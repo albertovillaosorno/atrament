@@ -498,3 +498,16 @@ so the observed result does not establish which Firefox bfcache path ran or
 whether other engines restore a cached page differently. It cannot prove
 browser-history removal of the initial launch URL, crash erasure, or automatic
 backend destruction on tab close. P1 remains open.
+
+A separate real Firefox crash-after-navigation fixture accepts a synthetic
+private task draft replacement, navigates to another document, confirms
+that document has no task control, and abruptly kills Firefox without End or
+tab close. A bounded literal-byte scan of its disposable profile finds no
+UTF-8 copy of the random draft marker; a test-owned positive-control file
+verifies that the scanner would detect the same marker before removal.
+
+This adds page-exit-then-browser-death coverage to the existing direct hard
+stop and orderly back-navigation paths. No server-side session End occurs;
+the test does not claim backend destruction. Firefox recovery data may contain
+compressed or encoded state, and other engines and host crash collectors are
+not covered. P1 remains open for the full cleanup lifecycle.

@@ -8630,6 +8630,130 @@ test(
     },
 );
 
+// Navigating away need not terminate the browser. A subsequent hard stop
+// can still leave browser recovery data even after the pagehide handler has
+// cleared script-visible state. Inspect only a fresh, test-owned profile.
+test(
+    "Firefox hard stop after navigation leaves no literal private draft",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-away-hard-stop-");
+        const marker = `atrament-away-private-` +
+            crypto.randomBytes(24).toString("hex");
+        const calls = [];
+        let markWritten;
+        const written = new Promise((resolve) => { markWritten = resolve; });
+        const server = createSessionFixtureServer(
+            calls,
+            (request, response, field) => {
+                assert.equal(field, "task");
+                request.resume();
+                request.once("end", () => {
+                    response.writeHead(204, { "Cache-Control": "no-store" });
+                    response.end();
+                    markWritten();
+                });
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            const origin = `http://127.0.0.1:${address.port}`;
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            const ready = await waitForSessionStatus(
+                bidi, tab.context, "Session ready",
+            );
+            assert.equal(ready.task.value, REFRESH_DRAFT.task);
+            assert.equal(ready.hash, "");
+            const edited = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const input = document.getElementById("task-input");
+                    input.value = ${JSON.stringify(marker)};
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(edited.type, "success");
+            await observedWithin(written, "accepted departed-page draft");
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const resident = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `document.getElementById("task-input").value` +
+                    ` === ${JSON.stringify(marker)}`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.deepEqual(resident.result, { type: "boolean", value: true });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `${origin}/missing`,
+                wait: "complete",
+            });
+            const away = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify({
+                    path: location.pathname,
+                    hasTask: document.querySelector("#task-input") !== null
+                })`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(away.type, "success");
+            assert.equal(away.result.type, "string");
+            assert.deepEqual(JSON.parse(away.result.value), {
+                path: "/missing", hasTask: false,
+            });
+            assert.deepEqual(calls, [
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+                "POST /api/session/task",
+            ]);
+            // No End, tab close, or history return: terminate the actual
+            // browser after the private page has left the active document.
+            const firefox = children[0];
+            const exited = once(firefox, "exit");
+            assert.ok(firefox.kill("SIGKILL"),
+                "test-owned Firefox must accept abrupt stop");
+            await observedWithin(exited, "Firefox hard stop after pagehide");
+            bidi.close();
+            bidi = null;
+            const control = path.join(profile, "away-control.bin");
+            fs.writeFileSync(control, Buffer.from(marker, "utf8"));
+            assert.equal(
+                firefoxProfileContainsPlaintext(profile, marker), true);
+            fs.rmSync(control);
+            assert.equal(
+                firefoxProfileContainsPlaintext(profile, marker), false,
+                "Firefox recovery retained a literal departed-page draft");
+            assert.equal(calls.includes("POST /api/session/end"), false,
+                "hard stop must not imply backend erasure");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
 test(
     "Firefox pagehide aborts a pending explicit session end request",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },

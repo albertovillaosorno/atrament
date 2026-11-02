@@ -2407,3 +2407,15 @@ This is scoped to Firefox, the fixture's `Cache-Control: no-store` policy, and
 normal history traversal. It does not prove bfcache eligibility, remove the
 initial credential URL from Firefox's profile database, protect the browser
 opener's argv, or settle the known P8 credential-retention defect.
+
+A distinct Firefox browser-death fixture now tests a private page that has
+already navigated away: it posts a random synthetic task draft, confirms
+the accepted text was resident and a different document is active, and then
+sends `SIGKILL` without explicit End. The bounded regular-file profile scanner
+detects a test-owned marker control but finds no literal private draft bytes
+after this crash-after-pagehide path.
+
+This positive observation does not imply the browser erased the original
+credential-bearing URL from history, that no compressed or external recovery
+copy exists, or that backend memory was released. It complements but cannot
+replace the still-open credential-handoff and cleanup requirements of P8.
