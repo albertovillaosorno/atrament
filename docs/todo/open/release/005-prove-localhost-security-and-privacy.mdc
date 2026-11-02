@@ -2489,8 +2489,9 @@ The Linux opener now starts in its own process group and sends `SIGKILL` to
 that group before terminating/reaping its direct child on timeout or a
 wait-observation failure. The focused regression is green. An exact Cargo
 registry inventory pins the Linux-only `nix` `signal` capability to the
-browser-launch package; no additional registry package was resolved. This
-closes the demonstrated *non-detached* helper after a timed-out launch, not
+browser-launch package; no additional registry package was resolved.
+
+This closes the demonstrated *non-detached* helper after a timed-out launch, not
 all possible opener descendants: a helper can escape to a new group/session,
 or a shell can exit before the timeout while leaving background processes.
 It does not remove the launch URL from opener argv or Firefox history and

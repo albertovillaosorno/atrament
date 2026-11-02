@@ -133,7 +133,7 @@ fn credential_echoing_stderr_opener_is_silenced_and_typed() {
     clippy::expect_used,
     clippy::missing_trait_methods,
     clippy::create_dir,
-    reason = "isolated test fixture owns its helper directory and fail-fast cleanup",
+    reason = "test-only helper directory and fail-fast cleanup",
 )]
 fn timed_out_linux_opener_does_not_leave_a_running_descendant() {
     use std::fs;
@@ -165,7 +165,12 @@ fn timed_out_linux_opener_does_not_leave_a_running_descendant() {
     fs::write(
         &opener,
         format!(
-            "#!/bin/sh\n(sleep 0.4; printf continued > '{}') &\nprintf started > '{}'\nwait\n",
+            concat!(
+                "#!/bin/sh\n",
+                "(sleep 0.4; printf continued > '{}') &\n",
+                "printf started > '{}'\n",
+                "wait\n",
+            ),
             marker.display(),
             started.display(),
         ),

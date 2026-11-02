@@ -2068,8 +2068,13 @@ test("backend raw native authority requires explicit review", async () => {
 // the Cargo feature is already unified through the browser-launch package.
 function usesNativeSignalAuthority(source) {
     source = normalizeRustRawIdentifiers(source);
+    const groupedImport = new RegExp(
+        String.raw`\buse\s+(?:::)?\s*nix\s*::\s*\{[^;]*` +
+        String.raw`\bsys\s*::\s*(?:\{[^;]*\bsignal\b|signal\b)`,
+        "u",
+    );
     return /\bnix\s*::\s*sys\s*::\s*signal\b/u.test(source)
-        || /\buse\s+(?:::)?\s*nix\s*::\s*\{[^;]*\bsys\s*::\s*(?:\{[^;]*\bsignal\b|signal\b)/u.test(source);
+        || groupedImport.test(source);
 }
 
 test("native Linux signalling is confined to the browser opener", async () => {
