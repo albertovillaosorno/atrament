@@ -1651,3 +1651,17 @@ thirteen browser-code probes plus six individually restored source mutations
 verify rejection. This is a conservative lexical source review, not proof of
 browser file-picker permission, drag-and-drop dataflow, or complete local-file
 intake confinement; P8 acceptance remains open.
+
+The reviewed browser modules also admitted a new inbound `message` event
+listener even though outbound popup, channel, and `postMessage` APIs were
+forbidden. Separate inactive message listeners in authored TypeScript and
+emitted JavaScript passed the preceding cross-context source check and were
+restored exactly.
+
+A new inbound event inventory requires review for `message`, `messageerror`,
+and `storage` event names, matching event-handler properties, and the two
+named event constructors across all ten modules. Ten syntactic probes now
+reject these paths; the check is lexical, not a browser message-flow sandbox
+or proof against dynamically assembled names.
+
+The opener argv leak and broader P8 acceptance remain open.

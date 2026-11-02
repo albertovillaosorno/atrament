@@ -364,6 +364,44 @@ test("browser modules reject unreviewed cross-context authority", async () => {
     }
 });
 
+// Inbound Window message and storage events let unrelated contexts influence
+// a session without using fetch, popup creation, or outbound postMessage.
+// Require review before any handler or first-class event constructor appears.
+// This is a conservative literal inventory, not a browser message-flow proof.
+function hasUnreviewedInboundCrossContextEvents(source) {
+    const eventProperties =
+        /\b(?:onmessage|onmessageerror|onstorage|MessageEvent|StorageEvent)\b/u;
+    return eventProperties.test(source)
+        || /(["'`])(?:message|messageerror|storage)\1/u.test(source);
+}
+
+test("browser inbound cross-context events require explicit review",
+    async () => {
+    const candidates = [
+        'window.addEventListener("message", () => {});',
+        "globalThis.addEventListener('messageerror', handler);",
+        'document.body.addEventListener(`message`, handler);',
+        'window.addEventListener("storage", handler);',
+        "window.onmessage = handler;",
+        'globalThis["onmessageerror"] = handler;',
+        "const { onstorage: handler } = window;",
+        "const factory = MessageEvent;",
+        "const factory = StorageEvent;",
+        'const eventType = "message";',
+    ];
+    assert.equal(hasUnreviewedInboundCrossContextEvents(
+        'window.addEventListener("pagehide", handler);'), false);
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedInboundCrossContextEvents(source), false,
+            `${filename} gained an unreviewed inbound cross-context event`);
+        for (const candidate of candidates) {
+            assert.equal(hasUnreviewedInboundCrossContextEvents(
+                `${source}\n${candidate}`), true,
+            `${filename}: ${candidate} escaped inbound event review`);
+        }
+    }
+});
+
 // Browser-selected files and origin-private filesystem directories are
 // separate from the backend's explicit, selected-path import/export API.
 // Require source review before new filesystem handles appear in the UI.
