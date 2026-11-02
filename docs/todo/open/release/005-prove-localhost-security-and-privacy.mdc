@@ -1784,3 +1784,17 @@ computed property-name construction. Six individually injected authored and
 emitted source mutations then failed the new guard and were byte-restored.
 
 The launcher argv leak and P8 acceptance remain open.
+
+The browser persistence inventory also missed the Storage Access API and
+Shared Storage capabilities. Inactive direct method and first-class handle
+references for `requestStorageAccess`, `hasStorageAccess`, `sharedStorage`,
+`StorageAccessHandle`, and `requestStorageAccessFor` were individually inserted
+into authored and emitted browser main modules. All six passed the previous
+focused browser persistence guard, then were restored byte-for-byte.
+
+The expanded lexical source inventory now requires explicit review for these
+cross-context storage names as well as `SharedStorage`. Twelve synthetic
+variants are checked across every authored and emitted module. This is not
+runtime evidence of third-party storage permission, exhaustive dynamic alias
+confinement, or a fix for the known browser-launch argv credential exposure.
+P8 acceptance remains open.

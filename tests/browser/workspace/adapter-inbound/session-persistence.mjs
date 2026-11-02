@@ -296,11 +296,15 @@ test("browser source and generated modules reject undeclared transport",
     }
 });
 
-// A page can retain text through window.name and cookie or cache APIs even
-// without Web Storage. Bracket access and first-class global references must
-// not silently bypass the previously reviewed literal storage inventory.
+// A page can retain text through window.name, cookies, cache and shared
+// browser storage APIs without Web Storage. Bracket access and first-class
+// global references must not bypass this literal storage inventory.
 function hasUnreviewedBrowserPersistenceReference(source) {
-    const ambientStores = /\b(?:cookieStore|caches)\b/u;
+    const ambientStores = new RegExp(
+        String.raw`\b(?:cookieStore|caches|sharedStorage|SharedStorage|` +
+            String.raw`requestStorageAccess|requestStorageAccessFor|` +
+            String.raw`hasStorageAccess|StorageAccessHandle)\b`, "u",
+    );
     const windowName = new RegExp(
         String.raw`\b(?:window|globalThis)\s*(?:(?:\?\.|\.)\s*name\b|` +
             String.raw`(?:\?\.)?\[\s*['"]name['"]\s*\])`, "u",
@@ -320,7 +324,7 @@ function hasUnreviewedBrowserPersistenceReference(source) {
     const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     return [ambientStores, windowName, documentCookie,
         destructuredWindowName, destructuredDocumentCookie]
-        .some((pattern) => pattern.test(source))
+        .some((pattern) => pattern.test(executable))
         || protocolRegistry.test(executable);
 }
 
@@ -361,6 +365,37 @@ test("browser persistence review rejects indexed cookie, cache and name APIs",
             assert.equal(hasUnreviewedBrowserPersistenceReference(
                 `${source}\n${candidate}`), true,
             `${filename}: ${candidate} escaped persistence review`);
+        }
+    }
+});
+
+// Storage Access can expose cookie state across contexts, while Shared
+// Storage keeps origin data outside this disposable page's lifetime.
+// First-class methods and literal-indexed aliases require owner review.
+test("browser storage access and shared storage require review", async () => {
+    assert.equal(hasUnreviewedBrowserPersistenceReference(
+        "// sharedStorage is not used\nconst value = 1;"), false);
+    const probes = [
+        "document.requestStorageAccess()",
+        "const request = document.requestStorageAccess;",
+        'const request = document["requestStorageAccess"];',
+        "document.requestStorageAccessFor(origin)",
+        'const request = document["requestStorageAccessFor"];',
+        "document.hasStorageAccess()",
+        "const check = document.hasStorageAccess;",
+        "void StorageAccessHandle;",
+        "window.sharedStorage.set('key', 'value');",
+        'const shared = globalThis["sharedStorage"];',
+        "const shared = navigator.sharedStorage;",
+        "void SharedStorage;",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedBrowserPersistenceReference(source), false,
+            `${filename} gained an unreviewed shared storage capability`);
+        for (const candidate of probes) {
+            assert.equal(hasUnreviewedBrowserPersistenceReference(
+                `${source}\n${candidate}`), true,
+            `${filename}: ${candidate} escaped storage access review`);
         }
     }
 });
