@@ -2573,3 +2573,14 @@ a fixed diagnostic after consuming the cancelled promise. The isolated test
 proves both redaction and socket teardown without an orphan rejection. This
 hardens test failure reporting only; production opener argv and Firefox history
 credential retention remain open.
+
+A separate red-first process-startup harness regression found that the helper
+used to dispose of compiled CLI children forwarded private exception text from
+test-owned synthetic child `SIGKILL` exceptions and asynchronous `error` events.
+It now maps both to one fixed error category while retaining its bounded forced
+reap and observer cleanup.
+
+The regression tests both channels and checks that the private marker and
+exception cause are absent from returned diagnostics. This is test-runner
+redaction, not evidence that production browser-launch argv or Firefox history
+no longer stores the session credential; P8 is still open.

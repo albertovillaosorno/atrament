@@ -443,7 +443,11 @@ function terminateChild(child, forcedMs = 10_000) {
             }
         };
         const onExit = () => finish();
-        const onError = (error) => finish(error);
+        // Process errors may contain private launch arguments or output.
+        // Never expose an untrusted child error in the test failure object.
+        const onError = () => finish(new Error(
+            "disposable runtime child failed",
+        ));
         const timer = setTimeout(() => finish(new Error(
             "disposable runtime child did not exit after SIGKILL",
         )), forcedMs);
@@ -453,8 +457,8 @@ function terminateChild(child, forcedMs = 10_000) {
             if (!child.kill("SIGKILL") && !settled) {
                 finish(new Error("disposable runtime child SIGKILL failed"));
             }
-        } catch (error) {
-            finish(error);
+        } catch {
+            finish(new Error("disposable runtime child failed"));
         }
     });
 }
@@ -497,12 +501,34 @@ test("runtime startup child shutdown has a bounded SIGKILL reap", async () => {
     assert.equal(child.listenerCount("error"), 0);
 });
 
+test("runtime child cleanup refuses private process exceptions", async () => {
+    const marker = "private-startup-cleanup-marker-7385";
+    for (const failurePath of ["kill-throws", "process-error"]) {
+        const child = fixtureTerminationChild(() => {
+            if (failurePath === "kill-throws") {
+                throw new Error(`SIGKILL exception: ${marker}`);
+            }
+            queueMicrotask(() => child.emit("error",
+                new Error(`process event: ${marker}`)));
+            return true;
+        });
+        await assert.rejects(terminateChild(child, 500), (error) => {
+            assert.equal(error.message.includes(marker), false);
+            assert.equal("cause" in error, false);
+            assert.match(error.message, /disposable runtime child failed/);
+            return true;
+        });
+        assert.equal(child.listenerCount("exit"), 0);
+        assert.equal(child.listenerCount("error"), 0);
+    }
+});
+
 test("runtime startup child shutdown cleans observers if kill throws",
     async () => {
         const failure = new Error("synthetic SIGKILL failure");
         const child = fixtureTerminationChild(() => { throw failure; });
         await assert.rejects(terminateChild(child),
-            (error) => error === failure);
+            /disposable runtime child failed/);
         assert.equal(child.listenerCount("exit"), 0);
         assert.equal(child.listenerCount("error"), 0);
     });
