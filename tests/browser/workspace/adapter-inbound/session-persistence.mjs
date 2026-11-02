@@ -590,10 +590,14 @@ function usesUnreviewedBrowserHostInput(source, main) {
 function hasUnreviewedClipboardWrite(source, main) {
     const acquisition = "const writeText = clipboard?.writeText;";
     const acquisitions = source.split(acquisition).length - 1;
-    const methodReferences = source.match(/\bwriteText\b/gu) ?? [];
+    const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    const methodReferences = executable.match(/\bwriteText\b/gu) ?? [];
+    const clipboardReferences = executable.match(/\bclipboard\b/gu) ?? [];
     return acquisitions !== (main ? 1 : 0)
         || methodReferences.length !== (main ? 4 : 0)
-        || /\b(?:execCommand|clipboardData)\b/u.test(source);
+        || clipboardReferences.length !== (main ? 4 : 0)
+        || /\b(?:execCommand|clipboardData|ClipboardItem)\b/u
+            .test(executable);
 }
 
 test("browser clipboard-write paths require explicit source review",
@@ -616,6 +620,9 @@ test("browser clipboard-write paths require explicit source review",
             'clipboard?.["writeText"](privateDraft);',
             'document.execCommand("copy");',
             'window["clipboardData"].setData("Text", privateDraft);',
+            "const { write } = clipboard;",
+            'const writer = clipboard["wri" + "teText"];',
+            "void ClipboardItem;",
         ]) {
             assert.equal(hasUnreviewedClipboardWrite(
                 `${source}\n${candidate}`, main), true,

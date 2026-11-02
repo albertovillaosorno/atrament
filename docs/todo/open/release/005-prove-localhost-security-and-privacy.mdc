@@ -1704,3 +1704,16 @@ syntactic variants are rejected in both TypeScript and emitted JavaScript.
 This is a lexical review gate rather than a clipboard permission sandbox or
 proof against dynamically assembled method names. It does not address the
 opener's argv credential exposure or broader P8 acceptance.
+
+A follow-up red-first review found that destructuring `write` from the
+already acquired clipboard object, constructing the `writeText` property
+name from string parts, and referencing `ClipboardItem` all escaped the
+four-identifier check. Six inactive authored/emitted variants passed all
+50 previous focused tests and were each restored byte-for-byte.
+
+The source inventory now also fixes the four reviewed code-level `clipboard`
+references and requires explicit review for `ClipboardItem` construction.
+Three new syntactic probes plus six restored source mutations verify the
+check. Comment-only references do not create clipboard authority. As with
+other source inventories, computed values created without a literal
+`clipboard` reference and native browser permissions are outside this proof.
