@@ -2285,3 +2285,29 @@ unrelated port. Static backend network/process/FFI authority inventories
 remain separate safeguards, not proof of a complete live descriptor census.
 Restoring an exact process-owned inventory while retaining nondumpability
 requires an independently reviewed kernel observation method.
+
+A follow-up real Firefox BiDi probe uncovered an independently observed
+credential-retention boundary. Two fresh, disposable browser profiles were
+navigated to a synthetic credential-bearing launch URL. After the page scrubbed
+its visible fragment, the session fixture admitted a draft mutation. The exact
+initial URL (including `#session=` and the 64-hex test credential) remained as
+literal bytes in Firefox's `places.sqlite-wal` after both confirmed End and an
+abrupt browser `SIGKILL`.
+
+A bounded regular-file scan found the retained URL in the same path in
+both test profiles; the separate random draft marker
+was absent. The added strict no-retention assertions failed twice, as they
+should for this observed risk, and were not committed as passing tests.
+
+The test-owned HTTP fixture intentionally does not emit the production End
+response's `Clear-Site-Data: "storage"` header. This evidence therefore does
+not prove that actual runtime End retains history bytes when that header is
+present, or that the browser does or does not delete them subsequently.
+
+It does establish literal URL retention after a launch and forced browser death
+with no End response; script-visible storage and address-bar clearing are not
+sufficient evidence for erasing a credential-bearing navigation from browser
+history storage. This is a synthetic test-only credential and disposable
+profile, not an inspection of an operator's private Firefox history. P8 must
+remain open until credential handoff and browser-history cleanup are addressed
+with verified, browser-enforced evidence; opener argv exposure is separate.

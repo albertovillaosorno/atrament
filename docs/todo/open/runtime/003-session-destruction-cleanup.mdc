@@ -413,3 +413,13 @@ finds no literal plaintext copy. No session End request was sent; the fixture
 makes no claim that the server-side session was erased. Browser crash-recovery
 artifacts may still contain compressed data, and this does not simulate a
 backend crash or establish deletion of all browser-managed copies.
+
+The additional Firefox browser-history probe found that the literal initial
+credential-bearing launch URL survived in the disposable `places.sqlite-wal`
+file even after confirmed End or a hard browser stop. Unlike the absent task
+plaintext, fragment removal alone does not erase the original navigation from
+this browser's stored history. The test End fixture omits the production
+`Clear-Site-Data` header, so actual runtime End erasure remains unverified.
+
+The forced-stop case has no End header at all. Details and acceptance limits
+are recorded in the open localhost security task ATR-P8-005.
