@@ -708,7 +708,10 @@ test("browser ordinary file input and drag-file reads require review",
 function usesUnreviewedBrowserHostInput(source, main) {
     const hostProperty = String.raw`(?:geolocation|mediaDevices|credentials|` +
         String.raw`hardwareConcurrency|deviceMemory|userAgent(?:Data)?|` +
-        String.raw`connection|getBattery|getGamepads|bluetooth|usb|` +
+        String.raw`language|languages|platform|oscpu|vendor|appVersion|` +
+        String.raw`productSub|maxTouchPoints|pdfViewerEnabled|onLine|` +
+        String.raw`mediaCapabilities|connection|getBattery|getGamepads|` +
+        String.raw`bluetooth|usb|` +
         String.raw`serial|hid|gpu|keyboard|permissions|requestMIDIAccess|` +
         String.raw`contacts|xr|wakeLock)`;
     const ambientRead = new RegExp(
@@ -959,6 +962,42 @@ test("browser physical screen metrics require host-input review", async () => {
             assert.equal(usesUnreviewedBrowserHostInput(
                 `${source}\n${candidate}`, main), true,
             `${filename}: ${candidate} escaped display metric review`);
+        }
+    }
+});
+
+// Locale, OS and decoder-capability metadata can fingerprint the user's host
+// without a permission prompt or an API request. The workspace currently
+// derives character boundaries through Intl, not direct navigator metadata.
+test("browser locale and platform metadata require host-input review",
+    async () => {
+    const probes = [
+        "navigator.language",
+        "navigator.languages",
+        'const locale = navigator["language"];',
+        "const locale = window.navigator?.languages;",
+        "navigator.platform",
+        "navigator.oscpu",
+        "navigator.vendor",
+        "navigator.appVersion",
+        "navigator.productSub",
+        "navigator.maxTouchPoints",
+        "navigator.pdfViewerEnabled",
+        "navigator.onLine",
+        "navigator.mediaCapabilities.decodingInfo(config)",
+        'const codecs = globalThis.navigator?.["mediaCapabilities"];',
+    ];
+    assert.equal(usesUnreviewedBrowserHostInput(
+        "new Intl.Segmenter(undefined, { granularity: 'grapheme' });",
+        false), false);
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained an unreviewed host-metadata read`);
+        for (const candidate of probes) {
+            assert.equal(usesUnreviewedBrowserHostInput(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped host-metadata review`);
         }
     }
 });

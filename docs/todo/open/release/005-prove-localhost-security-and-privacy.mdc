@@ -2092,3 +2092,19 @@ admitted for responsive layout. No production browser path has changed.
 This is conservative lexical source review, not browser-enforced screen
 privacy or protection from computed property aliases. The launcher argv
 credential exposure and broader P8 acceptance remain unresolved.
+
+A new browser host-metadata review found that `navigator.language`,
+`navigator.platform`, device touch capacity, PDF viewer support, and
+media-decoder capability queries could be referenced without triggering the
+existing input inventory. These values can reveal locale, OS and host
+capabilities without a backend request or permission prompt.
+
+A red-first regression now requires review of these and related explicit
+navigator metadata properties across all ten authored/emitted browser
+modules. Fourteen direct, indexed, and optional-property probes per module
+must fail the source guard, while the editor's existing locale-neutral
+`Intl.Segmenter` use remains admitted. No production browser APIs changed.
+
+This is a conservative lexical inventory, not resistance to runtime-computed
+aliases or a guarantee of browser permission enforcement. P8 still lacks an
+argv-private browser secret handoff and independently verified storage erasure.
