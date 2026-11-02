@@ -1361,3 +1361,19 @@ including grouped aliases and raw identifiers. Six cfg-inactive
 original module bytes. This does not prove that short-lived threads never
 exist between process snapshots, and does not resolve browser opener argv
 credential exposure.
+
+The pinned Rust compiler accepts `std::os::unix::process::CommandExt` as a
+fully qualified trait bound, with `T::exec`, `T::pre_exec`, and deprecated
+`T::before_exec` captured as method items. The earlier process scanner checked
+imports and immediate platform extension calls, but missed the direct generic
+bound and bare `CommandExt::exec` items. A red-first regression reproduced the
+miss without any new registry dependencies or `std::process` references.
+
+The process authority inventory now reviews directly qualified Unix and
+Windows `CommandExt` paths and captured `CommandExt` launch method items.
+Four disabled source injections using a direct trait bound, an absolute root,
+raw identifiers, and comment-separated syntax were refused, then the
+`session-secret` source was restored byte-for-byte. Read-only platform
+`ExitStatusExt` references stay admitted. This is conservative static review,
+not a runtime process sandbox or a fix for the browser-opener credential
+exposure through child arguments.

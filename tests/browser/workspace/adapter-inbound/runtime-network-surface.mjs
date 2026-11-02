@@ -298,7 +298,14 @@ function usesStandardLibraryProcessAuthority(source) {
     if (/\.\s*(?:spawn|exec|status|output|pre_exec|before_exec)\s*\(/u
         .test(source)
         || /\.\s*spawn_(?:scoped|unchecked)\s*\(/u.test(source)
-        || /\bCommandExt\s*::\s*(?:exec|pre_exec|before_exec)\s*\(/u
+        // A generic trait bound can use the platform process extension
+        // directly without importing it. Capture as a method item also
+        // requires no adjacent call, and can execute later under an alias.
+        || new RegExp(
+            String.raw`\bstd\s*::\s*os\s*::\s*(?:unix|windows)\s*::` +
+                String.raw`\s*process\s*::\s*CommandExt\b`, "u",
+        ).test(source)
+        || /\bCommandExt\s*::\s*(?:exec|pre_exec|before_exec)\b/u
             .test(source)) {
         return true;
     }
@@ -1160,6 +1167,17 @@ test("standard-library process detector covers equivalent imports", () => {
         'launcher.status();',
         'launcher.output();',
         'launcher.pre_exec(|| Ok(()));',
+        // Generic trait bounds and captured method items require no
+        // `use std::os::unix::process` or immediate invocation.
+        'fn capture<T: std::os::unix::process::CommandExt>() {}',
+        'let exec = <T as std::os::unix::process::CommandExt>::exec;',
+        'fn capture<T: std::os::unix::process::CommandExt>() {' +
+            ' let pre_exec = T::pre_exec::<fn() -> std::io::Result<()>>; }',
+        'let exec = CommandExt::exec;',
+        'let pre_exec = CommandExt::pre_exec;',
+        'let before_exec = CommandExt::before_exec;',
+        'fn capture<T: ::std::os::windows::process::CommandExt>() {}',
+        'fn capture<T: r#std::r#os::r#unix::r#process::r#CommandExt>() {}',
         'CommandExt::before_exec(&mut launcher, || Ok(()));',
         'CommandExt::exec(&mut launcher);',
         'use std::os::unix::process::CommandExt;',
