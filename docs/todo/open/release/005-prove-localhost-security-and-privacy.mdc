@@ -1884,3 +1884,19 @@ legacy video presentation setter. This is lexical review, not evidence of
 browser availability, an OS display permission sandbox, or resistance to
 dynamically constructed property names. The known opener-argv credential
 exposure and P8 acceptance remain unresolved.
+
+The browser input source review previously guarded `navigator.credentials`
+but not global Credential Management or WebAuthn interfaces, some of which
+can disclose host authenticator capabilities without fetching drafts. A
+read-only evaluation of the previous detector admitted twelve synthetic
+first-class, indexed, and constructor references.
+
+The host-input inventory now requires explicit source review for named
+`PublicKeyCredential`, authenticator responses, credential container, and
+password, federated, identity, one-time password, and digital credential
+interfaces. Twelve probes run across all ten authored/emitted browser modules.
+Six independently injected references in the authored and emitted main
+modules failed the updated inventory and were restored byte-for-byte. This
+is lexical review only, not a browser credential permission experiment or
+proof against runtime-computed aliases. P8 remains open, and the browser
+launcher still exposes its credential-bearing URL in child process argv.

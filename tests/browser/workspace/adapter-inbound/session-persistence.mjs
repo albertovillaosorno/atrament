@@ -658,7 +658,12 @@ function usesUnreviewedBrowserHostInput(source, main) {
             String.raw`LinearAccelerationSensor|GravitySensor|Gyroscope|` +
             String.raw`Magnetometer|AmbientLightSensor|ProximitySensor|` +
             String.raw`AbsoluteOrientationSensor|RelativeOrientationSensor|` +
-            String.raw`XR[A-Z][A-Za-z0-9_]*)\b`,
+            String.raw`XR[A-Z][A-Za-z0-9_]*|PublicKeyCredential|` +
+            String.raw`AuthenticatorResponse|AuthenticatorAssertionResponse|` +
+            String.raw`AuthenticatorAttestationResponse|CredentialsContainer|` +
+            String.raw`PasswordCredential|FederatedCredential|` +
+            String.raw`IdentityCredential|IdentityProvider|OTPCredential|` +
+            String.raw`DigitalCredential)\b`,
         "u",
     );
     const motionEvents =
@@ -882,6 +887,36 @@ test("browser XR device sensing requires explicit source review", async () => {
             assert.equal(usesUnreviewedBrowserHostInput(
                 `${source}\n${candidate}`, main), true,
             `${filename}: ${candidate} escaped WebXR review`);
+        }
+    }
+});
+
+// Credential Management and WebAuthn expose identity and authenticator
+// properties through named objects as well as navigator.credentials.
+// A new first-class reference therefore needs explicit source review.
+test("browser credential objects require host-input review", async () => {
+    const probes = [
+        "PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()",
+        'const passkey = window["PublicKeyCredential"];',
+        "void AuthenticatorResponse;",
+        "void AuthenticatorAssertionResponse;",
+        "void AuthenticatorAttestationResponse;",
+        "void CredentialsContainer;",
+        "new PasswordCredential({ id: 'user', password: 'pass' });",
+        "new FederatedCredential({ id: 'user', provider: 'provider' });",
+        "void IdentityCredential;",
+        "void IdentityProvider;",
+        "void OTPCredential;",
+        "void DigitalCredential;",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained unreviewed credential authority`);
+        for (const candidate of probes) {
+            assert.equal(usesUnreviewedBrowserHostInput(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped credential-object review`);
         }
     }
 });
