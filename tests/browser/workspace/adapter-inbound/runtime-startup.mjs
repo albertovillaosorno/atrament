@@ -635,8 +635,12 @@ const PROCESS_MEMORY_FILES = [
     "pagemap", "syscall",
 ];
 
-function processMemoryProbe(pid) {
-    return PROCESS_MEMORY_FILES.map((name) => {
+// Resolving these kernel-owned symlinks can expose process-private file and
+// directory locations even when no process memory bytes are read.
+const PROCESS_PATH_LINKS = ["cwd", "root", "exe"];
+
+function procfsOpenProbe(pid, entries) {
+    return entries.map((name) => {
         let descriptor;
         try {
             descriptor = fs.openSync(`/proc/${pid}/${name}`, "r");
@@ -649,6 +653,14 @@ function processMemoryProbe(pid) {
             }
         }
     });
+}
+
+function processMemoryProbe(pid) {
+    return procfsOpenProbe(pid, PROCESS_MEMORY_FILES);
+}
+
+function processPathLinkProbe(pid) {
+    return procfsOpenProbe(pid, PROCESS_PATH_LINKS);
 }
 
 test(
@@ -667,6 +679,9 @@ test(
             assert.deepEqual(processMemoryProbe(control.pid),
                 PROCESS_MEMORY_FILES.map(() => "readable"),
                 "parent must be able to open ordinary child procfs files");
+            assert.deepEqual(processPathLinkProbe(control.pid),
+                PROCESS_PATH_LINKS.map(() => "readable"),
+                "parent can resolve an ordinary child's procfs path links");
 
             const openerDirectory = path.join(fixture, "bin");
             fs.mkdirSync(openerDirectory);
@@ -686,6 +701,12 @@ test(
             for (const [index, result] of
                 processMemoryProbe(runtime.pid).entries()) {
                 const name = PROCESS_MEMORY_FILES[index];
+                assert.equal(["EACCES", "EPERM"].includes(result), true,
+                    `ready runtime must deny /proc/<pid>/${name}`);
+            }
+            for (const [index, result] of
+                processPathLinkProbe(runtime.pid).entries()) {
+                const name = PROCESS_PATH_LINKS[index];
                 assert.equal(["EACCES", "EPERM"].includes(result), true,
                     `ready runtime must deny /proc/<pid>/${name}`);
             }
@@ -920,6 +941,12 @@ test(
             for (const [index, result] of
                 processMemoryProbe(child.pid).entries()) {
                 const name = PROCESS_MEMORY_FILES[index];
+                assert.equal(["EACCES", "EPERM"].includes(result), true,
+                    `private draft must deny /proc/<pid>/${name}`);
+            }
+            for (const [index, result] of
+                processPathLinkProbe(child.pid).entries()) {
+                const name = PROCESS_PATH_LINKS[index];
                 assert.equal(["EACCES", "EPERM"].includes(result), true,
                     `private draft must deny /proc/<pid>/${name}`);
             }

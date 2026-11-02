@@ -380,3 +380,12 @@ interfaces can disclose process-layout, mapping, page, or register metadata
 without reading `/proc/<pid>/mem`. The result is host-specific procfs access
 evidence, not an inspection of private bytes, a deliberate crash, a claim about
 other operating systems, or proof that host crash collectors erase dumps.
+
+A separate live Linux procfs probe additionally opens the `cwd`, `root`, and
+`exe` symlink paths without reading their targets or file contents. An
+ordinary same-user child allows all three opens; the real Atrament binary
+denies all three with `EACCES` or `EPERM` both when ready and after admitting
+private draft text. This checks that the process dumpability guard also
+constrains path resolution that could expose process-specific locations. It
+does not hide `/proc/<pid>/cmdline`, secure a credential-bearing browser-opener
+argument, or prove filesystem erasure on session death.
