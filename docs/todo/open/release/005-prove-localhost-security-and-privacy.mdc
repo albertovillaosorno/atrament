@@ -1717,3 +1717,16 @@ Three new syntactic probes plus six restored source mutations verify the
 check. Comment-only references do not create clipboard authority. As with
 other source inventories, computed values created without a literal
 `clipboard` reference and native browser permissions are outside this proof.
+
+A direct browser microphone review found that Web Speech recognition
+constructors and legacy `navigator.getUserMedia` methods did not match the
+existing `navigator.mediaDevices` host-input inventory. Eight inactive
+mutations across authored and emitted main modules passed all 50 prior
+source-persistence tests and were restored byte-for-byte.
+
+The zero-owner browser host-input source guard now requires explicit review
+for named Speech Recognition constructors and grammar lists, along with
+legacy unprefixed and vendor-prefixed `getUserMedia` methods. Ten syntactic
+probes cover first-class, direct and indexed references. The guard is a
+lexical review boundary, not proof that microphone permissions are denied by
+all browsers or that computed runtime names are exhaustively detected.

@@ -564,7 +564,16 @@ function usesUnreviewedBrowserHostInput(source, main) {
             hostProperty + String.raw`\b`,
         "u",
     );
+    // Legacy camera/microphone capture and speech recognition can request
+    // device input without touching navigator.mediaDevices.
+    const directCapture = new RegExp(
+        String.raw`\b(?:SpeechRecognition|webkitSpeechRecognition|` +
+            String.raw`SpeechGrammarList|webkitSpeechGrammarList|` +
+            String.raw`getUserMedia|webkitGetUserMedia|` +
+            String.raw`mozGetUserMedia|msGetUserMedia)\b`, "u",
+    );
     if (ambientRead.test(source)
+        || directCapture.test(source)
         || /\breadText\b/u.test(source)
         || /\bclipboard\s*(?:\?\.|\.)\s*read\b/u.test(source)
         || /\bclipboard\s*(?:\?\.)?\[\s*['"]read['"]\s*\]/u
@@ -657,6 +666,16 @@ test("browser host-input inventory refuses unreviewed reads", () => {
         "navigator.credentials.get({ password: true })",
         "navigator.gpu.requestAdapter()",
         "navigator.usb.requestDevice({ filters: [] })",
+        "new SpeechRecognition()",
+        "new window.webkitSpeechRecognition()",
+        'const recognition = globalThis["SpeechRecognition"];',
+        "new SpeechGrammarList()",
+        "new webkitSpeechGrammarList()",
+        "navigator.getUserMedia({ audio: true }, yes, no)",
+        "navigator.webkitGetUserMedia({ video: true }, yes, no)",
+        "navigator.mozGetUserMedia({ audio: true }, yes, no)",
+        "navigator.msGetUserMedia({ audio: true }, yes, no)",
+        'const capture = navigator["getUserMedia"];',
     ]) {
         assert.equal(usesUnreviewedBrowserHostInput(
             allowedWrite + candidate, true), true, candidate);
