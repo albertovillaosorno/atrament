@@ -724,7 +724,7 @@ function waitForSocketConnection(socket, timeoutMs = 10_000) {
 
 // Read one complete WebSocket upgrade header without dropping split TCP chunks
 // or waiting indefinitely when a remote debugging endpoint stops responding.
-function readWebSocketUpgrade(socket, timeoutMs = 10_000) {
+function readWebSocketUpgrade(socket, timeoutMs = 10_000, signal = null) {
     return new Promise((resolve, reject) => {
         let received = Buffer.alloc(0);
         const finish = (error, result) => {
@@ -733,12 +733,16 @@ function readWebSocketUpgrade(socket, timeoutMs = 10_000) {
             socket.off("error", onError);
             socket.off("end", onEnd);
             socket.off("close", onEnd);
+            signal?.removeEventListener("abort", onAbort);
             if (error === null) {
                 resolve(result);
             } else {
                 reject(error);
             }
         };
+        const onAbort = () => finish(new Error(
+            "WebSocket upgrade request cancelled",
+        ));
         const onError = () => finish(new Error(
             "WebSocket upgrade socket failed",
         ));
@@ -789,6 +793,10 @@ function readWebSocketUpgrade(socket, timeoutMs = 10_000) {
         socket.once("error", onError);
         socket.once("end", onEnd);
         socket.once("close", onEnd);
+        signal?.addEventListener("abort", onAbort, { once: true });
+        if (signal?.aborted) {
+            onAbort();
+        }
     });
 }
 
@@ -1085,20 +1093,32 @@ class BidiClient {
             throw error;
         }
         const key = crypto.randomBytes(16).toString("base64");
+        const upgradeAbort = new AbortController();
         const upgrade = readWebSocketUpgrade(
             this.socket,
             FIREFOX_BIDI_READY_TIMEOUT_MS,
+            upgradeAbort.signal,
         );
-        this.socket.write([
-            `GET ${this.url.pathname} HTTP/1.1`,
-            `Host: ${this.url.host}`,
-            "Upgrade: websocket",
-            "Connection: Upgrade",
-            `Sec-WebSocket-Key: ${key}`,
-            "Sec-WebSocket-Version: 13",
-            "",
-            "",
-        ].join("\r\n"));
+        try {
+            this.socket.write([
+                `GET ${this.url.pathname} HTTP/1.1`,
+                `Host: ${this.url.host}`,
+                "Upgrade: websocket",
+                "Connection: Upgrade",
+                `Sec-WebSocket-Key: ${key}`,
+                "Sec-WebSocket-Version: 13",
+                "",
+                "",
+            ].join("\r\n"));
+        } catch {
+            // The socket can throw untrusted process/request text before the
+            // upgrade promise is awaited. Cancel it to avoid an unhandled
+            // rejection, release observers, and emit only a fixed error.
+            upgradeAbort.abort();
+            await upgrade.catch(() => {});
+            this.socket.destroy();
+            throw new Error("WebDriver BiDi upgrade request write failed");
+        }
         let response;
         try {
             response = await upgrade;
@@ -1411,6 +1431,37 @@ test("Firefox BiDi client refuses off-loopback debugging endpoints", () => {
             endpoint);
     }
 });
+
+test("WebDriver upgrade write failures redact private socket errors",
+    async () => {
+        const marker = "private-upgrade-write-marker-7331";
+        const socket = new PassThrough();
+        const originalCreateConnection = net.createConnection;
+        socket.write = () => {
+            throw new Error(`failed upgrade request: ${marker}`);
+        };
+        net.createConnection = () => {
+            queueMicrotask(() => socket.emit("connect"));
+            return socket;
+        };
+        try {
+            const bidi = new BidiClient("ws://127.0.0.1:1234/session");
+            await assert.rejects(bidi.connect(), (error) => {
+                assert.equal(error.message.includes(marker), false);
+                assert.equal("cause" in error, false);
+                assert.match(error.message, /upgrade request write failed/);
+                return true;
+            });
+            assert.equal(socket.destroyed, true);
+            assert.equal(socket.listenerCount("data"), 0);
+            assert.equal(socket.listenerCount("error"), 0);
+            assert.equal(socket.listenerCount("close"), 0);
+        } finally {
+            net.createConnection = originalCreateConnection;
+            socket.destroy();
+        }
+    },
+);
 
 test("WebDriver upgrade headers use finite Firefox startup budget",
     async () => {

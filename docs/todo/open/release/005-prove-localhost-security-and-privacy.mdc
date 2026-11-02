@@ -2559,3 +2559,17 @@ the fixture now rejects with a constant cleanup diagnostic instead. The
 focused fixture tests still verify that active and upgraded connections are
 closed or rejected within a finite bound. This is not production runtime
 listener teardown or a claim that host browser history was erased.
+
+A further red-first Firefox BiDi harness regression reproduced a synchronous
+WebSocket upgrade-request `socket.write()` exception that carried a synthetic
+private marker into the test's rejection message. Because the failure occurred
+before the upgrade response promise was awaited, subsequent socket shutdown
+also triggered an unhandled rejection after the test ended.
+
+The upgrade reader
+now accepts a caller-owned cancellation signal, removes its observers and
+readiness deadline on cancellation, and the caller converts write failures to
+a fixed diagnostic after consuming the cancelled promise. The isolated test
+proves both redaction and socket teardown without an orphan rejection. This
+hardens test failure reporting only; production opener argv and Firefox history
+credential retention remain open.
