@@ -2476,3 +2476,22 @@ This strengthens evidence while a draft is actually resident, but does not
 remove the production opener's argument exposure, Firefox navigation-history
 retention, privileged inspection, or other operating systems' risks. Neither
 P8 nor the linked P1 cleanup task is complete.
+
+
+A red-first Linux launcher test reproduced a process-lifecycle leak after the
+bounded opener timeout: a test-owned shell created a delayed background child,
+the previous kill of only the opener shell returned `TimedOut`, and the child
+still executed a marker write after its parent was killed. The test now
+requires proof that the opener started its child, then checks no delayed write
+occurs after launch failure.
+
+The Linux opener now starts in its own process group and sends `SIGKILL` to
+that group before terminating/reaping its direct child on timeout or a
+wait-observation failure. The focused regression is green. An exact Cargo
+registry inventory pins the Linux-only `nix` `signal` capability to the
+browser-launch package; no additional registry package was resolved. This
+closes the demonstrated *non-detached* helper after a timed-out launch, not
+all possible opener descendants: a helper can escape to a new group/session,
+or a shell can exit before the timeout while leaving background processes.
+It does not remove the launch URL from opener argv or Firefox history and
+therefore does not close P1/P8 credential-handling acceptance.

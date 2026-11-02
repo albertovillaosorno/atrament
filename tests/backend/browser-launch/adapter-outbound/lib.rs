@@ -124,6 +124,71 @@ fn credential_echoing_stderr_opener_is_silenced_and_typed() {
     assert!(!error.to_string().contains(PRIVATE_LAUNCH_URL));
 }
 
+// A timed-out opener can spawn a child before it stops responding. The
+// child's delayed marker must never appear after the launch failure: killing
+// only the direct opener leaves an unowned helper running.
+#[cfg(target_os = "linux")]
+#[test]
+#[expect(
+    clippy::expect_used,
+    clippy::missing_trait_methods,
+    clippy::create_dir,
+    reason = "isolated test fixture owns its helper directory and fail-fast cleanup",
+)]
+fn timed_out_linux_opener_does_not_leave_a_running_descendant() {
+    use std::fs;
+    use std::os::unix::fs::PermissionsExt as _;
+    use std::path::PathBuf;
+    use std::process;
+    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::thread;
+
+    static FIXTURE_ID: AtomicU64 = AtomicU64::new(0);
+    struct Scratch(PathBuf);
+    impl Drop for Scratch {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).expect("remove only test-owned helper");
+        }
+    }
+    let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../.temp");
+    fs::create_dir_all(&root).expect("project-local scratch exists");
+    let scratch = Scratch(root.join(format!(
+        "opener-timeout-{}-{}",
+        process::id(),
+        FIXTURE_ID.fetch_add(1, Ordering::Relaxed),
+    )));
+    fs::create_dir(&scratch.0).expect("unique helper fixture");
+    let marker = scratch.0.join("descendant-continued");
+    let started = scratch.0.join("descendant-started");
+    let opener = scratch.0.join("opener.sh");
+    fs::write(
+        &opener,
+        format!(
+            "#!/bin/sh\n(sleep 0.4; printf continued > '{}') &\nprintf started > '{}'\nwait\n",
+            marker.display(),
+            started.display(),
+        ),
+    )
+    .expect("write test opener");
+    fs::set_permissions(&opener, fs::Permissions::from_mode(0o700))
+        .expect("make test opener executable");
+    let error = browser_launch::launch_with_timeout(
+        opener.as_os_str(),
+        PRIVATE_LAUNCH_URL,
+        Duration::from_millis(80),
+    )
+    .expect_err("hung helper must fail closed");
+    assert!(matches!(error, browser_launch::LaunchError::TimedOut));
+    assert!(started.exists(), "opener must have spawned its child");
+    assert!(!error.to_string().contains(PRIVATE_LAUNCH_URL));
+    thread::sleep(Duration::from_millis(700));
+    assert!(
+        !marker.exists(),
+        "a failed opener must not leave its child executing",
+    );
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn linux_graphical_session_markers_must_be_nonempty() {

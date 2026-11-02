@@ -2063,6 +2063,47 @@ test("backend raw native authority requires explicit review", async () => {
         "libc, native extern, and assembly bypass reviewed Rust authority");
 });
 
+// The Linux launcher is the single reviewed owner of native group signalling.
+// A new direct signal import elsewhere must trigger security review, even if
+// the Cargo feature is already unified through the browser-launch package.
+function usesNativeSignalAuthority(source) {
+    source = normalizeRustRawIdentifiers(source);
+    return /\bnix\s*::\s*sys\s*::\s*signal\b/u.test(source)
+        || /\buse\s+(?:::)?\s*nix\s*::\s*\{[^;]*\bsys\s*::\s*(?:\{[^;]*\bsignal\b|signal\b)/u.test(source);
+}
+
+test("native Linux signalling is confined to the browser opener", async () => {
+    for (const source of [
+        "use nix::sys::signal::{killpg, Signal};",
+        "use r#nix::r#sys::r#signal as signals;",
+        "nix::sys::signal::killpg(group, SIGKILL);",
+        "use nix::{sys::{signal as signals}, errno::Errno};",
+        "use nix::{sys::signal::{killpg, Signal}, errno::Errno};",
+    ]) {
+        assert.equal(usesNativeSignalAuthority(source), true, source);
+    }
+    assert.equal(usesNativeSignalAuthority(
+        "use nix::sys::stat::Mode;",
+    ), false);
+
+    const owners = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        if (usesNativeSignalAuthority(source)) {
+            owners.push(sourcePath);
+        }
+    }
+    assert.deepEqual(owners, [BROWSER_LAUNCH],
+        "new Linux process-signal authority needs an explicit owner review");
+    const launcher = normalizeRustRawIdentifiers(
+        await readFile(BROWSER_LAUNCH, "utf8"),
+    );
+    assert.equal([...launcher.matchAll(/\bkillpg\s*\(/gu)].length, 1,
+        "one reviewed Linux group-kill call");
+    assert.equal([...launcher.matchAll(/\bprocess_group\s*\(/gu)].length, 1,
+        "one reviewed Linux group-creation call");
+});
+
 // A later PR_SET_DUMPABLE(true) invalidates the startup memory guard.
 // Inspect all backend callers; this conservative source check does not parse
 // macro expansions or prove that privileged host tools honor the guard.
@@ -2670,6 +2711,20 @@ test("backend registry dependencies remain explicitly reviewed", () => {
     );
     resolvedRegistryPackages.sort(comparePackages);
     assert.deepEqual(registryDependencies, [
+        {
+            // The only Linux launcher native capability is group signalling
+            // on a failed or timed-out opener, not general process control.
+            defaultFeatures: false,
+            features: ["fs", "signal"],
+            kind: null,
+            name: "nix",
+            optional: false,
+            owner: "atrament_browser_launch",
+            rename: null,
+            requirement: "=0.31.3",
+            source: "registry+https://github.com/rust-lang/crates.io-index",
+            target: 'cfg(target_os = "linux")',
+        },
         {
             defaultFeatures: true,
             features: [],

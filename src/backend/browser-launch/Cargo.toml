@@ -8,6 +8,10 @@ license = "MIT"
 [lib]
 path = "adapter-outbound/lib.rs"
 
+# Only the Linux opener needs group termination on launch failure.
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { workspace = true, features = ["signal"] }
+
 [lints]
 workspace = true
 

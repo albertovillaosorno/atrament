@@ -184,6 +184,9 @@ dependencies = [
 [[package]]
 name = "atrament_browser_launch"
 version = "0.1.0"
+dependencies = [
+ "nix",
+]
 
 [[package]]
 name = "atrament_citation_review_linkage"

@@ -29,15 +29,22 @@
 // - Defaults:
 //   - Uses the platform opener and refuses Linux launch without a GUI session.
 //   - Bounds opener completion to five seconds before failing startup closed.
+//   - On Linux, kills the opener group on timeout or wait failure.
 //   - Currently exposes the fragment in opener argv (known P1 defect).
 //
 
 //! Operating-system browser launch for the disposable Atrament runtime.
 
 #[cfg(target_os = "linux")]
+use nix::sys::signal::{killpg, Signal};
+#[cfg(target_os = "linux")]
+use nix::unistd::Pid;
+#[cfg(target_os = "linux")]
 use std::env;
 use std::error::Error;
 use std::ffi::OsStr;
+#[cfg(target_os = "linux")]
+use std::os::unix::process::CommandExt as _;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::time::{Duration, Instant};
 use std::{fmt, io, thread};
@@ -205,7 +212,19 @@ fn launch_status(status: ExitStatus) -> Result<(), LaunchError> {
     }
 }
 
+// Keep launcher helpers in a separate group so a timed-out opener cannot
+// strand its own descendants with authority it inherited at launch. A helper
+// that deliberately starts a new session is outside this process-group bound.
+#[cfg(target_os = "linux")]
+fn terminate_opener_group(child: &Child) {
+    if let Ok(pid) = i32::try_from(child.id()) {
+        let _signal = killpg(Pid::from_raw(pid), Signal::SIGKILL);
+    }
+}
+
 fn terminate_after_launch_error(child: &mut Child) {
+    #[cfg(target_os = "linux")]
+    terminate_opener_group(child);
     if child.kill().is_ok() {
         drop(child.wait());
     } else {
@@ -224,13 +243,15 @@ pub(crate) fn launch_with_timeout(
     }
     // The credential-bearing production URL is currently visible in argv.
     // Do not interpret null stdio as confidential process handoff.
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    let _configured = command
         .arg(url)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(LaunchError::Spawn)?;
+        .stderr(Stdio::null());
+    #[cfg(target_os = "linux")]
+    let _grouped = command.process_group(0);
+    let mut child = command.spawn().map_err(LaunchError::Spawn)?;
     let started = Instant::now();
     loop {
         match child.try_wait() {
@@ -243,6 +264,8 @@ pub(crate) fn launch_with_timeout(
         }
         let elapsed = started.elapsed();
         if elapsed >= timeout {
+            #[cfg(target_os = "linux")]
+            terminate_opener_group(&child);
             match child.kill() {
                 Ok(()) => {
                     let _status =
