@@ -283,8 +283,14 @@ function usesStandardLibraryStreamWriting(source) {
 // Keep both execution authorities within the reviewed browser launcher.
 function usesStandardLibraryProcessAuthority(source) {
     source = normalizeRustRawIdentifiers(source);
+    // Command construction and execution methods can be captured as items,
+    // then invoked later without retaining the name of the original method.
+    const commandItem = new RegExp(
+        String.raw`\bCommand\s*::\s*(?:new|spawn|status|output|` +
+            String.raw`exec|pre_exec|before_exec)\b`, "u",
+    );
     if (/\bstd\s*::\s*process\b/u.test(source)
-        || /\bCommand\s*::\s*new\s*\(/u.test(source)
+        || commandItem.test(source)
         // A scoped worker can be created through a captured `Scope::spawn`
         // function item, even if this module never calls `.spawn(...)`.
         || /\b(?:std\s*::\s*)?thread\s*::\s*(?:spawn|scope|Builder|Scope)\b/u
@@ -1198,6 +1204,16 @@ test("standard-library process detector covers equivalent imports", () => {
         'use std::os::unix;',
         'use std::{os::{unix, fd::AsRawFd}};',
         "std::process::Command::new(\"curl\");",
+        // Command constructors and execution functions are first-class
+        // method items; no call is needed in the declaring module.
+        'let construct = Command::new::<&str>;',
+        'let start = Command::spawn;',
+        'let status = Command::status;',
+        'let output = Command::output;',
+        'let before = Command::pre_exec;',
+        'let exec = Command::exec;',
+        'let start = r#Command::r#spawn;',
+        'let output = Command/* comment */::output;',
         "Command::new(\"curl\");",
     ]) {
         assert.equal(usesStandardLibraryProcessAuthority(source), true,
@@ -1218,6 +1234,7 @@ test("standard-library process detector covers equivalent imports", () => {
         'use std::thread::sleep;',
         'use std::thread::{self, sleep};',
         'launcher.spawn_preview();',
+        'let preview = Command::preview;',
         'launcher.preview_exec();',
     ]) {
         assert.equal(usesStandardLibraryProcessAuthority(source), false,

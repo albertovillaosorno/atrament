@@ -1377,3 +1377,19 @@ raw identifiers, and comment-separated syntax were refused, then the
 `ExitStatusExt` references stay admitted. This is conservative static review,
 not a runtime process sandbox or a fix for the browser-opener credential
 exposure through child arguments.
+
+Rust `std::process::Command` also exposes `new`, `spawn`, `status`, and
+`output` as first-class function items: construction or process execution can
+happen later through a local binding, without a nearby `Command::new(...)` or
+`.spawn()` call. The pinned Rust 1.97.1 compiler accepts all four forms.
+The red-first fixture confirmed that the former process authority scanner
+missed a captured `Command::spawn` function item.
+
+A red-first regression now reviews those captured constructor and execution
+items, along with extension-method items on `Command`, without requiring
+an adjacent call. Six disabled mutations covering the four compiler-proven
+functions, raw identifiers, and comment-separated syntax failed the guard;
+the backend bytes were restored exactly. Unrelated `Command::preview` and
+read-only process status extension imports remain outside this conservative
+review. This is static source evidence, not an execution sandbox or a repair
+for the browser-opener credential exposed in child argv.
