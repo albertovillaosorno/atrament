@@ -2001,3 +2001,16 @@ This is conservative lexical drift detection, not browser
 runtime proof, coverage of computed API names, or a claim that browser support
 for these evolving APIs is uniform; the known launcher argv credential leak
 and P8 acceptance remain open.
+
+Authenticated explicit End now also emits `Clear-Site-Data: "storage"`
+only on the accepted `204` response, asking browsers to remove accidentally
+retained origin storage and service-worker registrations. The response does
+not clear cookies (which are shared across loopback ports) or browser caches.
+
+Both the Rust router test and a live Atrament subprocess test failed before the
+new header was emitted; after the change they pin the exact storage-only
+response while checking that draft writes and unauthorized End attempts cannot
+trigger cleanup. Actual browser storage deletion remains engine-dependent and
+is not established by these HTTP response tests. This adds a best-effort
+session-end cleanup signal, not a substitute for in-memory disposal or a fix
+for the independently known browser-opener argv credential exposure.

@@ -821,6 +821,8 @@ test(
                 body: draftText,
             });
             assert.equal(wrote.response.status, 204);
+            assert.equal(wrote.response.headers.has("clear-site-data"), false,
+                "draft writes must not trigger browser storage erasure");
             const read = await request("/api/session/task", {
                 headers: authenticated,
             });
@@ -834,6 +836,8 @@ test(
                 },
             );
             assert.equal(ended.status, 204);
+            assert.equal(ended.headers.get("clear-site-data"), '"storage"',
+                "only successful End requests clear origin-scoped storage");
             assert.equal(await ended.text(), "");
             await new Promise((resolve, reject) => {
                 if (child.exitCode !== null) {

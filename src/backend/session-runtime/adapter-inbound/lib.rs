@@ -1110,6 +1110,16 @@ fn empty_response(status: &str) -> Vec<u8> {
         .into_bytes()
 }
 
+fn accepted_end_response() -> Vec<u8> {
+    // End clears only storage for this exact browser origin. Clearing cookies
+    // could affect unrelated loopback apps: cookies are not port-scoped.
+    format!(
+        "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\
+         Clear-Site-Data: \"storage\"\r\n{RESPONSE_TRAILERS}",
+    )
+    .into_bytes()
+}
+
 fn json_response(status: &str, body: &[u8]) -> Vec<u8> {
     response(status, JSON_CONTENT_TYPE, body)
 }
@@ -1212,7 +1222,7 @@ pub fn route_request(
                 br#"{"error":"invalid_request"}"#,
             );
         }
-        return empty_response("204 No Content");
+        return accepted_end_response();
     }
     if let Some(field) = draft_field_for_target(parsed.target) {
         return match parsed.method {

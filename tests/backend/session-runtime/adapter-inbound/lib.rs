@@ -2400,14 +2400,17 @@ fn explicit_session_end_requires_current_credential_origin_and_empty_body() {
         b"",
     );
     let mut draft = seeded_private_draft();
+    let accepted = route_with_draft(&admitted, EXPECTED_HOST, &mut draft);
+    assert_eq!(status_line(&accepted), "HTTP/1.1 204 No Content");
+    let (accepted_head, accepted_body) = response_parts(&accepted);
+    assert_eq!(accepted_body, b"");
     assert_eq!(
-        status_line(&route_with_draft(
-            &admitted,
-            EXPECTED_HOST,
-            &mut draft,
-        )),
-        "HTTP/1.1 204 No Content",
+        accepted_head.matches("Clear-Site-Data: \"storage\"\r\n").count(),
+        1,
+        "accepted End should request only origin-scoped storage cleanup",
     );
+    assert!(!accepted_head.contains("\"cookies\""));
+    assert!(!accepted_head.contains("\"cache\""));
     assert_private_draft_unchanged(&draft);
 
     let denied = [
@@ -2424,13 +2427,11 @@ fn explicit_session_end_requires_current_credential_origin_and_empty_body() {
     ];
     for request in denied {
         let mut draft = seeded_private_draft();
-        assert_eq!(
-            status_line(&route_with_draft(
-                &request,
-                EXPECTED_HOST,
-                &mut draft,
-            )),
-            "HTTP/1.1 401 Unauthorized",
+        let response = route_with_draft(&request, EXPECTED_HOST, &mut draft);
+        assert_eq!(status_line(&response), "HTTP/1.1 401 Unauthorized");
+        assert!(
+            !response_parts(&response).0.contains("Clear-Site-Data:"),
+            "unauthorized requests must not request site-data erasure",
         );
         assert_private_draft_unchanged(&draft);
     }
