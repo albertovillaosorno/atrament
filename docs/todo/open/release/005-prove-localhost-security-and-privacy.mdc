@@ -1485,3 +1485,17 @@ and comment-separated forms. Seven temporarily injected cfg-disabled
 backend mutations were each rejected, then restored byte-for-byte.
 This source check does not prove process isolation or replace runtime
 confinement, and the existing browser-opener argv issue remains open.
+
+The Rust 1.97.1 standard library also exposes
+`std::thread::available_parallelism`, which reports host CPU availability
+without a nix sysinfo call or environment read. A compiler-only fixture
+confirmed that the function item is available. The ambient input source
+inventory initially missed this host-status read in a red-first test.
+
+The zero-owner privacy review now catches qualified and bare calls,
+captured function items, renamed or grouped imports, raw identifiers,
+module aliases, and comment-separated paths. The existing browser-opener
+`thread::sleep` remains allowed; no new runtime observation is performed.
+Nine temporary cfg-inactive `session-secret` source probes were each
+rejected and restored byte-for-byte. This does not establish hardware
+fingerprinting resistance or mitigate the known opener argv disclosure.

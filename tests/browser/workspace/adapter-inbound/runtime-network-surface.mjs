@@ -425,6 +425,23 @@ function usesProcessWideEnvironmentMutation(source) {
 // Confine reads to the two GUI markers and explicit CLI argument inspection.
 function unreviewedAmbientProcessInputReads(source, sourcePath) {
     source = normalizeRustRawIdentifiers(source);
+    // This stable std API exposes current CPU parallelism without nix or env.
+    // Reject even captured function items and renamed imports for review.
+    if (/\bthread\s*::\s*available_parallelism\b/u.test(source)) {
+        return true;
+    }
+    for (const match of source.matchAll(
+        /\buse\s+(?:::\s*)?std\s*::\s*([^;]+);/gu,
+    )) {
+        const imported = match[1];
+        if (/\bthread\s+as\b/u.test(imported)
+            || /\bthread\s*::\s*\{?[^;]*\bavailable_parallelism\b/u
+                .test(imported)
+            || /\bthread\s*::\s*\{[^;]*\bself\s+as\b/u
+                .test(imported)) {
+            return true;
+        }
+    }
     // Pinned nix exposes Linux machine load, memory, uptime and process count
     // even with only `fs` enabled. Such ambient host-status reads have no
     // admitted owner; review direct, captured and renamed module access.
@@ -493,8 +510,25 @@ test("ambient process input guard rejects unreviewed reads", () => {
     ].join(";\n");
     assert.equal(unreviewedAmbientProcessInputReads(accepted, BROWSER_LAUNCH),
         false);
+    assert.equal(unreviewedAmbientProcessInputReads(
+        `${accepted}; use std::{fmt, io, thread}; thread::sleep(duration);`,
+        BROWSER_LAUNCH), false);
     for (const [source, file] of [
         ['std::env::var("PRIVATE_KEY")', privateModule],
+        // Available CPU parallelism is ambient host configuration data.
+        ['std::thread::available_parallelism()', privateModule],
+        ['thread::available_parallelism()', privateModule],
+        ['let read = std::thread::available_parallelism;', privateModule],
+        ['use std::thread::available_parallelism as count;', privateModule],
+        ['use std::thread::{available_parallelism as count};',
+            privateModule],
+        ['use ::std::{thread::{available_parallelism as count}};',
+            privateModule],
+        ['use r#std::r#thread::r#available_parallelism as count;',
+            privateModule],
+        ['std/**/::thread::available_parallelism()', privateModule],
+        ['use std::thread as host_threads;', privateModule],
+        ['use std::{thread as host_threads};', privateModule],
         ['nix::sys::sysinfo::sysinfo()', privateModule],
         ['let read = nix::sys::sysinfo::sysinfo;', privateModule],
         ['use nix::sys::sysinfo as host_info;', privateModule],
