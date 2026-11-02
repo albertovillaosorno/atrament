@@ -389,3 +389,18 @@ private draft text. This checks that the process dumpability guard also
 constrains path resolution that could expose process-specific locations. It
 does not hide `/proc/<pid>/cmdline`, secure a credential-bearing browser-opener
 argument, or prove filesystem erasure on session death.
+
+A new disposable Firefox profile fixture admits an independently generated
+synthetic task draft, acknowledges its authenticated replacement, confirms
+**End session**, closes the tab, and terminates Firefox before inspecting
+profile files. A bounded read of regular files under that profile finds no
+literal UTF-8 copy of the draft. A test-owned positive-control file proves the
+same scanner detects the marker when it crosses a 64 KiB read boundary; that
+file is removed before the final assertion. The fixture intentionally does not
+send `Clear-Site-Data`, separating the observation from browser header support.
+
+This is a plaintext-only scan of the test profile after this orderly End
+sequence, not proof against compressed, encrypted, swapped, or externally
+collected copies; it does not cover drafts left by an unconfirmed close,
+filesystem snapshots, a deliberate crash, or other browser engines. Session
+teardown and media cleanup acceptance remain open.

@@ -7967,6 +7967,54 @@ async function browserStorageInventory(client, context) {
     return JSON.parse(observed.result.value);
 }
 
+// Inspect only regular files in a test-owned Firefox profile, without
+// following links. A fixed total-byte budget and chunk overlap prevent both
+// unbounded memory use and false negatives at read boundaries. This checks
+// literal bytes, not compressed or encrypted browser storage.
+function firefoxProfileContainsPlaintext(profile, marker) {
+    const needle = Buffer.from(marker, "utf8");
+    assert.ok(needle.length > 0 && needle.length < 1024);
+    const chunk = Buffer.alloc(64 * 1024);
+    let scannedBytes = 0;
+    let scannedFiles = 0;
+    const inspect = (directory) => {
+        const entries = fs.readdirSync(directory, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = path.join(directory, entry.name);
+            if (entry.isDirectory()) {
+                if (inspect(fullPath)) return true;
+                continue;
+            }
+            if (!entry.isFile()) continue;
+            scannedFiles += 1;
+            assert.ok(scannedFiles <= 4096,
+                "Firefox plaintext review exceeded file budget");
+            const descriptor = fs.openSync(fullPath, "r");
+            try {
+                let overlap = Buffer.alloc(0);
+                for (;;) {
+                    const read = fs.readSync(descriptor, chunk, 0,
+                        chunk.length, null);
+                    if (read === 0) break;
+                    scannedBytes += read;
+                    assert.ok(scannedBytes <= 512 * 1024 * 1024,
+                        "Firefox plaintext review exceeded byte budget");
+                    const combined = Buffer.concat([
+                        overlap, chunk.subarray(0, read),
+                    ]);
+                    if (combined.includes(needle)) return true;
+                    overlap = combined.subarray(Math.max(0,
+                        combined.length - needle.length + 1));
+                }
+            } finally {
+                fs.closeSync(descriptor);
+            }
+        }
+        return false;
+    };
+    return inspect(profile);
+}
+
 test(
     "Firefox draft edits and explicit End leave browser stores empty",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
@@ -8165,6 +8213,109 @@ test(
             for (const child of children.reverse()) {
                 await stopChild(child);
             }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox End does not leave literal private drafts in its disk profile",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-profile-plaintext-");
+        // This value exists only in the disposable browser fixture; neither
+        // assertion nor test failure should print its private content.
+        const marker = `atrament-private-` +
+            crypto.randomBytes(24).toString("hex");
+        const calls = [];
+        let markWritten;
+        const written = new Promise((resolve) => { markWritten = resolve; });
+        let markEnded;
+        const ended = new Promise((resolve) => { markEnded = resolve; });
+        const server = createSessionFixtureServer(
+            calls,
+            (request, response, field) => {
+                assert.equal(field, "task");
+                request.resume();
+                request.once("end", () => {
+                    response.writeHead(204, { "Cache-Control": "no-store" });
+                    response.end();
+                    markWritten();
+                });
+            },
+            () => markEnded(),
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/` +
+                    `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const edit = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const task = document.getElementById("task-input");
+                    task.value = ${JSON.stringify(marker)};
+                    task.dispatchEvent(new Event("input", { bubbles: true }));
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(edit.type, "success");
+            await observedWithin(written, "private synthetic draft write");
+            const end = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const end = document.getElementById("end-session");
+                    end.click();
+                    end.click();
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(end.type, "success");
+            await observedWithin(ended, "private synthetic session end");
+            const final = await waitForSessionStatus(
+                bidi, tab.context, "Session ended");
+            assert.deepEqual(final.task, { disabled: true, value: "" });
+            await bidi.command("browsingContext.close", {
+                context: tab.context,
+            });
+            bidi.close();
+            bidi = null;
+            for (const child of children.reverse()) await stopChild(child);
+            children.length = 0;
+
+            // Positive control: the scanner detects a marker straddling its
+            // read boundary. Remove this test-owned seed before the real scan.
+            const control = path.join(profile, "plaintext-control.bin");
+            fs.writeFileSync(control, Buffer.concat([
+                Buffer.alloc(64 * 1024 - 8), Buffer.from(marker, "utf8"),
+            ]));
+            assert.equal(
+                firefoxProfileContainsPlaintext(profile, marker), true);
+            fs.rmSync(control);
+            assert.equal(
+                firefoxProfileContainsPlaintext(profile, marker), false,
+                "ended Firefox profile retained a literal private draft");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
             fs.rmSync(profile, { recursive: true, force: true });
         }
     },
