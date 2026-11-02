@@ -2203,3 +2203,19 @@ modules. Existing fragment scrubbing and local page reload stay admitted.
 This is lexical drift detection rather than an execution sandbox. The
 browser opener still exposes its credential in argv, and Firefox storage
 cleanup remains unverified.
+
+A new real Firefox 158.0 fixture checks browser-managed storage after a
+synthetic task edit is acknowledged by the loopback test server and after
+explicit session End. The disposable profile starts empty, the browser
+completes handshake and draft hydration, and an actual `POST` receives `204`.
+The fixture independently observes zero `localStorage` and `sessionStorage`
+entries, zero IndexedDB databases and CacheStorage buckets, and an empty
+`document.cookie` string at startup, after the accepted edit, and after End.
+The final browser UI also shows a cleared, disabled task field.
+
+This is browser-executed evidence that the current workspace does not leave
+script-visible persistent state during the tested edit lifecycle. It does
+not inspect the browser's general HTTP disk cache, OS-level artifacts, or
+other browser engines, and it does not demonstrate erasure of stores created
+by another script. Firefox's earlier failure to enforce `Clear-Site-Data`
+and the browser-opener argv credential leak remain unresolved.

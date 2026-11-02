@@ -7944,6 +7944,126 @@ test(
     },
 );
 
+// Direct browser evidence complements the static source inventory: a draft
+// replacement must never materialize in script-visible persistent stores.
+// The disposable Firefox profile is intentionally empty at startup.
+async function browserStorageInventory(client, context) {
+    const observed = await client.command("script.evaluate", {
+        awaitPromise: true,
+        expression: `(async () => JSON.stringify({
+            localStorage: localStorage.length,
+            sessionStorage: sessionStorage.length,
+            cookie: document.cookie,
+            indexedDB: typeof indexedDB.databases === "function"
+                ? (await indexedDB.databases()).length : null,
+            cacheStorage: typeof caches?.keys === "function"
+                ? (await caches.keys()).length : null,
+        }))()`,
+        resultOwnership: "none",
+        target: { context },
+    });
+    assert.equal(observed.type, "success");
+    assert.equal(observed.result.type, "string");
+    return JSON.parse(observed.result.value);
+}
+
+test(
+    "Firefox draft edits and explicit End leave browser stores empty",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-browser-storage-");
+        const requests = [];
+        let markDraftWritten;
+        const draftWritten = new Promise((resolve) => {
+            markDraftWritten = resolve;
+        });
+        let markEnded;
+        const ended = new Promise((resolve) => { markEnded = resolve; });
+        const server = createSessionFixtureServer(
+            requests,
+            (request, response, field) => {
+                assert.equal(field, "task");
+                request.resume();
+                request.once("end", () => {
+                    response.writeHead(204, { "Cache-Control": "no-store" });
+                    response.end();
+                    markDraftWritten();
+                });
+            },
+            () => markEnded(),
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/` +
+                    `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const expected = {
+                localStorage: 0,
+                sessionStorage: 0,
+                cookie: "",
+                indexedDB: 0,
+                cacheStorage: 0,
+            };
+            assert.deepEqual(await browserStorageInventory(bidi, tab.context),
+                expected, "new Firefox profile starts without browser stores");
+            const edited = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const task = document.getElementById("task-input");
+                    task.value = "ephemeral synthetic privacy draft";
+                    task.dispatchEvent(new Event("input", { bubbles: true }));
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(edited.type, "success");
+            await observedWithin(draftWritten, "synthetic draft mutation");
+            assert.ok(requests.includes("POST /api/session/task"));
+            assert.deepEqual(await browserStorageInventory(bidi, tab.context),
+                expected, "accepted edit must not persist into browser stores");
+            const confirmation = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const end = document.getElementById("end-session");
+                    end.click();
+                    end.click();
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(confirmation.type, "success");
+            await observedWithin(ended, "synthetic session end");
+            const final = await waitForSessionStatus(
+                bidi, tab.context, "Session ended");
+            assert.deepEqual(final.task, { disabled: true, value: "" });
+            assert.deepEqual(await browserStorageInventory(bidi, tab.context),
+                expected, "ended session must not leave browser stores");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
 test(
     "Firefox pagehide aborts a pending explicit session end request",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
