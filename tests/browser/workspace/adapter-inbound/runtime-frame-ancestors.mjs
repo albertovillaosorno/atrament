@@ -8322,6 +8322,96 @@ test(
 );
 
 test(
+    "Firefox forced death leaves no literal private draft in its profile",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/session-profile-hard-stop-");
+        const marker = `atrament-private-` +
+            crypto.randomBytes(24).toString("hex");
+        let markWritten;
+        const written = new Promise((resolve) => { markWritten = resolve; });
+        const calls = [];
+        const server = createSessionFixtureServer(
+            calls,
+            (request, response, field) => {
+                assert.equal(field, "task");
+                request.resume();
+                request.once("end", () => {
+                    response.writeHead(204, { "Cache-Control": "no-store" });
+                    response.end();
+                    markWritten();
+                });
+            },
+        );
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/` +
+                    `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const edited = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const task = document.getElementById("task-input");
+                    task.value = ${JSON.stringify(marker)};
+                    task.dispatchEvent(new Event("input", { bubbles: true }));
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(edited.type, "success");
+            await observedWithin(written, "hard-stop private draft write");
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const resident = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `document.getElementById("task-input").value` +
+                    ` === ${JSON.stringify(marker)}`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(resident.type, "success");
+            assert.deepEqual(resident.result, { type: "boolean", value: true });
+
+            // No End, tab close, or pagehide: kill the disposable browser
+            // directly to examine what an abrupt browser exit left on disk.
+            const firefox = children[0];
+            assert.ok(firefox.kill("SIGKILL"),
+                "test-owned Firefox process must accept abrupt stop");
+            await observedWithin(once(firefox, "exit"),
+                "test-owned Firefox hard stop");
+            bidi.close();
+            bidi = null;
+            assert.equal(
+                firefoxProfileContainsPlaintext(profile, marker), false,
+                "aborted Firefox profile retained a literal private draft");
+            assert.ok(calls.includes("POST /api/session/task"),
+                "hard stop must follow acknowledged private draft write");
+            assert.ok(!calls.includes("POST /api/session/end"),
+                "hard stop must not imply confirmed backend erasure");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox pagehide aborts a pending explicit session end request",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {

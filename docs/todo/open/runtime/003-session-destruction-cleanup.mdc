@@ -404,3 +404,12 @@ sequence, not proof against compressed, encrypted, swapped, or externally
 collected copies; it does not cover drafts left by an unconfirmed close,
 filesystem snapshots, a deliberate crash, or other browser engines. Session
 teardown and media cleanup acceptance remain open.
+
+A separate disposable Firefox fixture exercises the opposite branch: it
+acknowledges a synthetic private task draft, verifies that the text is still
+present in the live input, then sends `SIGKILL` to the browser without End,
+tab close, or `pagehide`. After process exit, the same bounded profile scan
+finds no literal plaintext copy. No session End request was sent; the fixture
+makes no claim that the server-side session was erased. Browser crash-recovery
+artifacts may still contain compressed data, and this does not simulate a
+backend crash or establish deletion of all browser-managed copies.
