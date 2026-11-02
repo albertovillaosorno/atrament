@@ -2611,3 +2611,15 @@ The integration still awaits stream closure rather than treating an early
 process `exit` event as failure: Node can deliver buffered final output after
 `exit`. This change protects test harness failures, not production argv or
 Firefox history retention. P8 remains open.
+
+A further red-first readiness-selector regression showed the Firefox
+fixture would prematurely accept `undefined` as successful process output.
+It likewise accepted non-string values, including false, zero, empty strings,
+and objects, despite both real readiness paths selecting endpoint strings.
+
+The bounded helper now treats `null` and `undefined` as no match and refuses
+nonempty non-string and empty-string selections with a fixed error message.
+Two synthetic tests proved the old false-positive behavior, then passed with
+strict selection and listener cleanup. This is fixture correctness and
+failure-diagnostic containment, not proof of production credential erasure.
+P8 remains open.

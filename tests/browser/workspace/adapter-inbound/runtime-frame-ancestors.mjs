@@ -182,10 +182,17 @@ function waitForLine(stream, select, timeoutMs = 15_000, child = null) {
                     finish(new Error("invalid readiness record"));
                     return;
                 }
-                if (selected !== null) {
-                    finish(null, selected);
+                if (selected === null || selected === undefined) {
+                    continue;
+                }
+                // Readiness call sites select endpoint strings, not truthy
+                // values or arbitrary objects from untrusted process output.
+                if (typeof selected !== "string" || selected.length === 0) {
+                    finish(new Error("invalid readiness selector result"));
                     return;
                 }
+                finish(null, selected);
+                return;
             }
         };
         const timer = setTimeout(() => finish(new Error(
@@ -490,6 +497,37 @@ test(
         stream.end();
     },
 );
+
+test("readiness selector ignores undefined until a valid selected line",
+    async () => {
+        const stream = new PassThrough();
+        const pending = waitForLine(stream, (line) => {
+            if (line === "ready: valid") {
+                return "valid";
+            }
+            // An incomplete selector may omit its explicit null fallback.
+        });
+        stream.write("unrelated child output\n");
+        stream.write("ready: valid\n");
+        assert.equal(await pending, "valid");
+        assert.equal(stream.listenerCount("data"), 0);
+        stream.destroy();
+    });
+
+test("readiness selector refuses invalid selected values", async () => {
+    for (const value of [0, false, "", { origin: "private" }]) {
+        const stream = new PassThrough();
+        const pending = waitForLine(stream, () => value);
+        stream.write("ready: synthetic\n");
+        await assert.rejects(pending, (error) => {
+            assert.equal(error.message, "invalid readiness selector result");
+            assert.equal("cause" in error, false);
+            return true;
+        });
+        assert.equal(stream.listenerCount("data"), 0);
+        stream.destroy();
+    }
+});
 
 test(
     "readiness output fails promptly on closed or silent streams",
