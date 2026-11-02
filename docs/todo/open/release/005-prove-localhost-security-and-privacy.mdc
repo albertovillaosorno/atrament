@@ -1393,3 +1393,20 @@ the backend bytes were restored exactly. Unrelated `Command::preview` and
 read-only process status extension imports remain outside this conservative
 review. This is static source evidence, not an execution sandbox or a repair
 for the browser-opener credential exposed in child argv.
+
+The pinned `nix` 0.31.3 `fs` feature also enables `unistd::mkstemp`,
+which creates a persistent regular file from a template and returns an open
+file descriptor. The former direct filesystem mutation inventory reviewed
+`nix::fcntl` open paths and many `unistd` mutators, but missed this constructor.
+Rust 1.97.1 compiled a captured `nix::unistd::mkstemp::<str>` function item;
+`unistd::mkdtemp` is **not** enabled by the pinned feature set.
+
+A red-first regression demonstrated the missing `mkstemp` authority. The
+updated source inventory now detects direct and captured calls, grouped and
+renamed imports, raw identifiers, and comment-separated paths. Four inactive
+`session-secret` mutations failed the strengthened filesystem owner check;
+each mutation was restored byte-for-byte.
+
+No production code changed. This source review does not prove syscall
+isolation, clean up temporary files, or resolve the browser opener's
+exposed credential in child argv.

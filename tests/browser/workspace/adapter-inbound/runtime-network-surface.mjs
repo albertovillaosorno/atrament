@@ -662,7 +662,7 @@ function usesDirectFilesystemMutationAuthority(source) {
     const nixMutations = new RegExp(
         String.raw`\b(?:chown|fchown|fchownat|fchmod|fchmodat|ftruncate|` +
             String.raw`futimens|linkat|mkdir|mkdirat|mkfifo|mkfifoat|` +
-            String.raw`mknod|mknodat|` +
+            String.raw`mknod|mknodat|mkstemp|` +
             String.raw`renameat|renameat2|rmdir|symlinkat|truncate|` +
             String.raw`unlink|unlinkat|utimensat|write)\b`,
         "u",
@@ -1625,6 +1625,14 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use r#std::r#fs::r#DirBuilder;',
         'DirBuilder::new().recursive(true).create("private");',
         'std::fs::DirBuilder::new().create("private");',
+        // nix 0.31.3 `fs` enables mkstemp: it creates a persistent file
+        // without std::fs, nix::fcntl, or a borrowed stream write.
+        'nix::unistd::mkstemp("private_XXXXXX");',
+        'let create = nix::unistd::mkstemp::<str>;',
+        'use nix::unistd::mkstemp as create_file;',
+        'use ::nix::{unistd::{mkstemp as create_file}};',
+        'use r#nix::r#unistd::r#mkstemp as create_file;',
+        'nix/**/::unistd::mkstemp("private_XXXXXX");',
         'nix::sys::stat::mknod("private", kind, perms, dev);',
         'nix::sys::stat::mknodat(&dir, "private", kind, perms, dev);',
         'use nix::sys::stat::mknod as create_inode;',
