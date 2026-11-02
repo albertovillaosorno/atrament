@@ -85,6 +85,88 @@ async function browserModuleSources() {
     })));
 }
 
+// The HTML shell and stylesheet execute before the reviewed workspace
+// module. Pin their literal request-capable declarations independently of
+// the browser's CSP enforcement: a future asset needs explicit review.
+const STYLESHEET = new URL(
+    "../../../../src/browser/workspace/adapter-inbound/workspace.css",
+    import.meta.url,
+);
+
+function usesUnreviewedMarkupRequests(source) {
+    let remaining = source;
+    for (const tag of [
+        '<link rel="icon" href="data:,">',
+        '<link rel="stylesheet" href="./workspace.css">',
+        '<a class="skip-link" href="#llm-editor-title">',
+        '<a class="skip-link" href="#human-editor-title">',
+        '<script type="module" src="./generated/main.js">',
+    ]) {
+        if (remaining.split(tag).length - 1 !== 1) {
+            return true;
+        }
+        remaining = remaining.replace(tag, "");
+    }
+    return [
+        /<\s*(?:a|link|script|base|form|iframe|frame|portal|img)\b/iu,
+        /<\s*(?:source|picture|video|audio|track|embed|object)\b/iu,
+        /\b(?:href|src|srcset|srcdoc|action|formaction|poster)\s*=/iu,
+        /\b(?:ping|background|manifest)\s*=/iu,
+        /\b(?:style|on[a-z]+)\s*=/iu,
+        /<\s*meta\b[^>]*\bhttp-equiv\s*=\s*['"]?refresh\b/iu,
+    ].some((pattern) => pattern.test(remaining));
+}
+
+function usesUnreviewedStylesheetRequests(source) {
+    return [
+        /@\s*(?:import|font-face)\b/iu,
+        /\b(?:url|image-set|cross-fade)\s*\(/iu,
+        /-moz-binding\s*:/iu,
+    ].some((pattern) => pattern.test(source));
+}
+
+test("static HTML and CSS admit only reviewed resource declarations",
+    async () => {
+    const html = await readFile(INDEX_HTML, "utf8");
+    const css = await readFile(STYLESHEET, "utf8");
+    assert.equal(usesUnreviewedMarkupRequests(html), false,
+        "workspace HTML gained a resource or navigation declaration");
+    assert.equal(usesUnreviewedStylesheetRequests(css), false,
+        "workspace CSS gained a resource request declaration");
+});
+
+test("static asset inventory rejects unreviewed markup and CSS requests",
+    async () => {
+    const html = await readFile(INDEX_HTML, "utf8");
+    const css = await readFile(STYLESHEET, "utf8");
+    for (const candidate of [
+        '<img src="https://example.invalid/pixel" alt="">',
+        '<a href="https://example.invalid/leave">Leave</a>',
+        '<link rel="prefetch" href="/extra">',
+        '<script type="module" src="/extra.js"></script>',
+        '<form action="/submit"></form>',
+        '<iframe srcdoc="<p>foreign</p>"></iframe>',
+        '<meta http-equiv="refresh" content="0;url=/leave">',
+        '<div style="background: url(/image)"></div>',
+        '<div onclick="location.assign(42)"></div>',
+        '<svg><image href="/extra.svg" /></svg>',
+        '<source srcset="/extra.webp 1x">',
+    ]) {
+        assert.equal(usesUnreviewedMarkupRequests(
+            html.replace("</body>", `${candidate}</body>`)), true,
+        candidate);
+    }
+    for (const candidate of [
+        '@import "https://example.invalid/extra.css";',
+        'div { background-image: url("/extra.svg"); }',
+        'div { background: image-set("/extra.png" 1x); }',
+        '@font-face { font-family: extra; src: local("Extra"); }',
+    ]) {
+        assert.equal(usesUnreviewedStylesheetRequests(
+            `${css}\n${candidate}`), true, candidate);
+    }
+});
+
 const {
     isDraftReadContentType,
     decodeDraftReadResponse,
@@ -370,7 +452,8 @@ test("browser navigation inventory distinguishes reviewed local calls", () => {
         "const local = window.location.pathname + window.location.search;",
     ].join("\n");
     assert.equal(usesUnreviewedBrowserNavigation(reviewed, true), false);
-    assert.equal(usesUnreviewedBrowserNavigation("const draft = 'text';", false),
+    assert.equal(usesUnreviewedBrowserNavigation(
+        "const draft = 'text';", false),
         false);
     for (const candidate of [
         "window.location.assign(destination)",

@@ -1535,8 +1535,10 @@ computed location changes, history navigation, form submission, synthetic
 anchor clicks and dynamic image/audio constructors require review across
 both the authored TypeScript and emitted JavaScript trees. Five inert
 TypeScript navigation probes and one emitted-JavaScript probe were rejected,
-then each mutated file was restored byte-for-byte. The source inventory is
-not a DOM flow analysis or browser network sandbox; dynamically aliased and
+then each mutated file was restored byte-for-byte.
+
+The source inventory is not a DOM flow analysis or browser network sandbox;
+dynamically aliased and
 other unmodeled request paths remain outside the proof. The known browser
 opener argv credential exposure is unchanged, and P8 remains open.
 
@@ -1545,3 +1547,22 @@ missed `window['location'].assign(...)`. The review now includes literal
 bracket access and `globalThis` for location and history navigation; direct,
 computed-literal and globalThis probes pass the stricter regression. Arbitrary
 computed property names and indirect aliases remain outside the static proof.
+
+The existing browser privacy tests reviewed ten TypeScript/JavaScript
+modules but did not inspect the static HTML/CSS shell for resource requests.
+A red-first probe inserted an external `<img>` into the HTML and an `@import`
+into the stylesheet; all 39 existing session-persistence tests still passed.
+Both files were restored byte-for-byte after the probe.
+
+A separate static-resource inventory now pins the favicon, stylesheet,
+module script and two local skip links as the only declared HTML request or
+navigation targets. It rejects new resource tags, URL-bearing attributes,
+inline handlers, and meta redirects, along with CSS imports, URL/image
+functions and font-face declarations. Two focused tests cover the tracked
+sources and synthetic request variants.
+
+Four temporary HTML/CSS mutations (external image, meta redirect, CSS
+import, image-set) individually failed the
+new guard and were restored exactly. This is conservative text-level source
+review, not a DOM/CSS parser, runtime network trace, or substitute for CSP.
+The opener-argv credential exposure and wider P8 acceptance remain open.
