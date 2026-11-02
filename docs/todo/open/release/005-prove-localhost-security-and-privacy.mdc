@@ -1650,4 +1650,4 @@ creation across all ten authored/emitted modules. Four static-markup and
 thirteen browser-code probes plus six individually restored source mutations
 verify rejection. This is a conservative lexical source review, not proof of
 browser file-picker permission, drag-and-drop dataflow, or complete local-file
-intake confinement. P8 acceptance remains open.
+intake confinement; P8 acceptance remains open.
