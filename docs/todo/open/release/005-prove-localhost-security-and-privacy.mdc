@@ -1347,3 +1347,17 @@ flagging crate-local `env` modules. Eight cfg-inactive backend mutations across
 `session-secret`, browser launch, and runtime bootstrap were rejected and all
 original bytes restored. These are static checks, not OS-level environment
 isolation, and the browser-opener argv credential issue remains unresolved.
+
+Scoped Rust threads can execute host code without a conventional
+`thread::spawn` call in the declaring module. The pinned Rust 1.97.1 compiler
+accepts `Scope::spawn` captured as a first-class method item and later invoked
+through a local function binding. A red-first scanner fixture showed that a
+captured `std::thread::scope` also bypassed the prior process authority review.
+
+The process owner inventory now reviews direct and imported `thread::scope`,
+`thread::Scope`, and captured `Scope::spawn` or `Builder::spawn_scoped` items,
+including grouped aliases and raw identifiers. Six cfg-inactive
+`session-secret` mutations were rejected before exact restoration of the
+original module bytes. This does not prove that short-lived threads never
+exist between process snapshots, and does not resolve browser opener argv
+credential exposure.

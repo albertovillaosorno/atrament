@@ -285,7 +285,11 @@ function usesStandardLibraryProcessAuthority(source) {
     source = normalizeRustRawIdentifiers(source);
     if (/\bstd\s*::\s*process\b/u.test(source)
         || /\bCommand\s*::\s*new\s*\(/u.test(source)
-        || /\b(?:std\s*::\s*)?thread\s*::\s*(?:spawn|Builder)\b/u
+        // A scoped worker can be created through a captured `Scope::spawn`
+        // function item, even if this module never calls `.spawn(...)`.
+        || /\b(?:std\s*::\s*)?thread\s*::\s*(?:spawn|scope|Builder|Scope)\b/u
+            .test(source)
+        || /\b(?:Builder|Scope)\s*::\s*spawn(?:_scoped|_unchecked)?\b/u
             .test(source)) {
         return true;
     }
@@ -298,6 +302,10 @@ function usesStandardLibraryProcessAuthority(source) {
             .test(source)) {
         return true;
     }
+    const scopedThreadImport = new RegExp(
+        String.raw`\bthread\s*::\s*\{[^;]*` +
+            String.raw`(?:\b(?:spawn|scope|Builder|Scope)\b|\*)`, "u",
+    );
     for (const match of source.matchAll(
         /\buse\s+(?:::\s*)?std\s*::\s*([^;]+);/gu,
     )) {
@@ -306,10 +314,9 @@ function usesStandardLibraryProcessAuthority(source) {
         const threadImport = /\bthread\s+as\b/u.test(match[1])
             || /\bthread\s*::\s*\{[^;]*\bself\s+as\b/u
                 .test(match[1])
-            || /\bthread\s*::\s*(?:spawn|Builder|\*)/u
+            || /\bthread\s*::\s*(?:spawn|scope|Builder|Scope|\*)/u
                 .test(match[1])
-            || /\bthread\s*::\s*\{[^;]*(?:\bspawn\b|\bBuilder\b|\*)/u
-                .test(match[1]);
+            || scopedThreadImport.test(match[1]);
         const imported = match[1].replace(/[{}\s]/gu, "");
         // A renamed os root can hide a platform process extension.
         if (threadImport
@@ -1131,6 +1138,15 @@ test("standard-library process detector covers equivalent imports", () => {
         "use :: std::{process::Command};",
         'std::thread::spawn(|| {});',
         'thread::spawn(|| {});',
+        'std::thread::scope(|scope| scope.spawn(|| {}));',
+        'let scope = std::thread::scope;',
+        'let start = Scope::spawn;',
+        'let start = Builder::spawn_scoped;',
+        'let start = std::thread::Scope::spawn;',
+        'use std::thread::scope as with_threads;',
+        'use std::thread::Scope as ScopedWorkers;',
+        'use std::{thread::{scope as with_threads}, fmt};',
+        'use ::std::{thread::{Scope as ScopedWorkers}};',
         'use std::thread::spawn as launch_worker;',
         'use std::{thread::{spawn as launch_worker}, fmt};',
         'use ::std::{thread::{Builder as WorkerBuilder}};',
