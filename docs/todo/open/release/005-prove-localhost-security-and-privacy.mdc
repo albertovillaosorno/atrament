@@ -2551,3 +2551,11 @@ signal category; synthetic private-marker tests pass for both signal stages
 and the asynchronous event, with no lingering child observers. This does not
 prove an operating-system child was reaped after every failed signal, remove
 production launcher credentials, or satisfy P8's privacy acceptance.
+
+The disposable HTTP fixture server's close callback previously propagated
+a raw socket exception, which can include private process or request text.
+A red-first synthetic callback injected a private marker into that exception;
+the fixture now rejects with a constant cleanup diagnostic instead. The
+focused fixture tests still verify that active and upgraded connections are
+closed or rejected within a finite bound. This is not production runtime
+listener teardown or a claim that host browser history was erased.

@@ -431,7 +431,8 @@ async function closeFixtureServer(server, timeoutMs = 5_000) {
         server.close((error) => {
             clearTimeout(timer);
             if (error) {
-                reject(error);
+                // Native error text can contain untrusted socket metadata.
+                reject(new Error("disposable HTTP fixture close failed"));
             } else {
                 resolve();
             }
@@ -440,6 +441,31 @@ async function closeFixtureServer(server, timeoutMs = 5_000) {
     server.closeAllConnections();
     await closed;
 }
+
+test("fixture close errors never expose private socket diagnostics",
+    async () => {
+        const marker = "private-fixture-close-marker-7353";
+        let closeCalls = 0;
+        let abortCalls = 0;
+        const server = {
+            listening: true,
+            close: (done) => {
+                closeCalls += 1;
+                done(new Error(`fixture close failed: ${marker}`));
+            },
+            closeAllConnections: () => { abortCalls += 1; },
+        };
+        await assert.rejects(closeFixtureServer(server, 100), (error) => {
+            assert.equal(error.message.includes(marker), false);
+            assert.equal("cause" in error, false);
+            assert.equal(error.message,
+                "disposable HTTP fixture close failed");
+            return true;
+        });
+        assert.equal(closeCalls, 1);
+        assert.equal(abortCalls, 1);
+    },
+);
 
 test(
     "readiness output handles fragmented lines and removes observers",
