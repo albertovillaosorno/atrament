@@ -2185,3 +2185,21 @@ This is only lexical source review. Logging or timing APIs alone do not imply
 network exfiltration, and these checks are not browser-enforced privacy
 isolation. The opener argv credential and Firefox storage-erasure limitations
 still block the broader P8 acceptance claim.
+
+A further navigation review found that capturing `location.assign` or
+`history.pushState` could avoid the existing direct-call detector. A
+red-first synthetic `location.assign.bind(location)` probe passed before
+this guard was tightened. Captured methods can later change the browser's
+address without using an approved `fetch` site; `connect-src` alone is not a
+general navigation restriction.
+
+The source review now pins the six existing `window.location` and
+`window.history` expressions (nine occurrences) to the main TypeScript
+module and its generated JavaScript. Bare first-class `location`, `Location`,
+`history`, and `History` references require fresh review; ten alias,
+destructuring, and method-capture probes are checked against each of the ten
+modules. Existing fragment scrubbing and local page reload stay admitted.
+
+This is lexical drift detection rather than an execution sandbox. The
+browser opener still exposes its credential in argv, and Firefox storage
+cleanup remains unverified.

@@ -1448,8 +1448,14 @@ test("browser source and emitted modules reject unreviewed host reads",
 // This guards obvious source drift, not dynamically aliased objects or the
 // browser's complete navigation and network execution paths.
 function usesUnreviewedBrowserNavigation(source, main) {
-    let remaining = source;
+    // The complete known location/history authority is in the main module.
+    // Permit only these exact expressions: a captured method or computed
+    // alias can otherwise navigate without a direct .assign() call.
+    let remaining = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     for (const [site, count] of [
+        ["window.location.pathname", 1],
+        ["window.location.search", 1],
+        ["window.location.hash", 3],
         ["window.location.replace(localUrl)", 1],
         ["window.location.reload()", 1],
         ['window.history.replaceState(null, "", localUrl)', 2],
@@ -1506,9 +1512,25 @@ function usesUnreviewedBrowserNavigation(source, main) {
             "u",
         ),
     ];
-    const executable = remaining.replace(/^\s*\/\/[^\n]*$/gmu, "");
-    return navigation.some((pattern) => pattern.test(executable));
+    // Standalone location/history are ambient browser globals. Reject the
+    // first-class references too, not only named mutations: destructuring,
+    // optional chaining and bound methods can hide a later navigation.
+    return /\b(?:location|Location|history|History)\b/u.test(remaining)
+        || navigation.some((pattern) => pattern.test(remaining));
 }
+
+const CAPTURED_NAVIGATION_PROBES = [
+    "const navigate = location.assign.bind(location);",
+    'const navigate = location["assign"].bind(location);',
+    "const navigate = location?.replace;",
+    "const { assign: navigate } = location;",
+    "const { href: target } = location;",
+    "const handle = Location;",
+    "const go = history.pushState.bind(history);",
+    'const go = history["replaceState"];',
+    "const { pushState: go } = history;",
+    "const handle = History;",
+];
 
 test("browser navigation inventory distinguishes reviewed local calls", () => {
     const reviewed = [
@@ -1517,6 +1539,8 @@ test("browser navigation inventory distinguishes reviewed local calls", () => {
         "window.location.replace(localUrl);",
         "window.location.reload();",
         "const hash = window.location.hash;",
+        "const otherHash = window.location.hash;",
+        "const lastHash = window.location.hash;",
         "const local = window.location.pathname + window.location.search;",
     ].join("\n");
     assert.equal(usesUnreviewedBrowserNavigation(reviewed, true), false);
@@ -1552,6 +1576,7 @@ test("browser navigation inventory distinguishes reviewed local calls", () => {
         "new Image()",
         "new Audio()",
         "const navigatorTarget = window.location;",
+        ...CAPTURED_NAVIGATION_PROBES,
         'navigation.navigate("https://example.invalid/private");',
         'window.navigation.reload();',
         'globalThis["navigation"].navigate(target);',
@@ -1571,6 +1596,11 @@ test("browser source and emitted modules reject unreviewed navigation",
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(usesUnreviewedBrowserNavigation(source, main), false,
             `${filename} gained an unreviewed navigation or form request`);
+        for (const candidate of CAPTURED_NAVIGATION_PROBES) {
+            assert.equal(usesUnreviewedBrowserNavigation(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped navigation review`);
+        }
     }
 });
 
