@@ -331,3 +331,17 @@ and cleanup of the still-owned sibling. This is a last-observation guard,
 not atomic compare-and-unlink: a hostile concurrent rename after the
 identity check can still race cleanup or publication, and SIGKILL after
 publication of the temporary name can still strand that stage.
+
+Crash-memory capture is a separate, still-unverified privacy boundary.
+The validation host permits unlimited core size and its Linux
+`/proc/sys/kernel/core_pattern` routes crashes to `systemd-coredump`.
+The current Atrament startup path does not disable process dumpability
+before allocating the session secret or private notebook state. Depending
+on host crash-collection policy, an abnormal exit could therefore retain
+private process memory outside Atrament's ordinary cleanup lifecycle.
+
+This is source and host-policy evidence, **not** a forced-crash leak
+reproduction; no private crash dump was generated or inspected. P1 remains
+open pending an explicitly reviewed, fail-closed process-dump policy and
+an isolated child-process regression that verifies it without creating
+persistent private test artifacts.
