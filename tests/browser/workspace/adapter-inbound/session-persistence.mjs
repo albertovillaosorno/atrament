@@ -710,7 +710,7 @@ function usesUnreviewedBrowserHostInput(source, main) {
         String.raw`hardwareConcurrency|deviceMemory|userAgent(?:Data)?|` +
         String.raw`connection|getBattery|getGamepads|bluetooth|usb|` +
         String.raw`serial|hid|gpu|keyboard|permissions|requestMIDIAccess|` +
-        String.raw`contacts|xr)`;
+        String.raw`contacts|xr|wakeLock)`;
     const ambientRead = new RegExp(
         String.raw`\bnavigator\s*(?:(?:\?\.|\.)\s*|(?:\?\.)?\[\s*['"])` +
             hostProperty + String.raw`\b`,
@@ -737,15 +737,22 @@ function usesUnreviewedBrowserHostInput(source, main) {
             String.raw`AuthenticatorAttestationResponse|CredentialsContainer|` +
             String.raw`PasswordCredential|FederatedCredential|` +
             String.raw`IdentityCredential|IdentityProvider|OTPCredential|` +
-            String.raw`DigitalCredential|KeyboardLayoutMap|getLayoutMap)\b`,
+            String.raw`DigitalCredential|KeyboardLayoutMap|getLayoutMap|` +
+            String.raw`WakeLock|WakeLockSentinel|ScreenOrientation)\b`,
         "u",
     );
     const motionEvents =
         /\b(?:on)?(?:devicemotion|deviceorientation(?:absolute)?)\b/u;
+    const screenOrientation = new RegExp(
+        String.raw`\bscreen\s*(?:(?:\?\.|\.)\s*orientation\b|` +
+            String.raw`(?:\?\.)?\[\s*['"]orientation['"]\s*\])`,
+        "u",
+    );
     // Topics can disclose browsing interests even without session-network
     // calls or the navigator credential/device interfaces above.
     const browsingInterests = /\bbrowsingTopics\b/u;
     if (ambientRead.test(source)
+        || screenOrientation.test(source)
         || directCapture.test(source)
         || browsingInterests.test(source)
         || motionEvents.test(source)
@@ -895,6 +902,33 @@ test("browser keyboard layout APIs require host-input review", async () => {
             assert.equal(usesUnreviewedBrowserHostInput(
                 `${source}\n${candidate}`, main), true,
             `${filename}: ${candidate} escaped keyboard authority review`);
+        }
+    }
+});
+
+// Screen wake locks can keep the device awake, while screen orientation
+// exposes display state and can lock presentation direction. Neither is
+// required by the page editor's responsive window-size layout.
+test("browser screen power and orientation need host review", async () => {
+    const probes = [
+        "navigator.wakeLock.request('screen')",
+        'const power = navigator["wakeLock"];',
+        "const power = navigator?.wakeLock;",
+        "void WakeLock;",
+        "void WakeLockSentinel;",
+        "screen.orientation.lock('portrait');",
+        'const rotation = window.screen["orientation"];',
+        'const rotation = screen?.["orientation"];',
+        "void ScreenOrientation;",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained unreviewed screen power or orientation`);
+        for (const candidate of probes) {
+            assert.equal(usesUnreviewedBrowserHostInput(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped screen authority review`);
         }
     }
 });

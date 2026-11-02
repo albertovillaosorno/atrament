@@ -2063,3 +2063,16 @@ passes; a Firefox runtime fixture checks the served header.
 Browser support and enforcement vary, so this is not proof of browser-level
 denial or protection against computed property aliases. The opener argv
 leak and broader P8 acceptance remain unresolved.
+
+A separate red-first browser source review found that the existing host-input
+check admitted `navigator.wakeLock` device wake requests and
+`screen.orientation` display state reads or orientation locks. Neither is
+needed for the responsive editor, which uses its own viewport dimensions.
+
+The host-input inventory now requires review for the named wake-lock and
+screen-orientation interfaces, including first-class and indexed aliases.
+Nine synthetic examples run against all ten authored and emitted modules;
+no production browser code changed. The HTTP runtime already requests
+`screen-wake-lock=()` denial, but this lexical source review is not a
+browser-level enforcement test or a proof against dynamic aliases. P8 and
+the separate opener argv credential exposure remain unresolved.
