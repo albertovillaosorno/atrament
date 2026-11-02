@@ -2137,3 +2137,17 @@ and unreviewed timer calls. The production browser implementation is unchanged.
 This remains lexical drift detection and does not prove protection against
 computed aliases or compromised browser extensions. The launcher argv secret
 exposure, browser-storage erasure, and P8 acceptance remain unresolved.
+
+
+Browser global-object aliases could bypass the previous direct-property
+inventories: the old policy accepted `const root = window` without review.
+A red-first test now pins fourteen existing, exact `window` expressions
+(17 occurrences) in each main module. All other first-class `window`
+references and ambient `globalThis`, `self`, `top`, `parent`, `frames`, or
+`opener` tokens require review across source and emitted modules.
+
+Twelve synthetic alias and event additions per module fail this guard, while
+existing fragment scrubbing, bfcache handling, viewport timers, and resize
+listeners remain admitted. This is a lexical inventory, not browser-enforced
+capability isolation or proof against computed aliases. The unresolved
+browser-opener argv credential and Firefox storage erasure limitations remain.

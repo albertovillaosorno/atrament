@@ -398,6 +398,66 @@ test("browser runtime code loading requires explicit review", async () => {
     }
 });
 
+// An alias to the entire global object can retrieve a browser capability
+// without spelling its name in a direct-property audit. Preserve only the
+// reviewed viewport, navigation cleanup, lifecycle and timer references.
+function hasUnreviewedBrowserGlobalAuthority(source, main) {
+    // These exact expressions are the complete reviewed window authority.
+    // Removing them before scanning also catches aliases to the root object.
+    const allowed = [
+        ["window.location.pathname", 1],
+        ["window.location.search", 1],
+        ["window.location.hash", 3],
+        ['window.history.replaceState(null, "", localUrl)', 2],
+        ["window.location.replace(localUrl)", 1],
+        ['window.addEventListener("hashchange"', 1],
+        ['window.addEventListener("pagehide"', 1],
+        ['window.addEventListener("pageshow"', 1],
+        ['window.addEventListener("blur"', 1],
+        ['window.addEventListener("resize"', 1],
+        ["window.location.reload()", 1],
+        ["window.setTimeout(resetLocalViewportState, 0)", 1],
+        ["window.setTimeout(() => {", 1],
+        ["window.innerWidth", 1],
+    ];
+    let remaining = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    for (const [site, count] of allowed) {
+        if (remaining.split(site).length - 1 !== (main ? count : 0)) {
+            return true;
+        }
+        remaining = remaining.replaceAll(site, "");
+    }
+    return /\b(?:window|globalThis|self|top|parent|frames|opener)\b/u
+        .test(remaining);
+}
+
+test("browser first-class global aliases require explicit review", async () => {
+    const candidates = [
+        "const root = window;",
+        "const { navigator: host } = window;",
+        "const root = globalThis;",
+        'const host = globalThis?.["navigator"];',
+        "const root = self;",
+        "const root = top;",
+        "const root = parent;",
+        "const roots = frames;",
+        "const sourceWindow = opener;",
+        'const root = window["constructor"];',
+        "const root = window?.navigator;",
+        "window.addEventListener('message', onMessage);",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(hasUnreviewedBrowserGlobalAuthority(source, main),
+            false, `${filename} gained unreviewed browser global authority`);
+        for (const candidate of candidates) {
+            assert.equal(hasUnreviewedBrowserGlobalAuthority(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} bypassed the global-object review`);
+        }
+    }
+});
+
 // A page can retain text through window.name, cookies, cache and shared
 // browser storage APIs without Web Storage. Bracket access and first-class
 // global references must not bypass this literal storage inventory.
