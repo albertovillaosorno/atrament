@@ -444,3 +444,14 @@ process-memory denial evidence for the isolated guarded child, not a scan of
 the real runtime's resident data, a protection against privileged inspection,
 or a guarantee about swap, external browsers, or host crash collectors. P1
 remains open for end-to-end temporary media and crash cleanup.
+
+A manual Linux smoke probe also started the built Atrament CLI until `ready`
+using a disposable no-op browser opener. The parent compared a normal child
+process against the live runtime with the `process_vm_readv` and
+`process_vm_writev` system calls, each requesting one byte at invalid remote
+address zero. Both calls returned `EFAULT` for the ordinary child and `EPERM`
+for Atrament; no process-private memory was read or overwritten.
+
+The probe terminated both children and deleted its temporary opener. This
+is one live-host kernel-admission observation, not an automated end-to-end
+confidentiality or crash-erasure guarantee.

@@ -2331,3 +2331,14 @@ this Linux host, not global
 process isolation or confidentiality against privileged observers. It does
 not address the browser-launch argv/history credential risks or prove Firefox
 storage erasure; P8 remains open.
+
+A separate manual live CLI check started Atrament to `ready` with a
+test-owned no-op browser opener and made both memory system calls against
+invalid remote address zero. A same-parent ordinary child returned `EFAULT`
+for read and write, while Atrament returned `EPERM` for both before address
+validation, without exposing or changing process memory. This checks the
+compiled startup path in addition to the guarded synthetic child fixture.
+
+The test-owned opener and processes were destroyed after the smoke check.
+It does not prove Firefox history cleanup, eliminate the production launcher
+argv leak, or close P8.

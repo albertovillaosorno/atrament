@@ -122,7 +122,8 @@ fn linux_remote_memory_read_and_write_require_a_dumpable_target() {
                 break;
             }
         }
-        let address = maybe_address.expect("child announced a test-only address");
+        let address = maybe_address
+            .expect("child announced a test-only address");
         let mut buffer = [0u8; 8];
         let length = buffer.len();
         let pid = Pid::from_raw(i32::try_from(child.0.id())
