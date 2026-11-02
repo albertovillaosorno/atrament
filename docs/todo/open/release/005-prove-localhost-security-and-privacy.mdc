@@ -1809,6 +1809,8 @@ The updated inventory requires review for `navigator.contacts`,
 `getScreenDetails`, and `IdleDetector`. Thirteen direct, indexed, and
 first-class variants are tested across authored and emitted modules. Six
 individual additions in authored/emitted main source were rejected by the
-new guard and restored byte-for-byte. This does not demonstrate runtime
-permission denial, cover dynamically assembled names, or fix the browser
+new guard and restored byte-for-byte.
+
+This does not demonstrate runtime permission denial, cover dynamically
+assembled names, or fix the browser
 launcher's credential-bearing argv. P8 acceptance remains open.
