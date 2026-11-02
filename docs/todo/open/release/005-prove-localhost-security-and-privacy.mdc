@@ -2228,3 +2228,21 @@ reviewed session requests. This browser-executed, same-origin inventory would
 fail on an undeclared local telemetry route even if the router replied `404`.
 It does not establish absence of cross-origin traffic independently of the
 existing CSP and source inventories.
+
+The Firefox load/edit/End fixture now independently subscribes to WebDriver
+BiDi `network.beforeRequestSent` before navigation. The actual browser reports
+thirteen admitted same-origin HTTP requests matching the complete loopback
+router inventory, plus one inert `data:,` icon load. The test rejects an
+unexpected origin, URL query, scheme, or HTTP target even if the fixture
+router never receives that request; it also fails if network observation is
+absent. This expands P8 egress evidence beyond same-origin server logs.
+
+A deliberate navigation to a second test-owned loopback origin after End is
+observed by both the new HTTP server and the same BiDi subscriber, proving
+that the browser observer also sees off-origin requests from this tab.
+
+The BiDi check covers the observed HTTP request attempts in that disposable
+Firefox tab and lifecycle. It does not establish OS-wide network silence,
+other browser-engine behavior, or browser-enforced credential handoff safety.
+The launcher still passes the credential in child argv, and Firefox's
+`Clear-Site-Data` storage erasure is not proven.

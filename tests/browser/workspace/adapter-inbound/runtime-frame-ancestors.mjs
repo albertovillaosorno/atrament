@@ -30,8 +30,8 @@
 // - Description:
 //   - Uses Firefox's built-in WebDriver BiDi endpoint through a dependency-free
 //     RFC 6455 client. It checks responsive/scriptless layout, inert hostile
-//     text, framing, draft coalescing, fragment-scrubbed refresh, and
-//     close-time cancellation.
+//     text, framing, draft coalescing, network egress, fragment-scrubbed
+//     refresh, and close-time cancellation.
 // - Usage:
 //   - Run through `pnpm test:frontend` from the repository root.
 // - Defaults:
@@ -8001,6 +8001,7 @@ test(
         });
         const children = [];
         let bidi;
+        let foreignOriginControl;
         try {
             server.listen(0, "127.0.0.1");
             await once(server, "listening");
@@ -8010,6 +8011,10 @@ test(
             bidi = await startBidiFirefox(profile, children);
             const tab = await bidi.command("browsingContext.create", {
                 type: "tab",
+            });
+            await bidi.command("session.subscribe", {
+                events: ["network.beforeRequestSent"],
+                contexts: [tab.context],
             });
             await bidi.command("browsingContext.navigate", {
                 context: tab.context,
@@ -8059,7 +8064,7 @@ test(
             assert.deepEqual(final.task, { disabled: true, value: "" });
             assert.deepEqual(await browserStorageInventory(bidi, tab.context),
                 expected, "ended session must not leave browser stores");
-            assert.deepEqual(allRequests.sort(), [
+            const approvedRoutes = [
                 "GET /",
                 "GET /workspace.css",
                 "GET /generated/main.js",
@@ -8073,9 +8078,89 @@ test(
                 "GET /api/session/candidate",
                 "POST /api/session/task",
                 "POST /api/session/end",
-            ].sort(), "real browser must issue only the reviewed requests");
+            ].sort();
+            // A future accidental URL leak must not appear in test output.
+            assert.equal(JSON.stringify(allRequests.sort())
+                === JSON.stringify(approvedRoutes), true,
+                "real browser must issue only the reviewed requests");
+            const browserRequests = bidi.events.filter((event) =>
+                event.type === "event"
+                    && event.method === "network.beforeRequestSent");
+            assert.ok(browserRequests.length > 0,
+                "Firefox network observation must not silently be absent");
+            // The loopback router cannot see requests to other hosts. BiDi
+            // observes network attempts independently of that server.
+            const localRequests = [];
+            let dataIconEvents = 0;
+            for (const event of browserRequests) {
+                assert.equal(event.params.context, tab.context);
+                assert.equal(typeof event.params.request?.url, "string");
+                let url;
+                try {
+                    url = new URL(event.params.request.url);
+                } catch {
+                    assert.fail("Firefox reported a malformed request URL");
+                }
+                // Firefox also reports the document's inert data:, icon
+                // as a load event even though it has no network origin.
+                if (url.href === "data:,") {
+                    dataIconEvents += 1;
+                    continue;
+                }
+                assert.equal(
+                    url.origin === `http://127.0.0.1:${address.port}`,
+                    true,
+                    "workspace made a request outside its loopback origin");
+                assert.equal(url.search.length, 0,
+                    "unexpected query in request");
+                localRequests.push(
+                    `${event.params.request.method} ${url.pathname}`,
+                );
+            }
+            assert.equal(dataIconEvents, 1,
+                "only the reviewed inert icon may use a data URL");
+            assert.equal(JSON.stringify(localRequests.sort())
+                === JSON.stringify(allRequests), true,
+                "BiDi network events must agree with the loopback router");
+
+            // Positive control: the same BiDi context must also report an
+            // actual navigation to a different test-owned loopback origin.
+            // Only run it after asserting the ended workspace's inventory.
+            let controlVisits = 0;
+            foreignOriginControl = http.createServer((request, response) => {
+                if (request.url === "/network-observer-control") {
+                    controlVisits += 1;
+                }
+                response.writeHead(200, {
+                    "Content-Type": "text/html; charset=utf-8",
+                });
+                response.end("<!doctype html><title>Network control</title>");
+            });
+            foreignOriginControl.listen(0, "127.0.0.1");
+            await once(foreignOriginControl, "listening");
+            const controlAddress = foreignOriginControl.address();
+            assert.notEqual(controlAddress, null);
+            assert.notEqual(typeof controlAddress, "string");
+            const controlUrl = `http://127.0.0.1:${controlAddress.port}`
+                + "/network-observer-control";
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: controlUrl,
+                wait: "complete",
+            });
+            assert.equal(controlVisits, 1,
+                "test-owned second origin must receive its navigation");
+            assert.equal(bidi.events.some((event) =>
+                event.type === "event"
+                    && event.method === "network.beforeRequestSent"
+                    && event.params.context === tab.context
+                    && event.params.request?.url === controlUrl), true,
+                "BiDi must observe an off-origin request in the same tab");
         } finally {
             bidi?.close();
+            if (foreignOriginControl !== undefined) {
+                await closeFixtureServer(foreignOriginControl);
+            }
             await closeFixtureServer(server);
             for (const child of children.reverse()) {
                 await stopChild(child);
