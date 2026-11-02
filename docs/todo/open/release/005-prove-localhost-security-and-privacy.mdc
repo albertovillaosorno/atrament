@@ -1472,3 +1472,16 @@ renamed and nested imports, raw identifiers, and comment-separated paths.
 Eight temporarily injected, cfg-disabled backend probes each failed the
 owner check and were restored byte-for-byte. This is source-level review,
 not proof of runtime pipe isolation or cross-process transfer prevention.
+
+A third pinned nix 0.31.3 `fs` API can change process-wide filesystem
+resolution: Linux `nix::unistd::pivot_root`. The locked Rust 1.97.1
+compiler accepted its captured function item, unlike pathconf/fpathconf,
+which require the disabled `feature` flag and were excluded from scope.
+
+The process-global path mutation inventory did not recognize pivot_root;
+a red-first test confirmed that gap. The zero-owner guard now rejects
+its calls and function items, including aliased, nested, raw-identifier,
+and comment-separated forms. Seven temporarily injected cfg-disabled
+backend mutations were each rejected, then restored byte-for-byte.
+This source check does not prove process isolation or replace runtime
+confinement, and the existing browser-opener argv issue remains open.

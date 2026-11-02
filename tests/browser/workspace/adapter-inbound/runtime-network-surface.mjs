@@ -354,8 +354,11 @@ function usesStandardLibraryProcessAuthority(source) {
 // These global effects require a dedicated zero-owner source inventory.
 function usesProcessWidePathAuthority(source) {
     source = normalizeRustRawIdentifiers(source);
-    const mutation = /\b(?:chdir|fchdir|chroot|umask)\b/u;
-    if (/\b(?:set_current_dir|chdir|fchdir|chroot|umask)\s*\(/u.test(source)
+    // The pinned nix fs feature also exports Linux pivot_root, changing the
+    // process filesystem root without std::env::set_current_dir or chroot.
+    const mutation = /\b(?:chdir|fchdir|chroot|pivot_root|umask)\b/u;
+    if (/\b(?:set_current_dir|chdir|fchdir|chroot|pivot_root|umask)\s*\(/u
+        .test(source)
         || /\b(?:std\s*::\s*)?env\s*::\s*set_current_dir\b/u.test(source)) {
         return true;
     }
@@ -1579,6 +1582,13 @@ test("process-global path detector covers cwd and umask", () => {
         'nix::unistd::chdir("/untrusted");',
         'nix::unistd::fchdir(&directory);',
         'nix::unistd::chroot("/untrusted");',
+        'nix::unistd::pivot_root("/untrusted", "/old");',
+        'let mutate = nix::unistd::pivot_root::<str, str>;',
+        'use nix::unistd::pivot_root as change_root;',
+        'use nix::unistd::{pivot_root as change_root};',
+        'use ::nix::{unistd::{pivot_root as change_root}};',
+        'use r#nix::r#unistd::r#pivot_root as change_root;',
+        'nix/**/::unistd::pivot_root("/untrusted", "/old");',
         'nix::sys::stat::umask(mode);',
         'use nix::unistd::{chdir as change_cwd, fchdir as change_fd};',
         'use ::nix::{unistd::{chroot as change_root}};',
