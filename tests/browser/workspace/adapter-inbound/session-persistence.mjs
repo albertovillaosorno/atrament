@@ -743,16 +743,16 @@ function usesUnreviewedBrowserHostInput(source, main) {
     );
     const motionEvents =
         /\b(?:on)?(?:devicemotion|deviceorientation(?:absolute)?)\b/u;
-    const screenOrientation = new RegExp(
-        String.raw`\bscreen\s*(?:(?:\?\.|\.)\s*orientation\b|` +
-            String.raw`(?:\?\.)?\[\s*['"]orientation['"]\s*\])`,
-        "u",
-    );
+    // A first-class Screen reference permits future physical display reads
+    // even when the original expression never names width or color depth.
+    // Keep the existing viewport-only window.innerWidth path admitted.
+    const physicalScreen =
+        /\b(?:screen|Screen|ScreenDetailed|ScreenDetails)\b/u;
     // Topics can disclose browsing interests even without session-network
     // calls or the navigator credential/device interfaces above.
     const browsingInterests = /\bbrowsingTopics\b/u;
     if (ambientRead.test(source)
-        || screenOrientation.test(source)
+        || physicalScreen.test(source)
         || directCapture.test(source)
         || browsingInterests.test(source)
         || motionEvents.test(source)
@@ -929,6 +929,36 @@ test("browser screen power and orientation need host review", async () => {
             assert.equal(usesUnreviewedBrowserHostInput(
                 `${source}\n${candidate}`, main), true,
             `${filename}: ${candidate} escaped screen authority review`);
+        }
+    }
+});
+
+// Physical display metrics identify monitor resolution, available screen
+// bounds and color depth rather than the editor's own viewport. These host
+// properties are not required by the responsive workspace.
+test("browser physical screen metrics require host-input review", async () => {
+    const probes = [
+        "screen.width",
+        "screen.availWidth",
+        "screen.colorDepth",
+        'const display = window["screen"];',
+        "const display = globalThis?.screen;",
+        "const display = screen;",
+        "const { width } = window.screen;",
+        "void Screen;",
+        "void ScreenDetailed;",
+        "void ScreenDetails;",
+    ];
+    assert.equal(usesUnreviewedBrowserHostInput(
+        "const width = window.innerWidth;", false), false);
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained an unreviewed display metric read`);
+        for (const candidate of probes) {
+            assert.equal(usesUnreviewedBrowserHostInput(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped display metric review`);
         }
     }
 });

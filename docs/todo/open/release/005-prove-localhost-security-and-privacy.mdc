@@ -2076,3 +2076,19 @@ no production browser code changed. The HTTP runtime already requests
 `screen-wake-lock=()` denial, but this lexical source review is not a
 browser-level enforcement test or a proof against dynamic aliases. P8 and
 the separate opener argv credential exposure remain unresolved.
+
+Physical screen resolution, available display bounds, and color depth are
+host-derived values distinct from the viewport width used by the editor.
+The previous screen-orientation inventory accepted direct `screen.width`
+and first-class `window.screen` references, which could introduce unreviewed
+monitor fingerprinting without changing the authorized network calls.
+
+A red-first browser regression now requires review for `screen`, `Screen`,
+`ScreenDetailed`, and `ScreenDetails` references across the five authored
+TypeScript and five emitted JavaScript modules. Ten synthetic source forms
+per module exercise the new inventory, while `window.innerWidth` remains
+admitted for responsive layout. No production browser path has changed.
+
+This is conservative lexical source review, not browser-enforced screen
+privacy or protection from computed property aliases. The launcher argv
+credential exposure and broader P8 acceptance remain unresolved.
