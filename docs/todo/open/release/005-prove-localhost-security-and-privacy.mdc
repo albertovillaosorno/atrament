@@ -2386,8 +2386,8 @@ opener argv channel is separately exposed; P8 remains open for a redesigned
 credential handoff and verified non-retention, not merely empty web storage.
 
 A live Firefox back-navigation regression covers another browser-session
-reentry path: after a private synthetic draft is hydrated, navigating to a
-separate document and returning through browser history yields an empty,
+reentry path: after all three private synthetic drafts are hydrated, navigating
+to a separate document and returning through browser history yields an empty,
 disabled workspace with no new authenticated requests. The original fragment
 is absent from the returned location, and all three fields were populated
 before navigation. The browser process and fixture server stay alive for the
@@ -2397,11 +2397,11 @@ The test also confirms an intervening document is loaded before returning.
 An independent VM execution of the generated `pageshow` handler checks that a
 persisted restore requests immediate reload before local UI restoration.
 
-A fresh random synthetic task marker also remains absent from a bounded
-literal-byte scan of regular files in that disposable Firefox profile after
-navigation, tab close and browser shutdown. A test-owned positive-control file
-shows the same scan would find the marker if present. This does not rule out
-compressed, encrypted, swapped or external browser copies.
+Distinct random synthetic markers for the task, source, and candidate fields
+also remain absent from a bounded literal-byte scan of regular files in the
+disposable Firefox profile after navigation, tab close and browser shutdown.
+A test-owned positive-control file shows the same scan detects each marker.
+This does not rule out compressed, encrypted, swapped or external copies.
 
 This is scoped to Firefox, the fixture's `Cache-Control: no-store` policy, and
 normal history traversal. It does not prove bfcache eligibility, remove the
@@ -2409,11 +2409,11 @@ initial credential URL from Firefox's profile database, protect the browser
 opener's argv, or settle the known P8 credential-retention defect.
 
 A distinct Firefox browser-death fixture now tests a private page that has
-already navigated away: it posts a random synthetic task draft, confirms
-the accepted text was resident and a different document is active, and then
-sends `SIGKILL` without explicit End. The bounded regular-file profile scanner
-detects a test-owned marker control but finds no literal private draft bytes
-after this crash-after-pagehide path.
+already navigated away: it posts three independent synthetic draft values,
+confirms each was accepted and resident before a different document becomes
+active, and sends `SIGKILL` without explicit End. The bounded regular-file
+profile scanner detects all three test-owned marker controls but finds none
+of their literal private bytes after this crash-after-pagehide path.
 
 This positive observation does not imply the browser erased the original
 credential-bearing URL from history, that no compressed or external recovery
