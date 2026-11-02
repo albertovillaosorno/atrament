@@ -71,6 +71,14 @@ const RESPONSE_TRAILERS: &str = concat!(
     "img-src 'self' data:; manifest-src 'none'; media-src 'none'; ",
     "object-src 'none'; script-src 'self'; style-src 'self'; ",
     "worker-src 'none'\r\n",
+    // Browser authority not needed for text editing or the explicit Copy
+    // prompt action is denied at the HTTP boundary. Unsupported policy
+    // features are ignored by older engines; this is defense in depth.
+    "Permissions-Policy: accelerometer=(), autoplay=(), bluetooth=(), ",
+    "camera=(), display-capture=(), encrypted-media=(), fullscreen=(), ",
+    "geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), ",
+    "midi=(), payment=(), serial=(), usb=(), web-share=(), ",
+    "xr-spatial-tracking=()\r\n",
     "Referrer-Policy: no-referrer\r\n",
     "X-Content-Type-Options: nosniff\r\n",
     "Connection: close\r\n\r\n",

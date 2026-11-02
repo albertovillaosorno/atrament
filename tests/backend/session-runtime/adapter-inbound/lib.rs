@@ -2079,6 +2079,17 @@ fn serves_embedded_frontend_resources_without_caching() {
     }
 }
 
+// The browser needs clipboard writes, not device or OS integration. The
+// runtime must deny these ambient capabilities even when the public page
+// loads without its HTML and before any client code executes.
+const EXPECTED_PERMISSIONS_POLICY_HEADER: &str = concat!(
+    "Permissions-Policy: accelerometer=(), autoplay=(), bluetooth=(), ",
+    "camera=(), display-capture=(), encrypted-media=(), fullscreen=(), ",
+    "geolocation=(), gyroscope=(), hid=(), magnetometer=(), microphone=(), ",
+    "midi=(), payment=(), serial=(), usb=(), web-share=(), ",
+    "xr-spatial-tracking=()\r\n",
+);
+
 const EXPECTED_CSP_HEADER: &str = concat!(
     "Content-Security-Policy: frame-ancestors 'none'; ",
     "default-src 'self'; base-uri 'none'; connect-src 'self'; ",
@@ -2147,6 +2158,12 @@ fn assert_security_headers(response: &[u8]) {
     assert!(head.contains(
         EXPECTED_CSP_HEADER,
     ));
+    assert!(head.contains(EXPECTED_PERMISSIONS_POLICY_HEADER));
+    assert_eq!(
+        head.matches("Permissions-Policy: ").count(),
+        1,
+        "exactly one browser permissions policy must be sent",
+    );
     assert!(head.contains("Referrer-Policy: no-referrer\r\n"));
     assert!(head.contains("X-Content-Type-Options: nosniff\r\n"));
     assert!(head.contains("Connection: close\r\n"));

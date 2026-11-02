@@ -92,6 +92,19 @@ misdeclared scripts in production.
 This is browser enforcement evidence for the HTTP boundary, not a claim about
 browser-opener credentials or arbitrary outbound desktop programs.
 
+The loopback runtime also now sends a deny-only `Permissions-Policy` header
+on public, authenticated, error, and empty responses. It disables eighteen
+browser device and host-integration features not needed for text editing or
+the explicit Copy prompt action, including geolocation, camera, microphone,
+local displays, Bluetooth/USB, MIDI, payment, and WebXR. A red-first Rust
+regression failed on the previously absent header and now pins the exact
+single-header policy across seven response status classes. The malformed-body
+and request-timeout transport fixtures also share this header check.
+
+Feature support is browser-dependent: this proves response configuration, not
+independent permission denial in every engine. The known launcher argv leak
+and broader P8 acceptance remain unresolved.
+
 Browser privacy regression evidence also pins the generated workspace to exactly
 four admitted same-origin `fetch` call sites: handshake, draft read,
 draft write, and explicit session end. All four omit ambient credentials,
