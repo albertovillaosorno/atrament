@@ -847,7 +847,9 @@ function hasUnreviewedBrowserDisclosure(source) {
     return [
         new RegExp(
             String.raw`\b(?:console|debugger|reportError|` +
-                String.raw`Notification|alert|confirm|print)\b`, "u",
+                String.raw`Notification|alert|confirm|print|speechSynthesis|` +
+                String.raw`SpeechSynthesisUtterance|AudioContext|` +
+                String.raw`webkitAudioContext|AudioWorkletNode)\b`, "u",
         ),
         /\bprompt\s*\(/u,
         /\b(?:window|globalThis)\s*(?:\?\.|\.)\s*prompt\b/u,
@@ -873,6 +875,11 @@ test("browser private-output sinks require explicit review", async () => {
             "window['print']();",
             "prompt('dialog');",
             'globalThis["prompt"]("dialog");',
+            "speechSynthesis.speak(new SpeechSynthesisUtterance(text));",
+            'const speaker = globalThis["speechSynthesis"];',
+            "new AudioContext();",
+            "new webkitAudioContext();",
+            "new AudioWorkletNode(context, 'processor');",
             'navigator.share({ text: "example" });',
             'void navigator["share"];',
             "clipboard.write([]);",

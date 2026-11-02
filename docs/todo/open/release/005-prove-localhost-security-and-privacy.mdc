@@ -1677,3 +1677,15 @@ aliases in all ten browser modules. Thirteen synthetic variants and six
 separately restored source mutations confirm rejection. This is lexical
 source review, not browser storage inspection or proof against dynamically
 assembled property names. P8 remains open, including the launcher argv leak.
+
+The zero-owner private-output inventory also permitted Web Speech and Web
+Audio capabilities. Inactive speech synthesis in authored TypeScript and an
+`AudioContext` constructor in emitted JavaScript both passed the old review.
+Four source mutations across both trees were restored byte-for-byte.
+
+The expanded private-output guard now requires review for speech synthesis,
+speech utterances, and Web Audio output constructors. Five named references
+and four separate source mutations confirm rejection without changing browser
+production code. This is lexical review, not an audio-hardware privacy test
+or exhaustive coverage of dynamic property names. P8 and the opener argv
+credential exposure remain open.
