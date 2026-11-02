@@ -129,10 +129,31 @@ pub struct ProfileFileCommitEvidence {
 }
 
 #[cfg(target_os = "linux")]
-struct OwnedTemp<'directory> {
-    committed: bool,
-    dir: &'directory File,
-    name: String,
+pub(crate) struct OwnedTemp<'directory> {
+    pub(crate) committed: bool,
+    pub(crate) dir: &'directory File,
+    pub(crate) file_device: u64,
+    pub(crate) file_inode: u64,
+    pub(crate) name: String,
+}
+
+#[cfg(target_os = "linux")]
+impl OwnedTemp<'_> {
+    fn still_owns_name(&self) -> bool {
+        use nix::fcntl::AtFlags;
+        use nix::sys::stat::{SFlag, fstatat};
+
+        fstatat(
+            self.dir,
+            self.name.as_str(),
+            AtFlags::AT_SYMLINK_NOFOLLOW,
+        ).is_ok_and(|metadata| {
+            metadata.st_dev == self.file_device
+                && metadata.st_ino == self.file_inode
+                && SFlag::from_bits_truncate(metadata.st_mode) & SFlag::S_IFMT
+                    == SFlag::S_IFREG
+        })
+    }
 }
 
 #[cfg(target_os = "linux")]
@@ -152,7 +173,10 @@ struct ReplaceTargetObservation {
 )]
 impl Drop for OwnedTemp<'_> {
     fn drop(&mut self) {
-        if !self.committed {
+        // A competing actor can move or replace the random sibling before
+        // an error unwinds here. Never unlink a pathname no longer owned by
+        // the staged inode. This check cannot close a later rename race.
+        if !self.committed && self.still_owns_name() {
             let _result: Result<(), Errno> = unlinkat(
                 self.dir,
                 self.name.as_str(),
@@ -600,6 +624,8 @@ fn commit_platform(
                             committed: false,
                             dir: &directory,
                             name: temporary_name,
+                            file_device: file_identity.0,
+                            file_inode: file_identity.1,
                         });
                         break;
                     }
@@ -613,6 +639,12 @@ fn commit_platform(
             }
             let mut temp =
                 linked.ok_or(ProfileFileCommitError::RandomUnavailable)?;
+            // A replaced sibling must not be promoted to the selected
+            // target. The final lookup remains a race, so verify the actual
+            // selected inode again after the rename before reporting success.
+            if !temp.still_owns_name() {
+                return Err(ProfileFileCommitError::StagedFileChanged);
+            }
             // An absent selected target is not permission to overwrite a
             // different entry created after the final nofollow observation.
             // Let the kernel refuse that race at the irreversible rename.

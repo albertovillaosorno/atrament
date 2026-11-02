@@ -319,3 +319,15 @@ This does not simulate an injected race *inside* the full Export syscall
 sequence. An initially present target may still change after the last check,
 and SIGKILL between the temporary link and rename can still strand a stage;
 therefore the P1 session-destruction and cleanup task remains open.
+
+An Export cleanup ownership regression showed that a renamed or replaced
+temporary sibling could cause the error-path destructor to unlink another
+actor's file at the same random name. The Linux file-commit adapter now
+records the original staged inode's device and inode, checks the sibling
+without following links before failure cleanup, and refuses a changed
+sibling before the final rename. Direct test-only fixtures demonstrate the
+previous deletion, preservation of substituted regular files and symlinks,
+and cleanup of the still-owned sibling. This is a last-observation guard,
+not atomic compare-and-unlink: a hostile concurrent rename after the
+identity check can still race cleanup or publication, and SIGKILL after
+publication of the temporary name can still strand that stage.

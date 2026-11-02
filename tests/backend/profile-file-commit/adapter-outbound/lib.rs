@@ -1816,6 +1816,107 @@ mod linux {
     }
 }
 
+// Include the private cleanup guard to test replacement of its transient
+// sibling directly, without relying on a nondeterministic rename race.
+#[cfg(target_os = "linux")]
+#[allow(dead_code, unreachable_pub)]
+#[path = "../../../../src/backend/profile-file-commit/adapter-outbound/lib.rs"]
+mod owned_temp_cleanup_regression;
+
+#[cfg(target_os = "linux")]
+mod owned_temp_tests {
+    use super::owned_temp_cleanup_regression::OwnedTemp;
+    use std::fs::{self, File};
+    use std::os::unix::fs::MetadataExt as _;
+
+    #[test]
+    fn error_cleanup_never_unlinks_a_replaced_sibling_entry() {
+        let root = std::env::temp_dir().join(format!(
+            "atrament-owned-temp-{}", std::process::id(),
+        ));
+        fs::create_dir(&root).expect("unique fixture directory");
+        let directory = File::open(&root).expect("open owned directory");
+        let sibling = root.join(".atrament-export-test.tmp");
+        let original = root.join("original.atrament");
+        fs::write(&sibling, b"owned stage").expect("write owned stage");
+        let owned = OwnedTemp {
+            committed: false,
+            dir: &directory,
+            name: String::from(".atrament-export-test.tmp"),
+            file_device: fs::symlink_metadata(&sibling)
+                .expect("owned stage metadata").dev(),
+            file_inode: fs::symlink_metadata(&sibling)
+                .expect("owned stage metadata").ino(),
+        };
+        fs::rename(&sibling, &original).expect("move original stage");
+        fs::write(&sibling, b"other actor's file")
+            .expect("replace stage name with foreign file");
+        drop(owned);
+        let foreign = fs::read(&sibling);
+        let retained_original = fs::read(&original);
+        fs::remove_dir_all(&root).expect("remove owned fixture");
+        assert_eq!(foreign.expect("foreign entry must remain"),
+            b"other actor's file");
+        assert_eq!(retained_original.expect("original stage retained"),
+            b"owned stage");
+    }
+
+    #[test]
+    fn error_cleanup_removes_the_original_owned_sibling() {
+        let root = std::env::temp_dir().join(format!(
+            "atrament-owned-temp-original-{}", std::process::id(),
+        ));
+        fs::create_dir(&root).expect("unique fixture directory");
+        let directory = File::open(&root).expect("open owned directory");
+        let sibling = root.join(".atrament-export-test.tmp");
+        fs::write(&sibling, b"owned stage").expect("write owned stage");
+        let metadata = fs::symlink_metadata(&sibling).expect("owned inode");
+        let owned = OwnedTemp {
+            committed: false,
+            dir: &directory,
+            name: String::from(".atrament-export-test.tmp"),
+            file_device: metadata.dev(),
+            file_inode: metadata.ino(),
+        };
+        drop(owned);
+        let still_present = fs::symlink_metadata(&sibling).is_ok();
+        fs::remove_dir_all(&root).expect("remove owned fixture");
+        assert!(!still_present, "the original owned stage must be removed");
+    }
+
+    #[test]
+    fn error_cleanup_preserves_symlink_to_moved_original_stage() {
+        use std::os::unix::fs::symlink;
+
+        let root = std::env::temp_dir().join(format!(
+            "atrament-owned-temp-symlink-{}", std::process::id(),
+        ));
+        fs::create_dir(&root).expect("unique fixture directory");
+        let directory = File::open(&root).expect("open owned directory");
+        let sibling = root.join(".atrament-export-test.tmp");
+        let original = root.join("original.atrament");
+        fs::write(&sibling, b"owned stage").expect("write owned stage");
+        let metadata = fs::symlink_metadata(&sibling).expect("owned inode");
+        let owned = OwnedTemp {
+            committed: false,
+            dir: &directory,
+            name: String::from(".atrament-export-test.tmp"),
+            file_device: metadata.dev(),
+            file_inode: metadata.ino(),
+        };
+        fs::rename(&sibling, &original).expect("move original stage");
+        symlink(&original, &sibling).expect("replace stage with a symlink");
+        drop(owned);
+        let foreign_link = fs::symlink_metadata(&sibling)
+            .is_ok_and(|metadata| metadata.file_type().is_symlink());
+        let original_bytes = fs::read(&original);
+        fs::remove_dir_all(&root).expect("remove owned fixture");
+        assert!(foreign_link, "foreign symlink must remain");
+        assert_eq!(original_bytes.expect("original stage retained"),
+            b"owned stage");
+    }
+}
+
 use atrament_profile_file_commit::{
     ProfileFileCommitDisposition as Mode, ProfileFileCommitError as Error,
     commit_profile_file, commit_profile_file_cancellable,
