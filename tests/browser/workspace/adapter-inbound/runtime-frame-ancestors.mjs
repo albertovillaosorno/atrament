@@ -140,7 +140,11 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
                 reject(error);
             }
         };
-        const onError = (error) => finish(error);
+        // Readiness errors can embed private process output. Keep diagnostic
+        // messages fixed instead of propagating untrusted exception text.
+        const onError = () => finish(new Error(
+            "process readiness stream failed",
+        ));
         const onEnd = () => finish(new Error(
             "process output ended before readiness",
         ));
@@ -168,8 +172,8 @@ function waitForLine(stream, select, timeoutMs = 15_000) {
                 let selected;
                 try {
                     selected = select(line);
-                } catch (error) {
-                    finish(error);
+                } catch {
+                    finish(new Error("invalid readiness record"));
                     return;
                 }
                 if (selected !== null) {
@@ -459,6 +463,38 @@ test(
         silent.destroy();
     },
 );
+
+test("readiness selector exceptions redact private lines", async () => {
+    const marker = "private-selector-line-marker";
+    const stream = new PassThrough();
+    const pending = waitForLine(stream, (line) => {
+        throw new Error(`invalid fixture line: ${line}`);
+    });
+    stream.write(`${marker}\n`);
+    await assert.rejects(pending, (error) => {
+        assert.equal(error.message.includes(marker), false);
+        assert.match(error.message, /invalid readiness record/);
+        return true;
+    });
+    assert.equal(stream.listenerCount("data"), 0);
+    assert.equal(stream.listenerCount("error"), 0);
+    stream.destroy();
+});
+
+test("readiness stream errors never disclose private error text", async () => {
+    const marker = "private-stream-error-marker";
+    const stream = new PassThrough();
+    const pending = waitForLine(stream, () => null);
+    stream.emit("error", new Error(`stream failed: ${marker}`));
+    await assert.rejects(pending, (error) => {
+        assert.equal(error.message.includes(marker), false);
+        assert.match(error.message, /readiness stream failed/);
+        return true;
+    });
+    assert.equal(stream.listenerCount("data"), 0);
+    assert.equal(stream.listenerCount("error"), 0);
+    stream.destroy();
+});
 
 test("readiness failures never reflect untrusted process output", async () => {
     const marker = "private-process-output-marker";

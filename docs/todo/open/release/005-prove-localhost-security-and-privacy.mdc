@@ -2511,3 +2511,12 @@ leave no delayed same-group helper executing. This does not address helpers
 that deliberately detach or successful openers that retain child processes,
 nor does it remove fragment credentials from argv or Firefox history. P8
 remains open.
+
+The Firefox integration harness has two additional red-first test-log privacy
+regressions. Its bounded process-readiness parser formerly propagated both
+selector exceptions and stream errors verbatim; a test-owned selector and a
+synthetic stream error each demonstrated that an exception could contain a
+private readiness-line marker. The harness now emits fixed error messages
+for both cases and drops stream observers after rejection. This is a test
+logging boundary, not a change to production process or browser credential
+transport, and it does not close the existing P8 acceptance gaps.
