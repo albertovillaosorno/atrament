@@ -2219,3 +2219,12 @@ not inspect the browser's general HTTP disk cache, OS-level artifacts, or
 other browser engines, and it does not demonstrate erasure of stores created
 by another script. Firefox's earlier failure to enforce `Clear-Site-Data`
 and the browser-opener argv credential leak remain unresolved.
+
+The same Firefox fixture now records every HTTP request reaching its
+loopback server, including unknown paths rejected by the fixture router.
+After a full workspace load, one accepted task replacement, and End, the
+request multiset contains only the seven known static resources and the six
+reviewed session requests. This browser-executed, same-origin inventory would
+fail on an undeclared local telemetry route even if the router replied `404`.
+It does not establish absence of cross-origin traffic independently of the
+existing CSP and source inventories.

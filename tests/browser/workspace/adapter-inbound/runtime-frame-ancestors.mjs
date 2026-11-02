@@ -7980,6 +7980,7 @@ test(
         });
         let markEnded;
         const ended = new Promise((resolve) => { markEnded = resolve; });
+        const allRequests = [];
         const server = createSessionFixtureServer(
             requests,
             (request, response, field) => {
@@ -7993,6 +7994,11 @@ test(
             },
             () => markEnded(),
         );
+        // Capture browser requests before the fixture router even for
+        // unknown paths that the fixture rejects with 404.
+        server.prependListener("request", (request) => {
+            allRequests.push(`${request.method} ${request.url}`);
+        });
         const children = [];
         let bidi;
         try {
@@ -8053,6 +8059,21 @@ test(
             assert.deepEqual(final.task, { disabled: true, value: "" });
             assert.deepEqual(await browserStorageInventory(bidi, tab.context),
                 expected, "ended session must not leave browser stores");
+            assert.deepEqual(allRequests.sort(), [
+                "GET /",
+                "GET /workspace.css",
+                "GET /generated/main.js",
+                "GET /generated/session-diagnostic.js",
+                "GET /generated/session-draft.js",
+                "GET /generated/session-fragment.js",
+                "GET /generated/session-handshake.js",
+                "POST /api/handshake",
+                "GET /api/session/task",
+                "GET /api/session/source",
+                "GET /api/session/candidate",
+                "POST /api/session/task",
+                "POST /api/session/end",
+            ].sort(), "real browser must issue only the reviewed requests");
         } finally {
             bidi?.close();
             await closeFixtureServer(server);
