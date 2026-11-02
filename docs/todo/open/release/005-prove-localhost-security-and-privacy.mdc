@@ -2311,3 +2311,18 @@ history storage. This is a synthetic test-only credential and disposable
 profile, not an inspection of an operator's private Firefox history. P8 must
 remain open until credential handoff and browser-history cleanup are addressed
 with verified, browser-enforced evidence; opener argv exposure is separate.
+
+A complementary Linux kernel test now exercises `process_vm_readv` rather
+than assuming the procfs-open denial covers all same-user memory reads. The
+parent process successfully retrieves a fixed synthetic marker from an
+ordinary dumpable child at a known address; the same read against a second
+child running Atrament's production `PR_SET_DUMPABLE(0)` guard returns `EPERM`
+without modifying the destination buffer. `nix`'s `uio` feature is declared
+only as a Linux test dependency; the exact registry-owner inventory pins it
+separately from the narrower production dependency.
+
+This verifies one
+independent ptrace-credential-gated syscall on this Linux host, not global
+process isolation or confidentiality against privileged observers. It does
+not address the browser-launch argv/history credential risks or prove Firefox
+storage erasure; P8 remains open.

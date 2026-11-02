@@ -2659,6 +2659,20 @@ test("backend registry dependencies remain explicitly reviewed", () => {
             target: 'cfg(target_os = "linux")',
         },
         {
+            // process_vm_readv is used only in the isolated Linux test;
+            // production retains the narrower `process` feature set.
+            defaultFeatures: false,
+            features: ["fs", "process", "uio"],
+            kind: "dev",
+            name: "nix",
+            optional: false,
+            owner: "atrament_runtime_bootstrap",
+            rename: null,
+            requirement: "=0.31.3",
+            source: "registry+https://github.com/rust-lang/crates.io-index",
+            target: 'cfg(target_os = "linux")',
+        },
+        {
             defaultFeatures: true,
             features: [],
             kind: null,

@@ -30,6 +30,10 @@ nix = { workspace = true, features = ["process"] }
 [dev-dependencies]
 atrament_profile_entry_sha256 = { workspace = true }
 
+# Kernel memory-admission regression only; do not add uio to production.
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+nix = { workspace = true, features = ["process", "uio"] }
+
 [[bin]]
 name = "atrament"
 path = "composition/main.rs"

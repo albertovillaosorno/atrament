@@ -54,9 +54,13 @@ use std::ffi::OsString;
 use std::fmt::Write as _;
 use std::fs::{self, OpenOptions};
 use std::io::{self, Write as _};
+#[cfg(target_os = "linux")]
+use std::io::{BufRead as _, BufReader, IoSliceMut, Read as _};
 use std::iter;
 use std::path::PathBuf;
 use std::process::{self, Command};
+#[cfg(target_os = "linux")]
+use std::process::{Child, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use atrament_browser_launch::LaunchError;
@@ -71,6 +75,95 @@ use atrament_profile_zip_reader::{
 };
 
 static TEST_FILE_ID: AtomicU64 = AtomicU64::new(0);
+
+// A second Linux memory-access path uses the kernel's ptrace credential
+// check rather than procfs. The child exposes only a fixed synthetic marker;
+// the parent must read that exact address in the dumpable positive control.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_remote_memory_read_requires_a_dumpable_target() {
+    use nix::errno::Errno;
+    use nix::sys::uio::{RemoteIoVec, process_vm_readv};
+    use nix::unistd::Pid;
+
+    struct Probe(Child);
+    impl Drop for Probe {
+        fn drop(&mut self) {
+            drop(self.0.kill());
+            drop(self.0.wait());
+        }
+    }
+
+    let read_marker = |protected: bool| {
+        let mode = if protected { "protected" } else { "control" };
+        let mut child = Probe(Command::new(
+            env::current_exe().expect("test executable"),
+        )
+            .args(["--exact", "linux_remote_memory_probe_child", "--nocapture"])
+            .env("ATRAMENT_REMOTE_MEMORY_PROBE", mode)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("spawn child for same-parent memory access"));
+        let output = child.0.stdout.take().expect("child stdout pipe");
+        let mut lines = BufReader::new(output).lines();
+        let mut address = None;
+        for line in (&mut lines).take(8) {
+            let line = line.expect("read child readiness");
+            if let Some((_, value)) = line.split_once("ATRAMENT_PROBE_ADDR=") {
+                address = Some(value.trim().parse::<usize>()
+                    .expect("synthetic marker address"));
+                break;
+            }
+        }
+        let address = address.expect("child announced a test-only address");
+        let mut buffer = [0u8; 8];
+        let length = buffer.len();
+        let pid = Pid::from_raw(i32::try_from(child.0.id())
+            .expect("Linux child PID fits i32"));
+        let result = process_vm_readv(
+            pid,
+            &mut [IoSliceMut::new(&mut buffer)],
+            &[RemoteIoVec { base: address, len: length }],
+        );
+        // EOF releases the child without a signal or persistent artifacts.
+        drop(child.0.stdin.take());
+        let status = child.0.wait().expect("wait for test child");
+        assert!(status.success(), "memory probe child did not exit cleanly");
+        (result, buffer)
+    };
+
+    let (read, control) = read_marker(false);
+    assert_eq!(read, Ok(control.len()),
+        "parent must read a dumpable child's known synthetic memory");
+    assert_eq!(control, *b"guard-ok");
+    let (denied, private) = read_marker(true);
+    assert_eq!(denied, Err(Errno::EPERM),
+        "hardened child must refuse process_vm_readv from its own parent");
+    assert_eq!(private, [0u8; 8],
+        "denied syscall must not write private bytes to the caller");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_remote_memory_probe_child() {
+    let Ok(mode) = env::var("ATRAMENT_REMOTE_MEMORY_PROBE") else {
+        return;
+    };
+    assert!(matches!(mode.as_str(), "control" | "protected"));
+    nix::sys::prctl::set_dumpable(true).expect("control starts dumpable");
+    if mode == "protected" {
+        bootstrap::protect_process_memory_from_crash_snapshots()
+            .expect("production Linux memory guard applies");
+    }
+    let marker = Box::new(*b"guard-ok");
+    println!("ATRAMENT_PROBE_ADDR={}", marker.as_ptr() as usize);
+    io::stdout().flush().expect("flush child address to its parent");
+    let mut completion = [0u8; 1];
+    assert_eq!(io::stdin().read(&mut completion).expect("parent pipe"), 0);
+    assert_eq!(std::hint::black_box(marker.as_ref()), b"guard-ok");
+}
 
 // Only the disposable child has its dumpability toggled. In particular, no
 // private session or deliberate crash is created by this regression.

@@ -423,3 +423,18 @@ this browser's stored history. The test End fixture omits the production
 
 The forced-stop case has no End header at all. Details and acceptance limits
 are recorded in the open localhost security task ATR-P8-005.
+
+A separate Linux `process_vm_readv` regression now tests kernel remote-memory
+admission independently of the procfs path and open probes. Its test-only
+child places a known eight-byte synthetic marker at an announced address.
+The owning parent reads the exact marker when the child is dumpable, then
+receives `EPERM` with an unchanged receive buffer after an otherwise identical
+child invokes the production `PR_SET_DUMPABLE(0)` guard. Both children
+terminate through the test-owned stdin pipe without private draft data,
+crashes, core files, or persistent probe artifacts.
+
+This is direct Linux
+process-memory denial evidence for the isolated guarded child, not a scan of
+the real runtime's resident data, a protection against privileged inspection,
+or a guarantee about swap, external browsers, or host crash collectors. P1
+remains open for end-to-end temporary media and crash cleanup.
