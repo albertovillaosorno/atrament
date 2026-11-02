@@ -1315,3 +1315,19 @@ raw identifiers, and captured iterator adapters. Ten cfg-inactive
 borrowed-read items, three stream-write items, and two iterator variants). This
 static rule does not resolve actual receiver types, enforce descriptor
 provenance, or address the browser opener argv leak.
+
+The pinned Rust 1.97.1 compiler accepts fully qualified Unix `FileExt`
+`write_at` and `write_all_at` method items on `File`, even when no positional
+write call appears in the module. A red-first mutation-detector test exposed
+that the previous filesystem write review missed these captured items. The
+review now checks direct and fully qualified positional write items, including
+Windows `seek_write` source syntax, raw identifiers, and renamed `FileExt`
+imports that could hide later method references. Existing anonymous `as _`
+imports used solely for read extension methods remain admitted; their write
+calls are still scanned.
+
+Five cfg-inactive `session-secret` mutations (qualified writes, renamed or
+nested trait imports, and comment-separated raw identifiers) failed the
+updated single-owner filesystem mutation inventory and were byte-restored.
+The scanner does not resolve trait types, prove descriptor provenance, or
+address the known browser-opener argv credential disclosure.

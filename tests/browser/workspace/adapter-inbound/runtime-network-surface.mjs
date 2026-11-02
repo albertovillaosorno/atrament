@@ -569,7 +569,14 @@ function usesDirectFilesystemMutationAuthority(source) {
         const fsPath = /^\s*fs\s*::/u.test(imported)
             || /^\s*\{[^;]*\bfs\s*::/u.test(imported);
         const fileAlias = /\b(?:File|self)\s+as\b/u.test(imported);
-        if (moduleAlias || (fsPath && fileAlias)) {
+        // A renamed FileExt can hide `Trait::write_at` function items;
+        // `as _` only imports extension methods, whose calls are scanned.
+        const positionalTraitAlias =
+            /\bFileExt\s+as\s+(?!_\b)[\p{ID_Start}_]/u
+                .test(imported)
+            && /\bos\s*::\s*(?:unix|windows)\s*::\s*fs\b/u
+                .test(imported.replace(/[{}]/gu, ""));
+        if (moduleAlias || (fsPath && fileAlias) || positionalTraitAlias) {
             return true;
         }
     }
@@ -596,11 +603,19 @@ function usesDirectFilesystemMutationAuthority(source) {
             return true;
         }
     }
-    // FileExt positional writes can mutate a caller-supplied descriptor even
-    // when it was opened elsewhere. This includes Windows seek_write as well
-    // as Unix write_at; read-only seek_read remains allowed.
-    if (/\b(?:seek_write|write_at|write_all_at|write_vectored_at)\s*\(/u
-        .test(source)) {
+    // Positional FileExt writes can mutate a borrowed descriptor. In Rust,
+    // fully qualified trait methods may be captured as function items and
+    // called later, without an adjacent `(` or a trait import here.
+    const positionalWrite = String.raw`(?:seek_write|write_at|` +
+        String.raw`write_all_at|write_vectored_at)`;
+    const positionalCall = new RegExp(
+        String.raw`\b` + positionalWrite + String.raw`\s*\(`, "u",
+    );
+    const positionalItem = new RegExp(
+        String.raw`\bFileExt\s*>?\s*::\s*` + positionalWrite + String.raw`\b`,
+        "u",
+    );
+    if (positionalCall.test(source) || positionalItem.test(source)) {
         return true;
     }
     // The locked nix fs feature also exposes direct directory, inode and
@@ -1558,6 +1573,18 @@ test("direct filesystem mutation detector covers write authority", () => {
         'file.r#write_all_at(b"secret", 0);',
         'FileExt::write_at(&file, b"secret", 0);',
         'FileExt :: write_all_at ( &file, b"secret", 0 );',
+        'let write = FileExt::write_at;',
+        'let write_all = FileExt::write_all_at;',
+        'let vectored = FileExt::write_vectored_at;',
+        'let windows_write = FileExt::seek_write;',
+        'let write = <File as std::os::unix::fs::FileExt>::write_at;',
+        'let write = <File as std::os::windows::fs::FileExt>::seek_write;',
+        'let write = <File as ::std::os::unix::fs::FileExt>::write_at;',
+        'let write = FileExt::r#write_all_at;',
+        'use std::os::unix::fs::FileExt as OutputTrait;',
+        'use std::{os::{unix::{fs::{FileExt as OutputTrait}}}};',
+        'use std::os::windows::fs::FileExt as OutputTrait;',
+        'use std::os::unix::fs as hidden_fs;',
         'nix::unistd::ftruncate(&file, 0);',
         'use nix::unistd::ftruncate as hidden_truncate;',
         'use nix::unistd::{read, truncate as hidden_truncate};',
@@ -1654,6 +1681,9 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use std::os::windows::fs::MetadataExt as _;',
         'file.seek_read(bytes, 0);',
         'FileExt::seek_read(&file, bytes, 0);',
+        'let read_only = FileExt::read_at;',
+        'let read_only = <File as std::os::unix::fs::FileExt>::read_at;',
+        'let read_only = <File as std::os::unix::fs::FileExt>::read_exact_at;',
         'std::fs::symlink_metadata("state");',
         'use nix::unistd::read as input;',
         'use nix::unistd::{read, getpid};',
