@@ -1689,3 +1689,18 @@ and four separate source mutations confirm rejection without changing browser
 production code. This is lexical review, not an audio-hardware privacy test
 or exhaustive coverage of dynamic property names. P8 and the opener argv
 credential exposure remain open.
+
+The one reviewed Copy prompt clipboard write was previously guarded by
+counting `navigator.clipboard` and `clipboard?.writeText` occurrences, but an
+additional indexed `clipboard["writeText"]` acquisition or legacy
+`document.execCommand("copy")` did not change those counts. Four inactive
+injections in authored and emitted main modules each passed all 49 existing
+source-persistence tests and were restored byte-for-byte.
+
+An additional browser source guard now pins the single Copy prompt method
+acquisition, all four existing `writeText` identifiers, and bans legacy
+`execCommand` and `clipboardData` access across all ten modules. Seven
+syntactic variants are rejected in both TypeScript and emitted JavaScript.
+This is a lexical review gate rather than a clipboard permission sandbox or
+proof against dynamically assembled method names. It does not address the
+opener's argv credential exposure or broader P8 acceptance.

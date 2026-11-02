@@ -584,6 +584,46 @@ function usesUnreviewedBrowserHostInput(source, main) {
         || clipboardWrites.length !== (main ? 1 : 0);
 }
 
+// The one Copy prompt writeText acquisition is the only reviewed clipboard
+// text output path. First-class/indexed aliases and legacy execCommand copy
+// would allow unrelated private draft output without a new fetch or popup.
+function hasUnreviewedClipboardWrite(source, main) {
+    const acquisition = "const writeText = clipboard?.writeText;";
+    const acquisitions = source.split(acquisition).length - 1;
+    const methodReferences = source.match(/\bwriteText\b/gu) ?? [];
+    return acquisitions !== (main ? 1 : 0)
+        || methodReferences.length !== (main ? 4 : 0)
+        || /\b(?:execCommand|clipboardData)\b/u.test(source);
+}
+
+test("browser clipboard-write paths require explicit source review",
+    async () => {
+    const reviewed = "const clipboard = navigator.clipboard; " +
+        "const writeText = clipboard?.writeText; " +
+        "if (typeof writeText === 'function') { writeText.bind(clipboard); }";
+    assert.equal(hasUnreviewedClipboardWrite(reviewed, true), false);
+    assert.equal(hasUnreviewedClipboardWrite("export const x = 1;", false),
+        false);
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(hasUnreviewedClipboardWrite(source, main), false,
+            `${filename} gained an unreviewed clipboard-write path`);
+        for (const candidate of [
+            'const other = clipboard["writeText"];',
+            "const other = clipboard?.writeText;",
+            "const { writeText: other } = clipboard;",
+            "const other = navigator.clipboard.writeText;",
+            'clipboard?.["writeText"](privateDraft);',
+            'document.execCommand("copy");',
+            'window["clipboardData"].setData("Text", privateDraft);',
+        ]) {
+            assert.equal(hasUnreviewedClipboardWrite(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped clipboard-output review`);
+        }
+    }
+});
+
 test("browser host-input inventory refuses unreviewed reads", () => {
     const allowedWrite = "const clipboard = navigator.clipboard; " +
         "const writeText = clipboard?.writeText;";
