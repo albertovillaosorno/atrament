@@ -2358,3 +2358,23 @@ This is repeatable kernel-admission evidence on Linux, not a proof against
 privileged observers or other operating systems. The opener argv credential,
 Firefox browser-history retention, and remaining P1 cleanup obligations are
 unchanged, so P8 remains open.
+
+A new real Firefox disposable-profile fixture now sends the same
+`Clear-Site-Data: "storage"` header as the production End response. Before
+End, it seeds one test-owned entry in each of localStorage, sessionStorage,
+IndexedDB, and CacheStorage, then observes all four nonempty stores through
+WebDriver BiDi. After authenticated End reaches `Session ended`, all four
+stores are empty. This establishes Firefox storage-clear behavior for the
+synthetic origin and response, not browser-history erasure or other engines.
+
+A separate exploratory strict no-retention assertion still failed after that
+production-equivalent storage header: a bounded profile scan found the exact
+synthetic `#session=` launch URL after End and Firefox shutdown. The failing
+assertion was not retained in the passing regression suite. Unlike the earlier
+End fixture without `Clear-Site-Data`, this observation includes the header,
+although the server remains test-owned rather than the compiled runtime.
+
+This is direct evidence that this Firefox version's storage clear does not
+establish removal of the credential-bearing navigation from its profile. The
+opener argv channel is separately exposed; P8 remains open for a redesigned
+credential handoff and verified non-retention, not merely empty web storage.
