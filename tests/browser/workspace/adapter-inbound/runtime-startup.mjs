@@ -628,8 +628,15 @@ test(
 // Opening procfs is sufficient to test process-memory disclosure authority;
 // never read VM mappings, environment bytes or process memory into the runner.
 // The ordinary child is a positive control for the same parent and procfs.
+// Auxiliary vectors, memory maps, page maps, and register snapshots expose
+// additional process information independently of /proc/<pid>/mem.
+const PROCESS_MEMORY_FILES = [
+    "maps", "mem", "environ", "auxv", "smaps", "smaps_rollup",
+    "pagemap", "syscall",
+];
+
 function processMemoryProbe(pid) {
-    return ["maps", "mem", "environ"].map((name) => {
+    return PROCESS_MEMORY_FILES.map((name) => {
         let descriptor;
         try {
             descriptor = fs.openSync(`/proc/${pid}/${name}`, "r");
@@ -657,9 +664,9 @@ test(
             control = spawn(process.execPath, [
                 "-e", "setInterval(() => {}, 1000)",
             ], { stdio: "ignore" });
-            assert.deepEqual(processMemoryProbe(control.pid), [
-                "readable", "readable", "readable",
-            ], "parent must be able to open an ordinary child's procfs files");
+            assert.deepEqual(processMemoryProbe(control.pid),
+                PROCESS_MEMORY_FILES.map(() => "readable"),
+                "parent must be able to open ordinary child procfs files");
 
             const openerDirectory = path.join(fixture, "bin");
             fs.mkdirSync(openerDirectory);
@@ -676,9 +683,11 @@ test(
                 stdio: ["ignore", "pipe", "pipe"],
             });
             await waitForReady(runtime);
-            for (const result of processMemoryProbe(runtime.pid)) {
+            for (const [index, result] of
+                processMemoryProbe(runtime.pid).entries()) {
+                const name = PROCESS_MEMORY_FILES[index];
                 assert.equal(["EACCES", "EPERM"].includes(result), true,
-                    "a ready Atrament child must deny procfs memory reads");
+                    `ready runtime must deny /proc/<pid>/${name}`);
             }
         } finally {
             if (runtime !== null) {
@@ -908,12 +917,12 @@ test(
                 body: draftText,
             });
             assert.equal(wrote.response.status, 204);
-            assert.deepEqual(
-                processMemoryProbe(child.pid).map((result) =>
-                    ["EACCES", "EPERM"].includes(result)),
-                [true, true, true],
-                "a runtime holding private draft text must remain protected",
-            );
+            for (const [index, result] of
+                processMemoryProbe(child.pid).entries()) {
+                const name = PROCESS_MEMORY_FILES[index];
+                assert.equal(["EACCES", "EPERM"].includes(result), true,
+                    `private draft must deny /proc/<pid>/${name}`);
+            }
             assert.equal(wrote.response.headers.has("clear-site-data"), false,
                 "draft writes must not trigger browser storage erasure");
             const read = await request("/api/session/task", {

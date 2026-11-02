@@ -370,3 +370,13 @@ the guard while private draft text is resident, not only at startup. It
 does not show whether host crash collectors honor the policy.
 
 P1 is still open for broader cancellation, cleanup, and crash coverage.
+
+The live Linux memory probe now also opens, but never reads, `/proc/<pid>/auxv`,
+`smaps`, `smaps_rollup`, `pagemap`, and `syscall` from the parent process.
+An ordinary same-user child is the positive control for all eight procfs
+entries, and both the ready runtime and a runtime holding an accepted private
+draft deny every opening with `EACCES` or `EPERM`. These additional kernel
+interfaces can disclose process-layout, mapping, page, or register metadata
+without reading `/proc/<pid>/mem`. The result is host-specific procfs access
+evidence, not an inspection of private bytes, a deliberate crash, a claim about
+other operating systems, or proof that host crash collectors erase dumps.
