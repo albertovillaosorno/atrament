@@ -2243,6 +2243,94 @@ fn security_headers_cover_success_error_and_empty_responses() {
     }
 }
 
+// A response-side Link, Refresh, or reporting header could initiate external
+// browser traffic without a new frontend source reference. Require review of
+// every response field name, including error and no-body responses.
+fn response_header_names(response: &[u8]) -> Vec<&str> {
+    let (head, _) = response_parts(response);
+    head.split("\r\n")
+        .skip(1)
+        .take_while(|line| !line.is_empty())
+        .map(|line| {
+            line.split_once(':')
+                .expect("response field must contain a colon")
+                .0
+        })
+        .collect()
+}
+
+#[test]
+fn every_response_header_name_requires_browser_egress_review() {
+    let expected_common = [
+        "Cache-Control",
+        "Cross-Origin-Opener-Policy",
+        "Cross-Origin-Resource-Policy",
+        "Content-Security-Policy",
+        "Permissions-Policy",
+        "Referrer-Policy",
+        "X-Frame-Options",
+        "X-Content-Type-Options",
+        "Connection",
+    ];
+    let mut content_response_names = vec!["Content-Type", "Content-Length"];
+    content_response_names.extend(expected_common);
+    let mut empty_response_names = vec!["Content-Length"];
+    empty_response_names.extend(expected_common);
+    let mut end_response_names = vec!["Content-Length", "Clear-Site-Data"];
+    end_response_names.extend(expected_common);
+
+    for target in ["/", "/health", "/missing", "/workspace.css"] {
+        let response = request(target, EXPECTED_HOST);
+        assert!(
+            response_header_names(&response) == content_response_names,
+            "unreviewed browser response header for public or error route",
+        );
+    }
+    let authorization = format!("Bearer {EXPECTED_SECRET}");
+    let draft_request = draft_replace_request(
+        "/api/session/task",
+        Some(&authorization),
+        Some(EXPECTED_ORIGIN),
+        b"header inventory",
+    );
+    let mut draft = SessionDraftService::default();
+    let updated = route_with_draft(&draft_request, EXPECTED_HOST, &mut draft);
+    assert!(status_line(&updated).contains("204 No Content"));
+    assert!(
+        response_header_names(&updated) == empty_response_names,
+        "unreviewed browser response header for empty draft mutation",
+    );
+
+    let end_request = format!(
+        "POST /api/session/end HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\
+         Origin: {EXPECTED_ORIGIN}\r\nAuthorization: {authorization}\r\n\
+         Content-Length: 0\r\n\r\n",
+    );
+    let ended = route_runtime(end_request.as_bytes(), EXPECTED_HOST);
+    assert!(status_line(&ended).contains("204 No Content"));
+    assert!(
+        response_header_names(&ended) == end_response_names,
+        "unreviewed browser response header for session destruction",
+    );
+
+    // Negative control: any one new response field must break the inventory,
+    // including a speculative preload, redirect, or background reporter.
+    let original = request("/", EXPECTED_HOST);
+    let head_end = original
+        .windows(4)
+        .position(|bytes| bytes == b"\r\n\r\n")
+        .expect("response head boundary");
+    for name in ["Link", "Refresh", "Alt-Svc", "Report-To", "NEL", "Location"] {
+        let mut injected = original[..head_end].to_vec();
+        injected.extend_from_slice(format!("\r\n{name}: synthetic").as_bytes());
+        injected.extend_from_slice(&original[head_end..]);
+        assert!(
+            response_header_names(&injected) != content_response_names,
+            "an unreviewed response field must invalidate the allowlist",
+        );
+    }
+}
+
 #[test]
 fn compiled_frontend_module_is_referenced_by_the_served_document() {
     let response = request("/", "127.0.0.1:43123");

@@ -2246,3 +2246,12 @@ Firefox tab and lifecycle. It does not establish OS-wide network silence,
 other browser-engine behavior, or browser-enforced credential handoff safety.
 The launcher still passes the credential in child argv, and Firefox's
 `Clear-Site-Data` storage erasure is not proven.
+
+The localhost adapter now has a response-field-name inventory regression for
+public, error, empty draft-mutation, and accepted session-End replies. It
+requires exact canonical header names and order, rather than only validating
+individual security policy values. Synthetic `Link`, `Refresh`, `Alt-Svc`,
+`Report-To`, `NEL`, and `Location` header additions must all invalidate the
+inventory. This detects later server-header egress surfaces that a browser
+source/HTML/CSS inventory cannot observe; it does not establish that Firefox
+supports or executes any particular header-driven request behavior.
