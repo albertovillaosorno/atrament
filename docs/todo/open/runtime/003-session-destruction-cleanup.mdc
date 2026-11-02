@@ -349,4 +349,18 @@ in that test child, not total suppression under every host crash collector or
 an end-to-end crash-erasure guarantee. Non-Linux startup, swap, hibernation,
 and external browser processes remain outside this Linux-specific guard.
 
+A separate live Linux CLI fixture now launches the actual `atrament`
+executable through a disposable fake browser opener and waits until the
+runtime publishes `ready`. From the owning parent process, opening its
+`/proc/<pid>/maps`, `mem`, and `environ` files is refused with `EACCES` or
+`EPERM`. An ordinary sibling child is a positive control: the same parent
+can open all three files.
+
+The probe only opens and closes descriptors; it does not read
+sensitive memory or environment bytes, create a core dump, or persist
+process snapshots. This demonstrates the installed startup guard
+on the running binary under this host's procfs policy, beyond the earlier
+isolated guard-function test. It cannot prove crash-collector behavior on
+other hosts, protect browser-opener argv, or establish complete erasure.
+
 P1 is still open for broader cancellation, cleanup, and crash coverage.

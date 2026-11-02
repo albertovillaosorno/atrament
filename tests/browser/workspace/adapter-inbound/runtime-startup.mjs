@@ -625,6 +625,73 @@ test(
     },
 );
 
+// Opening procfs is sufficient to test process-memory disclosure authority;
+// never read VM mappings, environment bytes or process memory into the runner.
+// The ordinary child is a positive control for the same parent and procfs.
+function processMemoryProbe(pid) {
+    return ["maps", "mem", "environ"].map((name) => {
+        let descriptor;
+        try {
+            descriptor = fs.openSync(`/proc/${pid}/${name}`, "r");
+            return "readable";
+        } catch (error) {
+            return error.code;
+        } finally {
+            if (descriptor !== undefined) {
+                fs.closeSync(descriptor);
+            }
+        }
+    });
+}
+
+test(
+    "live Linux runtime denies parent-owned procfs memory disclosure",
+    { skip: process.platform !== "linux" },
+    async () => {
+        buildRuntime();
+        fs.mkdirSync(".temp", { recursive: true });
+        const fixture = fs.mkdtempSync(".temp/startup-proc-memory-");
+        let control = null;
+        let runtime = null;
+        try {
+            control = spawn(process.execPath, [
+                "-e", "setInterval(() => {}, 1000)",
+            ], { stdio: "ignore" });
+            assert.deepEqual(processMemoryProbe(control.pid), [
+                "readable", "readable", "readable",
+            ], "parent must be able to open an ordinary child's procfs files");
+
+            const openerDirectory = path.join(fixture, "bin");
+            fs.mkdirSync(openerDirectory);
+            fs.writeFileSync(path.join(openerDirectory, "xdg-open"),
+                "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+            const environment = {
+                ...process.env,
+                DISPLAY: ":atrament-test",
+                PATH: `${openerDirectory}:${process.env.PATH ?? ""}`,
+            };
+            delete environment.WAYLAND_DISPLAY;
+            runtime = spawn(RUNTIME_BINARY, [], {
+                env: environment,
+                stdio: ["ignore", "pipe", "pipe"],
+            });
+            await waitForReady(runtime);
+            for (const result of processMemoryProbe(runtime.pid)) {
+                assert.equal(["EACCES", "EPERM"].includes(result), true,
+                    "a ready Atrament child must deny procfs memory reads");
+            }
+        } finally {
+            if (runtime !== null) {
+                await terminateChild(runtime);
+            }
+            if (control !== null) {
+                await terminateChild(control);
+            }
+            fs.rmSync(fixture, { recursive: true, force: true });
+        }
+    },
+);
+
 test(
     "live Linux runtime exposes its published IPv4 loopback listener",
     { skip: process.platform !== "linux" },
