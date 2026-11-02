@@ -1442,3 +1442,18 @@ ambient host machine-status reads, and no production code changed.
 This is an inventory for explicit privacy review, not runtime prevention
 of hardware fingerprinting, native syscalls, or the existing browser-opener
 argv credential disclosure.
+
+The locked nix 0.31.3 `fs` feature also exposes Linux
+`nix::sys::memfd::memfd_create`. It creates a mutable, anonymous
+memory-backed file descriptor; unlike explicit profile export it has no
+selected path, and without `MFD_CLOEXEC` the descriptor can survive process
+execution. A Rust 1.97.1 compile-only function-item fixture confirmed the API
+is available under the locked dependency features.
+
+A red-first source regression showed that an unreviewed memory-file creator
+previously escaped the filesystem authority inventory. The detector now
+reviews direct calls, captured function items, renamed and grouped imports,
+raw identifiers, and comment-separated paths under the existing explicit
+profile-output owner policy. Seven inactive `session-secret` source injections
+were rejected individually and restored byte-for-byte. This does not prove
+runtime descriptor isolation or imply that a memory-backed file is persisted.

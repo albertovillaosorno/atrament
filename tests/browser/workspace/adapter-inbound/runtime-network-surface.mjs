@@ -560,7 +560,8 @@ test("backend ambient input reads stay in reviewed adapters", async () => {
         }
     }
     assert.deepEqual(unreviewed, [],
-        "environment, argv, host-path or host-status reads need privacy review");
+        "environment, argv, host-path or host-status reads need " +
+            "privacy review");
 });
 
 // Locked nix::fcntl can open read-only files, but also supports O_RDWR,
@@ -614,6 +615,12 @@ const MUTATING_FS_FUNCTIONS = new Set([
 
 function usesDirectFilesystemMutationAuthority(source) {
     source = normalizeRustRawIdentifiers(source);
+    // nix fs also exposes memfd_create, which returns an anonymous writable
+    // descriptor. It is not a persistent export, but can be inherited by a
+    // child unless CLOEXEC is explicitly requested. Require owner review.
+    if (/\bnix\s*::\s*sys\s*::\s*memfd\b/u.test(source)) {
+        return true;
+    }
     if (FILE_TYPE_ALIAS.test(source)) {
         return true;
     }
@@ -706,7 +713,8 @@ function usesDirectFilesystemMutationAuthority(source) {
         const groupedAlias =
             /\b(?:unistd|fcntl|stat)\s*::\s*\{[^;]*\bself\s+as\b/u;
         const wholeModule = /\b(?:unistd|fcntl|stat)\s*(?:,|\}|$)/u;
-        if (moduleAlias.test(imported) || groupedAlias.test(imported)
+        if (/\bsys\s*::[^;]*\bmemfd\b/u.test(imported)
+            || moduleAlias.test(imported) || groupedAlias.test(imported)
             || wholeModule.test(imported)
             || (module.test(imported) && nixMutations.test(imported))) {
             return true;
@@ -1672,6 +1680,15 @@ test("direct filesystem mutation detector covers write authority", () => {
         'use r#std::r#fs::r#DirBuilder;',
         'DirBuilder::new().recursive(true).create("private");',
         'std::fs::DirBuilder::new().create("private");',
+        // The pinned nix fs feature also enables anonymous writable files.
+        'nix::sys::memfd::memfd_create("secret", MFdFlags::empty());',
+        'let creator = nix::sys::memfd::memfd_create::<str>;',
+        'use nix::sys::memfd::memfd_create as creator;',
+        'use nix::sys::memfd as anon_files;',
+        'use nix::sys::{memfd as anon_files, stat::Mode};',
+        'use ::nix::{sys::{memfd::{memfd_create as creator}}};',
+        'use r#nix::r#sys::r#memfd::r#memfd_create as creator;',
+        'nix/**/::sys::memfd::memfd_create("secret", flags);',
         // nix 0.31.3 `fs` enables mkstemp: it creates a persistent file
         // without std::fs, nix::fcntl, or a borrowed stream write.
         'nix::unistd::mkstemp("private_XXXXXX");',
