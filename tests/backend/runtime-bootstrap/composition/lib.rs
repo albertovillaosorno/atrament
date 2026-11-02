@@ -81,8 +81,28 @@ use atrament_profile_stored_zip_writer::{
 use atrament_profile_zip_reader::{
     ProfileZipReadLimits, read_stored_profile_zip,
 };
+#[cfg(target_os = "linux")]
+use nix::unistd::Pid;
 
 static TEST_FILE_ID: AtomicU64 = AtomicU64::new(0);
+
+// The live CLI must reject both Linux debugger attachment variants.
+#[cfg(target_os = "linux")]
+fn assert_ready_cli_refuses_ptrace(pid: Pid) {
+    use nix::errno::Errno;
+    use nix::sys::ptrace;
+
+    assert_eq!(
+        ptrace::attach(pid),
+        Err(Errno::EPERM),
+        "ready CLI must reject same-parent debugger attachment",
+    );
+    assert_eq!(
+        ptrace::seize(pid, ptrace::Options::empty()),
+        Err(Errno::EPERM),
+        "ready CLI must reject debugger seizure without a stop signal",
+    );
+}
 
 // Exercise the compiled CLI startup path, not only the isolated guard helper.
 // The fake opener never records its credential-bearing argument. Address zero
@@ -91,7 +111,6 @@ static TEST_FILE_ID: AtomicU64 = AtomicU64::new(0);
 #[test]
 fn linux_ready_cli_refuses_remote_memory_syscalls() {
     use nix::errno::Errno;
-    use nix::sys::ptrace;
     use nix::sys::uio::{RemoteIoVec, process_vm_readv, process_vm_writev};
     use nix::unistd::Pid;
     use std::os::unix::fs::PermissionsExt as _;
@@ -151,7 +170,7 @@ fn linux_ready_cli_refuses_remote_memory_syscalls() {
     });
     let deadline = Instant::now() + Duration::from_secs(8);
     let mut ready = false;
-    for _ in 0..4_usize {
+    for _ in 0..4usize {
         let remaining = deadline.saturating_duration_since(Instant::now());
         let line = receiver
             .recv_timeout(remaining)
@@ -183,16 +202,7 @@ fn linux_ready_cli_refuses_remote_memory_syscalls() {
         Err(Errno::EPERM),
         "ready CLI must reject same-parent remote-memory write first",
     );
-    assert_eq!(
-        ptrace::attach(pid),
-        Err(Errno::EPERM),
-        "ready CLI must reject same-parent debugger attachment",
-    );
-    assert_eq!(
-        ptrace::seize(pid, ptrace::Options::empty()),
-        Err(Errno::EPERM),
-        "ready CLI must reject debugger seizure without a stop signal",
-    );
+    assert_ready_cli_refuses_ptrace(pid);
     drop(cli);
     reader.join().expect("complete bounded startup observer");
 }
@@ -435,19 +445,25 @@ fn linux_startup_crash_memory_policy_is_effective_in_a_child() {
 #[cfg(target_os = "linux")]
 #[test]
 fn linux_dumpability_child_probe() {
+    use nix::sys::prctl;
+
     if env::var_os("ATRAMENT_DUMPABILITY_CHILD_PROBE").is_none() {
         return;
     }
     // Force a positive baseline even when the parent process is hardened.
-    nix::sys::prctl::set_dumpable(true).expect("set initial dumpability");
-    assert!(nix::sys::prctl::get_dumpable().expect("read initial policy"));
+    prctl::set_dumpable(true).expect("set initial dumpability");
+    assert!(prctl::get_dumpable().expect("read initial policy"));
     bootstrap::protect_process_memory_from_crash_snapshots()
         .expect("refuse core dumps before loading private state");
     assert!(
-        !nix::sys::prctl::get_dumpable().expect("read final policy"),
+        !prctl::get_dumpable().expect("read final policy"),
         "the Linux child must no longer be dumpable",
     );
-    println!("atrament child dumpability guard confirmed");
+    writeln!(
+        io::stdout().lock(),
+        "atrament child dumpability guard confirmed",
+    )
+    .expect("publish only synthetic guard status");
 }
 
 struct OwnedProfileFile(PathBuf);

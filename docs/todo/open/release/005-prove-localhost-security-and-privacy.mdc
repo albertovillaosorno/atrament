@@ -2372,6 +2372,20 @@ tests neither inspect operator data nor establish resistance to privileged
 debuggers, and they do not resolve browser launch argv/history risks. P8
 remains open.
 
+A red-first backend source guard also caught a test-only kernel authority
+escape: `nix::sys::ptrace` and `nix::sys::uio` were not in the existing
+native-call inventory, even though Cargo can unify dev features during tests.
+The conservative source check now requires explicit review of direct and
+grouped paths to both modules across backend Rust sources, while retaining
+admitted `nix::sys::prctl` and `nix::sys::stat` references. This blocks
+unreviewed literal source references, not aliases constructed by macros or
+privileged host tools, and does not resolve browser credential retention.
+
+A second source inventory pins the single Linux `set_dumpable(false)` call in
+the runtime bootstrap and rejects additional calls or aliases in production.
+This detects ordinary future re-enablement in backend source, but is not a
+whole-program proof against generated code or privileged kernel observers.
+
 A new real Firefox disposable-profile fixture now sends the same
 `Clear-Site-Data: "storage"` header as the production End response. Before
 End, it seeds one test-owned entry in each of localStorage, sessionStorage,

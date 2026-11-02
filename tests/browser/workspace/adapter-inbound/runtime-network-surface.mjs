@@ -1055,6 +1055,16 @@ function usesUnreviewedNativeAuthority(source) {
         /\bnix\s*::\s*sys\s*::\s*socket\b/u,
         /\bnix\s*::\s*sys\s*::\s*\{[^;]*\bsocket\b/u,
         /\bnix\s*::\s*\{[^;]*\bsys\s*::\s*socket\b/u,
+        // The Linux test-only `ptrace`/`uio` features must never become
+        // backend production source authority via Cargo feature unification.
+        /\bnix\s*::\s*sys\s*::\s*(?:ptrace|uio)\b/u,
+        /\buse\s+(?:::)?\s*nix\s*::\s*sys\s*::\s*\{[^;]*\b(?:ptrace|uio)\b/u,
+        /\buse\s+(?:::)?\s*nix\s*::\s*\{[^;]*\bsys\s*::\s*(?:ptrace|uio)\b/u,
+        new RegExp(
+            String.raw`\buse\s+(?:::)?\s*nix\s*::\s*\{[^;]*\bsys\s*::` +
+                String.raw`\s*\{[^;]*\b(?:ptrace|uio)\b`,
+            "u",
+        ),
         /\b(?:unsafe\s+)?extern\s*(?:"[^"]+"\s*)?(?:\{|fn\b)/u,
         /\b(?:core|std)\s*::\s*arch\b/u,
         /\b(?:asm|global_asm)\s*!/u,
@@ -1981,7 +1991,7 @@ test("backend never renames the standard-library root", async () => {
         "renaming std would bypass reviewed network/process/file guards");
 });
 
-test("native authority detector covers raw syscall escape hatches", () => {
+test("native authority detector covers kernel escape hatches", () => {
     for (const source of [
         "use nix::libc::socket;",
         "use r#nix::r#libc::socket;",
@@ -2006,6 +2016,16 @@ test("native authority detector covers raw syscall escape hatches", () => {
         "nix::sys::socket::socket(domain, ty, flags, None);",
         "use nix::sys::{socket as sockets, stat};",
         "use nix::{sys::socket::socket, errno::Errno};",
+        // These wrappers gain kernel inspection capability only in test builds.
+        // Production source must never begin depending on that feature union.
+        "use nix::sys::ptrace;",
+        "use r#nix::r#sys::r#ptrace as debugger;",
+        "nix::sys::ptrace::seize(pid, Options::empty());",
+        "use nix::sys::uio::{process_vm_readv, RemoteIoVec};",
+        "use nix::sys::{ptrace as debugger, prctl};",
+        "use nix::sys::{uio::process_vm_writev, stat};",
+        "use nix::{sys::ptrace::attach, errno::Errno};",
+        "use nix::{sys::{uio::process_vm_readv}, errno::Errno};",
         'unsafe extern "C" { fn socket(); }',
         'unsafe extern "C-unwind" { fn socket(); }',
         'unsafe extern { fn socket(); }',
@@ -2020,6 +2040,7 @@ test("native authority detector covers raw syscall escape hatches", () => {
         "use nix::errno::Errno;",
         "use nix::fcntl::{OFlag, openat2};",
         "use nix::sys::stat::{SFlag, fstatat};",
+        "use nix::sys::prctl::{set_dumpable, get_dumpable};",
         "use nix::{sys::stat::Mode, errno::Errno};",
         "use std::os::fd::AsRawFd;",
         "use std::ffi::OsStr;",
@@ -2040,6 +2061,45 @@ test("backend raw native authority requires explicit review", async () => {
     }
     assert.deepEqual(nativeFiles, [],
         "libc, native extern, and assembly bypass reviewed Rust authority");
+});
+
+// A later PR_SET_DUMPABLE(true) invalidates the startup memory guard.
+// Inspect all backend callers; this conservative source check does not parse
+// macro expansions or prove that privileged host tools honor the guard.
+function dumpabilityMutationArgs(source) {
+    source = normalizeRustRawIdentifiers(source);
+    const calls = [...source.matchAll(
+        /\bset_dumpable\s*\(\s*([^)]*?)\s*\)/gu,
+    )].map((match) => match[1].trim());
+    // An imported alias must not hide a later call to set_dumpable(true).
+    const aliases = [...source.matchAll(
+        /\bset_dumpable\s+as\s+[a-zA-Z_][a-zA-Z_0-9]*/gu,
+    )].map(() => "aliased");
+    return [...calls, ...aliases];
+}
+
+test("backend has exactly one production dumpability mutation", async () => {
+    assert.deepEqual(dumpabilityMutationArgs(
+        "prctl::set_dumpable(false); prctl::set_dumpable(true);",
+    ), ["false", "true"]);
+    assert.deepEqual(dumpabilityMutationArgs(
+        "prctl::get_dumpable(); prctl::set_dumpable(0 == 1);",
+    ), ["0 == 1"]);
+    assert.deepEqual(dumpabilityMutationArgs("prctl::get_dumpable();"), []);
+    assert.deepEqual(dumpabilityMutationArgs(
+        "use nix::sys::prctl::{set_dumpable as enable}; enable(true);",
+    ), ["aliased"]);
+
+    const mutations = [];
+    for (const sourcePath of await rustSources(BACKEND_ROOT)) {
+        const source = await readFile(sourcePath, "utf8");
+        for (const argument of dumpabilityMutationArgs(source)) {
+            mutations.push([path.relative(BACKEND_ROOT, sourcePath), argument]);
+        }
+    }
+    assert.deepEqual(mutations, [
+        [path.join("runtime-bootstrap", "composition", "main.rs"), "false"],
+    ], "the Linux crash-memory guard must never be re-enabled");
 });
 
 // A raw inherited descriptor can be adopted as a File or socket without an
