@@ -2419,3 +2419,18 @@ This positive observation does not imply the browser erased the original
 credential-bearing URL from history, that no compressed or external recovery
 copy exists, or that backend memory was released. It complements but cannot
 replace the still-open credential-handoff and cleanup requirements of P8.
+
+A red-first browser automation test exposed a separate test-log privacy issue:
+`waitForSessionStatus` serialized the observed URL hash, status, and private
+draft fields when its readiness deadline expired. Direct-workspace and framed
+document wait helpers likewise serialized untrusted document metadata on
+failure.
+
+The harness now reports fixed error text without observed or expected page
+values. A controlled VM test supplies a synthetic private marker through
+all three result shapes and proves that none of their failure objects reflect
+it. The original assertion failed before the redaction fix.
+
+This protects test failure output, not runtime credential handoff, browser
+history, production logging, or other arbitrary assertions over test-owned
+private values. P8 remains open.

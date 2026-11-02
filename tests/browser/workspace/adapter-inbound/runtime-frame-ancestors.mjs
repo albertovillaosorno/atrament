@@ -2092,9 +2092,8 @@ async function waitForWorkspaceDocument(client, context) {
         }
         await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    throw new Error(
-        `workspace navigation did not settle: ${JSON.stringify(documentState)}`,
-    );
+    // Document title and remote fields may contain private page content.
+    throw new Error("workspace navigation did not settle");
 }
 
 async function waitForChildContext(client, root) {
@@ -2122,9 +2121,8 @@ async function waitForFramedDocument(client, context) {
         }
         await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    throw new Error(
-        `framed navigation did not settle: ${JSON.stringify(documentState)}`,
-    );
+    // A failed frame is not permission to print remote document metadata.
+    throw new Error("framed navigation did not settle");
 }
 
 async function navigateFromDocument(client, context, url) {
@@ -2196,6 +2194,76 @@ test("Firefox direct workspace navigation survives transient blanks",
         }, "wrong-document"),
         /workspace navigation did not settle/,
     );
+});
+
+test("browser readiness failures redact untrusted page fields", async () => {
+    const source = fs.readFileSync(new URL(import.meta.url), "utf8");
+    const documentStart = source.indexOf("async function evaluateDocument(");
+    const documentEnd = source.indexOf("async function navigateFromDocument(",
+        documentStart);
+    const sessionStart = source.lastIndexOf(
+        "async function evaluateSessionDocument(");
+    const sessionEnd = source.indexOf("async function performTrustedKey(",
+        sessionStart);
+    assert.ok(documentStart >= 0 && documentEnd > documentStart);
+    assert.ok(sessionStart >= 0 && sessionEnd > sessionStart);
+    const context = {
+        assert,
+        setTimeout(callback) { callback(); },
+    };
+    const documentWaiters = runInNewContext(
+        `${source.slice(documentStart, documentEnd)};` +
+            `({ waitForWorkspaceDocument, waitForFramedDocument })`,
+        context,
+    );
+    const waitForSession = runInNewContext(
+        `${source.slice(sessionStart, sessionEnd)}; waitForSessionStatus`,
+        context,
+    );
+    const privateText = `test-private-readiness-` +
+        crypto.randomBytes(16).toString("hex");
+    const remote = (state) => ({
+        async command(method) {
+            assert.equal(method, "script.evaluate");
+            return {
+                type: "success",
+                result: { type: "string", value: JSON.stringify(state) },
+            };
+        },
+    });
+    const failedSession = remote({
+        hash: `#session=${privateText}`,
+        status: privateText,
+        task: { disabled: false, value: privateText },
+        source: { disabled: false, value: privateText },
+        candidate: { disabled: false, value: privateText },
+    });
+    const failedDocument = remote({
+        title: privateText,
+        hasControl: false,
+        hasWorkspace: false,
+    });
+    const failedFrame = remote({
+        title: "",
+        hasControl: false,
+        hasWorkspace: false,
+        extraUntrustedField: privateText,
+    });
+    for (const startWait of [
+        () => waitForSession(failedSession, "tab",
+            `${privateText}-expected`, 2),
+        () => documentWaiters.waitForWorkspaceDocument(failedDocument, "tab"),
+        () => documentWaiters.waitForFramedDocument(failedFrame, "tab"),
+    ]) {
+        await assert.rejects(startWait(), (error) => {
+            assert.equal(error.message.includes(privateText), false,
+                "timeout messages must never reflect browser page content");
+            assert.equal(JSON.stringify(error).includes(privateText), false);
+            assert.equal("actual" in error, false);
+            assert.equal("expected" in error, false);
+            return true;
+        });
+    }
 });
 
 test("observedWithin releases timers after settlement", async () => {
@@ -2551,9 +2619,9 @@ async function waitForSessionStatus(client, context, expected, attempts = 100) {
         }
         await new Promise((resolve) => setTimeout(resolve, 25));
     }
-    throw new Error(
-        `session status did not reach ${expected}: ${JSON.stringify(state)}`,
-    );
+    // The observed hash and draft fields are untrusted session-private data.
+    // Even the caller's expected label is unnecessary in diagnostic output.
+    throw new Error("session status did not reach expected state");
 }
 
 async function performTrustedKey(client, context, value) {
