@@ -515,6 +515,49 @@ test("browser first-class Document authority requires explicit review",
     }
 });
 
+// DevTools logging and browser timing/reporting APIs can expose private text
+// or request metadata without invoking any of the four reviewed fetch calls.
+// Require an explicit source review before adding those host surfaces.
+function hasUnreviewedBrowserDiagnostics(source) {
+    const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    return new RegExp(
+        String.raw`\b(?:console|Console|reportError|ReportingObserver|` +
+            String.raw`ReportBody|performance|Performance[A-Za-z]*)\b`,
+        "u",
+    ).test(executable);
+}
+
+test("browser logging and timing authority requires explicit review",
+    async () => {
+    const probes = [
+        "console.log(privateDraft);",
+        "console.error(privateDraft);",
+        "const log = console;",
+        'const log = console["log"];',
+        "const log = Console;",
+        "reportError(new Error(privateDraft));",
+        "const report = reportError;",
+        "new ReportingObserver(handler);",
+        "const report = ReportBody;",
+        "performance.mark(privateDraft);",
+        "performance.measure(privateDraft);",
+        'const timeline = performance["getEntries"]();',
+        "const timing = Performance;",
+        "const timeline = PerformanceObserver;",
+        "const entries = PerformanceResourceTiming;",
+        "const navigation = PerformanceNavigationTiming;",
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedBrowserDiagnostics(source), false,
+            `${filename} gained unreviewed browser diagnostic authority`);
+        for (const candidate of probes) {
+            assert.equal(hasUnreviewedBrowserDiagnostics(
+                `${source}\n${candidate}`), true,
+            `${filename}: ${candidate} bypassed diagnostic review`);
+        }
+    }
+});
+
 // A page can retain text through window.name, cookies, cache and shared
 // browser storage APIs without Web Storage. Bracket access and first-class
 // global references must not bypass this literal storage inventory.

@@ -2168,3 +2168,20 @@ emitted JavaScript, including `ownerDocument`, `contentDocument`,
 This is lexical source drift detection, not a DOM capability sandbox or
 protection against computed property names. The launcher argument exposure,
 Firefox storage-clear non-enforcement, and broader P8 acceptance remain open.
+
+
+Browser console output can expose private draft text to developer tools,
+while performance entries and browser reporting APIs can reveal page timing
+or request metadata without any of the four reviewed fetch calls. The old
+static privacy inventory permitted `console.log(privateDraft)` unchanged.
+
+A new red-first regression now requires explicit review before browser
+modules reference first-class `console`, `reportError`, `ReportingObserver`,
+`ReportBody`, `performance`, or `Performance` timing interfaces. Sixteen
+synthetic additions per authored/emitted module fail the source inventory;
+existing source has no newly admitted diagnostic or timing capability.
+
+This is only lexical source review. Logging or timing APIs alone do not imply
+network exfiltration, and these checks are not browser-enforced privacy
+isolation. The opener argv credential and Firefox storage-erasure limitations
+still block the broader P8 acceptance claim.
