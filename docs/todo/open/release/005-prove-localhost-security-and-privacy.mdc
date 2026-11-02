@@ -1499,3 +1499,25 @@ module aliases, and comment-separated paths. The existing browser-opener
 Nine temporary cfg-inactive `session-secret` source probes were each
 rejected and restored byte-for-byte. This does not establish hardware
 fingerprinting resistance or mitigate the known opener argv disclosure.
+
+A complete real-Firefox continuation exercised all 42 browser integration
+cases, including hostile content, HTTP security policy, malformed and stalled
+session responses, clipboard copying, credential-fragment scrubbing, session
+teardown, and keyboard layout behavior. All 42 passed without skips; this
+closes the previously incomplete browser test run, not P8 acceptance itself.
+
+A red-first browser privacy review found that the existing source checks
+allowed an inert clipboard-read reference in an authored TypeScript helper.
+The new browser host-input inventory permits the single explicit Copy prompt
+clipboard-write acquisition in each main module while requiring review for
+clipboard reads, geolocation, media devices, permissions, credentials, and
+selected hardware or browser fingerprinting APIs. It scans all five authored
+TypeScript modules and all five generated JavaScript counterparts.
+
+Four deliberately inactive TypeScript injections (ordinary clipboard read,
+computed clipboard read, geolocation, and optionally indexed CPU availability)
+and one emitted-JavaScript media-device injection were each rejected by the
+new owner check, then restored byte-for-byte. This is deliberately conservative
+source-level evidence, not an AST or alias-flow proof, a browser permission
+sandbox, packet-level isolation, or a fix for the known opener argv credential
+exposure. The release task remains open pending its wider acceptance criteria.

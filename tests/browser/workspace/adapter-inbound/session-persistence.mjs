@@ -219,6 +219,83 @@ test("browser modules reject unreviewed cross-context authority", async () => {
     }
 });
 
+// Browser modules need the user's clipboard only to write the deliberate
+// Copy prompt result. Reads of clipboard contents, device identifiers or
+// permission-bearing host resources are not part of the admitted session.
+// This is an exact source inventory, not a browser permission sandbox.
+function usesUnreviewedBrowserHostInput(source, main) {
+    const hostProperty = String.raw`(?:geolocation|mediaDevices|credentials|` +
+        String.raw`hardwareConcurrency|deviceMemory|userAgent(?:Data)?|` +
+        String.raw`connection|getBattery|getGamepads|bluetooth|usb|` +
+        String.raw`serial|hid|gpu|permissions)`;
+    const ambientRead = new RegExp(
+        String.raw`\bnavigator\s*(?:(?:\?\.|\.)\s*|(?:\?\.)?\[\s*['"])` +
+            hostProperty + String.raw`\b`,
+        "u",
+    );
+    if (ambientRead.test(source)
+        || /\breadText\b/u.test(source)
+        || /\bclipboard\s*(?:\?\.|\.)\s*read\b/u.test(source)
+        || /\bclipboard\s*(?:\?\.)?\[\s*['"]read['"]\s*\]/u
+            .test(source)) {
+        return true;
+    }
+    const clipboardAccesses = [...source.matchAll(new RegExp(
+        String.raw`\bnavigator\s*(?:\?\.|\.)\s*clipboard\b|` +
+            String.raw`\bnavigator\s*(?:\?\.)?\[\s*` +
+            String.raw`['"]clipboard['"]\s*\]`,
+        "gu",
+    ))];
+    const clipboardWrites = [...source.matchAll(
+        /\bclipboard\s*\?\.\s*writeText\b/gu,
+    )];
+    return clipboardAccesses.length !== (main ? 1 : 0)
+        || clipboardWrites.length !== (main ? 1 : 0);
+}
+
+test("browser host-input inventory refuses unreviewed reads", () => {
+    const allowedWrite = "const clipboard = navigator.clipboard; " +
+        "const writeText = clipboard?.writeText;";
+    assert.equal(usesUnreviewedBrowserHostInput(allowedWrite, true), false);
+    assert.equal(usesUnreviewedBrowserHostInput("export const x = 1;", false),
+        false);
+    for (const candidate of [
+        "navigator.clipboard.readText()",
+        "clipboard.readText()",
+        "clipboard?.read()",
+        "clipboard['read']()",
+        "clipboard?.['read']()",
+        "navigator['clipboard'].read()",
+        "navigator.geolocation.getCurrentPosition(callback)",
+        "navigator?.mediaDevices.getUserMedia({ audio: true })",
+        "navigator.hardwareConcurrency",
+        "navigator['hardwareConcurrency']",
+        "navigator?.['hardwareConcurrency']",
+        "navigator . userAgentData",
+        "navigator.deviceMemory",
+        "navigator.connection",
+        "navigator.getBattery()",
+        "navigator.permissions.query({ name: 'camera' })",
+        "navigator.credentials.get({ password: true })",
+        "navigator.gpu.requestAdapter()",
+        "navigator.usb.requestDevice({ filters: [] })",
+    ]) {
+        assert.equal(usesUnreviewedBrowserHostInput(
+            allowedWrite + candidate, true), true, candidate);
+        assert.equal(usesUnreviewedBrowserHostInput(candidate, false),
+            true, candidate);
+    }
+});
+
+test("browser source and emitted modules reject unreviewed host reads",
+    async () => {
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained clipboard or ambient device read authority`);
+    }
+});
+
 test("page exit invalidates credential, work, and session text", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const start = source.indexOf(
