@@ -220,12 +220,26 @@ fn assert_linux_failed_opener_reaps_descendant(
     .expect("write test opener");
     fs::set_permissions(&opener, fs::Permissions::from_mode(0o700))
         .expect("make test opener executable");
-    let error = browser_launch::launch_with_timeout(
-        opener.as_os_str(),
-        PRIVATE_LAUNCH_URL,
-        timeout,
-    )
-    .expect_err("test opener must fail");
+    // A freshly materialized shell script can transiently fail execve with
+    // ETXTBSY on this host. Retry only before the opener has started; a
+    // successful spawn must still prove the descendant was terminated.
+    let mut busy_retries = 0;
+    let error = loop {
+        match browser_launch::launch_with_timeout(
+            opener.as_os_str(),
+            PRIVATE_LAUNCH_URL,
+            timeout,
+        ) {
+            Err(browser_launch::LaunchError::Spawn(error))
+                if error.kind() == std::io::ErrorKind::ExecutableFileBusy
+                    && busy_retries < 8 =>
+            {
+                busy_retries += 1;
+                thread::sleep(Duration::from_millis(25));
+            },
+            outcome => break outcome.expect_err("test opener must fail"),
+        }
+    };
     assert!(started.exists(), "opener must have spawned its child");
     assert!(!error.to_string().contains(PRIVATE_LAUNCH_URL));
     thread::sleep(Duration::from_millis(700));
