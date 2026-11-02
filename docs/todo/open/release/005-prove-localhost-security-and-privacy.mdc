@@ -2342,3 +2342,19 @@ compiled startup path in addition to the guarded synthetic child fixture.
 The test-owned opener and processes were destroyed after the smoke check.
 It does not prove Firefox history cleanup, eliminate the production launcher
 argv leak, or close P8.
+
+The live Linux CLI kernel-memory check is now automated in the
+`runtime_bootstrap_composition` Cargo integration fixture, rather than only a
+manual smoke. A disposable no-op `xdg-open` reaches the real executable's
+`ready` startup state without persisting its launch argument. Its owning
+parent receives `EPERM` for both `process_vm_readv` and `process_vm_writev`
+against invalid remote address zero, and the denied read leaves its sentinel
+untouched. The test tears down its own CLI and opener.
+
+Independent synthetic-child positive controls still verify Linux kernel
+syscall admission for an ordinary dumpable process.
+
+This is repeatable kernel-admission evidence on Linux, not a proof against
+privileged observers or other operating systems. The opener argv credential,
+Firefox browser-history retention, and remaining P1 cleanup obligations are
+unchanged, so P8 remains open.

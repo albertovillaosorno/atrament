@@ -9,13 +9,13 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Browser launch recovery and real selected-profile CLI regressions.
+//   - Browser launch recovery, profile CLI and Linux crash-policy probes.
 // - Must-Not:
-//   - Launch a browser, bind a listener or expose a session secret.
+//   - Launch a real browser or read live application memory/credentials.
 // - Allows:
 //   - Inputs: Typed launch errors, test-owned ZIP files and CLI arguments.
-//   - Outputs: Assertions over recovery and verified profile inspection.
-//   - Side effects: Test-owned files and bounded CLI subprocesses only.
+//   - Outputs: Assertions over recovery, profile and kernel memory admission.
+//   - Side effects: Test-owned files, CLI processes and a loopback listener.
 // - Split-When:
 //   - Profile CLI grows separate argument or section-decoding policies.
 // - Merge-When:
@@ -57,10 +57,18 @@ use std::io::{self, Write as _};
 #[cfg(target_os = "linux")]
 use std::io::{BufRead as _, BufReader, IoSlice, IoSliceMut, Read as _};
 use std::iter;
+#[cfg(target_os = "linux")]
+use std::path::Path;
 use std::path::PathBuf;
 use std::process::{self, Command};
 #[cfg(target_os = "linux")]
 use std::process::{Child, Stdio};
+#[cfg(target_os = "linux")]
+use std::sync::mpsc;
+#[cfg(target_os = "linux")]
+use std::thread;
+#[cfg(target_os = "linux")]
+use std::time::{Duration, Instant};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use atrament_browser_launch::LaunchError;
@@ -75,6 +83,108 @@ use atrament_profile_zip_reader::{
 };
 
 static TEST_FILE_ID: AtomicU64 = AtomicU64::new(0);
+
+// Exercise the compiled CLI startup path, not only the isolated guard helper.
+// The fake opener never records its credential-bearing argument. Address zero
+// is deliberately invalid, so even a dumpability regression reads no memory.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_ready_cli_refuses_remote_memory_syscalls() {
+    use nix::errno::Errno;
+    use nix::sys::uio::{RemoteIoVec, process_vm_readv, process_vm_writev};
+    use nix::unistd::Pid;
+    use std::os::unix::fs::PermissionsExt as _;
+
+    struct TestOpener(PathBuf);
+    impl Drop for TestOpener {
+        fn drop(&mut self) {
+            fs::remove_file(self.0.join("xdg-open"))
+                .expect("remove only test-owned opener");
+            fs::remove_dir(&self.0).expect("remove test-owned directory");
+        }
+    }
+    struct TestCli(Child);
+    impl Drop for TestCli {
+        fn drop(&mut self) {
+            drop(self.0.kill());
+            drop(self.0.wait());
+        }
+    }
+
+    let temp_root =
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.temp");
+    fs::create_dir_all(&temp_root).expect("project test scratch directory");
+    let opener_directory = temp_root.join(format!(
+        "live-memory-{}-{}",
+        process::id(),
+        TEST_FILE_ID.fetch_add(1, Ordering::Relaxed),
+    ));
+    #[expect(clippy::create_dir, reason = "scratch directory must be unique")]
+    fs::create_dir(&opener_directory)
+        .expect("unique test opener directory");
+    let opener = TestOpener(opener_directory);
+    let script = opener.0.join("xdg-open");
+    fs::write(&script, b"#!/bin/sh\nexit 0\n")
+        .expect("write no-op browser opener");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o700))
+        .expect("make test opener executable");
+
+    let mut cli = TestCli(
+        Command::new(env!("CARGO_BIN_EXE_atrament"))
+            .env("PATH", &opener.0)
+            .env("DISPLAY", ":atrament-test")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("start real CLI with test-owned opener"),
+    );
+    let stdout = cli.0.stdout.take().expect("CLI startup pipe");
+    let (sender, receiver) = mpsc::channel();
+    let reader = thread::spawn(move || {
+        for line in BufReader::new(stdout).lines().take(4) {
+            if sender.send(line).is_err() {
+                break;
+            }
+        }
+    });
+    let deadline = Instant::now() + Duration::from_secs(8);
+    let mut ready = false;
+    for _ in 0..4_usize {
+        let remaining = deadline.saturating_duration_since(Instant::now());
+        let line = receiver
+            .recv_timeout(remaining)
+            .expect("compiled CLI must publish ready before deadline")
+            .expect("CLI startup output must be UTF-8");
+        assert!(
+            !line.contains("#session="),
+            "CLI startup output cannot publish credentials"
+        );
+        if line.contains("\"state\":\"ready\"") {
+            ready = true;
+            break;
+        }
+    }
+    assert!(ready, "compiled CLI did not publish ready");
+    let pid = Pid::from_raw(
+        i32::try_from(cli.0.id()).expect("test-owned Linux CLI PID fits i32"),
+    );
+    let remote = [RemoteIoVec { base: 0, len: 1 }];
+    let mut byte = [0xa5u8];
+    assert_eq!(
+        process_vm_readv(pid, &mut [IoSliceMut::new(&mut byte)], &remote),
+        Err(Errno::EPERM),
+        "ready CLI must reject same-parent remote-memory read first",
+    );
+    assert_eq!(byte, [0xa5], "a denied read cannot change caller memory");
+    assert_eq!(
+        process_vm_writev(pid, &[IoSlice::new(&[0x5a])], &remote),
+        Err(Errno::EPERM),
+        "ready CLI must reject same-parent remote-memory write first",
+    );
+    drop(cli);
+    reader.join().expect("complete bounded startup observer");
+}
 
 // Independent Linux memory-access paths use the ptrace credential check,
 // not procfs. A child exposes only a synthetic marker at a known address.
