@@ -2179,6 +2179,11 @@ fn assert_security_headers(response: &[u8]) {
         "exactly one browser permissions policy must be sent",
     );
     assert!(head.contains("Referrer-Policy: no-referrer\r\n"));
+    assert_eq!(
+        head.lines().filter(|line| *line == "X-Frame-Options: DENY").count(),
+        1,
+        "exactly one legacy frame-denial header must be sent",
+    );
     assert!(head.contains("X-Content-Type-Options: nosniff\r\n"));
     assert!(head.contains("Connection: close\r\n"));
 }

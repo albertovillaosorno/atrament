@@ -1956,3 +1956,16 @@ twelve directives, while retaining explicit Copy prompt clipboard authority.
 These checks prove configured restrictions, not browser enforcement for every
 feature: an unsupported directive may be ignored. This cannot remediate the
 known opener argv credential exposure or close P8 acceptance.
+
+The localhost server now also sends `X-Frame-Options: DENY` on every HTTP
+response. This is a legacy frame-denial fallback alongside the enforced HTTP
+`frame-ancestors 'none'` CSP, not a substitute for modern CSP. A red-first
+Rust test confirmed that the previous transport omitted XFO, then pinned
+exactly one DENY header across seven success, error, and empty responses.
+
+A real Firefox fixture rehosts the runtime's XFO header onto a separate
+loopback document with no CSP or CSP meta element. A hostile origin can embed
+that same server's permissive control document but cannot embed the XFO-only
+document. This isolates browser enforcement of the legacy header without
+claiming that every engine supports it. The launcher argv credential exposure
+and P8 acceptance remain unresolved.

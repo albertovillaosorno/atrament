@@ -88,6 +88,9 @@ const RESPONSE_TRAILERS: &str = concat!(
     "speaker-selection=(), storage-access=(), usb=(), web-share=(), ",
     "window-management=(), xr-spatial-tracking=()\r\n",
     "Referrer-Policy: no-referrer\r\n",
+    // Legacy framing refusal complements CSP frame-ancestors for engines
+    // that do not enforce that HTTP CSP directive.
+    "X-Frame-Options: DENY\r\n",
     "X-Content-Type-Options: nosniff\r\n",
     "Connection: close\r\n\r\n",
 );

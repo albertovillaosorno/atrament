@@ -5049,6 +5049,8 @@ test(
                 "x-content-type-options",
             );
             assert.equal(responseNoSniff, "nosniff");
+            const responseXfo = runtimeResponse.headers.get("x-frame-options");
+            assert.equal(responseXfo, "DENY");
             assert.equal(runtimeResponse.headers.get(
                 "cross-origin-opener-policy",
             ), "same-origin");
@@ -5176,6 +5178,18 @@ test(
                     response.end('self.postMessage("ready");');
                     return;
                 }
+                if (request.url === "/xfo-header-only") {
+                    response.writeHead(200, {
+                        "Cache-Control": "no-store",
+                        "Content-Type": "text/html; charset=utf-8",
+                        "X-Frame-Options": responseXfo,
+                    });
+                    response.end([
+                        "<!doctype html><title>XFO protected frame</title>",
+                        '<main class="control-frame">Blocked by XFO</main>',
+                    ].join(""));
+                    return;
+                }
                 if (request.url === "/csp-header-only") {
                     response.writeHead(200, {
                         "Cache-Control": "no-store",
@@ -5257,13 +5271,18 @@ test(
                 const target = request.url === "/control"
                     ? permissiveOrigin
                     : origin;
+                const frameUrl = request.url === "/xfo-control"
+                    ? `${permissiveOrigin}/`
+                    : request.url === "/xfo-protected"
+                        ? `${permissiveOrigin}/xfo-header-only`
+                        : `${target}/`;
                 response.writeHead(200, {
                     "Cache-Control": "no-store",
                     "Content-Type": "text/html; charset=utf-8",
                 });
                 response.end([
                     "<!doctype html><title>Hostile frame</title>",
-                    `<iframe src="${target}/"></iframe>`,
+                    `<iframe src="${frameUrl}"></iframe>`,
                 ].join(""));
             });
             hostile.listen(0, "127.0.0.1");
@@ -5921,6 +5940,33 @@ test(
                     title: "Permissive frame",
                 },
             );
+
+            // Rehost the actual runtime X-Frame-Options header without
+            // CSP, so this framing refusal is independent from
+            // frame-ancestors and the existing document meta policy.
+            const framedXfoDocument = async (suffix) => {
+                const tab = await bidi.command("browsingContext.create", {
+                    type: "tab",
+                });
+                await bidi.command("browsingContext.navigate", {
+                    context: tab.context,
+                    url: `${hostileOrigin}/${suffix}`,
+                    wait: "complete",
+                });
+                const childContext = await waitForChildContext(
+                    bidi, tab.context,
+                );
+                return waitForFramedDocument(bidi, childContext);
+            };
+            assert.deepEqual(await framedXfoDocument("xfo-control"), {
+                hasControl: true,
+                hasWorkspace: false,
+                title: "Permissive frame",
+            }, "cross-origin framing control must load without XFO");
+            const xfoBlocked = await framedXfoDocument("xfo-protected");
+            assert.equal(xfoBlocked.hasControl, false,
+                "XFO must block cross-origin embedding without CSP");
+            assert.notEqual(xfoBlocked.title, "XFO protected frame");
 
             const attacker = await bidi.command("browsingContext.create", {
                 type: "tab",
