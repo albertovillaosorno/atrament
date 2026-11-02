@@ -487,11 +487,12 @@ performs local-fragment and viewport cleanup without reloading. The real
 navigation test independently confirms the intervening document has no draft
 controls before requesting history traversal.
 
-The same test uses a fresh random draft marker, closes the browser after
-history traversal, and scans only regular files in its disposable Firefox
-profile for those literal UTF-8 bytes. The marker is absent, while a
-browser-profile control file containing it is detected before removal. No
-explicit End request is sent, so backend destruction is not inferred.
+The same test uses a distinct random marker for each private draft field,
+closes the browser after history traversal, and scans only regular files in
+its disposable Firefox profile for literal UTF-8 bytes. All three markers
+are absent; a test-owned profile control file containing each marker is
+detected before removal. No explicit End request is sent, so backend
+destruction is not inferred.
 
 The fixture uses the production-like `Cache-Control: no-store` resource policy,
 so the observed result does not establish which Firefox bfcache path ran or

@@ -7335,11 +7335,15 @@ test(
         fs.mkdirSync(".temp", { recursive: true });
         const profile = fs.mkdtempSync(".temp/session-back-");
         const apiRequests = [];
-        const marker = `atrament-history-private-` +
-            crypto.randomBytes(24).toString("hex");
+        const drafts = Object.fromEntries(
+            ["task", "source", "candidate"].map((field) => [
+                field, `atrament-${field}-history-private-` +
+                    crypto.randomBytes(24).toString("hex"),
+            ]),
+        );
         const server = createSessionFixtureServer(
             apiRequests, null, null, null, null, null, null,
-            (field) => field === "task" ? marker : REFRESH_DRAFT[field],
+            (field) => drafts[field],
         );
         const children = [];
         let bidi;
@@ -7362,9 +7366,10 @@ test(
             const ready = await waitForSessionStatus(
                 bidi, tab.context, "Session ready",
             );
-            assert.equal(ready.task.value === marker, true);
-            assert.equal(ready.source.value, REFRESH_DRAFT.source);
-            assert.equal(ready.candidate.value, REFRESH_DRAFT.candidate);
+            for (const [field, marker] of Object.entries(drafts)) {
+                assert.equal(ready[field].value === marker, true,
+                    `${field} was present before browser navigation`);
+            }
             assert.equal(ready.hash, "");
             // Use real document navigation so pagehide and browser history
             // restoration run under Firefox rather than a synthetic event.
@@ -7415,14 +7420,17 @@ test(
             children.length = 0;
 
             const control = path.join(profile, "history-control.bin");
-            fs.writeFileSync(control, Buffer.from(marker, "utf8"));
-            assert.equal(
-                firefoxProfileContainsPlaintext(profile, marker), true);
+            fs.writeFileSync(control, Object.values(drafts).join("\n"),
+                { mode: 0o600 });
+            for (const marker of Object.values(drafts)) {
+                assert.equal(firefoxProfileContainsPlaintext(profile, marker),
+                    true, "test-owned history marker must be detectable");
+            }
             fs.rmSync(control);
-            assert.equal(
-                firefoxProfileContainsPlaintext(profile, marker), false,
-                "history navigation retained literal private draft bytes",
-            );
+            for (const [field, marker] of Object.entries(drafts)) {
+                assert.equal(firefoxProfileContainsPlaintext(profile, marker),
+                    false, `history navigation retained ${field} draft`);
+            }
         } finally {
             bidi?.close();
             await closeFixtureServer(server);
