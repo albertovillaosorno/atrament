@@ -2255,3 +2255,33 @@ individual security policy values. Synthetic `Link`, `Refresh`, `Alt-Svc`,
 inventory. This detects later server-header egress surfaces that a browser
 source/HTML/CSS inventory cannot observe; it does not establish that Firefox
 supports or executes any particular header-driven request behavior.
+
+
+The Linux crash-memory hardening adds only the already-locked `nix = 0.31.3`
+`process` feature to the runtime-bootstrap executable. An existing exact
+Cargo dependency inventory detected the new direct owner before its allowlist
+was updated: 39 of 40 backend network-surface tests passed, with only this
+unreviewed dependency entry failing. The follow-up inventory now pins the
+Linux-only target, disabled default features, inherited `fs` and explicit
+`process` features, package owner, source and exact version. No new registry
+package was resolved.
+
+This reviews native capability scope, without claiming that the Linux dump
+policy addresses browser-opener argv leakage or cross-browser storage erasure.
+
+
+Linux `PR_SET_DUMPABLE(0)` also intentionally restricts same-user reads of
+`/proc/<pid>/fd`. Two earlier live Linux socket fixtures failed with `EACCES`
+after that guard was enabled, although all other 271 frontend tests passed.
+The live fixtures now retain full per-process descriptor/inode classification
+when it is permitted. When dumpability prevents that inspection, they instead
+check the published IPv4 loopback socket and accepted connection through the
+process network namespace's kernel tables, alongside the thread and real
+HTTP edit/End checks.
+
+This fallback is weaker: `/proc/<pid>/net` is namespace-wide, and filtering by
+the published local endpoint cannot exclude an additional socket bound to an
+unrelated port. Static backend network/process/FFI authority inventories
+remain separate safeguards, not proof of a complete live descriptor census.
+Restoring an exact process-owned inventory while retaining nondumpability
+requires an independently reviewed kernel observation method.

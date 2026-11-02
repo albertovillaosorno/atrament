@@ -367,8 +367,8 @@ function processSocketInodes(pid) {
     return inodes.sort();
 }
 
-function processInternetSocketRows(pid, inodes) {
-    const wanted = new Set(inodes);
+function processInternetSocketRows(pid, inodes = null) {
+    const wanted = inodes === null ? null : new Set(inodes);
     const rows = [];
     for (const protocol of ["tcp", "tcp6", "udp", "udp6", "raw", "raw6"]) {
         const tablePath = `/proc/${pid}/net/${protocol}`;
@@ -378,7 +378,8 @@ function processInternetSocketRows(pid, inodes) {
         const table = fs.readFileSync(tablePath, "utf8");
         for (const line of table.trim().split("\n").slice(1)) {
             const fields = line.trim().split(/\s+/u);
-            if (fields.length < 10 || !wanted.has(fields[9])) {
+            if (fields.length < 10
+                || (wanted !== null && !wanted.has(fields[9]))) {
                 continue;
             }
             rows.push({
@@ -391,6 +392,34 @@ function processInternetSocketRows(pid, inodes) {
         }
     }
     return rows;
+}
+
+// PR_SET_DUMPABLE(0) intentionally denies same-user /proc/<pid>/fd reads.
+// Where that guard prevents descriptor attribution, verify the published
+// loopback endpoint through the namespace's TCP/UDP table instead. This
+// narrow fallback cannot prove absence of unrelated process-owned sockets;
+// only the accessible-FD path supplies that stronger inventory.
+function observedRuntimeSockets(pid, local) {
+    let inodes;
+    try {
+        inodes = processSocketInodes(pid);
+    } catch (error) {
+        if (error.code !== "EACCES" && error.code !== "EPERM") {
+            throw error;
+        }
+        return {
+            complete: false,
+            rows: processInternetSocketRows(pid)
+                // TIME_WAIT entries are kernel-owned after the process has
+                // closed the accepted socket; they are not live FDs.
+                .filter((row) => row.local === local
+                    && ["0A", "01"].includes(row.state)),
+        };
+    }
+    const rows = processInternetSocketRows(pid, inodes);
+    assert.deepEqual(inodes, rows.map((row) => row.inode).sort(),
+        "all process socket descriptors must be classified");
+    return { complete: true, rows };
 }
 
 function terminateChild(child, forcedMs = 10_000) {
@@ -597,7 +626,7 @@ test(
 );
 
 test(
-    "live Linux runtime owns only its published loopback listener",
+    "live Linux runtime exposes its published IPv4 loopback listener",
     { skip: process.platform !== "linux" },
     async () => {
         buildRuntime();
@@ -621,19 +650,15 @@ test(
             });
             const ready = await waitForReady(child);
             assert.deepEqual(processThreadIds(child.pid), [String(child.pid)]);
-            const socketInodes = processSocketInodes(child.pid);
-            const rows = processInternetSocketRows(
-                child.pid,
-                socketInodes,
-            );
-            assert.equal(rows.length, 1);
-            assert.deepEqual(socketInodes, rows.map((row) => row.inode));
             const origin = new URL(ready.origin);
             assert.equal(origin.hostname, "127.0.0.1");
             const expectedPort = Number.parseInt(origin.port, 10)
                 .toString(16)
                 .toUpperCase()
                 .padStart(4, "0");
+            const { rows } = observedRuntimeSockets(child.pid,
+                `0100007F:${expectedPort}`);
+            assert.equal(rows.length, 1);
             const { inode: _inode, ...surface } = rows[0];
             assert.deepEqual(surface, {
                 local: `0100007F:${expectedPort}`,
@@ -654,7 +679,7 @@ test(
 // argv probe, this fixture never saves the credential in a file or test log.
 // The production opener still has the independently documented argv defect.
 test(
-    "live Linux runtime keeps loopback-only sockets through private draft use",
+    "live Linux runtime retains loopback endpoint through private drafts",
     { skip: process.platform !== "linux" },
     async () => {
         buildRuntime();
@@ -733,11 +758,7 @@ test(
                 assert.deepEqual(processThreadIds(child.pid),
                     [String(child.pid)],
                     "private draft runtime must have only its main thread");
-                const inodes = processSocketInodes(child.pid);
-                const rows = processInternetSocketRows(child.pid, inodes);
-                // A Unix, netlink, packet, or other unclassified socket FD
-                // cannot disappear from the Internet-only table count.
-                assert.deepEqual(inodes, rows.map((row) => row.inode).sort());
+                const { rows } = observedRuntimeSockets(child.pid, local);
                 const listeners = rows.filter((row) => row.state === "0A");
                 assert.equal(listeners.length, 1);
                 assert.equal(rows.length <= 2, true);
@@ -775,8 +796,7 @@ test(
                 held.write(`GET /health HTTP/1.1\r\nHost: ${address.host}\r\n`);
                 let observed = false;
                 for (let attempt = 0; attempt < 40; attempt += 1) {
-                    const inodes = processSocketInodes(child.pid);
-                    const rows = processInternetSocketRows(child.pid, inodes);
+                    const { rows } = observedRuntimeSockets(child.pid, local);
                     if (rows.length === 2) {
                         observed = true;
                         assertOnlySessionSockets();

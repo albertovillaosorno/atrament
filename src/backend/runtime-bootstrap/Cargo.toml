@@ -6,8 +6,6 @@ publish = false
 license = "MIT"
 
 [dependencies]
-# Linux prctl uses nix safe wrappers; no unsafe code in the application.
-nix = { workspace = true, features = ["process"] }
 atrament_browser_launch = { workspace = true }
 atrament_explicit_file_path_intent = { workspace = true }
 atrament_profile_export_assembly = { workspace = true }
@@ -24,6 +22,10 @@ atrament_session_application = { workspace = true }
 atrament_session_handshake = { workspace = true }
 atrament_session_runtime = { workspace = true }
 atrament_session_secret = { workspace = true }
+
+# The crash-memory guard is Linux-only; keep other hosts dependency-free.
+[target.'cfg(target_os = "linux")'.dependencies]
+nix = { workspace = true, features = ["process"] }
 
 [dev-dependencies]
 atrament_profile_entry_sha256 = { workspace = true }
