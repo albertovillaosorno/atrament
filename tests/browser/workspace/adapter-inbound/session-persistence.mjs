@@ -296,6 +296,58 @@ test("browser source and generated modules reject undeclared transport",
     }
 });
 
+// A page can retain text through window.name and cookie or cache APIs even
+// without Web Storage. Bracket access and first-class global references must
+// not silently bypass the previously reviewed literal storage inventory.
+function hasUnreviewedBrowserPersistenceReference(source) {
+    const ambientStores = /\b(?:cookieStore|caches)\b/u;
+    const windowName = new RegExp(
+        String.raw`\b(?:window|globalThis)\s*(?:(?:\?\.|\.)\s*name\b|` +
+            String.raw`(?:\?\.)?\[\s*['"]name['"]\s*\])`, "u",
+    );
+    const documentCookie = new RegExp(
+        String.raw`\bdocument\s*(?:(?:\?\.|\.)\s*cookie\b|` +
+            String.raw`(?:\?\.)?\[\s*['"]cookie['"]\s*\])`, "u",
+    );
+    const destructuredWindowName =
+        /\{\s*name\s*(?::\s*[\w$]+)?\s*\}\s*=\s*(?:window|globalThis)\b/u;
+    const destructuredDocumentCookie =
+        /\{\s*cookie\s*(?::\s*[\w$]+)?\s*\}\s*=\s*document\b/u;
+    return [ambientStores, windowName, documentCookie,
+        destructuredWindowName, destructuredDocumentCookie]
+        .some((pattern) => pattern.test(source));
+}
+
+test("browser persistence review rejects indexed cookie, cache and name APIs",
+    async () => {
+    const allowed = "function f(name) { return name; }";
+    assert.equal(hasUnreviewedBrowserPersistenceReference(allowed), false);
+    const probes = [
+        'window["name"] = privateText;',
+        'globalThis?.["name"] = privateText;',
+        'window . name = privateText;',
+        'const { name } = window;',
+        'const { name: prior } = globalThis;',
+        'document["cookie"] = privateText;',
+        'document?.["cookie"] = privateText;',
+        'document . cookie;',
+        'const { cookie: value } = document;',
+        'cookieStore.get("session");',
+        'const store = globalThis["cookieStore"];',
+        'caches.open("workspace");',
+        'const storage = window["caches"];',
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        assert.equal(hasUnreviewedBrowserPersistenceReference(source), false,
+            `${filename} gained an unreviewed persistent browser API`);
+        for (const candidate of probes) {
+            assert.equal(hasUnreviewedBrowserPersistenceReference(
+                `${source}\n${candidate}`), true,
+            `${filename}: ${candidate} escaped persistence review`);
+        }
+    }
+});
+
 test("browser source and generated modules reject persistence APIs",
     async () => {
     const forbidden = [

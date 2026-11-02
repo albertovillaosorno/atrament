@@ -1665,3 +1665,15 @@ reject these paths; the check is lexical, not a browser message-flow sandbox
 or proof against dynamically assembled names.
 
 The opener argv leak and broader P8 acceptance remain open.
+
+The browser persistence inventory rejected literal `window.name` and
+`document.cookie` but permitted indexed access to either, plus Cache API and
+Cookie Store references. Six inactive authored/emitted probes passed the old
+persistence test and were restored byte-for-byte.
+
+A follow-up inventory now reviews named cookie and cache stores, direct and
+literal-indexed `window.name` / `document.cookie`, and their destructured
+aliases in all ten browser modules. Thirteen synthetic variants and six
+separately restored source mutations confirm rejection. This is lexical
+source review, not browser storage inspection or proof against dynamically
+assembled property names. P8 remains open, including the launcher argv leak.
