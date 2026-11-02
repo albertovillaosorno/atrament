@@ -1457,3 +1457,18 @@ raw identifiers, and comment-separated paths under the existing explicit
 profile-output owner policy. Seven inactive `session-secret` source injections
 were rejected individually and restored byte-for-byte. This does not prove
 runtime descriptor isolation or imply that a memory-backed file is persisted.
+
+The pinned nix 0.31.3 dependency also exposes `nix::unistd::pipe` and,
+with the enabled `fs` feature, `pipe2`. Both create local interprocess
+channels without invoking `std::net`, Unix-domain sockets, or `std::io`
+stream operations; `pipe` descriptors do not have close-on-exec set by
+default. Rust 1.97.1 compiled both captured function items against the
+locked dependency configuration.
+
+A red-first guard initially permitted an unreviewed pipe. The existing
+standard-stream inventory now requires descriptor-channel authority review
+for both constructors, including direct calls, captured function items,
+renamed and nested imports, raw identifiers, and comment-separated paths.
+Eight temporarily injected, cfg-disabled backend probes each failed the
+owner check and were restored byte-for-byte. This is source-level review,
+not proof of runtime pipe isolation or cross-process transfer prevention.

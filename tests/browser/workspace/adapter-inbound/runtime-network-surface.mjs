@@ -2242,14 +2242,15 @@ test("backend build-time file and environment inputs are pinned", async () => {
         "new compile-time inputs need explicit privacy review");
 });
 
-// A locked nix fs dependency can rebind process-wide stdin/stdout/stderr
-// using AsFd alone, or `dup` a file descriptor without CLOEXEC. No backend
-// module owns that authority; it also bypasses the std::io stream inventory.
-function usesNixDescriptorDuplication(source) {
-    const duplicator = String.raw`(?:dup|dup2|dup2_raw|dup2_stdin|` +
-        String.raw`dup2_stdout|dup2_stderr|dup3|dup3_raw)`;
+// Pinned nix can rebind stdin/stdout/stderr through descriptor duplication,
+// or create IPC pipes whose endpoints may survive a child exec by default.
+// Neither authority needs an std::io operation or Unix socket constructor.
+// No backend module owns an unreviewed descriptor channel.
+function usesNixDescriptorChannelAuthority(source) {
+    const channel = String.raw`(?:dup|dup2|dup2_raw|dup2_stdin|` +
+        String.raw`dup2_stdout|dup2_stderr|dup3|dup3_raw|pipe|pipe2)`;
     if (new RegExp(
-        String.raw`\bnix\s*::\s*unistd\s*::\s*` + duplicator +
+        String.raw`\bnix\s*::\s*unistd\s*::\s*` + channel +
             String.raw`\b`, "u",
     ).test(source)) {
         return true;
@@ -2263,7 +2264,7 @@ function usesNixDescriptorDuplication(source) {
                 .test(imported)
             || /\bunistd\s*::\s*\*/u.test(imported)
             || new RegExp(String.raw`\bunistd\s*::\s*\{[^;]*\b` +
-                duplicator + String.raw`\b`, "u").test(imported)) {
+                channel + String.raw`\b`, "u").test(imported)) {
             return true;
         }
     }
@@ -2275,7 +2276,7 @@ function usesNixDescriptorDuplication(source) {
 // and status writes are admitted; all stdin and stderr need source review.
 function unreviewedStandardStreamAuthority(source, sourcePath) {
     source = normalizeRustRawIdentifiers(source);
-    if (usesNixDescriptorDuplication(source)) {
+    if (usesNixDescriptorChannelAuthority(source)) {
         return true;
     }
     // Rust macros accept all three delimiters and comments as whitespace.
@@ -2348,6 +2349,16 @@ test("standard stream inventory blocks unreviewed host I/O", () => {
         ['use std::io as hidden;', privateModule],
         ['use std::{io as hidden};', privateModule],
         ['use std::io::{self as hidden, Write};', privateModule],
+        // Inherited Unix pipes create new IPC channels without sockets.
+        ['nix::unistd::pipe();', privateModule],
+        ['let creator = nix::unistd::pipe;', privateModule],
+        ['nix::unistd::pipe2(OFlag::O_CLOEXEC);', privateModule],
+        ['let creator = nix::unistd::pipe2;', privateModule],
+        ['use nix::unistd::pipe as channel;', privateModule],
+        ['use nix::unistd::pipe2 as channel;', privateModule],
+        ['use ::nix::{unistd::{pipe2 as channel}};', privateModule],
+        ['use r#nix::r#unistd::r#pipe as channel;', privateModule],
+        ['nix/**/::unistd::pipe();', privateModule],
         ['nix::unistd::dup2_stdout(&file);', privateModule],
         ['use nix::unistd::dup2_stderr as redirect;', privateModule],
         ['use nix::unistd::{dup2_stdin as redirect};', privateModule],
