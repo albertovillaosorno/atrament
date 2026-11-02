@@ -121,6 +121,13 @@ a helper separately fail the guard in either representation, including before
 a TypeScript rebuild. These are source-level checks, not continuous outbound
 network observation.
 
+The source and generated-module transport guard now rejects literal
+`fetchLater` references as well as unreviewed `fetch` references. Deferred
+fetches can leave the browser after page disposal, bypassing the explicit
+session-end and in-page request-abort model; red-first probes cover direct,
+first-class, bracketed, and destructured references, but this remains a static
+source-level regression rather than a browser-level network trace.
+
 Malformed or misdeclared browser handshake responses cannot grant edit
 authority. The in-memory client now offers explicit same-tab retry on rejected
 `200`/`409` JSON metadata while preserving the fragment-free address bar;

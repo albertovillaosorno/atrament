@@ -220,11 +220,14 @@ test("static workspace starts session controls disabled", async () => {
 
 // Count all literal fetch references, not just direct fetch(...) calls.
 // Captured or bracket-indexed fetch values can be invoked later under an
-// unrelated identifier. Full-line comments are not executable authority.
+// unrelated identifier. Unlike fetch(), fetchLater() can dispatch after the
+// page is disposed, bypassing page-lifetime cancellation entirely.
+// Full-line comments are not executable authority.
 function hasUnreviewedFetchReference(source, main) {
     const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     const references = executable.match(/\bfetch\b/gu) ?? [];
-    return references.length !== (main ? 4 : 0);
+    return references.length !== (main ? 4 : 0)
+        || /\bfetchLater\b/u.test(executable);
 }
 
 test("browser transport review rejects first-class fetch references", () => {
@@ -239,6 +242,25 @@ test("browser transport review rejects first-class fetch references", () => {
         "const { fetch: send } = globalThis;",
         "fetch.call(window, target);",
         "fetch /* review */ (target);",
+    ]) {
+        assert.equal(hasUnreviewedFetchReference(
+            `${reviewed}\n${candidate}`, true), true, candidate);
+        assert.equal(hasUnreviewedFetchReference(candidate, false),
+            true, candidate);
+    }
+});
+
+test("browser transport review denies post-exit deferred fetch", () => {
+    const reviewed = "fetch(0); fetch(1); fetch(2); fetch(3);";
+    assert.equal(hasUnreviewedFetchReference(
+        "// fetchLater is not executable", false), false);
+    for (const candidate of [
+        'fetchLater("/api/session/task");',
+        'window.fetchLater("/api/session/task");',
+        'const later = window.fetchLater;',
+        'const later = globalThis["fetchLater"];',
+        'const { fetchLater: later } = globalThis;',
+        'window?.["fetchLater"]?.("/api/session/task");',
     ]) {
         assert.equal(hasUnreviewedFetchReference(
             `${reviewed}\n${candidate}`, true), true, candidate);
