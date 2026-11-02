@@ -126,6 +126,14 @@ fn opener_io_failure_diagnostics_never_expose_underlying_private_text() {
     use std::error::Error as _;
     use std::io;
 
+    #[expect(deprecated, reason = "pin legacy diagnostic-chain privacy")]
+    fn assert_legacy_cause_redacted(error: &dyn std::error::Error) {
+        assert!(
+            error.cause().is_none(),
+            "legacy error-chain traversal must not expose private text",
+        );
+    }
+
     const PRIVATE_MARKER: &str = "synthetic-private-opener-diagnostic";
     let errors = [
         browser_launch::LaunchError::Spawn(io::Error::other(PRIVATE_MARKER)),
@@ -146,6 +154,7 @@ fn opener_io_failure_diagnostics_never_expose_underlying_private_text() {
             error.source().is_none(),
             "chained error source must not reveal private detail",
         );
+        assert_legacy_cause_redacted(&error);
     }
 }
 
