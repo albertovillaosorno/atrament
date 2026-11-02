@@ -115,6 +115,7 @@ function waitForReady(child) {
             child.stdout.off("error", onError);
             child.stdout.off("end", onEnd);
             child.stdout.off("close", onEnd);
+            child.off("error", onChildError);
             child.off("exit", onExit);
         };
         const finish = (error, record) => {
@@ -129,8 +130,13 @@ function waitForReady(child) {
                 resolve(record);
             }
         };
-        const onExit = (code, signal) => finish(new Error(
-            `runtime exited before ready: ${code}/${signal}`,
+        // Child error events may carry process arguments or private text.
+        // Exit metadata is also never needed for readiness admission.
+        const onExit = () => finish(new Error(
+            "runtime exited before ready",
+        ));
+        const onChildError = () => finish(new Error(
+            "runtime process failed before ready",
         ));
         const onError = () => finish(new Error(
             "runtime startup output stream failed",
@@ -185,6 +191,7 @@ function waitForReady(child) {
         child.stdout.once("error", onError);
         child.stdout.once("end", onEnd);
         child.stdout.once("close", onEnd);
+        child.once("error", onChildError);
         child.once("exit", onExit);
     });
 }
@@ -194,6 +201,47 @@ function fixtureReadinessChild() {
     child.stdout = new PassThrough();
     return child;
 }
+
+test("startup readiness redacts child process error events", async () => {
+    const marker = "private-startup-child-error-marker-2871";
+    const child = fixtureReadinessChild();
+    const pending = waitForReady(child);
+    let thrown = false;
+    try {
+        child.emit("error", new Error(`child failed: ${marker}`));
+    } catch {
+        thrown = true;
+        child.stdout.end();
+    }
+    await assert.rejects(pending, (error) => {
+        assert.equal(error.message.includes(marker), false);
+        assert.equal("cause" in error, false);
+        assert.equal(error.message, "runtime process failed before ready");
+        return true;
+    });
+    assert.equal(thrown, false, "child errors require a safe observer");
+    assert.equal(child.listenerCount("error"), 0);
+    assert.equal(child.listenerCount("exit"), 0);
+    assert.equal(child.stdout.listenerCount("data"), 0);
+    child.stdout.destroy();
+});
+
+test("startup readiness does not reflect untrusted exit metadata", async () => {
+    const marker = "private-startup-child-exit-marker-9362";
+    const child = fixtureReadinessChild();
+    const pending = waitForReady(child);
+    child.emit("exit", marker, marker);
+    await assert.rejects(pending, (error) => {
+        assert.equal(error.message.includes(marker), false);
+        assert.equal("cause" in error, false);
+        assert.equal(error.message, "runtime exited before ready");
+        return true;
+    });
+    assert.equal(child.listenerCount("error"), 0);
+    assert.equal(child.listenerCount("exit"), 0);
+    assert.equal(child.stdout.listenerCount("data"), 0);
+    child.stdout.destroy();
+});
 
 test("startup readiness bounds untrusted UTF-8 process output", async () => {
     const child = fixtureReadinessChild();

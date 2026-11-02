@@ -2584,3 +2584,15 @@ The regression tests both channels and checks that the private marker and
 exception cause are absent from returned diagnostics. This is test-runner
 redaction, not evidence that production browser-launch argv or Firefox history
 no longer stores the session credential; P8 is still open.
+
+A red-first startup test harness regression now exercises an asynchronous
+`ChildProcess` error event while waiting for the three ordered runtime
+readiness records. Without an error listener, the event escaped the readiness
+promise and could crash the test runner. The waiter now rejects with fixed
+text, releases its process and output observers, and does not retain a private
+exception cause. A second synthetic regression confirms that even malicious
+exit code or signal metadata cannot appear in the startup failure message.
+
+This narrows test-log exposure during failed launches, not the production
+browser-opener argv or Firefox navigation-history credential-retention risks.
+P8 remains open.
