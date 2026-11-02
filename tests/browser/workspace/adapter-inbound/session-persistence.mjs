@@ -601,6 +601,87 @@ test("browser source and emitted modules reject unreviewed navigation",
     }
 });
 
+// Runtime-created elements, injected markup and CSSOM rules can issue
+// requests without appearing in the static HTML/CSS or four fetch sites.
+// Keep current accessibility attributes and numeric layout properties
+// explicitly reviewed; new DOM sinks require a source-owner decision.
+function hasUnreviewedDynamicResourceAuthority(source, main) {
+    let remaining = source;
+    for (const [site, count] of [
+        ["function setAttributeIfChanged(", 1],
+        ["element.setAttribute(name, value)", 1],
+        ['divider.setAttribute("data-pointer-drag", "")', 1],
+        ['rootStyle.setProperty("--editor-track", `${share}fr`)', 1],
+        ['rootStyle.setProperty("--preview-track", `${previewShare}fr`)', 1],
+        [
+            'rootStyle.setProperty("--preview-zoom", ' +
+                'String(previewZoom / 100))', 1,
+        ],
+        ['setAttributeIfChanged(divider, "aria-valuenow", String(share))', 1],
+        ['setAttributeIfChanged(divider, "aria-valuetext", dividerValue)', 1],
+        ['setAttributeIfChanged(divider, "aria-valuemin", "50")', 1],
+        ['setAttributeIfChanged(divider, "aria-valuemax", "50")', 1],
+        ['setAttributeIfChanged(divider, "aria-disabled", "true")', 1],
+        ['setAttributeIfChanged(divider, "tabindex", "-1")', 1],
+        ['setAttributeIfChanged(divider, "aria-valuemin", "35")', 1],
+        ['setAttributeIfChanged(divider, "aria-valuemax", "65")', 1],
+        ['setAttributeIfChanged(divider, "tabindex", "0")', 1],
+    ]) {
+        if (remaining.split(site).length - 1 !== (main ? count : 0)) {
+            return true;
+        }
+        remaining = remaining.replaceAll(site, "");
+    }
+    return [
+        new RegExp(
+            String.raw`\b(?:createElement|createElementNS|` +
+                String.raw`createHTMLDocument|DOMParser|` +
+                String.raw`createContextualFragment|insertAdjacentHTML|` +
+                String.raw`innerHTML|outerHTML)\b`, "u",
+        ),
+        new RegExp(
+            String.raw`\b(?:CSSStyleSheet|insertRule|addRule|` +
+                String.raw`replaceSync|adoptedStyleSheets|cssText)\b`, "u",
+        ),
+        /\b(?:setAttribute|setAttributeIfChanged|setProperty)\b/u,
+        /\bdocument\s*\.\s*(?:write|writeln)\s*\(/u,
+        new RegExp(
+            String.raw`\.\s*(?:src|srcset|href|poster|action|` +
+                String.raw`formAction|background|backgroundImage)` +
+                String.raw`\s*=(?!=)`, "u",
+        ),
+    ].some((pattern) => pattern.test(remaining));
+}
+
+test("browser dynamic markup and CSSOM request sinks require review",
+    async () => {
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(hasUnreviewedDynamicResourceAuthority(source, main),
+            false, `${filename} gained an unreviewed DOM/CSSOM sink`);
+        for (const candidate of [
+            'document.createElement("img")',
+            'document.createElementNS("svg", "image")',
+            'document.implementation.createHTMLDocument("foreign")',
+            'element.innerHTML = draftText',
+            'element.insertAdjacentHTML("beforeend", draftText)',
+            'new DOMParser()',
+            'sheet.insertRule("@import url(/unreviewed.css)")',
+            'sheet.replaceSync("@import url(/unreviewed.css)")',
+            'new CSSStyleSheet()',
+            'image.setAttribute("src", destination)',
+            'setAttributeIfChanged(divider, "src", destination)',
+            'rootStyle.setProperty("background-image", destination)',
+            'image.src = destination',
+            'document.write(draftText)',
+        ]) {
+            assert.equal(hasUnreviewedDynamicResourceAuthority(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped dynamic-resource review`);
+        }
+    }
+});
+
 test("page exit invalidates credential, work, and session text", async () => {
     const source = await readFile(MAIN_MODULE, "utf8");
     const start = source.indexOf(

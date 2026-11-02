@@ -1604,3 +1604,20 @@ before exact restoration. A picker still requires user participation, while
 origin-private file access can persist without the backend's selected-path
 Export authority. This is a conservative text scan, not proof of runtime
 permission enforcement or exhaustive dynamic property resolution.
+
+The static HTML/CSS and four-fetch inventories also allowed browser scripts
+that constructed new elements or injected CSSOM rules at runtime. A red-first
+inactive `document.createElement("img")` in authored TypeScript and
+`CSSStyleSheet.prototype.insertRule(...)` in emitted JavaScript passed the
+existing transport, navigation, and static-resource checks. Neither injection
+was retained.
+
+A separate DOM/CSSOM source review now pins existing accessibility attribute
+writes and numeric editor-layout properties while requiring review for new
+markup constructors, HTML injection, CSSOM rule changes, URL-bearing property
+writes, and dynamic attributes. Fourteen synthetic probes and six individually
+restored source mutations (three authored, three emitted) verify rejection.
+The guard covers the five authored and five emitted modules, not browser DOM
+execution, arbitrary computed method names, or complete CSSOM dataflow.
+CSP enforcement, the opener argv credential defect, and wider P8 criteria
+remain separate.
