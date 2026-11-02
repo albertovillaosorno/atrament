@@ -2151,3 +2151,20 @@ existing fragment scrubbing, bfcache handling, viewport timers, and resize
 listeners remain admitted. This is a lexical inventory, not browser-enforced
 capability isolation or proof against computed aliases. The unresolved
 browser-opener argv credential and Firefox storage erasure limitations remain.
+
+
+A `document` alias or the `ownerDocument` of an already-selected element can
+recover document-wide state without using the reviewed global `window` or
+named `document.cookie` expressions. A red-first test demonstrated that
+`const root = document` escaped the previous source reviews.
+
+The browser privacy inventory now pins six exact `document` expressions
+(ten occurrences) in each main module: element selection, focus, style,
+visibility, and the visibility-change listener. Fourteen added alias and
+DOM-root acquisition probes per module require review in TypeScript and its
+emitted JavaScript, including `ownerDocument`, `contentDocument`,
+`contentWindow`, `getRootNode`, and first-class `Document` references.
+
+This is lexical source drift detection, not a DOM capability sandbox or
+protection against computed property names. The launcher argument exposure,
+Firefox storage-clear non-enforcement, and broader P8 acceptance remain open.

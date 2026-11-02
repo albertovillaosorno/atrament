@@ -458,6 +458,63 @@ test("browser first-class global aliases require explicit review", async () => {
     }
 });
 
+// A DOM node can recover the full Document through ownerDocument, and a
+// frame can expose another document even without an explicit global window.
+// These references need the same first-class capability review as window.
+function hasUnreviewedDocumentAuthority(source, main, typed) {
+    const allowed = [
+        [typed ? "document.querySelector<T>(selector)"
+            : "document.querySelector(selector)", 1],
+        ["document.getElementById(targetId)", 1],
+        ["document.documentElement.style", 2],
+        ["document.activeElement", 4],
+        ['document.addEventListener("visibilitychange"', 1],
+        ["document.visibilityState", 1],
+    ];
+    let remaining = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    for (const [site, count] of allowed) {
+        if (remaining.split(site).length - 1 !== (main ? count : 0)) {
+            return true;
+        }
+        remaining = remaining.replaceAll(site, "");
+    }
+    return new RegExp(
+        String.raw`\b(?:document|Document|ownerDocument|` +
+            String.raw`contentDocument|contentWindow|getRootNode)\b`, "u",
+    ).test(remaining);
+}
+
+test("browser first-class Document authority requires explicit review",
+    async () => {
+    const probes = [
+        "const root = document;",
+        "const { cookie: privateValue } = document;",
+        'const root = document["defaultView"];',
+        "const forms = document.forms;",
+        "const root = element.ownerDocument;",
+        "const root = element?.ownerDocument;",
+        'const root = element["ownerDocument"];',
+        "const root = frame.contentDocument;",
+        "const root = frame?.contentDocument;",
+        "const root = frame.contentWindow;",
+        "const root = element.getRootNode();",
+        "const root = element.getRootNode({ composed: true });",
+        "const constructor = Document;",
+        'document.addEventListener("paste", onPaste);',
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        const typed = filename.endsWith(".ts");
+        assert.equal(hasUnreviewedDocumentAuthority(source, main, typed),
+            false, `${filename} gained unreviewed Document authority`);
+        for (const candidate of probes) {
+            assert.equal(hasUnreviewedDocumentAuthority(
+                `${source}\n${candidate}`, main, typed), true,
+            `${filename}: ${candidate} bypassed Document review`);
+        }
+    }
+});
+
 // A page can retain text through window.name, cookies, cache and shared
 // browser storage APIs without Web Storage. Bracket access and first-class
 // global references must not bypass this literal storage inventory.
