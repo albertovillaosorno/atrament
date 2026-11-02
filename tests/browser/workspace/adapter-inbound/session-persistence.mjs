@@ -774,8 +774,14 @@ function usesUnreviewedBrowserHostInput(source, main) {
     const clipboardWrites = [...source.matchAll(
         /\bclipboard\s*\?\.\s*writeText\b/gu,
     )];
+    // The clipboard writer is the entire admitted navigator capability.
+    // Count aliases, destructured properties, and literal-indexed roots too;
+    // a new host API must not bypass review by hiding its property name.
+    const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    const navigatorReferences = executable.match(/\bnavigator\b/gu) ?? [];
     return clipboardAccesses.length !== (main ? 1 : 0)
-        || clipboardWrites.length !== (main ? 1 : 0);
+        || clipboardWrites.length !== (main ? 1 : 0)
+        || navigatorReferences.length !== (main ? 1 : 0);
 }
 
 // The one Copy prompt writeText acquisition is the only reviewed clipboard
@@ -880,6 +886,39 @@ test("browser host-input inventory refuses unreviewed reads", () => {
             allowedWrite + candidate, true), true, candidate);
         assert.equal(usesUnreviewedBrowserHostInput(candidate, false),
             true, candidate);
+    }
+});
+
+// A first-class navigator alias can subsequently access any new host API
+// without a literal navigator.property expression. Restrict the initial
+// navigator capability itself, retaining only the reviewed clipboard writer.
+test("browser first-class navigator aliases require host review", async () => {
+    const reviewed = "const clipboard = navigator.clipboard; " +
+        "const writeText = clipboard?.writeText;";
+    assert.equal(usesUnreviewedBrowserHostInput(reviewed, true), false);
+    assert.equal(usesUnreviewedBrowserHostInput(
+        "// navigator is not used\nexport const x = 1;", false), false);
+    const probes = [
+        "const device = navigator;",
+        "const device = window.navigator;",
+        "const device = globalThis.navigator;",
+        'const device = window["navigator"];',
+        'const device = globalThis?.["navigator"];',
+        "const { language: locale } = navigator;",
+        "const { geolocation: location } = window.navigator;",
+        "const { platform } = globalThis.navigator;",
+        'const { ["languages"]: locale } = navigator;',
+        'const unknown = navigator["unreviewedFeature"];',
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained unreviewed first-class host authority`);
+        for (const candidate of probes) {
+            assert.equal(usesUnreviewedBrowserHostInput(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} bypassed navigator alias review`);
+        }
     }
 });
 

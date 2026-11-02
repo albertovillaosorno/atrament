@@ -2108,3 +2108,15 @@ must fail the source guard, while the editor's existing locale-neutral
 This is a conservative lexical inventory, not resistance to runtime-computed
 aliases or a guarantee of browser permission enforcement. P8 still lacks an
 argv-private browser secret handoff and independently verified storage erasure.
+
+A first-class `navigator` reference or destructured host property could
+bypass the named-property source review entirely. A red-first regression
+confirmed that `const device = navigator` escaped the previous detector.
+
+The browser authority inventory now pins the entire literal `navigator`
+identifier surface to the single reviewed Copy prompt clipboard access in
+`main.ts` and its generated module. Ten alias and destructuring probes per
+module trigger review, including unknown indexed properties, while full-line
+comments remain inert. This is lexical drift detection, not an AST or
+browser sandbox and not a guarantee against dynamically constructed names.
+The separate opener argv credential leak and P8 acceptance remain unresolved.
