@@ -218,7 +218,10 @@ function stopChild(child, gracefulMs = 2_000, forcedMs = 10_000) {
             }
         };
         const onExit = () => finish();
-        const onError = (error) => finish(error);
+        // Child process errors may expose process arguments or private data.
+        const onError = () => finish(new Error(
+            "disposable child process failed",
+        ));
         const signalChild = (signal) => {
             try {
                 if (!child.kill(signal)) {
@@ -230,8 +233,8 @@ function stopChild(child, gracefulMs = 2_000, forcedMs = 10_000) {
                         ));
                     }
                 }
-            } catch (error) {
-                finish(error);
+            } catch {
+                finish(new Error(`disposable child ${signal} signal failed`));
             }
         };
         child.once("exit", onExit);
@@ -367,23 +370,28 @@ test("disposable child shutdown refuses unsuccessful signals", async () => {
     assert.equal(failedKill.listenerCount("error"), 0);
 });
 
-test("disposable child teardown retains original spawn and kill errors",
+test("disposable child shutdown errors redact private process details",
     async () => {
+        const marker = "private-child-process-marker-3881";
         for (const signalToFail of ["SIGTERM", "SIGKILL"]) {
             const child = new EventEmitter();
             child.exitCode = null;
             child.signalCode = null;
-            const fault = new Error(`injected failure during ${signalToFail}`);
             const signals = [];
             child.kill = (signal) => {
                 signals.push(signal);
                 if (signal === signalToFail) {
-                    throw fault;
+                    throw new Error(`private process ${marker}`);
                 }
                 return true;
             };
-            await assert.rejects(stopChild(child, 10, 10),
-                (error) => error === fault);
+            await assert.rejects(stopChild(child, 10, 10), (error) => {
+                assert.equal(error.message.includes(marker), false);
+                assert.equal("cause" in error, false);
+                assert.equal(error.message,
+                    `disposable child ${signalToFail} signal failed`);
+                return true;
+            });
             assert.deepEqual(signals, signalToFail === "SIGTERM"
                 ? ["SIGTERM"] : ["SIGTERM", "SIGKILL"]);
             assert.equal(child.listenerCount("exit"), 0);
@@ -392,13 +400,17 @@ test("disposable child teardown retains original spawn and kill errors",
         const child = new EventEmitter();
         child.exitCode = null;
         child.signalCode = null;
-        const fault = new Error("injected asynchronous child failure");
         child.kill = () => {
-            queueMicrotask(() => child.emit("error", fault));
+            queueMicrotask(() => child.emit("error",
+                new Error(`private process ${marker}`)));
             return true;
         };
-        await assert.rejects(stopChild(child, 100, 100),
-            (error) => error === fault);
+        await assert.rejects(stopChild(child, 100, 100), (error) => {
+            assert.equal(error.message.includes(marker), false);
+            assert.equal("cause" in error, false);
+            assert.match(error.message, /disposable child process failed/);
+            return true;
+        });
         assert.equal(child.listenerCount("exit"), 0);
         assert.equal(child.listenerCount("error"), 0);
     },

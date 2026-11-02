@@ -2542,3 +2542,12 @@ messages and release their connect/data/error/close observers on rejection.
 Focused connect, upgrade, and header-framing checks pass. This changes only
 test diagnostics; it does not secure the browser-opener argv handoff or erase
 Firefox navigation history, so P8 remains open.
+
+A third red-first test-harness leak involved disposable browser/runtime child
+shutdown: asynchronous process `error` events and exceptions thrown by
+`kill()` were formerly exposed verbatim by the cleanup promise. The helper
+now reports only a fixed process failure or the attempted `SIGTERM`/`SIGKILL`
+signal category; synthetic private-marker tests pass for both signal stages
+and the asynchronous event, with no lingering child observers. This does not
+prove an operating-system child was reaped after every failed signal, remove
+production launcher credentials, or satisfy P8's privacy acceptance.
