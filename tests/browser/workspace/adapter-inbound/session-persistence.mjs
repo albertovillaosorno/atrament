@@ -691,8 +691,12 @@ function usesUnreviewedBrowserHostInput(source, main) {
     );
     const motionEvents =
         /\b(?:on)?(?:devicemotion|deviceorientation(?:absolute)?)\b/u;
+    // Topics can disclose browsing interests even without session-network
+    // calls or the navigator credential/device interfaces above.
+    const browsingInterests = /\bbrowsingTopics\b/u;
     if (ambientRead.test(source)
         || directCapture.test(source)
+        || browsingInterests.test(source)
         || motionEvents.test(source)
         || /\breadText\b/u.test(source)
         || /\bclipboard\s*(?:\?\.|\.)\s*read\b/u.test(source)
@@ -815,6 +819,30 @@ test("browser host-input inventory refuses unreviewed reads", () => {
             allowedWrite + candidate, true), true, candidate);
         assert.equal(usesUnreviewedBrowserHostInput(candidate, false),
             true, candidate);
+    }
+});
+
+// The browser Topics API can reveal browsing interests without accessing
+// the session draft or any reviewed fetch site. Require source review before
+// reading or capturing the method, including bracket and destructuring forms.
+test("browser Topics interest reads require host-input review", async () => {
+    const probes = [
+        "document.browsingTopics()",
+        "window.document.browsingTopics()",
+        'globalThis.document["browsingTopics"]()',
+        "const read = document.browsingTopics;",
+        "const { browsingTopics: read } = document;",
+        'document?.["browsingTopics"]?.()',
+    ];
+    for (const { filename, source } of await browserModuleSources()) {
+        const main = filename === "main.ts" || filename === "main.js";
+        assert.equal(usesUnreviewedBrowserHostInput(source, main), false,
+            `${filename} gained an unreviewed host-data read`);
+        for (const candidate of probes) {
+            assert.equal(usesUnreviewedBrowserHostInput(
+                `${source}\n${candidate}`, main), true,
+            `${filename}: ${candidate} escaped Topics API review`);
+        }
     }
 });
 

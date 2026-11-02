@@ -1920,5 +1920,12 @@ modules failed the updated inventory and were restored byte-for-byte. This
 is lexical review only, not a browser credential permission experiment or
 proof against runtime-computed aliases.
 
+The browser Topics API is another browser-managed privacy input: it can expose
+browsing interests without using any admitted session transport or credential
+API. A red-first source regression now requires review for literal
+`browsingTopics` method calls and first-class or indexed aliases across all
+five authored and five emitted modules. This is not evidence of browser-level
+permission denial or protection against computed property names.
+
 P8 remains open, and the browser launcher still exposes its
 credential-bearing URL in child process argv.
