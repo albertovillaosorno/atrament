@@ -43,6 +43,9 @@ use std::io::{self, Write as _};
 use std::path::PathBuf;
 use std::str::from_utf8;
 
+#[cfg(target_os = "linux")]
+use nix::sys::prctl;
+
 use atrament_browser_launch as browser_launch;
 use atrament_explicit_file_path_intent::{
     ExplicitFilePathSource, ExplicitFilePurpose, ExplicitOverwriteIntent,
@@ -151,6 +154,28 @@ fn bind_runtime() -> io::Result<Runtime> {
 
 fn launch_url(origin: &str, secret: &SessionSecret) -> String {
     format!("{origin}#session={}", secret.encoded())
+}
+
+// Disable Linux core dumping before loading profile bytes or creating any
+// private session state. RLIMIT_CORE=0 alone does not suppress core-pattern
+// pipe handlers such as systemd-coredump. Refuse startup if the OS cannot
+// apply and verify the non-dumpable process policy.
+#[cfg(target_os = "linux")]
+pub(crate) fn protect_process_memory_from_crash_snapshots() -> io::Result<()> {
+    prctl::set_dumpable(false).map_err(|error| {
+        io::Error::other(format!(
+            "Atrament cannot disable Linux process dumpability: {error}",
+        ))
+    })?;
+    match prctl::get_dumpable() {
+        Ok(false) => Ok(()),
+        Ok(true) => Err(io::Error::other(
+            "Atrament Linux process is still dumpable after protection",
+        )),
+        Err(error) => Err(io::Error::other(format!(
+            "Atrament cannot verify Linux process dumpability: {error}",
+        ))),
+    }
 }
 
 fn new_session_secret() -> io::Result<SessionSecret> {
@@ -662,6 +687,8 @@ pub(crate) fn inspect_cli_args(
 }
 
 fn main() -> io::Result<()> {
+    #[cfg(target_os = "linux")]
+    protect_process_memory_from_crash_snapshots()?;
     if let Some(inspected) = inspect_cli_args(env::args_os().skip(1))? {
         let stdout = io::stdout();
         let mut output = stdout.lock();

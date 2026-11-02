@@ -72,6 +72,46 @@ use atrament_profile_zip_reader::{
 
 static TEST_FILE_ID: AtomicU64 = AtomicU64::new(0);
 
+// Only the disposable child has its dumpability toggled. In particular, no
+// private session or deliberate crash is created by this regression.
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_startup_crash_memory_policy_is_effective_in_a_child() {
+    let output = Command::new(env::current_exe().expect("test executable"))
+        .args(["--exact", "linux_dumpability_child_probe", "--nocapture"])
+        .env("ATRAMENT_DUMPABILITY_CHILD_PROBE", "1")
+        .output()
+        .expect("run isolated process for dumpability policy");
+    assert!(
+        output.status.success(),
+        "dumpability child failed: {}",
+        String::from_utf8_lossy(&output.stderr),
+    );
+    assert!(
+        String::from_utf8_lossy(&output.stdout)
+            .contains("atrament child dumpability guard confirmed"),
+        "the isolated dumpability assertion did not execute",
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn linux_dumpability_child_probe() {
+    if env::var_os("ATRAMENT_DUMPABILITY_CHILD_PROBE").is_none() {
+        return;
+    }
+    // Force a positive baseline even when the parent process is hardened.
+    nix::sys::prctl::set_dumpable(true).expect("set initial dumpability");
+    assert!(nix::sys::prctl::get_dumpable().expect("read initial policy"));
+    bootstrap::protect_process_memory_from_crash_snapshots()
+        .expect("refuse core dumps before loading private state");
+    assert!(
+        !nix::sys::prctl::get_dumpable().expect("read final policy"),
+        "the Linux child must no longer be dumpable",
+    );
+    println!("atrament child dumpability guard confirmed");
+}
+
 struct OwnedProfileFile(PathBuf);
 
 impl OwnedProfileFile {

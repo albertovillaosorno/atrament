@@ -332,16 +332,21 @@ not atomic compare-and-unlink: a hostile concurrent rename after the
 identity check can still race cleanup or publication, and SIGKILL after
 publication of the temporary name can still strand that stage.
 
-Crash-memory capture is a separate, still-unverified privacy boundary.
-The validation host permits unlimited core size and its Linux
-`/proc/sys/kernel/core_pattern` routes crashes to `systemd-coredump`.
-The current Atrament startup path does not disable process dumpability
-before allocating the session secret or private notebook state. Depending
-on host crash-collection policy, an abnormal exit could therefore retain
-private process memory outside Atrament's ordinary cleanup lifecycle.
+Crash-memory capture is a separate privacy boundary. This Linux host
+permits unlimited core size and routes crashes to `systemd-coredump` via
+`/proc/sys/kernel/core_pattern`; a zero core size limit alone would not
+suppress a pipe handler. Atrament now calls Linux `PR_SET_DUMPABLE(0)` through
+safe `nix` wrappers at the beginning of `main`, before inspecting private
+profile arguments, publishing startup state, or creating a session secret.
+`PR_GET_DUMPABLE` verifies the new setting; either system-call failure or an
+unexpected dumpable result refuses startup rather than loading private state.
 
-This is source and host-policy evidence, **not** a forced-crash leak
-reproduction; no private crash dump was generated or inspected. P1 remains
-open pending an explicitly reviewed, fail-closed process-dump policy and
-an isolated child-process regression that verifies it without creating
-persistent private test artifacts.
+An isolated child-process regression first enables dumpability in that child,
+then invokes the production guard and confirms the child's actual Linux
+`PR_GET_DUMPABLE` value is false. No deliberate crash, private profile, core
+dump, or test-owned persistent artifact is created. This proves the setting
+in that test child, not total suppression under every host crash collector or
+an end-to-end crash-erasure guarantee. Non-Linux startup, swap, hibernation,
+and external browser processes remain outside this Linux-specific guard.
+
+P1 is still open for broader cancellation, cleanup, and crash coverage.

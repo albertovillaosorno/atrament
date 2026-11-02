@@ -772,6 +772,7 @@ dependencies = [
  "atrament_session_handshake",
  "atrament_session_runtime",
  "atrament_session_secret",
+ "nix",
 ]
 
 [[package]]

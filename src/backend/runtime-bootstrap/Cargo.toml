@@ -6,6 +6,8 @@ publish = false
 license = "MIT"
 
 [dependencies]
+# Linux prctl uses nix safe wrappers; no unsafe code in the application.
+nix = { workspace = true, features = ["process"] }
 atrament_browser_launch = { workspace = true }
 atrament_explicit_file_path_intent = { workspace = true }
 atrament_profile_export_assembly = { workspace = true }
