@@ -1898,5 +1898,7 @@ interfaces. Twelve probes run across all ten authored/emitted browser modules.
 Six independently injected references in the authored and emitted main
 modules failed the updated inventory and were restored byte-for-byte. This
 is lexical review only, not a browser credential permission experiment or
-proof against runtime-computed aliases. P8 remains open, and the browser
-launcher still exposes its credential-bearing URL in child process argv.
+proof against runtime-computed aliases.
+
+P8 remains open, and the browser launcher still exposes its
+credential-bearing URL in child process argv.

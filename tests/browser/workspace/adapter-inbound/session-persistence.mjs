@@ -405,7 +405,8 @@ test("browser storage access and shared storage require review", async () => {
 // Storage Buckets may retain origin data beyond a disposable tab. The bare
 // navigator.storage spelling does not cover optional or indexed access to
 // navigator.storageBuckets and its separate bucket interfaces.
-test("browser storage buckets require explicit persistence review", async () => {
+test("browser storage buckets require explicit persistence review",
+    async () => {
     const probes = [
         'navigator["storageBuckets"].open("drafts")',
         "navigator?.storageBuckets.open('drafts')",
