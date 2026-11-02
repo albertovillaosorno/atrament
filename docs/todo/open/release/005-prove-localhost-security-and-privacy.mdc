@@ -1331,3 +1331,19 @@ nested trait imports, and comment-separated raw identifiers) failed the
 updated single-owner filesystem mutation inventory and were byte-restored.
 The scanner does not resolve trait types, prove descriptor provenance, or
 address the known browser-opener argv credential disclosure.
+
+The pinned Rust 1.97.1 compiler also accepts environment and argv readers as
+first-class function items: `env::var::<&str>`, `current_dir`, and `args_os`
+can be captured and invoked later. Likewise, the unsafe `set_var` and
+`remove_var` function items need no immediate call token. The existing
+source inventories reviewed imports and calls but overlooked these bare
+references, allowing a disabled backend probe to bypass source review.
+
+A red-first regression now reviews function-item references for environment,
+host-path, and argv reads, and keeps the exact browser GUI-marker and bootstrap
+argv-reader counts intact. The zero-owner process-environment mutation guard
+also rejects qualified mutator items, including raw identifiers, without
+flagging crate-local `env` modules. Eight cfg-inactive backend mutations across
+`session-secret`, browser launch, and runtime bootstrap were rejected and all
+original bytes restored. These are static checks, not OS-level environment
+isolation, and the browser-opener argv credential issue remains unresolved.

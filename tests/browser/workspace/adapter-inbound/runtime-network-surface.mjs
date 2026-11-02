@@ -373,7 +373,15 @@ function usesProcessWidePathAuthority(source) {
 // reads its environment; a new writer must undergo explicit privacy review.
 function usesProcessWideEnvironmentMutation(source) {
     source = normalizeRustRawIdentifiers(source);
-    if (/\b(?:set_var|remove_var)\s*\(/u.test(source)) {
+    // Unsafe environment mutators can be captured as function items under
+    // a later name. Do not require a call next to the authority reference.
+    // Keep crate-local `crate::env::remove_var` out of this std review.
+    const stdEnvironmentItem = new RegExp(
+        String.raw`(?<![\w:])(?:::)?(?:std\s*::\s*)?env\s*::\s*` +
+            String.raw`(?:set_var|remove_var)\b`, "u",
+    );
+    if (/\b(?:set_var|remove_var)\s*\(/u.test(source)
+        || stdEnvironmentItem.test(source)) {
         return true;
     }
     for (const match of source.matchAll(
@@ -396,8 +404,10 @@ function unreviewedAmbientProcessInputReads(source, sourcePath) {
     source = normalizeRustRawIdentifiers(source);
     const readers = String.raw`(?:var|var_os|vars|vars_os|current_dir|` +
         String.raw`current_exe|home_dir|temp_dir)`;
+    // `var::<&str>`, `current_dir`, and the argument iterator functions can
+    // be stored and invoked later without a call token in this module.
     const anyRead = new RegExp(
-        String.raw`\benv\s*::\s*` + readers + String.raw`\s*\(`,
+        String.raw`\benv\s*::\s*` + readers + String.raw`\b`,
         "gu",
     );
     const importedRead = new RegExp(
@@ -416,7 +426,7 @@ function unreviewedAmbientProcessInputReads(source, sourcePath) {
         return true;
     }
     const argumentsRead = [...source.matchAll(
-        /\b(?:std\s*::\s*)?env\s*::\s*(args|args_os)\s*\(/gu,
+        /\b(?:std\s*::\s*)?env\s*::\s*(args|args_os)\b/gu,
     )];
     const reads = [...source.matchAll(anyRead)];
     if (sourcePath === RUNTIME_BOOTSTRAP) {
@@ -450,6 +460,14 @@ test("ambient process input guard rejects unreviewed reads", () => {
     for (const [source, file] of [
         ['std::env::var("PRIVATE_KEY")', privateModule],
         ['std::env::current_dir()', privateModule],
+        ['let get = std::env::current_dir;', privateModule],
+        ['let get = std::env::var::<&str>;', privateModule],
+        ['let get = env::vars_os;', privateModule],
+        ['let get = env::temp_dir;', privateModule],
+        ['let get = env::args_os;', privateModule],
+        [`${accepted}; let get = env::var_os::<&str>;`, BROWSER_LAUNCH],
+        ['env::args_os().skip(1); let get = env::args_os;',
+            RUNTIME_BOOTSTRAP],
         ['std::env::current_exe()', privateModule],
         ['std::env::home_dir()', privateModule],
         ['std::env::temp_dir()', privateModule],
@@ -1496,6 +1514,9 @@ test("process-wide environment mutators require source review", () => {
     for (const source of [
         'std::env::set_var("PATH", "untrusted");',
         'env::remove_var("DISPLAY");',
+        'let change = std::env::set_var::<&str, &str>;',
+        'let change = env::remove_var::<&str>;',
+        'let change = r#std/**/::r#env::r#set_var::<&str, &str>;',
         'r#std::r#env::r#set_var("PATH", "untrusted");',
         'use std::env::set_var;',
         'use std::env::remove_var as forget;',
