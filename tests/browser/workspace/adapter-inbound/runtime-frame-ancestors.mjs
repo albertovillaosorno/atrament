@@ -3454,6 +3454,60 @@ function assertVisibleInViewport(rectangle, viewportHeight, label) {
 }
 
 test(
+    "Firefox retains full Rust u64 JSON seeds in a numeric text field",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/workspace-u64-");
+        const children = [];
+        let bidi;
+        try {
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: "about:blank",
+                wait: "complete",
+            });
+            const remote = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `JSON.stringify((() => {
+                    const maximum = "18446744073709551615";
+                    const parsed = JSON.parse('{"seed":' + maximum + '}',
+                        (key, value, context) =>
+                            key === "seed" ? context?.source : value);
+                    const field = document.createElement("input");
+                    field.type = "text";
+                    field.inputMode = "numeric";
+                    field.value = parsed.seed;
+                    return {
+                        seed: parsed.seed,
+                        field: field.value,
+                        sent: '{"seed":' + field.value + '}',
+                    };
+                })())`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(remote.result?.type, "string");
+            assert.deepEqual(JSON.parse(remote.result.value), {
+                seed: "18446744073709551615",
+                field: "18446744073709551615",
+                sent: '{"seed":18446744073709551615}',
+            });
+        } finally {
+            bidi?.close();
+            for (const child of children.reverse()) {
+                await stopChild(child);
+            }
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox without JavaScript keeps both static workspace surfaces visible",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
