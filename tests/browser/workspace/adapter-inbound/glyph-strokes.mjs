@@ -340,3 +340,43 @@ test("pointer drawing validates segments on release", async () => {
         ui.restore();
     }
 });
+
+test("curved pointer traces preserve samples and refuse excess", async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const preview = get("preview");
+        const pointer = (x, y) => ({
+            clientX: x, clientY: y, pointerId: 99,
+            isPrimary: true, button: 0,
+        });
+        editor.start();
+        preview.dispatch("pointerdown", pointer(10, 10));
+        preview.dispatch("pointermove", pointer(100, 100));
+        preview.dispatch("pointermove", pointer(200, 70));
+        assert.equal(preview.children.length, 2);
+        assert.equal(preview.children[1].attributes.get("data-draft"), "true");
+        preview.dispatch("pointerup", pointer(250, 140));
+        assert.equal(preview.children.length, 3);
+        assert.equal(get("selected").value, "2");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()), [
+            { ...stroke(), x1: 100, y1: 100, x2: 1000, y2: 1000,
+                color: "#243647" },
+            { ...stroke(), x1: 1000, y1: 1000, x2: 2000, y2: 700,
+                color: "#243647" },
+            { ...stroke(), x1: 2000, y1: 700, x2: 2500, y2: 1400,
+                color: "#243647" },
+        ]);
+        preview.dispatch("pointerdown", pointer(20, 20));
+        for (let i = 1; i <= 129; i += 1) {
+            preview.dispatch("pointermove", pointer(20 + (i % 2) * 10, 20));
+        }
+        preview.dispatch("pointerup", pointer(200, 200));
+        assert.match(get("status").textContent, /128 sampled/);
+        assert.equal(preview.children.length, 3,
+            "overlong gesture must not partially append segments");
+    } finally {
+        ui.restore();
+    }
+});

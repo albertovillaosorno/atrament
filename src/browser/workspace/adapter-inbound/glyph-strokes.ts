@@ -176,8 +176,9 @@ export function createGlyphStrokeEditor(): {
         grapheme: string;
         color: string;
         width: number;
-        first: Point;
+        points: Point[];
         last: Point;
+        overflow: boolean;
     } | null = null;
     let downloadUrl: string | null = null;
 
@@ -226,17 +227,28 @@ export function createGlyphStrokeEditor(): {
             return line;
         });
         if (drawing !== null && drawing.grapheme === character.value) {
-            const draft = document.createElementNS(SVG_NS, "line");
-            draft.setAttribute("x1", String(drawing.first.x));
-            draft.setAttribute("y1", String(drawing.first.y));
-            draft.setAttribute("x2", String(drawing.last.x));
-            draft.setAttribute("y2", String(drawing.last.y));
-            draft.setAttribute("stroke", drawing.color);
-            draft.setAttribute("stroke-width", String(drawing.width));
-            draft.setAttribute("stroke-linecap", "round");
-            draft.setAttribute("stroke-dasharray", "150 100");
-            draft.setAttribute("data-draft", "true");
-            lines.push(draft);
+            const points = drawing.points.slice();
+            const last = points.at(-1);
+            if (last?.x !== drawing.last.x || last?.y !== drawing.last.y) {
+                points.push(drawing.last);
+            }
+            if (points.length === 1) points.push(drawing.last);
+            for (let i = 1; i < points.length; i += 1) {
+                const first = points[i - 1];
+                const second = points[i];
+                if (first === undefined || second === undefined) continue;
+                const draft = document.createElementNS(SVG_NS, "line");
+                draft.setAttribute("x1", String(first.x));
+                draft.setAttribute("y1", String(first.y));
+                draft.setAttribute("x2", String(second.x));
+                draft.setAttribute("y2", String(second.y));
+                draft.setAttribute("stroke", drawing.color);
+                draft.setAttribute("stroke-width", String(drawing.width));
+                draft.setAttribute("stroke-linecap", "round");
+                draft.setAttribute("stroke-dasharray", "150 100");
+                draft.setAttribute("data-draft", "true");
+                lines.push(draft);
+            }
         }
         preview.replaceChildren(...lines);
         preview.setAttribute("aria-label",
@@ -315,7 +327,7 @@ export function createGlyphStrokeEditor(): {
                 grapheme: character.value,
                 color: color.value.toUpperCase(),
                 width,
-                first, last: first,
+                points: [first], last: first, overflow: false,
             };
             render();
         } catch (error) {
@@ -327,6 +339,18 @@ export function createGlyphStrokeEditor(): {
         const point = pointerPoint(event);
         if (point === null) return;
         drawing.last = point;
+        const sampled = drawing.points.at(-1);
+        if (sampled !== undefined) {
+            const dx = point.x - sampled.x;
+            const dy = point.y - sampled.y;
+            if (dx * dx + dy * dy >= 60 * 60) {
+                if (drawing.points.length >= 129) {
+                    drawing.overflow = true;
+                } else {
+                    drawing.points.push(point);
+                }
+            }
+        }
         render();
     });
     preview.addEventListener("pointerup", (event) => {
@@ -337,16 +361,31 @@ export function createGlyphStrokeEditor(): {
             preview.releasePointerCapture(event.pointerId);
         }
         try {
+            if (current.overflow) {
+                throw new Error("Trace exceeds 128 sampled line segments");
+            }
             const last = pointerPoint(event) ?? current.last;
-            if (current.first.x === last.x && current.first.y === last.y) {
+            const points = current.points.slice();
+            const finalSample = points.at(-1);
+            if (finalSample?.x !== last.x || finalSample?.y !== last.y) {
+                points.push(last);
+            }
+            if (points.length < 2 || points.length > 129) {
                 throw new Error("Drag across the preview to draw a segment");
             }
-            const next = [...strokes, validateStroke({
-                grapheme: current.grapheme,
-                x1: current.first.x, y1: current.first.y,
-                x2: last.x, y2: last.y,
-                width: current.width, color: current.color,
-            })];
+            const segments = points.slice(1).map((end, index) => {
+                const first = points[index];
+                if (first === undefined) {
+                    throw new Error("Missing trace start point");
+                }
+                return validateStroke({
+                    grapheme: current.grapheme,
+                    x1: first.x, y1: first.y,
+                    x2: end.x, y2: end.y,
+                    width: current.width, color: current.color,
+                });
+            });
+            const next = [...strokes, ...segments];
             encodeGlyphLibrary(next);
             strokes = next;
             selectedIndex = next.length - 1;
