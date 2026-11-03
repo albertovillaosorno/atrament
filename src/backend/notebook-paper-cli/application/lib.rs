@@ -37,7 +37,7 @@
 use std::env;
 use std::error::Error;
 use std::fs::File;
-use std::io::{self, Read as _, Write as _};
+use std::io::{self, Write as _};
 use std::mem::swap;
 use std::path::Path;
 use std::str::from_utf8;
@@ -61,6 +61,7 @@ use atrament_physical_page_profile::{
 use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };
+use atrament_profile_file_reader::read_bounded_profile_file;
 use atrament_profile_json_syntax::{
     ProfileJsonSyntaxLimits, ValidatedProfileJsonObject,
     validate_profile_json_object,
@@ -312,15 +313,9 @@ fn encode_profile(options: Options) -> String {
 fn read_profile(path: &str) -> Result<Options, String> {
     let file = File::open(path)
         .map_err(|error| format!("cannot open paper profile: {error}"))?;
-    let mut bytes = Vec::new();
-    let _read = file
-        .take(4_097)
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("cannot read paper profile: {error}"))?;
-    if bytes.len() > MAX_PROFILE_BYTES {
-        return Err("paper profile exceeds 4096-byte limit".into());
-    }
-    decode_profile(&bytes)
+    let bytes = read_bounded_profile_file(file, MAX_PROFILE_BYTES)
+        .map_err(|error| format!("paper profile file refused: {error:?}"))?;
+    decode_profile(bytes.bytes())
 }
 
 fn parse_page_count(value: &str) -> Result<usize, String> {

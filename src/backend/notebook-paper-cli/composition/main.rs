@@ -41,6 +41,7 @@ use atrament_pdf_composition_plan as _;
 use atrament_pdf_vector_serializer as _;
 use atrament_physical_page_profile as _;
 use atrament_profile_file_commit as _;
+use atrament_profile_file_reader as _;
 use atrament_profile_json_syntax as _;
 
 

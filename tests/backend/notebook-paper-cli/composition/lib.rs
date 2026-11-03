@@ -245,6 +245,9 @@ fn paper_profile_file_read_is_bounded_and_refuses_corrupt_disk_data() {
     assert!(read_profile(filename).is_err());
     fs::remove_file(&path).expect("test fixture is removed");
     assert!(read_profile(filename).is_err());
+    let directory = env::temp_dir();
+    let directory_name = directory.to_str().expect("temporary directory UTF-8");
+    assert!(read_profile(directory_name).is_err());
 }
 
 #[test]

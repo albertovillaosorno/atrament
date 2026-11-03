@@ -37,7 +37,7 @@ use std::env;
 use std::error::Error;
 use std::fmt::Write as _;
 use std::fs::File;
-use std::io::{self, Read as _, Write as _};
+use std::io::{self, Write as _};
 use std::path::Path;
 use std::slice::Iter;
 
@@ -52,6 +52,7 @@ use atrament_handwriting_statistics_json::{
 use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };
+use atrament_profile_file_reader::read_bounded_profile_file;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 const USAGE: &str = "Usage: atrament-profiles paper [atrament-paper options] \
@@ -77,16 +78,9 @@ fn read_handwriting_profile(
 ) -> Result<HandwritingStatisticsProfile, String> {
     let file = File::open(path)
         .map_err(|error| format!("cannot open handwriting profile: {error}"))?;
-    let mut bytes = Vec::new();
-    let _read_length = file
-        .take(
-            u64::try_from(MAXIMUM_STATISTICS_JSON_BYTES)
-                .map_err(|error| format!("size limit overflow: {error}"))?
-                .saturating_add(1),
-        )
-        .read_to_end(&mut bytes)
-        .map_err(|error| format!("cannot read handwriting profile: {error}"))?;
-    decode_statistics_json(&bytes, &UnicodeGraphemeSegmentation)
+    let bytes = read_bounded_profile_file(file, MAXIMUM_STATISTICS_JSON_BYTES)
+        .map_err(|error| format!("handwriting file refused: {error:?}"))?;
+    decode_statistics_json(bytes.bytes(), &UnicodeGraphemeSegmentation)
         .map_err(|error| format!("handwriting profile refused: {error:?}"))
 }
 
@@ -134,7 +128,9 @@ fn remove_glyph_option(
         None
     };
     profile
-        .without_glyph_override(grapheme, dimension, &UnicodeGraphemeSegmentation)
+        .without_glyph_override(
+            grapheme, dimension, &UnicodeGraphemeSegmentation,
+        )
         .map_err(|error| format!("statistics refused: {error:?}"))
 }
 

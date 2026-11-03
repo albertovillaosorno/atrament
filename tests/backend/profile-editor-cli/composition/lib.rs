@@ -250,13 +250,24 @@ fn glyph_removal_fixture() -> PathBuf {
     let source = test_path();
     let target = source.to_str().expect("input filename");
     let initial = args(&[
-        "--set-glyph", "\u{f1}", "height", "2500", "3500", "3000", "3000", "100",
+        "--set-glyph", "\u{f1}", "height",
+        "2500", "3500", "3000", "3000", "100",
         "--set-glyph", "\u{f1}", "slant", "-1000", "1000", "0", "0", "100",
-        "--set-glyph", "n\u{303}", "height", "2500", "3500", "3000", "3000", "100",
+        "--set-glyph", "n\u{303}", "height",
+        "2500", "3500", "3000", "3000", "100",
         "--output", target,
     ]);
     assert!(execute_handwriting(&initial).expect("initial save").is_none());
     source
+}
+
+#[test]
+fn profile_reader_rejects_directory_before_decoding() {
+    let directory = env::temp_dir();
+    let name = directory.to_str().expect("temporary directory UTF-8");
+    let error = read_handwriting_profile(name)
+        .expect_err("a directory is not a regular profile file");
+    assert!(error.contains("NotRegularFile"));
 }
 
 #[test]

@@ -375,7 +375,8 @@ fn median_and_mean_must_be_jointly_possible_within_envelope() {
 
 #[test]
 fn removing_one_override_restores_global_without_changing_other_glyphs() {
-    let entry = parameter(Dimension::Height, stat(2_000, 4_000, 3_500, 3_400, 200));
+    let entry =
+        parameter(Dimension::Height, stat(2_000, 4_000, 3_500, 3_400, 200));
     let baseline = HandwritingStatisticsProfile::baseline(77);
     let authored = baseline
         .with_glyph("ñ", entry, &BOUNDARIES)
@@ -434,7 +435,9 @@ fn removing_unowned_exact_glyph_or_dimension_fails_without_mutation() {
         Err(HandwritingStatisticsError::MissingGlyphOverride),
     );
     assert_eq!(
-        authored.without_glyph_override("ñ", Some(Dimension::Width), &BOUNDARIES),
+        authored.without_glyph_override(
+            "ñ", Some(Dimension::Width), &BOUNDARIES,
+        ),
         Err(HandwritingStatisticsError::MissingGlyphDimension(
             Dimension::Width,
         )),

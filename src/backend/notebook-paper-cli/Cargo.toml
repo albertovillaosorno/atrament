@@ -11,6 +11,7 @@ atrament_pdf_composition_plan = { workspace = true }
 atrament_pdf_vector_serializer = { workspace = true }
 atrament_physical_page_profile = { workspace = true }
 atrament_profile_file_commit = { workspace = true }
+atrament_profile_file_reader = { workspace = true }
 atrament_profile_json_syntax = { workspace = true }
 
 [lib]

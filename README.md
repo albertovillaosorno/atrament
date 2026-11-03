@@ -198,12 +198,15 @@ Each statistical edit requires the dimension name followed by **minimum,
 maximum, mean, median, and standard deviation** in that dimension's native
 units: micrometres, millidegrees, or parts per thousand. Ten named global
 variables and exact per-grapheme overrides, including decomposed accents,
-are supported. `--remove-glyph GRAPHEME` removes an entire exact glyph,
+are supported.
+
+`--remove-glyph GRAPHEME` removes an entire exact glyph,
 `--remove-glyph-dimension GRAPHEME DIM` restores that dimension to its
 global value, and removing the last override deletes the empty glyph.
-Missing glyphs or dimensions refuse before saving. The default profile
-is **not calibrated handwriting**; its seed is recorded, but no stochastic
-stroke generator is connected yet.
+Missing glyphs or dimensions refuse before saving.
+
+The default profile is **not calibrated handwriting**; its seed is recorded,
+but no stochastic stroke generator is connected yet.
 
 `--profile` must come before statistical edits. Input is limited to 1 MiB,
 unknown/duplicate fields or impossible statistics refuse, and output is
