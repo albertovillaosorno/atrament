@@ -309,6 +309,22 @@ through the Rust CLI and produced an actual one-page PDF and transparent
 72-DPI RGBA PNG of `hmhm`. Full alphabets, native curve persistence and
 cursive joining remain unfinished; P1-012 remains open.
 
+## Exact straight l/t geometric starters (partial) — 2026-11-03
+
+The localhost editor now explicitly constructs lowercase `l` from one
+vertical line, and `t` from a different vertical stem plus the existing
+horizontal e-style SVG crossbar. Their one/two ordered straight strokes
+are exact integer coordinates in both browser SVG and native TSV. Bounds
+refuse a clipped tall ascender atomically; there is no automatic glyph
+fallback or hidden shape substitution.
+
+Two browser tests verify coordinate equality, ideal-guide visibility,
+explicit text/grapheme replacement, UTF-8 TSV readback and refusal without
+changing saved shapes. A three-segment `lt` library roundtripped
+byte-for-byte through Rust and produced a one-page PDF and a transparent
+72-DPI RGBA PNG of `ltlt`. This adds only two manually selected templates;
+full handwriting inventory, native curves and cursive joining remain open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

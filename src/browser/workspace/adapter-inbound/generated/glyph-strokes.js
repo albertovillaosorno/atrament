@@ -212,6 +212,15 @@ function roundedStory(cx, cy, radius, g) {
 // An m is two exact quadratic upper humps inside the same horizontal
 // cell, plus three explicit stems. The m SVG keeps those quadratics; TSV
 // exports 64 rounded chords and three independently ordered pen lines.
+// Straight forms retain exact SVG/TSV line segments, not rounded chords.
+// The t crossbar reuses the e guide's existing bounded bar coordinates.
+function tallStem(cx, cy, radius, g) {
+    return {
+        from: { x: cx, y: g === "l"
+                ? cy - Math.round(radius * 1.5) : cy - radius },
+        to: { x: cx, y: cy + radius },
+    };
+}
 function doubleHump(cx, cy, radius) {
     const left = cx - radius;
     const right = cx + radius;
@@ -254,7 +263,7 @@ function quadratic(from, control, to, step) {
 }
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
-        "n", "u", "h", "m", "c", "e", "i", "í"].includes(g)) {
+        "n", "u", "h", "m", "l", "t", "c", "e", "i", "í"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -319,6 +328,23 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         }
         output.push(line(bow.lastStem.from, bow.lastStem.to));
         return output;
+    }
+    if (g === "l" || g === "t") {
+        const stem = tallStem(cx, cy, radius, g);
+        if (stem.from.y < halfPen) {
+            throw new Error("Tall stem and pen must fit inside glyph cell");
+        }
+        const lines = [validateStroke({
+                grapheme: g, x1: stem.from.x, y1: stem.from.y,
+                x2: stem.to.x, y2: stem.to.y, width: pen, color,
+            })];
+        if (g === "t")
+            lines.push(validateStroke({
+                grapheme: g, x1: cx - radius, y1: cy,
+                x2: cx + Math.round(radius * 0.55), y2: cy,
+                width: pen, color,
+            }));
+        return lines;
     }
     if (g === "c" || g === "e") {
         const result = Array.from({ length: OPEN_ARC_SEGMENTS }, (_, index) => {
@@ -684,13 +710,17 @@ export function createGlyphStrokeEditor() {
             eBar.setAttribute("y2", String(cy));
             eBar.setAttribute("stroke-width", numeric.width.value);
             eBar.setAttribute("stroke", color.value);
-            const barState = active && chosen.grapheme === "e"
-                ? "visible" : "hidden";
+            const barState = active && ["e", "t"]
+                .includes(chosen.grapheme) ? "visible" : "hidden";
             eBar.setAttribute("visibility", barState);
             const pen = Number(numeric.width.value);
             const iParts = ["i", "í"].includes(chosen.grapheme)
                 ? dottedI(cx, cy, r, pen)
                 : dottedI(cx, cy, 1100, 250);
+            if (["l", "t"].includes(chosen.grapheme)) {
+                const tallKind = chosen.grapheme === "l" ? "l" : "t";
+                iParts.stem = tallStem(cx, cy, r, tallKind);
+            }
             for (const [iElement, part] of [
                 [iStem, iParts.stem], [iDot, iParts.dot],
             ]) {
@@ -701,8 +731,8 @@ export function createGlyphStrokeEditor() {
                 iElement.setAttribute("stroke-width", numeric.width.value);
                 iElement.setAttribute("stroke", color.value);
             }
-            const iState = active && ["i", "í"].includes(chosen.grapheme)
-                ? "visible" : "hidden";
+            const iState = active && ["i", "í", "l", "t"]
+                .includes(chosen.grapheme) ? "visible" : "hidden";
             const dotState = active && chosen.grapheme === "i"
                 ? "visible" : "hidden";
             iStem.setAttribute("visibility", iState);

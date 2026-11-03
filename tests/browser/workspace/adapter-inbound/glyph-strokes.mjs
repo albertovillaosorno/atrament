@@ -1056,6 +1056,80 @@ test("h/m SVG guides and TSV replacement remain session-safe", async () => {
     }
 });
 
+test("l and t preserve exact straight ink and bounded ascenders", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const l = geometricStarter("l", ...args);
+    const t = geometricStarter("t", ...args);
+    assert.deepEqual(l, [{
+        grapheme: "l", x1: 1550, y1: 800, x2: 1550, y2: 3550,
+        width: 250, color: "#123456",
+    }]);
+    assert.deepEqual(t, [
+        { grapheme: "t", x1: 1550, y1: 1350,
+            x2: 1550, y2: 3550, width: 250, color: "#123456" },
+        { grapheme: "t", x1: 450, y1: 2450,
+            x2: 2155, y2: 2450, width: 250, color: "#123456" },
+    ]);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary([...l, ...t])),
+        [...l, ...t]);
+    assert.throws(() => geometricStarter("l", 1550, 1450, 1100,
+        250, "#123456"), /Tall stem and pen/);
+    assert.throws(() => geometricStarter("l", ...args,
+        undefined, "two-storey"), /Two-storey/);
+});
+
+test("l/t exact SVG guides and atomic explicit replacement", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        for (const [glyph, y, lines] of [
+            ["l", "800", 1], ["t", "1350", 2],
+        ]) {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            get("form").value = glyph;
+            get("form").dispatch("change");
+            assert.equal(get("ideal-i-stem").attributes.get("visibility"),
+                "visible");
+            assert.equal(get("ideal-i-stem").attributes.get("y1"), y);
+            assert.equal(get("ideal-i-stem").attributes.get("y2"),
+                "3550");
+            assert.equal(get("ideal-i-dot").attributes.get("visibility"),
+                "hidden");
+            assert.equal(get("ideal-e-bar").attributes.get("visibility"),
+                glyph === "t" ? "visible" : "hidden");
+            assert.equal(get("ideal-circle").attributes.get("visibility"),
+                "hidden");
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, lines);
+        }
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, [
+            ...geometricStarter("l", 1550, 2450, 1100, 250,
+                "#243647"),
+            ...geometricStarter("t", 1550, 2450, 1100, 250,
+                "#243647"),
+        ]);
+        get("character").value = "l";
+        get("character").dispatch("input");
+        get("form").value = "l";
+        get("form").dispatch("change");
+        get("circle-y").value = "1450";
+        get("circle-y").dispatch("input");
+        assert.equal(get("ideal-i-stem").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Tall stem and pen/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "clipped l must not change prior authored strokes");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("c and e open-circle arcs and dotted i have ordered ink", () => {
     const args = [1550, 2450, 1100, 250, "#123456"];
     const c = geometricStarter("c", ...args);

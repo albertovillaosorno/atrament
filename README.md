@@ -536,7 +536,7 @@ curved pen stroke.
 
 For a geometric starting point, choose an explicitly supported glyph
 (`o`, `a`, `ó`, `á`, `b`, `d`, `p`, `q`, `n`, `u`, `h`, `m`,
-`c`, `e`, `i` or `í`) and its matching
+`l`, `t`, `c`, `e`, `i` or `í`) and its matching
 geometric starter. Adjust the center and radius in
 micrometres, then deliberately replace that letter's unsaved strokes.
 The `o`/`a` forms share a true analytic circle.
@@ -585,6 +585,12 @@ entire alphabet or a continuous native quadratic in the exported PDF.
 The lowercase `c` is a 270-degree exact SVG circular arc with a right-hand
 gap, serialized as 36 rounded chords. The `e` reuses precisely those chords
 and adds a horizontal crossbar (37 segments); both remain editable.
+
+The tall `l` is one exact vertical line segment; `t` is a separate
+vertical stem with one straight e-style crossbar (2 ordered segments).
+Their SVG guides use the same exact line coordinates as the native TSV,
+without curve approximation. With an out-of-cell ascender, the editor
+refuses replacement rather than clipping or changing earlier glyphs.
 
 A dotted `i` has one straight stem plus one short dot stroke (2 segments).
 A separately selectable `í` instead keeps the stem and puts a rising acute
