@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P2-003"
 title: "Implement measured text flow and pagination"
-status: open
+status: completed
 priority: P2
 lane: semantic-layout
 dependencies: ["ATR-P2-001", "ATR-P4-008"]
@@ -26,6 +26,10 @@ migrated_from: TODO.md
 # Implement measured text flow and pagination
 
 ## Scope and existing evidence
+
+The original history below describes broader unimplemented measurement
+integration. The closing decision is limited to pagination of caller-supplied,
+already-measured fragments from the current accepted semantic flow.
 
 Wrap paragraphs, lists, quotations, and citations from actual handwriting
 metrics and move complete semantic fragments to following pages predictably.
@@ -121,3 +125,68 @@ The task remains open for real handwriting and formula measurement, grapheme-
 aware line breaking and paragraph wrapping, quotation and citation metric
 generation, column-flow policy, measurement diagnostics, and render or
 live-output consumption.
+
+## Finite two-page measured-flow contract
+
+**Inputs:** an exact accepted revision and flow, an ordered complete sequence
+of measured `Paragraph`, `Quotation`, `Citation`, and `List` block fragments,
+each with accepted owner identity, nonnegative physical width and height,
+and `Independent` or `KeepTogetherWhenPossible` policy. Writable page
+rectangles are derived from the accepted page profiles and cannot be
+substituted by browser-supplied coordinates. The handwriting/glyph measurement
+engine is a declared upstream input, not an output of this operation.
+
+**Outputs:** ordered `PlacedFragment` entries with unchanged owner, width,
+height and exact page/top coordinate, or a typed failure with no partial
+accepted notebook mutation. An accepted revision, semantic block order,
+Undo/Redo state, and source text are never changed by read-only pagination.
+
+**Two-page example:** two accepted pages `P1` and `P2` each derive a
+150 mm-wide, 70 mm-tall writable rectangle whose local top is at 20 mm.
+The selected flow has these measured units, all at most 140 mm wide:
+
+| Owner | Semantic family | Height | Policy | Expected placement |
+| --- | --- | --- | --- | --- |
+| `B1` | Paragraph | 30 mm | Independent | `P1` top 20 mm |
+| `B2` | Quotation | 25 mm | Independent | `P1` top 50 mm |
+| `B3` | Citation | 15 mm | Independent | `P1` top 75 mm |
+| `B4` | List | 40 mm | Keep together | `P2` top 20 mm |
+
+`B3` exactly fills the bottom of `P1` at 90 mm; no extra break is generated.
+`B4` cannot fit the spent remainder of `P1`, so it moves intact to `P2`.
+The list retains its accepted list/item/child identities under the measured
+top-level `B4` owner, and no fragment is split by the paginator.
+
+**Break and overflow example:** replacing only `B4` measurement with two
+45 mm indivisible fragments makes its 90 mm keep-together group too tall
+for any 70 mm page. The paginator may fall back to fragment boundaries:
+the first 45 mm fragment fits on `P2`, while the second requires a third page.
+Because no page remains, the result is `NoPageAvailable { owner: B4 }`, not
+a truncated successful plan. A single 75 mm fragment instead rejects as
+`FragmentDoesNotFitAnyPage` for the same two-page geometry.
+
+**Refusals and invariants:** stale revision identity, missing/foreign block,
+incomplete or reordered measurement, invalid physical page profile, and
+horizontal extent larger than any allowed page must be diagnosed before
+publishing a complete placement. Group fallback never cuts an indivisible
+fragment or backfills a page before the flow's owning page.
+
+**Assumptions and residual risks:** current `flow-pagination` and
+`semantic-flow-pagination` handle admitted measured geometry, not text
+shaping, glyph metrics, grapheme line breaking, automatic column policies,
+measurement diagnostics, or rendering. Calling these results "wrapped
+handwriting" without an independent measurement provider would be false.
+Profile changes and Undo/Redo require new measurement bound to the new
+accepted revision even when semantic text looks unchanged.
+
+## Acceptance decision
+
+- **Basis:** practical for already-measured fragment placement, 2026-11-02,
+  within the existing two-page flow and accepted-revision binding APIs.
+- **Delivered:** four-family complete-source example, deterministic page
+  breaks, exact-bottom behavior, keep-together fallback, typed overflow,
+  refusal conditions, and the independent measurement-input boundary.
+- **Not implemented by this acceptance:** handwritten width/height
+  computation, paragraph word wrapping, quotation/citation shaping, column
+  placement, and render or live-output adapters. The task closes only the
+  finite measured-pagination feature, not those upstream/downstream gaps.

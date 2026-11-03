@@ -20,13 +20,6 @@ labels belong here.
 
 ## P2 — Semantic notebook and physical layout
 
-### TODO - Implement measured text flow and pagination
-
-Wrap paragraphs, lists, quotations, and citations from actual handwriting
-metrics and move complete semantic fragments to following pages predictably.
-
-[docs/todo/open/semantic/003-text-flow-pagination.mdc](docs/todo/open/semantic/003-text-flow-pagination.mdc)
-
 ### TODO - Implement fixed-region constraint solving
 
 Place titles, figures, callouts, and freeform regions with anchors,
