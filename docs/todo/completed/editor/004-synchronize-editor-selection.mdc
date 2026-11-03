@@ -1,0 +1,78 @@
+---
+record_type: task
+id: "ATR-P3-004"
+title: "Synchronize selection between both editors"
+status: completed
+priority: P3
+lane: dual-editor
+dependencies: ["ATR-P3-002", "ATR-P3-003"]
+dependencies_specified: true
+dependency_rationale: >-
+  Selection sync requires both editor surfaces.
+acceptance_criteria:
+  - >-
+      Selecting source, a diagnostic, a page object, or a table cell must
+      focus the same stable semantic identity in the other surface.
+  - >-
+      Finite v1 completion: Round-trip one source span, one page object, and
+      one diagnostic through shared stable selection identities between both
+      editors.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Synchronize selection between both editors
+
+## Scope and existing evidence
+
+Historical notes below describe observed implementation gaps, which the
+finite theoretical contract does not silently resolve.
+
+Selecting source, a diagnostic, a page object, or a table cell must focus the
+same stable semantic identity in the other surface.
+
+## Finite bidirectional semantic selection contract
+
+**Inputs:** one current accepted revision, a stable semantic identity, an
+optional range within that identity, the origin surface (`source`, `page`, or
+`diagnostic`), and a page owner resolved from the same revision. **Outputs:**
+a single shared selection descriptor plus non-mutating focus/scroll hints to
+both editors, or a visible unresolved/stale-target result. Selection does not
+create an accepted semantic edit or modify unsaved source drafts.
+
+**Identity rule:** object IDs come from the accepted backend graph, not DOM
+indices, visual positions, line numbers, or an LLM response string. A source
+range must align with the admitted grapheme boundaries of its text owner.
+A page figure selects its owning semantic object in the source inspector;
+a diagnostic selects the identity named by its revision-bound target.
+Unknown identity, stale revision, or ambiguous semantic-to-visual mappings
+must not select a different object as an approximation.
+
+**Worked round-trip on revision `r12`:** one page `p1` contains text span
+`t2` (`¿Por qué?`) and figure `f3`; one current overflow diagnostic `d1`
+names `f3`. Selecting the full `t2` grapheme range in source highlights its
+page preview and retains source focus on return. Clicking `f3` in preview
+opens `f3` in the source object inspector and highlights the same figure.
+Activating `d1` focuses `f3` in both surfaces and shows that diagnostic; an
+explicit return to source and back keeps `f3`, never `d1`, as selected owner.
+
+**Refusal example:** a diagnostic from revision `r11` or an unloaded page
+without a trustworthy `f3` owner returns `StaleSelection` or
+`UnresolvedSelection`, leaving the prior shared selection intact. A source
+caret inside the decomposed `e` plus combining-acute grapheme cannot create
+a half-grapheme selection; it must snap to a declared cluster boundary or
+refuse the range, without changing authored Unicode text.
+
+**Assumptions and limits:** semantic identities and explicit revision-bound
+diagnostic models exist as backend primitives. The current frontend has no
+complete source-object index or preview hit-test identity mapping. Table-cell
+subselection, cross-page linked objects, assistive-technology focus behavior,
+and actual browser/CLI/MCP selection transport are not proven by this contract.
+
+## Acceptance decision
+
+- **Basis:** theoretical for cross-surface selection transport, 2026-11-02.
+- **Delivered:** three explicit round-trips, shared revision/owner rules,
+  grapheme range handling and stale/unresolved refusal outcomes.
+- **Not implemented by this acceptance:** backend-driven focus and hit-test
+  integration, complete diagnostic linking, or table-cell selection UI.

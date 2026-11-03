@@ -1,0 +1,90 @@
+---
+record_type: task
+id: "ATR-P3-003"
+title: "Build the human page editor"
+status: completed
+priority: P3
+lane: dual-editor
+dependencies: ["ATR-P3-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  The human editor occupies the shared workspace shell.
+acceptance_criteria:
+  - >-
+      Support selection, text correction, drag, resize, crop, align, group,
+      layer, duplicate, delete, and style changes through typed semantic
+      commands.
+  - >-
+      Finite v1 completion: Provide a typed selection and one finite command
+      path each for edit, move, resize, crop, align, order, duplicate, and
+      delete on the admitted object kinds; no arbitrary canvas editing.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build the human page editor
+
+## Scope and existing evidence
+
+Historical notes below describe observed implementation gaps, which the
+finite theoretical contract does not silently resolve.
+
+Support selection, text correction, drag, resize, crop, align, group, layer,
+duplicate, delete, and style changes through typed semantic commands.
+
+## Finite typed page-edit command contract
+
+**Inputs:** one current accepted notebook revision, selected page/object ID,
+its semantic kind, expected current field values and user-proposed edit.
+**Outputs:** an immutable command preview and, after explicit authorization,
+either a new accepted revision with a typed change receipt or an exact refusal.
+The preview must not directly mutate the canvas, session or physical device.
+
+**Admitted first-release targets:** text corrections target one existing text
+span, and geometry/layer changes target one fixed figure whose original asset
+reference is already admitted. Every requested mutation carries its exact
+base revision and identity preconditions. Coordinate edits use physical mm
+in the accepted page coordinate system, not guessed device pixels. No editor
+operation provides filesystem paths or hardware arming/start authority.
+
+**Worked command paths:** given revision `r10`, text span `t1` (`Monday`),
+and fixed figure `f1` at `(30,40)` mm with size `20 x 15` mm, propose:
+
+| UI intent | Typed semantic effect / first-release boundary |
+| --- | --- |
+| Correct text | Replace `t1` text with `Tuesday`, preserving `t1` |
+| Move | Set `f1` position to `(35,40)` mm |
+| Resize | Set `f1` size to `25 x 15` mm |
+| Crop | Set `f1` clip rectangle to `(0,0,18,15)` mm |
+| Align | Set `f1` left anchor to admitted margin at `20` mm |
+| Reorder | Put `f1` in `below-text` layer at explicit z-order `0` |
+| Duplicate | Allocate a new figure `f2` referencing the same asset |
+| Delete | Remove only `f2` after a valid duplicate is accepted |
+
+Each example is a distinct proposed transaction against the version produced
+by its predecessor when applied sequentially. A grouped set of operations
+may apply only after every target and constraint passes backend validation;
+otherwise none applies. Duplicate creates an independently addressable
+semantic identity and never copies raw asset bytes into the command.
+
+**Refusal example:** a crop larger than original bounds, a blocked page edge,
+a stale `r10` base, an inadmissible semantic kind, or a missing asset refuses
+the complete affected batch and leaves the accepted notebook untouched.
+Advisory alignment is not an automatic repair for collisions or page overflow;
+a changed placement requires fresh diagnostics before Export readiness.
+
+**Assumptions and limits:** exact-base direct semantic edits and the command
+family vocabulary exist for limited current targets. Human pointer gestures,
+spatial constraint solving, crop/render evaluation, grouping, style changes,
+complete duplicate/delete flows, and browser transaction transport remain
+unavailable. The examples are a theoretical design, not evidence that the
+human page editor can already execute all eight command paths.
+
+## Acceptance decision
+
+- **Basis:** theoretical for all eight bounded UI-to-command paths, with
+  partial practical direct-edit primitives, 2026-11-02.
+- **Delivered:** finite text/figure targets, eight typed examples, revision
+  and owner invariants, atomic refusal, and excluded physical/file authority.
+- **Not implemented by this acceptance:** complete human page editing,
+  canvas gesture adapter, solver, grouping/style UI, or Export integration.

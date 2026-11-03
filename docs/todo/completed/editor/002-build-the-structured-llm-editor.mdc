@@ -1,0 +1,100 @@
+---
+record_type: task
+id: "ATR-P3-002"
+title: "Build the structured LLM editor"
+status: completed
+priority: P3
+lane: dual-editor
+dependencies: ["ATR-P3-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  The LLM editor occupies the shared workspace shell.
+acceptance_criteria:
+  - >-
+      Edit task instructions and notebook source with structured completion,
+      formatting, object navigation, diagnostics, and a safe raw-response
+      inspection boundary.
+  - >-
+      Finite v1 completion: Provide task/source editing, raw model-response
+      inspection, object navigation, and diagnostics on one bounded notebook
+      example without executing pasted content.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build the structured LLM editor
+
+## Scope and existing evidence
+
+Historical notes below describe observed implementation gaps, which the
+finite theoretical contract does not silently resolve.
+
+Edit task instructions and notebook source with structured completion,
+formatting,
+object navigation, diagnostics, and a safe raw-response inspection boundary.
+
+Current frontend evidence includes task, source, permanent prompt, backend-owned
+options, and a visually isolated raw model-response boundary that explicitly
+remains untrusted until backend validation. After a compatible authenticated
+handshake, task, source, and raw-response draft fields are read from
+backend-owned session state, staged without partial DOM updates, then committed
+to the UI together before editing is enabled. Complete edits replace those same
+backend draft fields, while page exit aborts both reads and writes and clears
+browser text.
+
+Structured completion, object navigation, candidate diagnostics, semantic
+acceptance, and semantic-command transport remain unfinished.
+
+## Finite structured source and untrusted-response contract
+
+**Inputs:** one authenticated active session, backend-owned task/source drafts,
+a current accepted notebook revision, a read-only semantic object index and
+diagnostic set, and optional pasted model-response text. **Outputs:** editable
+task/source drafts, visible raw response, bounded object navigation and linked
+diagnostics. Draft edits alone never promote or replace accepted notebook data.
+
+**Draft boundary:** a compatible session handshake and complete draft read must
+precede enabling fields. Edits submit exact text as backend drafts, not as
+commands to a browser-owned notebook. A failed or partial read keeps editing
+disabled and identifies the failure without exposing stale session text.
+Raw response stays text-only even when it contains markup, JSON-looking
+commands, code, or export/start instructions; no paste executes or applies it.
+
+**Finite structured aid:** for one notebook with one page, one title span and
+one paragraph span, expose a tree of stable semantic identities and a source
+cursor anchor. A completion suggestion may propose one admitted block kind at
+an allowed insertion anchor; its preview is inert until a typed semantic edit
+is validated and explicitly accepted. Formatting aids may insert literal
+source characters only, not fabricate a parsed accepted notebook. Diagnostics
+show severity, stable code, revision and target identity when those fields
+are available; unknown targets remain a visible unresolved entry.
+
+**Worked example:** accepted revision `r7` contains page `p1`, title `t1`
+(`Study notes`) and paragraph `q1` (`La célula`). The user edits the Task
+draft to `Outline biology`, highlights `q1` in the object tree, and pastes
+`<script>start()</script>` in the raw-response field. The response is shown
+verbatim as untrusted text, without script execution, semantic mutation,
+Export, or a change from `r7`. A proposed paragraph insertion is merely a
+suggestion until a separately accepted backend command succeeds.
+
+**Refusal example:** if the object index is from `r6`, the current session
+is `r7`, or a pasted response references a nonexistent `q9`, the editor
+shows a stale/unresolved navigation result and retains the draft. It must
+not guess the new identity or silently treat an unvalidated response as
+accepted content. Session loss disables editing and requires a fresh read.
+
+**Assumptions and limits:** authenticated backend draft synchronization and
+inert raw text fields already exist. Object indexing, structured completion,
+semantic diff/acceptance, and diagnostic-to-source transport are not fully
+implemented. This finite design does not establish a working semantic code
+editor, parser, or secure end-to-end response admission.
+
+## Acceptance decision
+
+- **Basis:** practical for existing authenticated drafts and untrusted text
+  presentation; theoretical for structured aids and semantic navigation,
+  2026-11-02.
+- **Delivered:** bounded notebook example, exact draft/response boundaries,
+  optional inert completion, diagnostic linking and stale-session refusal.
+- **Not implemented by this acceptance:** source-aware completion, object
+  explorer, revision-linked diagnostics, validated candidate integration.

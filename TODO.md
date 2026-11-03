@@ -20,28 +20,6 @@ labels belong here.
 
 ## P3 — The dual human and LLM editor
 
-### TODO - Build the structured LLM editor
-
-Edit task instructions and notebook source with structured completion,
-formatting, object navigation, diagnostics, and a safe raw-response
-inspection boundary.
-
-[docs/todo/open/editor/002-build-the-structured-llm-editor.mdc](docs/todo/open/editor/002-build-the-structured-llm-editor.mdc)
-
-### TODO - Build the human page editor
-
-Support selection, text correction, drag, resize, crop, align, group, layer,
-duplicate, delete, and style changes through typed semantic commands.
-
-[docs/todo/open/editor/003-build-the-human-page-editor.mdc](docs/todo/open/editor/003-build-the-human-page-editor.mdc)
-
-### TODO - Synchronize selection between both editors
-
-Selecting source, a diagnostic, a page object, or a table cell must focus the
-same stable semantic identity in the other surface.
-
-[docs/todo/open/editor/004-synchronize-editor-selection.mdc](docs/todo/open/editor/004-synchronize-editor-selection.mdc)
-
 ### TODO - Implement semantic undo and redo
 
 Record accepted command batches rather than DOM or canvas snapshots and
