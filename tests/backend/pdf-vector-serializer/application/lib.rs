@@ -390,28 +390,68 @@ fn filled_contours_refuse_collinear_ink_but_accept_curved_ink() {
 }
 
 #[test]
-fn aggregate_stream_budget_refuses_before_later_page_rendering() {
-    let mut malformed_box = page(Vec::new());
-    malformed_box.physical_page_box.width_um = 0;
+fn oversized_page_stream_refuses_before_later_invalid_page() {
+    let mut commands = vec![PdfPathCommand::MoveTo(point(20_000, 30_000))];
+    for index in 1i32..100i32 {
+        commands.push(PdfPathCommand::LineTo(point(
+            20_000i32.saturating_add(index),
+            30_000,
+        )));
+    }
+    let first_page = page(vec![PdfVectorPath {
+        commands,
+        paint: PdfPathPaint::Stroke {
+            color: PdfRgb {
+                red: 5,
+                green: 22,
+                blue: 240,
+            },
+            width_um: 350,
+        },
+    }]);
+    let mut invalid_later_page = page(Vec::new());
+    invalid_later_page.physical_page_box.width_um = 0;
     let composition = PdfCompositionPlan {
         assets: Vec::new(),
-        pages: vec![
-            page(Vec::new()),
-            page(Vec::new()),
-            malformed_box,
-        ],
-        render_manifest_identity: "bounded-blank-pages.v1",
+        pages: vec![first_page, invalid_later_page],
+        render_manifest_identity: "oversized-stream.v1",
     };
-    // Each blank stream is 26 bytes. Two exceed 40 total, so the third
-    // invalid box must not be inspected just to discover a byte overrun.
-    let restricted = PdfVectorLimits {
-        maximum_pdf_bytes: 40,
-        ..limits()
-    };
+    // The first page alone exceeds 500 bytes. It must stop before the
+    // invalid second page can change the outcome to InvalidPageBox.
     assert_eq!(
-        serialize_vector_pdf(&composition, restricted),
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: 500,
+                ..limits()
+            },
+        ),
         Err(PdfVectorError::ResourceLimit),
-        "cumulative stream bytes must refuse before a later invalid page box",
+        "oversized page content must refuse before later-page rendering",
+    );
+}
+
+#[test]
+fn final_pdf_overhead_refuses_before_later_invalid_page() {
+    let mut invalid_later_page = page(Vec::new());
+    invalid_later_page.physical_page_box.height_um = 0;
+    let composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(Vec::new()), invalid_later_page],
+        render_manifest_identity: "bounded-output.v1",
+    };
+    // The two content streams fit 300 bytes in total, but the PDF header,
+    // page tree and first page object do not. Refuse before rendering page 2.
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: 300,
+                ..limits()
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+        "final output budget must be enforced before later-page rendering",
     );
 }
 

@@ -536,31 +536,6 @@ fn append_xref_and_trailer(
     Ok(())
 }
 
-// Every PDF page stream is embedded verbatim in the final output. Stop
-// retaining them as soon as their sum exceeds the entire PDF byte budget;
-// otherwise many individually bounded pages can exhaust memory first.
-fn render_bounded_streams(
-    composition: &PdfVectorComposition<'_>,
-    limits: PdfVectorLimits,
-) -> Result<Vec<String>, PdfVectorError> {
-    let mut streams = Vec::new();
-    let mut cumulative_bytes = 0usize;
-    for page in &composition.pages {
-        let stream = render_page(page, limits)?;
-        cumulative_bytes = cumulative_bytes
-            .checked_add(stream.len())
-            .ok_or(PdfVectorError::ResourceLimit)?;
-        if cumulative_bytes > limits.maximum_pdf_bytes {
-            return Err(PdfVectorError::ResourceLimit);
-        }
-        streams
-            .try_reserve(1)
-            .map_err(|_error| PdfVectorError::AllocationFailed)?;
-        streams.push(stream);
-    }
-    Ok(streams)
-}
-
 /// Serialize a complete vector-only PDF without touching filesystem paths.
 ///
 /// The input must already contain accepted path coordinates in micrometers.
@@ -596,7 +571,6 @@ pub fn serialize_vector_pdf(
     {
         return Err(PdfVectorError::InvalidManifestIdentity);
     }
-    let streams = render_bounded_streams(composition, limits)?;
     let mut bytes = Vec::new();
     let mut offsets = Vec::new();
     let limit = limits.maximum_pdf_bytes;
@@ -627,9 +601,11 @@ pub fn serialize_vector_pdf(
         .as_bytes(),
         limit,
     )?;
-    for (index, (page, stream)) in
-        composition.pages.iter().zip(&streams).enumerate()
-    {
+    // Build each page only when its preceding PDF bytes have fit the
+    // budget. A completed page stream is needed only until its own object
+    // is appended, never retained alongside all other page streams.
+    for (index, page) in composition.pages.iter().enumerate() {
+        let stream = render_page(page, limits)?;
         let object = 3usize.saturating_add(index.saturating_mul(2));
         let width = page_points(page.physical_page_box.width_um);
         let height = page_points(page.physical_page_box.height_um);
@@ -649,7 +625,7 @@ pub fn serialize_vector_pdf(
             &mut bytes,
             &mut offsets,
             object.saturating_add(1),
-            stream,
+            &stream,
             limit,
         )?;
     }

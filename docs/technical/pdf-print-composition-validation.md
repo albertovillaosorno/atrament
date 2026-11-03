@@ -115,26 +115,21 @@ loops and self-crossing contours remain admitted without using a signed-area
 heuristic, which would incorrectly discard some filled self-intersections.
 The same collinearity check does not apply to stroked lines.
 
-For multi-page output, retained PDF content streams are now checked against
-the **aggregate** `maximum_pdf_bytes` budget after each page, before the next
-page is rendered. A document whose individual streams fit but whose combined
-streams cannot fit the requested PDF refuses early as `ResourceLimit`.
-The serialized header, objects, offsets and trailer are still subject to the
-same final byte budget; this early stream check is only a necessary bound.
+For multi-page output, the PDF assembler now renders and appends one page
+at a time, checking the exact current output byte count before rendering the
+next page. It no longer retains every prior page content stream while also
+building the final document buffer. The serializer still holds a single
+rendered page stream until its length is written; it is not a streaming
+text/font/image renderer or a general memory cap on caller-owned geometry.
 
-When assembling page-stream PDF objects, the encoder now appends the
-already-rendered stream directly into the bounded output buffer. Only the
-small object header and trailer are separately formatted: the encoder no
-longer creates a second full-size temporary string for each page stream.
-A 10,001-command regression checks large stream length, path completeness,
-byte-accurate cross-reference offsets, and one-byte-short refusal. This
-reduces transient allocation; it does not remove the final output buffer or
-previously retained page streams, and it is not a complete memory bound.
-
-An executable regression first returned a later-page `InvalidPageBox` after
-the earlier streams had already exhausted the requested byte budget. It now
-returns `ResourceLimit` before inspecting that later page, limiting retained
-streams independently of caller-owned document page count.
+The final byte budget applies to the header, page tree, page objects, content
+streams, metadata, cross-reference entries and trailer. A red/green regression
+confirmed that the old all-pages-first approach could inspect a later invalid
+page even after the final PDF overhead had already exhausted the byte budget.
+It now refuses as `ResourceLimit` before that later page is rendered. The
+existing oversized-stream regression, large-content fixture and exact-limit
+boundary regressions still apply. Output bytes and PDF object order are
+unchanged.
 
 A local smoke fixture fed real output bytes to Poppler `pdfinfo` and
 `pdftoppm`; both accepted and rendered an A4 page (595.276 by 841.89 points).
