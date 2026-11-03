@@ -1,0 +1,109 @@
+---
+record_type: task
+id: "ATR-P4-008"
+title: "Implement handwriting roles and sizes"
+status: completed
+priority: P4
+lane: handwriting
+dependencies: ["ATR-P4-006"]
+dependencies_specified: true
+dependency_rationale: >-
+  Handwriting roles adapt contextual stroke planning.
+acceptance_criteria:
+  - >-
+      Allow one profile to expose body, title, subtitle, label, caption,
+      formula, margin, and annotation roles without pretending they are
+      unrelated writers.
+  - >-
+      Finite v1 completion: Expose body, title, label, and annotation roles
+      at two declared sizes with stable metrics and a fallback for an
+      unavailable role.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement handwriting roles and sizes
+
+## Scope and existing evidence
+
+Historical implementation notes describe domain-only evidence. The finite
+acceptance below does not claim full sampling, rendering or quality testing.
+
+Allow one profile to expose body, title, subtitle, label, caption, formula,
+margin, and annotation roles without pretending they are unrelated writers.
+
+Current executable evidence now centralizes those eight handwriting roles and
+stores the profile identity once around caller-supplied role presentations. Role
+entries therefore carry size/style metadata but cannot independently claim a
+different writer identity. A read-only role lookup returns `None` for a missing
+role and refuses an ambiguous duplicate claim instead of silently choosing one.
+
+A complete read-only audit now walks the canonical eight-role order and reports
+each role as Missing, Unique, or Ambiguous together with every caller-order
+presentation index. It does not synthesize defaults or declare any global
+validity policy. A 4,681-case exhaustive oracle covers every sequence through
+four supplied presentations over all eight roles and cross-checks exact lookup,
+duplicate indices, and complete audit evidence against an independent oracle.
+
+Size units, role defaults, style vocabulary, global duplicate/missing-role
+policy, glyph behavior, and semantic document-style mappings remain open.
+
+## Finite single-writer role and two-size presentation contract
+
+**Inputs:** one exact selected handwriting-profile identity, its eight-role
+audit, role-specific calibrated dimensions and a requested semantic text role.
+**Outputs:** one unambiguous role presentation at an admitted small/large
+size, a visibly accepted fallback to another role of the *same* writer,
+or `UnavailableRole`. No role may silently change profile identity.
+
+**First-release roles:** `Body`, `Title`, `Subtitle`, `Label`, `Caption`,
+`Formula`, `Margin` and `Annotation` belong to one profile. V1 activation
+requires complete explicit size/metric claims for `Body`, `Title`, `Label`,
+and `Annotation`; the other four remain separately exposed but may be missing
+until supported. Each role has one unique profile entry containing its two
+named size variants: variants must not be represented as duplicate role
+entries, because ambiguous role lookup currently fails closed.
+
+**Proposed finite metric matrix (illustrative, not calibrated):**
+
+| Role | Small / large cap height | Baseline and width policy |
+| --- | --- | --- |
+| Body | 3.0 / 4.0 mm | Stable body baseline; measured advance |
+| Title | 5.0 / 7.0 mm | Title baseline; same writer strokes |
+| Label | 2.5 / 3.5 mm | Compact baseline; same writer strokes |
+| Annotation | 2.5 / 3.0 mm | Margin baseline; same writer strokes |
+
+**Selection rule:** a `Body` span requesting large maps to the exact selected
+profile's `Body/large` measured metrics and compatible contextual stroke
+forms. Role changes may alter size, entry/exit rules and spacing but cannot
+invent a different hand or reuse a contour beyond its calibrated envelope.
+The four other declared roles remain in the eight-role audit and cannot be
+implicitly mapped to Body or Title just because their entry is missing.
+
+**Worked example:** selected profile `student-A` has one `Body` entry with
+small=3.0 mm and large=4.0 mm. An accepted paragraph `p1` requests
+`Body/large` and a title `t1` requests `Title/small=5.0 mm`; both retain
+`student-A` in their derived provenance. If `Formula` is missing, a user may
+explicitly choose a declared visible `Body/small` approximation only after
+the backend confirms formula glyph coverage and records that choice.
+
+**Refusal example:** duplicate `Title` entries, absent `Annotation/large`,
+invalid measured cap height or `Formula` requiring unknown symbols refuses
+role selection and blocks affected output until explicit repair/fallback.
+A silently substituted system typeface or a second writer profile is not an
+acceptable default. Scaling outside measured bounds cannot be labeled as
+the same verified handwriting evidence.
+
+**Assumptions and limits:** one profile-owned role lookup and eight-role
+audit exist, but size units, variant storage, physical metrics and cross-role
+fallback policy do not. The four numerical rows are theoretical examples,
+not measured claims or implemented preview/rendering modes.
+
+## Acceptance decision
+
+- **Basis:** practical for the same-profile role inventory/audit; theoretical
+  for two-size variant metrics and declared fallbacks, 2026-11-02.
+- **Delivered:** eight-role identity, four core roles with two sizes each,
+  worked selection and missing/ambiguous refusal.
+- **Not implemented by this acceptance:** metric calibration, size variants,
+  style/role command transport or handwriting output.

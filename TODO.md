@@ -18,38 +18,6 @@ remain in typed records under `docs/todo/open/`. Completed work belongs under
 then one direct Markdown link to the complete typed record. No per-item field
 labels belong here.
 
-## P4 — Personal handwriting profiles and synthesis
-
-### TODO - Implement bounded correlated variation
-
-Support observed or authorized minimum, maximum, distribution, and
-correlation for size, slant, roundness, flattening, spacing, drift, speed,
-and pressure.
-
-[docs/todo/open/handwriting/007-bounded-correlated-variation.mdc](docs/todo/open/handwriting/007-bounded-correlated-variation.mdc)
-
-### TODO - Implement handwriting roles and sizes
-
-Allow one profile to expose body, title, subtitle, label, caption, formula,
-margin, and annotation roles without pretending they are unrelated writers.
-
-[docs/todo/open/handwriting/008-handwriting-roles-sizes.mdc](docs/todo/open/handwriting/008-handwriting-roles-sizes.mdc)
-
-### TODO - Prevent repeated-glyph and repeated-line artifacts
-
-Detect frozen contours, identical word rhythms, mechanical baselines, local
-white noise, and configurations that leave the calibrated writer's envelope.
-
-[docs/todo/open/handwriting/009-repeated-glyph-line-artifacts.mdc](docs/todo/open/handwriting/009-repeated-glyph-line-artifacts.mdc)
-
-### TODO - Validate against held-out writing
-
-Measure geometry, rhythm, joins, spacing, punctuation, and perceptual
-fidelity against samples excluded from extraction and publish known failure
-modes.
-
-[docs/todo/open/handwriting/010-validate-against-held-out-writing.mdc](docs/todo/open/handwriting/010-validate-against-held-out-writing.mdc)
-
 ## P5 — Deterministic CPU rendering and digital output
 
 ### TODO - Implement authoritative vector geometry

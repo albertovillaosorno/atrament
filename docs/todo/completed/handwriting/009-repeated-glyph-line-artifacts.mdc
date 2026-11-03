@@ -1,0 +1,110 @@
+---
+record_type: task
+id: "ATR-P4-009"
+title: "Prevent repeated-glyph and repeated-line artifacts"
+status: completed
+priority: P4
+lane: handwriting
+dependencies: ["ATR-P4-006", "ATR-P4-007"]
+dependencies_specified: true
+dependency_rationale: >-
+  Artifact checks need both planning and variation.
+acceptance_criteria:
+  - >-
+      Detect frozen contours, identical word rhythms, mechanical baselines,
+      local white noise, and configurations that leave the calibrated
+      writer's envelope.
+  - >-
+      Finite v1 completion: Specify one deterministic repeated-glyph and
+      repeated-line variation rule within profile limits, and one explicit
+      no-variation fallback when evidence is inadequate.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Prevent repeated-glyph and repeated-line artifacts
+
+## Scope and existing evidence
+
+Historical implementation notes describe domain-only evidence. The finite
+acceptance below does not claim full sampling, rendering or quality testing.
+
+Detect frozen contours, identical word rhythms, mechanical baselines, local
+white noise, and configurations that leave the calibrated writer's envelope.
+
+Current executable evidence now freezes seven independent variation-quality
+axes spanning those five artifact risks plus the accepted ADR's correlation
+retention and extreme-legibility checks. One caller-computed finding is required
+per axis. Duplicate or omitted axes reject structurally, while detected
+artifacts remain evidence and are reported in canonical axis order. Structural
+completeness now also produces constructor-sealed evidence, and canonical
+detected-artifact projection can be repeated from that proof without rescanning
+axis coverage.
+
+All 128 combinations of not-detected/detected findings require the sealed and
+direct projections to agree without depending on input order.
+
+Statistical detectors, thresholds, perceptual metrics, correlation models,
+legibility criteria, sampling, rendering, and release policy remain open.
+
+## Finite seven-axis repeat-artifact and conservative fallback contract
+
+**Inputs:** one deterministic contextual stroke plan, the selected profile's
+observed/authorized variation bounds, a repeated-glyph/word/line review
+corpus, and caller-computed findings for all seven required quality axes.
+**Outputs:** a complete ordered artifact report, `ReviewRequired` or a
+proposed bounded variation setting. Structural completeness is not a quality
+pass and does not prove a specific person's visual style.
+
+**Seven independent axes:** `CalibratedEnvelope`, `CorrelationRetention`,
+`ExtremeLegibility`, `FrozenContours`, `LocalWhiteNoise`,
+`MechanicalBaselines`, and `WordRhythmRepetition`. Require exactly one
+finding per axis and retain original evidence source IDs and measurement
+method. Missing/duplicate axes refuse the report before quality conclusions;
+a detected artifact remains detected evidence, not an automatic source edit.
+
+**Finite corpus:** render the repeated body fragment `la la`, a second line
+also containing `la la`, and the same glyph `a` once in a title role. Review
+contour identity, interglyph advance, shared line drift, join rhythm,
+cross-scale correlation and legibility at the declared extremes. A proposed
+first-release threshold flags repeated identical contour hashes and identical
+word-spacing sequences if both repeats have admitted distinct context and
+calibrated variation; it does not randomly alter strokes merely to evade a
+hash match.
+
+**Worked example:** profile `student-A` admits body-height 2.5..3.5 mm and
+shared line drift at most 0.2 mm. Both `la` words happen to use the identical
+baseline trace and contour, so report `FrozenContours=ArtifactDetected` and
+`WordRhythmRepetition=ArtifactDetected` with the two word identities. Other
+axes are individually marked `ArtifactNotDetected` only if their evidence was
+measured; an unmeasured axis is incomplete and cannot imply a pass. Candidate
+repair changes only authorized shared line/glyph variation and requires a
+fresh seven-axis report.
+
+**Conservative fallback:** if personal variation parameters or evidence are
+absent, emit exactly the admitted nonvaried stroke plan with a visible
+`NoVariationEvidence` limitation, or refuse when even deterministic base
+strokes are missing. Do not fabricate naturalness or silently add independent
+pixel noise. Static output may remain readable but cannot be called
+writer-fidelity verified from this fallback alone.
+
+**Refusal example:** a proposed extra slant breaks the profile's maximum,
+white-noise jitter destroys a join, or a title extreme becomes unreadable.
+Each blocks the revised plan, preserves the last accepted parameters and
+reports the offending axis; no automatic release after merely counting all
+seven findings. A detector absent from the runtime must be labeled theoretical.
+
+**Assumptions and limits:** the existing evidence domain enforces seven-axis
+completeness and canonical detected-artifact projection across all 128
+finding combinations. Statistical detectors, actual contour comparison,
+legibility criteria, reliable correlations, rendering and release scoring
+remain unimplemented. This report contract is not a visual realism test.
+
+## Acceptance decision
+
+- **Basis:** practical for the quality-axis vocabulary/completeness; theoretical
+  for detector thresholds and variation repair, 2026-11-02.
+- **Delivered:** seven-class report, two-line repeat example, nonvariation
+  fallback and out-of-envelope/legibility refusals.
+- **Not implemented by this acceptance:** statistical detection, calibrated
+  threshold fitting, actual visual review or safe rendered ink repair.

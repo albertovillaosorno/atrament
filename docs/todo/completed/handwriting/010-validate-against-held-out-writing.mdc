@@ -1,0 +1,117 @@
+---
+record_type: task
+id: "ATR-P4-010"
+title: "Validate against held-out writing"
+status: completed
+priority: P4
+lane: handwriting
+dependencies: ["ATR-P4-006", "ATR-P4-009"]
+dependencies_specified: true
+dependency_rationale: >-
+  Held-out samples assess actual plans and artifact resistance.
+acceptance_criteria:
+  - >-
+      Measure geometry, rhythm, joins, spacing, punctuation, and perceptual
+      fidelity against samples excluded from extraction and publish known
+      failure modes.
+  - >-
+      Finite v1 completion: Define a held-out one-page comparison protocol
+      with a finite rubric for legibility, collisions, and personal style;
+      absent physical samples permit theory-only acceptance without a
+      similarity claim.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Validate against held-out writing
+
+## Scope and existing evidence
+
+Historical implementation notes describe domain-only evidence. The finite
+acceptance below does not claim full sampling, rendering or quality testing.
+
+Measure geometry, rhythm, joins, spacing, punctuation, and perceptual fidelity
+against samples excluded from extraction and publish known failure modes.
+
+Current executable evidence now freezes a transport-neutral held-out quality
+report with those six required dimensions, caller-owned measured values and
+supporting evidence, and caller-owned known failure modes. Structural admission
+first rejects conflicting calibration sample roles, then rejects measurements
+that reference training or unknown samples in report order, and finally requires
+all six quality dimensions. Repeated held-out measurements and an empty known-
+failure list remain valid because aggregation and failure discovery are not
+inferred here. Successful structural admission now also produces
+constructor-sealed evidence borrowing the exact sample declarations and report.
+
+A 793-case compact oracle exhausts all 64 required-dimension subsets plus all
+729 six-measurement held-out/training/unknown sample-reference sequences. Both
+the direct and sealed paths pin role-conflict, first invalid-reference, then
+missing-dimension precedence without declaring any quality score.
+
+Metric units, thresholds, scoring, statistical/perceptual models, sample
+sufficiency, quality-report generation, and pass/fail policy remain open.
+
+## Finite held-out single-page quality comparison contract
+
+**Inputs:** a corrected one-page held-out handwriting capture, stable held-out
+sample IDs not used in training, one rendered proposed page from the same
+accepted semantic source, the selected profile/revision and a declared
+measurement method for each required quality dimension. **Outputs:** a
+six-dimension report plus a finite readability/collision/style rubric, exact
+known failures, and `Supported`, `NeedsReview` or `TheoryOnly` disposition.
+Structural report completeness alone is never proof of personal fidelity.
+
+**Sample split and page:** reserve `train-1` through `train-10` exclusively
+for calibration and `hold-1` for an A4 page written without access to those
+stroke samples. The held-out page repeats a finite corpus: title `Biología`,
+a sentence `¿Dónde estás?`, digits `0123`, equation `x² + 1`, and a two-line
+free-writing region. Record writing instrument, paper, photo geometry,
+physical units, author consent and known calibration/capture limitations.
+
+**Six required measurements:** `Geometry` (median baseline/height deviation
+in mm), `Rhythm` (advance/velocity pattern deviation with observed method),
+`Joins` (matched or mismatched contact transitions), `Spacing` (word/line
+separation in mm), `Punctuation` (missing/reversed symbol count), and
+`PerceptualFidelity` (explicitly labeled blinded human comparison or unknown).
+All six carry exact `hold-1` provenance; training-only samples cannot fill a
+missing axis. If rendered samples or human judgments are unavailable, mark
+measurements as `Unmeasured` and return `TheoryOnly`, not invented scores.
+
+**Finite first-release rubric (proposed):**
+
+| Dimension | Observed pass condition | Refusal/review condition |
+| --- | --- | --- |
+| Legibility | Every corpus token readable | Any ambiguous token = review |
+| Collision | No glyph/line overlap | Any observed overlap = block |
+| Style | Blinded comparison recorded | No real evidence = theory-only |
+
+**Worked example:** `hold-1` was never used for stroke extraction. Geometry
+reports median 0.4 mm baseline deviation, punctuation reports 0 missing
+symbols and Joins reports 1 mismatch in 8 observed transitions; record
+all these illustrative numbers with exact method and source ID. One failed
+join yields `NeedsReview` even if punctuation is complete and legibility is
+rated acceptable. Missing real held-out capture yields `TheoryOnly` with no
+claims of measured geometry, similarity or writer fidelity.
+
+**Refusal example:** a report citing `train-3`, duplicate sample identity
+across training and held-out, omitted `Rhythm` dimension, unresolved capture
+scale, or an unmarked perceptual guess cannot become `Supported`. Preserve
+all six dimensions and known failure modes in caller order; publish the
+failure instead of silently changing the corpus or training on the holdout.
+No matching score is promised without genuinely independent physical data.
+
+**Assumptions and limits:** code already checks sample role separation,
+held-out-only references and coverage of all six report dimensions, with
+constructor-owned structural evidence. Actual comparison geometry, rendering,
+human judgment, quality thresholds, sufficiency tests and scoring are absent.
+This acceptance is deliberately theoretical where physical samples cannot be
+collected or compared; it does not certify handwriting authenticity.
+
+## Acceptance decision
+
+- **Basis:** practical for source split/dimension completeness; theoretical
+  for quality rubric and physical comparison, 2026-11-02.
+- **Delivered:** one-page corpus, six measured axes, three-row rubric,
+  example with a failing join and explicit `TheoryOnly` refusal.
+- **Not implemented by this acceptance:** actual held-out measurement,
+  perceptual scoring, calibration sufficiency or real-writer certification.
