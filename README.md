@@ -261,6 +261,13 @@ These endpoints are in-memory only; POST does not persist a file or set
 session-wide defaults. They require the existing session bearer credential
 and same-origin admission, like the paper profile endpoint.
 
+The localhost web editor now also offers **Notebook page profile** controls
+for date placeholder style and placement, border radius, page numbers and
+preprinted-sheet intent. **Use current paper** incorporates unsaved sheet
+settings before Rust validation. Load and Save JSON use explicitly selected
+files; they do not silently persist browser state or render those metadata
+marks.
+
 ## The workspace
 
 The following is the intended notebook workflow, not a claim that the

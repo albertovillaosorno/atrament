@@ -34,7 +34,7 @@
 import { parseBoundedJsonResponse } from "./session-diagnostic.js";
 import * as sessionDraft from "./session-draft.js";
 import * as sessionHandshake from "./session-handshake.js";
-import { createPaperProfileEditor } from "./paper-profile.js";
+import { createPaperProfileEditor, createNotebookProfileEditor } from "./paper-profile.js";
 import { createHandwritingProfileEditor } from "./handwriting-profile.js";
 import { sessionSecretFromFragment } from "./session-fragment.js";
 function fragmentFreeLocalUrl() {
@@ -165,6 +165,17 @@ const paperEditor = createPaperProfileEditor({
     currentSecret: () => sessionSecret,
     sessionSignal: sessionRequests.signal,
     unauthorized: invalidateUnauthorizedSession,
+});
+const notebookEditor = createNotebookProfileEditor({
+    currentSecret: () => sessionSecret,
+    sessionSignal: sessionRequests.signal,
+    unauthorized: invalidateUnauthorizedSession,
+    paperDraft: () => {
+        if (paperEditor.draftJson === undefined) {
+            throw new Error("Paper profile unavailable");
+        }
+        return paperEditor.draftJson();
+    },
 });
 const handwritingEditor = createHandwritingProfileEditor({
     currentSecret: () => sessionSecret,
@@ -384,6 +395,7 @@ function hideSessionRetry() {
 }
 function clearSessionText() {
     paperEditor.reset();
+    notebookEditor.reset();
     handwritingEditor.reset();
     hideSessionRetry();
     taskInput.defaultValue = "";
@@ -680,6 +692,7 @@ async function hydrateSessionDraft(secret) {
     enableCompatibleEditing();
     setTextIfChanged(sessionStatus, "Session ready");
     void paperEditor.start(secret);
+    void notebookEditor.start(secret);
     void handwritingEditor.start(secret);
 }
 async function syncDraftField(field, input, secret) {

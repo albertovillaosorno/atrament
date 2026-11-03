@@ -118,6 +118,7 @@ type PaperEditorContext = {
 type PaperEditor = {
     reset: () => void;
     start: (secret: string) => Promise<void>;
+    draftJson?: () => string;
 };
 
 export function createPaperProfileEditor(context: PaperEditorContext): PaperEditor {
@@ -469,5 +470,286 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
         });
     });
     syncControls();
+    return { start, reset, draftJson: proposedJson };
+}
+
+// Notebook metadata is a thin browser proposal; Rust owns its nested paper
+// schema, date semantics, printable-area constraints and canonical JSON.
+type NotebookProfile = {
+    schema: "atrament.notebook.v1";
+    paper: PaperProfile;
+    date_style: "none" | "line" | "box";
+    date_placement: "none" | "top-left" | "top-right";
+    border_radius_um: number;
+    page_numbers: boolean;
+    printed_sheet: boolean;
+};
+
+type NotebookEditorContext = PaperEditorContext & {
+    paperDraft: () => string;
+};
+
+function readNotebook(json: string): NotebookProfile {
+    if (new TextEncoder().encode(json).length > 8192) {
+        throw new Error("Notebook JSON exceeds the native limit");
+    }
+    const parsed: unknown = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null) {
+        throw new Error("Missing canonical notebook profile");
+    }
+    const value = parsed as Record<string, unknown>;
+    if (Object.keys(value).length !== 7
+        || value.schema !== "atrament.notebook.v1"
+        || !["none", "line", "box"].includes(String(value.date_style))
+        || !["none", "top-left", "top-right"].includes(
+            String(value.date_placement),
+        )
+        || !Number.isSafeInteger(value.border_radius_um)
+        || Number(value.border_radius_um) < 0
+        || typeof value.page_numbers !== "boolean"
+        || typeof value.printed_sheet !== "boolean"
+    ) {
+        throw new Error("Invalid canonical notebook metadata");
+    }
+    // The shared reader is only a display-shape check, not paper admission.
+    readCanonicalProfile(JSON.stringify(value.paper));
+    return value as NotebookProfile;
+}
+
+export function createNotebookProfileEditor(
+    context: NotebookEditorContext,
+): PaperEditor {
+    const style = required<HTMLSelectElement>("notebook-date-style");
+    const placement = required<HTMLSelectElement>("notebook-date-placement");
+    const radius = required<HTMLInputElement>("notebook-radius");
+    const slider = required<HTMLInputElement>("notebook-radius-range");
+    const numbers = required<HTMLInputElement>("notebook-page-numbers");
+    const printed = required<HTMLInputElement>("notebook-printed-sheet");
+    const load = required<HTMLInputElement>("notebook-load");
+    const usePaper = required<HTMLButtonElement>("notebook-use-paper");
+    const defaults = required<HTMLButtonElement>("notebook-default");
+    const save = required<HTMLButtonElement>("notebook-save");
+    const status = required<HTMLElement>("notebook-status");
+    const controls = [style, placement, radius, slider, numbers, printed,
+        load, usePaper, defaults, save];
+    let admitted: NotebookProfile | null = null;
+    let generation = 0;
+    let busy = false;
+    let downloadUrl: string | null = null;
+
+    function active(secret: string, generationAtStart: number): boolean {
+        return generation === generationAtStart
+            && context.currentSecret() === secret
+            && !context.sessionSignal.aborted;
+    }
+
+    function sync(): void {
+        for (const control of controls) {
+            control.disabled = busy || admitted === null
+                || context.currentSecret() === null;
+        }
+    }
+
+    function display(profile: NotebookProfile): void {
+        admitted = profile;
+        style.value = profile.date_style;
+        placement.value = profile.date_placement;
+        radius.value = String(profile.border_radius_um / 1000);
+        slider.value = radius.value;
+        numbers.checked = profile.page_numbers;
+        printed.checked = profile.printed_sheet;
+        sync();
+    }
+
+    async function request(secret: string, proposed?: string): Promise<string> {
+        const response = await fetch("./api/notebook/profile", {
+            method: proposed === undefined ? "GET" : "POST",
+            headers: {
+                Authorization: `Bearer ${secret}`,
+                ...(proposed === undefined ? {} : {
+                    "Content-Type": "application/json",
+                }),
+            },
+            ...(proposed === undefined ? {} : { body: proposed }),
+            credentials: "omit",
+            cache: "no-store",
+            mode: "same-origin",
+            redirect: "error",
+            referrerPolicy: "origin",
+            signal: AbortSignal.any([
+                context.sessionSignal,
+                AbortSignal.timeout(30_000),
+            ]),
+        });
+        if (response.status === 401) {
+            context.unauthorized();
+            throw new Error("Session expired");
+        }
+        if (!response.ok || !response.headers.get("content-type")
+            ?.startsWith("application/json")) {
+            throw new Error("Rust notebook validation refused");
+        }
+        return response.text();
+    }
+
+    async function canonical(secret: string, proposed: string):
+        Promise<{ json: string; profile: NotebookProfile }> {
+        if (new TextEncoder().encode(proposed).length > 8192) {
+            throw new Error("Notebook proposal exceeds limit");
+        }
+        const json = await request(secret, proposed);
+        return { json, profile: readNotebook(json) };
+    }
+
+    function proposal(): NotebookProfile {
+        if (admitted === null || radius.value === ""
+            || !radius.validity.valid) {
+            throw new Error("Notebook profile is not ready");
+        }
+        const millimetres = Number(radius.value);
+        if (!Number.isFinite(millimetres) || millimetres < 0
+            || !Number.isSafeInteger(Math.round(millimetres * 1000))) {
+            throw new Error("Invalid border radius");
+        }
+        return {
+            ...admitted,
+            date_style: style.value as NotebookProfile["date_style"],
+            date_placement: placement.value as NotebookProfile["date_placement"],
+            border_radius_um: Math.round(millimetres * 1000),
+            page_numbers: numbers.checked,
+            printed_sheet: printed.checked,
+        };
+    }
+
+    async function action(
+        work: (secret: string, observed: number) => Promise<void>,
+    ): Promise<void> {
+        const secret = context.currentSecret();
+        if (busy || admitted === null || secret === null) return;
+        const observed = generation;
+        busy = true;
+        sync();
+        try {
+            await work(secret, observed);
+        } catch {
+            if (active(secret, observed)) {
+                status.textContent = "Notebook refused; nothing saved.";
+            }
+        } finally {
+            if (active(secret, observed)) {
+                busy = false;
+                sync();
+            }
+        }
+    }
+
+    async function start(secret: string): Promise<void> {
+        generation += 1;
+        const observed = generation;
+        admitted = null;
+        busy = true;
+        sync();
+        status.textContent = "Loading native notebook defaults…";
+        try {
+            const profile = readNotebook(await request(secret));
+            if (active(secret, observed)) {
+                display(profile);
+                status.textContent = "Edit metadata, then save JSON.";
+            }
+        } catch {
+            if (active(secret, observed)) {
+                status.textContent = "Notebook profile unavailable.";
+            }
+        } finally {
+            if (active(secret, observed)) {
+                busy = false;
+                sync();
+            }
+        }
+    }
+
+    function reset(): void {
+        generation += 1;
+        admitted = null;
+        busy = false;
+        load.value = "";
+        if (downloadUrl !== null) {
+            URL.revokeObjectURL(downloadUrl);
+            downloadUrl = null;
+        }
+        sync();
+        status.textContent = "Requires a compatible backend session.";
+    }
+
+    radius.addEventListener("input", (): void => {
+        slider.value = radius.value;
+    });
+    slider.addEventListener("input", (): void => {
+        radius.value = slider.value;
+    });
+    usePaper.addEventListener("click", (): void => {
+        void action(async (secret, observed) => {
+            const paper = JSON.parse(context.paperDraft()) as PaperProfile;
+            const result = await canonical(secret, JSON.stringify({
+                ...proposal(), paper,
+            }));
+            if (active(secret, observed)) {
+                display(result.profile);
+                status.textContent = "Current sheet settings validated.";
+            }
+        });
+    });
+    defaults.addEventListener("click", (): void => {
+        void action(async (secret, observed) => {
+            const profile = readNotebook(await request(secret));
+            if (active(secret, observed)) {
+                display(profile);
+                status.textContent = "Notebook reset to Rust defaults.";
+            }
+        });
+    });
+    load.addEventListener("change", (): void => {
+        const file = load.files?.item(0);
+        load.value = "";
+        if (file === null || file === undefined) return;
+        if (file.size > 8192) {
+            status.textContent = "Notebook JSON exceeds 8192 bytes.";
+            return;
+        }
+        void action(async (secret, observed) => {
+            const proposed = await file.text();
+            if (!active(secret, observed)) return;
+            const result = await canonical(secret, proposed);
+            if (active(secret, observed)) {
+                display(result.profile);
+                status.textContent = "Validated notebook JSON loaded.";
+            }
+        });
+    });
+    save.addEventListener("click", (): void => {
+        void action(async (secret, observed) => {
+            const result = await canonical(secret, JSON.stringify(proposal()));
+            if (!active(secret, observed)) return;
+            display(result.profile);
+            if (downloadUrl !== null) URL.revokeObjectURL(downloadUrl);
+            const url = URL.createObjectURL(new Blob([result.json], {
+                type: "application/json",
+            }));
+            downloadUrl = url;
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = "atrament-notebook.json";
+            link.rel = "noopener";
+            link.click();
+            window.setTimeout(() => {
+                if (downloadUrl === url) {
+                    URL.revokeObjectURL(url);
+                    downloadUrl = null;
+                }
+            }, 60_000);
+            status.textContent = "Validated notebook JSON downloaded.";
+        });
+    });
+    sync();
     return { start, reset };
 }

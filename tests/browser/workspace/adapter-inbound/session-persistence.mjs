@@ -67,6 +67,9 @@ const isHandwritingModule = (filename) =>
     || filename === "handwriting-profile.js";
 const isProfileModule = (filename) => isHandwritingModule(filename)
     || filename === "paper-profile.ts" || filename === "paper-profile.js";
+const profileModuleCount = (filename) =>
+    filename === "paper-profile.ts" || filename === "paper-profile.js"
+        ? 2 : isHandwritingModule(filename) ? 1 : 0;
 const REVIEWED_TYPESCRIPT = REVIEWED_MODULES.map((filename) =>
     filename.replace(/\.js$/u, ".ts"));
 
@@ -130,6 +133,14 @@ function usesUnreviewedMarkupRequests(source) {
         return true;
     }
     remaining = remaining.replace(handwritingPicker, "");
+    // Notebook JSON picker also passes all bytes to the Rust v1 codec.
+    const notebookPicker = `<input id="notebook-load" type="file"
+                accept=".json,application/json"
+                aria-label="Load native notebook profile JSON" disabled>`;
+    if (remaining.split(notebookPicker).length - 1 !== 1) {
+        return true;
+    }
+    remaining = remaining.replace(notebookPicker, "");
     return [
         /<\s*(?:a|link|script|base|form|iframe|frame|portal|img)\b/iu,
         /<\s*(?:source|picture|video|audio|track|embed|object)\b/iu,
@@ -249,7 +260,7 @@ test("static workspace starts session controls disabled", async () => {
 function hasUnreviewedFetchReference(source, main, paper = false) {
     const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     const references = executable.match(/\bfetch\b/gu) ?? [];
-    return references.length !== (main ? 4 : paper ? 1 : 0)
+    return references.length !== (main ? 4 : paper)
         || /\bfetchLater\b/u.test(executable);
 }
 
@@ -296,10 +307,10 @@ test("browser source and generated modules reject undeclared transport",
     async () => {
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
-        const paper = isProfileModule(filename);
+        const paper = profileModuleCount(filename);
         const fetchCalls = source.match(/\bfetch\s*\(/gu) ?? [];
-        assert.equal(fetchCalls.length, main ? 4 : paper ? 1 : 0,
-            `${filename} must retain only four reviewed fetch sites`);
+        assert.equal(fetchCalls.length, main ? 4 : paper,
+            `${filename} must retain the reviewed fetch sites`);
         assert.equal(hasUnreviewedFetchReference(source, main, paper), false,
             `${filename} gained an unreviewed fetch reference`);
         if (main) {
@@ -356,7 +367,8 @@ function hasUnreviewedExecutableCode(source, filename) {
             'import * as sessionHandshake from "./session-handshake.js";',
             'import { sessionSecretFromFragment } from ' +
                 '"./session-fragment.js";',
-            'import { createPaperProfileEditor } from "./paper-profile.js";',
+            'import { createPaperProfileEditor, createNotebookProfileEditor } ' +
+                'from "./paper-profile.js";',
             'import { createHandwritingProfileEditor } from ' +
                 '"./handwriting-profile.js";',
         ],
@@ -385,12 +397,14 @@ function hasUnreviewedExecutableCode(source, filename) {
         "window.setTimeout(() => {",
     ]) {
         if (remaining.split(site).length - 1 !==
-            ((moduleName === "main" || ((moduleName === "paper-profile"
-                || moduleName === "handwriting-profile")
-                && site === "window.setTimeout(() => {")) ? 1 : 0)) {
+            (moduleName === "main" ? 1
+                : site === "window.setTimeout(() => {"
+                    ? moduleName === "paper-profile" ? 2
+                        : moduleName === "handwriting-profile" ? 1 : 0
+                    : 0)) {
             return true;
         }
-        remaining = remaining.replace(site, "");
+        remaining = remaining.replaceAll(site, "");
     }
     const dynamicCode = new RegExp(
         String.raw`\b(?:import|eval|Function|AsyncFunction|GeneratorFunction|` +
@@ -451,7 +465,7 @@ function hasUnreviewedBrowserGlobalAuthority(source, main, paper = false) {
     ];
     let remaining = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     for (const [site, count] of allowed) {
-        if (remaining.split(site).length - 1 !== (main ? count : paper && site === "window.setTimeout(() => {" ? 1 : 0)) {
+        if (remaining.split(site).length - 1 !== (main ? count : paper && site === "window.setTimeout(() => {" ? paper : 0)) {
             return true;
         }
         remaining = remaining.replaceAll(site, "");
@@ -478,12 +492,12 @@ test("browser first-class global aliases require explicit review", async () => {
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(hasUnreviewedBrowserGlobalAuthority(source, main,
-            isProfileModule(filename)),
+            profileModuleCount(filename)),
             false, `${filename} gained unreviewed browser global authority`);
         for (const candidate of candidates) {
             assert.equal(hasUnreviewedBrowserGlobalAuthority(
                 `${source}\n${candidate}`, main,
-                isProfileModule(filename)), true,
+                profileModuleCount(filename)), true,
             `${filename}: ${candidate} bypassed the global-object review`);
         }
     }
@@ -515,10 +529,10 @@ function hasUnreviewedDocumentAuthority(source, main, typed, paper = false,
         "document.getElementById(id)",
         'document.createElement("a")',
     ]) {
-        if (remaining.split(site).length - 1 !== (paper ? 1 : 0)) {
+        if (remaining.split(site).length - 1 !== paper) {
             return true;
         }
-        remaining = remaining.replace(site, "");
+        remaining = remaining.replaceAll(site, "");
     }
     const optionSite = 'document.createElement("option")';
     if (remaining.split(optionSite).length - 1 !== (handwriting ? 2 : 0)) {
@@ -553,12 +567,12 @@ test("browser first-class Document authority requires explicit review",
         const main = filename === "main.ts" || filename === "main.js";
         const typed = filename.endsWith(".ts");
         assert.equal(hasUnreviewedDocumentAuthority(source, main, typed,
-            isProfileModule(filename), isHandwritingModule(filename)),
+            profileModuleCount(filename), isHandwritingModule(filename)),
             false, `${filename} gained unreviewed Document authority`);
         for (const candidate of probes) {
             assert.equal(hasUnreviewedDocumentAuthority(
                 `${source}\n${candidate}`, main, typed,
-                isProfileModule(filename), isHandwritingModule(filename)), true,
+                profileModuleCount(filename), isHandwritingModule(filename)), true,
             `${filename}: ${candidate} bypassed Document review`);
         }
     }
@@ -955,6 +969,15 @@ function hasUnreviewedBrowserFileIntake(source, paper = false,
         }
         reviewed = reviewed.replace(site, "");
     }
+    // Paper module now also owns one native notebook JSON picker and export.
+    for (const site of [
+        "load.files?.item(0)",
+        "URL.createObjectURL(new Blob([result.json], {",
+    ]) {
+        const count = paper === 2 ? 1 : 0;
+        if (reviewed.split(site).length - 1 !== count) return true;
+        reviewed = reviewed.replace(site, "");
+    }
     return [
         new RegExp(
             String.raw`\b(?:FileReader|FileReaderSync|FileList|` +
@@ -983,7 +1006,7 @@ test("browser ordinary file input and drag-file reads require review",
     }
     for (const { filename, source } of await browserModuleSources()) {
         assert.equal(hasUnreviewedBrowserFileIntake(source,
-            isProfileModule(filename), filename.endsWith(".ts"),
+            profileModuleCount(filename), filename.endsWith(".ts"),
             isHandwritingModule(filename)), false,
             `${filename} gained an unreviewed local-file read`);
         for (const candidate of [
@@ -1003,7 +1026,7 @@ test("browser ordinary file input and drag-file reads require review",
         ]) {
             assert.equal(hasUnreviewedBrowserFileIntake(
                 `${source}\n${candidate}`,
-                isProfileModule(filename), filename.endsWith(".ts"),
+                profileModuleCount(filename), filename.endsWith(".ts"),
                 isHandwritingModule(filename)), true,
             `${filename}: ${candidate} escaped ordinary-file review`);
         }
@@ -1535,10 +1558,10 @@ function usesUnreviewedBrowserNavigation(source, main, paper = false) {
         remaining = remaining.replaceAll(site, "");
     }
     // One anchor click is confined to an explicit local Blob download.
-    if (remaining.split("link.click()").length - 1 !== (paper ? 1 : 0)) {
+    if (remaining.split("link.click()").length - 1 !== paper) {
         return true;
     }
-    remaining = remaining.replace("link.click()", "");
+    remaining = remaining.replaceAll("link.click()", "");
     const locationMethod = String.raw`(?:assign|replace|reload)`;
     const locationWritable = String.raw`(?:href|search|hash|pathname|` +
         String.raw`host|hostname|protocol)`;
@@ -1669,12 +1692,12 @@ test("browser source and emitted modules reject unreviewed navigation",
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(usesUnreviewedBrowserNavigation(source, main,
-            isProfileModule(filename)), false,
+            profileModuleCount(filename)), false,
             `${filename} gained an unreviewed navigation or form request`);
         for (const candidate of CAPTURED_NAVIGATION_PROBES) {
             assert.equal(usesUnreviewedBrowserNavigation(
                 `${source}\n${candidate}`, main,
-                isProfileModule(filename)), true,
+                profileModuleCount(filename)), true,
             `${filename}: ${candidate} escaped navigation review`);
         }
     }
@@ -1717,10 +1740,10 @@ function hasUnreviewedDynamicResourceAuthority(source, main, paper = false,
         'document.createElement("a")',
         "link.href = url",
     ]) {
-        if (remaining.split(site).length - 1 !== (paper ? 1 : 0)) {
+        if (remaining.split(site).length - 1 !== paper) {
             return true;
         }
-        remaining = remaining.replace(site, "");
+        remaining = remaining.replaceAll(site, "");
     }
     const optionSite = 'document.createElement("option")';
     if (remaining.split(optionSite).length - 1 !== (handwriting ? 2 : 0)) {
@@ -1753,7 +1776,7 @@ test("browser dynamic markup and CSSOM request sinks require review",
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(hasUnreviewedDynamicResourceAuthority(source, main,
-            isProfileModule(filename), isHandwritingModule(filename)),
+            profileModuleCount(filename), isHandwritingModule(filename)),
             false, `${filename} gained an unreviewed DOM/CSSOM sink`);
         for (const candidate of [
             'document.createElement("img")',
@@ -1773,7 +1796,7 @@ test("browser dynamic markup and CSSOM request sinks require review",
         ]) {
             assert.equal(hasUnreviewedDynamicResourceAuthority(
                 `${source}\n${candidate}`, main,
-                isProfileModule(filename), isHandwritingModule(filename)), true,
+                profileModuleCount(filename), isHandwritingModule(filename)), true,
             `${filename}: ${candidate} escaped dynamic-resource review`);
         }
     }
