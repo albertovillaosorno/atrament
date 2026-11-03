@@ -2746,7 +2746,58 @@ handler, leaving the readiness promise unresolved until a separate exit.
 The fixture now refuses non-binary output immediately with a fixed encoding
 diagnostic, no private exception cause, and observer cleanup.
 
-All 19 startup
-process tests (including live compiled Linux runtime fixtures) pass. This
-prevents a test-log diagnostic leak, not production opener-argv exposure or
-Firefox history retention; P8 remains open.
+All 19 startup process tests (including live compiled Linux runtime fixtures)
+pass. This prevents a test-log diagnostic leak, not production opener-argv
+exposure or Firefox history retention; P8 remains open.
+
+## Finite localhost threat boundary and unresolved risk ledger
+
+This bounded assessment covers the current disposable Linux localhost runtime
+and its observed Firefox workspace path, not every operating system, browser,
+or independently privileged host observer. It is a theoretical threat-model
+summary backed by the specific process, socket, and browser checks above.
+
+**Inputs and authority.** The native process owns a 127.0.0.1 listener and
+a randomly generated per-process Bearer credential. The browser receives
+that credential in a launch URL fragment and must present the exact token,
+Host, and applicable Origin to read or mutate private session fields.
+
+**Observed admission and refusal.** An authenticated POST with an exact
+canonical Origin can replace a bounded UTF-8 draft; a hostile-origin or
+missing-credential mutation receives 401 without draft admission. A
+confirmed, authenticated empty End request closes its listener even when
+the acknowledgement cannot reach the browser. These are observed paths, not
+guarantees of secure handoff or automatic cleanup for an abandoned tab.
+
+**Remaining risks for a first-release decision:**
+
+- **Opener arguments: unresolved credential disclosure.** The native
+  launcher still passes the credential-bearing URL in an opener argv value,
+  visible to some local observers and possibly opener descendants. The
+  current startup design does not provide a confidential out-of-band handoff.
+- **Browser history: unresolved durable retention.** Fragment removal from
+  the live page and negative literal-byte Firefox profile scans do not prove
+  erasure of encoded, compressed, or browser-history copies of the launch URL.
+  No cross-browser erasure assertion is admitted.
+- **Backend lifetime: partial teardown proof.** Explicit End revokes the
+  current session authority and releases the listener; closing or crashing a
+  tab does not itself guarantee immediate backend session destruction. Process
+  crash collectors and privileged memory inspection remain outside the proof.
+- **Temporary media: absent end-to-end fixture.** In-memory media cleanup
+  bookkeeping has tests, but no actual temporary conversion file exists to
+  exercise deletion on cancel, crash, or restart. This obligation remains
+  unverified rather than being treated as vacuously secure.
+- **Hostile web content: scoped browser evidence.** Exact loopback host and
+  origin checks, response isolation policy, and no-store admission are covered
+  by checked-in runtime and Firefox fixtures. The results do not attest to
+  every browser engine, platform permission, or future resource endpoint.
+- **Explicit outputs: intentional persistence.** Caller-selected exports
+  are deliberately durable and are not part of ephemeral End destruction.
+  Their existence cannot be used as either proof or disproof of session-only
+  media cleanup.
+
+A theoretical first-release acceptance may cite this ledger as the bounded
+design assessment. It must not state that the unresolved credential exposure
+or temporary-media cleanup has been fixed, that browser history was erased,
+or that the current implementation is ready for a confidential deployment.
+The recorded P1/P8 implementation and validation obligations remain open.
