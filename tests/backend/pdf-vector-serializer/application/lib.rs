@@ -389,6 +389,32 @@ fn filled_contours_refuse_collinear_ink_but_accept_curved_ink() {
     }
 }
 
+#[test]
+fn aggregate_stream_budget_refuses_before_later_page_rendering() {
+    let mut malformed_box = page(Vec::new());
+    malformed_box.physical_page_box.width_um = 0;
+    let composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![
+            page(Vec::new()),
+            page(Vec::new()),
+            malformed_box,
+        ],
+        render_manifest_identity: "bounded-blank-pages.v1",
+    };
+    // Each blank stream is 26 bytes. Two exceed 40 total, so the third
+    // invalid box must not be inspected just to discover a byte overrun.
+    let restricted = PdfVectorLimits {
+        maximum_pdf_bytes: 40,
+        ..limits()
+    };
+    assert_eq!(
+        serialize_vector_pdf(&composition, restricted),
+        Err(PdfVectorError::ResourceLimit),
+        "cumulative stream bytes must refuse before a later invalid page box",
+    );
+}
+
 #[expect(
     clippy::indexing_slicing,
     reason = "fixture has one known page and two paths"

@@ -115,6 +115,18 @@ loops and self-crossing contours remain admitted without using a signed-area
 heuristic, which would incorrectly discard some filled self-intersections.
 The same collinearity check does not apply to stroked lines.
 
+For multi-page output, retained PDF content streams are now checked against
+the **aggregate** `maximum_pdf_bytes` budget after each page, before the next
+page is rendered. A document whose individual streams fit but whose combined
+streams cannot fit the requested PDF refuses early as `ResourceLimit`.
+The serialized header, objects, offsets and trailer are still subject to the
+same final byte budget; this early stream check is only a necessary bound.
+
+An executable regression first returned a later-page `InvalidPageBox` after
+the earlier streams had already exhausted the requested byte budget. It now
+returns `ResourceLimit` before inspecting that later page, limiting retained
+streams independently of caller-owned document page count.
+
 A local smoke fixture fed real output bytes to Poppler `pdfinfo` and
 `pdftoppm`; both accepted and rendered an A4 page (595.276 by 841.89 points).
 The fixture is a synthetic vector path, not a source notebook or visual
