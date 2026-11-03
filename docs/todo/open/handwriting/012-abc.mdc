@@ -121,10 +121,16 @@ and math Unicode roundtrips, bad-file refusal, preview/download gestures,
 and stale asynchronous import rejection. The Rust session runtime serves the
 new JavaScript from its explicit allowlist and tests the served bytes.
 
-Not yet implemented: drawing by mouse/touch, editing arbitrary existing
-segments without remove/re-add, automatically generating the entire required
-114-glyph baseline, browser-native notebook ink composition, and learned
-writer calibration. This task remains open.
+The browser now selects any authored segment by dropdown or SVG line,
+preloads its exact physical coordinates and ink color, and applies validated
+replacement or targeted deletion without reconstructing other segments.
+Invalid changes preserve the previous library. Focused frontend tests cover
+mixed-grapheme imports, middle-segment editing, wrong-length refusal and
+explicit TSV output.
+
+Not yet implemented: drawing by mouse/touch, automatically generating the
+entire required 114-glyph baseline, browser-native notebook ink composition,
+and learned writer calibration. This task remains open.
 
 ## Acceptance decision
 

@@ -509,8 +509,11 @@ The localhost browser now offers an **Authored glyph strokes** section after
 session admission. Choose an exact grapheme, pen color, start/end micrometre
 coordinates, and stroke thickness with numeric fields or matching ranges.
 Click **Add stroke** to inspect the actual segments in the SVG preview.
-
-**Remove last glyph stroke** changes only the selected exact grapheme.
+Choose any existing segment from the selector (or click its drawn line) to
+load its saved coordinates, thickness and color into the controls. **Update
+selected stroke** validates and replaces only that segment; **Remove selected
+stroke** deletes only that segment, not the other shapes for the grapheme.
+Invalid updates leave the saved draft untouched.
 
 **Load stroke TSV** reads an explicit existing glyph file into an in-memory
 draft. **Download stroke TSV** saves the canonical native-compatible file;

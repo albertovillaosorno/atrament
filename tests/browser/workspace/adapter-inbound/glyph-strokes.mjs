@@ -79,7 +79,8 @@ function mountEditor() {
         revokeObjectURL: URL.revokeObjectURL,
     };
     const ids = ["glyph-character", "glyph-color", "glyph-load",
-        "glyph-add", "glyph-remove", "glyph-save", "glyph-preview",
+        "glyph-add", "glyph-selected", "glyph-update", "glyph-remove",
+        "glyph-save", "glyph-preview",
         "glyph-status", ...["x1", "y1", "x2", "y2", "width"]
             .flatMap((axis) => [`glyph-${axis}`, `glyph-${axis}-range`])];
     const elements = new Map(ids.map((id) => [id, new FakeElement()]));
@@ -102,11 +103,13 @@ function mountEditor() {
             return new FakeElement();
         },
         createElement: (tag) => {
-            assert.equal(tag, "a");
+            assert.ok(tag === "a" || tag === "option");
             const element = new FakeElement();
-            element.click = () => links.push({
-                name: element.download, href: element.href,
-            });
+            if (tag === "a") {
+                element.click = () => links.push({
+                    name: element.download, href: element.href,
+                });
+            }
             return element;
         },
     };
@@ -208,6 +211,64 @@ test("import refuses bad UTF-8 and stale file operations", async () => {
         }];
         await get("load").dispatch("change");
         assert.equal(get("preview").children.length, 1);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("choose and revise any imported stroke without altering neighbors", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const original = [stroke("ñ"), stroke("∞"),
+            { ...stroke("ñ"), x1: 500, y1: 700, color: "#333333" },
+            { ...stroke("ñ"), x1: 800, y1: 900 },
+        ];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(original));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        assert.equal(get("selected").children.length, 4);
+        assert.equal(get("selected").disabled, false);
+        assert.equal(get("update").disabled, true);
+        assert.equal(get("remove").disabled, true);
+        get("selected").value = "2";
+        get("selected").dispatch("change");
+        assert.equal(get("x1").value, "500");
+        assert.equal(get("x1-range").value, "500");
+        assert.equal(get("color").value, "#333333");
+        assert.equal(get("update").disabled, false);
+        get("x1-range").value = "1234";
+        get("x1-range").dispatch("input");
+        get("color").value = "#112233";
+        get("update").dispatch("click");
+        assert.equal(get("preview").children[1].attributes.get("x1"), "1234");
+        assert.equal(get("preview").children[1].attributes.get("data-selected"), "true");
+        get("x2").value = "1234";
+        get("y2").value = "700";
+        get("update").dispatch("click");
+        assert.match(get("status").textContent, /endpoints must differ/i);
+        assert.equal(get("preview").children[1].attributes.get("x2"), "3000");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()), [
+            original[0], original[1],
+            { ...original[2], x1: 1234, color: "#112233" }, original[3],
+        ]);
+        get("remove").dispatch("click");
+        assert.equal(get("selected").value, "");
+        assert.equal(get("preview").children.length, 2);
+        get("character").value = "∞";
+        get("character").dispatch("input");
+        assert.equal(get("selected").children.length, 2);
+        get("preview").children[0].dispatch("click");
+        assert.equal(get("selected").value, "1");
+        assert.equal(get("color").value, "#A1B2C3");
+        editor.reset();
+        assert.equal(get("selected").disabled, true);
+        assert.equal(get("update").disabled, true);
+        assert.equal(get("preview").children.length, 0);
     } finally {
         ui.restore();
     }

@@ -149,6 +149,8 @@ export function createGlyphStrokeEditor(): {
     const color = required<HTMLInputElement>("glyph-color");
     const source = required<HTMLInputElement>("glyph-load");
     const add = required<HTMLButtonElement>("glyph-add");
+    const selected = required<HTMLSelectElement>("glyph-selected");
+    const update = required<HTMLButtonElement>("glyph-update");
     const remove = required<HTMLButtonElement>("glyph-remove");
     const save = required<HTMLButtonElement>("glyph-save");
     const preview = required<SVGSVGElement>("glyph-preview");
@@ -159,19 +161,37 @@ export function createGlyphStrokeEditor(): {
         numeric[axis] = required<HTMLInputElement>(`glyph-${axis}`);
         ranges[axis] = required<HTMLInputElement>(`glyph-${axis}-range`);
     }
-    const controls = [character, color, source, add, remove, save,
+    const controls = [character, color, source, add, selected, update, remove, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
     let generation = 0;
     let strokes: Stroke[] = [];
+    let selectedIndex: number | null = null;
     let downloadUrl: string | null = null;
 
     const message = (text: string): void => { status.textContent = text; };
     const render = (): void => {
-        const shown = strokes.filter((stroke) => {
-            return stroke.grapheme === character.value;
+        const shown = strokes.flatMap((stroke, index) => {
+            return stroke.grapheme === character.value ? [{ stroke, index }] : [];
         });
-        const lines = shown.map((stroke) => {
+        if (!shown.some(({ index }) => index === selectedIndex)) {
+            selectedIndex = null;
+        }
+        const options = shown.map(({ index }, position) => {
+            const option = document.createElement("option");
+            option.value = String(index);
+            option.textContent = "Stroke " + (position + 1) + " of " + shown.length;
+            return option;
+        });
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choose a stroke to edit";
+        selected.replaceChildren(placeholder, ...options);
+        selected.value = selectedIndex === null ? "" : String(selectedIndex);
+        selected.disabled = !active || shown.length === 0;
+        update.disabled = !active || selectedIndex === null;
+        remove.disabled = !active || selectedIndex === null;
+        const lines = shown.map(({ stroke, index }) => {
             const line = document.createElementNS(SVG_NS, "line");
             for (const axis of ["x1", "y1", "x2", "y2"] as const) {
                 line.setAttribute(axis, String(stroke[axis]));
@@ -179,12 +199,26 @@ export function createGlyphStrokeEditor(): {
             line.setAttribute("stroke", stroke.color);
             line.setAttribute("stroke-width", String(stroke.width));
             line.setAttribute("stroke-linecap", "round");
+            if (index === selectedIndex) {
+                line.setAttribute("data-selected", "true");
+            }
+            line.addEventListener("click", () => { if (active) choose(index); });
             return line;
         });
         preview.replaceChildren(...lines);
-        const description = `${shown.length} authored strokes for `
-            + "the exact selected grapheme";
-        preview.setAttribute("aria-label", description);
+        preview.setAttribute("aria-label",
+            shown.length + " authored strokes for the exact selected grapheme");
+    };
+    const choose = (index: number): void => {
+        const stroke = strokes[index];
+        if (!active || stroke?.grapheme !== character.value) return;
+        selectedIndex = index;
+        for (const axis of AXES) {
+            numeric[axis].value = String(stroke[axis]);
+            ranges[axis].value = String(stroke[axis]);
+        }
+        color.value = stroke.color;
+        render();
     };
     const editable = (): Stroke => validateStroke({
         grapheme: character.value, color: color.value,
@@ -195,7 +229,19 @@ export function createGlyphStrokeEditor(): {
         width: boundedInteger(numeric.width.value, 1500, "width"),
     });
 
-    character.addEventListener("input", render);
+    character.addEventListener("input", () => {
+        selectedIndex = null;
+        render();
+    });
+    selected.addEventListener("change", () => {
+        if (!active) return;
+        if (!/^(0|[1-9][0-9]*)$/.test(selected.value)) {
+            selectedIndex = null;
+            render();
+            return;
+        }
+        choose(Number(selected.value));
+    });
     for (const axis of AXES) {
         numeric[axis].addEventListener("input", () => {
             ranges[axis].value = numeric[axis].value;
@@ -213,24 +259,36 @@ export function createGlyphStrokeEditor(): {
             const next = [...strokes, editable()];
             encodeGlyphLibrary(next);
             strokes = next;
+            selectedIndex = next.length - 1;
             render();
             message(`${strokes.length} unsaved authored strokes`);
         } catch (error) {
             message(String(error));
         }
     });
-    remove.addEventListener("click", () => {
-        if (!active) return;
-        const index = strokes.findLastIndex((stroke) => {
-            return stroke.grapheme === character.value;
-        });
-        if (index < 0) {
-            message("No segment for this exact grapheme to remove");
-            return;
+    update.addEventListener("click", () => {
+        if (!active || selectedIndex === null) return;
+        try {
+            const changed = editable();
+            const index = selectedIndex;
+            if (strokes[index]?.grapheme !== character.value) return;
+            const next = strokes.slice();
+            next[index] = changed;
+            encodeGlyphLibrary(next);
+            strokes = next;
+            render();
+            message("Updated selected stroke; " + strokes.length + " unsaved strokes");
+        } catch (error) {
+            message(String(error));
         }
-        strokes.splice(index, 1);
+    });
+    remove.addEventListener("click", () => {
+        if (!active || selectedIndex === null) return;
+        if (strokes[selectedIndex]?.grapheme !== character.value) return;
+        strokes.splice(selectedIndex, 1);
+        selectedIndex = null;
         render();
-        message(`${strokes.length} unsaved authored strokes`);
+        message(strokes.length + " unsaved authored strokes");
     });
     source.addEventListener("change", async () => {
         if (!active) return;
@@ -249,6 +307,7 @@ export function createGlyphStrokeEditor(): {
             const text = decoder.decode(bytes);
             const checked = parseGlyphLibrary(text);
             strokes = checked;
+            selectedIndex = null;
             render();
             message(`Loaded ${checked.length} authored strokes in memory`);
         } catch (error) {
@@ -284,6 +343,7 @@ export function createGlyphStrokeEditor(): {
         generation += 1;
         active = false;
         strokes = [];
+        selectedIndex = null;
         for (const control of controls) control.disabled = true;
         source.value = "";
         if (downloadUrl !== null) {
@@ -299,6 +359,7 @@ export function createGlyphStrokeEditor(): {
         start: (): void => {
             active = true;
             for (const control of controls) control.disabled = false;
+            render();
             message("Select one exact glyph and add hand-drawn segments");
         },
     };

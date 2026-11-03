@@ -981,3 +981,8 @@ button:focus-visible {
   border-radius: 8px;
   background: #fffefb;
 }
+
+/* Selected outline is visually marked, but TSV ink stays unchanged. */
+.glyph-stroke-preview line[data-selected="true"] {
+  filter: drop-shadow(0 0 90px #b45309);
+}

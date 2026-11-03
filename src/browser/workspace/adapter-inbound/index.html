@@ -564,9 +564,17 @@
             viewBox="0 0 3500 4500" role="img"
             aria-label="Authored glyph stroke preview"></svg>
           <div class="paper-actions">
+            <label>Existing stroke for this grapheme
+              <select id="glyph-selected" disabled>
+                <option value="">Choose a stroke to edit</option>
+              </select>
+            </label>
             <button id="glyph-add" type="button" disabled>Add stroke</button>
+            <button id="glyph-update" type="button" disabled>
+              Update selected stroke
+            </button>
             <button id="glyph-remove" type="button" disabled>
-              Remove last glyph stroke
+              Remove selected stroke
             </button>
             <label class="paper-upload-label" for="glyph-load">
               Load stroke TSV
