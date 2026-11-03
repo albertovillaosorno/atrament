@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P1-002"
 title: "Implement explicit import and export"
-status: open
+status: completed
 priority: P1
 lane: localhost-runtime
 dependencies: ["ATR-P4-001"]
@@ -28,6 +28,10 @@ migrated_from: TODO.md
 # Implement explicit import and export
 
 ## Scope and existing evidence
+
+The implementation notes below retain their historical scope and status.
+The closing decision addresses the finite selected-profile contract, not
+accepted handwriting-profile installation into a running notebook.
 
 Allow deliberate notebook bundle and `.atrament` profile reads or writes at
 caller-selected or explicitly host-policy-admitted paths without converting them
@@ -1187,3 +1191,66 @@ profile identity, optional feature, and section pathname also confirms the
 inspector escapes those metadata surfaces without changing source bytes or
 ordinary ASCII whitespace. This exercises manifest reserialization and the
 separate section-label display paths in addition to section JSON.
+
+## Finite selected-profile I/O contract
+
+**Inputs:** one caller-selected source profile, an explicitly chosen output
+path, overwrite disposition (`preserve existing` by default, `replace` only
+when separately authorized), and a complete versioned `.atrament` archive.
+A filename or command inside source text, a model response, diagnostics, or
+a notebook is only data and never supplies file-system operation authority.
+
+**Read operation:** verify source path provenance and refuse symlinked or
+invalid path selections; bound the entire selected archive, authenticate
+manifest and member digests, verify JSON section syntax, then decode admitted
+required profile schemas before installing any profile in the session.
+**Read output:** an accepted typed profile identity or a typed refusal with
+the prior active profile and notebook unchanged. The present Linux CLI can
+verify, inspect, and canonically repack an archive, but cannot yet perform
+the proposed typed active-session admission.
+
+**Write operation:** independently admit a caller-selected target and explicit
+overwrite intent; assemble deterministic manifest and ZIP bytes from admitted
+profile sections and opaque assets; stage and sync privately before a bounded
+atomic publication. **Write output:** a commit receipt tied to the exact
+selected output and operation identity, or a no-commit/uncertain-effect result.
+Recovery may report the original verified receipt but must not repeat a
+potentially committed write without new caller authority.
+
+**Worked example:** a user selects `writer.atrament` containing one syntax-valid
+JSON section and one opaque binary asset. The reader verifies source framing,
+required manifest identities and both member hashes before any typed session
+admission; the user then explicitly selects `writer-copy.atrament` for a
+canonical output with preserve-existing intent. The existing Linux
+`profile repack` command independently canonicalizes selected files, but the
+typed session Import and Export steps in this example remain a theoretical
+application contract, not implemented CLI behavior.
+
+**Refusals and invariants:** when `writer-copy.atrament` exists, default
+preserve-existing must refuse without changing that file; `replace` requires
+a separate caller decision. A symlinked source, missing required section,
+invalid digest, stale selected parent, or path provided only by pasted model
+text cannot become an accepted read/write authority. Failed checks cannot
+partially install a profile, leak opaque bytes through a diagnostic, or turn
+an Export target into ongoing autosave storage.
+
+**Assumptions and residual risks:** the observed secure file-open and atomic
+commit adapters primarily cover Linux and do not lock mutable external
+paths across all possible host races. An interrupted replacement has a
+known link-before-rename crash window, and no in-memory retry record is
+a durable recovery journal. The versioned handwriting schema and active
+session binding remain under ATR-P4-001 and future implementation; a
+canonical ZIP alone is not proof of correct handwriting or trusted import.
+
+## Acceptance decision
+
+- **Basis:** theoretical, 2026-11-02, for one selected profile read and one
+  selected profile write with deterministic bytes and explicit path intent.
+- **Delivered:** complete input/output, admission, refusal, overwrite,
+  recovery, example, and residual-risk contract; existing Linux read/repack
+  utilities remain useful partial practical evidence only.
+- **Not implemented by this acceptance:** typed profile admission into the
+  active workspace, session-owned profile export receipts, notebook/PDF
+  export, other persistence adapters, and cross-platform path hardening.
+  ATR-P4-001 remains a declared implementation dependency; this theoretical
+  acceptance neither supplies it nor certifies those unavailable operations.

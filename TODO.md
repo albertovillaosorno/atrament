@@ -20,16 +20,6 @@ labels belong here.
 
 ## P1 — Localhost runtime and ephemeral session
 
-### TODO - Implement explicit import and export
-
-Allow deliberate notebook bundle and `.atrament` profile reads or writes at
-caller-selected or explicitly host-policy-admitted paths without converting
-them into background persistence. Keep paths mentioned only in notebook,
-source, diagnostic, clipboard, or model-response text as data rather than
-Export authority.
-
-[docs/todo/open/runtime/002-implement-explicit-import-and-export.mdc](docs/todo/open/runtime/002-implement-explicit-import-and-export.mdc)
-
 ### TODO - Define one typed diagnostic envelope
 
 Represent field, object, page, source, glyph, collision, capability,
