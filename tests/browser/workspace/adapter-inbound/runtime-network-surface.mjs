@@ -1043,6 +1043,8 @@ test("ambient filesystem reads stay in reviewed profile adapters", async () => {
         "profile-export-session/composition/lib.rs",
         "profile-file-commit/adapter-outbound/lib.rs",
         "profile-file-reader/adapter-outbound/lib.rs",
+        // Localhost reads are bounded and symlink-refusing in this adapter.
+        "profile-local-file-read/adapter-outbound/lib.rs",
         "profile-selected-file-open/adapter-outbound/lib.rs",
         "profile-open-file-import/composition/lib.rs",
     ].map((relative) => path.join(BACKEND_ROOT, relative)).sort());

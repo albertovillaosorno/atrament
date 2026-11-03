@@ -40,7 +40,6 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::io::{self, Write as _};
-use std::fs::{self, OpenOptions};
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::from_utf8;
@@ -60,7 +59,10 @@ use atrament_profile_export_assembly::{
     ProfileExportPayload, assemble_profile_export_artifact,
 };
 use atrament_profile_entry_sha256::sha256_profile_bytes;
-use atrament_profile_file_reader::read_bounded_profile_file;
+use atrament_profile_local_file_read::{
+    LocalProfileFileReadError, canonical_local_profile_directory,
+    read_local_profile_bytes,
+};
 use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };
@@ -239,47 +241,25 @@ impl ProfileFileStore {
             ProfileFileKind::Handwriting => HandwritingGateway.canonical_json(json)
                 .map_err(|_error| ProfileFileError::InvalidInput),
         }
-    }    pub(crate) fn from_directory(path: &Path) -> io::Result<Self> {
-        let metadata = fs::symlink_metadata(path)?;
-        if !metadata.file_type().is_dir() {
-            return Err(io::Error::new(
-                io::ErrorKind::InvalidInput,
-                "profile directory must be a real existing directory",
-            ));
-        }
-        Ok(Self { directory: fs::canonicalize(path)? })
     }
 
-    #[expect(clippy::filetype_is_file, reason = "Only regular selected profile files are allowed")]
+    pub(crate) fn from_directory(path: &Path) -> io::Result<Self> {
+        Ok(Self { directory: canonical_local_profile_directory(path)? })
+    }
+
     fn read_raw(&self, kind: ProfileFileKind, name: &str)
         -> Result<Vec<u8>, ProfileFileError> {
         let path = self.selected_path(kind, name)?;
-        let metadata = fs::symlink_metadata(&path).map_err(|error| {
-            if error.kind() == io::ErrorKind::NotFound {
-                ProfileFileError::NotFound
-            } else {
-                ProfileFileError::FileIo
-            }
-        })?;
-        if !metadata.file_type().is_file() {
-            return Err(ProfileFileError::InvalidInput);
-        }
-        let mut options = OpenOptions::new();
-        let _options = options.read(true);
-        #[cfg(target_os = "linux")]
-        {
-            use std::os::unix::fs::OpenOptionsExt as _;
-            use nix::libc::{O_NOFOLLOW, O_NONBLOCK};
-            let _flags = options.custom_flags(O_NOFOLLOW | O_NONBLOCK);
-        }
-        let file = options.open(&path).map_err(|_error| ProfileFileError::FileIo)?;
         let limit = match kind {
             ProfileFileKind::Notebook => MAX_NOTEBOOK_JSON_BYTES,
             ProfileFileKind::Handwriting => MAXIMUM_STATISTICS_JSON_BYTES,
         };
-        let bytes = read_bounded_profile_file(file, limit)
-            .map_err(|_error| ProfileFileError::InvalidInput)?;
-        Ok(bytes.bytes().to_vec())
+        read_local_profile_bytes(&path, limit).map_err(|error| match error {
+            LocalProfileFileReadError::InvalidInput => ProfileFileError::InvalidInput,
+            LocalProfileFileReadError::FileIo => ProfileFileError::FileIo,
+            LocalProfileFileReadError::NotFound => ProfileFileError::NotFound,
+            LocalProfileFileReadError::Unavailable => ProfileFileError::Unavailable,
+        })
     }
 
     fn selected_path(&self, kind: ProfileFileKind, name: &str)

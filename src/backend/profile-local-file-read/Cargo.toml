@@ -1,0 +1,21 @@
+[package]
+name = "atrament_profile_local_file_read"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[lib]
+path = "adapter-outbound/lib.rs"
+test = false
+
+[dependencies]
+atrament_profile_file_reader = { workspace = true }
+atrament_profile_selected_file_open = { workspace = true }
+
+[[test]]
+name = "profile_local_file_read_adapter_outbound"
+path = "../../../tests/backend/profile-local-file-read/adapter-outbound/lib.rs"
+
+[lints]
+workspace = true

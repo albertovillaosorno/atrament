@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-local-file-read
+  name: profile-local-file-read
+  path: src/backend/profile-local-file-read
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: adapter-outbound

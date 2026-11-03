@@ -725,6 +725,14 @@ name = "atrament_profile_json_syntax"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_profile_local_file_read"
+version = "0.1.0"
+dependencies = [
+ "atrament_profile_file_reader",
+ "atrament_profile_selected_file_open",
+]
+
+[[package]]
 name = "atrament_profile_manifest_json_codec"
 version = "0.1.0"
 dependencies = [
@@ -829,10 +837,10 @@ dependencies = [
  "atrament_profile_entry_sha256",
  "atrament_profile_export_assembly",
  "atrament_profile_file_commit",
- "atrament_profile_file_reader",
  "atrament_profile_import_preflight",
  "atrament_profile_import_verification",
  "atrament_profile_json_syntax",
+ "atrament_profile_local_file_read",
  "atrament_profile_manifest_json_codec",
  "atrament_profile_manifest_json_writer",
  "atrament_profile_open_file_import",
