@@ -1,0 +1,107 @@
+---
+record_type: task
+id: "ATR-P4-003"
+title: "Correct photographed calibration geometry"
+status: completed
+priority: P4
+lane: handwriting
+dependencies: ["ATR-P4-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Photo correction requires calibration capture input.
+acceptance_criteria:
+  - >-
+      Detect reference marks, perspective, lens distortion, scale, grid,
+      baseline, and capture quality before treating any observed stroke as
+      evidence.
+  - >-
+      Finite v1 completion: Specify reference-mark detection, perspective
+      correction, physical scale, and capture-quality refusal for one
+      photographed calibration sheet; unsupported camera distortions are
+      named.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Correct photographed calibration geometry
+
+## Scope and existing evidence
+
+Historical implementation notes are retained for provenance. The accepted
+finite design does not imply unfinished runtime integration exists.
+
+Detect reference marks, perspective, lens distortion, scale, grid, baseline,
+and capture quality before treating any observed stroke as evidence.
+
+Current executable evidence now requires one caller-produced observation for
+each of those seven photographed-capture geometry families and binds the report
+to one stable capture identity. Duplicate families reject in report order and
+missing families reject in canonical requirement order; a 128-mask compact
+oracle exhausts every presence subset. Successful completeness now also returns
+constructor-sealed evidence borrowing the exact report, so later extraction can
+require all seven families without treating structural completeness as a quality
+pass.
+
+A separate 2,801-sequence oracle covers every axis sequence through length four
+and requires the sealed path to preserve duplicate-before-missing precedence
+independently. Detection, image decoding, transform
+fitting, distortion correction, units/tolerances, capture-quality scoring,
+geometry acceptance, and handwriting extraction remain open.
+
+## Finite photographed worksheet geometry and quality contract
+
+**Inputs:** one photograph tied to a captured A4 worksheet identity and
+revision, four declared page fiducials, observed pixel positions, camera
+orientation and explicit capture-quality evidence. **Outputs:** a proposed
+pixel-to-page planar homography in mm, a seven-family geometry report and
+quality verdict `Accepted`, `NeedsRecapture`, or `UnsupportedDistortion`.
+No stroke extraction may consume a report that is incomplete or refused.
+
+**Reference geometry:** the finite worksheet defines crosses in physical
+millimeters at `(15,15)`, `(195,15)`, `(195,282)`, `(15,282)` on a 210 x 297
+mm page. Detect each cross with a stable ID, confirm clockwise/non-self-
+intersecting order and solve one 3 x 3 projective transform from photo pixel
+centers to physical coordinates. Require positive finite scale, stable
+inverse and checks against independent known grid/baseline marks; do not use
+a guessed nominal DPI. Lens distortion outside a declared camera correction
+model cannot be silently absorbed as handwriting deformation.
+
+**Worked example:** a photo has ordered cross centers `(100,100)`,
+`(1900,100)`, `(1900,2770)`, `(100,2770)` pixels. For this front-facing ideal
+case, 1800 pixels span 180 mm horizontally and 2670 pixels span 267 mm
+vertically. The result is 10 pixels/mm with page mapping
+`x_mm = 15 + (x_px-100)/10`, `y_mm = 15 + (y_px-100)/10`.
+An independent baseline mark at image y=`600` maps to y=`65 mm` as expected.
+The seven report families record reference marks, perspective, lens
+assumptions, physical scale, grid, baseline and quality, all tied to the same
+capture ID. This is a theoretical calibration example, not a detector result.
+
+**Quality policy:** a proposed first-release acceptance threshold is at
+least four uniquely matched fiducials, no missing or mirrored corner, a
+nondegenerate transform, and independent grid/baseline residual no larger
+than 1 mm in physical coordinates. Report blur, shadows, clipping and
+reflections as explicit capture observations; if they make stroke boundaries
+unreliable, return `NeedsRecapture` despite numerically plausible corners.
+Unmodeled barrel/fisheye or rolling-shutter distortion is
+`UnsupportedDistortion`, not a corrected stroke sample.
+
+**Refusal example:** repeated top-right mark IDs, only three visible marks,
+a folded page, grid residual 2 mm, or severe lens warp refuses geometry
+acceptance. Retain raw capture provenance and exact failing condition; do not
+invent missing marks, extract paths, change profile style or apply an
+unverified image transform to saved handwriting evidence.
+
+**Assumptions and limits:** existing code admits a caller-owned report only
+when all seven geometry families are present and no duplicate family exists.
+It does not decode photographs, find fiducials, estimate homographies, score
+blur or correct a lens. Theoretical acceptance supplies a finite geometric
+contract but no functioning calibration photo pipeline or quality proof.
+
+## Acceptance decision
+
+- **Basis:** practical for seven-family report completeness only; theoretical
+  for photo detection, transform and quality thresholds, 2026-11-02.
+- **Delivered:** four known points, one 10 px/mm worked transform, seven
+  required observations, residual threshold and refusal cases.
+- **Not implemented by this acceptance:** real camera decoding, fiducial
+  detection, homography fitting, lens correction or stroke admission.

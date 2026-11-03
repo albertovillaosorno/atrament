@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P4-001"
 title: "Freeze the first `.atrament` container"
-status: open
+status: completed
 priority: P4
 lane: handwriting
 dependencies: []
@@ -99,6 +99,9 @@ remain open. Earlier sections below retain their historical step-by-step
 implementation evidence, rather than the final state of every prerequisite.
 
 ## Scope and existing evidence
+
+Historical implementation notes are retained for provenance. The accepted
+finite design does not imply unfinished runtime integration exists.
 
 Choose canonical encoding, manifest, checksums, optional assets, version rules,
 unknown-field behavior, migration, and a human-readable inspection command.
@@ -516,3 +519,72 @@ A 512-case deterministic manifest corpus compares both byte-for-byte,
 independently decodes the result and confirms a canonical round trip. This is
 bounded in-memory serialization only; it creates neither a complete profile
 artifact nor authorized filesystem Export.
+
+## Finite first portable handwriting-profile wire contract
+
+**Inputs:** a stable profile identity, admitted version `atrament.profile/1`,
+canonical UTF-8 JSON section values, optional opaque asset bytes, feature
+identifiers and caller-authorized destination bytes. **Outputs:** a read-only
+validated archive or canonical in-memory `.atrament` bytes, a human-readable
+inspection projection, or a typed refusal. A checked archive is not an active
+handwriting profile and does not authorize a filesystem write.
+
+**Canonical archive:** the root is exactly `manifest.json` followed by declared
+path-sorted members below `sections/` or `assets/`, encoded as deterministic
+stored-only ZIP32 with fixed writer framing. No symlinks, traversal paths,
+compression, platform-specific extras, undeclared members, duplicate paths,
+or unsupported ZIP64 are admitted in this first version. Manifest JSON uses
+fixed ASCII-key order, UTF-8, minimal JSON escaping, lowercase SHA-256 hex,
+and plain-decimal byte lengths. The writer preserves original Unicode code
+points rather than inventing normalization.
+
+**Manifest schema:** require exactly `container_version`, `profile_identity`,
+`required_features`, `optional_features`, and `entries`. Each entry names an
+exact relative path, media type, original byte length and SHA-256 over its
+**exact stored member bytes**. Require first-release sections
+`sections/strokes.json` and `sections/roles.json` as UTF-8 JSON objects for
+a profile claiming usable handwriting; they are proposed *semantic* schemas
+and are not currently decoded or applied by the active session. Extra opaque
+assets may live only below `assets/` and must be declared and verified.
+Unknown manifest keys, missing mandatory sections, unknown required feature
+identifiers or duplicate feature IDs refuse. Unknown optional feature IDs
+remain preserved as opaque declarations; they never imply executable support.
+
+**Worked example:** `student-A.atrament` declares version
+`atrament.profile/1`, identity `student-A`, no required/optional features,
+and exactly two JSON section entries. `sections/strokes.json` contains a
+sample-local stroke vocabulary object; `sections/roles.json` contains the
+same profile's body/title role mapping. The writer computes both actual byte
+lengths and SHA-256 digests from those exact bytes, then packages canonical
+root JSON and the two sorted members. `atrament profile inspect PATH` may
+show verified identity, version, section paths and bounded JSON inspection
+without opening a browser or printing opaque asset contents. This example
+specifies the proposed semantic meaning; it does not assert the current CLI
+validates or imports that handwriting schema.
+
+**Refusal and migration:** if a ZIP has a future `atrament.profile/2` version,
+an undeclared entry, wrong media type, digest mismatch, unknown required
+feature, or invalid JSON section, refuse before displaying a partial success
+or creating an accepted profile. Do not silently migrate or downgrade old or
+future containers; require a separately versioned, explicit migration tool
+that emits a new checked archive with a new identity/receipt. A canonical
+in-memory artifact is not permission to overwrite a path.
+
+**Assumptions and limits:** the repository already implements typed manifest
+checks, stored ZIP reader/writer, canonical manifest serialization, SHA
+verification and a Linux read-only inspect/check-canonical CLI. This design
+adds a finite required-section policy but supplies no versioned handwriting
+section parser, migration, authenticated selected-profile Import, approved
+file Export or cross-platform artifact lifecycle. Theoretical completion of
+this wire contract cannot establish active handwriting compatibility.
+
+## Acceptance decision
+
+- **Basis:** practical for the container byte-format and integrity primitives;
+  theoretical for required handwriting sections and migration policy,
+  2026-11-02.
+- **Delivered:** exact v1 schema and stored ZIP constraints, two required
+  example sections, SHA-256 integrity, optional-field behavior, inspection
+  projection and explicit version/digest/migration refusals.
+- **Not implemented by this acceptance:** versioned stroke/role section
+  decoding, migration, active-profile Import or user-authorized file Export.

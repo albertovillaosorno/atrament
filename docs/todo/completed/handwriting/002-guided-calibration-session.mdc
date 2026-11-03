@@ -1,0 +1,136 @@
+---
+record_type: task
+id: "ATR-P4-002"
+title: "Build the guided calibration session"
+status: completed
+priority: P4
+lane: handwriting
+dependencies: []
+dependencies_specified: true
+dependency_rationale: >-
+  Calibration capture can run before downstream stroke extraction.
+acceptance_criteria:
+  - >-
+      Collect isolated characters, joins, words, numerals, punctuation,
+      mathematics, titles, labels, sizes, speeds, pressure proxies, and free
+      writing on known paper.
+  - >-
+      Finite v1 completion: Publish one finite calibration worksheet and
+      ordered prompt set covering body, title, numeral, punctuation,
+      diacritic, and mathematics roles with explicit incomplete status.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build the guided calibration session
+
+## Scope and existing evidence
+
+Historical implementation notes are retained for provenance. The accepted
+finite design does not imply unfinished runtime integration exists.
+
+Collect isolated characters, joins, words, numerals, punctuation, mathematics,
+titles, labels, sizes, speeds, pressure proxies, and free writing on known
+paper.
+
+Current executable evidence now freezes transport-neutral calibration
+provenance. Parameter evidence retains caller-owned source region, units,
+confidence, and accepted correction history; observed evidence remains distinct
+from inferred extremes. Training and held-out sample identities cannot cross
+roles, and an underdetermined required behavior explicitly requests another
+sample.
+
+A 5,461-case exhaustive compact oracle covers every declaration sequence through
+six samples over two identities and both roles. Repeated same-role declarations
+remain valid while the first cross-role reuse rejects in declaration order.
+Successful separation now returns constructor-sealed evidence borrowing the
+exact sample declaration slice, and the same oracle requires direct/sealed
+parity.
+
+This does not choose a minimum sample set, confidence scale, unit vocabulary,
+source-region syntax, capture geometry, extraction algorithm, or calibration
+workflow.
+
+Guided-session evidence now also preserves a caller-supplied ordered prompt plan
+across resumptions, rejects duplicate prompt identities, derives completion from
+accepted prompt progress, and covers the ADR's isolated-character, join, word,
+sentence, numeral, punctuation, mathematical-symbol, heading, and free-writing
+categories. Successful identity admission now seals the exact session so
+completed prompts, completion, and next-pending position can be projected
+without rescanning identities.
+
+An exhaustive 511-state compact corpus covers every pending/completed mask from
+zero through eight prompts and cross-checks direct and sealed completion,
+next-pending position, and completed-prompt inspection against an independent
+bit-mask oracle. One
+exact-precondition edit can replace a completed prompt's sample link while
+preserving all unrelated prompt state; stale, pending, missing, ambiguous, and
+no-op cases cannot alter the session. A second exhaustive 3,076-case compact
+oracle crosses prompt counts through six with every progress mask, target or
+missing target, current/stale expectation, and equal/different replacement.
+
+Minimum counts, wording, sufficiency, weak-sample classification and workflow
+policy, capture UI, persistence/history, and geometry semantics remain open.
+
+## Finite guided A4 calibration worksheet and completion contract
+
+**Inputs:** a selected A4 physical worksheet revision, one declared profile
+identity, a fixed ordered prompt plan, and caller-recorded sample evidence.
+**Outputs:** a printed worksheet specification and a resumable completion
+ledger that marks each prompt `Pending`, `Completed` or `NeedsRecapture`.
+An incomplete or low-confidence worksheet cannot establish a usable writer.
+
+**Worksheet:** print an A4 portrait page with four 10 mm fiducial crosses at
+`(15,15)`, `(195,15)`, `(195,282)`, `(15,282)` mm in page coordinates, a
+printed identity/revision label, and isolated ruled capture boxes. Leave
+sufficient room for pen entry/exit and baseline marks. Prompt identifiers
+must be stable across resumption and a retake must preserve prior provenance,
+not overwrite a sample silently.
+
+| Prompt ID | Role and requested sample | Evidence captured |
+| --- | --- | --- |
+| `c01` | Body `a m n o` isolated | Stroke starts, ends and lifts |
+| `c02` | Join `an mano` | Adjacent-letter joining |
+| `c03` | Word `mañana` | Word spacing and diacritic |
+| `c04` | Sentence `¿Dónde estás?` | Punctuation and line rhythm |
+| `c05` | Numerals `0123456789` | Numeric joins and scale |
+| `c06` | Symbols `¡ ? « » —` | Prose punctuation |
+| `c07` | Mathematics `x² + 1 = 2` | Symbol role and baseline |
+| `c08` | Title `Biología` | Title height and scale |
+| `c09` | Label `Figura A` | Compact label size |
+| `c10` | Free writing, two lines | Unprompted rhythm and speed |
+
+**Collection rule:** each accepted prompt names the exact sample region,
+source capture identity, physical unit, pen/writer declaration and observed
+provenance. Speed and pressure proxies are only caller-reported or measured
+with a declared method; static photos cannot invent pressure values. Reserve
+separately labeled held-out sample IDs for later comparison and prohibit
+reusing any training ID as held-out evidence. Confidence must state whether
+observed, inferred, or unknown rather than fabricate a numeric score.
+
+**Worked example:** `student-A` has `c01` through `c07` completed, with `c08`
+marked `NeedsRecapture` and `c09`/`c10` pending. The resumable ledger reports
+`7/10` accepted, next actionable prompt `c08`, and overall `Incomplete`.
+Replacing `c08` requires its exact current sample reference and a fresh
+capture ID; the other nine records and original sample provenance remain.
+
+**Refusal example:** duplicate `c04`, a sample reused as both training and
+held-out, a stale replacement identity, absent fiducials or a missing capture
+rejects the relevant admission with a visible reason. Completion cannot be
+inferred from merely touching all ten prompts if capture quality is unknown.
+A photograph of the sheet is not proof of measured stroke geometry.
+
+**Assumptions and limits:** ordered prompt identity, progress/retake checks,
+sample provenance and training/held-out separation exist as transport-neutral
+primitives. Worksheet generation, camera capture, paper calibration,
+confidence scoring and live UI do not. These ten prompts are a finite
+**design worksheet**, not collected evidence or an authenticated user profile.
+
+## Acceptance decision
+
+- **Basis:** practical for prompt-progress and provenance primitives;
+  theoretical for the A4 worksheet and capture UX, 2026-11-02.
+- **Delivered:** ten finite prompts covering all named roles, four fiducials,
+  completion states, one incomplete example and explicit refusal paths.
+- **Not implemented by this acceptance:** physical worksheet printing,
+  real camera workflow, capture-quality scoring or extracted strokes.

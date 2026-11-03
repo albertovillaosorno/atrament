@@ -20,29 +20,6 @@ labels belong here.
 
 ## P4 — Personal handwriting profiles and synthesis
 
-### TODO - Freeze the first `.atrament` container
-
-Choose canonical encoding, manifest, checksums, optional assets, version
-rules, unknown-field behavior, migration, and a human-readable inspection
-command.
-
-[docs/todo/open/handwriting/001-freeze-the-first-atrament-container.mdc](docs/todo/open/handwriting/001-freeze-the-first-atrament-container.mdc)
-
-### TODO - Build the guided calibration session
-
-Collect isolated characters, joins, words, numerals, punctuation,
-mathematics, titles, labels, sizes, speeds, pressure proxies, and free
-writing on known paper.
-
-[docs/todo/open/handwriting/002-guided-calibration-session.mdc](docs/todo/open/handwriting/002-guided-calibration-session.mdc)
-
-### TODO - Correct photographed calibration geometry
-
-Detect reference marks, perspective, lens distortion, scale, grid, baseline,
-and capture quality before treating any observed stroke as evidence.
-
-[docs/todo/open/handwriting/003-photographed-calibration-geometry.mdc](docs/todo/open/handwriting/003-photographed-calibration-geometry.mdc)
-
 ### TODO - Extract the personal stroke vocabulary
 
 Derive centerlines, contours, entry and exit conditions, pen lifts,
