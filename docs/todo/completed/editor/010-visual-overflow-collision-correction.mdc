@@ -1,0 +1,83 @@
+---
+record_type: task
+id: "ATR-P3-010"
+title: "Make overflow and collision correction visual"
+status: completed
+priority: P3
+lane: dual-editor
+dependencies: ["ATR-P2-005", "ATR-P3-003"]
+dependencies_specified: true
+dependency_rationale: >-
+  Visual correction needs overflow facts and page editing.
+acceptance_criteria:
+  - >-
+      Draw page-edge, collision, and unsupported-mode diagnostics on preview
+      and link each overlay to the owning source object and correction
+      actions.
+  - >-
+      Finite v1 completion: Associate one overflow, one collision, and one
+      unsupported-mode overlay with the owning semantic object and an
+      actionable correction; full drawing-tool coverage is excluded.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Make overflow and collision correction visual
+
+## Scope and existing evidence
+
+Historical notes describe current implementation evidence and gaps. The
+finite acceptance below does not imply those gaps were implemented.
+
+Draw page-edge, collision, and unsupported-mode diagnostics on preview and link
+each overlay to the owning source object and correction actions.
+
+## Finite three-class visual diagnostic and correction contract
+
+**Inputs:** one accepted revision/page with stable semantic object IDs,
+current complete backend diagnostic evidence, measured page/object geometry,
+and the requested output capability. **Outputs:** a preview overlay linked
+to its owning source object and a typed candidate correction, or a visible
+incomplete/unresolved result. An overlay alone has no mutation, file Export,
+or physical-plan authority.
+
+**Presentation rule:** render a bounded overlay for one current diagnostic
+per class: page-edge overflow, object collision and unsupported output mode.
+Each overlay conveys its stable diagnostic identity, blocking disposition,
+semantic owner, target page, relevant geometry and admitted correction
+categories. Selection from the overlay focuses the same owner in the source
+inspector. Never hide an error behind the drawing or imply a proposed remedy
+has passed layout, source, or device capability checks.
+
+**Worked three-class example:** writable page rectangle `x=20..190 mm`,
+`y=20..277 mm`; fixed figure `f1` at `(184,40,12,20)` mm crosses right edge
+by `6 mm`. A red-edge overlay identifies `f1` and proposes `move left 6 mm`,
+subject to a new constraint check. Figure `f2` overlaps `f3` over a
+`5 x 5 mm` measured region; the collision overlay identifies both semantic
+owners and proposes a reviewed reposition rather than auto-shifting either.
+Figure `f4` is a color photograph in single-pen live mode; its capability
+overlay proposes a supported explicit line-art conversion request or a
+Digital/PDF output choice, never silent monochrome substitution.
+
+**Refusal example:** a diagnostic generated for revision `r5` must not
+activate a correction in `r6`. An overlay lacking a stable owner, precise
+geometry, supported remediation, or complete evidence must show
+`UnresolvedDiagnostic` instead of claiming the page is ready. A proposed
+move that removes right-edge overflow but creates a collision remains
+blocking after fresh reevaluation; no preview gesture silently commits it.
+
+**Assumptions and limits:** a read-only overflow diagnostic and layout-only
+Export preflight are existing backend primitives. Collision measurement,
+unsupported-mode diagnostics with consistent geometry, preview paint/hit-test,
+selection sync and fully authorized correction commands are unfinished.
+Theoretical acceptance does not claim the three overlays are implemented or
+that corrections can be safely applied to physical output.
+
+## Acceptance decision
+
+- **Basis:** practical for existing fixed-overflow evidence only; theoretical
+  for visual overlays, collision and unsupported-mode workflows, 2026-11-02.
+- **Delivered:** three typed overlay examples, owner/geometry/diagnostic
+  invariants, conditional corrections and stale/unsupported refusal.
+- **Not implemented by this acceptance:** rendered overlays, collision
+  solver, physical capability UI, or end-to-end correction commands.

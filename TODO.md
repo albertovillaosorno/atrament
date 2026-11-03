@@ -18,29 +18,6 @@ remain in typed records under `docs/todo/open/`. Completed work belongs under
 then one direct Markdown link to the complete typed record. No per-item field
 labels belong here.
 
-## P3 — The dual human and LLM editor
-
-### TODO - Keep the Copy prompt control permanently available
-
-Generate one complete, versioned request from current task and constraints,
-copy it with one action, and confirm the exact prompt identity copied.
-
-[docs/todo/open/editor/008-copy-prompt-control.mdc](docs/todo/open/editor/008-copy-prompt-control.mdc)
-
-### TODO - Validate pasted model responses transactionally
-
-Parse the complete response into a candidate notebook, show all differences
-and errors, and change the accepted session only after explicit acceptance.
-
-[docs/todo/open/editor/009-transactional-response-validation.mdc](docs/todo/open/editor/009-transactional-response-validation.mdc)
-
-### TODO - Make overflow and collision correction visual
-
-Draw page-edge, collision, and unsupported-mode diagnostics on preview and
-link each overlay to the owning source object and correction actions.
-
-[docs/todo/open/editor/010-visual-overflow-collision-correction.mdc](docs/todo/open/editor/010-visual-overflow-collision-correction.mdc)
-
 ## P4 — Personal handwriting profiles and synthesis
 
 ### TODO - Freeze the first `.atrament` container

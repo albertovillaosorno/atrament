@@ -1,0 +1,82 @@
+---
+record_type: task
+id: "ATR-P3-009"
+title: "Validate pasted model responses transactionally"
+status: completed
+priority: P3
+lane: dual-editor
+dependencies: ["ATR-P3-002", "ATR-P6-006"]
+dependencies_specified: true
+dependency_rationale: >-
+  Untrusted responses require an editor and atomic validation.
+acceptance_criteria:
+  - >-
+      Parse the complete response into a candidate notebook, show all
+      differences and errors, and change the accepted session only after
+      explicit acceptance.
+  - >-
+      Finite v1 completion: Parse one complete model response, display one
+      accepted/rejected diff, and commit only on explicit acceptance while
+      leaving the prior revision intact on refusal.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Validate pasted model responses transactionally
+
+## Scope and existing evidence
+
+Historical notes describe current implementation evidence and gaps. The
+finite acceptance below does not imply those gaps were implemented.
+
+Parse the complete response into a candidate notebook, show all differences and
+errors, and change the accepted session only after explicit acceptance.
+
+## Finite untrusted-response review and atomic acceptance contract
+
+**Inputs:** one complete pasted model-response text, the current accepted
+revision, backend parser/semantic schema identity and caller intent to inspect
+or accept a proposed notebook. **Outputs:** a bounded candidate with an
+ordered semantic diff and complete diagnostics, a refusal, or one newly
+accepted revision only after a separate explicit user acceptance. Pasted
+bytes and untrusted claims cannot supply file/device authority.
+
+**Review sequence:** preserve raw input as inert text, decode the complete
+versioned envelope with strict size/schema checks, validate references and
+semantic ownership against one base revision, then build a candidate without
+mutating the current notebook. Show the old and candidate values by stable
+semantic IDs plus all blocking and unresolved diagnostics. Only an explicit
+Accept action bound to the same base revision may submit one atomic backend
+transaction; Cancel leaves all accepted semantic state unchanged.
+
+**Worked example:** revision `r20` contains title identity `t1` with text
+`Chapter 1`. A complete model response proposes `Chapter 1: Cells` for
+the same semantic owner; the review shows one text diff `t1`, unchanged
+other objects and a complete nonblocking diagnostic set. Accepting exactly
+this reviewed proposal against `r20` creates `r21` and an explicit receipt;
+rejecting it instead preserves `r20` and the raw response for revision.
+
+**Refusal example:** a payload names nonexistent figure `f99`, includes a
+filesystem export path as an instruction, or is too large for the admitted
+parser. No candidate may be accepted and the existing revision stays intact.
+If the session advances to `r21` during review, an earlier `r20` proposal is
+`StaleBase`, even if it was otherwise valid; the user must review a fresh diff.
+Incomplete diagnostic evidence blocks acceptance rather than treating omitted
+error detail as success. Semantic commands in the raw text follow the same
+backend boundary, never a browser-side best-effort patch.
+
+**Assumptions and limits:** the backend has partial candidate validation,
+accepted revision ownership and atomic semantic transaction primitives.
+Browser paste-to-candidate parsing, complete versioned wire response formats,
+review UI, complete diagnostics and explicit acceptance transport remain open.
+This task is a theoretical review design, not a claim that arbitrary model
+output is currently safe or usable.
+
+## Acceptance decision
+
+- **Basis:** theoretical for full browser-assisted response review and commit;
+  partial practical backend candidate/transaction primitives, 2026-11-02.
+- **Delivered:** one accepted/rejected title diff, explicit human acceptance,
+  stale-base and invalid-payload refusal, atomic notebook invariant.
+- **Not implemented by this acceptance:** complete pasted response parser,
+  candidate UI, full model format, or browser-to-backend acceptance workflow.
