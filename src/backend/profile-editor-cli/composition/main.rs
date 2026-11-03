@@ -44,7 +44,7 @@ use std::io::{self, Write as _};
 use std::path::Path;
 use std::slice::Iter;
 
-use flow::{FlowFormat, FlowSource, layout_flow};
+use flow::{FlowFormat, FlowSource, HeadingDecoration, layout_flow};
 use glyph::GlyphVariation;
 
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
@@ -108,6 +108,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--fallback-glyph MISSING AUTHORED] \
     [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
     [--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY] \
+    [--heading-style underline|marker|none] [--heading-color '#RRGGBB'] \
     [--flow-text TEXT | --flow-markdown MARKDOWN | \
      --flow-text-file FILE | --flow-markdown-file FILE] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
@@ -124,6 +125,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     # headings and -/* list markers; -file options read one bounded local \
     UTF-8 file. Both use physical printable regions and exact authored ink; \
     it auto-selects PDF page count unless --pages is explicit. \
+    Markdown headings default to dark underlines; select a user-colored \
+    underline, opaque pastel marker band or no ornament. \
     --handwriting-profile applies selected mean dimensions to authored \
     shapes, not statistical sampling. --glyph-variation explicitly \
     applies reproducible per-occurrence creative jitter to the same shapes; \
@@ -177,6 +180,7 @@ struct NotebookRequest {
     export_paper: Option<NotebookPaperFormat>,
     flow: Option<FlowSource>,
     glyphs: GlyphOverlay,
+    heading: HeadingDecoration,
     ink: Vec<NotebookInkLine>,
     inspect: bool,
     output: Option<String>,
@@ -1071,6 +1075,27 @@ fn load_notebook_profile_option(
     )?)
 }
 
+fn validate_notebook_flow_selection(
+    flow: Option<&FlowSource>, glyphs: &GlyphOverlay,
+    heading: HeadingDecoration,
+) -> Result<(), String> {
+    heading.validate().map_err(str::to_owned)?;
+    if heading.is_selected() && flow.is_none_or(|source| {
+        source.format != FlowFormat::Markdown
+    }) {
+        return Err("heading customization requires --flow-markdown".into());
+    }
+    if flow.is_none() {
+        glyphs.validate_pairing()?;
+    } else if glyphs.strokes.is_empty() || !glyphs.runs.is_empty() {
+        return Err(concat!(
+            "flow requires authored glyph shapes without manual ",
+            "--place-text runs",
+        ).into());
+    }
+    Ok(())
+}
+
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut profile = NotebookProfile::default();
     let mut inspect = false;
@@ -1081,6 +1106,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut glyphs = GlyphOverlay::default();
     let mut statistics = None;
     let mut flow = None;
+    let mut heading = HeadingDecoration::default();
     let mut loaded = false;
     let mut edited = false;
     let mut iter = args.iter();
@@ -1116,6 +1142,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--inspect" => inspect = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
+            "--heading-style" | "--heading-color" => {
+                heading.parse(option, &mut iter)?;
+            }
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" => {
                 parse_notebook_flow(&mut iter, option, &mut flow)?;
@@ -1147,19 +1176,13 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         replace, output.as_deref(), inspect, &export, &ink,
         &glyphs, statistics.as_ref(),
     )?;
-    if flow.is_none() {
-        glyphs.validate_pairing()?;
-    } else if glyphs.strokes.is_empty() || !glyphs.runs.is_empty() {
-        return Err(concat!(
-            "flow requires authored glyph shapes without manual ",
-            "--place-text runs",
-        ).into());
-    }
+    validate_notebook_flow_selection(flow.as_ref(), &glyphs, heading)?;
     profile.validate()?;
     Ok(NotebookRequest {
         flow,
         pages_explicit: export.pages.is_some(),
         glyphs,
+        heading,
         dpi: export.dpi.unwrap_or(150),
         export_paper: export.format,
         ink,
@@ -1200,6 +1223,7 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     if let Some(source) = &request.flow {
         let (runs, ornaments, required_pages) = layout_flow(
             source, &request.profile, request.statistics.as_ref(),
+            request.heading,
         )?;
         if request.pages_explicit && request.pages < required_pages {
             return Err(format!(concat!(

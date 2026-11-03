@@ -427,10 +427,22 @@ cargo run -q -p atrament_profile_editor_cli -- \
 ```
 
 Both exports were smoke-tested with the editor's geometric `a` strokes;
-the PDF is a real one-page document and PNG is 72-DPI RGBA. A heading
-gets a pen underline and a list item gets an ink marker. For a notebook
-profile already saved as `notebook.json`, supply `--profile notebook.json`
-before the flow options to use its paper/margins instead of defaults.
+the PDF is a real one-page document and PNG is 72-DPI RGBA. By default, a
+Markdown heading gets a dark pen underline and a list item gets an ink mark.
+To highlight a title with a **colored marker band behind the handwritten
+strokes**, add `--heading-style marker --heading-color '#F8DE91'` to either
+export. Four overlapping, **opaque** 1.4-mm pen lines form this pastel band;
+`--heading-style underline --heading-color '#A462D0'` changes only the
+underline color, and `--heading-style none` removes the heading ornament.
+The marker option does not change authored glyph geometry, and the existing
+512-ink-segment cap and physical margin checks also apply to heading ink.
+This is a deliberately simple marker-decoration option, **not** a full title
+font, translucent highlighter or arbitrary image layer. It works with the
+opt-in `--glyph-variation` ink sampler described below.
+
+For a notebook profile already saved as `notebook.json`, supply
+`--profile notebook.json` before the flow options to use its paper/margins
+instead of defaults.
 
 Use `--flow-text-file` for plain text, or `--flow-text` and
 `--flow-markdown` for inline command arguments. Blank lines create gaps;
@@ -445,8 +457,8 @@ only `a` was saved), export refuses with its exact Unicode identity;
 no PDF/PNG is created or overwritten. Author more glyphs in the editor
 or select a deliberate native `--fallback-glyph` mapping. The CLI does
 not yet save semantic notebook body content or offer browser Markdown
-paste/preview, automatic handwriting shapes, cursive joining or aesthetic
-heading lettering.
+paste/preview, automatic handwriting shapes, cursive joining or
+specialty decorative letterforms beyond the simple marker band.
 
 The same Rust-only CLI can draw **explicit caller-owned pen segments** over
 paper, printed dates, and page numbers. A separate `--ink-line` is repeated

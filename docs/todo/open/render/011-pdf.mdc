@@ -97,6 +97,37 @@ There is no saved notebook body-text schema, visual glyph editor, complete
 font/stroke set or image layer; these arguments are export-only. This is
 not a completed P5-011 end-to-end notebook renderer.
 
+## Opt-in marker-style Markdown heading decoration (partial) — 2026-11-03
+
+The Rust `atrament-profiles notebook --flow-markdown` path can now select
+`--heading-style underline|marker|none` and an optional validated
+`--heading-color '#RRGGBB'`. Default behavior remains the existing navy
+single-stroke underline. The marker option uses four parallel, overlapping
+1.4-mm **opaque** pastel strokes on the heading text baseline region,
+drawn **before** the caller-authored glyph ink by the existing physical
+PDF and transparent PNG compositor; it does not synthesize letterforms or
+modify glyph templates. A custom color can also recolor the ordinary
+underline. Bullet marks and page-specific dates/printed paper remain
+independent of heading decoration.
+
+Regression tests verify four colored strips, physical positions and stroke
+order relative to glyph ink, original underline defaults, a no-decoration
+choice that preserves bullets, repeatable genuine PDF/PNG output, malformed
+or duplicate flag refusal, and an unchanged existing target file on every
+refusal. A combined two-page Markdown test checks 36 accented authored
+headings, **144 colored marker strokes**, per-occurrence seeded ink and
+both PDF/PNG page-2 replay. The independent native CLI produced a genuine
+two-page A4 PDF and 596×842 transparent RGBA page-2 PNG; direct pixel
+inspection of an additional one-page PNG found 208 exact selected marker
+pixels and 25 original authored-ink pixels against transparent background.
+Custom heading flags require Markdown flow, and all decorative segments
+count against the unchanged 512-stroke budget and printable bounds.
+
+This is an **export-only** presentation choice, not a saved notebook style,
+translucent marker simulation or browser text composition; neither images
+nor a persisted two-page notebook document are implemented. P5-011 remains
+open for its full native saved-content and image-layer acceptance.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

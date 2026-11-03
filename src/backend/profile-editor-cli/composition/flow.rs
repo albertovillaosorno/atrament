@@ -33,6 +33,7 @@
 //! A bounded text-to-physical-page bridge for the native CLI.
 
 use std::mem::take;
+use std::slice::Iter;
 
 use atrament_handwriting_statistics::{Dimension, HandwritingStatisticsProfile};
 use atrament_notebook_paper_cli::NotebookInkLine;
@@ -102,6 +103,77 @@ impl FlowSource {
     }
 }
 
+/// CLI-only title decoration; immutable canonical glyph templates are
+/// painted after any marker ink, preserving original handwriting strokes.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HeadingStyle {
+    Marker,
+    None,
+    Underline,
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+#[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+pub(super) struct HeadingDecoration {
+    color: Option<[u8; 3]>,
+    style: Option<HeadingStyle>,
+}
+
+impl HeadingDecoration {
+    pub(super) const fn is_selected(self) -> bool {
+        self.color.is_some() || self.style.is_some()
+    }
+
+    pub(super) fn parse(
+        &mut self, flag: &str, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let selected = iter.next().ok_or_else(|| {
+            format!("{flag} requires a heading setting")
+        })?;
+        match flag {
+            "--heading-color" => {
+                if self.color.is_some() {
+                    return Err("--heading-color may appear only once".into());
+                }
+                if selected.len() != 7 || !selected.is_ascii()
+                    || !selected.starts_with('#') {
+                    return Err("heading color must be #RRGGBB".into());
+                }
+                let byte = |start: usize| -> Result<u8, String> {
+                    let digits = selected.get(start..start.saturating_add(2))
+                        .ok_or("heading color must be #RRGGBB")?;
+                    u8::from_str_radix(digits, 16)
+                        .map_err(|_error| "heading color must be #RRGGBB".into())
+                };
+                self.color = Some([byte(1)?, byte(3)?, byte(5)?]);
+            }
+            "--heading-style" => {
+                if self.style.is_some() {
+                    return Err("--heading-style may appear only once".into());
+                }
+                self.style = Some(match selected.as_str() {
+                    "marker" => HeadingStyle::Marker,
+                    "none" => HeadingStyle::None,
+                    "underline" => HeadingStyle::Underline,
+                    _ => return Err(
+                        "heading style must be marker, underline or none".into(),
+                    ),
+                });
+            }
+            _ => return Err("unknown heading setting".into()),
+        }
+        Ok(())
+    }
+
+    pub(super) const fn validate(self) -> Result<(), &'static str> {
+        if matches!(self.style, Some(HeadingStyle::None))
+            && self.color.is_some() {
+            return Err("--heading-color cannot accompany --heading-style none");
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Copy)]
 enum LineStyle {
     Body,
@@ -111,6 +183,7 @@ enum LineStyle {
 
 struct Layout<'model> {
     bottom: u32,
+    heading: HeadingDecoration,
     left: u32,
     lines: Vec<TextRun>,
     ornaments: Vec<NotebookInkLine>,
@@ -295,20 +368,40 @@ impl Layout<'_> {
         }
         let y = self.begin_row()?;
         if matches!(style, LineStyle::Heading) {
-            let mark_y = y
-                .checked_add(self.pitch)
-                .and_then(|end| end.checked_sub(2_300))
-                .ok_or("heading underline position overflow")?;
             let mark_end = start_x
                 .checked_add(extent)
-                .ok_or("heading underline exceeds page")?;
-            self.ornaments.push(NotebookInkLine {
-                page: self.page,
-                start_um: (start_x, mark_y),
-                end_um: (mark_end, mark_y),
-                width_um: 550,
-                rgb: [30, 48, 74],
-            });
+                .ok_or("heading ornament exceeds page")?;
+            match self.heading.style.unwrap_or(HeadingStyle::Underline) {
+                HeadingStyle::Underline => {
+                    let mark_y = y.checked_add(self.pitch)
+                        .and_then(|end| end.checked_sub(2_300))
+                        .ok_or("heading underline position overflow")?;
+                    self.ornaments.push(NotebookInkLine {
+                        page: self.page,
+                        start_um: (start_x, mark_y),
+                        end_um: (mark_end, mark_y),
+                        width_um: 550,
+                        rgb: self.heading.color.unwrap_or([30, 48, 74]),
+                    });
+                }
+                HeadingStyle::Marker => {
+                    // Four overlapping 1.4-mm strokes create a visible
+                    // pastel marker band behind the subsequent glyph ink.
+                    // Existing Rust compositor width/clearance bounds apply.
+                    for lift in [900u32, 1_900, 2_900, 3_900] {
+                        let mark_y = y.checked_add(lift)
+                            .ok_or("heading marker position overflow")?;
+                        self.ornaments.push(NotebookInkLine {
+                            page: self.page,
+                            start_um: (start_x, mark_y),
+                            end_um: (mark_end, mark_y),
+                            width_um: 1_400,
+                            rgb: self.heading.color.unwrap_or([255, 237, 159]),
+                        });
+                    }
+                }
+                HeadingStyle::None => {}
+            }
         }
         if first && matches!(style, LineStyle::Bullet) {
             let x1 = start_x
@@ -402,6 +495,7 @@ pub(super) fn layout_flow(
     source: &FlowSource,
     profile: &NotebookProfile,
     statistics: Option<&HandwritingStatisticsProfile>,
+    decoration: HeadingDecoration,
 ) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
     let (left, top, right, bottom) = profile.printable_rect_um()?;
     let boundaries = UnicodeGraphemeSegmentation;
@@ -429,6 +523,7 @@ pub(super) fn layout_flow(
         }
     }
     let mut layout = Layout {
+        heading: decoration,
         statistics,
         lines: Vec::new(),
         ornaments: Vec::new(),

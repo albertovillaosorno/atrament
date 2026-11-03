@@ -2330,7 +2330,7 @@ fn flow_markdown_wraps_to_two_physical_pages_with_headings_and_bullets() {
         .expect("bounded source");
     let profile = NotebookProfile::default();
     let (runs, decorations, pages) = layout_flow(
-        &source, &profile, None,
+        &source, &profile, None, HeadingDecoration::default(),
     ).expect("measured flow");
     assert_eq!(pages, 2);
     assert_eq!(runs.first().expect("heading").text, "a",
@@ -2391,6 +2391,7 @@ fn flow_wraps_long_unicode_words_by_exact_grapheme_and_preserves_ink() {
     ]).iter()).expect("decomposed authored shape");
     let (runs, _, pages) = layout_flow(
         &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
     ).expect("exact grapheme boundaries");
     assert_eq!(pages, 1);
     assert!(runs.len() > 1);
@@ -2483,6 +2484,7 @@ fn flow_preserves_explicit_ascii_spaces_and_same_ink_advances() {
     ]).iter()).expect("authored a shape");
     let (runs, ornaments, pages) = layout_flow(
         &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
     ).expect("preserved whitespace");
     assert_eq!(pages, 1);
     assert!(ornaments.is_empty());
@@ -2753,4 +2755,164 @@ fn seeded_variation_keeps_exact_nfd_fallback_and_applies_selected_means() {
     assert_eq!(placed.get(1).expect("second NFD").width_um, 457);
     assert_eq!(placed, glyphs.expand(&[], Some(&model))
         .expect("replayed NFD variation"));
+}
+
+#[test]
+fn marker_headings_keep_authored_text_and_bullets_with_colored_ink() {
+    let source = FlowSource::new(FlowFormat::Markdown, "# a\n- a")
+        .expect("bounded Markdown");
+    let mut marker = HeadingDecoration::default();
+    marker.parse("--heading-style", &mut args(&["marker"]).iter())
+        .expect("marker selection");
+    marker.parse("--heading-color", &mut args(&["#E2D16F"]).iter())
+        .expect("exact RGB selection");
+    let (runs, ornaments, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None, marker,
+    ).expect("marker heading measured");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs.first().expect("heading").text, "a");
+    assert_eq!(runs.get(1).expect("bullet").text, "a");
+    assert_eq!(ornaments.len(), 5, "four marker bands and one bullet");
+    for (index, stroke) in ornaments.iter().take(4).enumerate() {
+        assert_eq!(stroke.width_um, 1_400);
+        assert_eq!(stroke.rgb, [0xE2, 0xD1, 0x6F]);
+        assert_eq!(stroke.page, 1);
+        assert_eq!(stroke.start_um.0, runs[0].origin_um.0);
+        assert_eq!(stroke.end_um.0, runs[0].origin_um.0 + 4_000);
+        assert_eq!(stroke.start_um.1,
+            runs[0].origin_um.1 + [900, 1900, 2900, 3900][index]);
+    }
+    assert_eq!(ornaments.last().expect("bullet").width_um, 450);
+
+    let (_, default_ornaments, _) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("original underline unchanged");
+    assert_eq!(default_ornaments.len(), 2);
+    assert_eq!(default_ornaments[0].width_um, 550);
+    assert_eq!(default_ornaments[0].rgb, [30, 48, 74]);
+
+    let mut none = HeadingDecoration::default();
+    none.parse("--heading-style", &mut args(&["none"]).iter())
+        .expect("no heading ornament");
+    let (_, none_ornaments, _) = layout_flow(
+        &source, &NotebookProfile::default(), None, none,
+    ).expect("no ornament measured");
+    assert_eq!(none_ornaments.len(), 1, "bullet remains visible");
+}
+
+#[test]
+fn custom_marker_heading_exports_native_pdf_png_and_replays() {
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "1200", "2400", "3200",
+        "250", "#123456", "--flow-markdown", "# a\n\na",
+    ]);
+    let underline = execute_notebook(&command).expect("default heading")
+        .expect("PDF bytes");
+    command.extend(args(&[
+        "--heading-style", "marker", "--heading-color", "#E2D16F",
+    ]));
+    let pdf = execute_notebook(&command).expect("marker PDF")
+        .expect("PDF bytes");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    assert_ne!(pdf, underline);
+    let content = String::from_utf8_lossy(&pdf);
+    let first_marker = content.find("0.886 0.820 0.435 RG")
+        .expect("exact heading color in native PDF");
+    let glyph_ink = content.find("0.071 0.204 0.337 RG")
+        .expect("original glyph stroke color in native PDF");
+    assert!(first_marker < glyph_ink,
+        "the wide marker band must be laid behind authored glyph ink");
+    assert_eq!(content.matches("0.886 0.820 0.435 RG").count(), 4);
+    assert_eq!(pdf, execute_notebook(&command).expect("replay")
+        .expect("PDF bytes"));
+
+    let mut png = command.clone();
+    let format_at = png.iter().position(|item| item == "pdf")
+        .expect("PDF switch");
+    *png.get_mut(format_at).expect("format value") = "png".into();
+    png.extend(args(&["--dpi", "72"]));
+    let png_bytes = execute_notebook(&png).expect("marker PNG")
+        .expect("PNG bytes");
+    assert!(png_bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(png_bytes, execute_notebook(&png).expect("PNG replay")
+        .expect("PNG bytes"));
+    let mut plain = png.clone();
+    plain.truncate(plain.len() - 6);
+    assert_ne!(png_bytes, execute_notebook(&plain).expect("plain PNG")
+        .expect("PNG bytes"));
+}
+
+#[test]
+fn invalid_heading_decorations_do_not_replace_existing_pdf() {
+    let target = test_path();
+    let filename = target.to_str().expect("owned target");
+    fs::write(&target, b"keep-existing-pdf").expect("sentinel");
+    let base = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "1200", "2400", "3200",
+        "250", "#123456", "--flow-markdown", "# a",
+        "--output", filename, "--replace",
+    ]);
+    for invalid in [
+        args(&["--heading-style", "invalid"]),
+        args(&["--heading-style", "marker", "--heading-style", "none"]),
+        args(&["--heading-color", "#XYZXYZ"]),
+        args(&["--heading-color", "#12345"]),
+        args(&["--heading-color", "#112233", "--heading-color", "#445566"]),
+        args(&["--heading-style", "none", "--heading-color", "#112233"]),
+        args(&["--heading-color"]),
+    ] {
+        let mut command = base.clone();
+        command.extend(invalid);
+        assert!(execute_notebook(&command).is_err(), "{command:?}");
+        assert_eq!(fs::read(&target).expect("unchanged"), b"keep-existing-pdf");
+    }
+    assert!(execute_notebook(&args(&[
+        "--export-paper", "pdf", "--heading-style", "marker",
+    ])).is_err(), "heading customization requires Markdown");
+    fs::remove_file(target).expect("remove test-owned sentinel");
+}
+
+#[test]
+fn marker_and_seeded_handwriting_share_two_measured_pdf_png_pages() {
+    // A real heading-only Markdown page fills, so new marker bands and
+    // varied glyphs must be kept in their assigned physical page order.
+    let markdown = "# á\n".repeat(36);
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "á", "1100", "1300", "2200", "2800",
+        "250", "#123456", "--flow-markdown", &markdown,
+        "--heading-style", "marker", "--heading-color", "#F8DE91",
+        "--glyph-variation", "42", "8", "8", "10", "7", "200", "40",
+    ]);
+    let pdf = execute_notebook(&command).expect("2-page marker and ink PDF")
+        .expect("PDF bytes");
+    let content = String::from_utf8_lossy(&pdf);
+    let streams = content.split("\nstream\n").skip(1)
+        .map(|entry| entry.split("\nendstream").next().unwrap_or(""))
+        .collect::<Vec<_>>();
+    assert_eq!(streams.len(), 2);
+    assert_eq!(content.matches("0.973 0.871 0.569 RG").count(), 144,
+        "four colored background strokes for each Markdown heading");
+    for page in &streams {
+        let marker = page.find("0.973 0.871 0.569 RG")
+            .expect("marker on every page");
+        let glyph = page.find("0.071 0.204 0.337 RG")
+            .expect("authored glyph on every page");
+        assert!(marker < glyph, "marker is below ink on each page");
+    }
+    assert_eq!(pdf, execute_notebook(&command).expect("PDF replay")
+        .expect("replayed bytes"));
+    let format_at = command.iter().position(|entry| entry == "pdf")
+        .expect("format value");
+    *command.get_mut(format_at).expect("format switch") = "png".into();
+    command.extend(args(&["--dpi", "72", "--png-page", "2"]));
+    let png = execute_notebook(&command).expect("page 2 ink and marker")
+        .expect("PNG bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(png, execute_notebook(&command).expect("PNG replay")
+        .expect("PNG bytes"));
 }
