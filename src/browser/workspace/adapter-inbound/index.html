@@ -555,13 +555,22 @@
               <input id="glyph-circle-radius" type="number" min="200"
                 max="1600" step="1" value="1100" disabled>
             </label>
+            <label>Acute horizontal shift (-500–500 µm)
+              <input id="glyph-accent-shift" type="number" min="-500"
+                max="500" step="1" value="0" disabled>
+            </label>
+            <label>Acute lift (0–500 µm)
+              <input id="glyph-accent-lift" type="number" min="0"
+                max="500" step="1" value="0" disabled>
+            </label>
             <button id="glyph-construct" type="button" disabled>
               Replace exact glyph with geometric starter
             </button>
           </div>
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the loop, positioned from circle geometry and
-            pen width. If the accent cannot fit, no ink is replaced.</p>
+            pen width. Shift it horizontally or lift it using the controls.
+            If the accent cannot fit, no ink is replaced.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>
           <svg id="glyph-ideal-preview" class="glyph-stroke-preview"

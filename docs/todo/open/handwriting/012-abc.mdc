@@ -184,6 +184,13 @@ contains 49 segments for `ó` and 50 for `á`; no native curve or anchor
 primitive persists. Decomposed accent graphemes and all other vowel forms
 still require independently authored strokes.
 
+The acute guides additionally admit a signed horizontal shift (-500 to 500
+µm) and a nonnegative lift (0 to 500 µm). Each is visible in the separate
+SVG guide, while invalid or clipped constructions refuse without mutating
+the TSV draft. Browser tests cover adjusted placement and refusal; any
+accepted output remains explicit integer line segments rather than a
+persistent accent attachment.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

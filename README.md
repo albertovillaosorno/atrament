@@ -546,6 +546,12 @@ retain the circle primitive: explicit replacement samples it into 48 rounded
 straight segments, plus a stem or accent for 49 total lines (`a`/`ó`) or
 both for 50 (`á`). This is **near-circular ink**, not an exact curve export.
 
+For `ó` and `á`, **Acute horizontal shift** (-500 to +500 µm) and
+**Acute lift** (0 to 500 µm) adjust the accent's position without moving
+the loop. The exact SVG guide follows those controls before any ink is
+replaced. An invalid offset or insufficient pen clearance refuses the
+entire replacement, leaving the prior glyph untouched.
+
 Invalid coordinates, accent clearance, pen thickness or library caps refuse
 without replacing any template; other graphemes remain untouched. General
 accent anchoring, a two-storey `a` and cursive remain unfinished.

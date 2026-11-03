@@ -141,60 +141,71 @@ export function encodeGlyphLibrary(strokes: Stroke[]): string {
 
 // The construction is defined by an analytic circle; v1 TSV can only
 // preserve its rounded line-segment approximation, not that ideal primitive.
-function acuteAccent(cx: number, cy: number, r: number, pen: number) {
-    const baseline = cy - r - pen - 120;
+function acuteAccent(
+    cx: number, cy: number, radius: number, pen: number,
+    dx: number, lift: number,
+) {
+    const baseline = cy - radius - pen - 120 - lift;
     return {
-        x1: cx - Math.round(r * 0.35), y1: baseline,
-        x2: cx + Math.round(r * 0.25),
-        y2: baseline - Math.round(r * 0.45),
+        x1: cx - Math.round(radius * 0.35) + dx, y1: baseline,
+        x2: cx + Math.round(radius * 0.25) + dx,
+        y2: baseline - Math.round(radius * 0.45),
     };
 }
 
 export function geometricStarter(
-    grapheme: string, x: number, y: number, radius: number,
-    width: number, color: string,
+    g: string, x: number, y: number, r: number, w: number,
+    color: string, pos?: { dx: number; lift: number },
 ): Stroke[] {
-    if (!["o", "a", "ó", "á"].includes(grapheme)) {
+    if (!["o", "a", "ó", "á"].includes(g)) {
         throw new Error("Circle starter requires exact o, a, ó or á");
     }
     const cx = boundedInteger(String(x), 3500, "center X");
     const cy = boundedInteger(String(y), 4500, "center Y");
-    const r = boundedInteger(String(radius), 1600, "radius");
-    const pen = boundedInteger(String(width), 1500, "width");
+    const radius = boundedInteger(String(r), 1600, "radius");
+    const pen = boundedInteger(String(w), 1500, "width");
+    const dx = pos?.dx ?? 0;
+    if (!Number.isSafeInteger(dx) || dx < -500 || dx > 500) {
+        throw new Error("Acute shift must be within -500..500 µm");
+    }
+    const lift = boundedInteger(
+        String(pos?.lift ?? 0), 500, "accent lift");
     const halfPen = pen / 2;
-    if (r < 200 || cx - r < halfPen || cy - r < halfPen
-        || cx + r + halfPen > 3500 || cy + r + halfPen > 4500) {
+    if (radius < 200 || cx - radius < halfPen
+        || cy - radius < halfPen
+        || cx + radius + halfPen > 3500
+        || cy + radius + halfPen > 4500) {
         throw new Error("Circle and pen thickness must fit inside glyph cell");
     }
     const point = (step: number): Point => {
         const radians = 2 * Math.PI * step / CIRCLE_SEGMENTS;
         return {
-            x: Math.round(cx + r * Math.cos(radians)),
-            y: Math.round(cy + r * Math.sin(radians)),
+            x: Math.round(cx + radius * Math.cos(radians)),
+            y: Math.round(cy + radius * Math.sin(radians)),
         };
     };
     const lines = Array.from({ length: CIRCLE_SEGMENTS }, (_, index) => {
         const first = point(index);
         const last = point(index + 1);
         return validateStroke({
-            grapheme, x1: first.x, y1: first.y,
+            grapheme: g, x1: first.x, y1: first.y,
             x2: last.x, y2: last.y, width: pen, color,
         });
     });
-    if (grapheme === "a" || grapheme === "á") {
+    if (g === "a" || g === "á") {
         lines.push(validateStroke({
-            grapheme, x1: cx + r, y1: cy - r,
-            x2: cx + r, y2: cy + r, width: pen, color,
+            grapheme: g, x1: cx + radius, y1: cy - radius,
+            x2: cx + radius, y2: cy + radius, width: pen, color,
         }));
     }
-    if (grapheme === "ó" || grapheme === "á") {
-        const accent = acuteAccent(cx, cy, r, pen);
+    if (g === "ó" || g === "á") {
+        const accent = acuteAccent(cx, cy, radius, pen, dx, lift);
         if (accent.y2 < halfPen || accent.x1 < halfPen
             || accent.x2 + halfPen > 3500) {
             throw new Error("Acute accent and pen must fit inside glyph cell");
         }
         lines.push(validateStroke({
-            grapheme, ...accent, width: pen, color,
+            grapheme: g, ...accent, width: pen, color,
         }));
     }
     return lines;
@@ -221,6 +232,8 @@ export function createGlyphStrokeEditor(): {
     const centerX = required<HTMLInputElement>("glyph-circle-x");
     const centerY = required<HTMLInputElement>("glyph-circle-y");
     const radius = required<HTMLInputElement>("glyph-circle-radius");
+    const accentShift = required<HTMLInputElement>("glyph-accent-shift");
+    const accentLift = required<HTMLInputElement>("glyph-accent-lift");
     const ideal = required<SVGSVGElement>("glyph-ideal-preview");
     const idealCircle = required<SVGCircleElement>("glyph-ideal-circle");
     const idealStem = required<SVGLineElement>("glyph-ideal-stem");
@@ -241,7 +254,7 @@ export function createGlyphStrokeEditor(): {
         ranges[axis] = required<HTMLInputElement>(`glyph-${axis}-range`);
     }
     const controls = [character, color, source, add, copyFrom, copy,
-        form, construct, centerX, centerY, radius,
+        form, construct, centerX, centerY, radius, accentShift, accentLift,
         selected, update,
         remove, reverse, earlier, later, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
@@ -276,7 +289,10 @@ export function createGlyphStrokeEditor(): {
             form.value, Number(centerX.value), Number(centerY.value),
             Number(radius.value), Number(numeric.width.value), color.value,
         ];
-        return geometricStarter(...values);
+        const position = {
+            dx: Number(accentShift.value), lift: Number(accentLift.value),
+        };
+        return geometricStarter(...values, position);
     };
     const renderIdeal = (): void => {
         try {
@@ -302,7 +318,10 @@ export function createGlyphStrokeEditor(): {
             const stemVisible = active && ["a", "á"].includes(form.value);
             const stemState = stemVisible ? "visible" : "hidden";
             idealStem.setAttribute("visibility", stemState);
-            const accent = acuteAccent(cx, cy, r, Number(numeric.width.value));
+            const pen = Number(numeric.width.value);
+            const dx = Number(accentShift.value);
+            const lift = Number(accentLift.value);
+            const accent = acuteAccent(cx, cy, r, pen, dx, lift);
             for (const axis of ["x1", "y1", "x2", "y2"] as const) {
                 idealAccent.setAttribute(axis, String(accent[axis]));
             }
@@ -415,7 +434,9 @@ export function createGlyphStrokeEditor(): {
         width: boundedInteger(numeric.width.value, 1500, "width"),
     });
 
-    for (const control of [form, centerX, centerY, radius, color]) {
+    for (const control of [
+        form, centerX, centerY, radius, color, accentShift, accentLift,
+    ]) {
         control.addEventListener("input", renderIdeal);
         control.addEventListener("change", renderIdeal);
     }

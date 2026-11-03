@@ -95,7 +95,8 @@ function mountEditor() {
     const ids = ["glyph-character", "glyph-color", "glyph-load",
         "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-circle-x",
-        "glyph-circle-y", "glyph-circle-radius", "glyph-ideal-preview",
+        "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
+        "glyph-accent-lift", "glyph-ideal-preview",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
         "glyph-earlier", "glyph-later",
@@ -110,6 +111,8 @@ function mountEditor() {
     get("circle-x").value = "1550";
     get("circle-y").value = "2450";
     get("circle-radius").value = "1100";
+    get("accent-shift").value = "0";
+    get("accent-lift").value = "0";
     for (const [axis, value] of Object.entries({
         x1: 100, y1: 200, x2: 3000, y2: 4200, width: 250,
     })) {
@@ -557,6 +560,25 @@ test("geometric starters share loop and validate acute strokes", () => {
     assert.deepEqual(acuteO.at(-1), { ...accent, grapheme: "ó" });
     assert.deepEqual(acuteA.at(-1), { ...accent, grapheme: "á" });
     assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(acuteO)), acuteO);
+    const shifted = geometricStarter(
+        "ó", 1550, 2450, 1100, 250, "#123456",
+        { dx: -250, lift: 150 },
+    );
+    assert.deepEqual(shifted.slice(0, 48), acuteO.slice(0, 48));
+    assert.deepEqual(shifted.at(-1), {
+        ...accent, grapheme: "ó",
+        x1: 915, y1: 830, x2: 1575, y2: 335,
+    });
+    for (const position of [
+        { dx: 501, lift: 0 }, { dx: -501, lift: 0 },
+        { dx: 0, lift: -1 }, { dx: 0, lift: 501 },
+        { dx: 1.25, lift: 0 },
+    ]) assert.throws(() => geometricStarter(
+        "ó", 1550, 2450, 1100, 250, "#123456", position,
+    ));
+    assert.throws(() => geometricStarter(
+        "ó", 250, 2450, 200, 80, "#123456", { dx: -500, lift: 0 },
+    ), /Acute accent/);
     assert.throws(() => geometricStarter(
         "ó", 1550, 1600, 1100, 250, "#123456",
     ), /Acute accent/);
@@ -604,6 +626,8 @@ test("geometric replacement preserves glyph identity and bounds", async () => {
             get("character").dispatch("input");
             get("form").value = grapheme;
             get("form").dispatch("change");
+            get("accent-shift").value = grapheme === "ó" ? "100" : "0";
+            get("accent-lift").value = grapheme === "ó" ? "100" : "0";
             get("construct").dispatch("click");
             assert.equal(get("preview").children.length, expected);
         }
@@ -611,6 +635,11 @@ test("geometric replacement preserves glyph identity and bounds", async () => {
         get("character").dispatch("input");
         get("form").value = "ó";
         get("form").dispatch("change");
+        get("accent-shift").value = "600";
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Acute shift/);
+        assert.equal(get("preview").children.length, 49);
+        get("accent-shift").value = "100";
         get("circle-y").value = "1600";
         get("construct").dispatch("click");
         assert.match(get("status").textContent, /Acute accent/);
@@ -625,7 +654,8 @@ test("geometric replacement preserves glyph identity and bounds", async () => {
         assert.deepEqual(saved.slice(50, 99), geometricStarter(
             "a", 1550, 2450, 1100, 250, "#243647"));
         assert.deepEqual(saved.slice(99, 148), geometricStarter(
-            "ó", 1550, 2450, 1100, 250, "#243647"));
+            "ó", 1550, 2450, 1100, 250, "#243647",
+            { dx: 100, lift: 100 }));
         assert.deepEqual(saved.slice(148), geometricStarter(
             "á", 1550, 2450, 1100, 250, "#243647"));
         editor.reset();
@@ -662,6 +692,12 @@ test("exact SVG circle guide tracks parameters without saving", async () => {
         assert.equal(get("ideal-accent").attributes.get("visibility"),
             "visible");
         assert.equal(get("ideal-accent").attributes.get("x1"), "1215");
+        get("accent-shift").value = "100";
+        get("accent-shift").dispatch("input");
+        get("accent-lift").value = "120";
+        get("accent-lift").dispatch("input");
+        assert.equal(get("ideal-accent").attributes.get("x1"), "1315");
+        assert.equal(get("ideal-accent").attributes.get("y1"), "860");
         get("form").value = "á";
         get("form").dispatch("change");
         assert.equal(get("ideal-stem").attributes.get("visibility"),
