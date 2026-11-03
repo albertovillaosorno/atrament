@@ -284,8 +284,8 @@ cargo run -q -p atrament_profile_editor_cli -- \
 
 PDF allows 1–32 physical pages; transparent RGBA PNG renders one page at
 72–300 DPI with physical resolution metadata. For `printed_sheet: true`,
-the exported PDF and PNG are **unmarked** overlays: notebook paper marks are
-suppressed to avoid printing duplicate ruling on existing stationery.
+existing ruling is suppressed to avoid duplicating marks on stationery.
+When no date placeholder is selected, PDF and PNG are unmarked overlays.
 
 No profile file is changed by rendering. Output is explicit and existing paths
 require `--replace`; invalid options refuse before changing output bytes.

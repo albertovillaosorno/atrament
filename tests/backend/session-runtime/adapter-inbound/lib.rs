@@ -5683,6 +5683,65 @@ fn notebook_paper_routes_render_rust_approved_pdf_png_and_preprint() {
 }
 
 #[test]
+fn notebook_date_box_and_line_round_trip_through_authenticated_http() {
+    use atrament_notebook_profile::{DatePlacement, DateStyle};
+
+    let mut notebook = NotebookProfile {
+        printed_sheet: true,
+        ..NotebookProfile::default()
+    };
+    notebook.date_style = DateStyle::Box;
+    notebook.date_placement = DatePlacement::TopRight;
+    let body = notebook.canonical_json().expect("native notebook JSON");
+    let pdf = route_runtime(&notebook_paper_request(
+        "pdf", "X-Atrament-Pdf-Pages: 2\r\n", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"), body.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&pdf), "HTTP/1.1 200 OK");
+    assert_eq!(
+        paper_http_body(&pdf),
+        notebook.paper_layer_pdf(2).expect("same native PDF"),
+    );
+    assert_eq!(
+        String::from_utf8_lossy(paper_http_body(&pdf))
+            .matches(" m\n").count(), 8,
+        "one empty date box per preprinted page, no duplicate ruling",
+    );
+    let png = route_runtime(&notebook_paper_request(
+        "png", "X-Atrament-Png-Dpi: 72\r\n", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"), body.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&png), "HTTP/1.1 200 OK");
+    assert_eq!(
+        paper_http_body(&png),
+        notebook.paper_layer_png(72).expect("same native PNG"),
+    );
+    notebook.date_style = DateStyle::Line;
+    notebook.date_placement = DatePlacement::TopLeft;
+    let moved = notebook.canonical_json().expect("moved date JSON");
+    let moved_pdf = route_runtime(&notebook_paper_request(
+        "pdf", "X-Atrament-Pdf-Pages: 2\r\n", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"), moved.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&moved_pdf), "HTTP/1.1 200 OK");
+    assert_ne!(paper_http_body(&pdf), paper_http_body(&moved_pdf));
+    assert_eq!(String::from_utf8_lossy(paper_http_body(&moved_pdf))
+        .matches(" m\n").count(), 2);
+
+    let insufficient_margin = body.replace(
+        "\"margin_top_um\": 22000", "\"margin_top_um\": 9000",
+    );
+    assert_ne!(insufficient_margin, body, "date clearance fixture edited");
+    let rejected = route_runtime(&notebook_paper_request(
+        "pdf", "X-Atrament-Pdf-Pages: 2\r\n", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"),
+        insufficient_margin.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&rejected), "HTTP/1.1 400 Bad Request");
+    assert!(!paper_http_body(&rejected).starts_with(b"%PDF"));
+}
+
+#[test]
 fn notebook_paper_routes_refuse_unauthorized_headers_and_bad_profiles() {
     let profile = NotebookProfile::default()
         .canonical_json().expect("default JSON");
