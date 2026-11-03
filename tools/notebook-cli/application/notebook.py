@@ -205,6 +205,46 @@ def write_json(path, data, replace=False):
     atomic_write(path, lambda f: f.write(payload), replace)
 
 
+def rebase_notebook_assets(doc, source, target):
+    """Keep existing local asset references valid when a JSON file moves."""
+    source_dir = Path(source).resolve().parent
+    target_dir = Path(target).resolve().parent
+    if source_dir == target_dir:
+        return
+
+    def adjusted(value):
+        if (
+            not isinstance(value, str)
+            or not value
+            or Path(value).is_absolute()
+        ):
+            return value
+        return os.path.relpath(source_dir / value, target_dir)
+
+    profile = doc.get("handwriting", {})
+    if isinstance(profile, dict):
+        font = profile.get("font")
+        if (
+            isinstance(font, str)
+            and not Path(font).is_absolute()
+            and (source_dir / font).is_file()
+        ):
+            profile["font"] = adjusted(font)
+        glyphs = profile.get("glyphs", {})
+        if isinstance(glyphs, dict):
+            for custom in glyphs.values():
+                if isinstance(custom, dict) and "image" in custom:
+                    custom["image"] = adjusted(custom["image"])
+    pages = doc.get("pages", [])
+    if isinstance(pages, list):
+        for page in pages:
+            if not isinstance(page, dict):
+                continue
+            for item in page.get("images", []):
+                if isinstance(item, dict) and "path" in item:
+                    item["path"] = adjusted(item["path"])
+
+
 def stat_sample(spec, rng, name):
     if isinstance(spec, (float, int)) and not isinstance(spec, bool):
         return require_number(spec, name)
@@ -1033,6 +1073,7 @@ def do_set_paper(args):
     width, height = validate_notebook(doc, 72)
     sample = Image.new("RGBA", (width, height))
     draw_paper(sample, paper, 72, False, False, False)
+    rebase_notebook_assets(doc, args.config, args.out)
     write_json(args.out, doc, args.replace)
     print(args.out)
 
@@ -1071,6 +1112,7 @@ def do_set_handwriting(args):
         raise ValueError("set-handwriting requires at least one option")
     for key in HANDWRITING_STATS:
         stat_sample(profile[key], random.Random(0), key)
+    rebase_notebook_assets(doc, args.config, args.out)
     write_json(args.out, doc, args.replace)
     print(args.out)
 
@@ -1113,6 +1155,7 @@ def do_set_page(args):
         raise ValueError("set-page requires page content or state changes")
     # Reject overflowing page text and header/footer labels before writing.
     render_page(doc, args.page - 1, 72, source.parent)
+    rebase_notebook_assets(doc, source, args.out)
     write_json(args.out, doc, args.replace)
     print(args.out)
 
@@ -1159,6 +1202,7 @@ def do_add_image(args):
     # This also rejects missing, unsafe, unreadable, or off-sheet images.
     sample = Image.new("RGBA", (width, height))
     draw_picture(sample, target.parent, item, 72)
+    rebase_notebook_assets(doc, source, target)
     images = doc["pages"][page_number - 1].setdefault("images", [])
     if len(images) >= 50:
         raise ValueError("page already contains 50 images")
@@ -1201,6 +1245,7 @@ def do_calibrate(args):
         }
     if all(raw is None for _, raw, _, _ in measurements):
         raise ValueError("provide at least one measurement series")
+    rebase_notebook_assets(doc, source, args.out)
     write_json(args.out, doc, args.replace)
     print(args.out)
 
@@ -1244,6 +1289,7 @@ def do_mark(args):
     selected = parse_pages(args.pages, len(pages))
     for page_idx in selected:
         pages[page_idx]["printed"] = not args.unmark
+    rebase_notebook_assets(doc, args.config, args.out)
     write_json(args.out, doc, args.replace)
     print(
         f"Marked {len(selected)} page(s) "

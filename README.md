@@ -203,6 +203,10 @@ image decoding are validated before the new configuration is written.
 
 `--tint-strength` requires `--tint`; a tint alone defaults to 50% strength.
 
+When writing a modified notebook JSON to a different directory, the editing
+commands also adjust existing relative image paths, custom glyph-image paths,
+and local font paths. Installed font names remain unchanged.
+
 ## Honest current limits
 
 The initial CLI **does produce** multi-page PDF/PNG files, but it is

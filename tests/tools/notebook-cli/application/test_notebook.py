@@ -409,6 +409,94 @@ class NotebookCliTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 2, result.stderr)
                 self.assertFalse(out.exists())
 
+    def test_page_edits_rebase_existing_fonts_glyphs_and_images(self):
+        (self.root / "font.otf").symlink_to(notebook.DEFAULT_FONT)
+        Image.new("RGBA", (12, 12), (0, 0, 0, 255)).save(
+            self.root / "glyph.png"
+        )
+        Image.new("RGB", (12, 12), "blue").save(self.root / "picture.png")
+        self.doc["handwriting"]["font"] = "font.otf"
+        self.doc["handwriting"]["glyphs"]["a"] = {"image": "glyph.png"}
+        self.doc["pages"][0]["images"] = [
+            {
+                "path": "picture.png",
+                "x_mm": 20,
+                "y_mm": 40,
+                "width_mm": 10,
+                "height_mm": 10,
+                "layer": "under",
+            }
+        ]
+        notebook.write_json(self.config, self.doc, replace=True)
+        nested = self.root / "nested"
+        nested.mkdir()
+        target = nested / "updated.json"
+        run = self.run_cli(
+            "set-page",
+            "--config",
+            str(self.config),
+            "--page",
+            "1",
+            "--append-line",
+            "Another a",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        changed = notebook.read_json(target)
+        self.assertEqual(changed["handwriting"]["font"], "../font.otf")
+        self.assertEqual(
+            changed["handwriting"]["glyphs"]["a"]["image"], "../glyph.png"
+        )
+        self.assertEqual(
+            changed["pages"][0]["images"][0]["path"], "../picture.png"
+        )
+        notebook.render_page(changed, 0, 100, target.parent)
+
+    def test_image_addition_rebases_previous_overlays_when_moving_json(self):
+        Image.new("RGB", (8, 8), "blue").save(self.root / "first.png")
+        Image.new("RGB", (8, 8), "red").save(self.root / "second.png")
+        self.doc["pages"][0]["images"] = [
+            {
+                "path": "first.png",
+                "x_mm": 12,
+                "y_mm": 35,
+                "width_mm": 10,
+                "height_mm": 10,
+                "layer": "under",
+            }
+        ]
+        notebook.write_json(self.config, self.doc, replace=True)
+        nested = self.root / "nested"
+        nested.mkdir()
+        target = nested / "two-overlays.json"
+        run = self.run_cli(
+            "add-image",
+            "--config",
+            str(self.config),
+            "--page",
+            "1",
+            "--image",
+            "second.png",
+            "--x-mm",
+            "25",
+            "--y-mm",
+            "45",
+            "--width-mm",
+            "10",
+            "--height-mm",
+            "10",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        doc = notebook.read_json(target)
+        self.assertEqual(
+            [item["path"] for item in doc["pages"][0]["images"]],
+            ["../first.png", "../second.png"],
+        )
+        notebook.render_page(doc, 0, 100, target.parent)
+
     def test_multi_page_pdf_is_a_real_print_size_pdf(self):
         target = self.root / "notes.pdf"
         run = self.run_cli(
