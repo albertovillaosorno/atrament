@@ -67,11 +67,13 @@ heading mark without changing text. List items keep their distinct physical
 ink mark and indentation. Heading styling is CLI-only and does not create
 semantic block styles or persistent title identities.
 
-Ordinary source lines are independently wrapped at word or grapheme
-boundaries; blank lines add paragraph spacing. Long headings refuse
-their single-line fixed region.
-This does **not** implement inline Markdown styling, combined soft-wrapped
-paragraphs, full ordered-list formatting or custom marker letterforms.
+Plain-text lines wrap independently at word or grapheme boundaries;
+Markdown ordinary lines now combine as soft-wrapped paragraphs, with two
+trailing spaces preserving a hard row break. Blank lines add paragraph
+spacing; Markdown headings and bullets end pending body paragraphs before
+their own styled rows. Long headings refuse their single-line fixed region.
+This does **not** implement inline Markdown styling, full ordered-list
+formatting or custom marker letterforms.
 
 Only caller-authored exact glyph strokes render; missing visible shapes still
 refuse with codepoints instead of silently substituting font characters.
@@ -82,6 +84,15 @@ tests cover decomposed Unicode glyph wrapping without dividing a grapheme,
 selected paper margins, exact file-vs-inline output, invalid UTF-8/oversize
 file refusal, and immutable existing output on oversized headings, missing
 shapes and insufficient explicitly requested pages.
+
+Four further native regressions distinguish Markdown soft-wrapped Unicode
+paragraphs from exact plain-text and explicit two-space hard breaks. They
+verify preserved decomposed graphemes, heading/list boundaries, original
+ink expansion, blank-line spacing, and one versus two physical pages for the
+same 40 source lines. Existing two-page PDF/PNG and seeded variation tests
+now use deliberate hard breaks instead of relying on non-Markdown line
+semantics. Real PDF/PNG parity and atomic empty-heading/list refusal are
+also verified. This is still a restricted export-only parser.
 
 The source and resulting ink are export-only CLI state, **not** a
 persisted semantic notebook model.

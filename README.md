@@ -445,8 +445,11 @@ For a notebook profile already saved as `notebook.json`, supply
 instead of defaults.
 
 Use `--flow-text-file` for plain text, or `--flow-text` and
-`--flow-markdown` for inline command arguments. Blank lines create gaps;
-ordinary lines wrap onto additional pages automatically (up to 32).
+`--flow-markdown` for inline command arguments. Plain-text newlines each
+start a physical row. In Markdown, consecutive ordinary lines form one
+soft-wrapped paragraph, while two spaces before a newline request a hard
+row break. Blank lines add spacing and headings/lists end a paragraph.
+Long text wraps and paginates automatically (up to 32 physical pages).
 The Markdown subset supports single-line `#`, `##`, `###` headings and
 `-`/`*` bullets, **not** inline styles, tables or full Markdown.
 The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.

@@ -121,7 +121,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     missing shapes refuse; --glyph-file loads a reusable library. \
     --fallback-glyph borrows a caller-selected existing authored shape \
     for one missing exact grapheme; no implicit or chained mappings. \
-    --flow-text wraps explicit lines and --flow-markdown also recognizes \
+    --flow-text keeps explicit lines; --flow-markdown joins ordinary lines \
+    into paragraphs (two trailing spaces force a new row), and recognizes \
     # headings and -/* list markers; -file options read one bounded local \
     UTF-8 file. Both use physical printable regions and exact authored ink; \
     it auto-selects PDF page count unless --pages is explicit. \

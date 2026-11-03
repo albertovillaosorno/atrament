@@ -540,25 +540,36 @@ pub(super) fn layout_flow(
         right,
         pitch,
     };
+    // A Markdown newline is a soft paragraph wrap, unlike an explicit
+    // line in plain-text mode. Two trailing spaces request a hard line
+    // break. Structural blocks terminate a pending paragraph first.
+    let mut paragraph = String::new();
     for input_line in source.text.lines() {
         let raw = input_line.trim_end_matches(' ');
         if raw.is_empty() {
+            if !paragraph.is_empty() {
+                layout.layout_line(&paragraph, LineStyle::Body)?;
+                paragraph.clear();
+            }
             layout.add_gap()?;
             continue;
         }
         let (style, body) = if source.format == FlowFormat::Markdown {
             ["### ", "## ", "# "]
                 .iter()
-                .find_map(|prefix| raw.strip_prefix(prefix))
+                .find_map(|prefix| input_line.strip_prefix(prefix))
                 .map_or_else(
                     || {
-                        raw.strip_prefix("- ")
-                            .or_else(|| raw.strip_prefix("* "))
+                        input_line.strip_prefix("- ")
+                            .or_else(|| input_line.strip_prefix("* "))
                             .map_or((LineStyle::Body, raw), |bullet| {
-                                (LineStyle::Bullet, bullet)
+                                (LineStyle::Bullet,
+                                    bullet.trim_end_matches(' '))
                             })
                     },
-                    |heading| (LineStyle::Heading, heading),
+                    |heading| {
+                        (LineStyle::Heading, heading.trim_end_matches(' '))
+                    },
                 )
         } else {
             (LineStyle::Body, raw)
@@ -566,7 +577,27 @@ pub(super) fn layout_flow(
         if body.trim().is_empty() {
             return Err("empty Markdown block refused".into());
         }
-        layout.layout_line(body, style)?;
+        if source.format == FlowFormat::Markdown
+            && matches!(style, LineStyle::Body)
+        {
+            if !paragraph.is_empty() {
+                paragraph.push(' ');
+            }
+            paragraph.push_str(body);
+            if input_line.ends_with("  ") {
+                layout.layout_line(&paragraph, LineStyle::Body)?;
+                paragraph.clear();
+            }
+        } else {
+            if !paragraph.is_empty() {
+                layout.layout_line(&paragraph, LineStyle::Body)?;
+                paragraph.clear();
+            }
+            layout.layout_line(body, style)?;
+        }
+    }
+    if !paragraph.is_empty() {
+        layout.layout_line(&paragraph, LineStyle::Body)?;
     }
     if layout.lines.is_empty() {
         return Err("flow has no renderable text".into());

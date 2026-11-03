@@ -2321,7 +2321,7 @@ fn fallback_uses_requested_graphemes_statistical_override() {
 
 #[test]
 fn flow_markdown_wraps_to_two_physical_pages_with_headings_and_bullets() {
-    let markdown = format!("# a\n\na a a\n- a\n{}", "a\n".repeat(34));
+    let markdown = format!("# a\n\na a a\n- a\n{}", "a  \n".repeat(34));
     let mut glyphs = GlyphOverlay::default();
     glyphs.parse("--glyph-stroke", &mut args(&[
         "a", "0", "0", "3500", "4500", "250", "#204060",
@@ -2378,6 +2378,116 @@ fn flow_markdown_wraps_to_two_physical_pages_with_headings_and_bullets() {
     let png_first = execute_notebook(&png_command)
         .expect("page 1 PNG").expect("PNG bytes");
     assert_ne!(png_second, png_first);
+}
+
+#[test]
+fn markdown_soft_wrap_preserves_unicode_and_structural_block_boundaries() {
+    let text = "# a\na \nn\u{303}\n- a\na\n\nn\u{303}";
+    let source = FlowSource::new(FlowFormat::Markdown, text)
+        .expect("admitted Markdown");
+    let (runs, ornaments, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("measured Markdown paragraphs");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.iter().map(|run| run.text.as_str())
+        .collect::<Vec<_>>(), ["a", "a n\u{303}", "a", "a", "n\u{303}"]);
+    assert_eq!(ornaments.len(), 2, "heading underline and list bullet");
+    assert_eq!(runs[1].origin_um.1 - runs[0].origin_um.1, 9_000);
+    assert_eq!(runs[2].origin_um.1 - runs[1].origin_um.1, 9_000);
+    assert_eq!(runs[4].origin_um.1 - runs[3].origin_um.1, 13_000,
+        "blank Markdown line adds a paragraph gap");
+
+    let mut glyphs = GlyphOverlay::default();
+    for grapheme in ["a", "n\u{303}"] {
+        glyphs.parse("--glyph-stroke", &mut args(&[
+            grapheme, "0", "0", "3500", "4500", "250", "#204060",
+        ]).iter()).expect("authored exact NFC/NFD shape");
+    }
+    glyphs.runs = runs;
+    assert_eq!(glyphs.expand(&[], None)
+        .expect("all exact graphemes render").len(), 6);
+
+    let plain = FlowSource::new(FlowFormat::Plain, "a\nn\u{303}")
+        .expect("plain text source");
+    let (plain_runs, _, _) = layout_flow(
+        &plain, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("plain newlines remain physical rows");
+    assert_eq!(plain_runs.iter().map(|run| run.text.as_str())
+        .collect::<Vec<_>>(), ["a", "n\u{303}"]);
+}
+
+#[test]
+fn markdown_soft_and_hard_breaks_change_measured_page_count() {
+    let soft = FlowSource::new(FlowFormat::Markdown, &"a\n".repeat(40))
+        .expect("soft-wrapped paragraph");
+    let hard = FlowSource::new(FlowFormat::Markdown, &"a  \n".repeat(40))
+        .expect("hard breaks");
+    let plain = FlowSource::new(FlowFormat::Plain, &"a\n".repeat(40))
+        .expect("plain lines");
+    let profile = NotebookProfile::default();
+    let counts = [soft, hard, plain].map(|source| {
+        let (runs, _, pages) = layout_flow(
+            &source, &profile, None, HeadingDecoration::default(),
+        ).expect("bounded physical flow");
+        (runs.len(), pages)
+    });
+    assert_eq!(counts[0].1, 1, "soft wraps consume only measured rows");
+    assert!(counts[0].0 < 40);
+    assert_eq!(counts[1], (40, 2), "two spaces request hard rows");
+    assert_eq!(counts[2], (40, 2), "plain text keeps authored rows");
+}
+
+#[test]
+fn markdown_soft_wrap_exports_same_real_pages_as_explicit_paragraph() {
+    let base = args(&[
+        "--printed-sheet", "true", "--glyph-stroke", "a",
+        "0", "0", "3500", "4500", "250", "#123456",
+        "--glyph-stroke", "n\u{303}", "0", "0", "3500", "4500",
+        "250", "#123456",
+    ]);
+    for format in ["pdf", "png"] {
+        let mut option = base.clone();
+        option.extend(args(&["--export-paper", format]));
+        if format == "png" {
+            option.extend(args(&["--dpi", "72"]));
+        }
+        let render = |text: &str| {
+            let mut command = option.clone();
+            command.extend(args(&["--flow-markdown", text]));
+            execute_notebook(&command)
+                .expect("native rendered Markdown").expect("image bytes")
+        };
+        let soft = render("a\nn\u{303}");
+        let joined = render("a n\u{303}");
+        let hard = render("a  \nn\u{303}");
+        assert_eq!(soft, joined, "soft break matches explicit space");
+        assert_ne!(soft, hard, "hard row break changes physical ink");
+        if format == "pdf" {
+            assert!(soft.starts_with(b"%PDF-1.4"));
+        } else {
+            assert!(soft.starts_with(b"\x89PNG\r\n\x1a\n"));
+        }
+    }
+}
+
+#[test]
+fn markdown_invalid_structural_block_preserves_existing_output() {
+    let target = test_path();
+    let filename = target.to_str().expect("test-owned output path");
+    fs::write(&target, b"existing PDF").expect("sentinel");
+    for source in ["a\n- ", "a\n* ", "a\n# ", "a\n## ", "a\n### "] {
+        let error = execute_notebook(&args(&[
+            "--export-paper", "pdf", "--glyph-stroke", "a", "0", "0",
+            "3500", "4500", "250", "#123456", "--flow-markdown",
+            source, "--output", filename, "--replace",
+        ])).expect_err("empty structural Markdown block must refuse");
+        assert!(error.contains("empty Markdown block refused"), "{error}");
+        assert_eq!(fs::read(&target).expect("preserved sentinel"),
+            b"existing PDF");
+    }
+    fs::remove_file(target).expect("remove test-owned output");
 }
 
 #[test]
@@ -2670,7 +2780,7 @@ fn invalid_native_variation_is_atomic_and_disallows_hidden_sampling() {
 fn seeded_notebook_markdown_flow_varies_across_physical_pages() {
     // The existing measured-flow layout, heading and bullet rules are
     // unchanged; native ink variation is applied after pagination.
-    let markdown = format!("# á\n\n- á á\n{}", "á\n".repeat(34));
+    let markdown = format!("# á\n\n- á á\n{}", "á  \n".repeat(34));
     let original = args(&[
         "--printed-sheet", "true", "--export-paper", "pdf",
         "--glyph-stroke", "á", "900", "1200", "2400", "3100",
