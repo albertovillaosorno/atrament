@@ -260,7 +260,7 @@ test("static workspace starts session controls disabled", async () => {
 function hasUnreviewedFetchReference(source, main, paper = false) {
     const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     const references = executable.match(/\bfetch\b/gu) ?? [];
-    return references.length !== (main ? 4 : paper)
+    return references.length !== (main ? 4 : Number(paper))
         || /\bfetchLater\b/u.test(executable);
 }
 
@@ -529,7 +529,7 @@ function hasUnreviewedDocumentAuthority(source, main, typed, paper = false,
         "document.getElementById(id)",
         'document.createElement("a")',
     ]) {
-        if (remaining.split(site).length - 1 !== paper) {
+        if (remaining.split(site).length - 1 !== Number(paper)) {
             return true;
         }
         remaining = remaining.replaceAll(site, "");
@@ -1558,7 +1558,7 @@ function usesUnreviewedBrowserNavigation(source, main, paper = false) {
         remaining = remaining.replaceAll(site, "");
     }
     // One anchor click is confined to an explicit local Blob download.
-    if (remaining.split("link.click()").length - 1 !== paper) {
+    if (remaining.split("link.click()").length - 1 !== Number(paper)) {
         return true;
     }
     remaining = remaining.replaceAll("link.click()", "");
@@ -1740,7 +1740,7 @@ function hasUnreviewedDynamicResourceAuthority(source, main, paper = false,
         'document.createElement("a")',
         "link.href = url",
     ]) {
-        if (remaining.split(site).length - 1 !== paper) {
+        if (remaining.split(site).length - 1 !== Number(paper)) {
             return true;
         }
         remaining = remaining.replaceAll(site, "");
