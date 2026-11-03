@@ -940,6 +940,7 @@ name = "atrament_session_runtime"
 version = "0.1.0"
 dependencies = [
  "atrament_diagnostic",
+ "atrament_notebook_paper_cli",
  "atrament_session_draft",
  "atrament_session_draft_port",
  "atrament_session_handshake",

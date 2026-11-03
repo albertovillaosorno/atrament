@@ -105,6 +105,13 @@ cargo run -q -p atrament_notebook_paper_cli -- \
 
 The explicit file-saving transport is Linux-only for now. Without `--output`,
 the original stdout PDF/JSON behavior remains unchanged.
+The authenticated localhost runtime also exposes this **same Rust authority**.
+After a compatible session handshake, `GET /api/paper/profile` returns the
+canonical default JSON; `POST /api/paper/profile` checks and canonicalizes a
+paper-only profile; and `POST /api/paper/pdf` produces its physical vector
+PDF. The POST routes require the exact session Origin, Bearer credential and
+bounded JSON input. This API does not yet save files or render handwriting.
+
 
 
 For a reusable paper-only profile, the same CLI can emit versioned JSON,

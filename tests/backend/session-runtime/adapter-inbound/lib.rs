@@ -112,11 +112,12 @@ fn route_runtime(request: &[u8], host: &str) -> Vec<u8> {
 }
 
 fn status_line(response: &[u8]) -> &str {
-    std::str::from_utf8(response)
-        .expect("response is UTF-8")
-        .split("\r\n")
-        .next()
-        .expect("response has status line")
+    let end = response
+        .windows(2)
+        .position(|window| window == b"\r\n")
+        .expect("HTTP response has status line terminator");
+    std::str::from_utf8(&response[..end])
+        .expect("HTTP status line is ASCII")
 }
 
 #[test]
@@ -4877,4 +4878,175 @@ fn adapter_requires_exactly_one_route_specific_application_diagnostic() {
         response_text.starts_with("HTTP/1.1 500 Internal Server Error\r\n")
     );
     assert!(!response_text.contains("atrament.session-draft.resource-limit"));
+}
+
+fn paper_endpoint_request(
+    method: &str,
+    target: &str,
+    authorization: Option<&str>,
+    origin: Option<&str>,
+    media_type: Option<&str>,
+    body: &[u8],
+) -> Vec<u8> {
+    let mut head = format!(
+        "{method} {target} HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n",
+    );
+    if let Some(secret) = authorization {
+        head.push_str(&format!("Authorization: Bearer {secret}\r\n"));
+    }
+    if let Some(value) = origin {
+        head.push_str(&format!("Origin: {value}\r\n"));
+    }
+    if let Some(value) = media_type {
+        head.push_str(&format!("Content-Type: {value}\r\n"));
+    }
+    if method == "POST" {
+        head.push_str(&format!("Content-Length: {}\r\n", body.len()));
+    }
+    head.push_str("\r\n");
+    let mut bytes = head.into_bytes();
+    bytes.extend_from_slice(body);
+    bytes
+}
+
+fn paper_http_body(response: &[u8]) -> &[u8] {
+    let position = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .expect("complete HTTP response has a header separator");
+    &response[position + 4..]
+}
+
+#[test]
+fn authenticated_paper_profile_is_canonical_and_renders_native_pdf() {
+    let request = paper_endpoint_request(
+        "GET", "/api/paper/profile", Some(EXPECTED_SECRET), None, None, b"",
+    );
+    let response = route_runtime(&request, EXPECTED_HOST);
+    assert_eq!(status_line(&response), "HTTP/1.1 200 OK");
+    assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
+    let profile = paper_http_body(&response);
+    let profile_text = std::str::from_utf8(profile).expect("UTF-8 profile");
+    assert!(profile_text.contains("\"schema\": \"atrament.paper.v1\""));
+    assert!(profile_text.contains("\"style\": \"grid\""));
+    let canonical = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/paper/profile", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"), profile,
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&canonical), "HTTP/1.1 200 OK");
+    assert_eq!(paper_http_body(&canonical), profile);
+    let rendered = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/paper/pdf", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"), profile,
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&rendered), "HTTP/1.1 200 OK");
+    assert!(rendered.windows(b"Content-Type: application/pdf".len()).any(
+        |window| window == b"Content-Type: application/pdf"
+    ));
+    let pdf = paper_http_body(&rendered);
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    assert!(String::from_utf8_lossy(pdf).contains(
+        "/MediaBox [0 0 595.276 841.890]"
+    ));
+    assert!(!pdf.is_empty());
+}
+
+#[test]
+fn paper_api_does_not_leak_profiles_without_authentication() {
+    for (method, target) in [
+        ("GET", "/api/paper/profile"),
+        ("POST", "/api/paper/profile"),
+        ("POST", "/api/paper/pdf"),
+    ] {
+        for authorization in [None, Some("b".repeat(64))] {
+            let response = route_runtime(
+                &paper_endpoint_request(
+                    method, target, authorization.as_deref(),
+                    Some(EXPECTED_ORIGIN), Some("application/json"),
+                    if method == "GET" { b"" } else { b"{}" },
+                ),
+                EXPECTED_HOST,
+            );
+            assert_eq!(status_line(&response), "HTTP/1.1 401 Unauthorized");
+            assert!(!String::from_utf8_lossy(&response).contains("atrament.paper.v1"));
+        }
+    }
+}
+
+#[test]
+fn paper_post_requires_exact_origin_and_json_media_type() {
+    let get = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/paper/profile", Some(EXPECTED_SECRET),
+            None, None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    let profile = paper_http_body(&get);
+    for origin in [None, Some("http://evil.example"), Some("null")] {
+        let response = route_runtime(
+            &paper_endpoint_request(
+                "POST", "/api/paper/pdf", Some(EXPECTED_SECRET),
+                origin, Some("application/json"), profile,
+            ),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&response), "HTTP/1.1 401 Unauthorized");
+    }
+    for media_type in [None, Some("text/plain"), Some("application/pdf")] {
+        let response = route_runtime(
+            &paper_endpoint_request(
+                "POST", "/api/paper/pdf", Some(EXPECTED_SECRET),
+                Some(EXPECTED_ORIGIN), media_type, profile,
+            ),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&response), "HTTP/1.1 400 Bad Request");
+    }
+}
+
+#[test]
+fn paper_api_refuses_unknown_fields_invalid_geometry_and_oversized_json() {
+    let get = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/paper/profile", Some(EXPECTED_SECRET),
+            None, None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    let canonical = std::str::from_utf8(paper_http_body(&get))
+        .expect("profile UTF-8");
+    let invalid = [
+        canonical.replace("\"schema\"", "\"unknown\""),
+        canonical.replace("\"spacing_um\": 5000", "\"spacing_um\": 0"),
+        canonical.replace("\"width_um\": 210000", "\"width_um\": 1"),
+        canonical.replace("atrament.paper.v1", "atrament.paper.v2"),
+    ];
+    for profile in invalid {
+        let response = route_runtime(
+            &paper_endpoint_request(
+                "POST", "/api/paper/pdf", Some(EXPECTED_SECRET),
+                Some(EXPECTED_ORIGIN), Some("application/json"),
+                profile.as_bytes(),
+            ),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&response), "HTTP/1.1 400 Bad Request");
+        assert!(!paper_http_body(&response).starts_with(b"%PDF"));
+    }
+    let oversized = vec![b'a'; 4_097];
+    let response = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/paper/pdf", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"), &oversized,
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&response), "HTTP/1.1 413 Content Too Large");
 }

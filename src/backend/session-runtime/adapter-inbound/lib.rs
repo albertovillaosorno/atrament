@@ -44,10 +44,19 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
 use std::time::{Duration, Instant};
 
+#[cfg(test)]
+use atrament_session_draft as _;
+#[cfg(test)]
+use atrament_session_handshake as _;
+
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, DIAGNOSTIC_VERSION, Diagnostic,
     DiagnosticCode, DiagnosticSet, Evidence, EvidenceUnit, LocationKind,
     LocationRole, Operation, Remediation, Severity,
+};
+use atrament_notebook_paper_cli::{
+    MAX_PROFILE_BYTES, canonical_paper_profile_json,
+    default_paper_profile_json, paper_profile_pdf,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
@@ -63,6 +72,7 @@ const CSS_CONTENT_TYPE: &str = "text/css; charset=utf-8";
 const JAVASCRIPT_CONTENT_TYPE: &str = "text/javascript; charset=utf-8";
 const TEXT_CONTENT_TYPE: &str = "text/plain; charset=utf-8";
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
+const PDF_CONTENT_TYPE: &str = "application/pdf";
 const RESPONSE_TRAILERS: &str = concat!(
     "Cache-Control: no-store\r\n",
     // A hostile local page must not keep an opener reference to the
@@ -895,6 +905,86 @@ fn request_origin_is_admitted(request: &[u8], expected_origin: &str) -> bool {
     request_has_exact_origin(request, expected_origin)
 }
 
+fn route_paper_profile(
+    request: &[u8],
+    method: &str,
+    target: &str,
+    context: &RouteRequestContext<'_>,
+) -> Vec<u8> {
+    let origin_ok = if method == "GET" {
+        request_origin_is_admitted(request, context.expected_origin)
+    } else {
+        request_has_exact_origin(request, context.expected_origin)
+    };
+    if !request_has_session_credential(request, context.expected_secret)
+        || !origin_ok
+    {
+        return json_response(
+            "401 Unauthorized",
+            br#"{"error":"unauthenticated"}"#,
+        );
+    }
+    if method == "GET" && target == "/api/paper/profile" {
+        return json_response(
+            "200 OK",
+            default_paper_profile_json().as_bytes(),
+        );
+    }
+    if method != "POST" {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    }
+    if !single_header_value(request, "content-type").is_some_and(
+        |type_name| {
+            type_name.eq_ignore_ascii_case("application/json")
+                || type_name.eq_ignore_ascii_case(JSON_CONTENT_TYPE)
+        },
+    ) {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    }
+    let Some(body) = request_body(request) else {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    };
+    if body.len() > MAX_PROFILE_BYTES {
+        return json_response(
+            "413 Content Too Large",
+            br#"{"error":"paper_profile_too_large"}"#,
+        );
+    }
+    match target {
+        "/api/paper/profile" => {
+            match canonical_paper_profile_json(body) {
+                Ok(json) => {
+                    json_response("200 OK", json.as_bytes())
+                },
+                Err(_error) => json_response(
+                    "400 Bad Request",
+                    br#"{"error":"invalid_paper_profile"}"#,
+                ),
+            }
+        },
+        "/api/paper/pdf" => match paper_profile_pdf(body) {
+            Ok(pdf) => response("200 OK", PDF_CONTENT_TYPE, &pdf),
+            Err(_error) => json_response(
+                "400 Bad Request",
+                br#"{"error":"invalid_paper_profile"}"#,
+            ),
+        },
+        _ => json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        ),
+    }
+}
+
 fn draft_field_for_target(target: &str) -> Option<DraftField> {
     match target {
         "/api/session/candidate" => Some(DraftField::Candidate),
@@ -1224,6 +1314,14 @@ pub fn route_request(
             );
         }
         return accepted_end_response();
+    }
+    if matches!(parsed.target, "/api/paper/profile" | "/api/paper/pdf") {
+        return route_paper_profile(
+            request,
+            parsed.method,
+            parsed.target,
+            context,
+        );
     }
     if let Some(field) = draft_field_for_target(parsed.target) {
         return match parsed.method {

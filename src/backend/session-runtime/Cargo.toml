@@ -7,6 +7,7 @@ license = "MIT"
 
 [dependencies]
 atrament_diagnostic = { workspace = true }
+atrament_notebook_paper_cli = { path = "../notebook-paper-cli" }
 atrament_session_draft_port = { workspace = true }
 atrament_session_handshake_port = { workspace = true }
 
