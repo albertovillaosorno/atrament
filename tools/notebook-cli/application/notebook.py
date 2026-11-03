@@ -111,6 +111,27 @@ DEFAULT = {
 }
 
 
+PAPER_NUMBER_OPTIONS = {
+    "width_mm": (40, 500),
+    "height_mm": (40, 700),
+    "spacing_mm": (1, 50),
+    "margin_top_mm": (0, 700),
+    "margin_bottom_mm": (0, 700),
+    "margin_left_mm": (0, 500),
+    "margin_right_mm": (0, 500),
+    "corner_radius_mm": (0, 30),
+    "date_y_mm": (0, 50),
+}
+PAPER_CHOICE_OPTIONS = {
+    "style": ("blank", "ruled", "grid", "dot"),
+    "date_style": ("none", "plain", "box", "underline"),
+    "date_side": ("left", "right"),
+    "page_number_style": ("none", "bottom-left", "bottom-right"),
+}
+PAPER_COLOR_OPTIONS = ("line_color", "margin_color", "border_color")
+PAPER_BOOLEAN_OPTIONS = ("draw_margin", "draw_border")
+
+
 def require_number(value, name, low=None, high=None):
     if (
         isinstance(value, bool)
@@ -971,6 +992,42 @@ def do_render(args):
         print(args.out)
 
 
+def do_set_paper(args):
+    doc = read_json(Path(args.config))
+    paper = doc.get("paper")
+    if not isinstance(paper, dict):
+        raise TypeError("paper must be an object")
+    changed = False
+    for key, (low, high) in PAPER_NUMBER_OPTIONS.items():
+        value = getattr(args, key)
+        if value is not None:
+            paper[key] = require_number(value, f"paper.{key}", low, high)
+            changed = True
+    for key in PAPER_CHOICE_OPTIONS:
+        value = getattr(args, key)
+        if value is not None:
+            paper[key] = value
+            changed = True
+    for key in PAPER_COLOR_OPTIONS:
+        value = getattr(args, key)
+        if value is not None:
+            color(value)
+            paper[key] = value
+            changed = True
+    for key in PAPER_BOOLEAN_OPTIONS:
+        value = getattr(args, key)
+        if value is not None:
+            paper[key] = value
+            changed = True
+    if not changed:
+        raise ValueError("set-paper requires at least one paper option")
+    width, height = validate_notebook(doc, 72)
+    sample = Image.new("RGBA", (width, height))
+    draw_paper(sample, paper, 72, False, False, False)
+    write_json(args.out, doc, args.replace)
+    print(args.out)
+
+
 def do_calibrate(args):
     source = Path(args.config)
     doc = read_json(source)
@@ -1107,6 +1164,25 @@ def main(argv=None):
     )
     p.add_argument("--replace", action="store_true")
     p.set_defaults(run=do_render)
+    p = cmds.add_parser(
+        "set-paper", help="change sheet size, rules, margins and date layout"
+    )
+    p.add_argument("--config", required=True)
+    for key in PAPER_NUMBER_OPTIONS:
+        p.add_argument(f"--{key.replace('_', '-')}", type=float)
+    for key, values in PAPER_CHOICE_OPTIONS.items():
+        p.add_argument(f"--{key.replace('_', '-')}", choices=values)
+    for key in PAPER_COLOR_OPTIONS:
+        p.add_argument(f"--{key.replace('_', '-')}")
+    for key in PAPER_BOOLEAN_OPTIONS:
+        p.add_argument(
+            f"--{key.replace('_', '-')}",
+            action=argparse.BooleanOptionalAction,
+            default=None,
+        )
+    p.add_argument("--out", required=True)
+    p.add_argument("--replace", action="store_true")
+    p.set_defaults(run=do_set_paper)
     p = cmds.add_parser(
         "calibrate",
         help="enter manually measured per-letter geometry samples",

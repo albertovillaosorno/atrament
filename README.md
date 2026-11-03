@@ -44,10 +44,17 @@ Pillow is not installed. There is no app server or network account.
 
 ```sh
 python3 cli/notebook.py init --out my-notebook.json
-# Edit the JSON: paper, handwriting, pages, images, and dates.
-python3 cli/notebook.py render --config my-notebook.json \
+# Choose physical paper parameters without manually editing its JSON.
+python3 cli/notebook.py set-paper --config my-notebook.json \
+  --style grid --width-mm 210 --height-mm 297 --spacing-mm 5 \
+  --margin-top-mm 22 --margin-bottom-mm 16 \
+  --margin-left-mm 20 --margin-right-mm 14 \
+  --corner-radius-mm 3 --date-style box \
+  --out grid-notebook.json
+# Edit the JSON for content, photographs and handwriting details.
+python3 cli/notebook.py render --config grid-notebook.json \
   --format pdf --dpi 300 --out homework.pdf
-python3 cli/notebook.py render --config my-notebook.json \
+python3 cli/notebook.py render --config grid-notebook.json \
   --format png --dpi 300 --transparent --out transparent-pages/
 # Optional: explicitly send the generated PDF to the local printer.
 python3 cli/notebook.py print --pdf homework.pdf
@@ -65,6 +72,11 @@ File writes refuse overwrite unless `--replace` is supplied. Image paths and
 custom glyph-image paths are resolved relative to the notebook JSON file.
 Raster PNG pages are full-sheet RGBA, so they align with a photographed or
 preprinted physical page.
+
+`set-paper` supports `--line-color`, `--margin-color`, `--border-color`, date
+location, and `--no-draw-margin`/`--no-draw-border`. Changing the sheet can
+make existing lines or labels overflow; `render` will refuse these instead of
+clipping them.
 
 Multi-page PNG rendering stages all pages before publishing any; a later-page
 layout failure leaves existing exported pages untouched. Filesystem failures

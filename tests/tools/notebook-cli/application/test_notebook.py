@@ -65,6 +65,73 @@ class NotebookCliTests(unittest.TestCase):
             check=False,
         )
 
+    def test_set_paper_configures_physical_grid_and_margins(self):
+        target = self.root / "grid.json"
+        run = self.run_cli(
+            "set-paper",
+            "--config",
+            str(self.config),
+            "--style",
+            "grid",
+            "--width-mm",
+            "105",
+            "--height-mm",
+            "148",
+            "--spacing-mm",
+            "5",
+            "--margin-top-mm",
+            "19",
+            "--margin-bottom-mm",
+            "13",
+            "--margin-left-mm",
+            "11",
+            "--margin-right-mm",
+            "12",
+            "--corner-radius-mm",
+            "3",
+            "--date-style",
+            "underline",
+            "--date-side",
+            "left",
+            "--date-y-mm",
+            "5",
+            "--line-color",
+            "#123abc",
+            "--no-draw-border",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        paper = notebook.read_json(target)["paper"]
+        self.assertEqual(paper["style"], "grid")
+        self.assertEqual(paper["width_mm"], 105)
+        self.assertEqual(paper["margin_bottom_mm"], 13)
+        self.assertEqual(paper["spacing_mm"], 5)
+        self.assertEqual(paper["date_style"], "underline")
+        self.assertEqual(paper["line_color"], "#123abc")
+        self.assertFalse(paper["draw_border"])
+        self.doc["paper"] = paper
+        image = notebook.render_page(self.doc, 0, 100, self.root)
+        self.assertEqual(image.size, (413, 583))
+        x = notebook.point_mm(11, 100) + 4 * notebook.point_mm(5, 100)
+        y = notebook.point_mm(19, 100) + 10 * notebook.point_mm(5, 100)
+        self.assertEqual(image.getpixel((x, y))[:3], (0x12, 0x3A, 0xBC))
+
+    def test_set_paper_rejects_invalid_or_missing_changes_without_output(self):
+        for extra in ((), ("--spacing-mm", "0"), ("--margin-left-mm", "95")):
+            with self.subTest(options=extra):
+                target = self.root / "invalid.json"
+                run = self.run_cli(
+                    "set-paper",
+                    "--config",
+                    str(self.config),
+                    *extra,
+                    "--out",
+                    str(target),
+                )
+                self.assertEqual(run.returncode, 2, run.stderr)
+                self.assertFalse(target.exists())
+
     def test_multi_page_pdf_is_a_real_print_size_pdf(self):
         target = self.root / "notes.pdf"
         run = self.run_cli(
