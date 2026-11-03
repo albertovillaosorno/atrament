@@ -196,6 +196,12 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         await settle();
         assert.match(elements.get("notebook-status").textContent,
             /reopened from local Rust/);
+        assert.equal(elements.get("notebook-radius").value, "3.5");
+        assert.equal(elements.get("notebook-radius-range").value, "3.5");
+        assert.equal(elements.get("notebook-date-style").value, "box");
+        assert.equal(elements.get("notebook-date-placement").value,
+            "top-right");
+        assert.equal(elements.get("notebook-page-numbers").checked, true);
         elements.get("notebook-printed-sheet").checked = false;
         elements.get("notebook-local-save").dispatch("click");
         await settle();

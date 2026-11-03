@@ -354,6 +354,15 @@ test("handwriting local file stores checked revisions and declines stale saves",
         await tick();
         await tick();
         assert.equal(b.elements.get("handwriting-seed").value, "11");
+        edit(b.elements, "handwriting-dimension", "width", "change");
+        edit(b.elements, "handwriting-minimum", "2000");
+        edit(b.elements, "handwriting-maximum", "2600");
+        edit(b.elements, "handwriting-mean-range", "2300");
+        edit(b.elements, "handwriting-median", "2300");
+        edit(b.elements, "handwriting-standard_deviation-range", "100");
+        assert.equal(b.elements.get("handwriting-mean").value, "2300");
+        assert.match(b.elements.get("handwriting-preview").textContent,
+            /range 2000…2600, mean 2300, median 2300, deviation 100/);
         edit(b.elements, "handwriting-seed", "12");
         b.elements.get("handwriting-local-save").dispatch("click");
         await tick();
@@ -361,6 +370,19 @@ test("handwriting local file stores checked revisions and declines stale saves",
         assert.equal(b.requests.at(-1).headers["X-Atrament-Profile-Revision"],
             "sha256:" + "a".repeat(64));
         assert.equal(diskProfile.seed, 12);
+        const storedWidth = diskProfile.globals.find(
+            (entry) => entry.dimension === "width");
+        assert.deepEqual([storedWidth.minimum, storedWidth.maximum,
+            storedWidth.mean, storedWidth.median,
+            storedWidth.standard_deviation], [2000, 2600, 2300, 2300, 100]);
+        b.elements.get("handwriting-local-load").dispatch("click");
+        await tick();
+        await tick();
+        edit(b.elements, "handwriting-dimension", "width", "change");
+        assert.equal(b.elements.get("handwriting-mean").value, "2300");
+        assert.equal(b.elements.get("handwriting-mean-range").value, "2300");
+        assert.match(b.elements.get("handwriting-preview").textContent,
+            /range 2000…2600, mean 2300, median 2300, deviation 100/);
         diskRevision = "sha256:" + "c".repeat(64);
         edit(b.elements, "handwriting-seed", "13");
         b.elements.get("handwriting-local-save").dispatch("click");
