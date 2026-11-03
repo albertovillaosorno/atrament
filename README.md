@@ -183,6 +183,10 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --set-glyph 'ñ' width 1800 2600 2200 2200 200 \
   --output handwriting.json --replace
 cargo run -q -p atrament_profile_editor_cli -- \
+  handwriting --profile handwriting.json \
+  --remove-glyph-dimension 'ñ' width \
+  --output handwriting.json --replace
+cargo run -q -p atrament_profile_editor_cli -- \
   handwriting --profile handwriting.json --inspect
 cargo run -q -p atrament_profile_editor_cli -- \
   paper --style ruled --emit-profile --output paper.json
@@ -194,8 +198,12 @@ Each statistical edit requires the dimension name followed by **minimum,
 maximum, mean, median, and standard deviation** in that dimension's native
 units: micrometres, millidegrees, or parts per thousand. Ten named global
 variables and exact per-grapheme overrides, including decomposed accents,
-are supported. The default profile is **not calibrated handwriting**; the
-seed is recorded but no stochastic stroke generator is connected yet.
+are supported. `--remove-glyph GRAPHEME` removes an entire exact glyph,
+`--remove-glyph-dimension GRAPHEME DIM` restores that dimension to its
+global value, and removing the last override deletes the empty glyph.
+Missing glyphs or dimensions refuse before saving. The default profile
+is **not calibrated handwriting**; its seed is recorded, but no stochastic
+stroke generator is connected yet.
 
 `--profile` must come before statistical edits. Input is limited to 1 MiB,
 unknown/duplicate fields or impossible statistics refuse, and output is

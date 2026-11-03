@@ -342,6 +342,10 @@ pub enum HandwritingStatisticsError {
     InvalidGrapheme(usize),
     /// A global dimension is missing.
     MissingGlobal(Dimension),
+    /// A requested dimension is not overridden for this glyph.
+    MissingGlyphDimension(Dimension),
+    /// A requested exact glyph override is absent.
+    MissingGlyphOverride,
     /// Too many grapheme overrides were supplied.
     TooManyGlyphs,
     /// The profile version is not admitted by this implementation.
@@ -568,6 +572,55 @@ impl HandwritingStatisticsProfile {
                 grapheme: grapheme.to_owned(),
                 parameters: vec![parameter],
             });
+        }
+        candidate.validate(boundaries)?;
+        Ok(candidate)
+    }
+
+    /// Return a validated candidate without one exact glyph override.
+    ///
+    /// When a dimension is selected, only that override is removed; its
+    /// inherited global value becomes active. Removing the last dimension
+    /// also removes the empty glyph entry. None removes the complete glyph.
+    /// Unmatched exact keys and absent dimensions refuse without mutation.
+    ///
+    /// # Errors
+    ///
+    /// Refuses invalid source profiles and missing exact overrides.
+    pub fn without_glyph_override<Boundary>(
+        &self,
+        grapheme: &str,
+        dimension: Option<Dimension>,
+        boundaries: &Boundary,
+    ) -> Result<Self, HandwritingStatisticsError>
+    where
+        Boundary: GraphemeBoundaryProvider,
+    {
+        self.validate(boundaries)?;
+        let mut candidate = self.clone();
+        let index = candidate
+            .glyphs
+            .iter()
+            .position(|glyph| glyph.grapheme == grapheme)
+            .ok_or(HandwritingStatisticsError::MissingGlyphOverride)?;
+        if let Some(selected_dimension) = dimension {
+            let glyph = candidate
+                .glyphs
+                .get_mut(index)
+                .ok_or(HandwritingStatisticsError::MissingGlyphOverride)?;
+            let before = glyph.parameters.len();
+            glyph.parameters
+                .retain(|item| item.dimension != selected_dimension);
+            if glyph.parameters.len() == before {
+                return Err(HandwritingStatisticsError::MissingGlyphDimension(
+                    selected_dimension,
+                ));
+            }
+            if glyph.parameters.is_empty() {
+                let _removed = candidate.glyphs.remove(index);
+            }
+        } else {
+            let _removed = candidate.glyphs.remove(index);
         }
         candidate.validate(boundaries)?;
         Ok(candidate)

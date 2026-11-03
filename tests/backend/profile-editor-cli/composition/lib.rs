@@ -245,3 +245,88 @@ fn cannot_replace_symlink_even_with_explicit_replace() {
     fs::remove_file(link).expect("owned link removed");
     fs::remove_file(actual).expect("owned file removed");
 }
+
+fn glyph_removal_fixture() -> PathBuf {
+    let source = test_path();
+    let target = source.to_str().expect("input filename");
+    let initial = args(&[
+        "--set-glyph", "\u{f1}", "height", "2500", "3500", "3000", "3000", "100",
+        "--set-glyph", "\u{f1}", "slant", "-1000", "1000", "0", "0", "100",
+        "--set-glyph", "n\u{303}", "height", "2500", "3500", "3000", "3000", "100",
+        "--output", target,
+    ]);
+    assert!(execute_handwriting(&initial).expect("initial save").is_none());
+    source
+}
+
+#[test]
+fn remove_glyph_cli_round_trip_preserves_exact_nfd_key() {
+    let source = glyph_removal_fixture();
+    let output = test_path();
+    let input_name = source.to_str().expect("input filename");
+    let output_name = output.to_str().expect("output filename");
+    let removal = args(&[
+        "--profile", input_name, "--remove-glyph-dimension",
+        "\u{f1}", "height", "--output", output_name,
+    ]);
+    assert!(execute_handwriting(&removal).expect("updated save").is_none());
+    let decoded = decode_statistics_json(
+        &fs::read(&output).expect("saved JSON"),
+        &UnicodeGraphemeSegmentation,
+    ).expect("same native codec");
+    assert_eq!(decoded.glyphs.len(), 2);
+    assert_eq!(
+        decoded.statistics_for("\u{f1}", Dimension::Height),
+        decoded.statistics_for("z", Dimension::Height),
+    );
+    assert_eq!(
+        decoded.statistics_for("\u{f1}", Dimension::Slant)
+            .expect("slant override").standard_deviation,
+        100,
+    );
+    assert_ne!(
+        decoded.statistics_for("n\u{303}", Dimension::Height),
+        decoded.statistics_for("\u{f1}", Dimension::Height),
+    );
+    let full = execute_handwriting(&args(&[
+        "--profile", input_name, "--remove-glyph", "\u{f1}",
+    ])).expect("whole glyph removal").expect("stdout JSON");
+    let no_glyph = decode_statistics_json(&full, &UnicodeGraphemeSegmentation)
+        .expect("whole glyph accepted");
+    assert_eq!(no_glyph.glyphs.len(), 1);
+    assert_eq!(
+        no_glyph.glyphs.first().expect("remaining glyph").grapheme,
+        "n\u{303}",
+    );
+    fs::remove_file(source).expect("remove owned input");
+    fs::remove_file(output).expect("remove owned output");
+}
+
+#[test]
+fn invalid_glyph_removal_preserves_existing_target_bytes() {
+    let source = glyph_removal_fixture();
+    let output = test_path();
+    let input_name = source.to_str().expect("input filename");
+    let output_name = output.to_str().expect("output filename");
+    fs::write(&output, b"preserved").expect("sentinel output");
+    for bad in [
+        args(&["--profile", input_name, "--remove-glyph", "a"]),
+        args(&[
+            "--profile", input_name, "--remove-glyph-dimension",
+            "\u{f1}", "width",
+        ]),
+        args(&[
+            "--profile", input_name, "--remove-glyph-dimension",
+            "\u{f1}", "unknown",
+        ]),
+        args(&["--remove-glyph", "\u{f1}", "--profile", input_name]),
+        args(&["--profile", input_name, "--remove-glyph"]),
+    ] {
+        let mut command = bad;
+        command.extend(args(&["--output", output_name, "--replace"]));
+        assert!(execute_handwriting(&command).is_err());
+        assert_eq!(fs::read(&output).expect("unchanged target"), b"preserved");
+    }
+    fs::remove_file(source).expect("remove owned input");
+    fs::remove_file(output).expect("remove owned output");
+}

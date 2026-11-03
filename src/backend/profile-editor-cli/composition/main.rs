@@ -39,6 +39,7 @@ use std::fmt::Write as _;
 use std::fs::File;
 use std::io::{self, Read as _, Write as _};
 use std::path::Path;
+use std::slice::Iter;
 
 use atrament_handwriting_statistics::{
     Dimension, DimensionStatistics, HandwritingStatisticsProfile,
@@ -57,6 +58,7 @@ const USAGE: &str = "Usage: atrament-profiles paper [atrament-paper options] \
     | handwriting [--profile ink.json] [--seed U64] \
     [--set-global DIM MIN MAX MEAN MEDIAN DEVIATION] \
     [--set-glyph GRAPHEME DIM MIN MAX MEAN MEDIAN DEVIATION] \
+    [--remove-glyph GRAPHEME] [--remove-glyph-dimension GRAPHEME DIM] \
     [--inspect] [--output FILE [--replace]]\n\
     Paper is the existing Rust physical-page profile (not a full notebook).\n\
     Handwriting units: micrometres, millidegrees, or parts per thousand.\n\
@@ -116,6 +118,26 @@ fn parse_parameter(values: &[String]) -> Result<DimensionStatistics, String> {
     })
 }
 
+fn remove_glyph_option(
+    operation: &str,
+    arguments: &mut Iter<'_, String>,
+    profile: &HandwritingStatisticsProfile,
+) -> Result<HandwritingStatisticsProfile, String> {
+    let grapheme = arguments.next().ok_or("removal requires a grapheme")?;
+    let dimension = if operation == "--remove-glyph-dimension" {
+        let key = arguments.next().ok_or("removal requires a dimension")?;
+        Some(
+            Dimension::from_key(key)
+                .ok_or_else(|| format!("unknown dimension: {key}"))?,
+        )
+    } else {
+        None
+    };
+    profile
+        .without_glyph_override(grapheme, dimension, &UnicodeGraphemeSegmentation)
+        .map_err(|error| format!("statistics refused: {error:?}"))
+}
+
 fn parse_handwriting_options(
     args: &[String],
 ) -> Result<HandwritingRequest, String> {
@@ -166,6 +188,10 @@ fn parse_handwriting_options(
                     .map_err(|error| {
                         format!("statistics refused: {error:?}")
                     })?;
+                seen_edit = true;
+            }
+            "--remove-glyph" | "--remove-glyph-dimension" => {
+                profile = remove_glyph_option(name, &mut iter, &profile)?;
                 seen_edit = true;
             }
             "--inspect" => {

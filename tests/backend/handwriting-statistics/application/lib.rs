@@ -372,3 +372,77 @@ fn median_and_mean_must_be_jointly_possible_within_envelope() {
         Ok(()),
     );
 }
+
+#[test]
+fn removing_one_override_restores_global_without_changing_other_glyphs() {
+    let entry = parameter(Dimension::Height, stat(2_000, 4_000, 3_500, 3_400, 200));
+    let baseline = HandwritingStatisticsProfile::baseline(77);
+    let authored = baseline
+        .with_glyph("ñ", entry, &BOUNDARIES)
+        .unwrap()
+        .with_glyph(
+            "ñ",
+            parameter(Dimension::Slant, stat(-2_000, 2_000, 0, 0, 100)),
+            &BOUNDARIES,
+        )
+        .unwrap()
+        .with_glyph("n\u{303}", entry, &BOUNDARIES)
+        .unwrap();
+
+    let removed_height = authored
+        .without_glyph_override("ñ", Some(Dimension::Height), &BOUNDARIES)
+        .unwrap();
+    assert_eq!(removed_height.glyphs.len(), 2);
+    assert_eq!(
+        removed_height.statistics_for("ñ", Dimension::Height),
+        baseline.statistics_for("ñ", Dimension::Height),
+    );
+    assert_eq!(
+        removed_height.statistics_for("ñ", Dimension::Slant),
+        authored.statistics_for("ñ", Dimension::Slant),
+    );
+    assert_eq!(
+        removed_height.statistics_for("n\u{303}", Dimension::Height),
+        authored.statistics_for("n\u{303}", Dimension::Height),
+    );
+
+    let removed_last = removed_height
+        .without_glyph_override("ñ", Some(Dimension::Slant), &BOUNDARIES)
+        .unwrap();
+    assert_eq!(removed_last.glyphs.len(), 1);
+    assert_eq!(removed_last.glyphs[0].grapheme, "n\u{303}");
+    assert_eq!(removed_last.validate(&BOUNDARIES), Ok(()));
+    let removed_full = authored
+        .without_glyph_override("ñ", None, &BOUNDARIES)
+        .unwrap();
+    assert_eq!(removed_full.glyphs, removed_last.glyphs);
+    assert_eq!(authored.glyphs.len(), 2);
+}
+
+#[test]
+fn removing_unowned_exact_glyph_or_dimension_fails_without_mutation() {
+    let baseline = HandwritingStatisticsProfile::baseline(11);
+    let authored = baseline
+        .with_glyph(
+            "ñ",
+            parameter(Dimension::Height, stat(2_000, 4_000, 3_000, 3_000, 100)),
+            &BOUNDARIES,
+        )
+        .unwrap();
+    assert_eq!(
+        authored.without_glyph_override("n\u{303}", None, &BOUNDARIES),
+        Err(HandwritingStatisticsError::MissingGlyphOverride),
+    );
+    assert_eq!(
+        authored.without_glyph_override("ñ", Some(Dimension::Width), &BOUNDARIES),
+        Err(HandwritingStatisticsError::MissingGlyphDimension(
+            Dimension::Width,
+        )),
+    );
+    assert_eq!(
+        authored.without_glyph_override("ab", None, &BOUNDARIES),
+        Err(HandwritingStatisticsError::MissingGlyphOverride),
+    );
+    assert_eq!(authored.glyphs.len(), 1);
+    assert_eq!(baseline.glyphs.len(), 0);
+}
