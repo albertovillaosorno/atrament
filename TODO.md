@@ -20,22 +20,6 @@ labels belong here.
 
 ## P7 — Honest single-pen live output
 
-### TODO - Prove safe interruption and uncertain-state recovery
-
-Test disconnect, power loss, user pause, emergency stop, process crash,
-partial stroke, unknown carriage position, restart, and refusal to resume
-unsafely.
-
-[docs/todo/open/live/009-safe-interruption-recovery.mdc](docs/todo/open/live/009-safe-interruption-recovery.mdc)
-
-### TODO - Prove complete single-pen notebook output
-
-Write a multi-page English and Spanish fixture with titles, prose, equations,
-tables, and line art on calibrated blank sheets with no manual content
-repair.
-
-[docs/todo/open/live/010-prove-complete-single-pen-notebook-output.mdc](docs/todo/open/live/010-prove-complete-single-pen-notebook-output.mdc)
-
 ## P8 — First-release completion
 
 ### TODO - Complete data-format and migration compatibility

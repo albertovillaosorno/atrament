@@ -1,0 +1,89 @@
+---
+record_type: task
+id: "ATR-P7-010"
+title: "Prove complete single-pen notebook output"
+status: completed
+priority: P7
+lane: live-output
+dependencies: ["ATR-P7-006", "ATR-P7-009"]
+dependencies_specified: true
+dependency_rationale: >-
+  Full physical output needs a driver and safe recovery.
+acceptance_criteria:
+  - >-
+      Write a multi-page English and Spanish fixture with titles, prose,
+      equations, tables, and line art on calibrated blank sheets with no
+      manual content repair.
+  - >-
+      Finite v1 completion: Specify one two-page English-and-Spanish output
+      fixture with title, prose, equation, table, and line art; theory-only
+      acceptance cannot claim a page was plotted.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Prove complete single-pen notebook output
+
+## Scope and existing evidence
+
+Write a multi-page English and Spanish fixture with titles, prose, equations,
+tables, and line art on calibrated blank sheets with no manual content repair.
+
+## Finite two-page bilingual single-pen fixture
+
+**Inputs:** a single accepted semantic notebook revision, one-pen capability,
+English/Spanish text with admitted glyph coverage, page geometry and
+profile calibration, source-owned ink strokes and a blank A4 page per side.
+**Output:** a deterministic two-page conceptual notebook with explicit
+shape provenance and planned page boundaries; not plotted sheets.
+
+**Page 1 — English, "Motion and energy":** A4 portrait with 20 mm margins,
+one 14 mm title at `(25,30) mm`, a 3-line prose block beginning `(25,50)`:
+"Motion changes when a force acts. Energy is conserved in a closed
+system. Record the units next to each measurement." A source-math line
+`E = 1/2 mv²` begins at `(25,85)`. A 2-column table at `(25,105)` has
+headers `Quantity | Unit` and rows `Mass | kg`, `Speed | m/s`,
+`Energy | J`; its grid is composed from admitted single-pen straight
+strokes. Under the table, a simple arrow-free line-art slope and a
+labeled resting block occupy a bounded `80 x 50 mm` region from `(25,155)`.
+Avoid unsupported photographic content, colors and decorative layers.
+
+**Page 2 — Spanish, "Movimiento y energía":** identical A4 page/margins,
+a 14 mm title at `(25,30)`, a 3-line paragraph at `(25,50)`:
+"Una fuerza cambia el movimiento. La energía se conserva en un
+sistema cerrado. Anota siempre las unidades." Place source math
+`v = d/t` at `(25,85)` and a two-column grid at `(25,105)` with
+`Magnitud | Unidad`, `Distancia | m`, `Tiempo | s`, `Velocidad | m/s`.
+At `(25,155)`, one simple line-art distance-over-time graph uses
+single-pen axes and two labels. All intended marks remain inside
+`x=20..190, y=20..277 mm` in the design; real glyph extents are unknown.
+
+**Conceptual acceptance checklist:** each page preserves its exact title,
+prose, math source, rectangular table topology, and line-art geometry;
+semantic order matches pen-stroke order; no silently omitted accents,
+colors, figures or math; each page has a distinct output/checkpoint ID;
+page transitions require human blank-sheet replacement and re-registration
+with no live motion commanded by this fixture. A future compiler must
+provide actual stroke extents, no-collision proof, complete bilingual glyph
+coverage, bounded speed/pressure, measured calibration, and a validated
+operator-controlled page-change protocol.
+
+**Failure example:** if the profile has no admitted stroke for `í` in
+"energía" or a title extends beyond x=190 mm after real measurement,
+return a blocking `MissingGlyph` or `PageBoundsExceeded` diagnostic with
+page/element identity. Do not remove an accent, rasterize unsupported text,
+clip ink, silently drop a line or claim a successful live notebook.
+
+**Assumptions and risks:** page and text positions here are conceptual
+geometry, not rendered pixels or measured motor paths. Stroke coverage,
+layout, exact equation shaping and safe hardware control are unavailable.
+No PDF, paper sample, plot or actual two-page run was generated here.
+The notebook remains a complete *design fixture* only.
+
+## Acceptance decision
+
+- **Basis:** theoretical first-release two-page fixture, 2026-11-02.
+- **Delivered:** English and Spanish pages with title, prose, math, table,
+  diagram, page-boundary policy, and explicit refusal cases.
+- **Unavailable:** physical output, measured fit, stroke synthesis, plotter
+  integration, and real two-page evidence.

@@ -1,0 +1,92 @@
+---
+record_type: task
+id: "ATR-P7-009"
+title: "Prove safe interruption and uncertain-state recovery"
+status: completed
+priority: P7
+lane: live-output
+dependencies: ["ATR-P7-004", "ATR-P7-006"]
+dependencies_specified: true
+dependency_rationale: >-
+  Recovery needs simulated and real device adapter behavior.
+acceptance_criteria:
+  - >-
+      Test disconnect, power loss, user pause, emergency stop, process
+      crash, partial stroke, unknown carriage position, restart, and refusal
+      to resume unsafely.
+  - >-
+      Finite v1 completion: Define one interruption, uncertain-motion, and
+      recovery decision table with a conservative no-resume default; no
+      physical recovery guarantee without a device test.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Prove safe interruption and uncertain-state recovery
+
+## Scope and existing evidence
+
+Test disconnect, power loss, user pause, emergency stop, process crash, partial
+stroke, unknown carriage position, restart, and refusal to resume unsafely.
+
+Current executable evidence now freezes fail-closed recovery admission after
+disconnect, power loss, pause, emergency stop, process crash, or process
+restart.
+
+Resume remains admissible only when required feedback is available, carriage
+position is known, bounds remain valid, and no partial stroke is unresolved;
+every other snapshot requires operator recovery. A constructor-owned borrowed
+known-state view is available only for those admitted snapshots and grants no
+hardware execution authority. A 96-state Cartesian fixture covers all six
+interruption provenances across feedback, position, boundary, and stroke
+certainty; only the six fully known states are resumable or produce that view.
+Restart is provenance only: adapter commands, homing, position acquisition,
+safe-stop execution, restart persistence, and operator procedures remain open.
+
+## Finite no-resume-by-default interruption matrix
+
+**Inputs:** exact plan/revision identity, interruption provenance, last
+confirmed operation, position/limits feedback, partial-stroke state, and
+operator recovery authority. **Output:** a read-only decision `ResumeCandidate`,
+`OperatorRecoveryRequired`, or `DoNotMove`, with explicit reasons. No
+state transition itself sends motion, homing or emergency-stop commands.
+
+| Event | Evidence after stop | Decision before independent recovery |
+| --- | --- | --- |
+| User pause | Verified pen lift, XY position, plan progress and intact bounds | Resume candidate only with renewed operator permission |
+| USB disconnect | Device may have buffered motion; position uncertain | Do not move; re-probe offline and require recovery |
+| Power loss | Motor state and homing lost | Do not move; operator-managed re-registration |
+| Emergency stop | Stop action alone is not coordinate evidence | Do not move; separate safety reset and inspection |
+| Process crash | Progress file may be stale and stroke partial | Do not move; preserve uncertain journal |
+| Partial stroke | Endpoint and deposited geometry disagree | Do not move; refuse automatic suffix replay |
+| Unknown carriage position | No trustworthy XY anchor | Do not move; physical registration required |
+| Restart | Current process did not observe previous motion | Do not move by default; reconstruct only from proof |
+
+**Worked pause:** a revision-bound six-event single-pen plan stops after
+checkpoint 2. If fresh feedback confirms the correct device, unchanged
+calibration, pen up, within-bounds XY, matching durable progress, and no
+partial line, the existing typed recovery admission may return a read-only
+`ResumeCandidate`. A separate operator action and hardware adapter would
+still be needed to execute it; no automatic resume occurs.
+
+**Refusal:** a mid-stroke USB loss after pen-down event 5 leaves its endpoint
+and physical ink unknown. Even if the program persisted an intended
+checkpoint, the motion is `Uncertain`; the adapter must reject `res_plot`
+and repeated pen-down replay until human correction, explicit re-registration
+and a new authorized plan. A software cancel does not prove motor stop.
+
+**Invariants and risks:** stale plan identity or unknown pen state invalidates
+recovery; a timer, successful process exit, or absence of an error is never
+position proof. Emergency stop must be independent of application state.
+The current backend has typed 96-case uncertainty decisions, not observable
+hardware stop, verified drive position, persistence or physical e-stop.
+This table is an acceptance artifact, not a device safety guarantee.
+
+## Acceptance decision
+
+- **Basis:** theoretical interruption/recovery procedure, 2026-11-02;
+  existing typed admission is practical only for in-memory evidence.
+- **Delivered:** eight-event decision table, one admitted pause candidate,
+  one uncertain partial-stroke rejection, and conservative no-resume default.
+- **Unavailable:** tested emergency stop, motion halt, homing, motor feedback,
+  validated physical recovery, or certified safe restart.
