@@ -1136,6 +1136,8 @@ export function createGlyphStrokeEditor() {
     const seedLowercase = required("glyph-seed-lowercase");
     const seedSpanish = required("glyph-seed-spanish");
     const seedSpanishNfd = required("glyph-seed-spanish-nfd");
+    const seedUpperSpanish = required("glyph-seed-upper-spanish");
+    const seedUpperSpanishNfd = required("glyph-seed-upper-spanish-nfd");
     const seedPunctuation = required("glyph-seed-punctuation");
     const seedQuotes = required("glyph-seed-quotes");
     const seedMath = required("glyph-seed-math");
@@ -1175,6 +1177,7 @@ export function createGlyphStrokeEditor() {
     }
     const controls = [character, color, source, add, copyFrom, copy, compose,
         form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
+        seedUpperSpanish, seedUpperSpanishNfd,
         seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
         centerX, centerY, radius,
         accentShift, accentLift,
@@ -1898,7 +1901,7 @@ export function createGlyphStrokeEditor() {
             message(String(error));
         }
     });
-    const fillSpanishAccents = (normalization) => {
+    const fillSpanishAccents = (normalization, letterCase = "lowercase") => {
         if (!active)
             return;
         try {
@@ -1910,16 +1913,22 @@ export function createGlyphStrokeEditor() {
                 ["u", "ú"], ["n", "ñ"], ["u", "ü"],
             ];
             const authored = new Set(strokes.map((stroke) => stroke.grapheme));
-            const missing = targets.map(([base, target]) => [base, target.normalize(normalization)])
-                .filter(([, target]) => !authored.has(target));
+            const missing = targets.map(([base, target]) => {
+                const casedBase = letterCase === "uppercase"
+                    ? base.toUpperCase() : base;
+                const casedTarget = letterCase === "uppercase"
+                    ? target.toUpperCase() : target;
+                const normalized = casedTarget.normalize(normalization);
+                return [casedBase, normalized];
+            }).filter(([, target]) => !authored.has(target));
             if (missing.length === 0) {
-                message(`All seven Spanish lowercase ${normalization}`
+                message(`All seven Spanish ${letterCase} ${normalization}`
                     + " accents are authored");
                 return;
             }
             const withoutBases = missing.flatMap(([base]) => authored.has(base) ? [] : [base]);
             if (withoutBases.length > 0) {
-                throw new Error("Author lowercase base glyphs first: "
+                throw new Error(`Author ${letterCase} base glyphs first: `
                     + [...new Set(withoutBases)].join(", "));
             }
             const shift = Number(accentShift.value);
@@ -1930,8 +1939,10 @@ export function createGlyphStrokeEditor() {
             strokes = next;
             selectedIndex = null;
             render();
+            const casing = letterCase === "uppercase" ? "uppercase " : "";
             message(`Filled ${missing.length} missing Spanish `
-                + `${normalization} accents (${added.length} sampled `
+                + `${casing}${normalization} accents `
+                + `(${added.length} sampled `
                 + "strokes); unsaved draft");
         }
         catch (error) {
@@ -1940,6 +1951,8 @@ export function createGlyphStrokeEditor() {
     };
     seedSpanish.addEventListener("click", () => fillSpanishAccents("NFC"));
     seedSpanishNfd.addEventListener("click", () => fillSpanishAccents("NFD"));
+    seedUpperSpanish.addEventListener("click", () => fillSpanishAccents("NFC", "uppercase"));
+    seedUpperSpanishNfd.addEventListener("click", () => fillSpanishAccents("NFD", "uppercase"));
     copy.addEventListener("click", () => {
         if (!active)
             return;

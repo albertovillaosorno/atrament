@@ -97,6 +97,7 @@ function mountEditor() {
         "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
         "glyph-seed-spanish", "glyph-seed-spanish-nfd",
+        "glyph-seed-upper-spanish", "glyph-seed-upper-spanish-nfd",
         "glyph-seed-punctuation", "glyph-seed-quotes",
         "glyph-seed-math", "glyph-seed-digits", "glyph-seed-capitals",
         "glyph-circle-x",
@@ -2201,22 +2202,109 @@ test("uppercase fill preserves ink and refuses over-cap", async () => {
     }
 });
 
-test("eight explicit fills author 94 independent glyphs", async () => {
+test("uppercase NFC and NFD preserve authored ink", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        assert.equal(get("seed-upper-spanish").disabled, true);
+        assert.equal(get("seed-upper-spanish-nfd").disabled, true);
+        editor.start();
+        get("seed-upper-spanish").dispatch("click");
+        assert.match(get("status").textContent,
+            /Author uppercase base glyphs first/);
+        get("seed-capitals").dispatch("click");
+        get("save").dispatch("click");
+        const original = parseGlyphLibrary(await downloads.at(-1).text());
+        const custom = { ...stroke("Ñ"), color: "#ABCDEF" };
+        const before = [...original, custom];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(before));
+        get("load").files = [{ size: bytes.length,
+            arrayBuffer: async () => bytes.buffer }];
+        await get("load").dispatch("change");
+        get("seed-upper-spanish").dispatch("click");
+        assert.match(get("status").textContent,
+            /Filled 6 missing Spanish uppercase NFC accents/);
+        get("seed-upper-spanish-nfd").dispatch("click");
+        assert.match(get("status").textContent,
+            /Filled 7 missing Spanish uppercase NFD accents/);
+        assert.equal(downloads.length, 1, "no implicit download");
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        const pairs = [["A", "Á"], ["E", "É"], ["I", "Í"],
+            ["O", "Ó"], ["U", "Ú"], ["N", "Ñ"], ["U", "Ü"]];
+        const nfc = pairs.filter(([, target]) => target !== "Ñ")
+            .flatMap(([base, target]) =>
+                composeAccentedGlyph(before, base, target, "#243647"));
+        const nfd = pairs.flatMap(([base, target]) =>
+            composeAccentedGlyph(before, base, target.normalize("NFD"),
+                "#243647"));
+        assert.deepEqual(saved, [...before, ...nfc, ...nfd]);
+        assert.deepEqual(saved.filter((line) => line.grapheme === "Ñ"),
+            [custom], "existing composed target is preserved");
+        assert.deepEqual(saved.slice(0, before.length), before,
+            "every authored uppercase source remains byte-identical");
+        get("seed-upper-spanish").dispatch("click");
+        get("seed-upper-spanish-nfd").dispatch("click");
+        assert.match(get("status").textContent,
+            /All seven Spanish uppercase NFD accents/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "repeat action never replaces exact authored ink");
+        editor.reset();
+        assert.equal(get("seed-upper-spanish").disabled, true);
+        assert.equal(get("seed-upper-spanish-nfd").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("uppercase accent batches refuse clipped marks and over-cap", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("seed-capitals").dispatch("click");
+        get("accent-lift").value = "500";
+        get("accent-lift").dispatch("input");
+        get("seed-upper-spanish").dispatch("click");
+        assert.match(get("status").textContent, /fit inside glyph cell/);
+        get("save").dispatch("click");
+        const before = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.equal(before.length, 512);
+        get("accent-lift").value = "0";
+        const full = [...before, ...Array.from({ length: 3540 },
+            () => stroke("∞"))];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(full));
+        get("load").files = [{ size: bytes.length,
+            arrayBuffer: async () => bytes.buffer }];
+        await get("load").dispatch("change");
+        get("seed-upper-spanish-nfd").dispatch("click");
+        assert.match(get("status").textContent, /Save requires 1..4096/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            full, "refused batch leaves every authored source unchanged");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("ten explicit fills author 108 exact glyphs", async () => {
     const ui = mountEditor();
     try {
         const { editor, get, downloads } = ui;
         editor.start();
         for (const action of ["seed-lowercase", "seed-spanish",
             "seed-spanish-nfd", "seed-punctuation", "seed-quotes",
-            "seed-math", "seed-digits", "seed-capitals"]) {
+            "seed-math", "seed-digits", "seed-capitals",
+            "seed-upper-spanish", "seed-upper-spanish-nfd"]) {
             get(action).dispatch("click");
             assert.match(get("status").textContent, /Filled/);
         }
         assert.equal(downloads.length, 0);
         get("save").dispatch("click");
         const all = parseGlyphLibrary(await downloads.at(-1).text());
-        assert.equal(all.length, 2378);
-        assert.equal(new Set(all.map((line) => line.grapheme)).size, 94);
+        assert.equal(all.length, 2656);
+        assert.equal(new Set(all.map((line) => line.grapheme)).size, 108);
         const differentMinuses = ["-", "−"].map((glyph) =>
             all.filter((line) => line.grapheme === glyph));
         assert.equal(differentMinuses[0].length, 1);
@@ -2227,6 +2315,8 @@ test("eight explicit fills author 94 independent glyphs", async () => {
         assert.equal(get("seed-math").disabled, true);
         assert.equal(get("seed-digits").disabled, true);
         assert.equal(get("seed-capitals").disabled, true);
+        assert.equal(get("seed-upper-spanish").disabled, true);
+        assert.equal(get("seed-upper-spanish-nfd").disabled, true);
     } finally {
         ui.restore();
     }

@@ -683,6 +683,12 @@
             <button id="glyph-seed-capitals" type="button" disabled>
               Fill missing uppercase A–Z (unsaved)
             </button>
+            <button id="glyph-seed-upper-spanish" type="button" disabled>
+              Fill missing uppercase Spanish accents (unsaved)
+            </button>
+            <button id="glyph-seed-upper-spanish-nfd" type="button" disabled>
+              Fill missing decomposed uppercase accents (unsaved)
+            </button>
           </div>
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the highest story, positioned from geometry
@@ -717,6 +723,9 @@
             exact o circle guide, C and G use a circular open arc,
             and S and other curved capitals use analytic quadratics.
             Only exact straight strokes and sampled curve chords export.
+            After the uppercase bases, add missing Spanish Á É Í Ó Ú Ñ Ü
+            in NFC or NFD separately; the same explicit accent composer
+            preserves source colors and exact Unicode target identity.
             Every fill remains unsaved.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>

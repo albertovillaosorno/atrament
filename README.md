@@ -597,9 +597,22 @@ transparent 72-DPI PNG. Note that the uppercase alphabet *alone*
 uses all 512 permitted final ink strokes on one page; longer text must
 be split or use a smaller authored stroke vocabulary.
 
-The draft still lacks uppercase accented targets, general italic/cursive
-connections and the complete 114-entry text inventory. Semantic Markdown
-is not yet connected to the browser glyph editor. The native renderer
+To complete the common uppercase Spanish accents without touching authored
+bases or existing target ink, click **Fill missing uppercase Spanish accents
+(unsaved)** for composed Á É Í Ó Ú Ñ Ü; the independent **decomposed
+uppercase accents** control adds their seven NFD forms. Both actions use
+the same explicit native-bounded accent composer as lowercase forms, and
+refuse a missing capital base, out-of-cell accent or oversized draft
+atomically. The 14 extra exact Unicode forms add **278 stroke segments**.
+All ten opt-in fills now offer **108 distinct glyphs and 2,656 strokes**.
+The Rust CLI audited all 14 uppercase accent forms with zero missing ink,
+read their TSV byte-identically, and rendered one-page A4 PDF and a
+transparent 72-DPI RGBA PNG. Neither accented batch downloads a file
+without an explicit save gesture.
+
+The draft still lacks general italic/cursive connections and the complete
+114-entry text inventory. Semantic Markdown is not yet connected to the
+browser glyph editor. The native renderer
 still caps output at 512 physical
 ink strokes per export. The shapes are editable geometric starters, not
 personal handwriting or retained analytic PDF curves.

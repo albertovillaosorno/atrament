@@ -588,6 +588,32 @@ one export; more content may refuse. Uppercase diacritic ink, analytic
 PDF curves, font variants, joined cursive and full bilingual text-page
 acceptance remain unfinished.
 
+## Uppercase Spanish NFC/NFD accent fill (partial) — 2026-11-03
+
+Two new, explicitly session-gated actions add only missing uppercase
+`Á É Í Ó Ú Ñ Ü` shapes from authored `A E I O U N` capital strokes,
+independently for NFC and NFD Unicode grapheme keys. They reuse the
+one-time deterministic accent composer, preserving the exact source
+stroke geometry and colors while drawing separate bounded target ink.
+The accepted source letters, already-authored target shapes and source
+ordering remain unchanged. Missing bases, clipped accents and exceeding
+the 4,096-stroke library limit refuse the entire unsaved candidate.
+
+Two browser regressions verify distinct NFC/NFD keys, preexisting custom
+`Ñ` preservation, 14 uppercase compositions, repeat idempotence,
+no implicit save, missing-base refusal, clipped marks and the native
+stroke-cap atomicity. The combined ten-action fill yields **108 exact
+Unicode glyphs and 2,656 sampled segments**. All **70 focused glyph
+tests**, TypeScript check and frontend build passed. The Rust glyph CLI
+read the 278-segment 14-accent TSV back byte-identically, audited each
+exact form with **zero missing shapes**, and emitted a genuine one-page
+A4 PDF and a transparent 72-DPI 596×842 RGBA PNG for NFC/NFD samples.
+
+The accepted native v1 file still contains only integer pen segments.
+Persistent diacritic anchors, vector-authoritative analytic curves,
+joined cursive, full bilingual inventory and one saved notebook containing
+rendered text remain unavailable; the executable P1 task remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
