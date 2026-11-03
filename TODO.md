@@ -20,13 +20,6 @@ labels belong here.
 
 ## P7 — Honest single-pen live output
 
-### TODO - Optimize path order without changing handwriting
-
-Reduce pen-up travel and drying conflicts while preserving stroke order where
-joins, ink behavior, semantics, or the handwriting profile require it.
-
-[docs/todo/open/live/003-path-order-preserves-handwriting.mdc](docs/todo/open/live/003-path-order-preserves-handwriting.mdc)
-
 ### TODO - Build the hardware simulator and dry run
 
 Visualize pen-up travel, pen-down paths, limits, time, pauses, and

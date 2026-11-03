@@ -1,0 +1,111 @@
+---
+record_type: task
+id: "ATR-P7-003"
+title: "Optimize path order without changing handwriting"
+status: completed
+priority: P7
+lane: live-output
+dependencies: ["ATR-P7-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Path ordering optimizes an existing motion plan.
+acceptance_criteria:
+  - >-
+      Reduce pen-up travel and drying conflicts while preserving stroke
+      order where joins, ink behavior, semantics, or the handwriting profile
+      require it.
+  - >-
+      Finite v1 completion: Specify one bounded path-order optimization pass
+      preserving stroke geometry and semantic grouping, with deterministic
+      tie-breaking and a safe no-op fallback.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Optimize path order without changing handwriting
+
+## Scope and existing evidence
+
+Reduce pen-up travel and drying conflicts while preserving stroke order where
+joins, ink behavior, semantics, or the handwriting profile require it.
+
+Current executable evidence now freezes the order-preservation boundary without
+choosing an optimizer. One constraint set is bound to an exact plan identity and
+operation count, with explicit Join, InkBehavior, Semantic, or
+HandwritingProfile reasons. A proposed optimized order must be a complete
+permutation of source operation indexes and retain every declared earlier/later
+relation; unconstrained operations may move.
+
+Constraint-set validation can now also return constructor-owned read-only
+evidence that borrows the exact plan-bound constraint set. Candidate loops may
+reuse that sealed structural evidence across multiple proposed permutations
+without repeating constraint validation or gaining route-selection authority.
+Successful candidate validation retains the exact candidate permutation and the
+sealed constraint evidence; invalid constraints or candidates produce no
+validated view. A checked-in 720-permutation oracle independently evaluates all
+six-operation orders and requires exact agreement between ordinary validation
+and the prevalidated-constraint path, including first violated-constraint
+precedence; exactly 24 permutations preserve all four fixture constraints.
+
+Route selection, operation materialization, distance/cost metrics,
+drying-conflict detection, and executable optimization remain open.
+
+## Finite path-order proposal: one adjacent-swap pass
+
+**Inputs:** a fixed identity and revision for an accepted single-pen motion
+plan; indexed operations with immutable pen-down geometry, pen-up endpoints,
+semantic owners, required checkpoints/pauses, pen state, and declared
+join/profile/ink/semantic precedence edges; and an externally supplied
+pairwise drying-conflict classification. **Output:** a new proposed ordering
+of the same operation indexes plus a comparative cost summary, or the original
+order with a typed reason. The proposal is not a motion command.
+
+**Algorithm:** start from the original order and consider only its single
+adjacent swaps, at most `n - 1` proposals for `n` operations. Do not swap a
+pause/checkpoint, cross a fixed semantic group boundary, or reverse any
+required precedence edge. Check each candidate using the existing exact-plan
+order-constraint validation. The proposed order must be a full permutation;
+pen-down paths, endpoints, speed, pressure, and semantic identities are
+unchanged. Score each admitted ordering lexicographically by (1) declared
+drying-conflict count, then (2) Euclidean pen-up travel in millimetres,
+including the initial pen position. If more than one swap has the same best
+score, choose the lexicographically smallest original-operation index list.
+Commit a proposal only when it strictly improves at least one cost dimension
+without worsening a higher-priority one. Otherwise return the original order.
+No nondeterministic random search, second pass, or inferred ink kinetics.
+
+**Worked four-stroke example:** initial pen position is `(0,0) mm`.
+Operation `0` writes `(0,0)` to `(1,0)`, `1` writes `(80,0)` to `(81,0)`,
+`2` writes `(2,0)` to `(3,0)`, and `3` writes `(82,0)` to `(83,0)`.
+Preserve `0 < 2` for a join and `1 < 3` for ink behavior. The caller has
+explicitly classified every candidate as having zero drying conflicts.
+Original `[0,1,2,3]` travels `79 + 79 + 79 = 237 mm` between strokes;
+swapping adjacent operations 1 and 2 yields `[0,2,1,3]`, with
+`1 + 77 + 1 = 79 mm`. It preserves both edges, all four stroke centerlines,
+and the original first contact point. This is an arithmetic design example,
+not a measured print or executed optimization.
+
+**Refusal/no-op example:** if a required join edge would be reversed, the
+candidate is not admitted. If all admitted swaps are no better, return the
+original plan unchanged. If an endpoint, drying classification, immutable
+group, or exact plan identity is unavailable, return the original ordering
+with `OptimizationEvidenceUnavailable`, never guess missing constraints or
+silently remove a checkpoint. A changed revision requires recomputation from
+its own exact operation indexes.
+
+**Assumptions and risks:** candidate validation and plan-bound explicit order
+constraints exist, but there is no implemented route enumerator, distance
+scorer, drying evidence source, ordered-motion rematerializer, or hardware
+execution authority. A scalar drying-conflict count cannot prove physical
+ink behavior. Fixed grouping is caller-declared; a missing semantic edge
+cannot be recovered from geometry. This contract covers one finite local
+pass only, without claiming global optimality or safe physical movement.
+
+## Acceptance decision
+
+- **Basis:** theoretical for the bounded adjacent-swap optimization, 2026-11-02;
+  practical only for the existing structural order-validator boundary.
+- **Delivered:** deterministic one-pass policy, four-stroke distance example,
+  hard geometry/order invariants, tie-break, evidence refusal and no-op path.
+- **Not implemented by this acceptance:** route optimization code, drying
+  calibration, plotted trajectories, or operational motion safety.
