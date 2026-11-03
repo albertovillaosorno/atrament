@@ -85,14 +85,15 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--profile notebook.json] [--paper-profile paper.json] \
     [--date-style none|line|box] \
     [--date-placement none|top-left|top-right] \
+    [--date-text YYYY-MM-DD|NN/NN/YYYY|NN.NN.YYYY] \
     [--border-radius-um INTEGER] [--page-numbers true|false] \
     [--printed-sheet true|false] [--inspect] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
     [--output FILE [--replace]]\n\
     Paper-layer export uses nested Rust paper settings and skips ruling \
-    on preprinted sheets. The selected empty date line or box is drawn; \
-    rounded borders render, but date text and handwriting do not. \
+    on preprinted sheets. The optional date prints in its selected box \
+    or line; rounded borders render, but handwriting does not. \
     Page numbers use a small bitmap in the bottom margin.";
 
 #[derive(Debug)]
@@ -610,6 +611,7 @@ fn apply_notebook_edit(
 ) -> Result<(), String> {
     match option {
         "--date-style" => profile.date_style = DateStyle::parse(value)?,
+        "--date-text" => value.clone_into(&mut profile.date_text),
         "--date-placement" => {
             profile.date_placement = DatePlacement::parse(value)?;
         }
@@ -744,8 +746,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 profile.paper_json = canonical_paper_profile_json(&paper)?;
                 edited = true;
             }
-            "--date-style" | "--date-placement" | "--border-radius-um"
-            | "--page-numbers" | "--printed-sheet" => {
+            "--date-style" | "--date-placement" | "--date-text"
+            | "--border-radius-um" | "--page-numbers"
+            | "--printed-sheet" => {
                 let value = iter
                     .next()
                     .ok_or_else(|| format!("{option} requires a value"))?;
@@ -821,12 +824,14 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 concat!(
                     "Version: atrament.notebook.v1\n",
                     "Date: {} / {}\n",
+                    "Printed date: {}\n",
                     "Border radius: {} um\n",
                     "Page numbers: {}\n",
                     "Printed sheet: {}\n"
                 ),
                 request.profile.date_style.key(),
                 request.profile.date_placement.key(),
+                request.profile.date_text,
                 request.profile.border_radius_um,
                 request.profile.page_numbers,
                 request.profile.printed_sheet,

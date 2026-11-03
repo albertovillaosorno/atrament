@@ -458,10 +458,15 @@ function readNotebook(json) {
         throw new Error("Missing canonical notebook profile");
     }
     const value = parsed;
-    if (Object.keys(value).length !== 7
+    if (Object.keys(value).length !== 8
         || value.schema !== "atrament.notebook.v1"
         || !["none", "line", "box"].includes(String(value.date_style))
         || !["none", "top-left", "top-right"].includes(String(value.date_placement))
+        || typeof value.date_text !== "string"
+        || !(value.date_text === ""
+            || /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value.date_text)
+            || /^[0-9]{2}([/.])[0-9]{2}\1[0-9]{4}$/.test(value.date_text))
+        || value.date_text.length > 10
         || !Number.isSafeInteger(value.border_radius_um)
         || Number(value.border_radius_um) < 0
         || typeof value.page_numbers !== "boolean"
@@ -475,6 +480,7 @@ function readNotebook(json) {
 export function createNotebookProfileEditor(context) {
     const style = required("notebook-date-style");
     const placement = required("notebook-date-placement");
+    const dateText = required("notebook-date-text");
     const radius = required("notebook-radius");
     const slider = required("notebook-radius-range");
     const numbers = required("notebook-page-numbers");
@@ -496,8 +502,8 @@ export function createNotebookProfileEditor(context) {
     const pngDpi = required("notebook-png-dpi");
     const pngPage = required("notebook-png-page");
     const status = required("notebook-status");
-    const controls = [style, placement, radius, slider, numbers, printed,
-        load, usePaper, editPaper, defaults, save,
+    const controls = [style, placement, dateText, radius, slider, numbers,
+        printed, load, usePaper, editPaper, defaults, save,
         localName, localLoad, localSave,
         exportPdf, exportPng, previewButton, pdfPages, pngDpi, pngPage];
     let admitted = null;
@@ -547,6 +553,7 @@ export function createNotebookProfileEditor(context) {
         admitted = profile;
         style.value = profile.date_style;
         placement.value = profile.date_placement;
+        dateText.value = profile.date_text;
         radius.value = String(profile.border_radius_um / 1000);
         slider.value = radius.value;
         numbers.checked = profile.page_numbers;
@@ -644,6 +651,7 @@ export function createNotebookProfileEditor(context) {
             ...admitted,
             date_style: style.value,
             date_placement: placement.value,
+            date_text: dateText.value,
             border_radius_um: Math.round(millimetres * 1000),
             page_numbers: numbers.checked,
             printed_sheet: printed.checked,
@@ -777,7 +785,7 @@ export function createNotebookProfileEditor(context) {
         radius.value = slider.value;
         clearPreview();
     });
-    for (const control of [style, placement, numbers, printed,
+    for (const control of [style, placement, dateText, numbers, printed,
         pngDpi, pngPage]) {
         control.addEventListener("input", clearPreview);
     }
@@ -944,9 +952,9 @@ export function createNotebookProfileEditor(context) {
                         ? `atrament-notebook-page-${page}.png`
                         : `atrament-notebook-paper.${format}`;
                     download(blob, filename);
-                    status.textContent = "Notebook paper, selected dates,"
-                        + " borders and page numbers downloaded · no date text,"
-                        + " handwriting or images."
+                    status.textContent = "Notebook paper, optional printed"
+                        + " numeric date, borders and page numbers downloaded ·"
+                        + " no handwriting or images."
                         + (format === "png" ? ` PNG sheet ${page}.` : "");
                 }
             });

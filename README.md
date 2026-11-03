@@ -348,8 +348,10 @@ web controls remain open implementation tasks.
 The `atrament-profiles notebook` subcommand creates a **versioned
 `atrament.notebook.v1` profile** containing the existing Rust-validated
 `atrament.paper.v1` sheet plus date placeholder style and location, border
-radius in micrometres, optional page numbers, and a printed-sheet flag. It
-is a starting page-profile envelope, **not** notebook content or date text.
+radius in micrometres, optional printed numeric date, page numbers, and
+a printed-sheet flag. This is page metadata, **not** notebook body content,
+searchable date text, or generated handwriting. Existing seven-field v1
+files reopen with an empty printed-date field.
 
 ```sh
 cargo run -q -p atrament_profile_editor_cli -- \
@@ -357,7 +359,8 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --emit-profile --output my-paper.json
 cargo run -q -p atrament_profile_editor_cli -- \
   notebook --paper-profile my-paper.json --date-style box \
-  --date-placement top-right --border-radius-um 3000 \
+  --date-placement top-right --date-text 2026-11-03 \
+  --border-radius-um 3000 \
   --page-numbers true --printed-sheet false --output notebook.json
 cargo run -q -p atrament_profile_editor_cli -- \
   notebook --profile notebook.json --page-numbers false \
@@ -398,9 +401,17 @@ No profile file is changed by rendering. Output is explicit and existing paths
 require `--replace`; invalid options refuse before changing output bytes.
 
 When a notebook selects a date placeholder (`line` or `box` at the top left
-or top right), the same Rust PDF/PNG renderer draws the empty 36 × 8 mm
-placeholder in the top margin. It requires at least 10 mm of top clearance
-and 36 mm of usable width; invalid placements refuse profile validation.
+or top right), the same Rust PDF/PNG renderer draws a 36 × 8 mm reserved
+area in the top margin. The optional `--date-text` (or `date_text` field in
+the localhost notebook editor) prints fixed-width numerals and separators
+inside that area, without synthesizing handwriting. Accepted examples are
+`2026-11-03`, `03/11/2026`, `11/03/2026`, and `03.11.2026`.
+
+An ambiguous day/month order is preserved exactly as typed, never guessed
+from locale. Impossible Gregorian dates, malformed separators, or dates
+without a selected placeholder refuse. Existing empty placeholders stay
+empty. The reserved area requires at least 10 mm of top clearance and
+36 mm of usable width; invalid placements refuse profile validation.
 
 With `page_numbers: true`, Rust prints page numbers 1–32 in the bottom
 margin using compact block numerals; each PDF page receives its own number.
@@ -416,9 +427,10 @@ printable region in both PDF and transparent PNG; zero leaves the border off.
 The radius must fit half the printable area, and each sheet-edge margin must
 be at least 0.06 mm to contain the outline's centered stroke.
 
-This is **not** a complete notebook export: actual date text, handwriting
-and image overlays are not rendered. Page numbers are printed markers,
-not sampled pen strokes.
+This is **not** a complete notebook export: only printed numeric date
+annotations, paper marks and page numbers render. Handwriting, arbitrary text,
+searchable text and image overlays remain unavailable. Date and page-number
+glyphs are printed markers, not sampled pen strokes.
 
 The localhost Rust runtime also exposes authenticated
 `GET /api/notebook/profile` (default profile) and
@@ -439,13 +451,14 @@ CLI. The web editor supplies page/DPI headers from its PDF and PNG controls,
 then downloads the selected physical paper layer. One PNG contains one sheet.
 
 Preprinted-sheet suppression applies to ruling in both formats; explicitly
-selected date placeholders, rounded outlines and page numbers remain visible.
-No date text, handwriting or image content is drawn in these outputs.
+selected date placeholders, optional printed numeric dates, rounded outlines
+and page numbers remain visible. Handwriting, arbitrary text and image
+content are still not drawn in these outputs.
 
 The localhost web editor now also offers **Notebook page profile** controls
-for date placeholder style and placement, border radius, page numbers and
-preprinted-sheet intent. PDF/PNG exports draw selected date placeholders,
-page numbers and rounded borders only when physically admissible.
+for date placeholder style and placement, optional printed date text,
+border radius, page numbers and preprinted-sheet intent. PDF/PNG exports draw
+these annotations only when physically admissible.
 
 **Use current paper** includes unsaved sheet settings before Rust validation.
 **Preview selected page**

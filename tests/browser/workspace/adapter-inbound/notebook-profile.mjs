@@ -5,8 +5,9 @@ import test from "node:test";
 import { createNotebookProfileEditor } from "../../../../src/browser/workspace/adapter-inbound/generated/paper-profile.js";
 
 const ids = ["notebook-date-style", "notebook-date-placement",
-    "notebook-radius", "notebook-radius-range", "notebook-page-numbers",
-    "notebook-printed-sheet", "notebook-load", "notebook-use-paper",
+    "notebook-date-text", "notebook-radius", "notebook-radius-range",
+    "notebook-page-numbers", "notebook-printed-sheet", "notebook-load",
+    "notebook-use-paper",
     "notebook-edit-paper",
     "notebook-default", "notebook-save", "notebook-status",
     "notebook-local-name", "notebook-local-load", "notebook-local-save",
@@ -21,7 +22,8 @@ const paper = {
 };
 const defaults = {
     schema: "atrament.notebook.v1", paper,
-    date_style: "none", date_placement: "none", border_radius_um: 0,
+    date_style: "none", date_placement: "none", date_text: "",
+    border_radius_um: 0,
     page_numbers: false, printed_sheet: false,
 };
 
@@ -157,6 +159,8 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         elements.get("notebook-radius-range").dispatch("input");
         elements.get("notebook-date-style").value = "box";
         elements.get("notebook-date-placement").value = "top-right";
+        elements.get("notebook-date-text").value = "2026-11-03";
+        elements.get("notebook-date-text").dispatch("input");
         elements.get("notebook-page-numbers").checked = true;
         elements.get("notebook-printed-sheet").checked = true;
         elements.get("notebook-edit-paper").dispatch("click");
@@ -175,6 +179,7 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.equal(first.border_radius_um, 3500);
         assert.equal(first.date_style, "box");
         assert.equal(first.date_placement, "top-right");
+        assert.equal(first.date_text, "2026-11-03");
         assert.equal(first.page_numbers, true);
         assert.equal(first.printed_sheet, true);
         elements.get("notebook-save").dispatch("click");
@@ -189,6 +194,7 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.equal(requests.at(-1).init.headers[
             "X-Atrament-Profile-Revision"], "new");
         assert.equal(diskProfile.page_numbers, true);
+        assert.equal(diskProfile.date_text, "2026-11-03");
         assert.match(elements.get("notebook-status").textContent,
             /saved in selected local directory/);
         elements.get("notebook-local-load").dispatch("click");
@@ -201,12 +207,17 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.equal(elements.get("notebook-date-style").value, "box");
         assert.equal(elements.get("notebook-date-placement").value,
             "top-right");
+        assert.equal(elements.get("notebook-date-text").value, "2026-11-03");
         assert.equal(elements.get("notebook-page-numbers").checked, true);
+        // The same browser form also retains Spain/Mexico day-first dates.
+        elements.get("notebook-date-text").value = "03/11/2026";
+        elements.get("notebook-date-text").dispatch("input");
         elements.get("notebook-printed-sheet").checked = false;
         elements.get("notebook-local-save").dispatch("click");
         await settle();
         await settle();
         assert.equal(diskProfile.printed_sheet, false);
+        assert.equal(diskProfile.date_text, "03/11/2026");
         assert.equal(requests.at(-1).init.headers[
             "X-Atrament-Profile-Revision"], "sha256:" + "a".repeat(64));
         diskRevision = "sha256:" + "c".repeat(64);
@@ -237,7 +248,7 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.match(elements.get("notebook-status").textContent,
             /PNG sheet 10/);
         assert.match(elements.get("notebook-status").textContent,
-            /no date text, handwriting or images/);
+            /no handwriting or images/);
         const beforePreview = requests.length;
         const previewFrame = elements.get("notebook-preview-frame");
         const previewImage = elements.get("notebook-preview-image");

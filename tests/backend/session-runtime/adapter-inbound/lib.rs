@@ -6091,3 +6091,59 @@ fn profile_file_post_refuses_missing_origin_and_stale_revision() {
             "{}").as_bytes())), "HTTP/1.1 200 OK",
         "mock accepts body; native gateway separately validates canonicality");
 }
+
+#[test]
+fn printed_numeric_date_validates_and_renders_over_authenticated_http() {
+    use atrament_notebook_profile::{DatePlacement, DateStyle};
+
+    let notebook = NotebookProfile {
+        date_style: DateStyle::Box,
+        date_placement: DatePlacement::TopRight,
+        date_text: "2026-11-03".into(),
+        printed_sheet: true,
+        ..NotebookProfile::default()
+    };
+    let body = notebook.canonical_json().expect("valid saved numeric date");
+    let mut empty = notebook.clone();
+    empty.date_text.clear();
+
+    let pdf = route_runtime(&notebook_paper_request(
+        "pdf", "X-Atrament-Pdf-Pages: 2\r\n", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"), body.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&pdf), "HTTP/1.1 200 OK");
+    assert_eq!(
+        paper_http_body(&pdf),
+        notebook.paper_layer_pdf(2).expect("CLI PDF authority"),
+    );
+    assert_ne!(
+        paper_http_body(&pdf),
+        empty.paper_layer_pdf(2).expect("empty date"),
+    );
+
+    let png = route_runtime(&notebook_paper_request(
+        "png", "X-Atrament-Png-Dpi: 72\r\nX-Atrament-Png-Page: 2\r\n",
+        Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+        Some("application/json"), body.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&png), "HTTP/1.1 200 OK");
+    assert_eq!(
+        paper_http_body(&png),
+        notebook.paper_layer_png_page(72, 2).expect("CLI PNG authority"),
+    );
+    assert_ne!(paper_http_body(&png), empty.paper_layer_png_page(72, 2)
+        .expect("empty date PNG"));
+
+    let invalid = body.replace("2026-11-03", "2026-02-29");
+    assert_ne!(invalid, body);
+    for (format, headers) in [
+        ("pdf", "X-Atrament-Pdf-Pages: 2\r\n"),
+        ("png", "X-Atrament-Png-Dpi: 72\r\n"),
+    ] {
+        let rejected = route_runtime(&notebook_paper_request(
+            format, headers, Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), invalid.as_bytes(),
+        ), EXPECTED_HOST);
+        assert_eq!(status_line(&rejected), "HTTP/1.1 400 Bad Request");
+    }
+}

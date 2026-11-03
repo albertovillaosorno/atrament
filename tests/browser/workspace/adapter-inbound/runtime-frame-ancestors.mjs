@@ -3625,6 +3625,7 @@ test(
                 edit("handwriting-dimension", "height", "change");
                 edit("notebook-date-style", "line");
                 edit("notebook-date-placement", "top-left");
+                edit("notebook-date-text", "2026-11-03");
                 edit("notebook-radius-range", "3");
                 document.getElementById("notebook-page-numbers").checked = true;
                 document.getElementById("notebook-printed-sheet")
@@ -3686,6 +3687,7 @@ test(
             assert.equal(nativeNotebook.paper.margin_top_um, 25000);
             assert.equal(nativeNotebook.date_style, "line");
             assert.equal(nativeNotebook.date_placement, "top-left");
+            assert.equal(nativeNotebook.date_text, "2026-11-03");
             assert.equal(nativeNotebook.page_numbers, true);
             assert.equal(nativeNotebook.printed_sheet, true);
 
@@ -3780,13 +3782,14 @@ test(
                 mean: document.getElementById("handwriting-mean").value,
                 slider: document.getElementById("handwriting-mean-range").value,
                 radius: document.getElementById("notebook-radius").value,
+                dateText: document.getElementById("notebook-date-text").value,
                 radiusSlider: document.getElementById(
                     "notebook-radius-range").value,
             }))())`);
             assert.deepEqual(reopened, {
                 seed: "18446744073709551615", glyph: "ñ",
                 mean: "3100", slider: "3100", radius: "3",
-                radiusSlider: "3",
+                dateText: "2026-11-03", radiusSlider: "3",
             });
             // Numeric handwriting is a Rust-only estimate; the actual
             // drawable page preview is Rust PNG, not browser CSS geometry.

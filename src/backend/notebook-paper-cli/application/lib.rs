@@ -34,7 +34,10 @@
 
 //! Shared Rust paper-profile, CLI, PDF and transparent PNG projection.
 
+mod date;
 mod png;
+
+pub use date::validate_printed_date_text;
 
 use std::env;
 use std::error::Error;
@@ -1311,9 +1314,34 @@ pub fn paper_profile_pdf_pages_with_border(
     page_numbers: bool,
     border_radius_um: u32,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_pdf_pages_with_printed_date(
+        profile, pages, include_marks, date, page_numbers, border_radius_um,
+        None,
+    )
+}
+
+/// Render notebook paper with an optional validated printed date string.
+///
+/// The date is rendered as legible fixed-width digits/punctuation; this does
+/// not synthesize handwriting or emit searchable PDF text.
+///
+/// # Errors
+/// Refuses impossible date values, missing placeholders or output limits.
+pub fn paper_profile_pdf_pages_with_printed_date(
+    profile: &[u8],
+    pages: usize,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+    border_radius_um: u32,
+    date_text: Option<&str>,
+) -> Result<Vec<u8>, String> {
     let options = decode_profile(profile)?;
     if !(1..=MAX_PAGES).contains(&pages) {
         return Err("paper PDF needs 1 to 32 pages".into());
+    }
+    if date.is_none() && date_text.is_some_and(|text| !text.is_empty()) {
+        return Err("printed date text needs a date placeholder".into());
     }
     let mut base = if include_marks {
         paper_paths(options)?
@@ -1322,6 +1350,9 @@ pub fn paper_profile_pdf_pages_with_border(
     };
     if let Some(placeholder) = date {
         append_date_placeholder(&mut base, options, placeholder)?;
+        if let Some(text) = date_text {
+            date::append_date_text(&mut base, options, placeholder, text)?;
+        }
     }
     if let Some(border) = rounded_border(options, border_radius_um)? {
         base.push(border_path(border)?);
@@ -1435,8 +1466,35 @@ pub fn paper_profile_png_page_with_border(
     page: usize,
     border_radius_um: u32,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_png_page_with_printed_date(
+        profile, dpi, include_marks, date, page_numbers, page,
+        border_radius_um, None,
+    )
+}
+
+/// Render one transparent PNG page with optional printed numeric date text.
+///
+/// # Errors
+/// Refuses unsupported dates or page/profile/raster budget errors.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "retains the existing seven-argument paper-layer API, adding date"
+)]
+pub fn paper_profile_png_page_with_printed_date(
+    profile: &[u8],
+    dpi: u32,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+    page: usize,
+    border_radius_um: u32,
+    date_text: Option<&str>,
+) -> Result<Vec<u8>, String> {
     if !(1..=MAX_PAGES).contains(&page) {
         return Err("PNG notebook page must be within 1..32".into());
+    }
+    if date.is_none() && date_text.is_some_and(|text| !text.is_empty()) {
+        return Err("printed date text needs a date placeholder".into());
     }
     let options = decode_profile(profile)?;
     let mut paths = if include_marks {
@@ -1446,6 +1504,9 @@ pub fn paper_profile_png_page_with_border(
     };
     if let Some(placeholder) = date {
         append_date_placeholder(&mut paths, options, placeholder)?;
+        if let Some(text) = date_text {
+            date::append_date_text(&mut paths, options, placeholder, text)?;
+        }
     }
     if page_numbers {
         append_page_number(&mut paths, options, page)?;

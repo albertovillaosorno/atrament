@@ -736,12 +736,14 @@ fn saved_notebook_date_export_matches_rust_layers_in_cli() {
     let saved_name = saved_path.to_str().expect("notebook filename");
     assert!(execute_notebook(&args(&[
         "--date-style", "box", "--date-placement", "top-right",
-        "--printed-sheet", "true", "--output", saved_name,
+        "--date-text", "2026-11-03", "--printed-sheet", "true",
+        "--output", saved_name,
     ])).expect("save notebook with date").is_none());
     let stored = fs::read(&saved_path).expect("saved notebook JSON");
     let notebook = NotebookProfile::from_json(&stored).expect("reopen date");
     assert_eq!(notebook.date_style, DateStyle::Box);
     assert_eq!(notebook.date_placement, DatePlacement::TopRight);
+    assert_eq!(notebook.date_text, "2026-11-03");
 
     let pdf = execute_notebook(&args(&[
         "--profile", saved_name, "--export-paper", "pdf", "--pages", "2",
@@ -749,9 +751,19 @@ fn saved_notebook_date_export_matches_rust_layers_in_cli() {
     .expect("two-page PDF")
     .expect("PDF stdout");
     assert_eq!(pdf, notebook.paper_layer_pdf(2).expect("same PDF"));
+    let mut without_date = notebook.clone();
+    without_date.date_text.clear();
+    let empty_pdf = without_date.paper_layer_pdf(2).expect("empty boxes");
     assert_eq!(
-        String::from_utf8_lossy(&pdf).matches(" m\n").count(), 8,
-        "four box strokes on each preprinted page, with no duplicate ruling",
+        String::from_utf8_lossy(&empty_pdf).matches(" m\n").count(), 8,
+        "four box strokes per page, no duplicated ruling",
+    );
+    assert_ne!(empty_pdf, pdf, "CLI exports printed date ink");
+    assert!(
+        String::from_utf8_lossy(&pdf).matches("
+f
+").count() > 150,
+        "selected printed date appears on both saved-page exports",
     );
 
     let png_path = test_path().with_extension("png");
@@ -773,9 +785,9 @@ fn saved_notebook_date_export_matches_rust_layers_in_cli() {
     .expect("edited date PDF")
     .expect("PDF stdout");
     assert_ne!(pdf, left_line);
-    assert_eq!(
-        String::from_utf8_lossy(&left_line).matches(" m\n").count(), 2,
-    );
+    assert!(String::from_utf8_lossy(&left_line).matches(" m\n").count()
+        < String::from_utf8_lossy(&pdf).matches(" m\n").count(),
+        "line has fewer ruled placeholder paths than date box");
     assert_eq!(fs::read(&saved_path).expect("source preserved"), stored);
     fs::remove_file(saved_path).expect("remove owned notebook");
     fs::remove_file(png_path).expect("remove owned PNG");
@@ -931,6 +943,11 @@ fn invalid_notebook_export_flags_refuse_without_file_changes() {
         args(&["--export-paper", "pdf", "--export-paper", "png"]),
         args(&["--inspect", "--export-paper", "pdf"]),
         args(&["--date-style", "box", "--export-paper", "pdf"]),
+        args(&["--date-text", "2026-11-03"]),
+        args(&["--date-style", "line", "--date-placement", "top-left",
+            "--date-text", "2026-02-29"]),
+        args(&["--date-style", "line", "--date-placement", "top-left",
+            "--date-text", "03/11.2026"]),
     ] {
         let mut attempt = invalid;
         attempt.extend(args(&["--output", filename, "--replace"]));

@@ -260,8 +260,9 @@
               </h3>
               <p class="field-help">
                 Notebook date and printed-page preferences. PDF/PNG draws
-                the selected empty date line or box in the top margin,
-                requiring 10 mm top clearance and 36 mm usable width.
+                the date line or box in the top margin. An optional numeric
+                date prints inside it (not generated handwriting), requiring
+                10 mm top clearance and 36 mm usable width.
                 Printed page numbers need 7 mm bottom clearance, and PDF
                 numbers pages 1–32 (PNG can select one of those pages). A
                 nonzero border radius draws a rounded printable outline;
@@ -285,6 +286,11 @@
                 <option value="top-left">Top left</option>
                 <option value="top-right">Top right</option>
               </select>
+            </label>
+            <label>Printed date (optional)
+              <input id="notebook-date-text" type="text" maxlength="10"
+                placeholder="YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY"
+                autocomplete="off" spellcheck="false" disabled>
             </label>
             <label>Border radius (mm)
               <input id="notebook-radius" type="number" min="0" max="500"

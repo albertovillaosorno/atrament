@@ -34,9 +34,10 @@
 
 use atrament_notebook_paper_cli::{
     PaperDatePlaceholder, canonical_paper_profile_json,
-    default_paper_profile_json, paper_profile_pdf_pages_with_border,
-    paper_profile_png_page_with_border, validate_paper_border_clearance,
+    default_paper_profile_json, paper_profile_pdf_pages_with_printed_date,
+    paper_profile_png_page_with_printed_date, validate_paper_border_clearance,
     validate_paper_date_clearance, validate_paper_page_number_clearance,
+    validate_printed_date_text,
 };
 use atrament_profile_json_syntax::{
     ProfileJsonSyntaxLimits, ValidatedProfileJsonObject,
@@ -130,6 +131,8 @@ pub struct NotebookProfile {
     pub date_placement: DatePlacement,
     /// Reserved date placeholder style.
     pub date_style: DateStyle,
+    /// Optional printed numeric date; not synthesized handwriting.
+    pub date_text: String,
     /// Whether to draw small printed page numerals in the bottom margin.
     pub page_numbers: bool,
     /// Canonical `atrament.paper.v1` JSON; no second page codec is invented.
@@ -144,6 +147,7 @@ impl Default for NotebookProfile {
             paper_json: default_paper_profile_json(),
             date_style: DateStyle::None,
             date_placement: DatePlacement::None,
+            date_text: String::new(),
             border_radius_um: 0,
             page_numbers: false,
             printed_sheet: false,
@@ -166,6 +170,7 @@ impl NotebookProfile {
                 "  \"paper\": {paper},\n",
                 "  \"date_style\": \"{date_style}\",\n",
                 "  \"date_placement\": \"{date_placement}\",\n",
+                "  \"date_text\": \"{date_text}\",\n",
                 "  \"border_radius_um\": {border_radius_um},\n",
                 "  \"page_numbers\": {page_numbers},\n",
                 "  \"printed_sheet\": {printed_sheet}\n",
@@ -174,6 +179,7 @@ impl NotebookProfile {
             paper = paper.trim_end().replace('\n', "\n  "),
             date_style = self.date_style.key(),
             date_placement = self.date_placement.key(),
+            date_text = self.date_text,
             border_radius_um = self.border_radius_um,
             page_numbers = self.page_numbers,
             printed_sheet = self.printed_sheet,
@@ -207,8 +213,9 @@ impl NotebookProfile {
     /// Refuses unknown/duplicate fields, types, geometry and versions.
     pub fn from_json(bytes: &[u8]) -> Result<Self, String> {
         let root = parse_root(bytes)?;
-        if root.root_fields().count() != 7 {
-            return Err("notebook requires exactly seven known fields".into());
+        let fields = root.root_fields().count();
+        if fields != 7 && fields != 8 {
+            return Err("notebook requires seven or eight known fields".into());
         }
         if string_member(root, "schema")? != SCHEMA {
             return Err("unsupported notebook profile schema".into());
@@ -223,6 +230,11 @@ impl NotebookProfile {
                 root,
                 "date_placement",
             )?)?,
+            date_text: if fields == 8 {
+                string_member(root, "date_text")?
+            } else {
+                String::new() // Read older saved notebook.v1 profiles.
+            },
             border_radius_um: number_member(root, "border_radius_um")?,
             page_numbers: boolean_member(root, "page_numbers")?,
             printed_sheet: boolean_member(root, "printed_sheet")?,
@@ -235,16 +247,18 @@ impl NotebookProfile {
     ///
     /// A selected empty date box/line is drawn in the top margin; printed
     /// page numbers are drawn below the marks. A nonzero corner radius draws
-    /// a rounded outline. Date text, images and handwriting are not rendered.
-    /// Preprinted stationery suppresses ruling but keeps the date placeholder.
+    /// a rounded outline. An optional numeric date prints inside its box or
+    /// above its line; images and handwriting are not rendered. Preprinted
+    /// stationery suppresses ruling but retains selected annotations.
     ///
     /// # Errors
     /// Refuses invalid metadata, geometry, page count or output limits.
     pub fn paper_layer_pdf(&self, pages: usize) -> Result<Vec<u8>, String> {
         self.validate()?;
-        paper_profile_pdf_pages_with_border(
+        paper_profile_pdf_pages_with_printed_date(
             self.paper_json.as_bytes(), pages, !self.printed_sheet,
             self.date_placeholder(), self.page_numbers, self.border_radius_um,
+            Some(&self.date_text),
         )
     }
 
@@ -267,10 +281,10 @@ impl NotebookProfile {
         &self, dpi: u32, page: usize,
     ) -> Result<Vec<u8>, String> {
         self.validate()?;
-        paper_profile_png_page_with_border(
+        paper_profile_png_page_with_printed_date(
             self.paper_json.as_bytes(), dpi, !self.printed_sheet,
             self.date_placeholder(), self.page_numbers, page,
-            self.border_radius_um,
+            self.border_radius_um, Some(&self.date_text),
         )
     }
 
@@ -285,6 +299,10 @@ impl NotebookProfile {
             return Err(
                 "date style and placement must both be none or set".into()
             );
+        }
+        validate_printed_date_text(&self.date_text)?;
+        if self.date_placeholder().is_none() && !self.date_text.is_empty() {
+            return Err("printed date text requires a date placeholder".into());
         }
         let paper = canonical_paper_profile_json(self.paper_json.as_bytes())?;
         if self.date_placeholder().is_some() {

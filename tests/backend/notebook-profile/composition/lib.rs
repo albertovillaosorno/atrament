@@ -58,6 +58,7 @@ fn edited_notebook_preserves_native_paper_and_metadata() {
         paper_json: paper,
         date_style: DateStyle::Box,
         date_placement: DatePlacement::TopRight,
+        date_text: "2026-11-03".into(),
         border_radius_um: 4_000,
         page_numbers: true,
         printed_sheet: true,
@@ -304,4 +305,91 @@ fn page_number_clearance_refuses_at_admission_and_two_digit_pages_differ() {
     );
     assert!(streams.get(9).expect("PDF page stream").matches("\nf\n").count()
         > streams.first().expect("PDF page stream").matches("\nf\n").count());
+}
+
+#[test]
+fn printed_date_round_trips_legacy_and_new_notebook_profiles() {
+    let blank = NotebookProfile::default();
+    let canonical = blank.canonical_json().expect("new canonical");
+    assert!(canonical.contains("\"date_text\": \"\""));
+    let legacy = canonical.replace("  \"date_text\": \"\",\n", "");
+    assert_eq!(
+        NotebookProfile::from_json(legacy.as_bytes()).expect("old v1 file"),
+        blank,
+        "existing saved notebook.v1 files gain only the empty default",
+    );
+    let mut notebook = NotebookProfile {
+        date_style: DateStyle::Box,
+        date_placement: DatePlacement::TopRight,
+        date_text: "2026-11-03".into(),
+        printed_sheet: true,
+        ..blank
+    };
+    let bytes = notebook.canonical_json().expect("valid printed ISO date");
+    assert_eq!(
+        NotebookProfile::from_json(bytes.as_bytes()).expect("date reopens"),
+        notebook,
+    );
+    notebook.date_text = "03/11/2026".into();
+    assert!(notebook.validate().is_ok(), "Mexico and Spain day-first");
+    notebook.date_text = "11/03/2026".into();
+    assert!(notebook.validate().is_ok(), "English month-first");
+    notebook.date_text = "03.11.2026".into();
+    assert!(notebook.validate().is_ok(), "dot-separated date");
+    notebook.date_text = "2024-02-29".into();
+    assert!(notebook.validate().is_ok(), "leap day");
+}
+
+#[test]
+fn printed_date_has_native_visible_ink_in_pdf_and_transparent_png() {
+    let mut notebook = NotebookProfile {
+        date_style: DateStyle::Box,
+        date_placement: DatePlacement::TopRight,
+        printed_sheet: true,
+        ..NotebookProfile::default()
+    };
+    let bare_pdf = notebook.paper_layer_pdf(2).expect("empty boxes");
+    let bare_png = notebook.paper_layer_png(72).expect("empty PNG box");
+    notebook.date_text = "2026-11-03".into();
+    let date_pdf = notebook.paper_layer_pdf(2).expect("date PDF");
+    let date_png = notebook.paper_layer_png(72).expect("date PNG");
+    assert_ne!(bare_pdf, date_pdf);
+    assert_ne!(bare_png, date_png);
+    assert_eq!(notebook.paper_layer_png(72).expect("stable"), date_png);
+    let streams = String::from_utf8_lossy(&date_pdf);
+    assert!(streams.matches("\nf\n").count() > 150,
+        "each page contains filled printed date numeral cells");
+    notebook.date_placement = DatePlacement::TopLeft;
+    assert_ne!(notebook.paper_layer_png(72).expect("left"), date_png);
+    notebook.date_style = DateStyle::Line;
+    assert_ne!(notebook.paper_layer_pdf(2).expect("date line"), date_pdf);
+    notebook.date_text = "03/11/2026".into();
+    assert_ne!(notebook.paper_layer_png(72).expect("slash date"), date_png);
+}
+
+#[test]
+fn invalid_date_grammar_calendar_and_unplaced_text_refuse() {
+    let mut notebook = NotebookProfile {
+        date_style: DateStyle::Line,
+        date_placement: DatePlacement::TopLeft,
+        ..NotebookProfile::default()
+    };
+    for rejected in [
+        "2026-02-29", "2024-02-30", "2026-13-03", "00/00/2026",
+        "2026/11/03", "03-11-2026", "03/11.2026",
+        "2026-11-0A", "03/11/2026\n", "03/11/2026X",
+        "0000-01-01", "31/04/2026", "31/13/2026",
+    ] {
+        notebook.date_text = rejected.into();
+        assert!(notebook.canonical_json().is_err(), "{rejected}");
+        assert!(notebook.paper_layer_pdf(1).is_err(), "{rejected}");
+        assert!(notebook.paper_layer_png(72).is_err(), "{rejected}");
+    }
+    notebook.date_text = "2026-11-03".into();
+    notebook.date_style = DateStyle::None;
+    notebook.date_placement = DatePlacement::None;
+    assert!(notebook.validate().is_err(), "date text cannot be hidden");
+    assert!(notebook.paper_layer_pdf(1).is_err());
+    notebook.date_text.clear();
+    assert!(notebook.validate().is_ok());
 }

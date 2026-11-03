@@ -540,6 +540,7 @@ type NotebookProfile = {
     paper: PaperProfile;
     date_style: "none" | "line" | "box";
     date_placement: "none" | "top-left" | "top-right";
+    date_text: string;
     border_radius_um: number;
     page_numbers: boolean;
     printed_sheet: boolean;
@@ -559,12 +560,19 @@ function readNotebook(json: string): NotebookProfile {
         throw new Error("Missing canonical notebook profile");
     }
     const value = parsed as Record<string, unknown>;
-    if (Object.keys(value).length !== 7
+    if (Object.keys(value).length !== 8
         || value.schema !== "atrament.notebook.v1"
         || !["none", "line", "box"].includes(String(value.date_style))
         || !["none", "top-left", "top-right"].includes(
             String(value.date_placement),
         )
+        || typeof value.date_text !== "string"
+        || !(
+            value.date_text === ""
+            || /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value.date_text)
+            || /^[0-9]{2}([/.])[0-9]{2}\1[0-9]{4}$/.test(value.date_text)
+        )
+        || value.date_text.length > 10
         || !Number.isSafeInteger(value.border_radius_um)
         || Number(value.border_radius_um) < 0
         || typeof value.page_numbers !== "boolean"
@@ -582,6 +590,7 @@ export function createNotebookProfileEditor(
 ): PaperEditor {
     const style = required<HTMLSelectElement>("notebook-date-style");
     const placement = required<HTMLSelectElement>("notebook-date-placement");
+    const dateText = required<HTMLInputElement>("notebook-date-text");
     const radius = required<HTMLInputElement>("notebook-radius");
     const slider = required<HTMLInputElement>("notebook-radius-range");
     const numbers = required<HTMLInputElement>("notebook-page-numbers");
@@ -603,8 +612,8 @@ export function createNotebookProfileEditor(
     const pngDpi = required<HTMLInputElement>("notebook-png-dpi");
     const pngPage = required<HTMLInputElement>("notebook-png-page");
     const status = required<HTMLElement>("notebook-status");
-    const controls = [style, placement, radius, slider, numbers, printed,
-        load, usePaper, editPaper, defaults, save,
+    const controls = [style, placement, dateText, radius, slider, numbers,
+        printed, load, usePaper, editPaper, defaults, save,
         localName, localLoad, localSave,
         exportPdf, exportPng, previewButton, pdfPages, pngDpi, pngPage];
     let admitted: NotebookProfile | null = null;
@@ -661,6 +670,7 @@ export function createNotebookProfileEditor(
         admitted = profile;
         style.value = profile.date_style;
         placement.value = profile.date_placement;
+        dateText.value = profile.date_text;
         radius.value = String(profile.border_radius_um / 1000);
         slider.value = radius.value;
         numbers.checked = profile.page_numbers;
@@ -763,6 +773,7 @@ export function createNotebookProfileEditor(
             ...admitted,
             date_style: style.value as NotebookProfile["date_style"],
             date_placement: placement.value as NotebookProfile["date_placement"],
+            date_text: dateText.value,
             border_radius_um: Math.round(millimetres * 1000),
             page_numbers: numbers.checked,
             printed_sheet: printed.checked,
@@ -907,7 +918,7 @@ export function createNotebookProfileEditor(
         radius.value = slider.value;
         clearPreview();
     });
-    for (const control of [style, placement, numbers, printed,
+    for (const control of [style, placement, dateText, numbers, printed,
         pngDpi, pngPage]) {
         control.addEventListener("input", clearPreview);
     }
@@ -1074,9 +1085,9 @@ export function createNotebookProfileEditor(
                         ? `atrament-notebook-page-${page}.png`
                         : `atrament-notebook-paper.${format}`;
                     download(blob, filename);
-                    status.textContent = "Notebook paper, selected dates,"
-                        + " borders and page numbers downloaded · no date text,"
-                        + " handwriting or images."
+                    status.textContent = "Notebook paper, optional printed"
+                        + " numeric date, borders and page numbers downloaded ·"
+                        + " no handwriting or images."
                         + (format === "png" ? ` PNG sheet ${page}.` : "");
                 }
             });
