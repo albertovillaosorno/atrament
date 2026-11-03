@@ -20,36 +20,6 @@ labels belong here.
 
 ## P5 — Deterministic CPU rendering and digital output
 
-### TODO - Implement configurable line-art extraction
-
-Convert images to transparent single-color paths with levels, threshold,
-cleanup, detail, minimum feature, and preview controls suitable for hand
-color.
-
-[docs/todo/open/render/005-line-art-extraction.mdc](docs/todo/open/render/005-line-art-extraction.mdc)
-
-### TODO - Implement digital paper notes and shadows
-
-Render loose note fills, folds, stacking, and soft shadows as digital-only
-objects with readable contrast and explicit live incompatibility.
-
-[docs/todo/open/render/006-digital-paper-notes-shadows.mdc](docs/todo/open/render/006-digital-paper-notes-shadows.mdc)
-
-### TODO - Implement theme-safe decorative titles
-
-Support layered lettering, outlines, highlights, and motifs in digital mode
-and derive a sober, single-pen alternative without losing title hierarchy.
-
-[docs/todo/open/render/007-implement-theme-safe-decorative-titles.mdc](docs/todo/open/render/007-implement-theme-safe-decorative-titles.mdc)
-
-### TODO - Produce vector-preserving PDF
-
-Embed bounded texture and image resources, preserve physical page boxes and
-color, retain searchable semantics when compatible, and emit a render
-manifest.
-
-[docs/todo/open/render/008-produce-vector-preserving-pdf.mdc](docs/todo/open/render/008-produce-vector-preserving-pdf.mdc)
-
 ### TODO - Calibrate print and scan round trips
 
 Measure physical scale, clipping, margins, grid registration, color shifts,

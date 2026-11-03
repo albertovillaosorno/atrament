@@ -1,0 +1,100 @@
+---
+record_type: task
+id: "ATR-P5-007"
+title: "Implement theme-safe decorative titles"
+status: completed
+priority: P5
+lane: cpu-rendering
+dependencies: ["ATR-P5-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Decorative titles render from vector paths.
+acceptance_criteria:
+  - >-
+      Support layered lettering, outlines, highlights, and motifs in digital
+      mode and derive a sober, single-pen alternative without losing title
+      hierarchy.
+  - >-
+      Finite v1 completion: Specify one decorative title in light and dark
+      presentation with a theme-independent semantic fallback; unlimited
+      theme designs are excluded.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement theme-safe decorative titles
+
+## Scope and existing evidence
+
+Historical evidence is domain structure, not an operating raster or PDF
+renderer; the finite design acceptance is explicitly bounded.
+
+Support layered lettering, outlines, highlights, and motifs in digital mode and
+derive a sober, single-pen alternative without losing title hierarchy.
+
+Current executable evidence now freezes a caller-produced digital/live title
+pair around one stable semantic title identity and one exact hierarchy value.
+The digital treatment structurally carries layered lettering, outline,
+highlight,
+and motif inputs while the live treatment remains caller-owned one-pen intent.
+Validation rejects title-identity drift first and hierarchy drift second while
+allowing the mode-specific treatments themselves to differ. Successful
+comparison now returns constructor-sealed evidence borrowing the exact plan.
+
+A 256-case compact oracle crosses 64 hierarchy values with both identity- and
+hierarchy-drift bits while varying digital/live treatment values independently
+and requires direct/sealed admission parity.
+
+Title-style derivation, hierarchy semantics, typography, colors, motif
+generation, one-pen geometry, layout, rendering, and conversion orchestration
+remain open.
+
+## Finite theme-safe title treatments and single-pen fallback
+
+**Inputs:** one accepted semantic title identity with exact hierarchy level,
+selected light/dark theme, digital palette, optional motif assets and requested
+Digital/PDF or single-pen Live output. **Outputs:** a bounded decorative
+proposal in digital modes or a sober single-pen title path preserving identity
+and hierarchy; unsupported resources refuse instead of silently disappearing.
+
+**One title example:** semantic title `t1` reads `Biología`, level 1. The
+light Digital treatment uses dark-blue lettering, one pale-gold underline,
+a thin outline and a small leaf motif outside the text's bounding box. The
+dark treatment uses light lettering and a contrast-checked warm accent; both
+retain identical text, semantic owner and level-1 spatial hierarchy. Motifs
+are independently owned decorative objects, not a rewrite of title text.
+
+**Single-pen alternative:** for a one-pen Live plan, retain the selected
+writer's `Title` role at declared 5 mm cap height, add one simple underline
+with the same pen if safe, and omit color-dependent outlines/highlights,
+shadow and leaf fill only after an explicit capability conversion receipt.
+The derived title still reads `Biología`, retains `t1` and level 1, and does
+not claim a new handwriting profile or automatic pen changes.
+
+**Theme and geometry policy:** require minimum legible foreground/background
+contrast for both palettes before rendering, and keep line/outline separation
+inside the writable page region. Motifs cannot overlap the source title,
+clip its accents or degrade small annotation readability. The conversion
+preview lists every omitted or substituted effect; no unmapped motif becomes
+an invisible live stroke or a hidden false-success Export.
+
+**Refusal example:** a dark theme makes the gold underline unreadable, the
+motif spills into the writable margin, the selected handwriting profile lacks
+`Title` glyphs, or Live asks for multi-color layering. Preserve source text
+and reject the affected treatment or request a different explicit style.
+Missing text glyphs cannot be masked by decorative image lettering.
+
+**Assumptions and limits:** the repository can structurally compare a
+caller-produced digital/live title pair for identical title identity and
+hierarchy. Palette computation, decorative layout, theme contrasts, actual
+handwriting synthesis, alternate geometry and rendering are absent. This is
+one finite title design, not a general theme engine or generated Live plan.
+
+## Acceptance decision
+
+- **Basis:** practical for title/hierarchy pairing; theoretical for theme,
+  decorative and one-pen vector output, 2026-11-02.
+- **Delivered:** one light/dark digital style, same-hierarchy Live fallback,
+  explicit omitted effects and contrast/glyph refusal.
+- **Not implemented by this acceptance:** decorative paths, contrast
+  engine, genuine single-pen alternative or renderer integration.

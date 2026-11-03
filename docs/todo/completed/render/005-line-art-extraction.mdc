@@ -1,0 +1,105 @@
+---
+record_type: task
+id: "ATR-P5-005"
+title: "Implement configurable line-art extraction"
+status: completed
+priority: P5
+lane: cpu-rendering
+dependencies: ["ATR-P5-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Extracted line art must fit authoritative page geometry.
+acceptance_criteria:
+  - >-
+      Convert images to transparent single-color paths with levels,
+      threshold, cleanup, detail, minimum feature, and preview controls
+      suitable for hand color.
+  - >-
+      Finite v1 completion: Process or theoretically specify one
+      raster-to-transparent-line-art example with two detail settings and a
+      rejection for unsuitable source data.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement configurable line-art extraction
+
+## Scope and existing evidence
+
+Historical evidence is domain structure, not an operating raster or PDF
+renderer; the finite design acceptance is explicitly bounded.
+
+Convert images to transparent single-color paths with levels, threshold,
+cleanup, detail, minimum feature, and preview controls suitable for hand color.
+
+Current executable evidence now freezes the accepted live-compatible boundary:
+one source image identity plus caller-owned levels, threshold, cleanup, detail,
+minimum-feature, and preview controls can produce an ordered transparent-black
+vector-path result linked back to that source. Result validation rejects drift
+in any control or source identity from the exact request, with control drift
+checked first. Successful comparison now seals the exact request/result pair so
+later vector or live projection can require source linkage without repeating
+identity logic. A 128-case oracle crosses every six-control drift subset with
+matching or changed source identity and requires direct/sealed parity across
+both mismatch classes plus the exact-match path.
+
+The control values remain generic and have no inferred defaults.
+
+Image decoding, control units/ranges/semantics, path extraction, vector
+geometry,
+acceptance diagnostics, preview rendering, and final rendering remain open.
+
+## Finite transparent single-ink line-art extraction contract
+
+**Inputs:** one immutable admitted raster asset identity, pixel dimensions,
+color/alpha metadata and explicit request controls for levels, threshold,
+cleanup, detail, minimum physical feature and preview. **Outputs:** an
+ordered set of transparent-background black vector paths preserving the
+original source link, a read-only preview proposal, or a refusal. There is
+no automatic photograph-to-single-pen conversion without reviewed loss.
+
+**Finite source/controls:** first release accepts one well-formed opaque PNG
+or JPEG image with known physical placement and an admitted decoder, bounded
+at 8 MiB input and 4096 x 4096 pixels. Level normalization and a threshold
+operate on a declared grayscale luminance transform. Cleanup removes only
+connected components smaller than a declared minimum feature in mm, after
+pixel-to-page scaling. The line-art result contains no white filled regions,
+color, gray wash, opaque background or hidden raster image inside the path.
+
+**Worked two-detail example:** source `photo-1` is a 64 x 64 pixel black
+outline of a four-sided leaf on white with two internal veins. Its physical
+placement is 40 x 40 mm. `Low` uses two gray levels, threshold `0.5`,
+cleanup of isolated components smaller than 0.6 mm and minimum feature
+0.6 mm, returning a leaf outline plus major vein. `High` uses the same
+threshold, cleanup 0.2 mm and minimum feature 0.2 mm, retaining both fine
+veins where independently verified. Each result is transparent except
+source-linked black strokes and has its own exact control/asset identity.
+No real paths are claimed to have been extracted by this description.
+
+**Admission rule:** fixed source and all six control values must match the
+returned path evidence. A preview at 96 DPI only visualizes the candidate;
+explicit user acceptance and output capability must precede replacing a
+colored or photographic source with line art. Unsupported alpha handling,
+missing physical scale or ambiguous line continuity produces a typed
+non-acceptance, not an invented cleanup. Preserve original image bytes.
+
+**Refusal example:** a blurred color photograph without separable edges,
+a 5000-pixel side, transparent source with unknown blending, or returned
+paths linked to another asset refuses the request. Full-color photographs
+remain unsupported in a single-pen Live mode until a separate reviewed
+conversion produces admitted black paths; silence is not consent.
+
+**Assumptions and limits:** the repository already has six-control/source
+linkage for transparent black vector-result intent. Raster decode, edge
+estimation, cleanup, vector tracing, min-feature measurement, preview paint
+and real user acceptance are missing. The leaf paths above are theoretical,
+not rendered or tested line art.
+
+## Acceptance decision
+
+- **Basis:** practical for source/control/result identity; theoretical for
+  vector extraction and loss review, 2026-11-02.
+- **Delivered:** bounded image input, two detail settings, transparent black
+  path target, source preservation and unsuitable-input refusal.
+- **Not implemented by this acceptance:** actual raster-to-vector conversion,
+  image decoder, preview renderer or approved Live conversion.
