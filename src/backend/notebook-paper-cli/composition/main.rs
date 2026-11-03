@@ -15,7 +15,8 @@
 // - Allows:
 //   - Inputs: Explicit page options and bounded versioned paper-only JSON.
 //   - Outputs: PDF or versioned paper-only JSON on stdout, or refusal.
-//   - Side effects: Optional caller-selected profile read and stdout write.
+//   - Side effects: Optional caller-selected profile read and explicit file
+//     commit, or stdout write.
 // - Split-When:
 //   - Production notebook export integrates real user content and file effects.
 // - Merge-When:
@@ -38,6 +39,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io::{self, Read as _, Write as _};
 use std::mem::swap;
+use std::path::Path;
 use std::str::from_utf8;
 
 use atrament_paper_mark_geometry::{
@@ -56,6 +58,9 @@ use atrament_physical_page_profile::{
     PaperMarkAppearance, PaperMarkJoin, PaperMarkLayer, PaperPattern, Rect,
     SheetSize,
 };
+use atrament_profile_file_commit::{
+    ProfileFileCommitDisposition, commit_profile_file,
+};
 use atrament_profile_json_syntax::{
     ProfileJsonSyntaxLimits, ValidatedProfileJsonObject,
     validate_profile_json_object,
@@ -64,6 +69,7 @@ use atrament_profile_json_syntax::{
 const MAX_MARKS: u64 = 10_000;
 const MAX_PROFILE_BYTES: usize = 4_096;
 const MAX_PAGES: usize = 32;
+const MAX_OUTPUT_BYTES: usize = 24_000_000;
 const PAPER_PROFILE_SCHEMA: &str = "atrament.paper.v1";
 const DEFAULT_COLOR: PdfRgb = PdfRgb {
     red: 197,
@@ -77,7 +83,7 @@ const USAGE: &str = "Usage: atrament-paper [--profile paper.json] \
     [--margin-top-mm N] [--margin-bottom-mm N] \
     [--margin-left-mm N] [--margin-right-mm N] \
     [--line-color '#RRGGBB'] [--pages 1..32] \
-    [--emit-profile] > output-file";
+    [--emit-profile] [--output FILE [--replace]] > output-file";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Style {
@@ -100,11 +106,13 @@ struct Options {
     width_um: u32,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 struct CliRequest {
     emit_profile: bool,
     options: Options,
+    output: Option<String>,
     pages: usize,
+    replace: bool,
 }
 
 impl Default for Options {
@@ -327,6 +335,48 @@ fn parse_page_count(value: &str) -> Result<usize, String> {
     Ok(count)
 }
 
+fn apply_paper_edit(
+    opts: &mut Options,
+    name: &str,
+    value: &str,
+    seen_size_override: &mut bool,
+    seen_preset: &mut bool,
+) -> Result<(), String> {
+    match name {
+        "--style" => opts.style = paper_style(value)?,
+        "--paper-size" => {
+            if *seen_size_override || *seen_preset {
+                return Err(
+                    "paper size must precede size overrides and occur once"
+                        .into(),
+                );
+            }
+            (opts.width_um, opts.height_um) = paper_size(value)?;
+            *seen_preset = true;
+        }
+        "--width-mm" => {
+            opts.width_um = millimetres(value)?;
+            *seen_size_override = true;
+        }
+        "--height-mm" => {
+            opts.height_um = millimetres(value)?;
+            *seen_size_override = true;
+        }
+        "--spacing-mm" => opts.spacing_um = millimetres(value)?,
+        "--margin-top-mm" => opts.margin_top_um = millimetres(value)?,
+        "--margin-bottom-mm" => {
+            opts.margin_bottom_um = millimetres(value)?;
+        }
+        "--margin-left-mm" => opts.margin_left_um = millimetres(value)?,
+        "--margin-right-mm" => {
+            opts.margin_right_um = millimetres(value)?;
+        }
+        "--line-color" => opts.color = line_color(value)?,
+        _ => return Err(format!("unsupported option {name}; use --help")),
+    }
+    Ok(())
+}
+
 fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
     let mut opts = Options::default();
     let mut emit_profile = false;
@@ -337,6 +387,8 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
     let mut seen_orientation = false;
     let mut pages = 1;
     let mut seen_pages = false;
+    let mut output = None;
+    let mut replace = false;
     let mut items = args.iter();
     while let Some(name) = items.next() {
         if name == "--help" {
@@ -344,6 +396,13 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
         }
         if name == "--emit-profile" {
             emit_profile = true;
+            continue;
+        }
+        if name == "--replace" {
+            if replace {
+                return Err("--replace may appear only once".into());
+            }
+            replace = true;
             continue;
         }
         if name == "--landscape" || name == "--portrait" {
@@ -372,6 +431,13 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
             seen_profile = true;
             continue;
         }
+        if name == "--output" {
+            if output.is_some() || value.starts_with('-') || value.is_empty() {
+                return Err("--output requires one explicit file path".into());
+            }
+            output = Some(value.clone());
+            continue;
+        }
         seen_edit = true;
         match name.as_str() {
             "--pages" => {
@@ -381,45 +447,27 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
                 pages = parse_page_count(value)?;
                 seen_pages = true;
             }
-            "--style" => opts.style = paper_style(value)?,
-            "--paper-size" => {
-                if seen_size_override || seen_preset {
-                    return Err(
-                        "paper size must precede size overrides and occur once"
-                            .into(),
-                    );
-                }
-                (opts.width_um, opts.height_um) = paper_size(value)?;
-                seen_preset = true;
-            }
-            "--width-mm" => {
-                opts.width_um = millimetres(value)?;
-                seen_size_override = true;
-            }
-            "--height-mm" => {
-                opts.height_um = millimetres(value)?;
-                seen_size_override = true;
-            }
-            "--spacing-mm" => opts.spacing_um = millimetres(value)?,
-            "--margin-top-mm" => opts.margin_top_um = millimetres(value)?,
-            "--margin-bottom-mm" => {
-                opts.margin_bottom_um = millimetres(value)?;
-            }
-            "--margin-left-mm" => opts.margin_left_um = millimetres(value)?,
-            "--margin-right-mm" => {
-                opts.margin_right_um = millimetres(value)?;
-            }
-            "--line-color" => opts.color = line_color(value)?,
-            _ => return Err(format!("unsupported option {name}; use --help")),
+            _ => apply_paper_edit(
+                &mut opts,
+                name,
+                value,
+                &mut seen_size_override,
+                &mut seen_preset,
+            )?,
         }
     }
     if emit_profile && seen_pages {
         return Err("--pages is only valid when exporting a PDF".into());
     }
+    if replace && output.is_none() {
+        return Err("--replace requires --output".into());
+    }
     Ok(Some(CliRequest {
         emit_profile,
         options: opts,
+        output,
         pages,
+        replace,
     }))
 }
 
@@ -706,10 +754,44 @@ fn serialize_paths(
             maximum_commands_per_page: 50_000,
             maximum_pages: MAX_PAGES,
             maximum_paths_per_page: 10_000,
-            maximum_pdf_bytes: 24_000_000,
+            maximum_pdf_bytes: MAX_OUTPUT_BYTES,
         },
     )
     .map_err(|err| format!("PDF encoding refused: {err:?}"))
+}
+
+fn execute(request: CliRequest) -> Result<Option<Vec<u8>>, String> {
+    // Admission and rendering complete before any selected target can change.
+    let pdf = render_pages(request.options, request.pages)?;
+    let bytes = if request.emit_profile {
+        encode_profile(request.options).into_bytes()
+    } else {
+        pdf
+    };
+    let Some(output) = request.output else {
+        return Ok(Some(bytes));
+    };
+    let disposition = if request.replace {
+        ProfileFileCommitDisposition::ReplaceExisting
+    } else {
+        ProfileFileCommitDisposition::PreserveExisting
+    };
+    let _evidence = commit_profile_file(
+        Path::new(&output),
+        &bytes,
+        MAX_OUTPUT_BYTES,
+        disposition,
+    )
+        .map_err(|error| {
+            if error.may_have_committed() {
+                format!(
+                    "output durability unknown; inspect before retry: {error:?}"
+                )
+            } else {
+                format!("output not saved: {error:?}")
+            }
+        })?;
+    Ok(None)
 }
 
 /// Generate a reproducible physical-size sheet with Rust geometry and PDF.
@@ -723,11 +805,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         writeln!(io::stderr().lock(), "{USAGE}")?;
         return Ok(());
     };
-    let bytes = render_pages(request.options, request.pages)?;
-    if request.emit_profile {
-        let json = encode_profile(request.options);
-        io::stdout().lock().write_all(json.as_bytes())?;
-    } else {
+    if let Some(bytes) = execute(request)? {
         io::stdout().lock().write_all(&bytes)?;
     }
     Ok(())

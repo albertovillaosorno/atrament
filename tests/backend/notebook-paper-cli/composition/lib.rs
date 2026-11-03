@@ -385,3 +385,109 @@ fn multi_page_rejects_zero_excess_duplicate_and_profile_only_pages() {
     .expect("largest allowed sheet collection renders");
     assert!(String::from_utf8_lossy(&boundary).contains("/Count 32"));
 }
+
+#[test]
+fn selected_output_parsing_requires_explicit_path_and_overwrite_intent() {
+    for inputs in [
+        vec!["--output"],
+        vec!["--output", "--style"],
+        vec!["--output", "first", "--output", "second"],
+        vec!["--replace"],
+        vec!["--replace", "--replace", "--output", "first"],
+    ] {
+        let args = inputs.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        assert!(parse_options(&args).is_err(), "{args:?}");
+    }
+    let args = ["--output", "paper.json", "--emit-profile"]
+        .map(str::to_owned);
+    let request = parse_options(&args)
+        .expect("save one profile")
+        .expect("not help");
+    assert_eq!(request.output.as_deref(), Some("paper.json"));
+    assert!(!request.replace);
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn explicit_profile_save_round_trips_and_requires_replace_to_overwrite() {
+    use std::fs;
+    use std::process;
+
+    let dir = env::temp_dir().join(format!(
+        "atrament-paper-cli-profile-save-{}",
+        process::id()
+    ));
+    fs::create_dir_all(&dir).expect("test owns a new directory");
+    let output = dir.join("paper.json");
+    let filename = output.to_str().expect("fixture path is UTF-8");
+    let request = parse_options(
+        &["--emit-profile", "--style", "ruled", "--output", filename]
+            .map(str::to_owned),
+    )
+    .expect("valid saved paper profile")
+    .expect("not help");
+    assert_eq!(execute(request.clone()).expect("save paper profile"), None);
+    let initial = fs::read(&output).expect("read committed paper profile");
+    let loaded = read_profile(filename).expect("reload saved profile");
+    assert_eq!(style_name(loaded.style), "ruled");
+    assert!(execute(request).is_err(), "no implicit overwrite");
+    assert_eq!(fs::read(&output).expect("original remains"), initial);
+
+    let edited = parse_options(
+        &["--profile", filename, "--style", "grid", "--output",
+          filename, "--replace", "--emit-profile"].map(str::to_owned),
+    )
+    .expect("editable loaded profile")
+    .expect("not help");
+    assert_eq!(execute(edited).expect("atomic replace"), None);
+    let edited_profile = read_profile(filename).expect("reload edited profile");
+    assert_eq!(style_name(edited_profile.style), "grid");
+    assert_ne!(fs::read(&output).expect("edited file"), initial);
+    fs::remove_dir_all(&dir).expect("remove owned directory");
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_pdf_refuses_invalid_edition_and_existing_symlink() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use std::process;
+
+    let dir = env::temp_dir().join(format!(
+        "atrament-paper-cli-pdf-save-{}",
+        process::id()
+    ));
+    fs::create_dir_all(&dir).expect("test owns a new directory");
+    let output = dir.join("printed.pdf");
+    let filename = output.to_str().expect("fixture path is UTF-8");
+    let request = parse_options(
+        &["--pages", "2", "--output", filename].map(str::to_owned),
+    )
+    .expect("valid selected PDF")
+    .expect("not help");
+    assert_eq!(execute(request).expect("PDF file committed"), None);
+    let pdf = fs::read(&output).expect("PDF bytes on disk");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    assert!(String::from_utf8_lossy(&pdf).contains("/Count 2"));
+
+    let invalid = parse_options(
+        &["--style", "dot", "--spacing-mm", "1", "--output",
+          filename, "--replace"].map(str::to_owned),
+    )
+    .expect("parsed invalid geometry")
+    .expect("not help");
+    assert!(execute(invalid).is_err());
+    assert_eq!(fs::read(&output).expect("PDF preserved"), pdf);
+
+    let alias = dir.join("alias.pdf");
+    symlink(&output, &alias).expect("create symlink fixture");
+    let alias_path = alias.to_str().expect("fixture path is UTF-8");
+    let replace_alias = parse_options(
+        &["--output", alias_path, "--replace"].map(str::to_owned),
+    )
+    .expect("explicit symlink target")
+    .expect("not help");
+    assert!(execute(replace_alias).is_err(), "symlink replacement refused");
+    assert_eq!(fs::read(&output).expect("PDF preserved"), pdf);
+    fs::remove_dir_all(&dir).expect("remove owned directory");
+}

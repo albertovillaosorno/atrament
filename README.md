@@ -86,6 +86,26 @@ cargo run -q -p atrament_notebook_paper_cli -- \
 
 Pages contain the selected paper marks only; they do not yet include
 handwriting, dates, page numbers, or custom per-page content.
+For explicit file saving instead of shell redirection, pass `--output FILE`.
+It uses the existing Rust atomic file-commit adapter and refuses to overwrite
+an existing file or symlink. `--replace` permits replacement of an existing
+regular file, never a symlink; invalid profiles and geometry are rejected
+before the target is changed. An uncertain post-commit durability failure is
+reported explicitly rather than treated as a safe retry:
+
+```sh
+cargo run -q -p atrament_notebook_paper_cli -- \
+  --paper-size letter --style ruled --pages 2 --output ruled.pdf
+cargo run -q -p atrament_notebook_paper_cli -- \
+  --style grid --emit-profile --output paper-profile.json
+cargo run -q -p atrament_notebook_paper_cli -- \
+  --profile paper-profile.json --spacing-mm 4.5 \
+  --emit-profile --output paper-profile.json --replace
+```
+
+The explicit file-saving transport is Linux-only for now. Without `--output`,
+the original stdout PDF/JSON behavior remains unchanged.
+
 
 For a reusable paper-only profile, the same CLI can emit versioned JSON,
 read it again, and apply further explicit edits:
