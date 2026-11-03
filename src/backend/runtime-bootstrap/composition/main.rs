@@ -47,6 +47,7 @@ use std::str::from_utf8;
 use nix::sys::prctl;
 
 use atrament_browser_launch as browser_launch;
+use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 use atrament_explicit_file_path_intent::{
     ExplicitFilePathSource, ExplicitFilePurpose, ExplicitOverwriteIntent,
     classify_explicit_file_path_intent,
@@ -77,7 +78,13 @@ use atrament_session_application::SessionApplication;
 use atrament_session_handshake::{
     HandshakeService, PRODUCT_VERSION, PROTOCOL_VERSION,
 };
-use atrament_session_runtime::Runtime;
+use atrament_session_runtime::{
+    HandwritingProfileError, HandwritingProfileGateway, Runtime,
+};
+use atrament_handwriting_statistics::HandwritingStatisticsProfile;
+use atrament_handwriting_statistics_json::{
+    decode_statistics_json, encode_statistics_json,
+};
 use atrament_session_secret::SessionSecret;
 
 // This is bounded source-verification policy, not a general profile ingestion
@@ -88,6 +95,30 @@ const PROFILE_INSPECT_MAX_ENTRIES: usize = 64;
 const PROFILE_INSPECT_MAX_MEMBER_BYTES: usize = 2 * 1024 * 1024;
 const PROFILE_INSPECT_MAX_MEMBER_BYTES_U64: u64 = 2 * 1024 * 1024;
 const PROFILE_INSPECT_MAX_ROOT_BYTES: usize = 128 * 1024;
+
+/// Compose the real Rust statistics codec and Unicode adapter for HTTP use.
+struct HandwritingGateway;
+
+impl HandwritingProfileGateway for HandwritingGateway {
+    fn canonical_json(
+        &self,
+        input: &[u8],
+    ) -> Result<Vec<u8>, HandwritingProfileError> {
+        let accepted = decode_statistics_json(
+            input, &UnicodeGraphemeSegmentation,
+        ).map_err(|_error| HandwritingProfileError)?;
+        encode_statistics_json(&accepted, &UnicodeGraphemeSegmentation)
+            .map_err(|_error| HandwritingProfileError)
+    }
+
+    fn default_json(&self) -> Result<Vec<u8>, HandwritingProfileError> {
+        encode_statistics_json(
+            &HandwritingStatisticsProfile::baseline(0),
+            &UnicodeGraphemeSegmentation,
+        ).map_err(|_error| HandwritingProfileError)
+    }
+}
+
 
 /// Private, path-free canonicality refusal after complete source verification.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -705,6 +736,9 @@ fn main() -> io::Result<()> {
     browser_launch::launch(&initial_browser_url)
         .map_err(|error| browser_launch_failure(&error))?;
     publish_startup("ready", Some(runtime.origin()))?;
-    runtime.serve(secret.encoded(), &handshake, &mut application);
+    runtime.serve(
+        secret.encoded(), &HandwritingGateway,
+        &handshake, &mut application,
+    );
     Ok(())
 }

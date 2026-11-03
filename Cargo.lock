@@ -808,6 +808,8 @@ version = "0.1.0"
 dependencies = [
  "atrament_browser_launch",
  "atrament_explicit_file_path_intent",
+ "atrament_handwriting_statistics",
+ "atrament_handwriting_statistics_json",
  "atrament_profile_entry_sha256",
  "atrament_profile_export_assembly",
  "atrament_profile_file_commit",
@@ -823,6 +825,7 @@ dependencies = [
  "atrament_session_handshake",
  "atrament_session_runtime",
  "atrament_session_secret",
+ "atrament_unicode_grapheme_segmentation",
  "nix",
 ]
 
@@ -969,11 +972,14 @@ name = "atrament_session_runtime"
 version = "0.1.0"
 dependencies = [
  "atrament_diagnostic",
+ "atrament_handwriting_statistics",
+ "atrament_handwriting_statistics_json",
  "atrament_notebook_paper_cli",
  "atrament_session_draft",
  "atrament_session_draft_port",
  "atrament_session_handshake",
  "atrament_session_handshake_port",
+ "atrament_unicode_grapheme_segmentation",
 ]
 
 [[package]]

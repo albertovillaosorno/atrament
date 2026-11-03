@@ -117,6 +117,13 @@ paper-only profile; and `POST /api/paper/pdf` produces its physical vector
 PDF. The POST routes require the exact session Origin, Bearer credential and
 bounded JSON input. This API does not yet save files or render handwriting.
 
+The same Rust session now admits `GET /api/handwriting/profile` for the
+uncalibrated default, `POST /api/handwriting/profile` for canonical, bounded
+statistics validation, and `GET /api/handwriting/dimensions` for the ten
+variable names, physical units, and domain bounds. All three require the
+current session credential; POST additionally requires the exact Origin.
+These endpoints do not save server-side files or render written glyphs.
+
 The localhost workspace presents a **paper-only** editor after a successful
 session handshake. It offers A3/A4/A5/B5/Letter/Legal presets,
 blank/ruled/grid/dot patterns, physical dimensions, editable spacing and

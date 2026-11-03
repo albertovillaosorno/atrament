@@ -39,6 +39,7 @@
 //! transport without owning the application state those routes mutate.
 
 use std::fmt;
+use std::fmt::Write as _;
 use std::io::{self, Read as _, Write as _};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
@@ -48,6 +49,9 @@ use std::time::{Duration, Instant};
 use atrament_session_draft as _;
 #[cfg(test)]
 use atrament_session_handshake as _;
+
+use atrament_handwriting_statistics::{Dimension, Unit};
+use atrament_handwriting_statistics_json::MAXIMUM_STATISTICS_JSON_BYTES;
 
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, DIAGNOSTIC_VERSION, Diagnostic,
@@ -134,6 +138,34 @@ const SESSION_HANDSHAKE_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/session-handshake.js"
 );
 
+/// Refusal of a malformed or unencodable statistics profile.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct HandwritingProfileError;
+
+/// Trusted Rust gateway for the admitted statistics codec.
+///
+/// HTTP admission stays in transport; composition supplies the actual
+/// handwritten-statistics codec and Unicode grapheme implementation.
+pub trait HandwritingProfileGateway {
+    /// Validate and canonicalize caller-supplied JSON without persistence.
+    ///
+    /// # Errors
+    ///
+    /// Refuses invalid or unencodable statistics profiles.
+    fn canonical_json(
+        &self,
+        input: &[u8],
+    ) -> Result<Vec<u8>, HandwritingProfileError>;
+
+    /// Produce the uncalibrated baseline through the canonical Rust codec.
+    ///
+    /// # Errors
+    ///
+    /// Refuses a default profile that cannot be encoded.
+    fn default_json(&self) -> Result<Vec<u8>, HandwritingProfileError>;
+}
+
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ParsedRequestTarget<'request> {
     host: &'request str,
@@ -147,6 +179,7 @@ pub struct RouteRequestContext<'context> {
     expected_origin: &'context str,
     expected_secret: &'context str,
     handshake: &'context dyn SessionHandshake,
+    handwriting_gateway: &'context dyn HandwritingProfileGateway,
 }
 
 impl fmt::Debug for RouteRequestContext<'_> {
@@ -167,12 +200,14 @@ impl<'context> RouteRequestContext<'context> {
         expected_origin: &'context str,
         expected_secret: &'context str,
         handshake: &'context dyn SessionHandshake,
+        handwriting_gateway: &'context dyn HandwritingProfileGateway,
     ) -> Self {
         Self {
             expected_host,
             expected_origin,
             expected_secret,
             handshake,
+            handwriting_gateway,
         }
     }
 }
@@ -234,6 +269,7 @@ impl Runtime {
     pub fn serve(
         self,
         expected_secret: &str,
+        handwriting_gateway: &dyn HandwritingProfileGateway,
         handshake: &dyn SessionHandshake,
         draft: &mut dyn SessionDraft,
     ) {
@@ -242,6 +278,7 @@ impl Runtime {
             &self.origin,
             expected_secret,
             handshake,
+            handwriting_gateway,
         );
         for incoming in self.listener.incoming() {
             let Ok(mut connection) = incoming else {
@@ -988,6 +1025,105 @@ fn route_paper_profile(
     }
 }
 
+fn handwriting_dimension_catalog() -> String {
+    let mut json = String::from("{\"dimensions\":[");
+    for (index, dimension) in Dimension::ALL.into_iter().enumerate() {
+        if index > 0 {
+            json.push(',');
+        }
+        let unit = match dimension.unit() {
+            Unit::Micrometres => "micrometres",
+            Unit::Millidegrees => "millidegrees",
+            Unit::PartsPerThousand => "parts_per_thousand",
+        };
+        let bounds = dimension.bounds();
+        let _written = write!(
+            json,
+            concat!(
+                "{{\"key\":\"{}\",\"unit\":\"{}\",",
+                "\"minimum\":{},\"maximum\":{}}}",
+            ),
+            dimension.key(),
+            unit,
+            bounds.minimum,
+            bounds.maximum,
+        );
+    }
+    json.push_str("]}");
+    json
+}
+
+fn route_handwriting_profile(
+    request: &[u8],
+    method: &str,
+    target: &str,
+    context: &RouteRequestContext<'_>,
+) -> Vec<u8> {
+    let origin_ok = if method == "GET" {
+        request_origin_is_admitted(request, context.expected_origin)
+    } else {
+        request_has_exact_origin(request, context.expected_origin)
+    };
+    if !request_has_session_credential(request, context.expected_secret)
+        || !origin_ok
+    {
+        return json_response(
+            "401 Unauthorized",
+            br#"{"error":"unauthenticated"}"#,
+        );
+    }
+    if method == "GET" && target == "/api/handwriting/dimensions" {
+        return json_response(
+            "200 OK", handwriting_dimension_catalog().as_bytes(),
+        );
+    }
+    if method == "GET" {
+        return match context.handwriting_gateway.default_json() {
+            Ok(json) => json_response("200 OK", &json),
+            Err(_error) => json_response(
+                "500 Internal Server Error",
+                br#"{"error":"handwriting_profile_unavailable"}"#,
+            ),
+        };
+    }
+    if method != "POST" || target != "/api/handwriting/profile" {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    }
+    if !single_header_value(request, "content-type").is_some_and(
+        |media_type| {
+            media_type.eq_ignore_ascii_case("application/json")
+                || media_type.eq_ignore_ascii_case(JSON_CONTENT_TYPE)
+        },
+    ) {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    }
+    let Some(body) = request_body(request) else {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    };
+    if body.len() > MAXIMUM_STATISTICS_JSON_BYTES {
+        return json_response(
+            "413 Content Too Large",
+            br#"{"error":"handwriting_profile_too_large"}"#,
+        );
+    }
+    match context.handwriting_gateway.canonical_json(body) {
+        Ok(json) => json_response("200 OK", &json),
+        Err(_error) => json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_handwriting_profile"}"#,
+        ),
+    }
+}
+
 fn draft_field_for_target(target: &str) -> Option<DraftField> {
     match target {
         "/api/session/candidate" => Some(DraftField::Candidate),
@@ -1329,6 +1465,14 @@ pub fn route_request(
             parsed.method,
             parsed.target,
             context,
+        );
+    }
+    if matches!(
+        parsed.target,
+        "/api/handwriting/profile" | "/api/handwriting/dimensions"
+    ) {
+        return route_handwriting_profile(
+            request, parsed.method, parsed.target, context,
         );
     }
     if let Some(field) = draft_field_for_target(parsed.target) {

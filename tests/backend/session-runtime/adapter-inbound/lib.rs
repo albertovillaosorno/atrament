@@ -51,6 +51,9 @@ use atrament_session_handshake::{
     PROMPT_VERSION, PROTOCOL_VERSION, RENDERER_VERSION,
 };
 use atrament_session_runtime as _;
+use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+use atrament_handwriting_statistics::HandwritingStatisticsProfile;
+use atrament_handwriting_statistics_json::{decode_statistics_json, encode_statistics_json};
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
 };
@@ -61,6 +64,30 @@ const EXPECTED_SECRET: &str =
     "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
 
 static HANDSHAKE: HandshakeService = HandshakeService;
+struct TestHandwritingGateway;
+
+impl runtime::HandwritingProfileGateway for TestHandwritingGateway {
+    fn canonical_json(
+        &self,
+        input: &[u8],
+    ) -> Result<Vec<u8>, runtime::HandwritingProfileError> {
+        let admitted = decode_statistics_json(
+            input, &UnicodeGraphemeSegmentation,
+        ).map_err(|_error| runtime::HandwritingProfileError)?;
+        encode_statistics_json(&admitted, &UnicodeGraphemeSegmentation)
+            .map_err(|_error| runtime::HandwritingProfileError)
+    }
+
+    fn default_json(&self) -> Result<Vec<u8>, runtime::HandwritingProfileError> {
+        encode_statistics_json(
+            &HandwritingStatisticsProfile::baseline(0),
+            &UnicodeGraphemeSegmentation,
+        ).map_err(|_error| runtime::HandwritingProfileError)
+    }
+}
+
+
+static GATEWAY: TestHandwritingGateway = TestHandwritingGateway;
 
 struct MustNotEvaluateHandshake;
 
@@ -87,6 +114,7 @@ fn route_context<'context>(
         EXPECTED_ORIGIN,
         secret,
         handshake,
+        &GATEWAY,
     )
 }
 
@@ -478,7 +506,7 @@ fn response_for_incomplete_body(close_write: bool) -> Vec<u8> {
         &host,
         "http://127.0.0.1:1",
         EXPECTED_SECRET,
-        &HANDSHAKE,
+        &HANDSHAKE, &GATEWAY,
     );
     let mut draft = SessionDraftService::default();
     assert!(!runtime::serve_connection(&mut server, &context, &mut draft)
@@ -2422,7 +2450,7 @@ fn session_end_terminates_listener_and_destroys_process_owned_draft() {
     let origin = runtime.origin().to_owned();
     let server = thread::spawn(move || {
         let mut draft = seeded_private_draft();
-        runtime.serve(EXPECTED_SECRET, &HANDSHAKE, &mut draft);
+        runtime.serve(EXPECTED_SECRET, &GATEWAY, &HANDSHAKE, &mut draft);
         assert_private_draft_unchanged(&draft);
         // Draft bytes are dropped after the listener returns.
     });
@@ -2498,7 +2526,7 @@ fn abandoned_end_reply_still_drops_private_draft_after_complete_request() {
             inner: seeded_private_draft(),
             dropped: server_dropped,
         };
-        runtime.serve(EXPECTED_SECRET, &HANDSHAKE, &mut draft);
+        runtime.serve(EXPECTED_SECRET, &GATEWAY, &HANDSHAKE, &mut draft);
         assert_private_draft_unchanged(&draft.inner);
         // The owner is disposed even if the End acknowledgement is unread.
     });
@@ -2584,7 +2612,7 @@ fn accepted_end_is_terminal_when_acknowledgement_cannot_be_written() {
     assert!(server.write_all(b"probe").is_err(),
         "disabled server socket cannot send acknowledgement bytes");
     let context = runtime::RouteRequestContext::new(
-        &host, &origin, EXPECTED_SECRET, &HANDSHAKE,
+        &host, &origin, EXPECTED_SECRET, &HANDSHAKE, &GATEWAY,
     );
     let mut draft = seeded_private_draft();
     assert!(runtime::serve_connection(&mut server, &context, &mut draft)
@@ -3409,7 +3437,7 @@ fn loopback_draft_mutation_requires_declared_utf8_text_media_type() {
         runtime::configure_connection_deadline(&server)
             .expect("server deadline configures");
         let context = runtime::RouteRequestContext::new(
-            &host, &origin, EXPECTED_SECRET, &HANDSHAKE,
+            &host, &origin, EXPECTED_SECRET, &HANDSHAKE, &GATEWAY,
         );
         let mut draft = seeded_private_draft();
         assert!(!runtime::serve_connection(&mut server, &context, &mut draft)
@@ -5058,4 +5086,175 @@ fn paper_api_refuses_unknown_fields_invalid_geometry_and_oversized_json() {
         EXPECTED_HOST,
     );
     assert_eq!(status_line(&response), "HTTP/1.1 413 Content Too Large");
+}
+
+#[test]
+fn handwriting_profile_http_canonical_roundtrip_is_rust_owned() {
+    let get = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/handwriting/profile", Some(EXPECTED_SECRET),
+            None, None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&get), "HTTP/1.1 200 OK");
+    let baseline = paper_http_body(&get);
+    let baseline_text = std::str::from_utf8(baseline)
+        .expect("default handwriting JSON UTF-8");
+    assert!(baseline_text.contains("atrament.handwriting.statistics.v1"));
+    assert!(baseline_text.contains("\"seed\":0"));
+    assert!(baseline_text.contains("\"dimension\":\"height\""));
+    let canonical = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/handwriting/profile",
+            Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), baseline,
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&canonical), "HTTP/1.1 200 OK");
+    assert_eq!(paper_http_body(&canonical), baseline);
+
+    let edited = baseline_text.replace("\"seed\":0", "\"seed\":987");
+    let changed = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/handwriting/profile",
+            Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), edited.as_bytes(),
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&changed), "HTTP/1.1 200 OK");
+    assert!(std::str::from_utf8(paper_http_body(&changed))
+        .expect("admitted output UTF-8")
+        .contains("\"seed\":987"));
+}
+
+#[test]
+fn handwriting_profile_http_requires_exact_session_authority() {
+    for method in ["GET", "POST"] {
+        for secret in [None, Some("b".repeat(64))] {
+            let response = route_runtime(
+                &paper_endpoint_request(
+                    method, "/api/handwriting/profile", secret.as_deref(),
+                    Some(EXPECTED_ORIGIN), Some("application/json"),
+                    if method == "GET" { b"" } else { b"{}" },
+                ),
+                EXPECTED_HOST,
+            );
+            assert_eq!(status_line(&response), "HTTP/1.1 401 Unauthorized");
+            assert!(!String::from_utf8_lossy(&response)
+                .contains("atrament.handwriting.statistics.v1"));
+        }
+    }
+    for origin in [None, Some("null"), Some("http://malicious.local")] {
+        let response = route_runtime(
+            &paper_endpoint_request(
+                "POST", "/api/handwriting/profile", Some(EXPECTED_SECRET),
+                origin, Some("application/json"), b"{}",
+            ),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&response), "HTTP/1.1 401 Unauthorized");
+    }
+    let response = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/handwriting/profile", Some(EXPECTED_SECRET),
+            Some("http://malicious.local"), None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&response), "HTTP/1.1 401 Unauthorized");
+}
+
+#[test]
+fn handwriting_profile_http_refuses_invalid_json_and_payload_shapes() {
+    let get = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/handwriting/profile", Some(EXPECTED_SECRET),
+            None, None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    let canonical = std::str::from_utf8(paper_http_body(&get))
+        .expect("baseline JSON is UTF-8");
+    let invalid = [
+        canonical.replace("statistics.v1", "statistics.v2"),
+        canonical.replace("\"seed\":0", "\"seed\":-1"),
+        canonical.replace("\"seed\":0", "\"seed\":0,\"seed\":7"),
+        canonical.replace("\"dimension\":\"height\"", "\"dimension\":\"fake\""),
+    ];
+    for bad in invalid {
+        let response = route_runtime(
+            &paper_endpoint_request(
+                "POST", "/api/handwriting/profile", Some(EXPECTED_SECRET),
+                Some(EXPECTED_ORIGIN), Some("application/json"), bad.as_bytes(),
+            ),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&response), "HTTP/1.1 400 Bad Request");
+        assert_eq!(
+            paper_http_body(&response),
+            br#"{"error":"invalid_handwriting_profile"}"#,
+        );
+    }
+    for content_type in [None, Some("text/plain"), Some("application/pdf")] {
+        let response = route_runtime(
+            &paper_endpoint_request(
+                "POST", "/api/handwriting/profile", Some(EXPECTED_SECRET),
+                Some(EXPECTED_ORIGIN), content_type, canonical.as_bytes(),
+            ),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&response), "HTTP/1.1 400 Bad Request");
+    }
+    let oversized = vec![b' '; 1_048_577];
+    let response = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/handwriting/profile", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"), &oversized,
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&response), "HTTP/1.1 413 Content Too Large");
+}
+
+#[test]
+fn handwriting_dimension_catalog_uses_rust_domain_bounds() {
+    let accepted = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/handwriting/dimensions",
+            Some(EXPECTED_SECRET), None, None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&accepted), "HTTP/1.1 200 OK");
+    let catalog = std::str::from_utf8(paper_http_body(&accepted))
+        .expect("domain metadata must be UTF-8");
+    assert!(catalog.starts_with("{\"dimensions\":["));
+    assert!(catalog.contains("\"key\":\"height\""));
+    assert!(catalog.contains("\"unit\":\"micrometres\""));
+    assert!(catalog.contains("\"minimum\":100,\"maximum\":30000"));
+    assert_eq!(catalog.matches("\"key\":").count(), 10);
+    for secret in [None, Some("b".repeat(64))] {
+        let denied = route_runtime(
+            &paper_endpoint_request(
+                "GET", "/api/handwriting/dimensions",
+                secret.as_deref(), None, None, b"",
+            ),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&denied), "HTTP/1.1 401 Unauthorized");
+        assert!(!String::from_utf8_lossy(&denied)
+            .contains("\"key\":\"height\""));
+    }
+    let denied = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/handwriting/dimensions",
+            Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), b"{}",
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&denied), "HTTP/1.1 400 Bad Request");
 }
