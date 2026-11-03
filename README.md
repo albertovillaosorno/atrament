@@ -465,6 +465,11 @@ cargo run -q -p atrament_profile_editor_cli -- glyphs \
   --profile my-glyphs.tsv --audit-text '¡Señor! «Sí» ñ ∞'
 ```
 
+Use `glyphs --profile my-glyphs.tsv --audit-baseline` to check every member
+of the frozen **114 exact English/Spanish text graphemes** automatically,
+including accents and guillemets. The baseline does **not** include math;
+audit `∞`, equations or other symbols separately with `--audit-text`.
+
 The audit lists each distinct visible grapheme, its Unicode code points, and
 its actual authored stroke count or missing status; it does not confuse the
 statistical/text baseline with renderable ink. The versioned format

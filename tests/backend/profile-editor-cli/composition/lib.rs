@@ -2101,3 +2101,44 @@ fn glyph_audit_and_removal_refuse_bad_flags_without_writing_files() {
     fs::remove_file(library).expect("remove library");
     fs::remove_file(target).expect("remove target");
 }
+
+#[test]
+fn english_spanish_glyph_baseline_audits_all_114_real_shapes() {
+    let report = execute_glyph_library(&args(&["--audit-baseline"]))
+        .expect("baseline audit without shapes")
+        .expect("read-only report");
+    let report = String::from_utf8(report).expect("UTF-8 codepoint report");
+    assert!(report.contains("Frozen English/Spanish text baseline"));
+    assert!(report.contains("math symbols are separate"));
+    assert!(report.contains("Distinct visible graphemes: 114"));
+    assert!(report.contains("Missing authored glyphs: 114"));
+    assert!(report.contains("[U+00F1]: missing authored strokes"));
+    assert!(report.contains("[U+00AB]: missing authored strokes"));
+    assert!(report.contains("[U+00BB]: missing authored strokes"));
+    assert!(report.contains("[U+006E U+0303]: missing authored strokes"));
+    assert!(!report.contains("[U+221E]"),
+        "mathematical glyphs require the separate inventory");
+
+    let with_one = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+        "250", "#112233", "--audit-baseline",
+    ])).expect("authored shape audited").expect("report");
+    let with_one = String::from_utf8(with_one).expect("valid report");
+    assert!(with_one.contains("Missing authored glyphs: 113"));
+    assert!(with_one.contains("[U+00F1]: 1 authored strokes"));
+    assert!(with_one.contains("[U+006E U+0303]: missing authored strokes"));
+}
+
+#[test]
+fn glyph_baseline_audit_refuses_duplicate_or_mutating_selection() {
+    for command in [
+        args(&["--audit-baseline", "--audit-baseline"]),
+        args(&["--audit-baseline", "--audit-text", "ñ"]),
+        args(&["--audit-text", "ñ", "--audit-baseline"]),
+        args(&["--audit-baseline", "--replace"]),
+        args(&["--audit-baseline", "--output", "unused.tsv"]),
+    ] {
+        assert!(execute_glyph_library(&command).is_err(),
+            "auditing must stay read-only and unambiguous");
+    }
+}

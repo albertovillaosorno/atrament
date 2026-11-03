@@ -73,7 +73,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     | paper [atrament-paper options] \
     | glyphs [--profile strokes.tsv] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
-    [--remove-glyph GRAPHEME] [--audit-text UTF8_TEXT] \
+    [--remove-glyph GRAPHEME] [--audit-text UTF8_TEXT|--audit-baseline] \
     [--output strokes.tsv [--replace]] \
     | handwriting [--profile ink.json] [--seed U64] \
     [--set-global DIM MIN MAX MEAN MEDIAN DEVIATION] \
@@ -662,10 +662,27 @@ fn read_glyph_input(path: &str) -> Result<Vec<u8>, String> {
 }
 
 /// An explicit reusable glyph shape file, distinct from numeric statistics.
+/// Keep human-entered shape coverage audits bounded and explicit.
+fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
+    if selected.is_empty()
+        || selected.len() > MAX_INVENTORY_TEXT_BYTES
+        || selected.chars().all(char::is_whitespace)
+        || selected.chars().any(|ch| {
+            ch.is_control() && !ch.is_whitespace()
+        }) {
+        return Err(concat!(
+            "glyph audit needs 1..4096 UTF-8 bytes of ",
+            "visible text without control characters",
+        ).into());
+    }
+    Ok(())
+}
+
 fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let mut glyphs = GlyphOverlay::default();
     let mut output = None;
     let mut audit_text = None;
+    let mut audit_baseline = false;
     let mut replace = false;
     let mut iter = args.iter();
     while let Some(option) = iter.next() {
@@ -682,24 +699,27 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                     .ok_or("--remove-glyph requires an exact grapheme")?;
                 glyphs.remove_glyph(grapheme)?;
             }
+            "--audit-baseline" => {
+                if audit_text.is_some() {
+                    return Err(concat!(
+                        "--audit-text and --audit-baseline ",
+                        "may be selected only once",
+                    ).into());
+                }
+                audit_baseline = true;
+                audit_text = Some(REQUIRED_TEXT_GRAPHEMES.iter()
+                    .map(|entry| entry.grapheme)
+                    .collect::<Vec<_>>().join(" "));
+            }
             "--audit-text" => {
+
                 if audit_text.is_some() {
                     return Err("--audit-text may appear only once".into());
                 }
                 let selected = iter.next()
                     .ok_or("--audit-text requires UTF-8 text")?;
-                if selected.is_empty()
-                    || selected.len() > MAX_INVENTORY_TEXT_BYTES
-                    || selected.chars().all(char::is_whitespace)
-                    || selected.chars().any(|ch| {
-                        ch.is_control() && !ch.is_whitespace()
-                    }) {
-                    return Err(concat!(
-                        "glyph audit needs 1..4096 UTF-8 bytes of ",
-                        "visible text without control characters",
-                    ).into());
-                }
-                audit_text = Some(selected);
+                validate_glyph_audit_text(selected)?;
+                audit_text = Some(selected.clone());
             }
 
             "--output" => {
@@ -723,7 +743,17 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
         if output.is_some() || replace {
             return Err("--audit-text is stdout-only; omit --output".into());
         }
-        return glyphs.audit_text(text).map(Some);
+        let mut report = glyphs.audit_text(&text)?;
+        if audit_baseline {
+            let mut label = concat!(
+                "Frozen English/Spanish text baseline; ",
+                "math symbols are separate.\n",
+            ).as_bytes().to_vec();
+            label.append(&mut report);
+            return Ok(Some(label));
+        }
+        return Ok(Some(report));
+
     }
     let bytes = glyphs.encode_file()?;
 
