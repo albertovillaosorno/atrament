@@ -447,12 +447,13 @@ missing-symbol authoring before P4-012 or P5-011 can close.
 
 The optional `--handwriting-profile ink.json` reads the existing saved
 `atrament.handwriting.statistics.v1` file through the same strict Rust codec.
-For each exact authored grapheme it applies the **configured mean** of five
-variables: `width`, `height`, `ink_thickness`, `letter_spacing` and
-`baseline_offset`. Width and height map the 3.5 × 4.5 mm template cell to
-physical micrometres; ink thickness scales relative to 300 µm, baseline
-moves the segment vertically, and character advance is width plus letter
-spacing. Literal spaces still advance 4 mm. For example:
+For each exact authored grapheme it applies the **configured mean** of six
+variables: `width`, `height`, `ink_thickness`, `letter_spacing`,
+`baseline_offset` and `slant`. Width and height map the
+3.5 × 4.5 mm template cell to physical micrometres; ink thickness
+scales relative to 300 µm, baseline moves the segment vertically, and
+character advance is width plus letter spacing. Literal spaces still
+advance 4 mm. For example:
 
 ```sh
 cargo run -q -p atrament_profile_editor_cli -- handwriting \
@@ -468,9 +469,12 @@ cargo run -q -p atrament_profile_editor_cli -- notebook \
 Scaled strokes still need to fit the paper's printable region and the
 80–1500 µm physical pen width; nonpositive glyph advances refuse. Negative
 baseline positions or excessive lengths also refuse before writing output.
-These are deterministic affine transformations of *your supplied shapes*;
+
+Slant is a baseline-anchored shear using the mean millidegree angle:
+positive slant leans the top right, negative leans left, and out-of-page
+results refuse. These are deterministic transforms of *your supplied shapes*;
 there is **no sampling** and no actual learned handwriting. The other
-statistics (`slant`, `roundness`, `flattening`, `pressure`, `texture`), and
+statistics (`roundness`, `flattening`, `pressure`, `texture`), and
 standard deviation, min/max envelope, median, and seed, remain validated
 profile data but **do not currently modify output ink**.
 

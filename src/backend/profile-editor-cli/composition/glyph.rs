@@ -54,6 +54,7 @@ const MAX_RUN_GRAPHEMES: usize = 96;
 
 // Authored local coordinates are only scaled when a separate saved
 // statistical profile is explicitly selected by the caller.
+// A configured slant additionally shears the upper contours in physical units.
 const DEFAULT_TEMPLATE_WIDTH_UM: u32 = 3_500;
 const DEFAULT_TEMPLATE_HEIGHT_UM: u32 = 4_500;
 const DEFAULT_TEMPLATE_INK_UM: u32 = 300;
@@ -64,6 +65,7 @@ struct GlyphMetrics {
     height: u32,
     ink_thickness: u32,
     letter_spacing: i32,
+    slant: i32,
     width: u32,
 }
 
@@ -85,6 +87,7 @@ impl GlyphMetrics {
             height: positive(Dimension::Height)?,
             ink_thickness: positive(Dimension::InkThickness)?,
             letter_spacing: mean(Dimension::LetterSpacing)?,
+            slant: mean(Dimension::Slant)?,
             width: positive(Dimension::Width)?,
         })
     }
@@ -134,20 +137,8 @@ impl GlyphOverlay {
                     if expanded.len() == MAX_NOTEBOOK_INK_LINES {
                         return Err("text exceeds 512 total pen strokes".into());
                     }
-                    let translate = |point: (u32, u32)| -> Result<
-                        (u32, u32), String,
-                    > {
-                        let (x, y) = if let Some(values) = metrics {
-                            (
-                                scale(point.0, values.width,
-                                    DEFAULT_TEMPLATE_WIDTH_UM)?,
-                                scale(point.1, values.height,
-                                    DEFAULT_TEMPLATE_HEIGHT_UM)?,
-                            )
-                        } else {
-                            point
-                        };
-                        Ok((coordinate(glyph_x, x)?, coordinate(glyph_y, y)?))
+                    let translate = |point| {
+                        glyph_point(glyph_x, glyph_y, point, metrics)
                     };
                     let width_um = if let Some(values) = metrics {
                         scale(shape.width_um, values.ink_thickness,
@@ -290,6 +281,49 @@ impl GlyphOverlay {
         }
         Ok(())
     }
+}
+
+fn glyph_point(
+    glyph_x: i64, glyph_y: i64, point: (u32, u32),
+    metrics: Option<GlyphMetrics>,
+) -> Result<(u32, u32), String> {
+    let (x, y) = if let Some(values) = metrics {
+        (
+            scale(point.0, values.width, DEFAULT_TEMPLATE_WIDTH_UM)?,
+            scale(point.1, values.height, DEFAULT_TEMPLATE_HEIGHT_UM)?,
+        )
+    } else {
+        point
+    };
+    let x_on_page = if let Some(values) = metrics {
+        slanted_x(glyph_x, x, y, values.height, values.slant)?
+    } else {
+        coordinate(glyph_x, x)?
+    };
+    Ok((x_on_page, coordinate(glyph_y, y)?))
+}
+
+// Lean the upper edge of each caller-authored shape around its lower
+// baseline. Positive millidegrees lean right; negative values lean left.
+// Refuse nonfinite or unprintable positions rather than silently clipping.
+fn slanted_x(
+    origin_um: i64, local_x: u32, local_y: u32,
+    height: u32, slant_millidegrees: i32,
+) -> Result<u32, String> {
+    let radians = (f64::from(slant_millidegrees) / 1_000.0).to_radians();
+    let delta = (f64::from(height) - f64::from(local_y)) * radians.tan();
+    if !delta.is_finite() || delta.abs() > f64::from(i32::MAX) {
+        return Err("glyph slant exceeds coordinate limits".into());
+    }
+    #[expect(clippy::as_conversions, clippy::cast_possible_truncation, reason =
+        "bounded millidegree shear rounded to a whole micrometre")]
+    let shift_um = delta.round() as i32;
+    let absolute_um = origin_um
+        .checked_add(i64::from(local_x))
+        .and_then(|x| x.checked_add(i64::from(shift_um)))
+        .ok_or("slanted glyph x position overflow")?;
+    u32::try_from(absolute_um)
+        .map_err(|_error| "slanted glyph must stay on page".into())
 }
 
 fn coordinate(origin_um: i64, local_um: u32) -> Result<u32, String> {

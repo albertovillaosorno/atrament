@@ -71,11 +71,16 @@ composed `ñ`, decomposed `ñ` and custom mathematical `∞`, and verifies
 byte-identical PDF/PNG ink against explicit `--ink-line` strokes.
 
 The native CLI now optionally reads a saved handwriting statistics profile
-(`--handwriting-profile ink.json`) to apply five per-grapheme mean variables
-(width, height, ink thickness, letter spacing and baseline offset) to those
-explicit caller-drawn segments. The 3.5 × 4.5 mm template cell is mapped to
-physical strokes, including inherited global and exact glyph overrides.
+(`--handwriting-profile ink.json`) to apply six per-grapheme mean variables
+(width, height, ink thickness, letter spacing, baseline offset and slant) to
+those explicit caller-drawn segments. The 3.5 × 4.5 mm template
+cell is mapped to physical strokes, including inherited global and exact
+glyph overrides.
+
 Negative advances, invalid pen widths and nonprintable placements refuse.
+Slant uses the configured mean in millidegrees to shear the glyph about its
+lower baseline, leaning its top right for positive values or left for
+negative ones. Out-of-page slanted strokes refuse before file replacement.
 This is only a deterministic mean-based geometric transform; no sampled
 variation, real glyph capture or synthesis is claimed.
 

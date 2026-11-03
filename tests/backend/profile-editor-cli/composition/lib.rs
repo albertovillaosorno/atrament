@@ -1611,3 +1611,87 @@ fn statistical_glyph_layout_refuses_bad_advance_and_keeps_output() {
     fs::remove_file(source).expect("remove owned stats");
     fs::remove_file(target).expect("remove owned target");
 }
+
+#[test]
+fn saved_slant_means_shear_authored_glyphs_in_pdf_and_png() {
+    let path = test_path();
+    let filename = path.to_str().expect("temporary statistics path");
+    for (slant, first_x) in [("45000", "29500"), ("-45000", "20500")] {
+        let stats = execute_handwriting(&args(&[
+            "--set-glyph", "ñ", "width", "3500", "3500", "3500",
+            "3500", "0",
+            "--set-glyph", "ñ", "height", "4500", "4500", "4500",
+            "4500", "0",
+            "--set-glyph", "ñ", "slant", slant, slant, slant,
+            slant, "0",
+        ]))
+        .expect("explicit slant mean admitted")
+        .expect("native statistics bytes");
+        fs::write(&path, stats).expect("test-owned statistics profile");
+
+        for format in ["pdf", "png"] {
+            let mut selected = args(&[
+                "--printed-sheet", "true", "--export-paper", format,
+                "--handwriting-profile", filename,
+                "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+                "300", "#123456",
+                "--place-text", "1", "25000", "30000", "ñ",
+            ]);
+            if format == "png" {
+                selected.extend(args(&["--dpi", "72"]));
+            }
+            let mut expected = args(&[
+                "--printed-sheet", "true", "--export-paper", format,
+                "--ink-line", "1", first_x, "30000", "28500",
+                "34500", "300", "#123456",
+            ]);
+            if format == "png" {
+                expected.extend(args(&["--dpi", "72"]));
+            }
+            assert_eq!(
+                execute_notebook(&selected)
+                    .expect("mean slant export")
+                    .expect("output bytes"),
+                execute_notebook(&expected)
+                    .expect("manually sheared physical stroke")
+                    .expect("manual output"),
+                "{format} with {slant} millidegrees must tilt actual ink",
+            );
+        }
+    }
+    fs::remove_file(path).expect("remove owned statistics fixture");
+}
+
+#[test]
+fn out_of_page_slant_refuses_before_replacing_existing_pdf() {
+    let profile = test_path();
+    let profile_name = profile.to_str().expect("statistics path");
+    let output = test_path();
+    let output_name = output.to_str().expect("output path");
+    let stats = execute_handwriting(&args(&[
+        "--set-glyph", "ñ", "slant", "-85000", "-85000",
+        "-85000", "-85000", "0",
+    ]))
+    .expect("allowed negative slant")
+    .expect("profile bytes");
+    fs::write(&profile, stats).expect("saved statistics");
+    fs::write(&output, b"original PDF bytes").expect("sentinel target");
+    let command = args(&[
+        "--export-paper", "pdf", "--printed-sheet", "true",
+        "--handwriting-profile", profile_name,
+        "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+        "300", "#123456",
+        "--place-text", "1", "25000", "30000", "ñ",
+        "--output", output_name, "--replace",
+    ]);
+    assert!(
+        execute_notebook(&command).is_err(),
+        "unprintable slanted stroke must refuse",
+    );
+    assert_eq!(
+        fs::read(&output).expect("output unchanged"),
+        b"original PDF bytes",
+    );
+    fs::remove_file(profile).expect("remove profile fixture");
+    fs::remove_file(output).expect("remove output fixture");
+}
