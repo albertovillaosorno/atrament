@@ -131,6 +131,71 @@ class NotebookCliTests(unittest.TestCase):
         changed = notebook.render_page(self.doc, 0, 120, self.root)
         self.assertNotEqual(first.tobytes(), changed.tobytes())
 
+    def test_glyph_can_sample_individual_angle_baseline_and_width(self):
+        self.doc["handwriting"]["glyphs"]["ñ"] = {
+            "rotation_deg": {
+                "minimum": -3,
+                "mean": -1,
+                "median": -1,
+                "maximum": 2,
+                "stddev": 0.7,
+            },
+            "baseline_shift_mm": {
+                "minimum": -0.4,
+                "mean": 0,
+                "median": 0,
+                "maximum": 0.4,
+                "stddev": 0.1,
+            },
+            "width_scale": {
+                "minimum": 0.8,
+                "mean": 1,
+                "median": 1,
+                "maximum": 1.2,
+                "stddev": 0.06,
+            },
+        }
+        result = notebook.render_page(self.doc, 0, 120, self.root)
+        again = notebook.render_page(self.doc, 0, 120, self.root)
+        self.assertEqual(result.tobytes(), again.tobytes())
+
+    def test_decomposed_glyph_override_matches_normalized_character(self):
+        self.doc["pages"][0]["text"] = ["ñ"]
+        self.doc["handwriting"]["glyphs"] = {
+            "n\u0303": {"ink": "#cc0088", "height_scale": 1.5}
+        }
+        decomposed = notebook.render_page(self.doc, 0, 120, self.root)
+        self.doc["handwriting"]["glyphs"] = {
+            "ñ": {"ink": "#cc0088", "height_scale": 1.5}
+        }
+        normalized = notebook.render_page(self.doc, 0, 120, self.root)
+        self.assertEqual(decomposed.tobytes(), normalized.tobytes())
+        self.doc["handwriting"]["glyphs"]["n\u0303"] = {}
+        with self.assertRaisesRegex(ValueError, "distinct characters"):
+            notebook.render_page(self.doc, 0, 120, self.root)
+
+    def test_calibrate_adds_rotation_and_baseline_measurements(self):
+        out = self.root / "measured.json"
+        run = self.run_cli(
+            "calibrate",
+            "--config",
+            str(self.config),
+            "--glyph",
+            "n\u0303",
+            "--rotations=-3,-1,2",
+            "--baselines=-0.2,0.0,0.1",
+            "--out",
+            str(out),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        spec = notebook.read_json(out)["handwriting"]["glyphs"]["ñ"]
+        self.assertEqual(spec["rotation_deg"]["minimum"], -3)
+        self.assertEqual(spec["rotation_deg"]["maximum"], 2)
+        self.assertAlmostEqual(spec["rotation_deg"]["median"], -1)
+        self.assertAlmostEqual(spec["baseline_shift_mm"]["mean"], -1 / 30)
+        self.doc["handwriting"]["glyphs"]["ñ"] = spec
+        notebook.render_page(self.doc, 0, 120, self.root)
+
     def test_calibrate_uses_real_measurements_without_ocr(self):
         out = self.root / "calibrated.json"
         run = self.run_cli(

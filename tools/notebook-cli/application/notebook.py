@@ -183,8 +183,8 @@ def stat_sample(spec, rng, name):
     if "height_mm" in name or "width_mm" in name:
         minimum, maximum = 0.1, 50
     elif "width_scale" in name:
-        minimum, maximum = 0.1, 5
-    elif "baseline_mm" in name:
+        minimum, maximum = (0.2 if name.startswith("glyph.") else 0.1), 5
+    elif "baseline_mm" in name or "baseline_shift_mm" in name:
         minimum, maximum = -10, 10
     elif "rotation_deg" in name:
         minimum, maximum = -45, 45
@@ -496,9 +496,17 @@ class Pen:
         self.stroke = int(
             require_number(cfg.get("stroke_px", 0), "stroke_px", 0, 8)
         )
-        self.glyphs = cfg.get("glyphs", {})
-        if not isinstance(self.glyphs, dict):
+        glyphs = cfg.get("glyphs", {})
+        if not isinstance(glyphs, dict):
             raise TypeError("glyphs must be a mapping")
+        self.glyphs = {}
+        for key, override in glyphs.items():
+            normalized = unicodedata.normalize("NFC", key)
+            if len(normalized) != 1 or normalized in self.glyphs:
+                raise ValueError(
+                    "glyph keys must identify distinct characters"
+                )
+            self.glyphs[normalized] = override
 
     def mask(self, char, glyph):
         if "image" in glyph:
@@ -547,7 +555,12 @@ class Pen:
         )
         width_scale = stat_sample(self.cfg["width_scale"], rng, "width_scale")
         width_scale *= require_number(
-            custom.get("width_scale", 1), "width_scale", 0.2, 5
+            stat_sample(
+                custom.get("width_scale", 1), rng, "glyph.width_scale"
+            ),
+            "glyph.width_scale",
+            0.2,
+            5,
         )
         mask = self.mask(char, custom)
         if "width_mm" in custom:
@@ -583,7 +596,12 @@ class Pen:
             self.cfg.get("rotation_deg", 0), rng, "rotation_deg"
         )
         rotation += require_number(
-            custom.get("rotation_deg", 0), "glyph.rotation_deg", -45, 45
+            stat_sample(
+                custom.get("rotation_deg", 0), rng, "glyph.rotation_deg"
+            ),
+            "glyph.rotation_deg",
+            -45,
+            45,
         )
         if rotation:
             image = image.rotate(
@@ -593,7 +611,11 @@ class Pen:
             self.cfg.get("baseline_mm", 0), rng, "baseline_mm"
         )
         baseline += require_number(
-            custom.get("baseline_shift_mm", 0),
+            stat_sample(
+                custom.get("baseline_shift_mm", 0),
+                rng,
+                "glyph.baseline_shift_mm",
+            ),
             "glyph.baseline_shift_mm",
             -10,
             10,
@@ -952,17 +974,23 @@ def do_render(args):
 def do_calibrate(args):
     source = Path(args.config)
     doc = read_json(source)
-    glyph = args.glyph
+    glyph = unicodedata.normalize("NFC", args.glyph)
     if len(glyph) != 1:
         raise ValueError("--glyph must be exactly one character")
     if "handwriting" not in doc:
         raise ValueError("configuration has no handwriting section")
     custom = doc["handwriting"].setdefault("glyphs", {}).setdefault(glyph, {})
-    for key, raw in (("height_mm", args.heights), ("width_mm", args.widths)):
+    measurements = (
+        ("height_mm", args.heights, 0.1, 50),
+        ("width_mm", args.widths, 0.1, 50),
+        ("rotation_deg", args.rotations, -45, 45),
+        ("baseline_shift_mm", args.baselines, -10, 10),
+    )
+    for key, raw, low, high in measurements:
         if raw is None:
             continue
         vals = [
-            require_number(float(s.strip()), key, 0.1, 50)
+            require_number(float(s.strip()), key, low, high)
             for s in raw.split(",")
         ]
         if not vals:
@@ -975,8 +1003,8 @@ def do_calibrate(args):
             "stddev": statistics.pstdev(vals),
             "distribution": "gaussian",
         }
-    if args.heights is None and args.widths is None:
-        raise ValueError("provide --heights or --widths")
+    if all(raw is None for _, raw, _, _ in measurements):
+        raise ValueError("provide at least one measurement series")
     write_json(args.out, doc, args.replace)
     print(args.out)
 
@@ -1081,7 +1109,7 @@ def main(argv=None):
     p.set_defaults(run=do_render)
     p = cmds.add_parser(
         "calibrate",
-        help="enter manually measured per-letter height/width samples (mm)",
+        help="enter manually measured per-letter geometry samples",
     )
     p.add_argument("--config", required=True)
     p.add_argument("--glyph", required=True)
@@ -1090,6 +1118,12 @@ def main(argv=None):
     )
     p.add_argument(
         "--widths", help="comma-separated glyph widths in millimeters"
+    )
+    p.add_argument(
+        "--rotations", help="comma-separated glyph angle offsets in degrees"
+    )
+    p.add_argument(
+        "--baselines", help="comma-separated baseline offsets in millimeters"
     )
     p.add_argument("--out", required=True)
     p.add_argument("--replace", action="store_true")

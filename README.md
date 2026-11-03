@@ -108,7 +108,17 @@ python3 cli/notebook.py guide --image photo.jpg \
 python3 cli/notebook.py calibrate --config my-notebook.json --glyph a \
   --heights 3.1,3.3,3.6,3.4 --widths 1.6,1.7,1.5,1.8 \
   --out calibrated.json
+# Optional: measure angle and baseline offsets for the same letter.
+python3 cli/notebook.py calibrate --config calibrated.json --glyph ñ \
+  --rotations=-2,-1,0,2 --baselines=-0.2,0,0.1,0.2 \
+  --out calibrated-angles.json
 ```
+
+`--rotations` records per-glyph offsets in degrees, and `--baselines` records
+offsets in millimeters. These sampled per-letter statistics are added to the
+global rotation/baseline variation. Per-letter `width_scale` also accepts a
+statistics object. Negative series start with `--rotations=...` so command-line
+parsing does not mistake the values for separate flags.
 
 For precise letter shape, draw a transparent PNG for the character and set
 `glyphs["a"].image` to its path. You can adjust every glyph and every sign in
