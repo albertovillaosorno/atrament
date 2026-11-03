@@ -4623,16 +4623,26 @@ fn finite_first_release_math_sources_are_lossless() {
         ),
     ];
     for (family, mode, source) in examples {
-        let analyzed = analyze(source, mode).unwrap_or_else(|error| panic!("{family}: {error:?}"));
+        let analyzed = analyze(source, mode).unwrap_or_else(|error| {
+            panic!("{family}: {error:?}")
+        });
         assert_analysis_invariants(&analyzed, source, mode);
         assert!(analyzed.is_supported(), "{family}: unexpected unsupported");
-        assert_eq!(reconstructed(&analyzed), source, "{family}: source changed");
+        assert_eq!(
+            reconstructed(&analyzed),
+            source,
+            "{family}: source changed",
+        );
     }
 
     let unsupported_source = r"\unknownfunction{x}";
     let unsupported = analyze(unsupported_source, FormulaMode::Display)
         .expect("balanced unsupported formula remains inspectable");
-    assert_analysis_invariants(&unsupported, unsupported_source, FormulaMode::Display);
+    assert_analysis_invariants(
+        &unsupported,
+        unsupported_source,
+        FormulaMode::Display,
+    );
     assert!(!unsupported.is_supported());
     assert_eq!(unsupported.unsupported.len(), 1);
     assert_eq!(unsupported.unsupported[0].name, r"\unknownfunction");
