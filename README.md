@@ -884,12 +884,33 @@ row without changing the ideal row. A clipped, collapsed, invalid or overly
 complex (over 128-stroke) sample refuses visibly instead of clipping ink.
 A real Firefox/Rust localhost test checks accented `ó` replay and refusal.
 
-This is **SVG preview only**. The versioned stroke TSV remains the unvaried
-source, and `Download stroke TSV` is byte-identical across preview seeds.
-There is no automatic multi-line variation in native notebook PDF/PNG yet,
-no persisted setting in the Rust handwriting profile, and no joined cursive
-or learned writing style. The preview's spread knobs are separate from
-Rust's currently mean-only profile transforms described below.
+The comparison is SVG-only until the user explicitly selects one of its
+three **lower-row occurrences** and clicks **Download selected variation as
+separate TSV**. That downloads `my-varied-glyph-strokes.tsv`, replacing only
+the currently selected exact grapheme's strokes in a separate complete
+native-compatible library. Other authored Unicode glyphs remain unchanged;
+invalid, oversized or clipped variations refuse before the download. The
+original versioned library and its **Download stroke TSV** output stay
+byte-identical across preview seeds and derived downloads. Rust verifies
+and renders the derived shape independently:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-varied-glyph-strokes.tsv --audit-text 'ó'
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --printed-sheet true --export-paper pdf \
+  --glyph-file my-varied-glyph-strokes.tsv \
+  --place-text 1 25400 30000 'óó' --output varied.pdf
+```
+
+A native smoke validated a 49-stroke selected `ó` sample with zero missing
+shapes, byte-identical TSV readback, a real A4 one-page PDF and transparent
+72-DPI 596×842 RGBA PNG. This is **one chosen stored variant per Unicode
+key**, not a different shape for each repeated letter: both `ó` occurrences
+in the example have the same selected template. There is still no automatic
+multi-line seeded variation in notebook PDF/PNG, no persisted Rust variation
+settings, joined cursive or learned style. These browser-only spread knobs
+are distinct from Rust's mean-only transforms described below.
 
 Session end drops the unsaved draft. The browser generates explicit
 print-starter strokes for the frozen 114-character bilingual text inventory

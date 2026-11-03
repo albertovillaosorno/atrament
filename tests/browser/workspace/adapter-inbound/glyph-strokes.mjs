@@ -177,7 +177,8 @@ function mountEditor() {
         "glyph-update", "glyph-remove", "glyph-reverse",
         "glyph-earlier", "glyph-later",
         "glyph-variation-preview", "glyph-variation-status",
-        "glyph-variation-seed", ...["width", "height", "thickness",
+        "glyph-variation-seed", "glyph-variation-sample",
+        "glyph-variation-download", ...["width", "height", "thickness",
             "slant", "spacing", "regularity"].map((key) =>
             `glyph-variation-${key}`),
         "glyph-save", "glyph-preview",
@@ -193,6 +194,7 @@ function mountEditor() {
     get("circle-radius").value = "1100";
     get("accent-shift").value = "0";
     get("accent-lift").value = "0";
+    get("variation-sample").value = "1";
     for (const [key, value] of Object.entries({
         seed: 42, width: 6, height: 6, thickness: 8, slant: 4,
         spacing: 160, regularity: 20,
@@ -309,6 +311,70 @@ test("two-row accented comparison keeps authored TSV", async () => {
         editor.reset();
         assert.equal(get("variation-preview").children.length, 0);
         assert.equal(get("variation-seed").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("explicit varied TSV preserves the authored draft", async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads, links } = ui;
+        get("variation-download").dispatch("click");
+        assert.equal(links.length, 0, "session gate blocks download");
+        editor.start();
+        assert.equal(get("variation-download").disabled, true);
+        get("character").value = "ó";
+        get("character").dispatch("input");
+        get("form").value = "ó";
+        get("circle-radius").value = "800";
+        get("construct").dispatch("click");
+        get("character").value = "∞";
+        get("character").dispatch("input");
+        get("add").dispatch("click");
+        get("character").value = "ó";
+        get("character").dispatch("input");
+        assert.equal(get("variation-download").disabled, false);
+        get("save").dispatch("click");
+        const canonical = await downloads[0].text();
+        const originals = parseGlyphLibrary(canonical);
+        get("variation-sample").value = "2";
+        get("variation-download").dispatch("click");
+        assert.equal(links.length, 2);
+        assert.equal(links[0].name, "my-glyph-strokes.tsv");
+        assert.equal(links[1].name, "my-varied-glyph-strokes.tsv");
+        const variant = parseGlyphLibrary(await downloads[1].text());
+        assert.equal(variant.length, originals.length);
+        assert.deepEqual(variant.filter((item) => item.grapheme === "∞"),
+            originals.filter((item) => item.grapheme === "∞"));
+        assert.deepEqual(variant.filter((item) => item.grapheme === "ó"),
+            varyGlyphStrokes(originals, "ó", 42, 1, {
+                width: 6, height: 6, thickness: 8, slant: 4,
+                spacing: 160, regularity: 20,
+            }), "downloaded ink must be the displayed sample geometry");
+        assert.notDeepEqual(variant, originals);
+        get("variation-sample").value = "4";
+        get("variation-download").dispatch("click");
+        assert.equal(links.length, 2);
+        assert.match(get("status").textContent, /outside native bounds/);
+        get("variation-sample").value = "3";
+        get("variation-width").value = "21";
+        get("variation-width").dispatch("input");
+        assert.equal(get("variation-download").disabled, true);
+        get("variation-download").dispatch("click");
+        assert.equal(links.length, 2, "invalid preview refuses variant export");
+        get("variation-width").value = "6";
+        get("variation-width").dispatch("input");
+        assert.equal(get("variation-download").disabled, false);
+        get("variation-download").dispatch("click");
+        assert.equal(links.length, 3);
+        assert.notDeepEqual(parseGlyphLibrary(await downloads[2].text()),
+            variant, "a different selected occurrence has different ink");
+        get("save").dispatch("click");
+        assert.equal(await downloads[3].text(), canonical,
+            "the canonical TSV is byte-identical after varied exports");
+        editor.reset();
+        assert.equal(get("variation-download").disabled, true);
     } finally {
         ui.restore();
     }

@@ -917,6 +917,24 @@
               class="glyph-stroke-preview glyph-stroke-variation-preview"
               viewBox="0 0 14000 10000" role="img"
               aria-label="Variation requires an authored glyph"></svg>
+            <div class="paper-actions">
+              <label>Varied occurrence to export
+                <select id="glyph-variation-sample" disabled>
+                  <option value="1">Lower row: first</option>
+                  <option value="2">Lower row: second</option>
+                  <option value="3">Lower row: third</option>
+                </select>
+              </label>
+              <button id="glyph-variation-download" type="button" disabled>
+                Download selected variation as separate TSV
+              </button>
+            </div>
+            <p class="field-help">This exports one chosen lower-row glyph
+              occurrence as a native stroke library; all other authored
+              glyphs retain their exact ink. It never edits the canonical
+              draft. Rendering repeated letters with independently varied
+              shapes still needs a future Rust notebook variation pipeline.
+            </p>
             <p id="glyph-variation-status" class="field-help" role="status"
               aria-live="polite">Requires a compatible backend session.</p>
           </fieldset>

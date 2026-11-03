@@ -1487,6 +1487,10 @@ export function createGlyphStrokeEditor(): {
     const variationPreview = required<SVGSVGElement>("glyph-variation-preview");
     const variationStatus = required<HTMLElement>("glyph-variation-status");
     const variationSeed = required<HTMLInputElement>("glyph-variation-seed");
+    const variationSample =
+        required<HTMLSelectElement>("glyph-variation-sample");
+    const variationDownload =
+        required<HTMLButtonElement>("glyph-variation-download");
     const variationControls = {} as Record<
         keyof InkVariation, HTMLInputElement
     >;
@@ -1510,6 +1514,7 @@ export function createGlyphStrokeEditor(): {
         seedTextMarks,
         centerX, centerY, radius,
         accentShift, accentLift, variationSeed,
+        variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
         remove, reverse, earlier, later, save,
@@ -1530,6 +1535,23 @@ export function createGlyphStrokeEditor(): {
     let downloadUrl: string | null = null;
 
     const message = (text: string): void => { status.textContent = text; };
+    const download = (bytes: string, filename: string): void => {
+        const blob = new Blob([bytes], { type: "text/tab-separated-values" });
+        if (downloadUrl !== null) URL.revokeObjectURL(downloadUrl);
+        const url = URL.createObjectURL(blob);
+        downloadUrl = url;
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.rel = "noopener";
+        link.click();
+        window.setTimeout(() => {
+            if (downloadUrl === url) {
+                URL.revokeObjectURL(url);
+                downloadUrl = null;
+            }
+        }, 60_000);
+    };
     const neighbor = (offset: -1 | 1): number | null => {
         if (selectedIndex === null) return null;
         const grapheme = strokes[selectedIndex]?.grapheme;
@@ -1817,11 +1839,27 @@ export function createGlyphStrokeEditor(): {
             ideal.setAttribute("aria-label", "Invalid geometric settings");
         }
     };
+    const readVariation = (): { seed: number; settings: InkVariation } => {
+        const seed = boundedInteger(variationSeed.value, 0xFFFFFFFF,
+            "variation seed");
+        const settings = {} as InkVariation;
+        for (const key of ["width", "height", "thickness", "slant",
+            "spacing", "regularity"] as const) {
+            const raw = variationControls[key].value;
+            if (!/^[0-9]+$/.test(raw)) {
+                throw new Error(`Variation ${key} requires whole units`);
+            }
+            settings[key] = Number(raw);
+        }
+        checkVariation(seed, 0, settings);
+        return { seed, settings };
+    };
     const renderVariation = (): void => {
         const authored = strokes.filter(
             (item) => item.grapheme === character.value,
         );
         if (!active || authored.length === 0) {
+            variationDownload.disabled = true;
             variationPreview.replaceChildren();
             variationStatus.textContent = active
                 ? "Author this exact glyph to compare repeated ink"
@@ -1829,18 +1867,7 @@ export function createGlyphStrokeEditor(): {
             return;
         }
         try {
-            const seed = boundedInteger(variationSeed.value, 0xFFFFFFFF,
-                "variation seed");
-            const settings = {} as InkVariation;
-            for (const key of ["width", "height", "thickness", "slant",
-                "spacing", "regularity"] as const) {
-                const raw = variationControls[key].value;
-                if (!/^[0-9]+$/.test(raw)) {
-                    throw new Error(`Variation ${key} requires whole units`);
-                }
-                settings[key] = Number(raw);
-            }
-            checkVariation(seed, 0, settings);
+            const { seed, settings } = readVariation();
             if (authored.length > 128) {
                 throw new Error("Preview is limited to 128 selected strokes");
             }
@@ -1872,6 +1899,7 @@ export function createGlyphStrokeEditor(): {
                 }
             }
             variationPreview.replaceChildren(...lines);
+            variationDownload.disabled = false;
             variationPreview.setAttribute("aria-label",
                 `Top: three ideal ${character.value} glyphs; bottom: `
                     + `three seed ${seed} varied glyphs`);
@@ -1879,6 +1907,7 @@ export function createGlyphStrokeEditor(): {
                 `Three ideal and three seeded varied ${character.value} `
                 + "copies. Authored library unchanged; preview only.";
         } catch (error) {
+            variationDownload.disabled = true;
             variationPreview.replaceChildren();
             variationPreview.setAttribute("aria-label", "Variation refused");
             variationStatus.textContent = String(error);
@@ -2552,24 +2581,33 @@ export function createGlyphStrokeEditor(): {
     save.addEventListener("click", () => {
         if (!active) return;
         try {
-            const bytes = encodeGlyphLibrary(strokes);
-            const mediaType = "text/tab-separated-values";
-            const blob = new Blob([bytes], { type: mediaType });
-            if (downloadUrl !== null) URL.revokeObjectURL(downloadUrl);
-            const url = URL.createObjectURL(blob);
-            downloadUrl = url;
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = "my-glyph-strokes.tsv";
-            link.rel = "noopener";
-            link.click();
-            window.setTimeout(() => {
-                if (downloadUrl === url) {
-                    URL.revokeObjectURL(url);
-                    downloadUrl = null;
-                }
-            }, 60_000);
+            download(encodeGlyphLibrary(strokes), "my-glyph-strokes.tsv");
             message("Glyph TSV downloaded; Rust validates it before export");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    variationDownload.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            const { seed, settings } = readVariation();
+            const sample = boundedInteger(variationSample.value, 3,
+                "variation sample");
+            if (sample < 1) {
+                throw new Error("Choose varied sample 1, 2 or 3");
+            }
+            const changed = varyGlyphStrokes(
+                strokes, character.value, seed, sample - 1, settings,
+            );
+            let position = 0;
+            const candidate = strokes.map((item) =>
+                item.grapheme === character.value
+                    ? changed[position++]! : item,
+            );
+            const bytes = encodeGlyphLibrary(candidate);
+            download(bytes, "my-varied-glyph-strokes.tsv");
+            message(`Varied sample ${sample} downloaded as a separate TSV; `
+                + "authored draft unchanged, Rust validates before export");
         } catch (error) {
             message(String(error));
         }
