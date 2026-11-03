@@ -118,3 +118,6 @@ contracts:
   - id: atrament.technical.completed-todo-acceptance-audit-2026-11-03
     status: verified
     path: completed-todo-acceptance-audit-2026-11-03.md
+  - id: atrament.technical.local-print-cli
+    status: verified
+    path: local-print-cli.md

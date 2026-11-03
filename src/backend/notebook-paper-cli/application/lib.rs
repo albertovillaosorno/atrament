@@ -67,6 +67,8 @@ use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };
 use atrament_profile_file_reader::read_bounded_profile_file;
+// The separate print binary owns safe selected-file opening.
+use atrament_profile_selected_file_open as _;
 use atrament_profile_json_syntax::{
     ProfileJsonSyntaxLimits, ValidatedProfileJsonObject,
     validate_profile_json_object,

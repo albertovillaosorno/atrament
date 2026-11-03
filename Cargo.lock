@@ -505,6 +505,7 @@ dependencies = [
  "atrament_profile_file_commit",
  "atrament_profile_file_reader",
  "atrament_profile_json_syntax",
+ "atrament_profile_selected_file_open",
  "nix",
 ]
 

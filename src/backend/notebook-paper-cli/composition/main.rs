@@ -42,6 +42,7 @@ use atrament_pdf_vector_serializer as _;
 use atrament_physical_page_profile as _;
 use atrament_profile_file_commit as _;
 use atrament_profile_file_reader as _;
+use atrament_profile_selected_file_open as _;
 #[cfg(all(test, unix))]
 use nix::sys::stat::Mode;
 #[cfg(all(test, unix))]

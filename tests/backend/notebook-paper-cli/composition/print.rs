@@ -1,0 +1,192 @@
+// Copyright:
+//   - Copyright © 2026 Alberto Villa Osorno.
+// SPDX-License-Identifier:
+//   - MIT
+// Confidential:
+//   - false
+// License-File:
+//   - LICENSE-MIT
+//
+// Boundary-Contract:
+// - Owns:
+//   - Explicit local printing admission and harmless fake-spool fixtures.
+// - Must-Not:
+//   - Submit an actual printer job or confuse CUPS acceptance with printing.
+// - Allows:
+//   - Inputs: Owned temporary PDFs, printer names and fake CUPS executable.
+//   - Outputs: Assertions for accepted and refused CLI and spool operations.
+//   - Side effects: Only temporary local test files and an owned fake spool.
+// - Split-When:
+//   - Real printer integration gains a dedicated opt-in test environment.
+// - Merge-When:
+//   - A physical printer adapter owns this print contract.
+// - Summary:
+//   - Proves exports stay separate from explicitly selected local printing.
+// - Description:
+//   - Verifies bounded PDF snapshots and shell-free argv/stderr behavior.
+// - Usage:
+//   - cargo test -p atrament_notebook_paper_cli --bin atrament-print
+// - Defaults:
+//   - No printer access, no default-queue submission.
+//
+
+//! Isolated print entrypoint contract tests; no real print queue is contacted.
+
+#![expect(
+    clippy::expect_used,
+    clippy::panic,
+    reason = "test-only fail-fast printer admission fixtures"
+)]
+
+use super::*;
+use std::fs;
+use std::sync::atomic::{AtomicU64, Ordering};
+
+static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
+
+fn fixture_dir() -> PathBuf {
+    let number = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
+    let dir = env::temp_dir().join(format!(
+        "atrament-print-fixture-{}-{number}",
+        std::process::id(),
+    ));
+    fs::create_dir(&dir).expect("create owned fixture directory");
+    dir
+}
+
+fn real_pdf() -> Vec<u8> {
+    let paper = atrament_notebook_paper_cli::default_paper_profile_json();
+    atrament_notebook_paper_cli::paper_profile_pdf_pages(
+        paper.as_bytes(),
+        2,
+        false,
+    )
+    .expect("native two-page preprinted PDF")
+}
+
+#[test]
+fn printing_requires_exact_file_and_named_queue() {
+    let valid = ["--pdf", "notebook.pdf", "--printer", "Local_Printer-2"]
+        .map(str::to_owned);
+    let request = parse_args(&valid).expect("valid options").expect("print");
+    assert_eq!(request.pdf, PathBuf::from("notebook.pdf"));
+    assert_eq!(request.printer, "Local_Printer-2");
+    assert_eq!(parse_args(&["--help".into()]).expect("help"), None);
+
+    let refused = [
+        vec![],
+        vec!["--pdf", "notebook.pdf"],
+        vec!["--printer", "local"],
+        vec!["--pdf", "notebook.pdf", "--printer", ""],
+        vec!["--pdf", "notebook.pdf", "--printer", "-bad"],
+        vec!["--pdf", "notebook.pdf", "--printer", "local;touch"],
+        vec!["--pdf", "notebook.pdf", "--printer", "bad queue"],
+        vec!["--pdf", "notebook.pdf", "--printer", "é"],
+        vec![
+            "--pdf",
+            "notebook.pdf",
+            "--printer",
+            "queue",
+            "--copies",
+            "2",
+        ],
+        vec![
+            "--pdf",
+            "notebook.pdf",
+            "--printer",
+            "queue",
+            "--printer",
+            "other",
+        ],
+        vec![
+            "--pdf",
+            "notebook.pdf",
+            "--pdf",
+            "other.pdf",
+            "--printer",
+            "q",
+        ],
+        vec!["--help", "--pdf", "notebook.pdf"],
+    ];
+    for flags in refused {
+        let args = flags.iter().map(ToString::to_string).collect::<Vec<_>>();
+        assert!(parse_args(&args).is_err(), "refused {flags:?}");
+    }
+    assert!(!valid_printer(&"a".repeat(81)));
+}
+
+#[test]
+fn print_admits_real_two_page_pdf_and_refuses_bad_sources() {
+    let directory = fixture_dir();
+    let pdf = directory.join("two-pages.pdf");
+    let bytes = real_pdf();
+    fs::write(&pdf, &bytes).expect("write source PDF");
+    assert_eq!(selected_pdf(&pdf).expect("real PDF accepted"), bytes);
+
+    for data in [
+        b"not a PDF".as_slice(),
+        b"%PDF-1.4\nmissing EOF",
+        b"%PDF-1.4\n%%EOF\nnonwhitespace",
+    ] {
+        fs::write(&pdf, data).expect("replace bad fixture");
+        assert!(selected_pdf(&pdf).is_err(), "refuse invalid PDF");
+    }
+    fs::write(&pdf, &bytes).expect("restore fixture");
+    assert!(selected_pdf(&directory).is_err(), "no directory input");
+    assert!(selected_pdf(&directory.join("missing.pdf")).is_err());
+    fs::write(&pdf, vec![b'X'; MAX_PAPER_OUTPUT_BYTES + 1])
+        .expect("write oversize fixture");
+    assert!(
+        selected_pdf(&pdf).is_err(),
+        "enforce native output byte limit"
+    );
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
+fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
+    use std::os::unix::fs::{PermissionsExt as _, symlink};
+
+    let directory = fixture_dir();
+    let pdf = directory.join("two-pages.pdf");
+    let copied = directory.join("spooled.pdf");
+    let arguments = directory.join("args.txt");
+    let script = directory.join("fake-lp.sh");
+    let bytes = real_pdf();
+    fs::write(&pdf, &bytes).expect("source PDF");
+    fs::write(
+        &script,
+        format!(
+            concat!(
+                "#!/bin/sh\n",
+                "printf '%s\\n' \"$1\" \"$2\" \"$3\" > '{}'\n",
+                "cat > '{}'\n",
+            ),
+            arguments.display(),
+            copied.display(),
+        ),
+    )
+    .expect("fake spool script");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+
+    let selected = selected_pdf(&pdf).expect("complete input PDF");
+    assert!(!copied.exists(), "reading PDF never silently prints");
+    submit_with(&script, "Queue_1", &selected)
+        .expect("fake local CUPS acceptance");
+    assert_eq!(fs::read(&copied).expect("spooled bytes"), bytes);
+    assert_eq!(
+        fs::read_to_string(&arguments).expect("arguments"),
+        "-d\nQueue_1\n-\n",
+        "no command option injection"
+    );
+
+    fs::write(&script, "#!/bin/sh\nexit 7\n")
+        .expect("replace fake spool with refusing transport");
+    assert!(submit_with(&script, "Queue_1", &selected).is_err());
+    let linked = directory.join("linked.pdf");
+    symlink(&pdf, &linked).expect("linked fixture");
+    assert!(selected_pdf(&linked).is_err(), "source links fail closed");
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}

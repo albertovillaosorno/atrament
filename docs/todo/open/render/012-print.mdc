@@ -39,3 +39,27 @@ implementation was proposed.
 Open. Provide the actual bounded Rust/backend or browser integration and an
 accepted/refused example before marking the executable capability complete.
 Theoretical design acceptance alone cannot establish that this feature runs.
+
+## Explicit named local printing (partial) — 2026-11-03
+
+The separate Rust `atrament-print` executable submits an already-exported,
+operator-selected PDF to one explicitly selected local CUPS queue. It reads
+a single regular file through the existing Linux symlink-refusing file
+opener and exact bounded reader; missing/invalid selections, queue names,
+PDF framing and 24 MB limit all refuse before invoking `lp`. The submission
+has no shell, no implicit printer selection, and sends the exact validated
+PDF bytes over standard input rather than reopening a mutable filename.
+
+The standalone `atrament-profiles` notebook exporter already honors
+`printed_sheet` on preprinted paper, retains any optional numeric date,
+page numbering, border and explicit authored strokes, and omits existing
+ruling. Exports still never enqueue printer jobs. The native `atrament-print`
+command is the deliberately separate physical-print intent.
+
+**Evidence:** three focused Rust tests use a real two-page, unruled native
+PDF and an isolated fake `lp` executable to verify the complete exact byte
+stream and printer arguments without contacting a physical printer.
+See [local print CLI](../../../technical/local-print-cli.md) for usage and
+scope. No real CUPS queue, print alignment or successful physical page
+has been verified, and no saved image overlays exist. This executable
+task remains **open** pending those criteria.

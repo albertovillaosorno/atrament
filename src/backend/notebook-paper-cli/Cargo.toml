@@ -12,6 +12,7 @@ atrament_pdf_vector_serializer = { workspace = true }
 atrament_physical_page_profile = { workspace = true }
 atrament_profile_file_commit = { workspace = true }
 atrament_profile_file_reader = { workspace = true }
+atrament_profile_selected_file_open = { workspace = true }
 atrament_profile_json_syntax = { workspace = true }
 
 [lib]
@@ -20,6 +21,10 @@ path = "application/lib.rs"
 [[bin]]
 name = "atrament-paper"
 path = "composition/main.rs"
+
+[[bin]]
+name = "atrament-print"
+path = "composition/print.rs"
 
 [lints]
 workspace = true
