@@ -20,20 +20,6 @@ labels belong here.
 
 ## P7 — Honest single-pen live output
 
-### TODO - Build the hardware simulator and dry run
-
-Visualize pen-up travel, pen-down paths, limits, time, pauses, and
-checkpoints without connecting to a physical machine.
-
-[docs/todo/open/live/004-build-the-hardware-simulator-and-dry-run.mdc](docs/todo/open/live/004-build-the-hardware-simulator-and-dry-run.mdc)
-
-### TODO - Calibrate pen and blank-sheet coordinates
-
-Measure usable area, origin, axis orientation, scale, skew, pen-up height,
-contact height, speed, acceleration, page clamping, and boundary clearance.
-
-[docs/todo/open/live/005-calibrate-pen-and-blank-sheet-coordinates.mdc](docs/todo/open/live/005-calibrate-pen-and-blank-sheet-coordinates.mdc)
-
 ### TODO - Implement the NextDraw and AxiDraw CLI adapter
 
 Use documented SVG or CLI control behind a managed process boundary and prove

@@ -1,0 +1,93 @@
+---
+record_type: task
+id: "ATR-P7-005"
+title: "Calibrate pen and blank-sheet coordinates"
+status: completed
+priority: P7
+lane: live-output
+dependencies: ["ATR-P7-004"]
+dependencies_specified: true
+dependency_rationale: >-
+  Calibration must be verified using a safe dry run.
+acceptance_criteria:
+  - >-
+      Measure usable area, origin, axis orientation, scale, skew, pen-up
+      height, contact height, speed, acceleration, page clamping, and
+      boundary clearance.
+  - >-
+      Finite v1 completion: Define a one-device blank-sheet origin and
+      pen-offset calibration sequence with uncertainty bounds; without a
+      device, accept the theoretical calibration recipe.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Calibrate pen and blank-sheet coordinates
+
+## Scope and existing evidence
+
+Measure usable area, origin, axis orientation, scale, skew, pen-up height,
+contact height, speed, acceleration, page clamping, and boundary clearance.
+
+Current executable evidence now freezes those calibration measurements as one
+transport-neutral record bound to an identified device and explicit measurement
+evidence. Coordinate transform, pen-motion envelope, and blank-sheet
+registration remain separate grouped values while all units, tolerances, axis
+conventions, calibration algorithms, coordinate transforms, limit validation,
+dry-run admission, and physical arming remain open hardware-boundary work.
+
+## Finite one-device blank-sheet calibration recipe
+
+**Inputs:** an identified, hypothetical `D-01` single-pen device, one flat
+A4 blank sheet, repeatable sheet clamps, selected pen/tool, axis and units
+metadata, fiducial marks, measured tool contact/lift observations, and a dry
+run result. **Outputs:** a device-bound, revisioned transform, pen offset,
+measured usable rectangle and uncertainty ledger, or an explicit refusal.
+This recipe does not establish that any specific model has been calibrated.
+
+**Registration sequence:** (1) secure a flat sheet without a tool motion;
+(2) mark paper fiducials at `(20,20)`, `(190,20)`, `(20,277) mm` and a
+fourth check at `(190,277) mm`; (3) record device-coordinate readings and
+fit one affine 2D mapping with explicit x/y direction, scale, rotation and
+skew; (4) compare the fourth point against prediction, rather than fitting
+it; (5) measure contact and lift clearance, pen-axis offset, usable region,
+clamp exclusion and speed/acceleration envelopes separately; (6) run a
+read-only proposed-path dry run and do not arm or plot automatically.
+
+**Worked arithmetic, not measurements:** suppose the first three registered
+fiducials read `(0,0)`, `(170,0)`, `(0,257) mm` in device coordinates, so
+this example maps page `(x,y)` to device `(x-20,y-20)`. An independently
+observed check point `(170.3,257.2)` differs from its predicted `(170,257)`
+by about `0.36 mm`. Declare a `0.5 mm` hypothetical registration tolerance;
+this example is inside it. If a pen mark is hypothetically displaced
+`(+0.4,-0.2) mm` in device axes, subtract this offset from planned contact
+coordinates and keep its observation uncertainty `±0.2 mm` explicit. No
+actual machine origin, contact height, scale, offset or safe motion follows
+from these invented arithmetic inputs.
+
+**Calibration ledger:** carry device identity, firmware and tool identity;
+page dimensions, four fiducial readings, axis signs, transform matrix and
+units, max residual and uncertainty, measured pen-up/contact clearances,
+probed speed/acceleration limits, clamp geometry, final usable rectangle,
+operator, time and method. A missing measured field is `Unknown`, not zero;
+any command envelope must wait for real measurements and explicit arming.
+
+**Refusal:** a fourth-point residual `0.8 mm` against the declared `0.5 mm`
+limit, an inverted or ambiguous axis, missing contact/lift observation, a
+clamp inside the proposed path, changed tool, or an unknown boundary returns
+`CalibrationNotAdmitted`. Preserve prior calibration and issue no movement.
+Recalibration is needed for an altered sheet mount, pen or mechanical setup.
+
+**Assumptions and risks:** the typed record groups transform, pen envelope
+and paper registration but performs no fit or physical test. Skew, backlash,
+pen flexibility, clamp drift and surface height variation can invalidate an
+affine fit. This design is not a manufacturer procedure, device safety
+certification, or evidence that a writer is connected.
+
+## Acceptance decision
+
+- **Basis:** theoretical one-device recipe, 2026-11-02; no measurements taken.
+- **Delivered:** finite four-point registration and pen-offset sequence,
+  bounded residual calculation, unknown-field policy and refusal conditions.
+- **Unavailable:** measured device calibration, verified speed/contact
+  clearance, hardware arming, or safe plot execution.

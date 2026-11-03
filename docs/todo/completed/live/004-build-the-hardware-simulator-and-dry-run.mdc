@@ -1,0 +1,106 @@
+---
+record_type: task
+id: "ATR-P7-004"
+title: "Build the hardware simulator and dry run"
+status: completed
+priority: P7
+lane: live-output
+dependencies: ["ATR-P7-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Dry-run simulation consumes the device-neutral motion plan.
+acceptance_criteria:
+  - >-
+      Visualize pen-up travel, pen-down paths, limits, time, pauses, and
+      checkpoints without connecting to a physical machine.
+  - >-
+      Finite v1 completion: Simulate one single-page plan, including pen-up
+      and pen-down events and one out-of-bounds refusal; physical execution
+      is not required.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build the hardware simulator and dry run
+
+## Scope and existing evidence
+
+Visualize pen-up travel, pen-down paths, limits, time, pauses, and checkpoints
+without connecting to a physical machine.
+
+Current executable dry-run evidence now binds one exact device-neutral plan to
+one concrete coordinate-calibration record and one ordered limit-evidence entry
+per plan operation. It reuses the plan domain's structural operation kind rather
+than defining a second pen-up/pen-down/pause/checkpoint vocabulary.
+
+Motion cannot mark limit checking inapplicable, and unknown or violated limits
+reject at the exact operation index. A 16-case matrix covers all four limit
+states at pen-up, pause, checkpoint, and pen-down operations. Coordinate
+transforms, limit geometry, visual rendering, timing simulation beyond plan
+evidence, and hardware contact remain open.
+
+Offline simulation now also produces a borrowed inspection trace only after the
+complete dry run validates. Trace construction runs the same 16-state matrix and
+must either return the identical typed dry-run failure or borrow the exact
+admitted package with aligned limit evidence. Six compact under/over-count
+fixtures additionally preserve evaluation-count mismatch before limit-state
+inspection. The trace retains the exact plan
+and calibration, operation order, pen-up/down geometry, pause/checkpoint
+payloads, per-operation limit evidence, plan/revision identities, physical
+bounds, and admitted total estimated duration without copying or rewriting plan
+authority.
+
+The validated trace is constructor-owned and exposes only read-only dry-run and
+step views, so callers cannot fabricate a successful trace around an invalid
+dry run.
+Pixel/vector visualization, coordinate transforms, limit geometry, and derived
+per-operation timing remain open.
+
+## Finite offline dry-run storyboard
+
+**Inputs:** an immutable plan identity and accepted revision; physical page
+bounds `210 x 297 mm`, writable bounds `x=20..190, y=20..277 mm`;
+caller-supplied registered calibration identity; and one explicit limit state
+for each ordered operation. **Output:** an offline trace with each operation's
+kind, endpoints, contact state, bounds result, pause/checkpoint markers, and
+admitted duration if already known. No serial, USB, network, or motor command
+is emitted; no estimated duration is invented.
+
+**One-page worked trace:** operation 0 lifts and travels to `(30,40) mm`;
+operation 1 deposits one title stroke `(30,40)` to `(60,40) mm`;
+operation 2 checkpoints completion of operation 1; operation 3 is a declared
+operator pause; operation 4 remains pen-up and travels from `(60,40)` to
+`(30,55) mm`; operation 5 deposits `(30,55)` to `(65,55) mm`. For all six
+steps, the caller's boundary status is `WithinLimits`, and the read-only
+trace preserves each original motion, pause, and checkpoint. A future visual
+layer distinguishes pen-up as dashed travel, pen-down as solid ink, pause as
+a hold marker, checkpoint as a numbered marker, and bounds as a rectangle;
+no pixel renderer is claimed here. A timestamp or total duration is shown
+only if the input plan supplied accepted timing evidence; otherwise `Unknown`.
+
+**Refusal:** if operation 5 instead deposits from `(30,55)` to `(194,55) mm`,
+its endpoint exceeds the writable right edge, so caller-supplied limit
+validation must return `OutOfBounds` at operation 5. No complete trace or
+simulated-success receipt is produced. A missing operation limit status,
+changed plan revision, stale calibration, or mismatched evidence count also
+refuses rather than drawing a misleading safe path.
+
+**Invariants:** no physical channel is opened; the trace is a projection, not
+a replanned sequence; original order, geometry, owner IDs and checkpoint
+references remain identical. Bounds must be checked for pen-up and pen-down,
+not only inked points. A trace cannot mark an unverified limit as safe.
+
+**Assumptions and risks:** the backend has read-only dry-run and trace
+structures with explicit limit states. The caller still must compute actual
+coordinate transforms, envelope limits and timings. No viewport renderer,
+measured acceleration, collision dynamics, automatic limit evaluation, or
+physical hardware test is implemented by this document.
+
+## Acceptance decision
+
+- **Basis:** theoretical for the six-event visual storyboard, 2026-11-02;
+  practical only for the existing typed read-only limit/trace admission.
+- **Delivered:** a one-page pen-up/down/checkpoint/pause sequence and one
+  out-of-bounds typed refusal with no device operation.
+- **Unavailable:** physical motion simulation, rendered pixels, automatic
+  geometry limits, calibrated timing, and any actuator authority.
