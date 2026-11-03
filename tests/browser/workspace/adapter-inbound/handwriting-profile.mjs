@@ -43,7 +43,9 @@ const ids = ["handwriting-scope", "handwriting-dimension",
     "handwriting-reset", "handwriting-save", "handwriting-status",
     "handwriting-local-name", "handwriting-local-load",
     "handwriting-local-save",
-    "handwriting-preview", ...fields.flatMap((field) => [
+    "handwriting-preview", "handwriting-sample-glyph",
+    "handwriting-sample-occurrence", "handwriting-sample",
+    "handwriting-sample-result", ...fields.flatMap((field) => [
         `handwriting-${field}`, `handwriting-${field}-range`])];
 
 class FakeControl {
@@ -77,6 +79,8 @@ function mountBackend(implementation = {}) {
     const controller = new AbortController();
     elements.get("handwriting-scope").value = "global";
     elements.get("handwriting-local-name").value = "my-handwriting.json";
+    elements.get("handwriting-sample-glyph").value = "a";
+    elements.get("handwriting-sample-occurrence").value = "0";
     globalThis.document = {
         getElementById: (id) => elements.get(id) ?? null,
         createElement: (tag) => {
@@ -107,6 +111,9 @@ function mountBackend(implementation = {}) {
             return Response.json(catalog);
         }
         if (init.method === "GET") return Response.json(defaultProfile());
+        if (endpoint === "./api/handwriting/preview") {
+            return Response.json({ value: 3000 });
+        }
         assert.equal(init.method, "POST");
         assert.equal(init.headers["Content-Type"], "application/json");
         return Response.json(JSON.parse(init.body));
@@ -135,6 +142,77 @@ function edit(elements, id, value, event = "input") {
     control.value = value;
     control.dispatch(event);
 }
+
+test("native numeric preview uses unsaved glyph edits and is not persisted", async () => {
+    const b = mountBackend();
+    try {
+        await b.editor.start("private-session-credential");
+        edit(b.elements, "handwriting-dimension", "height", "change");
+        edit(b.elements, "handwriting-minimum", "2500");
+        edit(b.elements, "handwriting-maximum", "3500");
+        edit(b.elements, "handwriting-mean", "3200");
+        edit(b.elements, "handwriting-median", "3200");
+        edit(b.elements, "handwriting-standard_deviation", "150");
+        edit(b.elements, "handwriting-seed", "73");
+        edit(b.elements, "handwriting-sample-glyph", "ñ");
+        edit(b.elements, "handwriting-sample-occurrence", "12");
+        b.elements.get("handwriting-sample").dispatch("click");
+        await tick();
+        const request = b.requests.at(-1);
+        assert.equal(request.endpoint, "./api/handwriting/preview");
+        assert.equal(request.method, "POST");
+        const payload = JSON.parse(request.body);
+        assert.equal(payload.profile.seed, 73);
+        assert.equal(payload.profile.globals.find(
+            (p) => p.dimension === "height").mean, 3200);
+        assert.equal(payload.grapheme, "ñ");
+        assert.equal(payload.dimension, "height");
+        assert.equal(payload.occurrence, 12);
+        assert.match(b.elements.get("handwriting-sample-result").textContent,
+            /3000 micrometres.*no glyph ink/);
+        assert.equal(b.links.length, 0);
+        edit(b.elements, "handwriting-mean", "3300");
+        assert.equal(b.elements.get("handwriting-sample-result").textContent,
+            "No numeric sample requested.");
+        edit(b.elements, "handwriting-sample-occurrence", "-1");
+        const count = b.requests.length;
+        b.elements.get("handwriting-sample").dispatch("click");
+        await tick();
+        assert.equal(b.requests.length, count);
+        b.editor.reset();
+        assert.equal(b.elements.get("handwriting-sample").disabled, true);
+    } finally {
+        b.restore();
+    }
+});
+
+test("native numeric preview refuses malformed response without retaining output", async () => {
+    const b = mountBackend({
+        fetch(endpoint, init) {
+            if (endpoint === "./api/handwriting/dimensions") {
+                return Response.json(catalog);
+            }
+            if (init.method === "GET") return Response.json(defaultProfile());
+            assert.equal(endpoint, "./api/handwriting/preview");
+            return Response.json({ value: "not-a-number" });
+        },
+    });
+    try {
+        await b.editor.start("private-session-credential");
+        b.elements.get("handwriting-sample").dispatch("click");
+        await tick();
+        assert.equal(b.elements.get("handwriting-sample-result").textContent,
+            "No numeric sample requested.");
+        assert.match(b.elements.get("handwriting-status").textContent,
+            /no file saved/);
+        b.editor.reset();
+        assert.equal(b.elements.get("handwriting-sample").disabled, true);
+        assert.equal(b.elements.get("handwriting-sample-result").textContent,
+            "No numeric sample requested.");
+    } finally {
+        b.restore();
+    }
+});
 
 test("handwriting retains exact NFD glyph edits", async () => {
     const b = mountBackend();

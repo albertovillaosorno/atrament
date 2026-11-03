@@ -66,7 +66,9 @@ use atrament_profile_file_commit::{
 };
 use atrament_profile_import_preflight::ProfileImportBudget;
 use atrament_profile_import_verification::VerifiedAttachedProfileImport;
-use atrament_profile_json_syntax::ProfileJsonSyntaxLimits;
+use atrament_profile_json_syntax::{
+    ProfileJsonSyntaxLimits, ValidatedProfileJsonValue,
+};
 use atrament_profile_manifest_json_codec::ProfileManifestJsonLimits;
 use atrament_profile_manifest_json_writer::{
     ProfileManifestJsonWriteLimits, write_canonical_profile_manifest_json,
@@ -88,11 +90,14 @@ use atrament_session_runtime::{
     LoadedProfileFile, NotebookProfileError, NotebookProfileGateway,
     ProfileFileError, ProfileFileGateway, ProfileFileKind, Runtime,
 };
-use atrament_handwriting_statistics::HandwritingStatisticsProfile;
+use atrament_handwriting_statistics::{
+    Dimension, HandwritingStatisticsProfile, preview_value,
+};
 use atrament_handwriting_statistics_json::{
     MAXIMUM_STATISTICS_JSON_BYTES, decode_statistics_json,
     encode_statistics_json,
 };
+use atrament_profile_json_syntax::validate_profile_json_object;
 use atrament_session_secret::SessionSecret;
 
 // This is bounded source-verification policy, not a general profile ingestion
@@ -124,6 +129,48 @@ impl HandwritingProfileGateway for HandwritingGateway {
             &HandwritingStatisticsProfile::baseline(0),
             &UnicodeGraphemeSegmentation,
         ).map_err(|_error| HandwritingProfileError)
+    }
+
+    fn numeric_preview_json(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, HandwritingProfileError> {
+        let root = validate_profile_json_object(input, ProfileJsonSyntaxLimits {
+            maximum_bytes: MAXIMUM_STATISTICS_JSON_BYTES.saturating_add(512),
+            maximum_nesting: 32,
+            maximum_object_members: 64,
+            maximum_values: 100_000,
+        }).map_err(|_error| HandwritingProfileError)?;
+        if root.root_fields().count() != 4 {
+            return Err(HandwritingProfileError);
+        }
+        let profile_json = root.root_member_json("profile")
+            .ok_or(HandwritingProfileError)?;
+        let profile = decode_statistics_json(
+            profile_json, &UnicodeGraphemeSegmentation,
+        ).map_err(|_error| HandwritingProfileError)?;
+        let mut glyph_bytes = [0u8; 64];
+        let glyph_len = root.root_member_value("grapheme")
+            .ok_or(HandwritingProfileError)?
+            .copy_string_utf8(&mut glyph_bytes)
+            .map_err(|_error| HandwritingProfileError)?;
+        let grapheme = from_utf8(glyph_bytes.get(..glyph_len).ok_or(HandwritingProfileError)?)
+            .map_err(|_error| HandwritingProfileError)?;
+        let mut key_bytes = [0u8; 32];
+        let key_len = root.root_member_value("dimension")
+            .ok_or(HandwritingProfileError)?
+            .copy_string_utf8(&mut key_bytes)
+            .map_err(|_error| HandwritingProfileError)?;
+        let key = from_utf8(key_bytes.get(..key_len).ok_or(HandwritingProfileError)?)
+            .map_err(|_error| HandwritingProfileError)?;
+        let dimension = Dimension::from_key(key).ok_or(HandwritingProfileError)?;
+        let occurrence = root.root_member_value("occurrence")
+            .and_then(ValidatedProfileJsonValue::unsigned_integer)
+            .ok_or(HandwritingProfileError)?;
+        let value = preview_value(
+            &profile, grapheme, dimension, occurrence,
+            &UnicodeGraphemeSegmentation,
+        ).map_err(|_error| HandwritingProfileError)?;
+        Ok(format!("{{\"value\":{value}}}").into_bytes())
     }
 }
 

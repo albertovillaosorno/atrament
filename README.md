@@ -220,7 +220,11 @@ overrides such as `ñ` and decomposed accents.
 Rust, **Save JSON** downloads canonical Rust-validated statistics, and
 **Default** restores the uncalibrated native seed-zero profile. Bounds and
 units come from Rust; this is a numeric statistics preview, not actual ink
-rendering.
+rendering. **Preview seeded number in Rust** uses the current (including
+unsaved) controls, an exact grapheme, the selected native dimension, and a
+zero-based occurrence. Authenticated `POST /api/handwriting/preview` checks
+the whole profile and returns a repeatable integer for identical inputs.
+This is not calibrated ink or glyph shape data, and the preview saves no file.
 
 Large `u64` seeds outside JavaScript safe integer precision
 must be edited using the Rust CLI.

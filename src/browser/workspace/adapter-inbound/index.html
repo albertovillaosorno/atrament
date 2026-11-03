@@ -446,6 +446,23 @@
                 max="9007199254740991" step="1" disabled>
             </label>
           </div>
+          <div class="handwriting-controls" aria-label="Native numerical example">
+            <label>Preview exact grapheme
+              <input id="handwriting-sample-glyph" type="text" value="a"
+                maxlength="64" autocomplete="off" spellcheck="false" disabled>
+            </label>
+            <label>Occurrence index (0 or higher)
+              <input id="handwriting-sample-occurrence" type="number"
+                value="0" min="0" max="9007199254740991" step="1" disabled>
+            </label>
+          </div>
+          <div class="paper-actions">
+            <button id="handwriting-sample" type="button" disabled>
+              Preview seeded number in Rust
+            </button>
+          </div>
+          <p id="handwriting-sample-result" class="field-help" role="status"
+            aria-live="polite">No numeric sample requested.</p>
           <p id="handwriting-preview" class="field-help" aria-live="polite">
             No handwriting session loaded.
           </p>

@@ -2930,6 +2930,62 @@ fn cli_refuses_sha_valid_but_invalid_section_json_atomically() {
 }
 
 
+#[test]
+fn native_handwriting_preview_replays_seeded_exact_glyph_and_refuses_bad_input() {
+    use atrament_session_runtime::HandwritingProfileGateway;
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_handwriting_statistics_json::encode_statistics_json;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let baseline = HandwritingStatisticsProfile::baseline(73);
+    let override_stats = ScalarStatistics {
+        minimum: 2_000, maximum: 4_000, mean: 3_200,
+        median: 3_200, standard_deviation: 250,
+    };
+    let profile = baseline.with_glyph("ñ", DimensionStatistics {
+        dimension: Dimension::Height, statistics: override_stats,
+    }, &UnicodeGraphemeSegmentation).expect("admitted exact glyph");
+    let json = String::from_utf8(encode_statistics_json(
+        &profile, &UnicodeGraphemeSegmentation,
+    ).expect("canonical handwriting")).expect("UTF8");
+    let request = |glyph: &str, dimension: &str, occurrence: &str| {
+        format!("{{\"profile\":{json},\"grapheme\":\"{glyph}\",\"dimension\":\"{dimension}\",\"occurrence\":{occurrence}}}")
+    };
+    let gateway = bootstrap::HandwritingGateway;
+    let first = gateway.numeric_preview_json(
+        request("ñ", "height", "9").as_bytes(),
+    ).expect("seeded native preview");
+    assert_eq!(first, gateway.numeric_preview_json(
+        request("ñ", "height", "9").as_bytes(),
+    ).expect("same seed and occurrence"));
+    assert!(String::from_utf8_lossy(&first).starts_with("{\"value\":"));
+    let inherited = gateway.numeric_preview_json(
+        request("n", "height", "9").as_bytes(),
+    ).expect("non-overridden grapheme inherits mean");
+    assert_eq!(inherited, br#"{"value":3000}"#);
+    for (glyph, dimension, occurrence) in [
+        ("ab", "height", "9"),
+        ("ñ", "invalid", "9"),
+        ("ñ", "height", "-1"),
+        ("ñ", "height", "18446744073709551616"),
+    ] {
+        assert!(gateway.numeric_preview_json(
+            request(glyph, dimension, occurrence).as_bytes(),
+        ).is_err());
+    }
+    let duplicate = request("ñ", "height", "9").replace(
+        "\"occurrence\":9}", "\"occurrence\":9,\"occurrence\":7}",
+    );
+    assert!(gateway.numeric_preview_json(duplicate.as_bytes()).is_err());
+    let unknown = request("ñ", "height", "9").replace(
+        "\"occurrence\":9}", "\"occurrence\":9,\"extra\":true}",
+    );
+    assert!(gateway.numeric_preview_json(unknown.as_bytes()).is_err());
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn localhost_file_store_roundtrips_two_native_profiles_and_refuses_stale() {

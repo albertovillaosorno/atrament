@@ -205,6 +205,11 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
     const localSave = required<HTMLButtonElement>("handwriting-local-save");
     const status = required<HTMLElement>("handwriting-status");
     const preview = required<HTMLElement>("handwriting-preview");
+    const sampleGlyph = required<HTMLInputElement>("handwriting-sample-glyph");
+    const sampleOccurrence = required<HTMLInputElement>(
+        "handwriting-sample-occurrence");
+    const sampleButton = required<HTMLButtonElement>("handwriting-sample");
+    const sampleResult = required<HTMLElement>("handwriting-sample-result");
     const fields = FIELDS.map((field) => ({
         field,
         number: required<HTMLInputElement>(`handwriting-${field}`),
@@ -213,7 +218,8 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
     const controls = [scope, dimensionSelect, glyphSelect, newGlyph,
         addGlyph, removeGlyph, addOverride, removeOverride, seed,
         upload, resetButton, save,
-        localName, localLoad, localSave];
+        localName, localLoad, localSave, sampleGlyph, sampleOccurrence,
+        sampleButton];
     let dimensions: Dimension[] = [];
     let profile: Profile | null = null;
     let generation = 0;
@@ -306,6 +312,7 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
     }
 
     function display(): void {
+        sampleResult.textContent = "No numeric sample requested.";
         const dim = selectedDimension();
         const parameter = selectedParameter();
         const inherited = scope.value === "glyph" && parameter === undefined;
@@ -356,7 +363,8 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
 
     async function request(
         secret: string,
-        endpoint: "/api/handwriting/profile" | "/api/handwriting/dimensions",
+        endpoint: "/api/handwriting/profile" | "/api/handwriting/dimensions"
+            | "/api/handwriting/preview",
         json?: string,
     ): Promise<Response> {
         return fetch(`.${endpoint}`, {
@@ -421,7 +429,8 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
     }
 
     async function fetchJson(secret: string, endpoint:
-        "/api/handwriting/profile" | "/api/handwriting/dimensions",
+        "/api/handwriting/profile" | "/api/handwriting/dimensions"
+        | "/api/handwriting/preview",
         json?: string,
     ): Promise<string> {
         const response = await request(secret, endpoint, json);
@@ -597,6 +606,9 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
         selectedGlyph = "";
         upload.value = "";
         seed.value = "";
+        sampleGlyph.value = "a";
+        sampleOccurrence.value = "0";
+        sampleResult.textContent = "No numeric sample requested.";
         newGlyph.value = "";
         dimensionSelect.replaceChildren();
         glyphSelect.replaceChildren();
@@ -613,6 +625,11 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
         sync();
     }
 
+    for (const control of [sampleGlyph, sampleOccurrence]) {
+        control.addEventListener("input", (): void => {
+            sampleResult.textContent = "No numeric sample requested.";
+        });
+    }
     scope.addEventListener("change", display);
     dimensionSelect.addEventListener("change", display);
     glyphSelect.addEventListener("change", (): void => {
@@ -621,6 +638,7 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
     });
     newGlyph.addEventListener("input", sync);
     seed.addEventListener("input", (): void => {
+        sampleResult.textContent = "No numeric sample requested.";
         status.textContent = "Unsaved statistical changes.";
     });
     for (const { field, number, slider } of fields) {
@@ -699,6 +717,41 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
         display();
         status.textContent = "Unsaved override removal; missing dimensions "
             + "inherit global statistics.";
+    });
+    sampleButton.addEventListener("click", (): void => {
+        void action(async (secret, observed) => {
+            sampleResult.textContent = "No numeric sample requested.";
+            const grapheme = sampleGlyph.value;
+            const occurrenceRaw = sampleOccurrence.value;
+            const occurrence = Number(occurrenceRaw);
+            if (!grapheme || new TextEncoder().encode(grapheme).length > 64
+                || !occurrenceRaw || !Number.isSafeInteger(occurrence)
+                || occurrence < 0) {
+                throw new Error("Invalid numerical sample selection");
+            }
+            const dim = selectedDimension();
+            if (dim === undefined) throw new Error("Missing native dimension");
+            const body = JSON.stringify({
+                profile: candidate(), grapheme, dimension: dim.key, occurrence,
+            });
+            if (new TextEncoder().encode(body).length > MAX_JSON_BYTES + 512) {
+                throw new Error("Numerical sample proposal exceeds limit");
+            }
+            const json = await fetchJson(
+                secret, "/api/handwriting/preview", body,
+            );
+            if (!isCurrent(secret, observed)) return;
+            const result = record(boundedJson(json, 128));
+            if (!keysMatch(result, ["value"]) || !safeInteger(result.value)) {
+                throw new Error("Invalid native numerical sample response");
+            }
+            sampleResult.textContent = `Rust numeric example for `
+                + `${JSON.stringify(grapheme)} / ${dim.key} / #${occurrence}: `
+                + `${result.value} ${dim.unit}. `
+                + "Seeded estimate only; no glyph ink or calibrated moments.";
+            status.textContent = "Native numeric preview generated from unsaved "
+                + "statistics. No profile was saved.";
+        });
     });
     localName.addEventListener("input", clearTracking);
     localLoad.addEventListener("click", (): void => {

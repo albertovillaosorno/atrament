@@ -173,7 +173,16 @@ pub trait HandwritingProfileGateway {
     ///
     /// Refuses a default profile that cannot be encoded.
     fn default_json(&self) -> Result<Vec<u8>, HandwritingProfileError>;
+
+    /// Preview one grapheme/dimension/occurrence through the native sampler.
+    ///
+    /// # Errors
+    /// Refuses malformed or unadmitted profile/sample requests.
+    fn numeric_preview_json(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, HandwritingProfileError>;
 }
+
 
 
 /// Refusal from the native notebook codec, with no file authority.
@@ -1382,7 +1391,7 @@ fn route_handwriting_profile(
             "200 OK", handwriting_dimension_catalog().as_bytes(),
         );
     }
-    if method == "GET" {
+    if method == "GET" && target == "/api/handwriting/profile" {
         return match context.handwriting_gateway.default_json() {
             Ok(json) => json_response("200 OK", &json),
             Err(_error) => json_response(
@@ -1391,7 +1400,8 @@ fn route_handwriting_profile(
             ),
         };
     }
-    if method != "POST" || target != "/api/handwriting/profile" {
+    if method != "POST" || !matches!(target,
+        "/api/handwriting/profile" | "/api/handwriting/preview") {
         return json_response(
             "400 Bad Request",
             br#"{"error":"invalid_request"}"#,
@@ -1414,13 +1424,23 @@ fn route_handwriting_profile(
             br#"{"error":"invalid_request"}"#,
         );
     };
-    if body.len() > MAXIMUM_STATISTICS_JSON_BYTES {
+    let maximum_bytes = if target == "/api/handwriting/preview" {
+        MAXIMUM_STATISTICS_JSON_BYTES.saturating_add(512)
+    } else {
+        MAXIMUM_STATISTICS_JSON_BYTES
+    };
+    if body.len() > maximum_bytes {
         return json_response(
             "413 Content Too Large",
             br#"{"error":"handwriting_profile_too_large"}"#,
         );
     }
-    match context.handwriting_gateway.canonical_json(body) {
+    let result = if target == "/api/handwriting/preview" {
+        context.handwriting_gateway.numeric_preview_json(body)
+    } else {
+        context.handwriting_gateway.canonical_json(body)
+    };
+    match result {
         Ok(json) => json_response("200 OK", &json),
         Err(_error) => json_response(
             "400 Bad Request",
@@ -1551,7 +1571,8 @@ fn route_profile_transport(
         "/api/paper/profile" | "/api/paper/pdf" | "/api/paper/png" => {
             Some(route_paper_profile(request, method, target, context))
         }
-        "/api/handwriting/profile" | "/api/handwriting/dimensions" => {
+        "/api/handwriting/profile" | "/api/handwriting/dimensions"
+        | "/api/handwriting/preview" => {
             Some(route_handwriting_profile(request, method, target, context))
         }
         _ => None,

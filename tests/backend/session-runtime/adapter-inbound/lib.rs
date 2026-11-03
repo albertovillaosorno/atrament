@@ -85,6 +85,16 @@ impl runtime::HandwritingProfileGateway for TestHandwritingGateway {
             &UnicodeGraphemeSegmentation,
         ).map_err(|_error| runtime::HandwritingProfileError)
     }
+
+    fn numeric_preview_json(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, runtime::HandwritingProfileError> {
+        if input == b"{\"profile\":{},\"grapheme\":\"a\",\"dimension\":\"height\",\"occurrence\":0}" {
+            Ok(br#"{"value":3000}"#.to_vec())
+        } else {
+            Err(runtime::HandwritingProfileError)
+        }
+    }
 }
 
 
@@ -5285,6 +5295,48 @@ fn handwriting_profile_http_refuses_invalid_json_and_payload_shapes() {
         EXPECTED_HOST,
     );
     assert_eq!(status_line(&response), "HTTP/1.1 413 Content Too Large");
+}
+
+#[test]
+fn handwriting_numeric_preview_is_authenticated_bounded_and_post_only() {
+    let valid = br#"{"profile":{},"grapheme":"a","dimension":"height","occurrence":0}"#;
+    let request = |method: &str, secret: Option<&str>,
+        origin: Option<&str>, content_type: Option<&str>, body: &[u8]| {
+        route_runtime(&paper_endpoint_request(
+            method, "/api/handwriting/preview", secret, origin,
+            content_type, body,
+        ), EXPECTED_HOST)
+    };
+    let authorized = request("POST", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"), valid);
+    assert_eq!(status_line(&authorized), "HTTP/1.1 200 OK");
+    assert_eq!(paper_http_body(&authorized), br#"{"value":3000}"#);
+    for secret in [None, Some("b".repeat(64))] {
+        let denied = request("POST", secret.as_deref(),
+            Some(EXPECTED_ORIGIN), Some("application/json"), valid);
+        assert_eq!(status_line(&denied), "HTTP/1.1 401 Unauthorized");
+    }
+    let denied = request("POST", Some(EXPECTED_SECRET), None,
+        Some("application/json"), valid);
+    assert_eq!(status_line(&denied), "HTTP/1.1 401 Unauthorized");
+    let denied = request("POST", Some(EXPECTED_SECRET),
+        Some("http://evil.local"), Some("application/json"), valid);
+    assert_eq!(status_line(&denied), "HTTP/1.1 401 Unauthorized");
+    for method in ["GET", "PUT", "DELETE"] {
+        let denied = request(method, Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"), valid);
+        assert_eq!(status_line(&denied), "HTTP/1.1 400 Bad Request");
+    }
+    let denied = request("POST", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("text/plain"), valid);
+    assert_eq!(status_line(&denied), "HTTP/1.1 400 Bad Request");
+    let denied = request("POST", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"), b"{}");
+    assert_eq!(status_line(&denied), "HTTP/1.1 400 Bad Request");
+    let large = vec![b' '; 1_048_577 + 512];
+    let denied = request("POST", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"), &large);
+    assert_eq!(status_line(&denied), "HTTP/1.1 413 Content Too Large");
 }
 
 #[test]
