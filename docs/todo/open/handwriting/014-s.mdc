@@ -168,10 +168,42 @@ by the separate Rust CLI with exact byte equality, audited as `ó` with
 PDF and PNG. The test restores temporary browser API interception and
 removes its transient session/files afterward.
 
-The native PDF draws the **same chosen variant** for both `ó` repetitions;
-it does not yet sample each occurrence on a Rust notebook page or preserve
-variation settings across sessions. User-selected seeded variation is a
-bounded manual source-library export, not full P1-014 acceptance.
+This derived TSV makes the native PDF draw the **same chosen variant**
+for both `ó` repetitions. Native per-occurrence sampling is available
+through the separate CLI option below, not by this sampled TSV alone;
+neither option persists variation settings across sessions.
+
+## Native per-occurrence glyph variation on PDF/PNG (partial) — 2026-11-03
+
+The Rust `atrament-profiles notebook` CLI now accepts an **explicit**
+`--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY`
+option alongside a user-authored TSV or ink segment library. It applies
+browser-compatible seeded width/height/thickness, slant, spacing and
+shared-endpoint regularity at **each visible grapheme occurrence** rather
+than replacing its canonical glyph source. Samples continue in text-run
+order across physical pages, with the same exact NFC/NFD glyph identities;
+flow uses the original nominal advances and physical overshoot refuses.
+The 128-stroke-per-glyph browser sample bound and pen/cell clearance still
+apply, before native output is committed. The existing `--handwriting-profile`
+mean transforms apply only after the optional local perturbation.
+
+One regression checks all nine native line segments and tracking offsets
+for three authored accented `á` copies against independently sampled
+browser exact-coordinate fixtures, including shared vertices and repeat
+identity. A second renders four independent `ó` instances on two genuine
+physical PDF pages and transparent PNG page 2, checking stable replay and
+separate shapes across pages; a third rejects invalid seeds/spreads,
+duplicate settings and shape-free requests without replacing an existing
+file. A separate regression verifies decomposed Unicode `n` plus tilde
+using explicit authored fallback ink and selected per-grapheme means.
+Native Rust CLI tests cover these cases, PDF/PNG and error refusals;
+strict production-binary Clippy passes. No derived sample
+is written back into the authored library.
+
+This is **not** full P1-014 acceptance: per-line/word correlation, joined
+cursive and stroke grouping remain unavailable; the CLI variation settings,
+text and page content are not persisted in a saved notebook. A browser
+control still does not directly command native per-occurrence rendering.
 
 ## Acceptance decision
 

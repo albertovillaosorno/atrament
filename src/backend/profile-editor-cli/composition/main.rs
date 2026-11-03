@@ -11,7 +11,7 @@
 // - Owns:
 //   - Rust CLI editing and inventory inspection of handwriting profiles.
 // - Must-Not:
-//   - Invent glyph outlines, infer calibration, or sample handwriting.
+//   - Invent glyph outlines, infer calibration, or silently sample ink.
 // - Allows:
 //   - Inputs: Explicit CLI arguments and bounded caller-selected JSON files.
 //   - Outputs: Admitted JSON, exact text-inventory audit, or refusal.
@@ -45,6 +45,7 @@ use std::path::Path;
 use std::slice::Iter;
 
 use flow::{FlowFormat, FlowSource, layout_flow};
+use glyph::GlyphVariation;
 
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_handwriting_statistics::{
@@ -106,6 +107,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--fallback-glyph MISSING AUTHORED] \
     [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
+    [--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY] \
     [--flow-text TEXT | --flow-markdown MARKDOWN | \
      --flow-text-file FILE | --flow-markdown-file FILE] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
@@ -123,7 +125,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     UTF-8 file. Both use physical printable regions and exact authored ink; \
     it auto-selects PDF page count unless --pages is explicit. \
     --handwriting-profile applies selected mean dimensions to authored \
-    shapes, never statistical sampling or a font. \
+    shapes, not statistical sampling. --glyph-variation explicitly \
+    applies reproducible per-occurrence creative jitter to the same shapes; \
+    the six spreads use percent, percent, percent, degrees, um, um. \
     No synthesized glyphs, inline Markdown styles or images are rendered.";
 
 #[derive(Clone, Debug)]
@@ -154,6 +158,7 @@ struct GlyphOverlay {
     loaded_file: bool,
     runs: Vec<TextRun>,
     strokes: Vec<GlyphStroke>,
+    variation: Option<GlyphVariation>,
 }
 
 #[derive(Debug)]
@@ -948,7 +953,8 @@ fn parse_notebook_export_option(
             export.png_page = Some(usize::try_from(page)
                 .map_err(|error| format!("PNG page refused: {error}"))?);
         }
-        "--glyph-stroke" | "--place-text" | "--fallback-glyph" => {
+        "--glyph-stroke" | "--place-text" | "--fallback-glyph"
+        | "--glyph-variation" => {
             glyphs.parse(option, iter)?;
         }
         "--glyph-file" => {
@@ -1000,6 +1006,9 @@ fn validate_notebook_export_flags(
             "ink and glyph overlays need ",
             "--export-paper pdf or png",
         ).into());
+    }
+    if glyphs.variation.is_some() && glyphs.strokes.is_empty() {
+        return Err("--glyph-variation needs authored glyph shapes".into());
     }
     if statistics.is_some() && !glyphs.has_any() {
         return Err(concat!(
@@ -1113,7 +1122,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             }
             "--export-paper" | "--pages" | "--dpi" | "--png-page"
             | "--ink-line" | "--glyph-stroke" | "--glyph-file"
-            | "--place-text" | "--fallback-glyph" => {
+            | "--place-text" | "--fallback-glyph"
+            | "--glyph-variation" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
                     &mut glyphs,

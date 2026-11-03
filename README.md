@@ -907,12 +907,40 @@ A real Firefox/Rust localhost test captures the actual selected-sample TSV
 download in a disposable session. Rust audits the browser-exported
 49-stroke `ó` with zero missing shapes and byte-identical readback, then
 renders a genuine A4 one-page PDF and transparent 72-DPI 596×842 RGBA PNG.
-This is **one chosen stored variant per Unicode key**, not a different
-shape for each repeated letter: both `ó` occurrences
-in the example have the same selected template. There is still no automatic
-multi-line seeded variation in notebook PDF/PNG, no persisted Rust variation
-settings, joined cursive or learned style. These browser-only spread knobs
-are distinct from Rust's mean-only transforms described below.
+The separate TSV is **one chosen stored variant per Unicode key**: both
+`ó` occurrences in that example use the same selected template. For **native
+per-occurrence** variation instead, supply the original authored library to
+the Rust `notebook` CLI and explicitly select the same six bounded browser
+spreads. The following exports independent, seeded variants for repeated
+letters, without editing the original TSV:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --printed-sheet true --export-paper pdf \
+  --glyph-file my-glyph-strokes.tsv \
+  --place-text 1 25400 30000 'óóó' \
+  --place-text 1 25400 39500 'óóó' \
+  --glyph-variation 42 8 8 10 7 200 40 --output varied-lines.pdf
+```
+
+The seven `--glyph-variation` values are **uint32 seed**, maximum width,
+height and pen-thickness spreads (0–20% each), slant (0–12 degrees),
+per-occurrence horizontal tracking (0–500 µm), and endpoint regularity
+(0–150 µm). It uses the same xorshift samples and exact Unicode glyph keys
+as the browser preview. The occurrence sequence continues across manual
+text runs and Markdown flow pages. Rust checks the fully sampled ink and
+pen clearance (up to 128 template segments per glyph) before creating a
+PDF or transparent PNG; invalid settings, clipped shapes and missing
+sources refuse without replacing a selected output. A chosen saved
+`--handwriting-profile` still applies its means **after** this optional
+local variation; nominal line wrapping remains based on those means, with
+physical overshoot refused rather than silently clipped.
+
+This is an explicit creative perturbation of caller-authored strokes, not
+learned or calibrated handwriting. The seed/settings and text placement are
+still command-only, not saved in `atrament.notebook.v1`. Joined cursive,
+word/line-level correlation, letter context, and a persisted complete
+notebook-to-PDF workflow remain unfinished.
 
 Session end drops the unsaved draft. The browser generates explicit
 print-starter strokes for the frozen 114-character bilingual text inventory

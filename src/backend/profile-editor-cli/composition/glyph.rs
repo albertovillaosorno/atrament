@@ -65,6 +65,139 @@ const DEFAULT_TEMPLATE_WIDTH_UM: u32 = 3_500;
 const DEFAULT_TEMPLATE_HEIGHT_UM: u32 = 4_500;
 const DEFAULT_TEMPLATE_INK_UM: u32 = 300;
 
+/// Opt-in creative jitter, not an inferred distribution or saved profile.
+/// Units and the seeded xorshift match the browser glyph comparison.
+#[derive(Clone, Copy, Debug)]
+#[expect(clippy::redundant_pub_crate, reason = "CLI sibling module shares this type")]
+pub(super) struct GlyphVariation {
+    height: u32,
+    regularity: u32,
+    seed: u32,
+    slant: u32,
+    spacing: u32,
+    thickness: u32,
+    width: u32,
+}
+
+struct XorShift32(u32);
+
+impl GlyphVariation {
+    pub(super) fn parse(iter: &mut Iter<'_, String>) -> Result<Self, String> {
+        let seed = next_integer(iter, "variation seed", 0, u32::MAX)?;
+        let width = next_integer(iter, "variation width", 0, 20)?;
+        let height = next_integer(iter, "variation height", 0, 20)?;
+        let thickness = next_integer(iter, "variation thickness", 0, 20)?;
+        let slant = next_integer(iter, "variation slant", 0, 12)?;
+        let spacing = next_integer(iter, "variation spacing", 0, 500)?;
+        let regularity = next_integer(iter, "variation regularity", 0, 150)?;
+        Ok(Self {
+            height, regularity, seed, slant, spacing, thickness, width,
+        })
+    }
+
+    // JS Math.round is floor(n + 0.5), including negative half-way values.
+    #[expect(clippy::as_conversions, clippy::cast_possible_truncation, reason =
+        "bounded floating variation is checked before integer conversion")]
+    fn round_js(value: f64) -> Result<i32, String> {
+        let rounded = (value + 0.5).floor();
+        if !rounded.is_finite() || rounded < f64::from(i32::MIN)
+            || rounded > f64::from(i32::MAX) {
+            return Err("varied glyph coordinate exceeds numeric bounds".into());
+        }
+        Ok(rounded as i32)
+    }
+
+    #[expect(clippy::suboptimal_flops, reason =
+        "match browser JavaScript coordinate sampling without fused rounding")]
+    fn sample(self, shapes: &[&GlyphStroke], occurrence: u32)
+        -> Result<Vec<GlyphStroke>, String> {
+        if shapes.len() > 128 {
+            return Err("variation is limited to 128 strokes per glyph".into());
+        }
+        if occurrence > 10_000 {
+            return Err("variation occurrence outside 0..10000".into());
+        }
+        let identity = Self::variation_seed(self.seed, occurrence);
+        let mut random = XorShift32::new(identity);
+        let sx = 1.0f64 + random.unit() * f64::from(self.width) / 100.0f64;
+        let sy = 1.0f64 + random.unit() * f64::from(self.height) / 100.0f64;
+        let ink = 1.0f64 + random.unit() * f64::from(self.thickness)
+            / 100.0f64;
+        let shear = (random.unit() * f64::from(self.slant)).to_radians().tan();
+        let point = |x: u32, y: u32| -> Result<(u32, u32), String> {
+            let mut vertex = XorShift32::new(identity
+                ^ x.wrapping_mul(0x85EB_CA6B)
+                ^ y.wrapping_mul(0xC2B2_AE35));
+            let changed_x = Self::round_js(
+                1750.0 + (f64::from(x) - 1750.0) * sx
+                    + (4500.0 - f64::from(y)) * shear
+                    + vertex.unit() * f64::from(self.regularity),
+            )?;
+            let changed_y = Self::round_js(
+                2250.0 + (f64::from(y) - 2250.0) * sy
+                    + vertex.unit() * f64::from(self.regularity),
+            )?;
+            Ok((
+                u32::try_from(changed_x)
+                    .map_err(|_error| "varied glyph exceeds cell" )?,
+                u32::try_from(changed_y)
+                    .map_err(|_error| "varied glyph exceeds cell" )?,
+            ))
+        };
+        shapes.iter().map(|shape| {
+            let start = point(shape.start_um.0, shape.start_um.1)?;
+            let end = point(shape.end_um.0, shape.end_um.1)?;
+            let width = u32::try_from(Self::round_js(
+                f64::from(shape.width_um) * ink,
+            )?).map_err(|_error| "varied glyph ink width invalid")?;
+            if !(80..=1_500).contains(&width) || start == end {
+                return Err("varied glyph pen width or length invalid".into());
+            }
+            let clearance = width.div_ceil(2);
+            for (x, y) in [start, end] {
+                if x < clearance || x > 3500u32.saturating_sub(clearance)
+                    || y < clearance || y > 4500u32.saturating_sub(clearance) {
+                    return Err("varied ink and pen must fit inside glyph cell".into());
+                }
+            }
+            Ok(GlyphStroke {
+                start_um: start, end_um: end, width_um: width,
+                ..(*shape).clone()
+            })
+        }).collect()
+    }
+
+    // Browser spacing is absolute occurrence tracking, not accumulated
+    // advance; layout remains measured from the canonical glyph width.
+    fn tracking(self, occurrence: u32) -> Result<i32, String> {
+        let mut random = XorShift32::new(Self::variation_seed(
+            self.seed, occurrence.checked_add(3)
+                .ok_or("variation occurrence overflow")?,
+        ));
+        Self::round_js(random.unit() * f64::from(self.spacing))
+    }
+
+    const fn variation_seed(seed: u32, occurrence: u32) -> u32 {
+        seed ^ occurrence.wrapping_add(1).wrapping_mul(0x9E37_79B9)
+    }
+}
+
+impl XorShift32 {
+    const fn new(seed: u32) -> Self {
+        Self(if seed == 0 { 0x6D2B_79F5 } else { seed })
+    }
+
+    #[expect(clippy::suboptimal_flops, reason =
+        "match browser JavaScript math without fused rounding")]
+    fn unit(&mut self) -> f64 {
+        self.0 ^= self.0 << 13i32;
+        self.0 ^= self.0 >> 17i32;
+        self.0 ^= self.0 << 5i32;
+        f64::from(self.0) / f64::from(u32::MAX) * 2.0f64 - 1.0f64
+    }
+}
+
+
 #[derive(Clone, Copy)]
 struct GlyphMetrics {
     baseline_offset: i32,
@@ -181,6 +314,7 @@ impl GlyphOverlay {
         let boundaries = UnicodeGraphemeSegmentation;
         let mut expanded = manual.to_vec();
         let mut missing = Vec::new();
+        let mut occurrence = 0u32;
         for run in &self.runs {
             let mut offset_um = 0i64;
             for index in 0..boundaries.grapheme_count(&run.text) {
@@ -207,15 +341,24 @@ impl GlyphOverlay {
                         GlyphMetrics::from_profile(profile, grapheme)
                     })
                     .transpose()?;
+                let tracking = self.variation.map_or(Ok(0i32), |variation| {
+                    variation.tracking(occurrence)
+                })?;
+                let selected = if let Some(variation) = self.variation {
+                    variation.sample(&matches, occurrence)?
+                } else {
+                    matches.iter().map(|shape| (*shape).clone()).collect()
+                };
                 let glyph_x = i64::from(run.origin_um.0)
                     .checked_add(offset_um)
+                    .and_then(|value| value.checked_add(i64::from(tracking)))
                     .ok_or("glyph horizontal origin overflow")?;
                 let glyph_y = i64::from(run.origin_um.1)
                     .checked_add(i64::from(metrics.map_or(
                         0i32, |values| values.baseline_offset,
                     )))
                     .ok_or("glyph vertical origin overflow")?;
-                for shape in matches {
+                for shape in &selected {
                     if expanded.len() == MAX_NOTEBOOK_INK_LINES {
                         return Err("text exceeds 512 total pen strokes".into());
                     }
@@ -257,6 +400,8 @@ impl GlyphOverlay {
                 }
                 offset_um = offset_um.checked_add(advance)
                     .ok_or("glyph text advance overflow")?;
+                occurrence = occurrence.checked_add(1)
+                    .ok_or("variation occurrence overflow")?;
             }
         }
         if !missing.is_empty() {
@@ -291,7 +436,7 @@ impl GlyphOverlay {
 
     pub(super) const fn has_any(&self) -> bool {
         !self.runs.is_empty() || !self.strokes.is_empty()
-            || !self.fallbacks.is_empty()
+            || !self.fallbacks.is_empty() || self.variation.is_some()
     }
 
     /// Load a reusable exact-Unicode library with tab-separated columns.
@@ -417,6 +562,12 @@ impl GlyphOverlay {
                 });
             }
             "--fallback-glyph" => self.parse_fallback(iter)?,
+            "--glyph-variation" => {
+                if self.variation.is_some() {
+                    return Err("--glyph-variation may appear only once".into());
+                }
+                self.variation = Some(GlyphVariation::parse(iter)?);
+            },
             _ => return Err(format!("unknown glyph export option: {flag}")),
 
         }
@@ -473,6 +624,9 @@ impl GlyphOverlay {
                 "--glyph-stroke and --place-text require one another; ",
                 "all visible graphemes need an authored shape",
             ).into());
+        }
+        if self.variation.is_some() && self.runs.is_empty() {
+            return Err("--glyph-variation requires placed text".into());
         }
         if !self.fallbacks.is_empty() && self.runs.is_empty() {
             return Err(concat!(
