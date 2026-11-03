@@ -158,8 +158,14 @@ impl NotebookProfileGateway for NotebookGateway {
     fn paper_png(
         &self, input: &[u8], dpi: u32,
     ) -> Result<Vec<u8>, NotebookProfileError> {
+        self.paper_png_page(input, dpi, 1)
+    }
+
+    fn paper_png_page(
+        &self, input: &[u8], dpi: u32, page: usize,
+    ) -> Result<Vec<u8>, NotebookProfileError> {
         NotebookProfile::from_json(input)
-            .and_then(|profile| profile.paper_layer_png(dpi))
+            .and_then(|profile| profile.paper_layer_png_page(dpi, page))
             .map_err(|_error| NotebookProfileError)
     }
 }

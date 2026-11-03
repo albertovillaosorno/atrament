@@ -35,7 +35,7 @@
 use atrament_notebook_paper_cli::{
     PaperDatePlaceholder, canonical_paper_profile_json,
     default_paper_profile_json, paper_profile_pdf_pages_with_annotations,
-    paper_profile_png_layer_with_annotations, validate_paper_date_clearance,
+    paper_profile_png_page_with_annotations, validate_paper_date_clearance,
     validate_paper_page_number_clearance,
 };
 use atrament_profile_json_syntax::{
@@ -248,15 +248,28 @@ impl NotebookProfile {
         )
     }
 
-    /// Export a transparent RGBA paper layer at a bounded physical DPI.
+    /// Export the first page as a transparent RGBA paper layer.
     ///
     /// # Errors
     /// Refuses invalid metadata, paper geometry, DPI or raster budgets.
     pub fn paper_layer_png(&self, dpi: u32) -> Result<Vec<u8>, String> {
+        self.paper_layer_png_page(dpi, 1)
+    }
+
+    /// Export a selected page (1–32) as a transparent RGBA PNG.
+    ///
+    /// When numbering is on, the printed page index agrees with PDF output.
+    /// This emits one PNG, not a multi-page image bundle.
+    ///
+    /// # Errors
+    /// Refuses invalid page index, metadata, geometry, DPI or raster budgets.
+    pub fn paper_layer_png_page(
+        &self, dpi: u32, page: usize,
+    ) -> Result<Vec<u8>, String> {
         self.validate()?;
-        paper_profile_png_layer_with_annotations(
+        paper_profile_png_page_with_annotations(
             self.paper_json.as_bytes(), dpi, !self.printed_sheet,
-            self.date_placeholder(), self.page_numbers,
+            self.date_placeholder(), self.page_numbers, page,
         )
     }
 

@@ -124,8 +124,14 @@ impl runtime::NotebookProfileGateway for TestNotebookGateway {
     fn paper_png(
         &self, input: &[u8], dpi: u32,
     ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        self.paper_png_page(input, dpi, 1)
+    }
+
+    fn paper_png_page(
+        &self, input: &[u8], dpi: u32, page: usize,
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
         NotebookProfile::from_json(input)
-            .and_then(|profile| profile.paper_layer_png(dpi))
+            .and_then(|profile| profile.paper_layer_png_page(dpi, page))
             .map_err(|_error| runtime::NotebookProfileError)
     }
 }
@@ -5680,6 +5686,61 @@ fn notebook_paper_routes_render_rust_approved_pdf_png_and_preprint() {
         paper_http_body(&response),
         decoded.paper_layer_png(72).expect("same Rust authority"),
     );
+}
+
+#[test]
+fn selected_notebook_png_page_is_bounded_and_matches_native_rust() {
+    let notebook = NotebookProfile {
+        page_numbers: true,
+        printed_sheet: true,
+        ..NotebookProfile::default()
+    };
+    let body = notebook.canonical_json().expect("saved notebook");
+    let mut samples = Vec::new();
+    for page in [1, 9, 10, 32] {
+        let extra = format!(
+            "X-Atrament-Png-Dpi: 72\r\nX-Atrament-Png-Page: {page}\r\n",
+        );
+        let response = route_runtime(&notebook_paper_request(
+            "png", &extra, Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            body.as_bytes(),
+        ), EXPECTED_HOST);
+        assert_eq!(status_line(&response), "HTTP/1.1 200 OK");
+        assert_eq!(
+            paper_http_body(&response),
+            notebook.paper_layer_png_page(72, page).expect("same Rust PNG"),
+        );
+        samples.push(paper_http_body(&response).to_vec());
+    }
+    assert_ne!(samples.first(), samples.get(1));
+    assert_ne!(samples.get(1), samples.get(2));
+    assert_ne!(samples.get(2), samples.get(3));
+    let without_header = route_runtime(&notebook_paper_request(
+        "png", "X-Atrament-Png-Dpi: 72\r\n",
+        Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+        Some("application/json"), body.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&without_header), "HTTP/1.1 200 OK");
+    assert_eq!(paper_http_body(&without_header), samples.first()
+        .expect("first page authority"));
+    for selected in [
+        "X-Atrament-Png-Page: 0\r\n",
+        "X-Atrament-Png-Page: 33\r\n",
+        "X-Atrament-Png-Page: +1\r\n",
+        "X-Atrament-Png-Page: 1\r\nX-Atrament-Png-Page: 2\r\n",
+        "X-Atrament-Png-Page: seven\r\n",
+        "X-Atrament-Png-Page: \r\n",
+    ] {
+        let headers = format!("X-Atrament-Png-Dpi: 72\r\n{selected}");
+        let rejected = route_runtime(&notebook_paper_request(
+            "png", &headers, Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            body.as_bytes(),
+        ), EXPECTED_HOST);
+        assert_eq!(status_line(&rejected), "HTTP/1.1 400 Bad Request");
+        assert!(!paper_http_body(&rejected).starts_with(b"\x89PNG"));
+    }
 }
 
 #[test]

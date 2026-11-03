@@ -488,10 +488,11 @@ export function createNotebookProfileEditor(context) {
     const exportPng = required("notebook-export-png");
     const pdfPages = required("notebook-pdf-pages");
     const pngDpi = required("notebook-png-dpi");
+    const pngPage = required("notebook-png-page");
     const status = required("notebook-status");
     const controls = [style, placement, radius, slider, numbers, printed,
         load, usePaper, editPaper, defaults, save,
-        exportPdf, exportPng, pdfPages, pngDpi];
+        exportPdf, exportPng, pdfPages, pngDpi, pngPage];
     let admitted = null;
     let generation = 0;
     let busy = false;
@@ -590,7 +591,7 @@ export function createNotebookProfileEditor(context) {
             }
         }, 60_000);
     }
-    async function exportLayer(secret, format, amount, notebook) {
+    async function post(secret, format, amount, notebook, page) {
         return fetch(`./api/notebook/paper/${format}`, {
             method: "POST",
             headers: {
@@ -600,6 +601,7 @@ export function createNotebookProfileEditor(context) {
                     "X-Atrament-Pdf-Pages": String(amount),
                 } : {
                     "X-Atrament-Png-Dpi": String(amount),
+                    "X-Atrament-Png-Page": String(page),
                 }),
             },
             body: notebook,
@@ -762,12 +764,14 @@ export function createNotebookProfileEditor(context) {
         button.addEventListener("click", () => {
             void action(async (secret, observed) => {
                 const amount = validExportNumber(input, minimum, maximum);
+                const page = format === "png"
+                    ? validExportNumber(pngPage, 1, 32) : 1;
                 const proposed = JSON.stringify(proposal());
                 const result = await canonical(secret, proposed);
                 if (!active(secret, observed))
                     return;
                 const body = result.json;
-                const reply = await exportLayer(secret, format, amount, body);
+                const reply = await post(secret, format, amount, body, page);
                 if (!active(secret, observed))
                     return;
                 if (reply.status === 401) {
@@ -783,10 +787,14 @@ export function createNotebookProfileEditor(context) {
                 const blob = await reply.blob();
                 if (active(secret, observed)) {
                     display(result.profile);
-                    download(blob, `atrament-notebook-paper.${format}`);
+                    const filename = format === "png" && page !== 1
+                        ? `atrament-notebook-page-${page}.png`
+                        : `atrament-notebook-paper.${format}`;
+                    download(blob, filename);
                     status.textContent = "Notebook paper, selected dates"
                         + " and page numbers downloaded · no actual date text,"
-                        + " borders or ink.";
+                        + " borders or ink."
+                        + (format === "png" ? ` PNG sheet ${page}.` : "");
                 }
             });
         });

@@ -1252,6 +1252,30 @@ pub fn paper_profile_png_layer_with_annotations(
     date: Option<PaperDatePlaceholder>,
     page_numbers: bool,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_png_page_with_annotations(
+        profile, dpi, include_marks, date, page_numbers, 1,
+    )
+}
+
+/// Rasterize one selected numbered notebook sheet as transparent RGBA PNG.
+///
+/// Pages 1–32 use the same compact printed digits as the matching PDF page.
+/// Date and paper marks remain identical across pages. Page numbering is
+/// optional, but the selected page must always be admitted.
+///
+/// # Errors
+/// Refuses invalid profiles, page indices, annotation clearance or budgets.
+pub fn paper_profile_png_page_with_annotations(
+    profile: &[u8],
+    dpi: u32,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+    page: usize,
+) -> Result<Vec<u8>, String> {
+    if !(1..=MAX_PAGES).contains(&page) {
+        return Err("PNG notebook page must be within 1..32".into());
+    }
     let options = decode_profile(profile)?;
     let mut paths = if include_marks {
         paper_paths(options)?
@@ -1262,7 +1286,7 @@ pub fn paper_profile_png_layer_with_annotations(
         append_date_placeholder(&mut paths, options, placeholder)?;
     }
     if page_numbers {
-        append_page_number(&mut paths, options, 1)?;
+        append_page_number(&mut paths, options, page)?;
     }
     png::render_paper_png(options.width_um, options.height_um, dpi, &paths)
 }

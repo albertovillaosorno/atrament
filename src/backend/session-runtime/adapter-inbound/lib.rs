@@ -211,6 +211,20 @@ pub trait NotebookProfileGateway {
     fn paper_png(
         &self, input: &[u8], dpi: u32,
     ) -> Result<Vec<u8>, NotebookProfileError>;
+
+    /// Render one selected PNG sheet, retaining default first-page behavior.
+    /// Implementations may override to support distinct numbered pages.
+    ///
+    /// # Errors
+    /// Refuses unsupported page selections or invalid native profile data.
+    fn paper_png_page(
+        &self, input: &[u8], dpi: u32, page: usize,
+    ) -> Result<Vec<u8>, NotebookProfileError> {
+        if page != 1 {
+            return Err(NotebookProfileError);
+        }
+        self.paper_png(input, dpi)
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -1026,7 +1040,33 @@ fn route_notebook_export(
                         br#"{"error":"invalid_png_dpi"}"#,
                     );
                 };
-            gateway.paper_png(body, dpi)
+            let page = if header_is_present(
+                request, "x-atrament-png-page",
+            ) {
+                let Some(value) = single_header_value(
+                    request, "x-atrament-png-page",
+                ) else {
+                    return json_response(
+                        "400 Bad Request",
+                        br#"{"error":"invalid_png_page"}"#,
+                    );
+                };
+                let parsed = (!value.is_empty()
+                    && value.bytes().all(|byte| byte.is_ascii_digit()))
+                    .then(|| value.parse::<usize>().ok())
+                    .flatten()
+                    .filter(|page| (1..=32).contains(page));
+                let Some(page) = parsed else {
+                    return json_response(
+                        "400 Bad Request",
+                        br#"{"error":"invalid_png_page"}"#,
+                    );
+                };
+                page
+            } else {
+                1
+            };
+            gateway.paper_png_page(body, dpi, page)
         }
         _ => return json_response(
             "400 Bad Request", br#"{"error":"invalid_request"}"#,

@@ -263,7 +263,7 @@
                 the selected empty date line or box in the top margin,
                 requiring 10 mm top clearance and 36 mm usable width.
                 Printed page numbers need 7 mm bottom clearance, and PDF
-                numbers pages 1–32 (PNG includes page 1 only). Rounded
+                numbers pages 1–32 (PNG can select one of those pages). Rounded
                 borders and handwriting are not yet drawn; preprinted sheets
                 omit the existing ruling but retain selected annotations.
                 Use current paper to include the sheet editor settings.
@@ -327,8 +327,12 @@
               <input id="notebook-png-dpi" type="number" min="72" max="300"
                 step="1" value="150" disabled>
             </label>
+            <label>PNG page (1–32)
+              <input id="notebook-png-page" type="number" min="1" max="32"
+                step="1" value="1" disabled>
+            </label>
             <button id="notebook-export-png" type="button"
-              disabled>Export paper-layer PNG</button>
+              disabled>Export selected-page PNG</button>
           </div>
           <p id="notebook-status" class="action-status" role="status"
             aria-live="polite">Requires a compatible backend session.</p>

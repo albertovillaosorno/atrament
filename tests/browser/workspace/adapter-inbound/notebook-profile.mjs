@@ -10,7 +10,7 @@ const ids = ["notebook-date-style", "notebook-date-placement",
     "notebook-edit-paper",
     "notebook-default", "notebook-save", "notebook-status",
     "notebook-export-pdf", "notebook-export-png",
-    "notebook-pdf-pages", "notebook-png-dpi"];
+    "notebook-pdf-pages", "notebook-png-dpi", "notebook-png-page"];
 const paper = {
     schema: "atrament.paper.v1", style: "grid", width_um: 210_000,
     height_um: 297_000, spacing_um: 5_000, margin_top_um: 22_000,
@@ -73,6 +73,9 @@ test("notebook form validates page metadata and downloads native JSON", async ()
                     : init.headers["X-Atrament-Png-Dpi"],
                 pdf ? "3" : "72",
             );
+            if (!pdf) {
+                assert.equal(init.headers["X-Atrament-Png-Page"], "10");
+            }
             return new Response(
                 pdf ? "%PDF-1.7" : "\x89PNG",
                 { headers: { "Content-Type":
@@ -144,6 +147,7 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         const beforeExport = requests.length;
         elements.get("notebook-pdf-pages").value = "3";
         elements.get("notebook-png-dpi").value = "72";
+        elements.get("notebook-png-page").value = "10";
         elements.get("notebook-export-pdf").dispatch("click");
         await settle();
         await settle();
@@ -155,11 +159,21 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         await settle();
         await settle();
         assert.deepEqual(downloads, ["atrament-notebook.json",
-            "atrament-notebook-paper.pdf", "atrament-notebook-paper.png"]);
+            "atrament-notebook-paper.pdf", "atrament-notebook-page-10.png"]);
         assert.match(elements.get("notebook-status").textContent,
             /page numbers downloaded/);
         assert.match(elements.get("notebook-status").textContent,
+            /PNG sheet 10/);
+        assert.match(elements.get("notebook-status").textContent,
             /no actual date text, borders or ink/);
+        const beforeBadPng = requests.length;
+        elements.get("notebook-png-page").value = "33";
+        elements.get("notebook-export-png").dispatch("click");
+        await settle();
+        assert.equal(requests.length, beforeBadPng,
+            "invalid selected PNG page refused before network use");
+        assert.match(elements.get("notebook-status").textContent,
+            /nothing saved/);
         const beforeInvalid = requests.length;
         elements.get("notebook-pdf-pages").value = "33";
         elements.get("notebook-export-pdf").dispatch("click");

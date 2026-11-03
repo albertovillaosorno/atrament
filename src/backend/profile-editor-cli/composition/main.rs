@@ -79,7 +79,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--border-radius-um INTEGER] [--page-numbers true|false] \
     [--printed-sheet true|false] [--inspect] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
-    [--dpi 72..300 (PNG only)] [--output FILE [--replace]]\n\
+    [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
+    [--output FILE [--replace]]\n\
     Paper-layer export uses nested Rust paper settings and skips ruling \
     on preprinted sheets. The selected empty date line or box is drawn; \
     date text, borders and ink do not render. Page numbers use a \
@@ -100,6 +101,7 @@ struct NotebookRequest {
     inspect: bool,
     output: Option<String>,
     pages: usize,
+    png_page: usize,
     profile: NotebookProfile,
     replace: bool,
 }
@@ -115,6 +117,7 @@ struct NotebookExportOptions {
     dpi: Option<u32>,
     format: Option<NotebookPaperFormat>,
     pages: Option<usize>,
+    png_page: Option<usize>,
 }
 
 fn read_handwriting_profile(
@@ -478,6 +481,16 @@ fn parse_notebook_export_option(
                 iter.next().map(String::as_str), "--dpi", 72, 300,
             )?);
         }
+        "--png-page" => {
+            if export.png_page.is_some() {
+                return Err("--png-page may appear only once".into());
+            }
+            let page = export_integer(
+                iter.next().map(String::as_str), "--png-page", 1, 32,
+            )?;
+            export.png_page = Some(usize::try_from(page)
+                .map_err(|error| format!("PNG page refused: {error}"))?);
+        }
         _ => return Err(format!("unknown notebook export option: {option}")),
     }
     Ok(())
@@ -531,7 +544,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 }
                 inspect = true;
             }
-            "--export-paper" | "--pages" | "--dpi" => {
+            "--export-paper" | "--pages" | "--dpi" | "--png-page" => {
                 parse_notebook_export_option(option, &mut iter, &mut export)?;
             }
             "--output" => {
@@ -567,8 +580,10 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     {
         return Err("--pages requires --export-paper pdf".into());
     }
-    if export.dpi.is_some() && export.format != Some(NotebookPaperFormat::Png) {
-        return Err("--dpi requires --export-paper png".into());
+    if (export.dpi.is_some() || export.png_page.is_some())
+        && export.format != Some(NotebookPaperFormat::Png)
+    {
+        return Err("--dpi and --png-page require --export-paper png".into());
     }
     profile.validate()?;
     Ok(NotebookRequest {
@@ -577,6 +592,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         inspect,
         output,
         pages: export.pages.unwrap_or(1),
+        png_page: export.png_page.unwrap_or(1),
         profile,
         replace,
     })
@@ -610,7 +626,9 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             MAX_PAPER_OUTPUT_BYTES,
         ),
         Some(NotebookPaperFormat::Png) => (
-            request.profile.paper_layer_png(request.dpi)?,
+            request.profile.paper_layer_png_page(
+                request.dpi, request.png_page,
+            )?,
             MAX_PAPER_OUTPUT_BYTES,
         ),
         None => (canonical.into_bytes(), MAX_NOTEBOOK_JSON_BYTES),

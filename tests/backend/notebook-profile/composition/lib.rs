@@ -209,6 +209,38 @@ fn notebook_dates_and_printed_page_numbers_render() {
 }
 
 #[test]
+fn selected_png_page_matches_printed_pdf_index() {
+    let mut notebook = NotebookProfile {
+        printed_sheet: true,
+        page_numbers: true,
+        date_style: DateStyle::Line,
+        date_placement: DatePlacement::TopRight,
+        ..NotebookProfile::default()
+    };
+    let first = notebook.paper_layer_png(72).expect("default PNG page");
+    assert_eq!(
+        first,
+        notebook.paper_layer_png_page(72, 1).expect("first page"),
+    );
+    let ninth = notebook.paper_layer_png_page(72, 9).expect("ninth page");
+    let tenth = notebook.paper_layer_png_page(72, 10).expect("tenth page");
+    assert_ne!(first, ninth);
+    assert_ne!(ninth, tenth, "two-digit printed marker differs");
+    assert_ne!(
+        tenth,
+        notebook.paper_layer_png_page(72, 32).expect("last page"),
+    );
+    assert!(notebook.paper_layer_png_page(72, 0).is_err());
+    assert!(notebook.paper_layer_png_page(72, 33).is_err());
+    notebook.page_numbers = false;
+    assert_eq!(
+        notebook.paper_layer_png_page(72, 1).expect("unmarked first"),
+        notebook.paper_layer_png_page(72, 32).expect("unmarked last"),
+        "when numbering is off, identical physical pages agree",
+    );
+}
+
+#[test]
 fn page_number_clearance_refuses_at_admission_and_two_digit_pages_differ() {
     let mut notebook = NotebookProfile {
         printed_sheet: true,

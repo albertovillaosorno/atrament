@@ -279,8 +279,9 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --date-placement top-right --export-paper pdf --pages 3 \
   --output notebook-paper.pdf
 cargo run -q -p atrament_profile_editor_cli -- \
-  notebook --profile notebook.json --export-paper png --dpi 150 \
-  --output notebook-paper.png
+  notebook --profile notebook.json --page-numbers true \
+  --export-paper png --dpi 150 --png-page 10 \
+  --output notebook-page-10.png
 ```
 
 PDF allows 1–32 physical pages; transparent RGBA PNG renders one page at
@@ -298,9 +299,10 @@ placeholder in the top margin. It requires at least 10 mm of top clearance
 and 36 mm of usable width; invalid placements refuse profile validation.
 
 With `page_numbers: true`, Rust prints page numbers 1–32 in the bottom
-margin using compact block numerals; each PDF page receives its own number,
-while the single transparent PNG sheet contains page 1. This requires at
-least 7 mm of bottom margin and refuses invalid profiles before export.
+margin using compact block numerals; each PDF page receives its own number.
+A PNG export can select page 1–32 with `--png-page N` (defaults to page 1).
+The PNG exporter emits one physical sheet per invocation, not an image bundle.
+Numbering requires at least 7 mm of bottom margin; invalid profiles refuse.
 Numbered sheets retain the number and date placeholder when `printed_sheet`
 suppresses the existing paper marks.
 
@@ -318,10 +320,13 @@ and same-origin admission, like the paper profile endpoint.
 The authenticated localhost runtime also accepts notebook JSON at
 `POST /api/notebook/paper/pdf` (with one `X-Atrament-Pdf-Pages: 1..32`
 header) and `POST /api/notebook/paper/png` (with one
-`X-Atrament-Png-Dpi: 72..300` header). Both use the same Rust notebook
-validator and paper serializer as the CLI. The web editor supplies these
-headers from its PDF-page and PNG-DPI controls and downloads the resulting
-paper layer.
+`X-Atrament-Png-Dpi: 72..300` header). PNG optionally accepts a single
+`X-Atrament-Png-Page: 1..32` header and defaults to page 1 if omitted;
+malformed or repeated page headers refuse before rendering.
+
+Both formats use the same Rust notebook validator and paper serializer as the
+CLI. The web editor supplies page/DPI headers from its PDF and PNG controls,
+then downloads the selected physical paper layer. One PNG contains one sheet.
 
 Preprinted-sheet suppression applies to ruling in both formats; explicitly
 selected date placeholders and page numbers remain visible. No date text,

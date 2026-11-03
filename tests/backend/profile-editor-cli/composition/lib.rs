@@ -691,6 +691,16 @@ fn saved_notebook_page_numbers_export_sequential_pdf_and_png() {
     ]))
     .expect("numbered PNG").expect("PNG bytes");
     assert_eq!(png, profile.paper_layer_png(72).expect("canonical PNG"));
+    let tenth_png = execute_notebook(&args(&[
+        "--profile", name, "--export-paper", "png", "--dpi", "72",
+        "--png-page", "10",
+    ]))
+    .expect("numbered page 10 PNG").expect("PNG bytes");
+    assert_ne!(png, tenth_png, "selected page changes printed number");
+    assert_eq!(
+        tenth_png,
+        profile.paper_layer_png_page(72, 10).expect("page 10 PNG"),
+    );
     assert_eq!(fs::read(&saved).expect("source remains"), source);
     fs::remove_file(saved).expect("remove owned profile");
 }
@@ -742,6 +752,14 @@ fn invalid_notebook_export_flags_refuse_without_file_changes() {
         args(&["--export-paper", "png", "--dpi", "301"]),
         args(&["--export-paper", "png", "--dpi", "x"]),
         args(&["--export-paper", "png", "--dpi", "72", "--dpi", "72"]),
+        args(&["--png-page", "10"]),
+        args(&["--export-paper", "pdf", "--png-page", "2"]),
+        args(&["--export-paper", "png", "--png-page", "0"]),
+        args(&["--export-paper", "png", "--png-page", "33"]),
+        args(&["--export-paper", "png", "--png-page", "-1"]),
+        args(&["--export-paper", "png", "--png-page", "no"]),
+        args(&["--export-paper", "png", "--png-page", "2", "--png-page", "3"]),
+        args(&["--export-paper", "png", "--png-page"]),
         args(&["--export-paper", "pdf", "--export-paper", "png"]),
         args(&["--inspect", "--export-paper", "pdf"]),
         args(&["--date-style", "box", "--export-paper", "pdf"]),
