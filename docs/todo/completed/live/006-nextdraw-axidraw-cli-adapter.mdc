@@ -1,0 +1,90 @@
+---
+record_type: task
+id: "ATR-P7-006"
+title: "Implement the NextDraw and AxiDraw CLI adapter"
+status: completed
+priority: P7
+lane: live-output
+dependencies: ["ATR-P7-002", "ATR-P7-005"]
+dependencies_specified: true
+dependency_rationale: >-
+  Vendor motion needs a plan and admitted coordinates.
+acceptance_criteria:
+  - >-
+      Use documented SVG or CLI control behind a managed process boundary
+      and prove preview, plot, pause, resume, cancellation, and failure
+      diagnostics.
+  - >-
+      Finite v1 completion: Specify one documented CLI transport for one
+      named supported model, with plot, pause, resume, cancel, and
+      failed-command states; hardware certification is separate.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement the NextDraw and AxiDraw CLI adapter
+
+## Scope and existing evidence
+
+Use documented SVG or CLI control behind a managed process boundary and prove
+preview, plot, pause, resume, cancellation, and failure diagnostics.
+
+## Finite AxiDraw V3 CLI process contract
+
+**Target and reference:** AxiDraw V3, one pen, via the AxiDraw CLI
+`axicli` SVG input path and documented `--model 1` setting. Reference:
+https://axidraw.com/doc/cli_api/ . The CLI's support list includes V3;
+this is a proposed adapter, not a tested installation or device.
+
+**Inputs:** an admitted exact-revision single-pen motion plan, bounded SVG
+with source stroke order, previously accepted physical coordinate limits,
+selected AxiDraw V3 and tool settings, installed CLI version, and distinct
+operator authorization for physical output. **Outputs:** preview artifact,
+managed plot progress record, resumable pause marker, or typed rejection.
+Only an explicitly armed Plot state may launch a command without `--preview`.
+
+**Finite state flow:** `Prepared -> Previewed -> Armed -> Running ->
+Paused -> Resuming -> Completed`, with independent `Cancelled`, `Failed`
+and `PositionUnknown` terminal states. Preview example is an argv vector,
+not a shell command: `axicli page.svg --model 1 --mode plot
+--reordering 4 --preview --rendering 3 --output_file preview.svg`.
+The vendor documents that `--preview` disables USB communication, while
+`--reordering 4` preserves file order *and* prevents implicit path joining.
+Neither flag alone proves safe boundaries. The proposal rejects SVG layer
+controls that could supersede caller settings, unsupported path content, and
+an unrecognized CLI version before admission.
+
+**Explicit physical intent:** after operator verification of bounds, pen,
+model, origin, selected device, and preview, an authorized process would use
+`axicli page.svg --model 1 --mode plot --reordering 4
+--output_file paused.svg`. The adapter must spawn fixed argv with no shell,
+private bounded diagnostics, an owned process group, a command deadline, and
+no ambient credential in arguments. A documented AxiDraw pause is requested
+by the device pause control or supported CLI interruption; a saved progress
+SVG is a **candidate** only after verified completion of the paused command.
+An authorized resume uses the vendor `--mode res_plot` against that artifact
+with identical model/pen options, but only after independently confirming
+reliable carriage position and unchanged source plan. A cancellation is not
+an automatic resumable pause; stop the owned process, revoke arming and mark
+position `Unknown` until manually re-established.
+
+**Refusal:** nonzero exit, deadline expiry, unrecognized output media,
+missing pause artifact, lost USB, changed calibration, mismatched progress
+identity, uncertain carriage location, unsupported SVG features or model
+refuses further commands with a fixed diagnostic. Never blindly replay a
+partial path; a failed command can have already moved a machine. Neither
+`res_home` nor `res_plot` is permitted after a crash without renewed
+hardware-position checks and operator authorization.
+
+**Assumptions and limits:** command examples follow vendor CLI documentation,
+not executable source in Atrament. There is no managed vendor subprocess,
+USB adapter, position probe, actual progress-file parser, test device,
+physical e-stop, or verified plot. No CLI was invoked for this acceptance.
+
+## Acceptance decision
+
+- **Basis:** theoretical one-model CLI transport specification, 2026-11-02.
+- **Delivered:** AxiDraw V3 model 1, explicit safe preview, order-preserving
+  plot argv, pause/resume/cancel/failure transitions and refusal behavior.
+- **Unavailable:** production CLI adapter, physical plot, verified resume,
+  motor-control authority, and device certification.

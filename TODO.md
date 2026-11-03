@@ -20,27 +20,6 @@ labels belong here.
 
 ## P7 — Honest single-pen live output
 
-### TODO - Implement the NextDraw and AxiDraw CLI adapter
-
-Use documented SVG or CLI control behind a managed process boundary and prove
-preview, plot, pause, resume, cancellation, and failure diagnostics.
-
-[docs/todo/open/live/006-nextdraw-axidraw-cli-adapter.mdc](docs/todo/open/live/006-nextdraw-axidraw-cli-adapter.mdc)
-
-### TODO - Implement documented HP-GL and GP-GL export
-
-Map admitted motion capabilities to each command language without claiming
-direct-device support for untested transports, firmware, or model behavior.
-
-[docs/todo/open/live/007-hp-gl-gp-gl-export.mdc](docs/todo/open/live/007-hp-gl-gp-gl-export.mdc)
-
-### TODO - Build the physical compatibility ledger
-
-Record exact model, firmware, adapter tier, transport, paper, pen, usable
-area, settings, evidence, known limitations, and last acceptance date.
-
-[docs/todo/open/live/008-build-the-physical-compatibility-ledger.mdc](docs/todo/open/live/008-build-the-physical-compatibility-ledger.mdc)
-
 ### TODO - Prove safe interruption and uncertain-state recovery
 
 Test disconnect, power loss, user pause, emergency stop, process crash,

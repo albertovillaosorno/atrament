@@ -1,0 +1,97 @@
+---
+record_type: task
+id: "ATR-P7-007"
+title: "Implement documented HP-GL and GP-GL export"
+status: completed
+priority: P7
+lane: live-output
+dependencies: ["ATR-P7-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Plotter export serializes the device-neutral motion plan.
+acceptance_criteria:
+  - >-
+      Map admitted motion capabilities to each command language without
+      claiming direct-device support for untested transports, firmware, or
+      model behavior.
+  - >-
+      Finite v1 completion: Define one supported single-pen HP-GL and GP-GL
+      subset, with one example file and explicit refusal for unsupported
+      commands.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement documented HP-GL and GP-GL export
+
+## Scope and existing evidence
+
+Map admitted motion capabilities to each command language without claiming
+direct-device support for untested transports, firmware, or model behavior.
+
+## Finite single-pen text export dialects
+
+**Inputs:** a revision-bound device-neutral plan, calibrated page origin,
+physical-to-device unit mapping, one pen, explicit command dialect and
+admitted coordinate ranges. **Outputs:** one immutable offline text artifact
+with command order and digest, or `UnsupportedDialectOperation`; never
+send the artifact to a serial or USB endpoint.
+
+**HP-GL subset:** `IN;` initializes, `SP1;` selects the single supported
+pen, `PA;` selects absolute coordinates, `PUx,y;` moves without drawing and
+`PDx,y;` draws. Example with hypothetical 40 units/mm, page-space strokes
+(30,40)->(60,40) and (30,55)->(65,55), and no origin offset:
+
+```text
+IN;SP1;PA;PU1200,1600;PD2400,1600;PU1200,2200;PD2600,2200;PU;
+```
+
+**GP-GL subset:** for a hypothetical Graphtec dialect with configured step
+size 0.1 mm, restrict commands to absolute `M x,y` move without drawing and
+`D x,y` draw, with the command terminator supplied by that specific device
+profile. The design sample using comma coordinates and carriage-return
+termination (shown here as `\r`) is:
+
+```text
+M300,400\r
+D600,400\r
+M300,550\r
+D650,550\r
+```
+
+Graphtec manuals require explicit GP-GL vs HP-GL configuration and GP-GL
+step size. The GP-GL move/draw mnemonics are documented in the command table:
+https://www.ohthehugemanatee.net/2011/07/gpgl-reference-courtesy-of-graphtec/
+For device-dependent step and termination see the Graphtec CE3000 guide:
+https://www.graphtecamerica.com/s/CE3000-User-Manual.pdf . The example is
+**not** a verified stream for a particular firmware. A later serializer
+must pin the exact model's terminator and coordinate semantics before
+producing any actual GP-GL bytes.
+
+**Invariants:** every pen-down polyline follows source order exactly,
+original strokes are never reversed or joined; all quantized endpoints
+must remain inside the selected calibrated writable region. Only admitted
+integer coordinates are serialized, with a declared rounding policy and
+checked maximum quantization error. Pause/checkpoint semantics are carried
+in sidecar provenance, not silently translated into motion commands.
+
+**Refusal:** multiple pens, color changes, unsupported curves or text,
+unknown GP-GL terminator/units, negative/unrepresentable coordinates,
+unadmitted speed or force, unsafe page offsets, and missing pen-up/pen-down
+classification all refuse without partial output. In particular, no
+unchecked `SP2`, native `AA`, `CI`, GP-GL feed/cut command, or machine query
+is inserted. Reject a plan requiring a vendor pause instruction because
+neither minimal subset faithfully represents it on paper.
+
+**Assumptions and risks:** this is a protocol design; there is no HP-GL or
+GP-GL byte serializer, installed plotter, transport driver or model-specific
+firmware test. Some GP-GL models use differing terminators, geometry units
+and option state. Offline export is never direct-device support.
+
+## Acceptance decision
+
+- **Basis:** theoretical two-dialect export contract, 2026-11-02.
+- **Delivered:** one HP-GL example, one GP-GL example, admitted command
+  lists, checked-coordinate policy and refusals for unsupported features.
+- **Unavailable:** actual serializer, firmwares, transmission and certified
+  device operation.

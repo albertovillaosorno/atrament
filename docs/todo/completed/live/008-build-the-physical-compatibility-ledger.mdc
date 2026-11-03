@@ -1,0 +1,88 @@
+---
+record_type: task
+id: "ATR-P7-008"
+title: "Build the physical compatibility ledger"
+status: completed
+priority: P7
+lane: live-output
+dependencies: ["ATR-P7-004"]
+dependencies_specified: true
+dependency_rationale: >-
+  Hardware compatibility requires dry-run evidence.
+acceptance_criteria:
+  - >-
+      Record exact model, firmware, adapter tier, transport, paper, pen,
+      usable area, settings, evidence, known limitations, and last
+      acceptance date.
+  - >-
+      Finite v1 completion: Record one device-model/firmware/transport
+      combination with limitations and dated evidence status; if no device
+      is available, publish a clearly unverified example only.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build the physical compatibility ledger
+
+## Scope and existing evidence
+
+Record exact model, firmware, adapter tier, transport, paper, pen, usable area,
+settings, evidence, known limitations, and last acceptance date.
+
+Current executable evidence now freezes that compatibility record without
+claiming support for any untested hardware. Exact model, firmware, transport,
+adapter tier, paper, pen, usable area, settings, acceptance evidence, known
+limitations, and last acceptance date remain caller-owned values tied to one
+combination. Hardware probing, compatibility admission, persistence, expiry or
+recertification policy, and physical support claims remain open.
+
+## One finite, explicitly unverified model entry
+
+**Inputs:** declared exact model, observed firmware, transport and adapter
+tier, physical page/pen setup, settings, dated dry-run evidence and a human
+acceptance decision. **Output:** an append-only profile-scoped record with
+`Candidate`, `Verified` or `Unsupported` status and a blocking refusal
+reason, not a device-access grant. Unknown facts remain `Unknown`.
+
+**Worked hypothetical entry (not a support claim):**
+
+| Field | Example record value |
+| --- | --- |
+| Model | AxiDraw V3 (vendor-listed CLI family) |
+| Firmware | `EXAMPLE-NOT-REAL-1` (invented test ID) |
+| Transport | USB (proposed, disconnected) |
+| Adapter tier | `CandidateOnly` |
+| Paper and pen | A4 blank, one pen, no actual sample |
+| Usable area | `Unknown` (nominal A4 is not calibration) |
+| Settings | CLI model 1, strict stroke ordering 4 |
+| Evidence | `TheoryOnly`, no dry-run or USB test |
+| Date | 2026-11-02 (record design date, not acceptance date) |
+| Last physical acceptance | `None` |
+| Known limits | No firmware, origin, axes, clamp or pen measurements |
+
+**Evaluation rule:** the pair `(model, firmware)` is immutable identity and
+the transport, selected pen, paper mount, calibration, CLI version and
+physical capability tier are part of the qualification key. The ledger may
+record a hypothetical combination but never promote it to `Verified` from
+an offline storyboard alone. A future verified entry must retain source of
+model/firmware observations, observer, date, trace, limits and fail result.
+
+**Refusal example:** `PlanForPlot` with this entry must return
+`NoVerifiedHardwareCombination` even if its theoretical dimensions fit.
+An altered firmware, pen, mount, command mode or calibration invalidates a
+previous real acceptance for that changed combination. Do not infer a
+firmware version or last physical acceptance date from today's record.
+
+**Assumptions and risks:** vendor lists AxiDraw V3 as an eligible CLI family
+(https://axidraw.com/doc/cli_api/), but this repository has no device
+probing, persisted ledger verification, timed recertification, operator
+training evidence or physical certification. The table is deliberately
+unusable to authorize a live plot.
+
+## Acceptance decision
+
+- **Basis:** theoretical ledger example, 2026-11-02, with invented firmware ID.
+- **Delivered:** one dated model/firmware/transport candidate, settings,
+  explicit missing evidence, limitations, and authorization refusal.
+- **Unavailable:** real model/firmware observations, physical compatibility
+  decision, live execution, or recertification.
