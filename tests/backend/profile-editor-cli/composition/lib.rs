@@ -2318,3 +2318,180 @@ fn fallback_uses_requested_graphemes_statistical_override() {
         "shape substitute must retain original glyph mean width and slant");
     fs::remove_file(profile).expect("remove test-owned profile");
 }
+
+#[test]
+fn flow_markdown_wraps_to_two_physical_pages_with_headings_and_bullets() {
+    let markdown = format!("# a\n\na a a\n- a\n{}", "a\n".repeat(34));
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "a", "0", "0", "3500", "4500", "250", "#204060",
+    ]).iter()).expect("one exact authored shape");
+    let source = FlowSource::new(FlowFormat::Markdown, &markdown)
+        .expect("bounded source");
+    let profile = NotebookProfile::default();
+    let (runs, decorations, pages) = layout_flow(
+        &source, &profile, None,
+    ).expect("measured flow");
+    assert_eq!(pages, 2);
+    assert_eq!(runs.first().expect("heading").text, "a",
+        "heading marker removed");
+    assert_eq!(runs.get(1).expect("paragraph").text, "a a a");
+    assert_eq!(runs.get(2).expect("list").text, "a",
+        "list marker replaced by ink");
+    assert_eq!(decorations.len(), 2, "underline and list mark");
+    assert_eq!(decorations.first().expect("heading rule").page, 1);
+    assert_eq!(decorations.get(1).expect("bullet marker").page, 1);
+    assert!(runs.iter().any(|run| run.page == 2));
+    for run in &runs {
+        assert!(run.origin_um.0 >= 22_500);
+        assert!(run.origin_um.1 >= 24_500);
+    }
+    // The exported PDF must auto-select exactly two physical-size pages,
+    // and PNG page 2 must contain different, actually placed ink.
+    let command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060", "--flow-markdown", &markdown,
+    ]);
+    let pdf = execute_notebook(&command).expect("two-page PDF")
+        .expect("PDF bytes");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    let streams = String::from_utf8_lossy(&pdf)
+        .split("\nstream\n").skip(1)
+        .map(|entry| entry.split("\nendstream").next().unwrap_or("")
+            .to_owned()).collect::<Vec<_>>();
+    assert_eq!(streams.len(), 2);
+    assert!(streams.first().expect("page 1").contains(" m\n"));
+    assert!(streams.get(1).expect("page 2").contains(" m\n"));
+    let mut png_command = args(&[
+        "--printed-sheet", "true", "--export-paper", "png",
+        "--dpi", "72", "--png-page", "2",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060", "--flow-markdown", &markdown,
+    ]);
+    let png_second = execute_notebook(&png_command)
+        .expect("page 2 PNG").expect("PNG bytes");
+    assert!(png_second.starts_with(b"\x89PNG\r\n\x1a\n"));
+    let page_field = png_command.iter_mut().find(|value| value.as_str() == "2")
+        .expect("selected PNG page 2");
+    *page_field = "1".into();
+    let png_first = execute_notebook(&png_command)
+        .expect("page 1 PNG").expect("PNG bytes");
+    assert_ne!(png_second, png_first);
+}
+
+#[test]
+fn flow_wraps_long_unicode_words_by_exact_grapheme_and_preserves_ink() {
+    let source = FlowSource::new(
+        FlowFormat::Plain, &"n\u{303}".repeat(130),
+    ).expect("Unicode source");
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "n\u{303}", "0", "0", "3500", "4500", "250", "#204060",
+    ]).iter()).expect("decomposed authored shape");
+    let (runs, _, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+    ).expect("exact grapheme boundaries");
+    assert_eq!(pages, 1);
+    assert!(runs.len() > 1);
+    assert_eq!(runs.iter().map(|run| UnicodeGraphemeSegmentation
+        .grapheme_count(&run.text)).sum::<usize>(), 130);
+    assert!(runs.iter().all(|run| {
+        run.text.chars().count() == UnicodeGraphemeSegmentation
+            .grapheme_count(&run.text).saturating_mul(2)
+    }), "no decomposed combining mark is split across rows");
+    glyphs.runs = runs;
+    assert_eq!(glyphs.expand(&[], None)
+        .expect("authoritative physical glyph placement").len(), 130);
+}
+
+#[test]
+fn flow_refuses_overflow_missing_shapes_and_mutation_before_commit() {
+    let target = test_path().with_extension("pdf");
+    let filename = target.to_str().expect("owned target");
+    fs::write(&target, b"previous valid PDF").expect("sentinel");
+    let base = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060",
+    ]);
+    for (source, expected) in [
+        (format!("# {}", "a".repeat(65)),
+            "heading exceeds one-line fixed region"),
+        ("a \u{f1}".into(), "U+00F1"),
+    ] {
+        let mut command = base.clone();
+        command.extend(args(&[
+            "--flow-markdown", &source, "--output", filename, "--replace",
+        ]));
+        let error = execute_notebook(&command)
+            .expect_err("invalid flow refuses before overwrite");
+        assert!(error.contains(expected), "{error}");
+        assert_eq!(fs::read(&target).expect("unchanged"),
+            b"previous valid PDF");
+    }
+    let mut insufficient = base;
+    insufficient.extend(args(&[
+        "--flow-text", &"a\n".repeat(40), "--pages", "1",
+        "--output", filename, "--replace",
+    ]));
+    assert!(execute_notebook(&insufficient).expect_err("page shortage")
+        .contains("requires 2 physical pages"));
+    assert_eq!(fs::read(&target).expect("unchanged"),
+        b"previous valid PDF");
+    for invalid in ["\t", "a\0", "a\r", "a\n\u{0008}"] {
+        assert!(FlowSource::new(FlowFormat::Plain, invalid).is_err());
+    }
+    fs::remove_file(target).expect("remove owned target");
+}
+
+#[test]
+fn flow_file_reads_bounded_local_markdown_and_refuses_unsafe_inputs() {
+    let source = test_path().with_extension("md");
+    let name = source.to_str().expect("selected source file");
+    let document = "# a\n\na a\n- a\n";
+    fs::write(&source, document).expect("test-owned Markdown");
+    let base = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060",
+    ]);
+    let mut inline = base.clone();
+    inline.extend(args(&["--flow-markdown", document]));
+    let mut from_file = base;
+    from_file.extend(args(&["--flow-markdown-file", name]));
+    assert_eq!(execute_notebook(&inline).expect("inline PDF"),
+        execute_notebook(&from_file).expect("read-only file PDF"));
+    assert_eq!(fs::read(&source).expect("still original"),
+        document.as_bytes());
+    fs::write(&source, vec![b'a'; 4_097]).expect("oversize file");
+    assert!(execute_notebook(&from_file).expect_err("bound refused")
+        .contains("notebook input refused"));
+    fs::write(&source, [0xff, 0xfe]).expect("invalid bytes");
+    assert!(execute_notebook(&from_file).expect_err("UTF-8 refused")
+        .contains("flow file must be UTF-8"));
+    fs::remove_file(source).expect("remove test-owned Markdown");
+}
+
+#[test]
+fn flow_preserves_explicit_ascii_spaces_and_same_ink_advances() {
+    let source = FlowSource::new(FlowFormat::Plain, "  a  a")
+        .expect("visible text with preserved indentation");
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "a", "0", "0", "3500", "4500", "250", "#204060",
+    ]).iter()).expect("authored a shape");
+    let (runs, ornaments, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+    ).expect("preserved whitespace");
+    assert_eq!(pages, 1);
+    assert!(ornaments.is_empty());
+    assert_eq!(runs.first().expect("one text row").text, "  a  a");
+    glyphs.runs = runs;
+    let ink = glyphs.expand(&[], None).expect("same glyph placement");
+    assert_eq!(ink.len(), 2);
+    let first = ink.first().expect("first a");
+    let second = ink.get(1).expect("second a");
+    assert_eq!(first.start_um.0, 30_500);
+    assert_eq!(second.start_um.0, 42_500);
+}

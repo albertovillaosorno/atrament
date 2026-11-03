@@ -428,3 +428,22 @@ fn notebook_explicit_ink_projects_without_becoming_saved_metadata() {
         notebook,
     );
 }
+
+#[test]
+fn printable_rectangle_tracks_selected_native_paper_margins() {
+    let mut profile = NotebookProfile::default();
+    assert_eq!(profile.printable_rect_um().expect("default A4 inset"),
+        (20_000, 22_000, 196_000, 281_000));
+    profile.paper_json = profile.paper_json
+        .replace("\"margin_left_um\": 20000", "\"margin_left_um\": 30000")
+        .replace("\"margin_top_um\": 22000", "\"margin_top_um\": 25000")
+        .replace("\"margin_right_um\": 14000", "\"margin_right_um\": 24000")
+        .replace("\"margin_bottom_um\": 16000", "\"margin_bottom_um\": 20000");
+    assert_eq!(profile.printable_rect_um().expect("edited paper inset"),
+        (30_000, 25_000, 186_000, 277_000));
+    profile.paper_json = profile.paper_json.replace(
+        "\"margin_right_um\": 24000", "\"margin_right_um\": 240000",
+    );
+    assert!(profile.printable_rect_um().is_err(),
+        "invalid native paper must refuse rather than return stale bounds");
+}

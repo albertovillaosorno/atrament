@@ -33,6 +33,7 @@
 
 //! Single local CLI boundary for admitted paper and handwriting profiles.
 
+mod flow;
 mod glyph;
 
 use std::env;
@@ -42,6 +43,8 @@ use std::fs::{File, metadata};
 use std::io::{self, Write as _};
 use std::path::Path;
 use std::slice::Iter;
+
+use flow::{FlowFormat, FlowSource, layout_flow};
 
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_handwriting_statistics::{
@@ -103,6 +106,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--fallback-glyph MISSING AUTHORED] \
     [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
+    [--flow-text TEXT | --flow-markdown MARKDOWN | \
+     --flow-text-file FILE | --flow-markdown-file FILE] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
     [--output FILE [--replace]]\n\
     Paper-layer export uses nested Rust paper settings and skips ruling \
@@ -113,9 +118,13 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     missing shapes refuse; --glyph-file loads a reusable library. \
     --fallback-glyph borrows a caller-selected existing authored shape \
     for one missing exact grapheme; no implicit or chained mappings. \
-    --handwriting-profile applies selected mean \
-    dimensions to authored shapes, never statistical sampling or a font. \
-    No synthesized glyphs or images are rendered.";
+    --flow-text wraps explicit lines and --flow-markdown also recognizes \
+    # headings and -/* list markers; -file options read one bounded local \
+    UTF-8 file. Both use physical printable regions and exact authored ink; \
+    it auto-selects PDF page count unless --pages is explicit. \
+    --handwriting-profile applies selected mean dimensions to authored \
+    shapes, never statistical sampling or a font. \
+    No synthesized glyphs, inline Markdown styles or images are rendered.";
 
 #[derive(Clone, Debug)]
 struct GlyphStroke {
@@ -161,11 +170,13 @@ struct HandwritingRequest {
 struct NotebookRequest {
     dpi: u32,
     export_paper: Option<NotebookPaperFormat>,
+    flow: Option<FlowSource>,
     glyphs: GlyphOverlay,
     ink: Vec<NotebookInkLine>,
     inspect: bool,
     output: Option<String>,
     pages: usize,
+    pages_explicit: bool,
     png_page: usize,
     profile: NotebookProfile,
     replace: bool,
@@ -399,12 +410,9 @@ fn parse_handwriting_options(
                 profile = remove_glyph_option(name, &mut iter, &profile)?;
                 seen_edit = true;
             }
-            "--inspect" => {
-                if inspect {
-                    return Err("--inspect may appear only once".into());
-                }
-                inspect = true;
-            }
+            "--inspect" if inspect =>
+                return Err("--inspect may appear only once".into()),
+            "--inspect" => inspect = true,
             "--inventory-text" => {
                 let selected = parse_inventory_text(
                     &mut iter, inventory_text.as_deref(),
@@ -993,7 +1001,6 @@ fn validate_notebook_export_flags(
             "--export-paper pdf or png",
         ).into());
     }
-    glyphs.validate_pairing()?;
     if statistics.is_some() && !glyphs.has_any() {
         return Err(concat!(
             "--handwriting-profile requires both --glyph-stroke ",
@@ -1020,6 +1027,41 @@ fn parse_notebook_handwriting_profile(
     Ok(())
 }
 
+fn parse_notebook_flow(
+    iter: &mut Iter<'_, String>, option: &str,
+    flow: &mut Option<FlowSource>,
+) -> Result<(), String> {
+    if flow.is_some() {
+        return Err("only one flow source may be supplied".into());
+    }
+    let source = iter.next().ok_or(
+        "flow needs a UTF-8 text value or a selected file path"
+    )?;
+    let format = if option.starts_with("--flow-text") {
+        FlowFormat::Plain
+    } else {
+        FlowFormat::Markdown
+    };
+    *flow = Some(if option.ends_with("-file") {
+        FlowSource::from_file(format, source)?
+    } else {
+        FlowSource::new(format, source)?
+    });
+    Ok(())
+}
+
+fn load_notebook_profile_option(
+    iter: &mut Iter<'_, String>, loaded: bool, edited: bool,
+) -> Result<NotebookProfile, String> {
+    if loaded || edited {
+        return Err("--profile must appear once, before edits".into());
+    }
+    let path = iter.next().ok_or("--profile requires a file")?;
+    NotebookProfile::from_json(&read_notebook_input(
+        path, MAX_NOTEBOOK_JSON_BYTES,
+    )?)
+}
+
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut profile = NotebookProfile::default();
     let mut inspect = false;
@@ -1029,22 +1071,16 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut ink = Vec::new();
     let mut glyphs = GlyphOverlay::default();
     let mut statistics = None;
+    let mut flow = None;
     let mut loaded = false;
     let mut edited = false;
     let mut iter = args.iter();
     while let Some(option) = iter.next() {
         match option.as_str() {
             "--profile" => {
-                if loaded || edited {
-                    return Err(
-                        "--profile must appear once, before edits".into()
-                    );
-                }
-                let path = iter.next().ok_or("--profile requires a file")?;
-                profile = NotebookProfile::from_json(&read_notebook_input(
-                    path,
-                    MAX_NOTEBOOK_JSON_BYTES,
-                )?)?;
+                profile = load_notebook_profile_option(
+                    &mut iter, loaded, edited,
+                )?;
                 loaded = true;
             }
             "--paper-profile" => {
@@ -1066,14 +1102,14 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 apply_notebook_edit(&mut profile, option, value)?;
                 edited = true;
             }
-            "--inspect" => {
-                if inspect {
-                    return Err("--inspect may appear only once".into());
-                }
-                inspect = true;
-            }
-            "--handwriting-profile" => {
-                parse_notebook_handwriting_profile(&mut iter, &mut statistics)?;
+            "--inspect" if inspect =>
+                return Err("--inspect may appear only once".into()),
+            "--inspect" => inspect = true,
+            "--handwriting-profile" =>
+                parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
+            "--flow-text" | "--flow-markdown"
+            | "--flow-text-file" | "--flow-markdown-file" => {
+                parse_notebook_flow(&mut iter, option, &mut flow)?;
             }
             "--export-paper" | "--pages" | "--dpi" | "--png-page"
             | "--ink-line" | "--glyph-stroke" | "--glyph-file"
@@ -1084,14 +1120,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 )?;
             }
             "--output" => {
-                let path = iter.next().ok_or("--output requires a filename")?;
-                if output.is_some() || path.is_empty() || path.starts_with('-')
-                {
-                    return Err(
-                        "--output requires one explicit filename".into()
-                    );
-                }
-                output = Some(path.clone());
+                output = Some(parse_selected_output(
+                    &mut iter, output.is_some(),
+                )?);
             }
             "--replace" => {
                 if replace {
@@ -1106,8 +1137,18 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         replace, output.as_deref(), inspect, &export, &ink,
         &glyphs, statistics.as_ref(),
     )?;
+    if flow.is_none() {
+        glyphs.validate_pairing()?;
+    } else if glyphs.strokes.is_empty() || !glyphs.runs.is_empty() {
+        return Err(concat!(
+            "flow requires authored glyph shapes without manual ",
+            "--place-text runs",
+        ).into());
+    }
     profile.validate()?;
     Ok(NotebookRequest {
+        flow,
+        pages_explicit: export.pages.is_some(),
         glyphs,
         dpi: export.dpi.unwrap_or(150),
         export_paper: export.format,
@@ -1123,7 +1164,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
 }
 
 fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
-    let request = parse_notebook_options(args)?;
+    let mut request = parse_notebook_options(args)?;
     let canonical = request.profile.canonical_json()?;
     if request.inspect {
         return Ok(Some(
@@ -1145,6 +1186,27 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             )
             .into_bytes(),
         ));
+    }
+    if let Some(source) = &request.flow {
+        let (runs, ornaments, required_pages) = layout_flow(
+            source, &request.profile, request.statistics.as_ref(),
+        )?;
+        if request.pages_explicit && request.pages < required_pages {
+            return Err(format!(concat!(
+                "flow requires {} physical pages, ",
+                "more than the explicit --pages count",
+            ), required_pages));
+        }
+        if request.export_paper == Some(NotebookPaperFormat::Png)
+            && request.png_page > required_pages {
+            return Err(format!(
+                "flow has {required_pages} pages; selected PNG page is empty"
+            ));
+        }
+        request.pages = request.pages.max(required_pages);
+        request.glyphs.runs = runs;
+        request.ink.extend(ornaments);
+        request.glyphs.validate_pairing()?;
     }
     let ink = request.glyphs.expand(
         &request.ink, request.statistics.as_ref(),

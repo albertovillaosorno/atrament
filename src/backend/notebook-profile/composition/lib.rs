@@ -310,6 +310,34 @@ impl NotebookProfile {
         )
     }
 
+    /// Return the validated physical printable rectangle as left, top,
+    /// right, bottom coordinates in micrometres. Page-local text flow must
+    /// keep its marks within this native paper authority.
+    ///
+    /// # Errors
+    /// Refuses a malformed or geometrically invalid page profile.
+    pub fn printable_rect_um(&self) -> Result<(u32, u32, u32, u32), String> {
+        self.validate()?;
+        let root = parse_root(self.paper_json.as_bytes())?;
+        let number = |key: &str| -> Result<u32, String> {
+            let value = root.root_member_value(key)
+                .and_then(ValidatedProfileJsonValue::unsigned_integer)
+                .ok_or_else(|| format!("invalid paper measurement: {key}"))?;
+            u32::try_from(value).map_err(|_error| {
+                format!("paper measurement exceeds micrometres: {key}")
+            })
+        };
+        let left = number("margin_left_um")?;
+        let top = number("margin_top_um")?;
+        let right = number("width_um")?
+            .checked_sub(number("margin_right_um")?)
+            .ok_or("paper right margin exceeds width")?;
+        let bottom = number("height_um")?
+            .checked_sub(number("margin_bottom_um")?)
+            .ok_or("paper bottom margin exceeds height")?;
+        Ok((left, top, right, bottom))
+    }
+
     /// Check all fields, including printable border bounds and stroke inset.
     ///
     /// # Errors
@@ -364,6 +392,8 @@ impl NotebookProfile {
         }
         Ok(())
     }
+
+
 }
 
 fn boolean_member(

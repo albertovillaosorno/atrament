@@ -44,6 +44,48 @@ records remain accepted theoretical deliverables and are not reopened:
 - ATR-P2-004 — archived semantic design
 - ATR-P2-005 — archived semantic design
 
+## Native CLI plain-text and Markdown flow (partial) — 2026-11-03
+
+The Rust `atrament-profiles notebook` CLI now accepts an explicitly supplied
+`--flow-text` or `--flow-markdown` source, or `--flow-text-file` and
+`--flow-markdown-file` for caller-selected bounded UTF-8 files (maximum
+4,096 bytes). It uses the selected saved paper profile's validated physical
+printable rectangle, exact Unicode grapheme boundaries and the same nominal
+per-glyph horizontal advances as the native authored-stroke compositor.
+
+When a handwriting statistics profile is selected, the mean width/spacing
+and height/baseline affect flow; without one, advances are 4 mm and the
+minimum row pitch is 9 mm. Page breaks are automatic, up to 32 pages and
+128 laid-out lines; the preexisting 512 total pen-segment export cap remains.
+An explicit `--pages` smaller than the measured PDF count refuses.
+
+The limited Markdown subset recognizes `#`, `##`, and `###` single-line
+headings and `-` or `*` list items. Headings get an explicit ink underline,
+and list items a physical ink marker and indentation.
+
+Ordinary source lines are independently wrapped at word or grapheme boundaries; blank lines add
+paragraph spacing. Long headings refuse their single-line fixed region.
+This does **not** implement inline Markdown styling, combined soft-wrapped
+paragraphs, full ordered-list formatting or decorative marker lettering.
+
+Only caller-authored exact glyph strokes render; missing visible shapes still
+refuse with codepoints instead of silently substituting font characters.
+
+Native regression tests rendered real two-page PDF and separate 72-DPI PNG
+pages from a heading, paragraph, list and subsequent body lines. Additional
+tests cover decomposed Unicode glyph wrapping without dividing a grapheme,
+selected paper margins, exact file-vs-inline output, invalid UTF-8/oversize
+file refusal, and immutable existing output on oversized headings, missing
+shapes and insufficient explicitly requested pages.
+
+The source and resulting ink are export-only CLI state, **not** a persisted semantic notebook model.
+Browser paste/edit, stable semantic block identities, complete Markdown,
+fixed image regions, true glyph outlines, aesthetic titles and persisted
+notebook body content remain open.
+
+This partial slice does not meet the finite two-page saved-notebook
+acceptance criterion.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

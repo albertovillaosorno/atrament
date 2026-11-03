@@ -265,6 +265,30 @@ impl GlyphOverlay {
         Ok(expanded)
     }
 
+    /// Layout uses the same per-grapheme advances as physical ink placement.
+    /// The second value is the nominal glyph contour width for clearance.
+    pub(super) fn flow_advance_um(
+        grapheme: &str,
+        statistics: Option<&HandwritingStatisticsProfile>,
+    ) -> Result<(u32, u32), String> {
+        if grapheme == " " {
+            return Ok((ADVANCE_UM, 0));
+        }
+        let Some(profile) = statistics else {
+            return Ok((ADVANCE_UM, DEFAULT_TEMPLATE_WIDTH_UM));
+        };
+        let metrics = GlyphMetrics::from_profile(profile, grapheme)?;
+        let advance = i64::from(metrics.width)
+            .checked_add(i64::from(metrics.letter_spacing))
+            .ok_or("glyph letter advance overflow")?;
+        if advance <= 0 {
+            return Err("glyph width plus letter spacing must be positive".into());
+        }
+        Ok((u32::try_from(advance)
+            .map_err(|_error| "glyph letter advance overflow")?,
+            metrics.width))
+    }
+
     pub(super) const fn has_any(&self) -> bool {
         !self.runs.is_empty() || !self.strokes.is_empty()
             || !self.fallbacks.is_empty()
@@ -578,7 +602,11 @@ fn scale(local_um: u32, target_um: u32, reference_um: u32)
     u32::try_from(scaled).map_err(|_error| "glyph scale too large".into())
 }
 
-fn segment_at(
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "Sibling flow module shares Unicode boundary authority"
+)]
+pub(super) fn segment_at(
     boundaries: UnicodeGraphemeSegmentation,
     text: &str,
     index: usize,
