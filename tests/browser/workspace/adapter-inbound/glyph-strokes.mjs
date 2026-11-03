@@ -96,7 +96,7 @@ function mountEditor() {
         "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-ideal-preview",
-        "glyph-ideal-circle", "glyph-ideal-stem",
+        "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
         "glyph-earlier", "glyph-later",
         "glyph-save", "glyph-preview",
@@ -512,7 +512,7 @@ test("stroke reversal and reorder affect only the chosen glyph", async () => {
 });
 
 
-test("analytic circle starter samples a shared o/a loop plus a stem", () => {
+test("geometric starters share loop and validate acute strokes", () => {
     const circle = geometricStarter("o", 1550, 2450, 1100, 250, "#123456");
     const simpleA = geometricStarter("a", 1550, 2450, 1100, 250,
         "#123456");
@@ -538,6 +538,28 @@ test("analytic circle starter samples a shared o/a loop plus a stem", () => {
         }
     }
     assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(simpleA)), simpleA);
+    const acuteO = geometricStarter("ó", 1550, 2450, 1100, 250,
+        "#123456");
+    const acuteA = geometricStarter("á", 1550, 2450, 1100, 250,
+        "#123456");
+    assert.equal(acuteO.length, 49);
+    assert.equal(acuteA.length, 50);
+    assert.deepEqual(acuteO.slice(0, 48), circle.map((line) => ({
+        ...line, grapheme: "ó",
+    })));
+    assert.deepEqual(acuteA.slice(0, 49), simpleA.map((line) => ({
+        ...line, grapheme: "á",
+    })));
+    const accent = {
+        x1: 1165, y1: 980, x2: 1825, y2: 485,
+        width: 250, color: "#123456",
+    };
+    assert.deepEqual(acuteO.at(-1), { ...accent, grapheme: "ó" });
+    assert.deepEqual(acuteA.at(-1), { ...accent, grapheme: "á" });
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(acuteO)), acuteO);
+    assert.throws(() => geometricStarter(
+        "ó", 1550, 1600, 1100, 250, "#123456",
+    ), /Acute accent/);
     for (const bad of [
         ["ñ", 1550, 2450, 1100, 250, "#123456"],
         ["o", -1, 2450, 1100, 250, "#123456"],
@@ -561,7 +583,7 @@ test("geometric replacement preserves glyph identity and bounds", async () => {
         }];
         await get("load").dispatch("change");
         get("construct").dispatch("click");
-        assert.match(get("status").textContent, /Select exact o or a/);
+        assert.match(get("status").textContent, /Choose matching o, a, ó or á/);
         get("character").value = "o";
         get("character").dispatch("input");
         get("circle-radius").value = "3200";
@@ -577,13 +599,35 @@ test("geometric replacement preserves glyph identity and bounds", async () => {
         get("form").value = "a";
         get("construct").dispatch("click");
         assert.equal(get("preview").children.length, 49);
+        for (const [grapheme, expected] of [["ó", 49], ["á", 50]]) {
+            get("character").value = grapheme;
+            get("character").dispatch("input");
+            get("form").value = grapheme;
+            get("form").dispatch("change");
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, expected);
+        }
+        get("character").value = "ó";
+        get("character").dispatch("input");
+        get("form").value = "ó";
+        get("form").dispatch("change");
+        get("circle-y").value = "1600";
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Acute accent/);
+        assert.equal(get("preview").children.length, 49,
+            "failed acute replacement preserves the existing ó ink");
+        get("circle-y").value = "2450";
         get("save").dispatch("click");
         const saved = parseGlyphLibrary(await downloads[0].text());
         assert.deepEqual(saved.slice(0, 2), [original[0], original[2]]);
         assert.deepEqual(saved.slice(2, 50), geometricStarter(
             "o", 1550, 2450, 1100, 250, "#243647"));
-        assert.deepEqual(saved.slice(50), geometricStarter(
+        assert.deepEqual(saved.slice(50, 99), geometricStarter(
             "a", 1550, 2450, 1100, 250, "#243647"));
+        assert.deepEqual(saved.slice(99, 148), geometricStarter(
+            "ó", 1550, 2450, 1100, 250, "#243647"));
+        assert.deepEqual(saved.slice(148), geometricStarter(
+            "á", 1550, 2450, 1100, 250, "#243647"));
         editor.reset();
         assert.equal(get("construct").disabled, true);
     } finally {
@@ -611,11 +655,32 @@ test("exact SVG circle guide tracks parameters without saving", async () => {
         assert.equal(get("ideal-stem").attributes.get("visibility"),
             "visible");
         assert.equal(get("ideal-stem").attributes.get("x1"), "2700");
+        get("form").value = "ó";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-stem").attributes.get("visibility"),
+            "hidden");
+        assert.equal(get("ideal-accent").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-accent").attributes.get("x1"), "1215");
+        get("form").value = "á";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-stem").attributes.get("visibility"),
+            "visible");
+        get("circle-y").value = "1600";
+        get("circle-y").dispatch("input");
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "hidden", "invalid acute clearance hides the entire guide");
+        assert.equal(get("ideal-accent").attributes.get("visibility"),
+            "hidden");
+        get("circle-y").value = "2450";
+        get("circle-y").dispatch("input");
         get("circle-radius").value = "1900";
         get("circle-radius").dispatch("input");
         assert.equal(get("ideal-circle").attributes.get("visibility"),
             "hidden", "invalid guide cannot display stale accepted geometry");
         assert.equal(get("ideal-stem").attributes.get("visibility"),
+            "hidden");
+        assert.equal(get("ideal-accent").attributes.get("visibility"),
             "hidden");
         get("save").dispatch("click");
         assert.equal(downloads.length, 0, "preview never persists ink");
@@ -627,6 +692,8 @@ test("exact SVG circle guide tracks parameters without saving", async () => {
         assert.equal(get("ideal-circle").attributes.get("visibility"),
             "hidden");
         assert.equal(get("ideal-stem").attributes.get("visibility"),
+            "hidden");
+        assert.equal(get("ideal-accent").attributes.get("visibility"),
             "hidden");
     } finally {
         ui.restore();

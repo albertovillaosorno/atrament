@@ -529,27 +529,26 @@ stroke** deletes only that segment, not the other shapes for the grapheme.
 Invalid updates leave the saved draft untouched.
 
 The selected segment can be **reversed** (swap start and end) or moved
-**earlier/later** among
-segments of the exact same grapheme; unrelated Unicode entries retain their
-relative order and ink. The native TSV sequence remains the chosen drawing
-order, but v1 line segments do not represent a grouped curved pen stroke.
+**earlier/later** among segments of the exact same grapheme. Other Unicode
+entries retain their relative order and ink. The native TSV sequence remains
+the chosen drawing order, but v1 line segments do not represent a grouped
+curved pen stroke.
 
-For a geometric starting point, choose exact `o` or `a`, select the matching
-**Circle o** or **Simple a** control, adjust circle center and radius in
-micrometres, and deliberately replace that letter's unsaved segments. Both
-starters reuse a true analytic circle; the simple single-storey `a` adds a
-right stem. A separate exact SVG circle/stem guide updates with the numbers
-and never writes ink.
+For a geometric starting point, choose exact `o`, `a`, `ó`, or `á` and
+select its matching geometric starter. Adjust circle center and radius in
+micrometres, then deliberately replace that letter's unsaved strokes. All
+four share a true analytic circle; simple `a` adds a right stem, while the
+acute forms add a rising accent based on loop size and pen width.
 
-The existing Rust v1 glyph TSV, PDF and PNG exporters cannot retain or
-stroke that exact circle primitive: an explicit replacement
-samples it into 48 rounded integer-coordinate straight segments (49 for
-`a`), and Rust validates the result. This is a **near-circular export**, not
-the final mathematically exact glyph representation.
+A separate exact SVG construction guide updates with the numbers without
+writing ink. The existing Rust v1 glyph TSV, PDF and PNG exporters cannot
+retain the circle primitive: explicit replacement samples it into 48 rounded
+straight segments, plus a stem or accent for 49 total lines (`a`/`ó`) or
+both for 50 (`á`). This is **near-circular ink**, not an exact curve export.
 
-Invalid coordinates, pen thickness or library caps refuse without replacing
-any template; other graphemes remain untouched. A selected two-storey `a`
-or cursive form is not yet automatically available.
+Invalid coordinates, accent clearance, pen thickness or library caps refuse
+without replacing any template; other graphemes remain untouched. General
+accent anchoring, a two-storey `a` and cursive remain unfinished.
 
 Drag across the SVG preview with a mouse, pen or touch to trace a letterform
 as up to 128 connected line segments per gesture. Canceled, zero-length and
@@ -991,4 +990,7 @@ claim about who physically wrote an exported page.
 
 ## License
 
-Atrament is licensed under the [MIT License](LICENSE-MIT).
+Original materials covered by the current [LICENSE](LICENSE) are proprietary.
+That notice preserves valid permissions for earlier licensed versions and
+separate rights for third-party materials; [LICENSE-MIT](LICENSE-MIT) remains
+available for the earlier MIT terms where they apply.

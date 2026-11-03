@@ -141,12 +141,21 @@ export function encodeGlyphLibrary(strokes: Stroke[]): string {
 
 // The construction is defined by an analytic circle; v1 TSV can only
 // preserve its rounded line-segment approximation, not that ideal primitive.
+function acuteAccent(cx: number, cy: number, r: number, pen: number) {
+    const baseline = cy - r - pen - 120;
+    return {
+        x1: cx - Math.round(r * 0.35), y1: baseline,
+        x2: cx + Math.round(r * 0.25),
+        y2: baseline - Math.round(r * 0.45),
+    };
+}
+
 export function geometricStarter(
     grapheme: string, x: number, y: number, radius: number,
     width: number, color: string,
 ): Stroke[] {
-    if (grapheme !== "o" && grapheme !== "a") {
-        throw new Error("Circle starter requires exact o or simple a");
+    if (!["o", "a", "ó", "á"].includes(grapheme)) {
+        throw new Error("Circle starter requires exact o, a, ó or á");
     }
     const cx = boundedInteger(String(x), 3500, "center X");
     const cy = boundedInteger(String(y), 4500, "center Y");
@@ -172,10 +181,20 @@ export function geometricStarter(
             x2: last.x, y2: last.y, width: pen, color,
         });
     });
-    if (grapheme === "a") {
+    if (grapheme === "a" || grapheme === "á") {
         lines.push(validateStroke({
             grapheme, x1: cx + r, y1: cy - r,
             x2: cx + r, y2: cy + r, width: pen, color,
+        }));
+    }
+    if (grapheme === "ó" || grapheme === "á") {
+        const accent = acuteAccent(cx, cy, r, pen);
+        if (accent.y2 < halfPen || accent.x1 < halfPen
+            || accent.x2 + halfPen > 3500) {
+            throw new Error("Acute accent and pen must fit inside glyph cell");
+        }
+        lines.push(validateStroke({
+            grapheme, ...accent, width: pen, color,
         }));
     }
     return lines;
@@ -205,6 +224,7 @@ export function createGlyphStrokeEditor(): {
     const ideal = required<SVGSVGElement>("glyph-ideal-preview");
     const idealCircle = required<SVGCircleElement>("glyph-ideal-circle");
     const idealStem = required<SVGLineElement>("glyph-ideal-stem");
+    const idealAccent = required<SVGLineElement>("glyph-ideal-accent");
     const selected = required<HTMLSelectElement>("glyph-selected");
     const update = required<HTMLButtonElement>("glyph-update");
     const remove = required<HTMLButtonElement>("glyph-remove");
@@ -279,14 +299,24 @@ export function createGlyphStrokeEditor(): {
             idealStem.setAttribute("y2", String(cy + r));
             idealStem.setAttribute("stroke-width", numeric.width.value);
             idealStem.setAttribute("stroke", color.value);
-            const stemVisible = active && form.value === "a";
+            const stemVisible = active && ["a", "á"].includes(form.value);
             const stemState = stemVisible ? "visible" : "hidden";
             idealStem.setAttribute("visibility", stemState);
+            const accent = acuteAccent(cx, cy, r, Number(numeric.width.value));
+            for (const axis of ["x1", "y1", "x2", "y2"] as const) {
+                idealAccent.setAttribute(axis, String(accent[axis]));
+            }
+            idealAccent.setAttribute("stroke-width", numeric.width.value);
+            idealAccent.setAttribute("stroke", color.value);
+            const hasAcute = ["ó", "á"].includes(form.value);
+            const accentState = active && hasAcute ? "visible" : "hidden";
+            idealAccent.setAttribute("visibility", accentState);
             ideal.setAttribute("aria-label", "Analytic geometric "
                 + form.value + " guide, not retained in line-segment TSV");
         } catch {
             idealCircle.setAttribute("visibility", "hidden");
             idealStem.setAttribute("visibility", "hidden");
+            idealAccent.setAttribute("visibility", "hidden");
             ideal.setAttribute("aria-label", "Invalid circle settings");
         }
     };
@@ -524,7 +554,7 @@ export function createGlyphStrokeEditor(): {
         if (!active) return;
         try {
             if (character.value !== form.value) {
-                throw new Error("Select exact o or a before constructing");
+                throw new Error("Choose matching o, a, ó or á");
             }
             const lines = starterFromInputs();
             const next = [

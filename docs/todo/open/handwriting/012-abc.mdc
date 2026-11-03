@@ -172,7 +172,17 @@ Browser regressions cover o/a shared-loop geometry, path closure, exact
 Unicode replacement, and refusal of invalid dimensions. The preview guide
 is **exact SVG geometry**, but the exported segments only approximate its
 circle; no analytic primitive persists to PDF/PNG. Two-storey a, cursive,
-accent anchors, and the full bilingual inventory are still open.
+general accent anchoring, and the full bilingual inventory are still open.
+
+## Explicit acute ó/á starters (partial) — 2026-11-03
+
+The same exact loop supports precomposed `ó` and single-storey `á`, with a
+rising acute line positioned above the circle using its size and pen width.
+The browser refuses an accent that would extend outside the 3500×4500 µm
+cell, leaving all previously authored glyphs unchanged. Explicit TSV export
+contains 49 segments for `ó` and 50 for `á`; no native curve or anchor
+primitive persists. Decomposed accent graphemes and all other vowel forms
+still require independently authored strokes.
 
 ## Acceptance decision
 

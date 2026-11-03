@@ -529,17 +529,18 @@
               <input id="glyph-color" type="color" value="#243647" disabled>
             </label>
           </div>
-          <p class="field-help">Geometric starters: an o starts from an
-            analytic circle, and a single-storey a adds a right stem to the
-            same circle. Native v1 TSV/PDF ink is still a 48-segment
-            approximation of the circle; the exact circle equation is not
-            persisted. These presets explicitly replace only the selected
-            o or a, not other glyphs.</p>
+          <p class="field-help">Geometric starters: exact o is an analytic
+            circle, simple a adds a right stem, and acute ó/á add a rising
+            accent above the same loop. Native v1 TSV/PDF ink still samples
+            the circle as 48 line segments, not an exact persistent curve.
+            The explicit replacement affects only the selected grapheme.</p>
           <div class="handwriting-controls">
             <label>Geometric starter
               <select id="glyph-form" disabled>
                 <option value="o">Circle o</option>
                 <option value="a">Simple a (circle + stem)</option>
+                <option value="ó">Acute ó (circle + accent)</option>
+                <option value="á">Acute á (simple a + accent)</option>
               </select>
             </label>
             <label>Circle center X (µm)
@@ -558,6 +559,9 @@
               Replace exact glyph with geometric starter
             </button>
           </div>
+          <p class="field-help">The acute forms use an explicit rising
+            accent stroke above the loop, positioned from circle geometry and
+            pen width. If the accent cannot fit, no ink is replaced.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>
           <svg id="glyph-ideal-preview" class="glyph-stroke-preview"
@@ -568,6 +572,9 @@
               visibility="hidden"></circle>
             <line id="glyph-ideal-stem" x1="2650" y1="1350"
               x2="2650" y2="3550" stroke="#243647" stroke-width="250"
+              stroke-linecap="round" visibility="hidden"></line>
+            <line id="glyph-ideal-accent" x1="1165" y1="980"
+              x2="1825" y2="485" stroke="#243647" stroke-width="250"
               stroke-linecap="round" visibility="hidden"></line>
           </svg>
           <div class="handwriting-controls">
