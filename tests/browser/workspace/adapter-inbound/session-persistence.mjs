@@ -254,13 +254,15 @@ test("static workspace starts session controls disabled", async () => {
 
 // Count all literal fetch references, not just direct fetch(...) calls.
 // Captured or bracket-indexed fetch values can be invoked later under an
-// unrelated identifier. Unlike fetch(), fetchLater() can dispatch after the
+// unrelated identifier. The paper module has three reviewed fetch sites.
+// Unlike fetch(), fetchLater() can dispatch after the
 // page is disposed, bypassing page-lifetime cancellation entirely.
 // Full-line comments are not executable authority.
 function hasUnreviewedFetchReference(source, main, paper = false) {
     const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     const references = executable.match(/\bfetch\b/gu) ?? [];
-    return references.length !== (main ? 4 : Number(paper))
+    const reviewedCount = paper === 2 ? 3 : Number(paper);
+    return references.length !== (main ? 4 : reviewedCount)
         || /\bfetchLater\b/u.test(executable);
 }
 
@@ -309,7 +311,8 @@ test("browser source and generated modules reject undeclared transport",
         const main = filename === "main.ts" || filename === "main.js";
         const paper = profileModuleCount(filename);
         const fetchCalls = source.match(/\bfetch\s*\(/gu) ?? [];
-        assert.equal(fetchCalls.length, main ? 4 : paper,
+        assert.equal(fetchCalls.length,
+            main ? 4 : paper === 2 ? 3 : paper,
             `${filename} must retain the reviewed fetch sites`);
         assert.equal(hasUnreviewedFetchReference(source, main, paper), false,
             `${filename} gained an unreviewed fetch reference`);
@@ -465,11 +468,16 @@ function hasUnreviewedBrowserGlobalAuthority(source, main, paper = false) {
     ];
     let remaining = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     for (const [site, count] of allowed) {
-        if (remaining.split(site).length - 1 !== (main ? count : paper && site === "window.setTimeout(() => {" ? paper : 0)) {
+        const expected = main ? count
+            : paper && site === "window.setTimeout(() => {" ? paper : 0;
+        if (remaining.split(site).length - 1 !== expected) {
             return true;
         }
         remaining = remaining.replaceAll(site, "");
     }
+    // Date-placement string literals contain "top" but are not global refs.
+    remaining = remaining.replaceAll("\"top-left\"", "")
+        .replaceAll("\"top-right\"", "");
     return /\b(?:window|globalThis|self|top|parent|frames|opener)\b/u
         .test(remaining);
 }
@@ -488,6 +496,7 @@ test("browser first-class global aliases require explicit review", async () => {
         'const root = window["constructor"];',
         "const root = window?.navigator;",
         "window.addEventListener('message', onMessage);",
+        "window.setTimeout(() => {",
     ];
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
@@ -524,12 +533,13 @@ function hasUnreviewedDocumentAuthority(source, main, typed, paper = false,
         }
         remaining = remaining.replaceAll(site, "");
     }
-    // Both admitted editors use one known lookup and one Blob anchor.
-    for (const site of [
-        "document.getElementById(id)",
-        'document.createElement("a")',
+    // One lookup helper is shared by both paper and notebook editors.
+    // Each editor owns a separately reviewed Blob download anchor.
+    for (const [site, count] of [
+        ["document.getElementById(id)", paper ? 1 : 0],
+        ['document.createElement("a")', Number(paper)],
     ]) {
-        if (remaining.split(site).length - 1 !== Number(paper)) {
+        if (remaining.split(site).length - 1 !== count) {
             return true;
         }
         remaining = remaining.replaceAll(site, "");
@@ -562,6 +572,7 @@ test("browser first-class Document authority requires explicit review",
         "const root = element.getRootNode({ composed: true });",
         "const constructor = Document;",
         'document.addEventListener("paste", onPaste);',
+        'document.createElement("a")',
     ];
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
@@ -955,28 +966,22 @@ test("browser filesystem authority inventory rejects unreviewed access", () => {
 function hasUnreviewedBrowserFileIntake(source, paper = false,
     typed = false, handwriting = false) {
     let reviewed = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
-    // Each native editor admits only one user-selected JSON and one download.
+    // Paper and notebook JSON pickers are user-selected; neither editor can
+    // open an unselected file. Each download has one reviewed Blob URL/anchor.
     for (const [site, count] of [
-        ["upload.files?.item(0)", 1],
-        ["URL.createObjectURL(blob)", handwriting ? 0 : 1],
+        ["upload.files?.item(0)", paper ? 1 : 0],
+        ["URL.createObjectURL(blob)", handwriting ? 0 : Number(paper)],
         ['new Blob([result.json], { type: "application/json" })',
-            handwriting ? 0 : 1],
-        ["blob: Blob", typed && !handwriting ? 1 : 0],
+            paper === 2 ? 1 : 0],
+        ["blob: Blob", typed && !handwriting ? Number(paper) : 0],
         ["URL.createObjectURL(new Blob([json], {", handwriting ? 1 : 0],
+        ["load.files?.item(0)", paper === 2 ? 1 : 0],
+        ["new Blob([result.json], {", paper === 2 ? 1 : 0],
     ]) {
-        if (reviewed.split(site).length - 1 !== (paper ? count : 0)) {
+        if (reviewed.split(site).length - 1 !== count) {
             return true;
         }
-        reviewed = reviewed.replace(site, "");
-    }
-    // Paper module now also owns one native notebook JSON picker and export.
-    for (const site of [
-        "load.files?.item(0)",
-        "URL.createObjectURL(new Blob([result.json], {",
-    ]) {
-        const count = paper === 2 ? 1 : 0;
-        if (reviewed.split(site).length - 1 !== count) return true;
-        reviewed = reviewed.replace(site, "");
+        reviewed = reviewed.replaceAll(site, "");
     }
     return [
         new RegExp(
@@ -1020,6 +1025,7 @@ test("browser ordinary file input and drag-file reads require review",
             "item.getAsFile();",
             "item.webkitGetAsEntry();",
             "URL.createObjectURL(blob);",
+            "load.files?.item(0)",
             "input.files;",
             'input["files"];',
             "dragEvent.dataTransfer.files;",
