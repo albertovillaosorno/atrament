@@ -51,7 +51,6 @@ use atrament_handwriting_statistics_json::{
 };
 use atrament_notebook_paper_cli::{
     MAX_PAPER_OUTPUT_BYTES, canonical_paper_profile_json,
-    paper_profile_pdf_pages, paper_profile_png_layer,
 };
 use atrament_notebook_profile::{
     DatePlacement, DateStyle, MAX_NOTEBOOK_JSON_BYTES, NotebookProfile,
@@ -81,8 +80,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--printed-sheet true|false] [--inspect] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--dpi 72..300 (PNG only)] [--output FILE [--replace]]\n\
-    Paper-layer export uses the nested Rust paper settings and skips marks \
-    on preprinted sheets. Dates, borders, page numbers and ink do not render.";
+    Paper-layer export uses nested Rust paper settings and skips ruling \
+    on preprinted sheets. The selected empty date line or box is drawn; \
+    date text, borders, page numbers and ink do not render.";
 
 #[derive(Debug)]
 struct HandwritingRequest {
@@ -605,19 +605,11 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     }
     let (bytes, maximum_bytes) = match request.export_paper {
         Some(NotebookPaperFormat::Pdf) => (
-            paper_profile_pdf_pages(
-                request.profile.paper_json.as_bytes(),
-                request.pages,
-                !request.profile.printed_sheet,
-            )?,
+            request.profile.paper_layer_pdf(request.pages)?,
             MAX_PAPER_OUTPUT_BYTES,
         ),
         Some(NotebookPaperFormat::Png) => (
-            paper_profile_png_layer(
-                request.profile.paper_json.as_bytes(),
-                request.dpi,
-                !request.profile.printed_sheet,
-            )?,
+            request.profile.paper_layer_png(request.dpi)?,
             MAX_PAPER_OUTPUT_BYTES,
         ),
         None => (canonical.into_bytes(), MAX_NOTEBOOK_JSON_BYTES),

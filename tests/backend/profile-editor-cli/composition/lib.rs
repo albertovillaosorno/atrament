@@ -589,8 +589,7 @@ fn saved_notebook_exports_printable_paper_pdf_and_transparent_png() {
     let pdf_bytes = fs::read(&pdf_output).expect("PDF persisted");
     assert_eq!(
         pdf_bytes,
-        paper_profile_pdf_pages(profile.paper_json.as_bytes(), 3, true)
-            .expect("same Rust paper output"),
+        profile.paper_layer_pdf(3).expect("same Rust paper output"),
     );
     assert!(String::from_utf8_lossy(&pdf_bytes).contains("/Count 3"));
     assert!(execute_notebook(&args(&[
@@ -599,13 +598,63 @@ fn saved_notebook_exports_printable_paper_pdf_and_transparent_png() {
     ])).expect("transparent PNG saved").is_none());
     assert_eq!(
         fs::read(&png_output).expect("PNG persisted"),
-        paper_profile_png_layer(profile.paper_json.as_bytes(), 72, true)
-            .expect("same Rust PNG output"),
+        profile.paper_layer_png(72).expect("same Rust PNG output"),
     );
     assert_eq!(fs::read(&notebook).expect("source immutable"), stored);
     fs::remove_file(notebook).expect("owned notebook removed");
     fs::remove_file(pdf_output).expect("owned PDF removed");
     fs::remove_file(png_output).expect("owned PNG removed");
+}
+
+#[test]
+fn saved_notebook_date_export_matches_rust_layers_in_cli() {
+    let saved_path = test_path();
+    let saved_name = saved_path.to_str().expect("notebook filename");
+    assert!(execute_notebook(&args(&[
+        "--date-style", "box", "--date-placement", "top-right",
+        "--printed-sheet", "true", "--output", saved_name,
+    ])).expect("save notebook with date").is_none());
+    let stored = fs::read(&saved_path).expect("saved notebook JSON");
+    let notebook = NotebookProfile::from_json(&stored).expect("reopen date");
+    assert_eq!(notebook.date_style, DateStyle::Box);
+    assert_eq!(notebook.date_placement, DatePlacement::TopRight);
+
+    let pdf = execute_notebook(&args(&[
+        "--profile", saved_name, "--export-paper", "pdf", "--pages", "2",
+    ]))
+    .expect("two-page PDF")
+    .expect("PDF stdout");
+    assert_eq!(pdf, notebook.paper_layer_pdf(2).expect("same PDF"));
+    assert_eq!(
+        String::from_utf8_lossy(&pdf).matches(" m\n").count(), 8,
+        "four box strokes on each preprinted page, with no duplicate ruling",
+    );
+
+    let png_path = test_path().with_extension("png");
+    let png_name = png_path.to_str().expect("PNG filename");
+    assert!(execute_notebook(&args(&[
+        "--profile", saved_name, "--export-paper", "png", "--dpi", "72",
+        "--output", png_name,
+    ])).expect("PNG export").is_none());
+    assert_eq!(
+        fs::read(&png_path).expect("saved PNG"),
+        notebook.paper_layer_png(72).expect("same physical RGBA layer"),
+    );
+
+    let left_line = execute_notebook(&args(&[
+        "--profile", saved_name, "--date-style", "line",
+        "--date-placement", "top-left", "--export-paper", "pdf",
+        "--pages", "2",
+    ]))
+    .expect("edited date PDF")
+    .expect("PDF stdout");
+    assert_ne!(pdf, left_line);
+    assert_eq!(
+        String::from_utf8_lossy(&left_line).matches(" m\n").count(), 2,
+    );
+    assert_eq!(fs::read(&saved_path).expect("source preserved"), stored);
+    fs::remove_file(saved_path).expect("remove owned notebook");
+    fs::remove_file(png_path).expect("remove owned PNG");
 }
 
 #[test]
@@ -622,8 +671,7 @@ fn notebook_printed_sheet_suppresses_marks_without_editing_profile() {
     .expect("PDF bytes");
     assert_eq!(
         pdf,
-        paper_profile_pdf_pages(profile.paper_json.as_bytes(), 2, false)
-            .expect("same unmarked PDF"),
+        profile.paper_layer_pdf(2).expect("same unmarked PDF"),
     );
     let png = execute_notebook(&args(&[
         "--printed-sheet", "true", "--export-paper", "png", "--dpi", "72",
@@ -632,8 +680,7 @@ fn notebook_printed_sheet_suppresses_marks_without_editing_profile() {
     .expect("PNG bytes");
     assert_eq!(
         png,
-        paper_profile_png_layer(profile.paper_json.as_bytes(), 72, false)
-            .expect("same unmarked PNG"),
+        profile.paper_layer_png(72).expect("same unmarked PNG"),
     );
     assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
 }
