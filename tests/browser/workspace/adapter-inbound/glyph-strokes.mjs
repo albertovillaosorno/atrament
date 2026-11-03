@@ -288,6 +288,14 @@ test("two-row accented comparison keeps authored TSV", async () => {
             snapshot.slice(0, 49 * 3));
         assert.notDeepEqual(spaced.slice(49 * 3),
             different.slice(49 * 3), "spacing varies only the lower row");
+        for (const line of get("variation-preview").children) {
+            for (const axis of ["x1", "x2"]) {
+                const x = Number(line.attributes.get(axis));
+                const pen = Number(line.attributes.get("stroke-width"));
+                assert.ok(x - pen / 2 >= 0 && x + pen / 2 <= 14000,
+                    `preview ${axis} and pen remain in SVG at max spacing`);
+            }
+        }
         get("variation-width").value = "";
         get("variation-width").dispatch("input");
         assert.equal(get("variation-preview").children.length, 0);

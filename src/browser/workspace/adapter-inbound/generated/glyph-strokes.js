@@ -1673,7 +1673,8 @@ export function createGlyphStrokeEditor() {
                         * settings.spacing);
                     for (const ink of sequence) {
                         const line = document.createElementNS(SVG_NS, "line");
-                        const xOffset = 200 + copy * 4550 + tracking;
+                        // Keep the +/-500 µm tracking inside SVG bounds.
+                        const xOffset = 600 + copy * 4450 + tracking;
                         const yOffset = 200 + row * 4800;
                         line.setAttribute("x1", String(ink.x1 + xOffset));
                         line.setAttribute("y1", String(ink.y1 + yOffset));
