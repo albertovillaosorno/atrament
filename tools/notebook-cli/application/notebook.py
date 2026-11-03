@@ -1075,6 +1075,56 @@ def do_set_handwriting(args):
     print(args.out)
 
 
+def do_add_image(args):
+    source = Path(args.config).resolve()
+    doc = read_json(source)
+    width, height = validate_notebook(doc, 72)
+    page_number = args.page
+    if not 1 <= page_number <= len(doc["pages"]):
+        raise ValueError("selected page does not exist")
+    target = Path(args.out).resolve()
+    source_image = Path(args.image)
+    if not source_image.is_absolute():
+        source_image = source.parent / source_image
+    source_image = source_image.resolve()
+    if args.tint_strength is not None and args.tint is None:
+        raise ValueError("--tint-strength requires --tint")
+    if args.tint is not None:
+        color(args.tint)
+    item = {
+        "path": os.path.relpath(source_image, target.parent),
+        "x_mm": require_number(args.x_mm, "image.x_mm", 0, 1000),
+        "y_mm": require_number(args.y_mm, "image.y_mm", 0, 1000),
+        "width_mm": require_number(args.width_mm, "image.width_mm", 0.1, 1000),
+        "height_mm": require_number(
+            args.height_mm, "image.height_mm", 0.1, 1000
+        ),
+        "layer": args.layer,
+        "saturation": require_number(
+            args.saturation, "image.saturation", 0, 5
+        ),
+        "opacity": require_number(args.opacity, "image.opacity", 0, 1),
+    }
+    if args.tint is not None:
+        item["tint"] = args.tint
+        item["tint_strength"] = require_number(
+            args.tint_strength if args.tint_strength is not None else 0.5,
+            "image.tint_strength",
+            0,
+            1,
+        )
+    # Render the exact asset at bounded preview DPI before persisting a path.
+    # This also rejects missing, unsafe, unreadable, or off-sheet images.
+    sample = Image.new("RGBA", (width, height))
+    draw_picture(sample, target.parent, item, 72)
+    images = doc["pages"][page_number - 1].setdefault("images", [])
+    if len(images) >= 50:
+        raise ValueError("page already contains 50 images")
+    images.append(item)
+    write_json(target, doc, args.replace)
+    print(target)
+
+
 def do_calibrate(args):
     source = Path(args.config)
     doc = read_json(source)
@@ -1249,6 +1299,22 @@ def main(argv=None):
     p.add_argument("--out", required=True)
     p.add_argument("--replace", action="store_true")
     p.set_defaults(run=do_set_handwriting)
+    p = cmds.add_parser(
+        "add-image", help="place or recolor a local picture on one page"
+    )
+    p.add_argument("--config", required=True)
+    p.add_argument("--page", type=int, required=True)
+    p.add_argument("--image", required=True)
+    for name in ("x-mm", "y-mm", "width-mm", "height-mm"):
+        p.add_argument(f"--{name}", type=float, required=True)
+    p.add_argument("--layer", choices=("under", "over"), default="under")
+    p.add_argument("--saturation", type=float, default=1)
+    p.add_argument("--opacity", type=float, default=1)
+    p.add_argument("--tint")
+    p.add_argument("--tint-strength", type=float)
+    p.add_argument("--out", required=True)
+    p.add_argument("--replace", action="store_true")
+    p.set_defaults(run=do_add_image)
     p = cmds.add_parser(
         "calibrate",
         help="enter manually measured per-letter geometry samples",

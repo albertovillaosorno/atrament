@@ -204,6 +204,120 @@ class NotebookCliTests(unittest.TestCase):
                 self.assertEqual(run.returncode, 2, run.stderr)
                 self.assertFalse(target.exists())
 
+    def test_add_image_with_position_saturation_tint_and_opacity(self):
+        image_path = self.root / "photo.png"
+        Image.new("RGBA", (8, 8), (200, 30, 50, 128)).save(image_path)
+        target = self.root / "with-image.json"
+        run = self.run_cli(
+            "add-image",
+            "--config",
+            str(self.config),
+            "--page",
+            "2",
+            "--image",
+            "photo.png",
+            "--x-mm",
+            "20",
+            "--y-mm",
+            "30",
+            "--width-mm",
+            "25",
+            "--height-mm",
+            "14",
+            "--layer",
+            "over",
+            "--saturation",
+            "0",
+            "--tint",
+            "#abcdef",
+            "--tint-strength",
+            "1",
+            "--opacity",
+            "0.5",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        result = notebook.read_json(target)
+        item = result["pages"][1]["images"][0]
+        self.assertEqual(item["layer"], "over")
+        self.assertEqual(item["tint_strength"], 1)
+        self.assertEqual((target.parent / item["path"]).resolve(), image_path)
+        self.assertEqual(result["pages"][0]["images"], [])
+        page = notebook.render_page(result, 1, 100, target.parent, True)
+        x = notebook.point_mm(22, 100)
+        y = notebook.point_mm(32, 100)
+        self.assertEqual(page.getpixel((x, y)), (171, 205, 239, 64))
+
+    def test_add_image_paths_remain_valid_in_another_output_directory(self):
+        Image.new("RGB", (10, 10), "blue").save(self.root / "texture.jpg")
+        nested = self.root / "nested"
+        nested.mkdir()
+        output = nested / "with-photo.json"
+        run = self.run_cli(
+            "add-image",
+            "--config",
+            str(self.config),
+            "--page",
+            "1",
+            "--image",
+            "texture.jpg",
+            "--x-mm",
+            "25",
+            "--y-mm",
+            "45",
+            "--width-mm",
+            "12",
+            "--height-mm",
+            "12",
+            "--out",
+            str(output),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        doc = notebook.read_json(output)
+        self.assertEqual(
+            doc["pages"][0]["images"][0]["path"], "../texture.jpg"
+        )
+        render = notebook.render_page(doc, 0, 100, nested)
+        x = notebook.point_mm(30, 100)
+        y = notebook.point_mm(50, 100)
+        self.assertEqual(render.getpixel((x, y))[:3], (0, 0, 254))
+
+    def test_add_image_rejects_invalid_placements_and_missing_assets(self):
+        Image.new("RGB", (8, 8), "blue").save(self.root / "tiny.png")
+        common = (
+            "add-image",
+            "--config",
+            str(self.config),
+            "--image",
+            "tiny.png",
+            "--page",
+            "1",
+            "--x-mm",
+            "10",
+            "--y-mm",
+            "10",
+            "--width-mm",
+            "10",
+            "--height-mm",
+            "10",
+        )
+        invalid = (
+            ("--page", "3"),
+            ("--x-mm", "95"),
+            ("--height-mm", "0"),
+            ("--opacity", "2"),
+            ("--tint", "red"),
+            ("--image", "missing.png"),
+            ("--tint-strength", "0.8"),
+        )
+        for options in invalid:
+            with self.subTest(options=options):
+                target = self.root / "bad-image.json"
+                run = self.run_cli(*common, *options, "--out", str(target))
+                self.assertEqual(run.returncode, 2, run.stderr)
+                self.assertFalse(target.exists())
+
     def test_multi_page_pdf_is_a_real_print_size_pdf(self):
         target = self.root / "notes.pdf"
         run = self.run_cli(

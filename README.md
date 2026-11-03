@@ -176,6 +176,23 @@ To draw the grid in a transparent PNG as well, add `--keep-rules`. A page's
 an underlay only when you actually want it included in the exported image;
 for compositing in Photoshop or similar, export transparently instead.
 
+An image can also be placed without hand-editing JSON:
+
+```sh
+python3 cli/notebook.py add-image --config writing-notebook.json \
+  --page 1 --image photo.png --x-mm 40 --y-mm 45 \
+  --width-mm 60 --height-mm 35 --layer over \
+  --saturation 0.75 --tint '#adceef' --tint-strength 0.35 \
+  --opacity 0.85 --out illustrated.json
+```
+
+The image path is interpreted relative to the input notebook JSON and saved
+relative to the output JSON's directory. The converter accepts PNG, JPEG,
+WebP, and restricted local SVG. SVG needs ImageMagick installed. Placement and
+image decoding are validated before the new configuration is written.
+
+`--tint-strength` requires `--tint`; a tint alone defaults to 50% strength.
+
 ## Honest current limits
 
 The initial CLI **does produce** multi-page PDF/PNG files, but it is
