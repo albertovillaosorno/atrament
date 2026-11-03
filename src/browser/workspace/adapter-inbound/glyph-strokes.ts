@@ -94,7 +94,7 @@ export function parseGlyphLibrary(text: string): Stroke[] {
     if (new TextEncoder().encode(text).length > MAX_BYTES
         || !text.endsWith("\n") || text.includes("\r")) {
         throw new Error(
-            "Glyph TSV must be at most 524288 bytes, with LF lines",
+            "Glyph TSV exceeds 512 KiB or has bad line endings",
         );
     }
     const lines = text.slice(0, -1).split("\n");
@@ -411,8 +411,8 @@ export function createGlyphStrokeEditor(): {
             }
         }
         preview.replaceChildren(...lines);
-        preview.setAttribute("aria-label",
-            shown.length + " authored strokes for the exact selected grapheme");
+        const label = `${shown.length} strokes for selected glyph`;
+        preview.setAttribute("aria-label", label);
     };
     const choose = (index: number): void => {
         const stroke = strokes[index];
