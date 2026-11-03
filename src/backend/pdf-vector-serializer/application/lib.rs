@@ -479,6 +479,30 @@ fn append_object(
     append(bytes, object, maximum_pdf_bytes)
 }
 
+// Keep a completed page stream borrowed while serializing its PDF object.
+// Formatting the whole object at once would allocate another full-size copy
+// of the stream before the caller's final byte limit could be enforced.
+fn append_stream_object(
+    bytes: &mut Vec<u8>,
+    offsets: &mut Vec<usize>,
+    object: usize,
+    stream: &str,
+    maximum_pdf_bytes: usize,
+) -> Result<(), PdfVectorError> {
+    append_object(
+        bytes,
+        offsets,
+        format!(
+            "{object} 0 obj\n<< /Length {} >>\nstream\n",
+            stream.len(),
+        )
+        .as_bytes(),
+        maximum_pdf_bytes,
+    )?;
+    append(bytes, stream.as_bytes(), maximum_pdf_bytes)?;
+    append(bytes, b"endstream\nendobj\n", maximum_pdf_bytes)
+}
+
 fn append_xref_and_trailer(
     bytes: &mut Vec<u8>,
     offsets: &[usize],
@@ -621,16 +645,11 @@ pub fn serialize_vector_pdf(
             .as_bytes(),
             limit,
         )?;
-        append_object(
+        append_stream_object(
             &mut bytes,
             &mut offsets,
-            format!(
-                "{} 0 obj\n<< /Length {} >>\nstream\n{}endstream\nendobj\n",
-                object.saturating_add(1),
-                stream.len(),
-                stream,
-            )
-            .as_bytes(),
+            object.saturating_add(1),
+            stream,
             limit,
         )?;
     }

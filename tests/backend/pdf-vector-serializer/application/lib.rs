@@ -416,6 +416,76 @@ fn aggregate_stream_budget_refuses_before_later_page_rendering() {
 }
 
 #[expect(
+    clippy::expect_used,
+    reason = "the accepted large stream must have inspectable PDF framing"
+)]
+#[test]
+fn large_page_stream_preserves_exact_length_and_xref_without_truncation() {
+    let mut commands = vec![PdfPathCommand::MoveTo(point(20_000, 30_000))];
+    for index in 0i32..10_000i32 {
+        commands.push(PdfPathCommand::LineTo(point(
+            20_000i32.saturating_add(index),
+            30_000,
+        )));
+    }
+    let composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![
+            page(vec![PdfVectorPath {
+                commands,
+                paint: PdfPathPaint::Stroke {
+                    color: PdfRgb {
+                        red: 5,
+                        green: 22,
+                        blue: 240,
+                    },
+                    width_um: 350,
+                },
+            }]),
+            page(Vec::new()),
+        ],
+        render_manifest_identity: "large-stream.v1",
+    };
+    let large_limits = PdfVectorLimits {
+        maximum_commands_per_page: 10_001,
+        maximum_pdf_bytes: 400_000,
+        ..limits()
+    };
+    let bytes = serialize_vector_pdf(&composition, large_limits)
+        .expect("10,001-command stream fits its admitted byte budget");
+    assert_xref_integrity(&bytes);
+    let pdf = pdf_string(&bytes);
+    let stream = pdf
+        .split_once("stream\n")
+        .expect("first PDF stream exists")
+        .1
+        .split_once("endstream\n")
+        .expect("first PDF stream terminates")
+        .0;
+    assert!(stream.len() > 100_000, "fixture must have a large stream");
+    assert_eq!(
+        stream.matches(" l\n").count(),
+        10_000,
+        "all emitted segments must survive the stream object boundary",
+    );
+    assert!(
+        pdf.contains(&format!("/Length {} >>\nstream\n", stream.len())),
+        "PDF /Length must count the exact verbatim content stream",
+    );
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: bytes.len().saturating_sub(1),
+                ..large_limits
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+        "a one-byte-short output budget still refuses the whole PDF",
+    );
+}
+
+#[expect(
     clippy::indexing_slicing,
     reason = "fixture has one known page and two paths"
 )]

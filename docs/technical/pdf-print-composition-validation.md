@@ -122,6 +122,15 @@ streams cannot fit the requested PDF refuses early as `ResourceLimit`.
 The serialized header, objects, offsets and trailer are still subject to the
 same final byte budget; this early stream check is only a necessary bound.
 
+When assembling page-stream PDF objects, the encoder now appends the
+already-rendered stream directly into the bounded output buffer. Only the
+small object header and trailer are separately formatted: the encoder no
+longer creates a second full-size temporary string for each page stream.
+A 10,001-command regression checks large stream length, path completeness,
+byte-accurate cross-reference offsets, and one-byte-short refusal. This
+reduces transient allocation; it does not remove the final output buffer or
+previously retained page streams, and it is not a complete memory bound.
+
 An executable regression first returned a later-page `InvalidPageBox` after
 the earlier streams had already exhausted the requested byte budget. It now
 returns `ResourceLimit` before inspecting that later page, limiting retained
