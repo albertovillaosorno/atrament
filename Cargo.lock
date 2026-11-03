@@ -510,6 +510,13 @@ name = "atrament_pdf_composition_plan"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_pdf_vector_serializer"
+version = "0.1.0"
+dependencies = [
+ "atrament_pdf_composition_plan",
+]
+
+[[package]]
 name = "atrament_pen_contact_model"
 version = "0.1.0"
 

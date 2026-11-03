@@ -1,0 +1,9 @@
+identity:
+  id: function:pdf-vector-serializer
+  name: pdf-vector-serializer
+  path: src/backend/pdf-vector-serializer
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

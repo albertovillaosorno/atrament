@@ -227,6 +227,9 @@ depends_on = ["atrament_application_operation_lifecycle", "atrament_mcp_capabili
 [component.atrament_pdf_composition_plan]
 depends_on = []
 
+[component.atrament_pdf_vector_serializer]
+depends_on = ["atrament_pdf_composition_plan"]
+
 [component.atrament_physical_compatibility_ledger]
 depends_on = []
 

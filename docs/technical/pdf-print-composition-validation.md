@@ -2,7 +2,8 @@
 
 ## Status
 
-Verified against the current transport-neutral output domains.
+Verified against the current output domains and an isolated vector-only PDF
+byte serializer. Full notebook-to-PDF Export remains unimplemented.
 
 ## Purpose
 
@@ -35,9 +36,10 @@ The current executable composition boundary spans these pure backend domains:
 - `src/backend/render-regression-evidence/domain/lib.rs` for independent
   regression-axis completeness before a visual report is considered complete.
 
-These are transport-neutral values. They do not emit PDF bytes, choose a PDF
-library, write files, rasterize pages, embed fonts, compute hashes, or decide
-physical pass/fail tolerances.
+These transport-neutral values do not emit PDF bytes, choose a PDF library,
+write files, rasterize pages, embed fonts, compute hashes, or decide physical
+pass/fail tolerances. A separate vector-only PDF application adapter now emits
+bytes for fully resolved, supported paths, without changing these domains.
 
 ## Contract
 
@@ -78,6 +80,34 @@ remain
 unchanged. The current domain does not define how a safe external reference is
 represented or whether one is admitted for a particular export; that belongs to
 future resource and PDF adapters.
+
+### Isolated vector-only PDF byte serialization
+
+`src/backend/pdf-vector-serializer/application/lib.rs` is a narrow, executable
+PDF 1.4 serializer for caller-resolved geometry (not a notebook converter).
+It consumes concrete `PdfCompositionPlan` page authority with positive
+physical sizes in micrometers, one explicit `DeviceRGB` color intent, and
+ordered stroke/fill vector paths. Its output is deterministic in-memory bytes
+with real page boxes, cubic paths, PDF object offsets, and a checked ASCII
+render-manifest identity in the Info dictionary.
+
+Top-left physical coordinates
+map to PDF points by an explicit page transform. Bounds include the round
+stroke's half-width, so an otherwise in-page centerline cannot clip silently.
+
+The adapter refuses *every* accepted asset and preserved searchable text:
+image/color-profile embedding and font/semantic-text rendering do not exist
+here. It also refuses malformed paths, invalid page boxes, unsafe manifest
+identities, and caller-bounded page/path/command/byte overruns. The output
+contains no inferred notebook layout, complete manifest, file path,
+filesystem effect, or user-authorized Export operation. It is not evidence
+that a pasted assignment can be turned into a PDF by the current UI/CLI.
+
+A local smoke fixture fed real output bytes to Poppler `pdfinfo` and
+`pdftoppm`; both accepted and rendered an A4 page (595.276 by 841.89 points).
+The fixture is a synthetic vector path, not a source notebook or visual
+fidelity measurement. PDF conformance beyond the supported subset and other
+PDF readers remain unverified.
 
 ### Render manifests retain reproducibility inputs
 
@@ -183,6 +213,10 @@ Current checked-in regression evidence includes:
   physical boxes, vector authority, color intent, searchable-text disposition,
   asset disposition, manifest linkage, and all 18,432 compact order/disposition
   states;
+- `tests/backend/pdf-vector-serializer/application/lib.rs`, which pins
+  reproducible two-page vector PDF bytes, object/xref offsets, physical A4
+  dimensions, material paints, explicit resource refusal, malformed geometry,
+  clipping and byte-budget boundaries;
 - `tests/backend/render-manifest/domain/lib.rs`, which pins source, asset,
   model, seed, quality, and version input retention across all 2,880 compact
   asset/model ordering states;
@@ -233,8 +267,9 @@ request/result evidence; the 128-state drift oracle requires that sealed path to
 match the direct validator exactly. Control units, ranges, algorithms, and
 defaults remain intentionally unspecified.
 
-Still-open implementation work includes PDF serialization and validation,
-resource embedding, font/searchable-text compatibility, image intake and
+Still-open implementation work includes complete notebook-to-PDF Export and
+broader PDF conformance validation, resource embedding, font/searchable-text
+compatibility, image intake and
 placement, render-manifest serialization/identity, output file adapters, actual
 visual comparators and goldens, line-art algorithms, and measured print/scan
 acceptance thresholds.

@@ -73,6 +73,7 @@ members = [
     "src/backend/mcp-semantic-command-admission-projection",
     "src/backend/mcp-semantic-command-result-projection",
     "src/backend/pdf-composition-plan",
+    "src/backend/pdf-vector-serializer",
     "src/backend/physical-compatibility-ledger",
     "src/backend/physical-recovery-state",
     "src/backend/physical-page-profile",
@@ -169,6 +170,8 @@ atrament_media_job_session = { path = "src/backend/media-job-session" }
 atrament_motion_plan_dry_run = { path = "src/backend/motion-plan-dry-run" }
 atrament_one_shot_formatting_prompt = { path = "src/backend/one-shot-formatting-prompt" }
 atrament_output_capability_matrix = { path = "src/backend/output-capability-matrix" }
+atrament_pdf_composition_plan = { path = "src/backend/pdf-composition-plan" }
+atrament_pdf_vector_serializer = { path = "src/backend/pdf-vector-serializer" }
 atrament_physical_page_profile = { path = "src/backend/physical-page-profile" }
 atrament_profile_export_assembly = { path = "src/backend/profile-export-assembly" }
 atrament_profile_export_retry_binding = { path = "src/backend/profile-export-retry-binding" }
