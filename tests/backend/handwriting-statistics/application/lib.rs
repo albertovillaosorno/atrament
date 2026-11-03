@@ -52,6 +52,7 @@ use atrament_handwriting_statistics::{
     Dimension, DimensionStatistics, GlyphStatistics,
     HandwritingStatisticsError, HandwritingStatisticsProfile,
     MAXIMUM_GLYPH_OVERRIDES, STATISTICS_PROFILE_VERSION, ScalarStatistics,
+    preview_value,
     ScalarStatisticsError, Unit,
 };
 use atrament_unicode_grapheme_boundary_port as _;
@@ -448,4 +449,78 @@ fn removing_unowned_exact_glyph_or_dimension_fails_without_mutation() {
     );
     assert_eq!(authored.glyphs.len(), 1);
     assert_eq!(baseline.glyphs.len(), 0);
+}
+
+#[test]
+fn numeric_preview_replays_per_seed_exact_glyph_and_occurrence() {
+    let profile = HandwritingStatisticsProfile::baseline(42)
+        .with_global(
+            parameter(Dimension::Height, stat(2_000, 4_000, 3_000, 3_000, 450)),
+            &BOUNDARIES,
+        )
+        .unwrap()
+        .with_glyph(
+            "ñ",
+            parameter(Dimension::Height, stat(4_500, 5_500, 5_000, 5_000, 250)),
+            &BOUNDARIES,
+        )
+        .unwrap();
+    let sample = |key, ordinal| {
+        preview_value(&profile, key, Dimension::Height, ordinal, &BOUNDARIES)
+            .unwrap()
+    };
+    let exact = (0u64..128u64).map(|i| sample("ñ", i)).collect::<Vec<_>>();
+    assert_eq!(
+        exact,
+        (0u64..128u64).map(|i| sample("ñ", i)).collect::<Vec<_>>(),
+    );
+    assert!(exact.iter().all(|&value| (4_500..=5_500).contains(&value)));
+    assert!(exact.iter().any(|&value| value != 5_000));
+    assert!(exact.windows(2).any(|pair| pair.first() != pair.get(1)));
+    let nfd = (0u64..128u64)
+        .map(|i| sample("n\u{303}", i))
+        .collect::<Vec<_>>();
+    assert!(nfd.iter().all(|&value| (2_000..=4_000).contains(&value)));
+    assert_ne!(exact, nfd, "NFC override is not applied to NFD");
+    assert_eq!(
+        sample("ñ", 5), exact[5],
+        "call order cannot advance a global RNG",
+    );
+    assert_eq!(
+        preview_value(&profile, "ñ", Dimension::Width, u64::MAX, &BOUNDARIES),
+        Ok(2_200),
+        "a non-overridden zero-deviation dimension inherits the exact mean",
+    );
+
+    let mut alternate_seed = profile.clone();
+    alternate_seed.seed = 43;
+    let changed = (0u64..128u64).map(|i| {
+        preview_value(&alternate_seed, "ñ", Dimension::Height, i, &BOUNDARIES)
+            .unwrap()
+    }).collect::<Vec<_>>();
+    assert_ne!(exact, changed, "changing the seed changes preview variation");
+}
+
+#[test]
+fn numeric_preview_rejects_invalid_exact_keys_and_malformed_profiles() {
+    let profile = HandwritingStatisticsProfile::baseline(u64::MAX);
+    for invalid in ["", "ab", "ñ\n", "\u{1b}", &"a".repeat(65)] {
+        assert_eq!(
+            preview_value(&profile, invalid, Dimension::Height, 0, &BOUNDARIES),
+            Err(HandwritingStatisticsError::InvalidPreviewGrapheme),
+        );
+    }
+    assert_eq!(
+        preview_value(
+            &profile, "n\u{303}", Dimension::Height, u64::MAX,
+            &BOUNDARIES,
+        ),
+        Ok(3_000),
+    );
+    let mut stale = profile;
+    stale.version = "invalid".into();
+    assert_eq!(
+        preview_value(&stale, "ñ", Dimension::Height, 0, &BOUNDARIES),
+        Err(HandwritingStatisticsError::UnsupportedVersion),
+    );
 }

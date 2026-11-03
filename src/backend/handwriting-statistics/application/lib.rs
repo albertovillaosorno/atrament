@@ -34,8 +34,9 @@
 //! Bounded handwriting statistics with exact glyph overrides.
 //!
 //! Values are integers in the units declared by each [`Dimension`]. This is a
-//! profile-validation layer, not a handwriting renderer or sampler. NFC and NFD
-//! spellings remain separate exact keys, as required by the language inventory.
+//! profile-validation layer, not a handwriting renderer or calibrated sampler.
+//! NFC and NFD spellings remain separate exact keys, as required by the
+//! language inventory. A bounded numeric preview is isolated in its module.
 
 #![cfg_attr(
     test,
@@ -44,6 +45,10 @@
         reason = "Integration fixtures use the Unicode adapter"
     )
 )]
+
+mod preview;
+
+pub use preview::preview_value;
 
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 
@@ -340,6 +345,8 @@ pub enum HandwritingStatisticsError {
     InvalidGlyphParameterCount(usize),
     /// A glyph key is empty, oversized, or not exactly one grapheme.
     InvalidGrapheme(usize),
+    /// Preview requested an invalid or multi-grapheme exact key.
+    InvalidPreviewGrapheme,
     /// A global dimension is missing.
     MissingGlobal(Dimension),
     /// A requested dimension is not overridden for this glyph.

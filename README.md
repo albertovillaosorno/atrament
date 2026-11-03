@@ -270,6 +270,8 @@ cargo run -q -p atrament_profile_editor_cli -- \
   handwriting --profile handwriting.json \
   --inventory-text '¡Hola, señor! ¿Qué tal? «Sí» ñ ∞'
 cargo run -q -p atrament_profile_editor_cli -- \
+  handwriting --profile handwriting.json --preview-glyph 'ñ' 7
+cargo run -q -p atrament_profile_editor_cli -- \
   paper --style ruled --emit-profile --output paper.json
 cargo run -q -p atrament_profile_editor_cli -- \
   paper --profile paper.json --spacing-mm 6 --output sheet.pdf
@@ -295,6 +297,15 @@ inventory because mathematical coverage is a separate authority. The audit
 allows 1–4096 UTF-8 bytes, refuses control characters and output-file flags,
 and writes only to stdout. **Inventory membership does not provide glyph
 outlines, fallback consent, or rendered handwriting.**
+
+The read-only `--preview-glyph GRAPHEME OCCURRENCE` CLI command produces
+a reproducible integer preview for each of ten admitted dimensions using
+the stored seed, exact grapheme identity, and occurrence index. It applies
+global controls and per-grapheme overrides without saving or rendering.
+This is intentionally an **uncalibrated numeric estimate**: the configured
+mean, deviation, and limits affect it, but the median, exact distribution
+moments, and ink shapes are **not** reproduced. Use it to compare edits,
+not to claim a finished handwriting style.
 
 The default profile is **not calibrated handwriting**; its seed is recorded,
 but no stochastic stroke generator is connected yet.

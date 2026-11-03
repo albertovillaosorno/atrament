@@ -44,7 +44,7 @@ use std::slice::Iter;
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_handwriting_statistics::{
     Dimension, DimensionStatistics, HandwritingStatisticsProfile,
-    ScalarStatistics, Unit,
+    ScalarStatistics, Unit, preview_value,
 };
 use atrament_handwriting_statistics_json::{
     MAXIMUM_STATISTICS_JSON_BYTES, decode_statistics_json,
@@ -71,11 +71,14 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--set-global DIM MIN MAX MEAN MEDIAN DEVIATION] \
     [--set-glyph GRAPHEME DIM MIN MAX MEAN MEDIAN DEVIATION] \
     [--remove-glyph GRAPHEME] [--remove-glyph-dimension GRAPHEME DIM] \
-    [--inspect | --inventory-text TEXT] [--output FILE [--replace]]\n\
+    [--inspect | --inventory-text TEXT | --preview-glyph GRAPHEME OCCURRENCE] \
+    [--output FILE [--replace]]\n\
     Paper is the existing Rust physical-page profile (not a full notebook).\n\
     Handwriting units: micrometres, millidegrees, or parts per thousand.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
     not glyph outlines, available ink shapes, or renderability.\n\
+    --preview-glyph reports bounded seeded numerical estimates only; \
+    not calibrated moments, median reproduction, or generated ink.\n\
     Run paper --help for page sizes, styles, margins and PDF options.";
 
 const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
@@ -97,6 +100,7 @@ struct HandwritingRequest {
     inspect: bool,
     inventory_text: Option<String>,
     output: Option<String>,
+    preview_glyph: Option<(String, u64)>,
     profile: HandwritingStatisticsProfile,
     replace: bool,
 }
@@ -219,12 +223,53 @@ fn parse_inventory_text(
     Ok(text.clone())
 }
 
+fn parse_preview_glyph(
+    arguments: &mut Iter<'_, String>,
+    already_selected: bool,
+) -> Result<(String, u64), String> {
+    if already_selected {
+        return Err("--preview-glyph may appear only once".into());
+    }
+    let glyph = arguments
+        .next()
+        .ok_or("--preview-glyph requires a grapheme")?;
+    let count = arguments
+        .next()
+        .ok_or("--preview-glyph requires an occurrence")?;
+    if count.is_empty() || !count.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("preview occurrence requires an unsigned integer".into());
+    }
+    let occurrence = count
+        .parse::<u64>()
+        .map_err(|error| format!("invalid occurrence: {error}"))?;
+    Ok((glyph.clone(), occurrence))
+}
+
+fn parse_selected_output(
+    arguments: &mut Iter<'_, String>,
+    already_selected: bool,
+) -> Result<String, String> {
+    let path = arguments.next().ok_or("--output requires a filename")?;
+    if already_selected || path.starts_with('-') || path.is_empty() {
+        return Err("--output requires one explicit filename".into());
+    }
+    Ok(path.clone())
+}
 fn validate_handwriting_flags(
     inspect: bool,
     inventory_text: Option<&str>,
+    preview_glyph: bool,
     output: Option<&str>,
     replace: bool,
 ) -> Result<(), String> {
+    if preview_glyph
+        && (inspect || inventory_text.is_some() || output.is_some())
+    {
+        return Err(concat!(
+            "--preview-glyph is stdout-only and cannot combine with ",
+            "--inspect, --inventory-text or --output",
+        ).into());
+    }
     if replace && output.is_none() {
         return Err("--replace requires --output".into());
     }
@@ -250,6 +295,7 @@ fn parse_handwriting_options(
     let mut seen_profile = false;
     let mut seen_edit = false;
     let (mut inspect, mut inventory_text) = (false, None);
+    let mut preview_glyph = None;
     let mut output = None;
     let mut replace = false;
     let mut iter = args.iter();
@@ -310,18 +356,15 @@ fn parse_handwriting_options(
                 )?;
                 inventory_text = Some(selected);
             }
+            "--preview-glyph" => {
+                preview_glyph = Some(parse_preview_glyph(
+                    &mut iter, preview_glyph.is_some(),
+                )?);
+            }
             "--output" => {
-                let selected =
-                    iter.next().ok_or("--output requires a filename")?;
-                if output.is_some()
-                    || selected.starts_with('-')
-                    || selected.is_empty()
-                {
-                    return Err(
-                        "--output requires one explicit filename".into()
-                    );
-                }
-                output = Some(selected.clone());
+                output = Some(parse_selected_output(
+                    &mut iter, output.is_some(),
+                )?);
             }
             "--replace" => {
                 if replace {
@@ -333,7 +376,8 @@ fn parse_handwriting_options(
         }
     }
     validate_handwriting_flags(
-        inspect, inventory_text.as_deref(), output.as_deref(), replace,
+        inspect, inventory_text.as_deref(), preview_glyph.is_some(),
+        output.as_deref(), replace,
     )?;
     profile
         .validate(&boundaries)
@@ -342,6 +386,7 @@ fn parse_handwriting_options(
         inspect,
         inventory_text,
         output,
+        preview_glyph,
         profile,
         replace,
     })
@@ -469,6 +514,40 @@ fn inventory_handwriting(
     .into_bytes())
 }
 
+fn preview_handwriting(
+    profile: &HandwritingStatisticsProfile,
+    grapheme: &str,
+    occurrence: u64,
+) -> Result<Vec<u8>, String> {
+    let mut report = format!(
+        concat!(
+            "Seeded numeric preview (not ink or calibrated statistics)\n",
+            "Grapheme: \"{}\"\nSeed: {}\nOccurrence: {}\n",
+            "Median and exact population moments are not reproduced.\n",
+        ),
+        grapheme.escape_debug(),
+        profile.seed,
+        occurrence,
+    );
+    for dimension in Dimension::ALL {
+        let value = preview_value(
+            profile,
+            grapheme,
+            dimension,
+            occurrence,
+            &UnicodeGraphemeSegmentation,
+        )
+        .map_err(|error| format!("numeric preview refused: {error:?}"))?;
+        let _written = writeln!(
+            report,
+            "{} ({}): {value}",
+            dimension.key(),
+            unit_name(dimension.unit()),
+        );
+    }
+    Ok(report.into_bytes())
+}
+
 fn execute_handwriting(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let request = parse_handwriting_options(args)?;
     let boundaries = UnicodeGraphemeSegmentation;
@@ -479,6 +558,11 @@ fn execute_handwriting(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     }
     if let Some(text) = request.inventory_text.as_deref() {
         return inventory_handwriting(&request.profile, text).map(Some);
+    }
+    if let Some((grapheme, occurrence)) = request.preview_glyph.as_ref() {
+        return preview_handwriting(
+            &request.profile, grapheme, *occurrence,
+        ).map(Some);
     }
     if let Some(output) = request.output {
         let disposition = if request.replace {

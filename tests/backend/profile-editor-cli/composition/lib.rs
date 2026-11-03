@@ -1019,3 +1019,75 @@ fn inventory_cli_refuses_unsafe_or_conflicting_requests_without_file_effects() {
     }
     fs::remove_file(target).expect("remove owned sentinel");
 }
+
+#[test]
+fn numeric_handwriting_preview_is_repeatable_and_uses_exact_glyph_overrides() {
+    let base = args(&[
+        "--seed", "77",
+        "--set-global", "height", "2000", "4000", "3000", "3000", "350",
+        "--set-glyph", "\u{f1}", "height",
+        "4500", "5500", "5000", "5000", "220",
+        "--preview-glyph", "\u{f1}", "7",
+    ]);
+    let first = execute_handwriting(&base)
+        .expect("preview admitted").expect("stdout only");
+    assert_eq!(first, execute_handwriting(&base)
+        .expect("repeat accepted").expect("same bytes"));
+    let rendered = String::from_utf8(first).expect("readable numeric preview");
+    assert!(rendered.contains("Seeded numeric preview (not ink"));
+    assert!(rendered.contains("Grapheme: \"\u{f1}\""));
+    assert!(rendered.contains("Seed: 77\nOccurrence: 7"));
+    assert!(rendered.contains(
+        "Median and exact population moments are not reproduced",
+    ));
+    let height = rendered.lines()
+        .find(|line| line.starts_with("height (micrometres): "))
+        .expect("height value reported");
+    let value = height.split_once(": ").expect("one value").1
+        .parse::<i32>().expect("integer preview");
+    assert!((4_500i32..=5_500i32).contains(&value));
+    assert_eq!(value, 5_479i32, "stable cross-run preview value");
+    assert!(rendered.contains("width (micrometres): 2200"));
+
+    let nfd = args(&[
+        "--seed", "77",
+        "--set-global", "height", "2000", "4000", "3000", "3000", "350",
+        "--set-glyph", "\u{f1}", "height",
+        "4500", "5500", "5000", "5000", "220",
+        "--preview-glyph", "n\u{303}", "7",
+    ]);
+    let nfd_output = String::from_utf8(execute_handwriting(&nfd)
+        .expect("NFD admitted").expect("NFD preview bytes"))
+        .expect("UTF-8 report");
+    assert!(nfd_output.contains("Grapheme: \"n\u{303}\""));
+    let nfd_height = nfd_output.lines()
+        .find(|line| line.starts_with("height (micrometres): "))
+        .expect("NFD height");
+    let nfd_value = nfd_height.split_once(": ").expect("one value").1
+        .parse::<i32>().expect("integer preview");
+    assert!((2_000i32..=4_000i32).contains(&nfd_value));
+}
+
+#[test]
+fn numeric_preview_refusals_are_stdout_only_and_preserve_file_bytes() {
+    let target = test_path();
+    fs::write(&target, b"unchanged").expect("owned sentinel");
+    let filename = target.to_str().expect("UTF-8 output name");
+    for invalid in [
+        args(&["--preview-glyph", "\u{f1}"]),
+        args(&["--preview-glyph", "\u{f1}", "-1"]),
+        args(&["--preview-glyph", "\u{f1}", "1.0"]),
+        args(&["--preview-glyph", "\u{f1}", "18446744073709551616"]),
+        args(&["--preview-glyph", "ab", "0"]),
+        args(&["--preview-glyph", "\u{f1}\n", "0"]),
+        args(&["--preview-glyph", "\u{f1}", "0", "--inspect"]),
+        args(&["--preview-glyph", "\u{f1}", "0", "--inventory-text", "\u{f1}"]),
+        args(&["--preview-glyph", "\u{f1}", "0", "--preview-glyph", "a", "0"]),
+        args(&["--preview-glyph", "\u{f1}", "0", "--output", filename,
+            "--replace"]),
+    ] {
+        assert!(execute_handwriting(&invalid).is_err(), "{invalid:?}");
+        assert_eq!(fs::read(&target).expect("unchanged output"), b"unchanged");
+    }
+    fs::remove_file(target).expect("remove owned sentinel");
+}
