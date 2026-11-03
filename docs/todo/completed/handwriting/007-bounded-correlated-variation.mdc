@@ -98,7 +98,9 @@ from `(profile revision, document seed, parameter ID, semantic scope ID)`.
 Use its integer output as a fixed uniform quantile for a declared triangular
 or uniform bounded distribution. For a correlated group, share one document/
 page/line component across contained words and derive a smaller word/glyph
-residual from independently domain-separated keys. Persist the declared
+residual from independently domain-separated keys.
+
+Persist the declared
 algorithm version, quantization and chosen scale so retries never depend on
 traversal order or process-global randomness. Clamp only within declared
 numeric bounds and report the clamped original and final values.

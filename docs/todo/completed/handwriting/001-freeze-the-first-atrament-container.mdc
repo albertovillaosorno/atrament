@@ -544,7 +544,9 @@ exact relative path, media type, original byte length and SHA-256 over its
 **exact stored member bytes**. Require first-release sections
 `sections/strokes.json` and `sections/roles.json` as UTF-8 JSON objects for
 a profile claiming usable handwriting; they are proposed *semantic* schemas
-and are not currently decoded or applied by the active session. Extra opaque
+and are not currently decoded or applied by the active session.
+
+Extra opaque
 assets may live only below `assets/` and must be declared and verified.
 Unknown manifest keys, missing mandatory sections, unknown required feature
 identifiers or duplicate feature IDs refuse. Unknown optional feature IDs
@@ -556,7 +558,9 @@ and exactly two JSON section entries. `sections/strokes.json` contains a
 sample-local stroke vocabulary object; `sections/roles.json` contains the
 same profile's body/title role mapping. The writer computes both actual byte
 lengths and SHA-256 digests from those exact bytes, then packages canonical
-root JSON and the two sorted members. `atrament profile inspect PATH` may
+root JSON and the two sorted members.
+
+`atrament profile inspect PATH` may
 show verified identity, version, section paths and bounded JSON inspection
 without opening a browser or printing opaque asset contents. This example
 specifies the proposed semantic meaning; it does not assert the current CLI

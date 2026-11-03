@@ -57,7 +57,9 @@ obscure text or change physical page boxes.
 4 mm correlation length in page millimeters. The default `Off` choice has
 zero field and zero additional sampling cost. `Soft` admits luminance delta
 up to 1% absolute; `Visible` admits up to 2% when measured contrast remains
-above the approved readability bound. Both are evaluated at a fixed physical
+above the approved readability bound.
+
+Both are evaluated at a fixed physical
 coordinate system independent of zoom or raster output DPI. The declared
 variation strength is inclusive within a caller-owned admitted range.
 

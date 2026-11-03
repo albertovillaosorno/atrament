@@ -87,7 +87,9 @@ no run-global noise or GPU-specific nondeterminism is allowed.
 input range `0..1`. A proposed preset predicts coverage `0.85`, trace width
 `0.30 mm`, starvation `0.08` and pooling `0.05`, each within independently
 approved output envelopes. Edge displacement and paper absorption retain
-their own measured/calibrated limits. Stochastic deposition uses the same
+their own measured/calibrated limits.
+
+Stochastic deposition uses the same
 seed on repeated Preview and Final, not a fresh noise field each redraw.
 These numbers are illustrative; no empirical pen model is inferred here.
 

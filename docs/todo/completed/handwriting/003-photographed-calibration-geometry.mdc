@@ -71,6 +71,7 @@ model cannot be silently absorbed as handwriting deformation.
 case, 1800 pixels span 180 mm horizontally and 2670 pixels span 267 mm
 vertically. The result is 10 pixels/mm with page mapping
 `x_mm = 15 + (x_px-100)/10`, `y_mm = 15 + (y_px-100)/10`.
+
 An independent baseline mark at image y=`600` maps to y=`65 mm` as expected.
 The seven report families record reference marks, perspective, lens
 assumptions, physical scale, grid, baseline and quality, all tied to the same

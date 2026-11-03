@@ -85,6 +85,7 @@ space without Unicode normalization. For each letter, choose only an admitted
 candidate whose declared left/right context and entry/exit conditions match
 the adjacent graphemes. Order alternatives by caller-declared candidate rank
 then stable candidate identity; duplicate identities refuse before ranking.
+
 Joins require compatible continuous pen contact and tangent difference within
 a proposed 15-degree threshold; otherwise require an explicit lift and
 unconnected next stroke. Word spaces always force a lift and an admitted

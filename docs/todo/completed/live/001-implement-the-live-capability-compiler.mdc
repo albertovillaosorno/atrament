@@ -78,7 +78,9 @@ profile glyphs and paper bounds are admitted. A bright highlight is `Convert`
 only after user acceptance of one-pen underline; color photographs may
 `Convert` only with accepted transparent black line-art paths. A paper shadow
 is `Reject` in Live; a second colored pen is `Future` for a single-pen
-machine. A decorative title is `Convert` to one sober same-writer title
+machine.
+
+A decorative title is `Convert` to one sober same-writer title
 with hierarchy retained. All five decisions remain source-linked, and a
 `Convert` item is blocking until its exact conversion kind/provenance passes.
 

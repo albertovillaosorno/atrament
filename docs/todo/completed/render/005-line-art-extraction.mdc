@@ -72,7 +72,9 @@ placement is 40 x 40 mm. `Low` uses two gray levels, threshold `0.5`,
 cleanup of isolated components smaller than 0.6 mm and minimum feature
 0.6 mm, returning a leaf outline plus major vein. `High` uses the same
 threshold, cleanup 0.2 mm and minimum feature 0.2 mm, retaining both fine
-veins where independently verified. Each result is transparent except
+veins where independently verified.
+
+Each result is transparent except
 source-linked black strokes and has its own exact control/asset identity.
 No real paths are claimed to have been extracted by this description.
 

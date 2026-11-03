@@ -76,7 +76,9 @@ or arbitrary raster whole-page fallback is allowed.
 **Resources and exceptions (proposed bounds):** embed referenced image assets
 only after byte integrity/media validation, at most 16 MiB per image and
 64 MiB total resources per page. Paper texture may be a bounded separate
-raster layer, never a replacement for text/diagram vectors. Font glyphs
+raster layer, never a replacement for text/diagram vectors.
+
+Font glyphs
 requiring a non-embeddable or unavailable font refuse searchable text until a
 selected admissible mapping exists. If handwriting is outlines only,
 retain searchable semantics only where exact Unicode-to-path ownership can

@@ -61,6 +61,7 @@ filesystem export path as an instruction, or is too large for the admitted
 parser. No candidate may be accepted and the existing revision stays intact.
 If the session advances to `r21` during review, an earlier `r20` proposal is
 `StaleBase`, even if it was otherwise valid; the user must review a fresh diff.
+
 Incomplete diagnostic evidence blocks acceptance rather than treating omitted
 error detail as success. Semantic commands in the raw text follow the same
 backend boundary, never a browser-side best-effort patch.

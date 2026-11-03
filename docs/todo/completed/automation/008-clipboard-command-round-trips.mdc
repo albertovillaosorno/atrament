@@ -83,7 +83,9 @@ The user copies a backend prompt allowing only `t1`, pastes a model answer
 proposing `Tuesday` into the raw-response field, and selects Review.
 Backend parsing against `r10` yields a single text diff and complete
 nonblocking diagnostics. Only pressing Accept submits a fresh atomic batch;
-commit yields `r11`. Cancel keeps `r10`. No chat-provider automation or
+commit yields `r11`.
+
+Cancel keeps `r10`. No chat-provider automation or
 clipboard history archive is required for this bounded first release.
 
 **Stale/refusal case:** if another edit advances the session to `r11`

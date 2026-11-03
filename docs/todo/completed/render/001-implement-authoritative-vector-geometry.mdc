@@ -60,7 +60,9 @@ writable rectangle `x=20..190`, `y=20..277`. Every vector primitive has
 finite coordinates, measured width/height where applicable, explicit clip
 owner and a source identity. The seven admitted primitive families are
 `LayoutBox`, `StrokeCenterline`, `ExpandedInkContour`, `RulePath`, `Equation`,
-`Table` and `DiagramPath`. A placed image remains linked to its original
+`Table` and `DiagramPath`.
+
+A placed image remains linked to its original
 asset bytes and measured clip rectangle, rather than falsely becoming a
 fully editable vector object. A converted line-art image is a distinct
 source-linked `DiagramPath` proposal.

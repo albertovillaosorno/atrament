@@ -20,7 +20,8 @@ release archive. Read the live `README.md`, `TODO.md`, `docs/adr/`, and
    exists. Absent discovery means `Unavailable`, not permission to guess tools.
    The MCP design contract lives in
    `docs/todo/completed/automation/010-mcp-command-schema-parity.mdc`.
-4. Use local `node --test tests/browser/workspace/adapter-inbound/todo-records.mjs`
+4. Use local
+   `node --test tests/browser/workspace/adapter-inbound/todo-records.mjs`
    to check TODO record integrity. This is not an application acceptance test.
    Never confuse theoretical examples with real render or hardware evidence.
 
@@ -36,8 +37,9 @@ credentials, environment secrets or internal paths in model-facing prompts.
 
 Accepted semantic IDs are backend-allocated; the agent may propose temporary
 candidate keys but cannot allocate accepted IDs. A request whose edit is not
-representable returns a typed unresolved response with its exact reason. A
-stale base, missing target, unknown operation or unsupported version refuses
+representable returns a typed unresolved response with its exact reason.
+
+A stale base, missing target, unknown operation or unsupported version refuses
 without mutation. Review diff and full diagnostics before an explicit user
 Apply. Do not infer success from a suggested prompt or a raw response.
 

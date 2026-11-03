@@ -60,6 +60,7 @@ and `diagnostics`, with `schema=atrament.notebook-candidate/1`. `candidate`
 contains ordered `pages[]`; each has a temporary `candidate_key`, accepted
 paper reference and ordered `blocks[]`. A block has `candidate_key`,
 `kind`, exact `text` or typed `content`, semantic role and `source_links[]`.
+
 V1 allows `title`, `paragraph`, `equation`, `table`, `figure`, `citation`, and
 `unresolved` content, with finite page/block budgets provided by backend.
 Candidate keys cannot masquerade as accepted notebook IDs. `unresolved[]`

@@ -67,7 +67,9 @@ an apparently unrelated stale page.
 **Worked example:** notebook revision `r30` has two independent fixed pages.
 On `p1`, text span `t1` precedes flow sibling `t2`; on fixed `p2`, figure
 `f9` has no dependency from `p1`. Edit `t1` from `A` to `Longer answer`,
-committing `r31`. The direct impact is `t1`. The closure invalidates the
+committing `r31`. The direct impact is `t1`.
+
+The closure invalidates the
 p1 flow from `t1` through `t2`, their handwriting layouts, overflow
 screens, p1 Preview, whole-document PDF result and any Live plan consuming
 p1. The `f9` source shape/own geometry remains unaffected if its profile

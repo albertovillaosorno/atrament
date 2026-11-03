@@ -103,7 +103,9 @@ not a proof that external content was verified.
 **Worked three-claim ledger:** source `src-1`, supplied text `The sample is
 10 mm long`, has a stable exact offset/owner. Claim `c1` repeats 10 mm and
 is `Provided(src-1)`; `c2` computes doubled length 20 mm and is
-`Derived(c1)` with arithmetic justification. Claim `c3`, `The sample was
+`Derived(c1)` with arithmetic justification.
+
+Claim `c3`, `The sample was
 collected in Madrid`, is `Unverified` because the location is absent.
 The export annotation for `c1` names `src-1`; `c2` names `c1` and identifies
 its derivation; `c3` prints `Source not established` and must not silently

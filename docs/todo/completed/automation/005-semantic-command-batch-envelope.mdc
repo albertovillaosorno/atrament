@@ -165,7 +165,9 @@ an internal file path, application credential or physical device authority.
 `schema=atrament.semantic-command-batch/1`. Each operation has a unique
 request-local `op_key`, typed operation kind, target or insertion anchor,
 exact expected old values, new semantic values and prior operation keys it
-depends on. Unknown fields/operation kinds, duplicate keys, missing targets,
+depends on.
+
+Unknown fields/operation kinds, duplicate keys, missing targets,
 forward/self/cyclic dependencies, or unsupported version refuse the whole
 batch. Read scope grants no write access. New accepted semantic IDs are
 allocated by the backend after validation, never by a model or CLI client.
@@ -184,6 +186,7 @@ normalization authority exists. Receipt fields are `status`, `base_revision`,
 Operation `edit-1` expects `t1=Monday` and proposes `Tuesday`; operation
 `edit-2` expects `t2=Start` and proposes `Begin`, with no dependency edge.
 Read scope contains both spans, write scope names exactly `t1` and `t2`.
+
 A valid review displays the two exact diffs; one backend commit yields `r21`
 and a receipt bound to the normalized identity, without writing a PDF or
 altering another semantic object. This wire envelope is theoretical even

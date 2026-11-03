@@ -67,7 +67,9 @@ plotter, opens a USB port or sends an actuator command.
 `(30,40)` mm, pen-down from `(30,40)` to `(60,40)` mm at declared 20 mm/s,
 then a pen-up travel to `(30,55)` and pen-down from `(30,55)` to `(65,55)`
 for owner `t2`. Insert a checkpoint before the second pen-down and a
-caller-authorized optional pause after it. Record speed, acceleration cap
+caller-authorized optional pause after it.
+
+Record speed, acceleration cap
 at 100 mm/s², pressure as `Unavailable` unless calibrated, all bounding
 coordinates, exact accepted revision, plan identity and estimated duration
 only when path/time model evidence is complete. No machine command is emitted.
