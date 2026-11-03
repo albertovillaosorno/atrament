@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P2-001"
 title: "Implement the semantic notebook model"
-status: open
+status: completed
 priority: P2
 lane: semantic-layout
 dependencies: []
@@ -26,6 +26,10 @@ migrated_from: TODO.md
 # Implement the semantic notebook model
 
 ## Scope and existing evidence
+
+The original implementation history below retains its status at the time
+it was recorded. The dated acceptance decision closes a bounded semantic
+model design, not a finished wire parser or all editor integrations.
 
 Represent notebooks, pages, flows, blocks, spans, formulas, tables, figures,
 styles, assets, constraints, output profiles, and provenance with stable IDs.
@@ -325,3 +329,83 @@ The task remains open for the complete first-release semantic vocabulary,
 format parsing and canonical serialization, migrations and round-trip fixtures,
 adapter-level semantic command/history transport, measured layout/render
 consumers, and format-compatible import/export.
+
+## Finite first-release semantic notebook design
+
+**Inputs:** one candidate notebook with a declared first-release semantic
+schema identity, versioned behavior expectation, physical page profiles,
+assets, styles, output profiles, provenance, semantic constraints, pages,
+reading-order flows, and typed blocks. **Outputs:** either an accepted
+revision plus backend-owned candidate-to-accepted identity mapping, or a
+typed refusal with the prior accepted revision and history unchanged.
+
+The proposed external identity `atrament.semantic-notebook/1` is a design
+label, **not** an implemented wire-format or parser version. The present
+`Notebook<CandidateIdentity>` and `Notebook<AcceptedIdentity>` Rust types,
+`RevisionIdentity`, and first-release `BlockContent` variants are the
+implementation evidence. A future external decoder must bind its declared
+schema to these admitted semantics before creating accepted authority.
+
+**One representative version-1 candidate:** notebook `c1` owns page profile
+`c2` (ruled physical sheet), page `c3` using `c2`, and reading flow `c4`.
+It declares style `c5` (body), asset `c6` (`image/png`), provenance `c7`
+(`Supplied`), output profile `c8` (`digital`), and layout constraint `c9`
+on flow `c4`. The flow contains these block-family examples, each assigned
+a distinct candidate-local identity:
+
+- `Heading(c10)`: inline span "Dynamics".
+- `Date(c11)`: inline span "2026-11-02".
+- `Paragraph(c12)`: inline span "Acceleration changes velocity".
+- `Quotation(c13)`: inline span "A measured observation".
+- `Citation(c14)`: inline span "[1]", linked to provenance `c7`.
+- `Definition(c15)`: inline span "Force is an interaction".
+- `Footnote(c16)`: inline span "Unit: newton".
+- `SourceNote(c17)`: inline span "Provided class notes".
+- `MarginNote(c18)`: inline span "Check units".
+- `Label(c19)`: inline span "Axis x", without invented diagram geometry.
+- `List(c20)`: ordered item `c30` with paragraph "Measure time".
+- `Table(c21)`: header row "Time" and body row "2 s".
+- `Mathematics(c22)`: display formula with authored source `F=ma`.
+- `Figure(c23)`: figure `c31` uses asset `c6` with caption "Motion".
+- `Rule(c24)`: a semantic divider without drawing coordinates.
+- `Callout(c25)`: nested paragraph "Remember units".
+- `Freeform(c26)`: nested label "Sketch region".
+- `Unresolved(c27)`: `Ambiguous` with source "? annotation".
+
+Each nested table, list, figure, formula, and inline span also requires its
+own distinct candidate-local identity even where the shorthand above omits
+them. The caller cannot declare accepted IDs. On valid acceptance the backend
+promotes each candidate reference to a new opaque accepted identity, records
+one revision, and preserves unresolved source without guessing an answer.
+Subsequent direct edits retain unchanged semantic IDs; a real edit advances
+the revision while a stale base or semantic no-op does not.
+
+**Refusals and invariants:** duplicate identities, missing style/asset or
+provenance targets, wrong-kind references, invalid physical profile or table
+shape, an unsupported required schema version, and nesting beyond 256 block
+levels refuse without partial mutation. Unknown future block kinds remain
+explicit `Unresolved(Unsupported)` with original source where a caller can
+safely express that fallback; unadmitted required semantics fail closed.
+No extension may silently authorize a file path, layout, live motion, or
+export. A provenance `Unresolved` source is not evidence of a true citation.
+
+**Assumptions and residual risks:** the representative candidate is a
+readable design sketch, not a serializable or independently executed fixture.
+Full versioned parse/canonical serialization, migration, typed Import/Export,
+frontend command transport, layout/render projections, and future families
+still need implementations. The existing typed in-memory model is usable for
+current internal acceptance without implying those missing capabilities.
+
+## Acceptance decision
+
+- **Basis:** theoretical, 2026-11-02, for the finite first-release notebook
+  contract with all 18 currently declared block variants and explicit
+  unresolved-content behavior; future block kinds are excluded.
+- **Delivered:** versioned design boundary, typed candidate/accepted state,
+  a representative complete-family example, refusal/invariant rules, and
+  integration risk inventory. Historical test descriptions are not newly
+  verified by this decision; `evidence_status` remains unchanged.
+- **Not implemented by this acceptance:** the external versioned notebook
+  parser, canonical serializer or migration, cross-adapter semantics, full
+  rendering/physical output, and notebook Import/Export. No claim that the
+  representative sketch is currently accepted by a command-line interface.

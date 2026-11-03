@@ -20,13 +20,6 @@ labels belong here.
 
 ## P2 — Semantic notebook and physical layout
 
-### TODO - Implement the semantic notebook model
-
-Represent notebooks, pages, flows, blocks, spans, formulas, tables, figures,
-styles, assets, constraints, output profiles, and provenance with stable IDs.
-
-[docs/todo/open/semantic/001-implement-the-semantic-notebook-model.mdc](docs/todo/open/semantic/001-implement-the-semantic-notebook-model.mdc)
-
 ### TODO - Implement calibrated grid and rule geometry
 
 Preserve nominal spacing and square cells while allowing bounded ruler error,
