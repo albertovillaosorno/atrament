@@ -1496,3 +1496,118 @@ fn glyph_overlay_budgets_and_nonselected_page_clearance_refuse() {
     }
     fs::remove_file(sentinel).expect("remove owned sentinel");
 }
+
+#[test]
+fn saved_handwriting_means_transform_authored_unicode_glyphs_in_both_formats() {
+    let saved_path = test_path();
+    let name = saved_path.to_str().expect("statistics test path");
+    let stats = execute_handwriting(&args(&[
+        "--set-glyph", "ñ", "width", "3000", "3000", "3000",
+        "3000", "0",
+        "--set-glyph", "ñ", "height", "4000", "4000", "4000",
+        "4000", "0",
+        "--set-glyph", "ñ", "ink_thickness", "500", "500", "500",
+        "500", "0",
+        "--set-glyph", "ñ", "letter_spacing", "600", "600", "600",
+        "600", "0",
+        "--set-glyph", "ñ", "baseline_offset", "1000", "1000", "1000",
+        "1000", "0",
+    ])).expect("saved statistics admitted").expect("statistics JSON");
+    fs::write(&saved_path, stats).expect("persist test-owned statistics");
+    let authored = args(&[
+        "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+        "300", "#123456",
+        "--place-text", "1", "25000", "30000", "ññ",
+    ]);
+    let manual_strokes = args(&[
+        "--ink-line", "1", "25000", "31000", "28000", "35000",
+        "500", "#123456",
+        "--ink-line", "1", "28600", "31000", "31600", "35000",
+        "500", "#123456",
+    ]);
+    for format in ["pdf", "png"] {
+        let mut selected = args(&[
+            "--printed-sheet", "true", "--export-paper", format,
+            "--handwriting-profile", name,
+        ]);
+        selected.extend(authored.clone());
+        let result = execute_notebook(&selected)
+            .expect("saved means applied").expect("output bytes");
+        let mut expected = args(&[
+            "--printed-sheet", "true", "--export-paper", format,
+        ]);
+        expected.extend(manual_strokes.clone());
+        assert_eq!(result, execute_notebook(&expected)
+            .expect("explicit physical ink accepted").expect("physical bytes"));
+        let without_stats = execute_notebook(&args(&[
+            "--printed-sheet", "true", "--export-paper", format,
+            "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+            "300", "#123456",
+            "--place-text", "1", "25000", "30000", "ññ",
+        ])).expect("original glyphs").expect("unscaled bytes");
+        assert_ne!(result, without_stats, "statistics transform real ink");
+    }
+    let mixed = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--handwriting-profile", name,
+        "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+        "300", "#123456",
+        "--glyph-stroke", "n\u{303}", "0", "0", "3500", "4500",
+        "300", "#123456",
+        "--place-text", "1", "25000", "30000", "ñn\u{303}",
+    ]);
+    let expected_mixed = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--ink-line", "1", "25000", "31000", "28000", "35000",
+        "500", "#123456",
+        "--ink-line", "1", "28600", "30000", "30800", "33000",
+        "300", "#123456",
+    ]);
+    assert_eq!(execute_notebook(&mixed).expect("NFC and NFD edit distinct")
+        .expect("mixed PDF"),
+        execute_notebook(&expected_mixed).expect("manual NFD ink")
+            .expect("manual PDF"));
+    fs::remove_file(saved_path).expect("remove owned statistics profile");
+}
+
+#[test]
+fn statistical_glyph_layout_refuses_bad_advance_and_keeps_output() {
+    let source = test_path();
+    let source_name = source.to_str().expect("statistics path");
+    let target = test_path();
+    let target_name = target.to_str().expect("output path");
+    let stats = execute_handwriting(&args(&[
+        "--set-glyph", "ñ", "letter_spacing", "-5000", "-5000",
+        "-5000", "-5000", "0",
+    ])).expect("negative letter spacing admitted").expect("JSON");
+    fs::write(&source, stats).expect("owned statistics file");
+    fs::write(&target, b"original").expect("owned output sentinel");
+    let glyph = args(&[
+        "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+        "300", "#123456",
+        "--place-text", "1", "25000", "30000", "ñ",
+    ]);
+    let mut invalid = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--handwriting-profile", source_name,
+    ]);
+    invalid.extend(glyph.clone());
+    invalid.extend(args(&["--output", target_name, "--replace"]));
+    let error = execute_notebook(&invalid).expect_err("negative advance");
+    assert!(error.contains("must be positive"), "{error}");
+    assert_eq!(fs::read(&target).expect("still original"), b"original");
+
+    let mut invalid_alone = args(&[
+        "--export-paper", "pdf", "--handwriting-profile", source_name,
+        "--output", target_name, "--replace",
+    ]);
+    assert!(execute_notebook(&invalid_alone).is_err());
+    invalid_alone.extend(glyph);
+    invalid_alone.extend(args(&[
+        "--handwriting-profile", source_name,
+    ]));
+    assert!(execute_notebook(&invalid_alone).is_err(), "duplicate profile");
+    assert_eq!(fs::read(&target).expect("unchanged"), b"original");
+    fs::remove_file(source).expect("remove owned stats");
+    fs::remove_file(target).expect("remove owned target");
+}

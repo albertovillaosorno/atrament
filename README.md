@@ -445,6 +445,35 @@ The glyph templates and placed text are CLI-only and are not persisted in
 Spanish/English inventory still needs actual user-calibrated outlines and
 missing-symbol authoring before P4-012 or P5-011 can close.
 
+The optional `--handwriting-profile ink.json` reads the existing saved
+`atrament.handwriting.statistics.v1` file through the same strict Rust codec.
+For each exact authored grapheme it applies the **configured mean** of five
+variables: `width`, `height`, `ink_thickness`, `letter_spacing` and
+`baseline_offset`. Width and height map the 3.5 × 4.5 mm template cell to
+physical micrometres; ink thickness scales relative to 300 µm, baseline
+moves the segment vertically, and character advance is width plus letter
+spacing. Literal spaces still advance 4 mm. For example:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- handwriting \
+  --set-glyph 'ñ' width 3000 3000 3000 3000 0 \
+  --output ink.json
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --printed-sheet true --export-paper pdf --pages 2 \
+  --handwriting-profile ink.json \
+  --glyph-stroke 'ñ' 0 0 3500 4500 300 '#1C3344' \
+  --place-text 2 25400 30000 'ññ' --output written.pdf
+```
+
+Scaled strokes still need to fit the paper's printable region and the
+80–1500 µm physical pen width; nonpositive glyph advances refuse. Negative
+baseline positions or excessive lengths also refuse before writing output.
+These are deterministic affine transformations of *your supplied shapes*;
+there is **no sampling** and no actual learned handwriting. The other
+statistics (`slant`, `roundness`, `flattening`, `pressure`, `texture`), and
+standard deviation, min/max envelope, median, and seed, remain validated
+profile data but **do not currently modify output ink**.
+
 The compositor refuses zero-length strokes, nonprintable endpoints, line
 width outside 80–1500 µm, unrequested PDF page numbers, and more than 512
 segments. Selected PNG pages render only their page's ink; invalid off-page

@@ -85,6 +85,13 @@ page geometry or output replacement before writing. A new regression proves
 that page-2 glyph ink equals individually specified page-2 pen segments in
 both formats and is not silently copied to page 1.
 
+The CLI additionally accepts a separately saved, validated
+`atrament.handwriting.statistics.v1` profile for **mean-based** width, height,
+ink-thickness, letter-spacing and baseline-offset transformations of the
+explicit glyph segments. PDF and PNG share the resulting physical strokes;
+unsupported statistical variables remain numeric-only, and output still
+requires every visible grapheme to have a caller-authored shape.
+
 There is no saved notebook body-text schema, visual glyph editor, complete
 font/stroke set or image layer; these arguments are export-only. This is
 not a completed P5-011 end-to-end notebook renderer.

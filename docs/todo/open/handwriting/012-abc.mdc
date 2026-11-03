@@ -70,6 +70,15 @@ sequences are reported before file replacement. A focused test covers
 composed `ñ`, decomposed `ñ` and custom mathematical `∞`, and verifies
 byte-identical PDF/PNG ink against explicit `--ink-line` strokes.
 
+The native CLI now optionally reads a saved handwriting statistics profile
+(`--handwriting-profile ink.json`) to apply five per-grapheme mean variables
+(width, height, ink thickness, letter spacing and baseline offset) to those
+explicit caller-drawn segments. The 3.5 × 4.5 mm template cell is mapped to
+physical strokes, including inherited global and exact glyph overrides.
+Negative advances, invalid pen widths and nonprintable placements refuse.
+This is only a deterministic mean-based geometric transform; no sampled
+variation, real glyph capture or synthesis is claimed.
+
 The built-in 114-entry inventory is still **not a set of actual outlines**.
 No automatically selected glyphs, calibrated forms, statistical ink or
 persisted glyph templates exist. This partial caller-drawn fallback does

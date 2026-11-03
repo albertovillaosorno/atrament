@@ -36,6 +36,9 @@
 use std::fmt::Write as _;
 use std::slice::Iter;
 
+use atrament_handwriting_statistics::{
+    Dimension, HandwritingStatisticsProfile,
+};
 use atrament_notebook_paper_cli::{
     MAX_NOTEBOOK_INK_LINES, NotebookInkLine,
 };
@@ -49,18 +52,60 @@ const MAX_STROKES: usize = 256;
 const MAX_RUNS: usize = 16;
 const MAX_RUN_GRAPHEMES: usize = 96;
 
+// Authored local coordinates are only scaled when a separate saved
+// statistical profile is explicitly selected by the caller.
+const DEFAULT_TEMPLATE_WIDTH_UM: u32 = 3_500;
+const DEFAULT_TEMPLATE_HEIGHT_UM: u32 = 4_500;
+const DEFAULT_TEMPLATE_INK_UM: u32 = 300;
+
+#[derive(Clone, Copy)]
+struct GlyphMetrics {
+    baseline_offset: i32,
+    height: u32,
+    ink_thickness: u32,
+    letter_spacing: i32,
+    width: u32,
+}
+
+impl GlyphMetrics {
+    fn from_profile(
+        profile: &HandwritingStatisticsProfile, grapheme: &str,
+    ) -> Result<Self, String> {
+        let mean = |dimension| -> Result<i32, String> {
+            profile.statistics_for(grapheme, dimension)
+                .map(|stat| stat.mean)
+                .ok_or_else(|| format!("missing {dimension:?} statistics"))
+        };
+        let positive = |dimension| -> Result<u32, String> {
+            u32::try_from(mean(dimension)?)
+                .map_err(|error| format!("negative {dimension:?}: {error}"))
+        };
+        Ok(Self {
+            baseline_offset: mean(Dimension::BaselineOffset)?,
+            height: positive(Dimension::Height)?,
+            ink_thickness: positive(Dimension::InkThickness)?,
+            letter_spacing: mean(Dimension::LetterSpacing)?,
+            width: positive(Dimension::Width)?,
+        })
+    }
+}
+
 impl GlyphOverlay {
     pub(super) fn expand(
         &self, manual: &[NotebookInkLine],
+        statistics: Option<&HandwritingStatisticsProfile>,
     ) -> Result<Vec<NotebookInkLine>, String> {
         self.validate_pairing()?;
         let boundaries = UnicodeGraphemeSegmentation;
         let mut expanded = manual.to_vec();
         let mut missing = Vec::new();
         for run in &self.runs {
+            let mut offset_um = 0i64;
             for index in 0..boundaries.grapheme_count(&run.text) {
                 let grapheme = segment_at(boundaries, &run.text, index)?;
                 if grapheme == " " {
+                    offset_um = offset_um.checked_add(i64::from(ADVANCE_UM))
+                        .ok_or("space advance overflow")?;
                     continue;
                 }
                 let matches = self.strokes.iter()
@@ -72,43 +117,77 @@ impl GlyphOverlay {
                     }
                     continue;
                 }
-                let shift = u32::try_from(index)
-                    .map_err(|error| format!("text length refused: {error}"))?
-                    .checked_mul(ADVANCE_UM)
-                    .ok_or("text horizontal offset overflow")?;
-                let x = run.origin_um.0.checked_add(shift)
-                    .ok_or("text x coordinate overflow")?;
+                let metrics = statistics
+                    .map(|profile| {
+                        GlyphMetrics::from_profile(profile, grapheme)
+                    })
+                    .transpose()?;
+                let glyph_x = i64::from(run.origin_um.0)
+                    .checked_add(offset_um)
+                    .ok_or("glyph horizontal origin overflow")?;
+                let glyph_y = i64::from(run.origin_um.1)
+                    .checked_add(i64::from(metrics.map_or(
+                        0i32, |values| values.baseline_offset,
+                    )))
+                    .ok_or("glyph vertical origin overflow")?;
                 for shape in matches {
                     if expanded.len() == MAX_NOTEBOOK_INK_LINES {
                         return Err("text exceeds 512 total pen strokes".into());
                     }
-                    let translate = |point: (u32, u32)| {
-                        Some((x.checked_add(point.0)?,
-                            run.origin_um.1.checked_add(point.1)?))
+                    let translate = |point: (u32, u32)| -> Result<
+                        (u32, u32), String,
+                    > {
+                        let (x, y) = if let Some(values) = metrics {
+                            (
+                                scale(point.0, values.width,
+                                    DEFAULT_TEMPLATE_WIDTH_UM)?,
+                                scale(point.1, values.height,
+                                    DEFAULT_TEMPLATE_HEIGHT_UM)?,
+                            )
+                        } else {
+                            point
+                        };
+                        Ok((coordinate(glyph_x, x)?, coordinate(glyph_y, y)?))
                     };
+                    let width_um = if let Some(values) = metrics {
+                        scale(shape.width_um, values.ink_thickness,
+                            DEFAULT_TEMPLATE_INK_UM)?
+                    } else {
+                        shape.width_um
+                    };
+                    if !(80..=1_500).contains(&width_um) {
+                        return Err(concat!(
+                            "scaled glyph ink width exceeds ",
+                            "80..1500 um",
+                        ).into());
+                    }
                     expanded.push(NotebookInkLine {
                         page: run.page,
-                        start_um: translate(shape.start_um)
-                            .ok_or("glyph start coordinate overflow")?,
-                        end_um: translate(shape.end_um)
-                            .ok_or("glyph end coordinate overflow")?,
-                        width_um: shape.width_um,
+                        start_um: translate(shape.start_um)?,
+                        end_um: translate(shape.end_um)?,
+                        width_um,
                         rgb: shape.rgb,
                     });
                 }
+                let advance = if let Some(values) = metrics {
+                    i64::from(values.width)
+                        .checked_add(i64::from(values.letter_spacing))
+                        .ok_or("glyph letter advance overflow")?
+                } else {
+                    i64::from(ADVANCE_UM)
+                };
+                if advance <= 0 {
+                    return Err(concat!(
+                        "glyph width plus letter spacing ",
+                        "must be positive",
+                    ).into());
+                }
+                offset_um = offset_um.checked_add(advance)
+                    .ok_or("glyph text advance overflow")?;
             }
         }
         if !missing.is_empty() {
-            let mut message = String::from("missing authored glyph shapes:");
-            for grapheme in missing {
-                let codepoints = grapheme.chars()
-                    .map(|ch| format!("U+{:04X}", u32::from(ch)))
-                    .collect::<Vec<_>>().join(" ");
-                let _written = write!(
-                    message, " \"{}\" [{codepoints}]", grapheme.escape_debug(),
-                );
-            }
-            return Err(message);
+            return Err(missing_shapes_error(&missing));
         }
         Ok(expanded)
     }
@@ -213,12 +292,47 @@ impl GlyphOverlay {
     }
 }
 
+fn coordinate(origin_um: i64, local_um: u32) -> Result<u32, String> {
+    let translated = origin_um.checked_add(i64::from(local_um))
+        .ok_or("glyph placement overflow")?;
+    u32::try_from(translated)
+        .map_err(|_error| {
+            "glyph placement needs nonnegative coordinates".into()
+        })
+}
+
+fn missing_shapes_error(missing: &[&str]) -> String {
+    let mut message = String::from("missing authored glyph shapes:");
+    for grapheme in missing {
+        let codepoints = grapheme.chars()
+            .map(|ch| format!("U+{:04X}", u32::from(ch)))
+            .collect::<Vec<_>>().join(" ");
+        let _written = write!(
+            message, " \"{}\" [{codepoints}]", grapheme.escape_debug(),
+        );
+    }
+    message
+}
+
 fn next_integer(
     iter: &mut Iter<'_, String>, label: &str, minimum: u32, maximum: u32,
 ) -> Result<u32, String> {
     export_integer(
         iter.next().map(String::as_str), label, minimum, maximum,
     )
+}
+
+fn scale(local_um: u32, target_um: u32, reference_um: u32)
+    -> Result<u32, String> {
+    let scaled = u64::from(local_um)
+        .checked_mul(u64::from(target_um))
+        .ok_or("glyph scale overflow")?
+        .checked_add(u64::from(reference_um.checked_div(2)
+            .ok_or("glyph scale reference is zero")?))
+        .ok_or("glyph rounding overflow")?
+        .checked_div(u64::from(reference_um))
+        .ok_or("glyph scale denominator is zero")?;
+    u32::try_from(scaled).map_err(|_error| "glyph scale too large".into())
 }
 
 fn segment_at(
