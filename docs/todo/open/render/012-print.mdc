@@ -1,0 +1,41 @@
+---
+record_type: task
+id: "ATR-P5-012"
+title: "Printed-page overlays and local printing"
+status: open
+priority: P5
+lane: render
+dependencies: ["ATR-P5-011"]
+dependencies_specified: true
+dependency_rationale: >-
+  Transparent output must share the real Rust renderer.
+acceptance_criteria:
+  - >-
+      Support printed-page flags and background-free overlays in the Rust
+      compositor with explicit printer intent, leaving physical plotting out of
+      scope.
+  - >-
+      Finite executable completion: A page marked as preprinted omits repeated
+      paper rules but retains its ink, date, and graphics; explicit print uses
+      a selected local printer and never occurs as an export side effect.
+evidence_status: not_independently_verified
+migrated_from: rust-cli-localhost-priority.md
+---
+
+# Printed-page overlays and local printing
+
+## Scope and existing evidence
+
+Support printed-page flags and background-free overlays in the Rust compositor
+with explicit printer intent, leaving physical plotting out of scope.
+
+The historical accepted theoretical design is preserved in completed P1–P9
+records. This record is **open executable integration work**. It must not be
+closed merely because a prior design was accepted or a different
+implementation was proposed.
+
+## Acceptance decision
+
+Open. Provide the actual bounded Rust/backend or browser integration and an
+accepted/refused example before marking the executable capability complete.
+Theoretical design acceptance alone cannot establish that this feature runs.

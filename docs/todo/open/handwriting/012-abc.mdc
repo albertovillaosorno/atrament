@@ -1,0 +1,44 @@
+---
+record_type: task
+id: "ATR-P4-012"
+title: "Spanish and English glyph coverage and fallback"
+status: open
+priority: P4
+lane: handwriting
+dependencies: ["ATR-P4-011"]
+dependencies_specified: true
+dependency_rationale: >-
+  Glyph rendering uses the Rust handwriting profile and explicit coverage
+  inventory.
+acceptance_criteria:
+  - >-
+      Connect the existing Spanish/English grapheme inventory, admitted
+      educational symbols, NFC/NFD accents, Spanish guillemets and punctuation,
+      and custom glyph fallback to Rust rendering.
+  - >-
+      Finite executable completion: A fixed Mexico/Spain/English test page
+      including ñ, ü, accents, ¿¡, «», curly quotes, mathematical symbols, and
+      decomposed accents either renders every admitted glyph or lists exact
+      missing graphemes with a user-owned fallback. No claim to all Unicode.
+evidence_status: not_independently_verified
+migrated_from: rust-cli-localhost-priority.md
+---
+
+# Spanish and English glyph coverage and fallback
+
+## Scope and existing evidence
+
+Connect the existing Spanish/English grapheme inventory, admitted educational
+symbols, NFC/NFD accents, Spanish guillemets and punctuation, and custom glyph
+fallback to Rust rendering.
+
+The historical accepted theoretical design is preserved in completed P1–P9
+records. This record is **open executable integration work**. It must not be
+closed merely because a prior design was accepted or a different
+implementation was proposed.
+
+## Acceptance decision
+
+Open. Provide the actual bounded Rust/backend or browser integration and an
+accepted/refused example before marking the executable capability complete.
+Theoretical design acceptance alone cannot establish that this feature runs.

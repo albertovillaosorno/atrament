@@ -23,11 +23,3 @@ paths = ["src/"]
 
 [role.test]
 paths = ["tests/"]
-
-# The personal notebook CLI and its bounded sample fixtures are intentionally
-# independent of the older Rust/browser product studies.
-[role.notebook_cli]
-paths = ["cli/", "tools/"]
-
-[role.notebook_example]
-paths = ["examples/"]

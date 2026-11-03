@@ -53,10 +53,10 @@ statements were reverified during the migration.
 ## Finite acceptance and honest evidence
 
 The first release accepts a finite deliverable, not an endless claim of
-completeness across all future formats, browsers, machines, or hardware. Each
-open record has a narrower `Finite v1 completion` criterion. One documented
-representative example per named capability is sufficient when the criterion
-does not explicitly demand more.
+completeness across all future formats, browsers, machines, or hardware.
+Each open task has a bounded executable criterion; historical design tasks
+retain their narrower theoretical completion. One representative accepted
+and rejected example is enough unless the criterion explicitly demands more.
 
 Future variants are separate work, not an
 implicit reason to reopen a bounded task. P9 remains optional.
@@ -92,10 +92,11 @@ may remain explicitly unknown when no concrete integration is admitted.
 ## Closing a task
 
 Check that the specific finite deliverable is present in the record. The
-owner may accept it as practical or theoretical without a separate proof or
-test run. Record the basis, produced artifact, unresolved assumptions and
-risks, and any unavailable integrations under `Acceptance decision`; retain
-the honest `evidence_status` rather than inventing verification.
+owner may accept a historical design deliverable theoretically without an
+independent test run. New **executable** integration tasks require the named
+working capability; documentation alone does not close them. Record the basis,
+produced artifact, unresolved assumptions and risks under `Acceptance
+decision`; retain honest `evidence_status` rather than inventing verification.
 
 Preserve the task identity and historical evidence, set `status: completed`,
 move the record to `completed/`, and remove it from `TODO.md`. Update internal
@@ -103,18 +104,18 @@ links.
 Do not automatically close a task merely because this policy exists: its
 particular bounded deliverable must actually be written or supplied.
 
-## Owner's narrower product decision — November 2, 2026
+## Current executable product decision — November 2, 2026
 
-The current executable product goal is **Linux CLI, personal use, notebook
-profiles, statistical per-letter handwriting, and PDF/PNG printing**.
-Multiplatform native installers, a browser editor, MCP automation, external
-LLM accounts, a physical plotter, and a custom writing robot are **not
-completion prerequisites**. Previous task acceptance records remain archived
-as academic/design evidence and should not be rewritten to simulate practical
-software validation. Hardware tasks are satisfied by finite theoretical
-plans; they do not require a device, prototype, firmware or test bench.
+The owner requires the existing Rust codebase, a local Rust CLI, and a web
+editor served by the existing loopback Rust runtime. Native notebook and
+handwriting profile editing, statistical per-glyph controls, real previews,
+and printable PDF/transparent PNG are required. The accidental Python
+notebook application has been removed rather than retained as a prototype.
 
-Use an actual CLI-exported PDF or PNG when claiming the new digital pathway
-works. When a feature is theoretical, label it theoretical; neither a closed
-TODO nor a design specification is proof of a running feature. Follow the
-short practical scope and limits in the root README.
+Hardware, external model accounts, MCP, and native desktop installers remain
+optional advanced work; their earlier finite theoretical records stay
+archived. **Nine new open executable tasks** track the missing Rust and
+localhost integrations. A theoretical artifact can close its own design
+scope, but cannot close a task requiring a demonstrably working application.
+Consult [the Rust-first roadmap](../technical/rust-cli-localhost-priority.md)
+for the exact priority order and glyph coverage targets.

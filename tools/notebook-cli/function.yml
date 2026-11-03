@@ -1,9 +1,0 @@
-identity:
-  id: function:notebook-cli
-  name: notebook-cli
-  path: tools/notebook-cli
-classification:
-  repository: atrament
-  domain: tools
-architecture:
-  kind: application

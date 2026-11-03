@@ -1,0 +1,40 @@
+---
+record_type: task
+id: "ATR-P1-006"
+title: "Authenticated localhost profile file operations"
+status: open
+priority: P1
+lane: runtime
+dependencies: ["ATR-P1-005"]
+dependencies_specified: true
+dependency_rationale: >-
+  The HTTP adapter must invoke the same Rust profile admission as the CLI.
+acceptance_criteria:
+  - >-
+      Expose caller-authorized load/save for versioned notebook and handwriting
+      profiles through the existing loopback-only Rust runtime.
+  - >-
+      Finite executable completion: Opening a profile in localhost and saving a
+      modified copy works; an unauthorized or stale write refuses without
+      changing the selected file.
+evidence_status: not_independently_verified
+migrated_from: rust-cli-localhost-priority.md
+---
+
+# Authenticated localhost profile file operations
+
+## Scope and existing evidence
+
+Expose caller-authorized load/save for versioned notebook and handwriting
+profiles through the existing loopback-only Rust runtime.
+
+The historical accepted theoretical design is preserved in completed P1–P9
+records. This record is **open executable integration work**. It must not be
+closed merely because a prior design was accepted or a different
+implementation was proposed.
+
+## Acceptance decision
+
+Open. Provide the actual bounded Rust/backend or browser integration and an
+accepted/refused example before marking the executable capability complete.
+Theoretical design acceptance alone cannot establish that this feature runs.
