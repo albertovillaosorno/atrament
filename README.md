@@ -528,11 +528,36 @@ selected stroke** validates and replaces only that segment; **Remove selected
 stroke** deletes only that segment, not the other shapes for the grapheme.
 Invalid updates leave the saved draft untouched.
 
+The selected segment can be **reversed** (swap start and end) or moved
+**earlier/later** among
+segments of the exact same grapheme; unrelated Unicode entries retain their
+relative order and ink. The native TSV sequence remains the chosen drawing
+order, but v1 line segments do not represent a grouped curved pen stroke.
+
+For a geometric starting point, choose exact `o` or `a`, select the matching
+**Circle o** or **Simple a** control, adjust circle center and radius in
+micrometres, and deliberately replace that letter's unsaved segments. Both
+starters reuse a true analytic circle; the simple single-storey `a` adds a
+right stem. A separate exact SVG circle/stem guide updates with the numbers
+and never writes ink.
+
+The existing Rust v1 glyph TSV, PDF and PNG exporters cannot retain or
+stroke that exact circle primitive: an explicit replacement
+samples it into 48 rounded integer-coordinate straight segments (49 for
+`a`), and Rust validates the result. This is a **near-circular export**, not
+the final mathematically exact glyph representation.
+
+Invalid coordinates, pen thickness or library caps refuse without replacing
+any template; other graphemes remain untouched. A selected two-storey `a`
+or cursive form is not yet automatically available.
+
 Drag across the SVG preview with a mouse, pen or touch to trace a letterform
 as up to 128 connected line segments per gesture. Canceled, zero-length and
-oversized gestures do not change the saved draft. To develop a related form,
-enter a different exact source grapheme under **Copy strokes from exact
-grapheme** and choose **Replace selected glyph with copy**. This explicitly
+oversized gestures do not change the saved draft.
+
+To develop a related form, enter a different exact source grapheme under
+**Copy strokes from exact grapheme** and choose **Replace selected glyph
+with copy**. This explicitly
 replaces only the target glyph's unsaved template; its strokes can then be
 edited independently. It does not silently substitute symbols or synthesize
 handwriting.
@@ -543,8 +568,9 @@ there is no automatic saving or new server-side file endpoint. The Rust CLI
 still validates the file on `glyphs --profile` or `notebook --glyph-file`.
 Invalid/oversized files and Unicode controls refuse.
 
-Session end drops the unsaved draft, and the browser does not synthesize
-glyphs or a writing style.
+Session end drops the unsaved draft. Outside these explicit `o`/`a`
+geometric starters, the browser does not generate a font, joined cursive,
+all baseline outlines, or a writing style.
 
 The saved glyph shape library is separate from `atrament.notebook.v1`;
 placed text is still export-only, with browser-authored geometry imported

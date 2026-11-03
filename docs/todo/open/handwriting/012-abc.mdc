@@ -159,6 +159,21 @@ Not yet implemented: automatically generating the entire required 114-glyph
 baseline, browser-native notebook ink composition, and learned writer
 calibration. This task remains open.
 
+## Analytic o/simple-a browser starter (partial) — 2026-11-03
+
+The localhost authoring surface now exposes editable center/radius inputs,
+with a true SVG circle guide for `o` and that same circle plus a right stem
+for single-storey `a`. An explicit action converts the construction into
+48 (or 49) integer-micrometre segments for the existing Rust v1 TSV format.
+A Rust CLI roundtrip accepted the generated sample without changing bytes;
+real single-page native PDF and transparent PNG were exported with `oa`.
+
+Browser regressions cover o/a shared-loop geometry, path closure, exact
+Unicode replacement, and refusal of invalid dimensions. The preview guide
+is **exact SVG geometry**, but the exported segments only approximate its
+circle; no analytic primitive persists to PDF/PNG. Two-storey a, cursive,
+accent anchors, and the full bilingual inventory are still open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

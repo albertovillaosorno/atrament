@@ -44,6 +44,17 @@ records remain accepted theoretical deliverables and are not reopened:
 - ATR-P4-006 — archived handwriting design
 - ATR-P4-007 — archived handwriting design
 
+## Ordered-line editing (partial) — 2026-11-03
+
+The browser editor can select an existing segment, reverse its endpoint
+direction, and move it before or after the adjacent segment belonging to
+the same exact Unicode grapheme, preserving unrelated entries and allowing
+explicit TSV roundtrip. Focused tests cover interleaved Unicode glyphs,
+first/last boundary disablement, unchanged neighbors, and session reset.
+This records **segment order**, not continuous curve grouping, pen lifts,
+joined cursive, accent composition or seeded correlated ink variation.
+Those acceptance criteria remain open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

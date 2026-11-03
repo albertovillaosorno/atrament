@@ -11,7 +11,7 @@
 // - Owns:
 //   - Explicit local editing of caller-authored Unicode stroke geometry.
 // - Must-Not:
-//   - Generate character outlines, claim calibration, or admit Rust profiles.
+//   - Claim full font/ideal-vector export, calibration, or Rust admission.
 //   - Write files or credentials without a deliberate download gesture.
 // - Allows:
 //   - Inputs: Exact Unicode glyphs, finite stroke fields, chosen TSV file.
@@ -22,7 +22,7 @@
 // - Merge-When:
 //   - A full authored-stroke editor takes over this bounded first slice.
 // - Summary:
-//   - Edits real hand-authored line segments, never imaginary glyph shapes.
+//   - Edits authored segments and opt-in geometric starter approximations.
 // - Description:
 //   - Rust still validates downloaded files on CLI load or PDF/PNG export.
 // - Usage:
@@ -30,11 +30,12 @@
 // - Defaults:
 //   - Empty in memory; no browser storage, implicit export, or silent fallback.
 //
-//! Temporary local authoring surface for real explicit glyph line segments.
+//! Bounded local authoring surface for explicit glyph line segments.
 const HEADER = "atrament.glyph-strokes.v1";
 const MAX_BYTES = 524_288;
 const MAX_STROKES = 4096;
 const SVG_NS = "http://www.w3.org/2000/svg";
+const CIRCLE_SEGMENTS = 48;
 const AXES = ["x1", "y1", "x2", "y2", "width"];
 function exactGrapheme(value) {
     if (!value || new TextEncoder().encode(value).length > 64
@@ -119,6 +120,44 @@ export function encodeGlyphLibrary(strokes) {
     }
     return result;
 }
+// The construction is defined by an analytic circle; v1 TSV can only
+// preserve its rounded line-segment approximation, not that ideal primitive.
+export function geometricStarter(grapheme, x, y, radius, width, color) {
+    if (grapheme !== "o" && grapheme !== "a") {
+        throw new Error("Circle starter requires exact o or simple a");
+    }
+    const cx = boundedInteger(String(x), 3500, "center X");
+    const cy = boundedInteger(String(y), 4500, "center Y");
+    const r = boundedInteger(String(radius), 1600, "radius");
+    const pen = boundedInteger(String(width), 1500, "width");
+    const halfPen = pen / 2;
+    if (r < 200 || cx - r < halfPen || cy - r < halfPen
+        || cx + r + halfPen > 3500 || cy + r + halfPen > 4500) {
+        throw new Error("Circle and pen thickness must fit inside glyph cell");
+    }
+    const point = (step) => {
+        const radians = 2 * Math.PI * step / CIRCLE_SEGMENTS;
+        return {
+            x: Math.round(cx + r * Math.cos(radians)),
+            y: Math.round(cy + r * Math.sin(radians)),
+        };
+    };
+    const lines = Array.from({ length: CIRCLE_SEGMENTS }, (_, index) => {
+        const first = point(index);
+        const last = point(index + 1);
+        return validateStroke({
+            grapheme, x1: first.x, y1: first.y,
+            x2: last.x, y2: last.y, width: pen, color,
+        });
+    });
+    if (grapheme === "a") {
+        lines.push(validateStroke({
+            grapheme, x1: cx + r, y1: cy - r,
+            x2: cx + r, y2: cy + r, width: pen, color,
+        }));
+    }
+    return lines;
+}
 function required(id) {
     const node = document.getElementById(id);
     if (node === null)
@@ -132,9 +171,20 @@ export function createGlyphStrokeEditor() {
     const add = required("glyph-add");
     const copyFrom = required("glyph-copy-from");
     const copy = required("glyph-copy");
+    const form = required("glyph-form");
+    const construct = required("glyph-construct");
+    const centerX = required("glyph-circle-x");
+    const centerY = required("glyph-circle-y");
+    const radius = required("glyph-circle-radius");
+    const ideal = required("glyph-ideal-preview");
+    const idealCircle = required("glyph-ideal-circle");
+    const idealStem = required("glyph-ideal-stem");
     const selected = required("glyph-selected");
     const update = required("glyph-update");
     const remove = required("glyph-remove");
+    const reverse = required("glyph-reverse");
+    const earlier = required("glyph-earlier");
+    const later = required("glyph-later");
     const save = required("glyph-save");
     const preview = required("glyph-preview");
     const status = required("glyph-status");
@@ -145,8 +195,9 @@ export function createGlyphStrokeEditor() {
         ranges[axis] = required(`glyph-${axis}-range`);
     }
     const controls = [character, color, source, add, copyFrom, copy,
+        form, construct, centerX, centerY, radius,
         selected, update,
-        remove, save,
+        remove, reverse, earlier, later, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
     let generation = 0;
@@ -155,7 +206,60 @@ export function createGlyphStrokeEditor() {
     let drawing = null;
     let downloadUrl = null;
     const message = (text) => { status.textContent = text; };
+    const neighbor = (offset) => {
+        if (selectedIndex === null)
+            return null;
+        const grapheme = strokes[selectedIndex]?.grapheme;
+        let index = selectedIndex + offset;
+        while (index >= 0 && index < strokes.length) {
+            if (strokes[index]?.grapheme === grapheme)
+                return index;
+            index += offset;
+        }
+        return null;
+    };
+    const starterFromInputs = () => {
+        const values = [
+            form.value, Number(centerX.value), Number(centerY.value),
+            Number(radius.value), Number(numeric.width.value), color.value,
+        ];
+        return geometricStarter(...values);
+    };
+    const renderIdeal = () => {
+        try {
+            // The SVG circle remains mathematically circular. Exporting the
+            // v1 library explicitly samples it into straight ink segments.
+            starterFromInputs();
+            const cx = Number(centerX.value);
+            const cy = Number(centerY.value);
+            const r = Number(radius.value);
+            idealCircle.setAttribute("cx", String(cx));
+            idealCircle.setAttribute("cy", String(cy));
+            idealCircle.setAttribute("r", String(r));
+            idealCircle.setAttribute("stroke-width", numeric.width.value);
+            idealCircle.setAttribute("stroke", color.value);
+            const shown = active ? "visible" : "hidden";
+            idealCircle.setAttribute("visibility", shown);
+            idealStem.setAttribute("x1", String(cx + r));
+            idealStem.setAttribute("y1", String(cy - r));
+            idealStem.setAttribute("x2", String(cx + r));
+            idealStem.setAttribute("y2", String(cy + r));
+            idealStem.setAttribute("stroke-width", numeric.width.value);
+            idealStem.setAttribute("stroke", color.value);
+            const stemVisible = active && form.value === "a";
+            const stemState = stemVisible ? "visible" : "hidden";
+            idealStem.setAttribute("visibility", stemState);
+            ideal.setAttribute("aria-label", "Analytic geometric "
+                + form.value + " guide, not retained in line-segment TSV");
+        }
+        catch {
+            idealCircle.setAttribute("visibility", "hidden");
+            idealStem.setAttribute("visibility", "hidden");
+            ideal.setAttribute("aria-label", "Invalid circle settings");
+        }
+    };
     const render = () => {
+        renderIdeal();
         const shown = strokes.flatMap((stroke, index) => {
             return stroke.grapheme === character.value
                 ? [{ stroke, index }] : [];
@@ -178,6 +282,9 @@ export function createGlyphStrokeEditor() {
         selected.disabled = !active || shown.length === 0;
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
+        reverse.disabled = !active || selectedIndex === null;
+        earlier.disabled = !active || neighbor(-1) === null;
+        later.disabled = !active || neighbor(1) === null;
         const lines = shown.map(({ stroke, index }) => {
             const line = document.createElementNS(SVG_NS, "line");
             for (const axis of ["x1", "y1", "x2", "y2"]) {
@@ -249,6 +356,10 @@ export function createGlyphStrokeEditor() {
         y2: boundedInteger(numeric.y2.value, 4500, "y2"),
         width: boundedInteger(numeric.width.value, 1500, "width"),
     });
+    for (const control of [form, centerX, centerY, radius, color]) {
+        control.addEventListener("input", renderIdeal);
+        control.addEventListener("change", renderIdeal);
+    }
     character.addEventListener("input", () => {
         drawing = null;
         selectedIndex = null;
@@ -267,9 +378,13 @@ export function createGlyphStrokeEditor() {
     for (const axis of AXES) {
         numeric[axis].addEventListener("input", () => {
             ranges[axis].value = numeric[axis].value;
+            if (axis === "width")
+                renderIdeal();
         });
         ranges[axis].addEventListener("input", () => {
             numeric[axis].value = ranges[axis].value;
+            if (axis === "width")
+                renderIdeal();
         });
     }
     const pointerPoint = (event) => {
@@ -389,6 +504,29 @@ export function createGlyphStrokeEditor() {
         }
         render();
     });
+    construct.addEventListener("click", () => {
+        if (!active)
+            return;
+        try {
+            if (character.value !== form.value) {
+                throw new Error("Select exact o or a before constructing");
+            }
+            const lines = starterFromInputs();
+            const next = [
+                ...strokes.filter((stroke) => stroke.grapheme !== form.value),
+                ...lines,
+            ];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message("Constructed " + lines.length + " sampled segments for "
+                + form.value + "; analytic circle is not retained by TSV");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
     copy.addEventListener("click", () => {
         if (!active)
             return;
@@ -458,6 +596,39 @@ export function createGlyphStrokeEditor() {
             message(String(error));
         }
     });
+    reverse.addEventListener("click", () => {
+        if (!active || selectedIndex === null)
+            return;
+        const index = selectedIndex;
+        const existing = strokes[index];
+        if (existing?.grapheme !== character.value)
+            return;
+        const next = strokes.slice();
+        next[index] = {
+            ...existing, x1: existing.x2, y1: existing.y2,
+            x2: existing.x1, y2: existing.y1,
+        };
+        encodeGlyphLibrary(next);
+        strokes = next;
+        choose(index);
+        message("Reversed selected pen stroke; unsaved");
+    });
+    const move = (offset) => {
+        if (!active || selectedIndex === null)
+            return;
+        const index = selectedIndex;
+        const target = neighbor(offset);
+        if (target === null)
+            return;
+        const next = strokes.slice();
+        [next[index], next[target]] = [next[target], next[index]];
+        encodeGlyphLibrary(next);
+        strokes = next;
+        choose(target);
+        message("Changed pen stroke order; unsaved");
+    };
+    earlier.addEventListener("click", () => move(-1));
+    later.addEventListener("click", () => move(1));
     remove.addEventListener("click", () => {
         if (!active || selectedIndex === null)
             return;

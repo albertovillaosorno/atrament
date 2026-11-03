@@ -529,6 +529,47 @@
               <input id="glyph-color" type="color" value="#243647" disabled>
             </label>
           </div>
+          <p class="field-help">Geometric starters: an o starts from an
+            analytic circle, and a single-storey a adds a right stem to the
+            same circle. Native v1 TSV/PDF ink is still a 48-segment
+            approximation of the circle; the exact circle equation is not
+            persisted. These presets explicitly replace only the selected
+            o or a, not other glyphs.</p>
+          <div class="handwriting-controls">
+            <label>Geometric starter
+              <select id="glyph-form" disabled>
+                <option value="o">Circle o</option>
+                <option value="a">Simple a (circle + stem)</option>
+              </select>
+            </label>
+            <label>Circle center X (µm)
+              <input id="glyph-circle-x" type="number" min="0" max="3500"
+                step="1" value="1550" disabled>
+            </label>
+            <label>Circle center Y (µm)
+              <input id="glyph-circle-y" type="number" min="0" max="4500"
+                step="1" value="2450" disabled>
+            </label>
+            <label>Circle radius (200–1600 µm)
+              <input id="glyph-circle-radius" type="number" min="200"
+                max="1600" step="1" value="1100" disabled>
+            </label>
+            <button id="glyph-construct" type="button" disabled>
+              Replace exact glyph with geometric starter
+            </button>
+          </div>
+          <p class="field-help">Exact SVG construction guide (not the
+            exported TSV ink):</p>
+          <svg id="glyph-ideal-preview" class="glyph-stroke-preview"
+            viewBox="0 0 3500 4500" role="img"
+            aria-label="Analytic geometric circle guide">
+            <circle id="glyph-ideal-circle" cx="1550" cy="2450" r="1100"
+              fill="none" stroke="#243647" stroke-width="250"
+              visibility="hidden"></circle>
+            <line id="glyph-ideal-stem" x1="2650" y1="1350"
+              x2="2650" y2="3550" stroke="#243647" stroke-width="250"
+              stroke-linecap="round" visibility="hidden"></line>
+          </svg>
           <div class="handwriting-controls">
             <label>Start X (0–3500 µm)
               <input id="glyph-x1" type="number" min="0" max="3500"
@@ -591,6 +632,15 @@
             </button>
             <button id="glyph-remove" type="button" disabled>
               Remove selected stroke
+            </button>
+            <button id="glyph-reverse" type="button" disabled>
+              Reverse selected pen direction
+            </button>
+            <button id="glyph-earlier" type="button" disabled>
+              Move selected stroke earlier
+            </button>
+            <button id="glyph-later" type="button" disabled>
+              Move selected stroke later
             </button>
             <label class="paper-upload-label" for="glyph-load">
               Load stroke TSV

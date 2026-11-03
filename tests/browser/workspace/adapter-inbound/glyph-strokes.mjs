@@ -2,7 +2,8 @@
 // Browser authored Unicode stroke authoring and session-safe TSV contracts.
 import assert from "node:assert/strict";
 import test from "node:test";
-const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor } =
+const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
+    geometricStarter } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -93,7 +94,11 @@ function mountEditor() {
     };
     const ids = ["glyph-character", "glyph-color", "glyph-load",
         "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-selected",
-        "glyph-update", "glyph-remove",
+        "glyph-form", "glyph-construct", "glyph-circle-x",
+        "glyph-circle-y", "glyph-circle-radius", "glyph-ideal-preview",
+        "glyph-ideal-circle", "glyph-ideal-stem",
+        "glyph-update", "glyph-remove", "glyph-reverse",
+        "glyph-earlier", "glyph-later",
         "glyph-save", "glyph-preview",
         "glyph-status", ...["x1", "y1", "x2", "y2", "width"]
             .flatMap((axis) => [`glyph-${axis}`, `glyph-${axis}-range`])];
@@ -101,6 +106,10 @@ function mountEditor() {
     const get = (id) => elements.get(`glyph-${id}`);
     get("character").value = "ñ";
     get("color").value = "#243647";
+    get("form").value = "o";
+    get("circle-x").value = "1550";
+    get("circle-y").value = "2450";
+    get("circle-radius").value = "1100";
     for (const [axis, value] of Object.entries({
         x1: 100, y1: 200, x2: 3000, y2: 4200, width: 250,
     })) {
@@ -446,6 +455,179 @@ test("copy replaces target strokes without touching neighbors", async () => {
             original[0], original[2],
             { ...original[0], grapheme: "n\u{303}" },
         ]);
+    } finally {
+        ui.restore();
+    }
+});
+
+
+test("stroke reversal and reorder affect only the chosen glyph", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const original = [
+            { ...stroke("o"), x1: 100 },
+            { ...stroke("ñ"), x1: 150 },
+            { ...stroke("o"), x1: 200 },
+            { ...stroke("ñ"), x1: 250 },
+            { ...stroke("o"), x1: 300 },
+        ];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(original));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("character").value = "o";
+        get("character").dispatch("input");
+        assert.equal(get("reverse").disabled, true);
+        get("selected").value = "2";
+        get("selected").dispatch("change");
+        assert.equal(get("reverse").disabled, false);
+        assert.equal(get("earlier").disabled, false);
+        assert.equal(get("later").disabled, false);
+        get("reverse").dispatch("click");
+        assert.equal(get("x1").value, "3000");
+        assert.equal(get("y1").value, "4200");
+        assert.equal(get("x2").value, "200");
+        get("earlier").dispatch("click");
+        assert.equal(get("selected").value, "0");
+        assert.equal(get("earlier").disabled, true);
+        get("earlier").dispatch("click");
+        get("later").dispatch("click");
+        assert.equal(get("selected").value, "2");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()), [
+            original[0], original[1],
+            { ...original[2], x1: 3000, y1: 4200, x2: 200, y2: 200 },
+            original[3], original[4],
+        ]);
+        editor.reset();
+        assert.equal(get("reverse").disabled, true);
+        assert.equal(get("earlier").disabled, true);
+        assert.equal(get("later").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+
+test("analytic circle starter samples a shared o/a loop plus a stem", () => {
+    const circle = geometricStarter("o", 1550, 2450, 1100, 250, "#123456");
+    const simpleA = geometricStarter("a", 1550, 2450, 1100, 250,
+        "#123456");
+    assert.equal(circle.length, 48);
+    assert.equal(simpleA.length, 49);
+    assert.deepEqual(simpleA.slice(0, 48), circle.map((line) => ({
+        ...line, grapheme: "a",
+    })));
+    assert.deepEqual(simpleA.at(-1), {
+        grapheme: "a", x1: 2650, y1: 1350, x2: 2650, y2: 3550,
+        width: 250, color: "#123456",
+    });
+    for (let i = 0; i < 48; i += 1) {
+        const segment = circle[i];
+        const next = circle[(i + 1) % 48];
+        assert.equal(segment.x2, next.x1);
+        assert.equal(segment.y2, next.y1);
+        for (const [x, y] of [
+            [segment.x1, segment.y1], [segment.x2, segment.y2],
+        ]) {
+            assert.ok(Math.abs(Math.hypot(x - 1550, y - 2450) - 1100) < 1,
+                "rounded sample lies within 1 µm of ideal circle");
+        }
+    }
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(simpleA)), simpleA);
+    for (const bad of [
+        ["ñ", 1550, 2450, 1100, 250, "#123456"],
+        ["o", -1, 2450, 1100, 250, "#123456"],
+        ["o", 200, 2450, 1100, 250, "#123456"],
+        ["a", 1550, 2450, 0, 250, "#123456"],
+        ["o", 1550, 2450, 1100.25, 250, "#123456"],
+        ["o", 1550, 2450, 1100, 79, "#123456"],
+        ["o", 1550, 2450, 1100, 250, "red"],
+    ]) assert.throws(() => geometricStarter(...bad));
+});
+
+test("geometric replacement preserves glyph identity and bounds", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const original = [stroke("ñ"), stroke("o"), stroke("∞")];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(original));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Select exact o or a/);
+        get("character").value = "o";
+        get("character").dispatch("input");
+        get("circle-radius").value = "3200";
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /outside native bounds/);
+        assert.equal(get("preview").children.length, 1,
+            "invalid construction leaves previous glyph intact");
+        get("circle-radius").value = "1100";
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 48);
+        get("character").value = "a";
+        get("character").dispatch("input");
+        get("form").value = "a";
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 49);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads[0].text());
+        assert.deepEqual(saved.slice(0, 2), [original[0], original[2]]);
+        assert.deepEqual(saved.slice(2, 50), geometricStarter(
+            "o", 1550, 2450, 1100, 250, "#243647"));
+        assert.deepEqual(saved.slice(50), geometricStarter(
+            "a", 1550, 2450, 1100, 250, "#243647"));
+        editor.reset();
+        assert.equal(get("construct").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+
+test("exact SVG circle guide tracks parameters without saving", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "hidden");
+        editor.start();
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-stem").attributes.get("visibility"),
+            "hidden");
+        get("circle-x").value = "1600";
+        get("circle-x").dispatch("input");
+        assert.equal(get("ideal-circle").attributes.get("cx"), "1600");
+        get("form").value = "a";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-stem").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-stem").attributes.get("x1"), "2700");
+        get("circle-radius").value = "1900";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "hidden", "invalid guide cannot display stale accepted geometry");
+        assert.equal(get("ideal-stem").attributes.get("visibility"),
+            "hidden");
+        get("save").dispatch("click");
+        assert.equal(downloads.length, 0, "preview never persists ink");
+        get("circle-radius").value = "1100";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "visible");
+        editor.reset();
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "hidden");
+        assert.equal(get("ideal-stem").attributes.get("visibility"),
+            "hidden");
     } finally {
         ui.restore();
     }
