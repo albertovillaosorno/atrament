@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P6-010"
 title: "Expose MCP from the same command schemas"
-status: open
+status: completed
 priority: P6
 lane: automation-media
 dependencies: ["ATR-P6-006"]
@@ -27,6 +27,9 @@ migrated_from: TODO.md
 # Expose MCP from the same command schemas
 
 ## Scope and existing evidence
+
+Historical primitives and design evidence do not establish an executable
+transport. The finite acceptance below records unsupported capabilities.
 
 Project bounded capability discovery, inspect, validate, apply, render, export,
 and plan capabilities for agents and prove normalized receipts match CLI and
@@ -257,3 +260,50 @@ known no-commit result, and crossed traversal commit stays Traversed. The other
 seven MCP capability classes receive no history projection, and retry,
 cancellation execution, traversal execution, and concrete MCP tooling remain
 open.
+
+## Finite MCP schema and honest capability projection contract
+
+**Inputs:** a backend-owned capability snapshot, authenticated caller
+context, command-version negotiation and proposed tool arguments. **Outputs:**
+a versioned capability projection and typed normalized read-only result or
+refusal. MCP cannot mint backend capabilities merely by advertising a tool.
+
+**Proposed MCP v1 operations:** `capabilities` reports `inspect`,
+`command_context`, `validate`, `apply`, `render`, `export`, `plan` and
+`history` with declared `available`, `unavailable` or `requires_authorization`
+status. Each admitted tool schema references the same normalized application
+input, result status, revision, diagnostic code and operation identity as CLI
+and browser. Unavailable operations must not be callable mutation tools;
+if a client nevertheless invokes them, return a typed `UnavailableCapability`
+without changing any accepted revision or output artifact.
+
+**Worked example:** `capabilities` exposes a read-only profile-inspection
+contract where the backend actually admits it, and reports semantic `Apply`
+as unavailable while command normalization/retry is incomplete. An agent
+requests Validate with exact revision `r5` only when a backend snapshot admits
+that authority; otherwise the response is an explicit no-execution refusal.
+When a future Apply is truly admitted, a valid two-edit batch must receive
+the *same normalized receipt* as CLI, not an MCP-specific invented success.
+
+**Authority/refusal rule:** transport ownership is distinct from read scope,
+write scope and effect authorization. `export` requires an explicit approved
+file target after complete preflight; `plan` is read-only and cannot arm or
+start. Physical `arm`/`start` need a separate device safety authority and
+are not implied by any of these tools. Wrong version, stale revision,
+missing source mapping, false discovered capability or retry-identity drift
+refuses with stable codes and no partial effects.
+
+**Limits:** typed MCP capability/disposition projections exist for Render,
+Plan, Export, Validate/Apply, History and cancellation status. Concrete MCP
+tool definitions, server adapter, authorization, normalized wire receipts,
+actual command execution, retry persistence and CLI parity do not exist.
+This schema is deliberately theoretical, not a deployed MCP server.
+
+## Acceptance decision
+
+- **Basis:** practical for transport-neutral capability projections;
+  theoretical for MCP tools, schema and parity, 2026-11-02.
+- **Delivered:** one versioned capability matrix, read-only example,
+  fail-closed Apply and physical safety refusal.
+- **Not implemented by this acceptance:** live MCP transport, tool calls,
+  normalized receipt comparison or hardware authority.

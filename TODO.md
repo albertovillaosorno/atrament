@@ -20,34 +20,6 @@ labels belong here.
 
 ## P6 — LLM, CLI, MCP, and media intake
 
-### TODO - Add clipboard command-mode round trips
-
-Let the backend present a self-contained command-mode prompt for an accepted
-revision and parse the pasted command envelope through the same untrusted raw
-response boundary. Delimit notebook/task/source material as data, exclude
-session credentials and internal paths, and treat prompt-injection-like
-source prose as untrusted content rather than application authority. Show the
-semantic diff and diagnostics before interactive acceptance rather than
-parsing commands in TypeScript.
-
-[docs/todo/open/automation/008-clipboard-command-round-trips.mdc](docs/todo/open/automation/008-clipboard-command-round-trips.mdc)
-
-### TODO - Expose CLI parity for every application command
-
-Create, inspect, validate, transform, render, export, and plan hardware
-without requiring a browser or changing domain behavior.
-
-[docs/todo/open/automation/009-cli-application-command-parity.mdc](docs/todo/open/automation/009-cli-application-command-parity.mdc)
-
-### TODO - Expose MCP from the same command schemas
-
-Project bounded capability discovery, inspect, validate, apply, render,
-export, and plan capabilities for agents and prove normalized receipts match
-CLI and interactive application. Keep physical `arm` and `start` behind their
-separate device-safety boundary.
-
-[docs/todo/open/automation/010-mcp-command-schema-parity.mdc](docs/todo/open/automation/010-mcp-command-schema-parity.mdc)
-
 ### TODO - Package self-contained agent instructions
 
 Allow a user to provide the repository or release bundle to an agent and have

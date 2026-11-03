@@ -1,0 +1,111 @@
+---
+record_type: task
+id: "ATR-P6-008"
+title: "Add clipboard command-mode round trips"
+status: completed
+priority: P6
+lane: automation-media
+dependencies: ["ATR-P6-005", "ATR-P6-006"]
+dependencies_specified: true
+dependency_rationale: >-
+  Clipboard responses use versioned, atomically checked batches.
+acceptance_criteria:
+  - >-
+      Let the backend present a self-contained command-mode prompt for an
+      accepted revision and parse the pasted command envelope through the
+      same untrusted raw response boundary. Delimit notebook/task/source
+      material as data, exclude session credentials and internal paths, and
+      treat prompt-injection-like source prose as untrusted content rather
+      than application authority. Show the semantic diff and diagnostics
+      before interactive acceptance rather than parsing commands in
+      TypeScript.
+  - >-
+      Finite v1 completion: Define one copy/paste command round trip with a
+      matching-base success, stale-base refusal, and user confirmation; no
+      chat-provider automation required.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Add clipboard command-mode round trips
+
+## Scope and existing evidence
+
+Historical primitives and design evidence do not establish an executable
+transport. The finite acceptance below records unsupported capabilities.
+
+Let the backend present a self-contained command-mode prompt for an accepted
+revision and parse the pasted command envelope through the same untrusted raw
+response boundary. Delimit notebook/task/source material as data, exclude
+session
+credentials and internal paths, and treat prompt-injection-like source prose as
+untrusted content rather than application authority. Show the semantic diff and
+diagnostics before interactive acceptance rather than parsing commands in
+TypeScript.
+
+If review permits selecting only some returned commands, submit that selection
+to the backend as a new dependency-checked batch and revalidate it. Never splice
+or partially apply the old validated envelope in TypeScript.
+
+Current clipboard transport design evidence freezes explicit Copy, exact text
+transport, prompt/context correlation, intentional external-data egress,
+operating-system clipboard lifetime, failure behavior, untrusted Paste, inert
+browser presentation, no hidden clipboard archive, and MCP parity.
+
+Current frontend evidence has one `writeText` path and no clipboard-read API,
+command parser, HTML sink, domain request, or browser storage path. A lifecycle
+fixture produced zero writes before Copy, exactly one blocked write after Copy,
+kept hostile markup and command-like prose inert, and on `pagehide` scrubbed the
+prompt/response without issuing a second clipboard write to simulate revocation.
+The static Copy description also states that system clipboard data can outlive
+the Atrament session and remains available with JavaScript disabled.
+
+Browser/backend wiring for real command responses remains open.
+
+## Finite clipboard command round trip and stale-base refusal
+
+**Inputs:** one backend-authored `atrament.prompt/1` command-mode prompt,
+accepted revision and command context, exact user-initiated clipboard copy,
+and pasted untrusted response bytes. **Outputs:** an inert candidate, one
+revision-linked semantic diff and diagnostic list, and a distinct confirmation
+request or typed refusal. The raw response never executes in the browser.
+
+**Copy contract:** present a single self-contained prompt with a command
+schema, exact base revision, read scope, writable target identities and
+preconditions. Task and notebook excerpts are delimited as untrusted data;
+strip application credentials and internal filesystem paths. Only explicit
+Copy can put bytes on the operating-system clipboard; explain that clipboard
+contents may outlive the session and cannot be reliably revoked on pagehide.
+The backend creates prompt identity and the UI reports only exact copied text.
+
+**Worked round trip:** at revision `r10`, source span `t1` is `Monday`.
+The user copies a backend prompt allowing only `t1`, pastes a model answer
+proposing `Tuesday` into the raw-response field, and selects Review.
+Backend parsing against `r10` yields a single text diff and complete
+nonblocking diagnostics. Only pressing Accept submits a fresh atomic batch;
+commit yields `r11`. Cancel keeps `r10`. No chat-provider automation or
+clipboard history archive is required for this bounded first release.
+
+**Stale/refusal case:** if another edit advances the session to `r11`
+before Accept, refuse the `r10` proposal as `StaleBase`, retaining it as
+inert text. An answer instructing `rm -rf`, demanding secrets, naming
+out-of-scope `t9`, or containing executable HTML is not application
+authority. If a user selects only part of a dependent batch, ask the backend
+to construct and revalidate a *new* subset batch; TypeScript must not splice
+or partially apply the old response. Denied clipboard permissions or missing
+prompt identity produce explicit no-mutation errors.
+
+**Assumptions and limits:** the frontend implements one explicit `writeText`
+path, inert response display and cleanup of session-owned text. It has no
+clipboard-read flow, command parser, backend candidate transport, semantic
+diff UI or complete consent path. This is a theoretical end-to-end protocol,
+not a deployed copy/paste automation channel.
+
+## Acceptance decision
+
+- **Basis:** practical for existing explicit Copy/inert text; theoretical
+  for command parsing, review and acceptance, 2026-11-02.
+- **Delivered:** one matching-base round trip, user confirmation, stale-base
+  and hostile-command refusals, and explicit clipboard persistence.
+- **Not implemented by this acceptance:** real paste parser, browser-to-backend
+  review, command subset rebasing or authenticated application Apply.
