@@ -96,7 +96,7 @@ function mountEditor() {
         "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-compose",
         "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
-        "glyph-seed-spanish",
+        "glyph-seed-spanish", "glyph-seed-spanish-nfd",
         "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
@@ -1489,6 +1489,79 @@ test("Spanish accent batch refuses ambiguous i", async () => {
             1, "custom NFC á was not overwritten");
         assert.equal(saved.filter((line) => line.grapheme === "e\u0301")
             .length, 1, "decomposed source key remains separate");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("decomposed Spanish batch preserves custom NFD and NFC", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        assert.equal(get("seed-spanish-nfd").disabled, true);
+        editor.start();
+        get("seed-lowercase").dispatch("click");
+        get("seed-spanish").dispatch("click");
+        get("save").dispatch("click");
+        const nfc = parseGlyphLibrary(await downloads.at(-1).text());
+        const custom = { ...stroke("e\u0301"), color: "#ABCDEF" };
+        const initial = [...nfc, custom];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(initial));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-spanish-nfd").dispatch("click");
+        assert.match(get("status").textContent, /Filled 6 missing Spanish NFD/);
+        assert.equal(downloads.length, 1, "no implicit file write");
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        const targets = [["a", "a\u0301"], ["i", "i\u0301"],
+            ["o", "o\u0301"], ["u", "u\u0301"],
+            ["n", "n\u0303"], ["u", "u\u0308"]];
+        const additions = targets.flatMap(([base, target]) =>
+            composeAccentedGlyph(initial, base, target, "#243647"));
+        assert.deepEqual(saved, [...initial, ...additions]);
+        assert.equal(saved.filter((s) => s.grapheme === "e\u0301").length,
+            1, "custom decomposed ink is kept byte-for-byte");
+        assert.equal(saved.filter((s) => s.grapheme === "é").length,
+            nfc.filter((s) => s.grapheme === "é").length,
+            "independent NFC source ink remains untouched");
+        assert.equal(saved.filter((s) => s.grapheme === "i\u0301").length,
+            2, "decomposed acute i consists only of stem and acute");
+        get("color").value = "#123456";
+        get("seed-spanish-nfd").dispatch("click");
+        assert.match(get("status").textContent,
+            /All seven Spanish lowercase NFD/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "repeated NFD fill must not overwrite existing glyphs");
+        editor.reset();
+        assert.equal(get("seed-spanish-nfd").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("decomposed Spanish batch rejects ambiguous i atomically", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const initial = ["a", "e", "i", "o", "u", "n"].map((glyph) =>
+            ({ ...stroke(glyph), x1: 900, y1: 1900,
+                x2: 2350, y2: 3300 }));
+        initial.push(stroke("a\u0301"));
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(initial));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-spanish-nfd").dispatch("click");
+        assert.match(get("status").textContent, /clear upper dot/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            initial, "NFD batch refusal must preserve all earlier ink");
     } finally {
         ui.restore();
     }

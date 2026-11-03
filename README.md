@@ -521,7 +521,16 @@ a clearly separated dot in `i` is removed from the copied accented form.
 The seven accented letters plus lowercase a–z have 986 sampled strokes by
 default. Rust audited all seven targets with no missing glyphs, reopened the
 TSV byte-for-byte, and rendered `niño` to PDF and transparent 72-DPI PNG.
-NFD accents remain separate Unicode keys and need independent composition.
+
+For pasted text that uses **decomposed Unicode**, click **Fill missing
+decomposed Spanish accents (unsaved)** after authoring the lowercase bases.
+The separate button composes `á é í ó ú ñ ü` under their exact NFD keys;
+it never overwrites NFC or already-authored NFD ink. Both batches together
+produce a 1,233-stroke, 40-grapheme default library (26 lowercase, 7 NFC,
+7 NFD). Rust reopened it, audited all 14 accented forms with zero missing
+shapes, and exported `ñ í` to a real one-page PDF and transparent 72-DPI
+RGBA PNG. A refused NFD batch leaves the prior draft unchanged; downloading
+and Rust export remain explicit gestures.
 
 These actions do not seed uppercase, punctuation or the
 complete 114-entry inventory. It does not connect semantic Markdown text

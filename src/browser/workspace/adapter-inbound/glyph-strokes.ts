@@ -814,6 +814,8 @@ export function createGlyphStrokeEditor(): {
     const construct = required<HTMLButtonElement>("glyph-construct");
     const seedLowercase = required<HTMLButtonElement>("glyph-seed-lowercase");
     const seedSpanish = required<HTMLButtonElement>("glyph-seed-spanish");
+    const seedSpanishNfd =
+        required<HTMLButtonElement>("glyph-seed-spanish-nfd");
     const centerX = required<HTMLInputElement>("glyph-circle-x");
     const centerY = required<HTMLInputElement>("glyph-circle-y");
     const radius = required<HTMLInputElement>("glyph-circle-radius");
@@ -847,7 +849,7 @@ export function createGlyphStrokeEditor(): {
         ranges[axis] = required<HTMLInputElement>(`glyph-${axis}-range`);
     }
     const controls = [character, color, source, add, copyFrom, copy, compose,
-        form, construct, seedLowercase, seedSpanish,
+        form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
         centerX, centerY, radius,
         accentShift, accentLift,
         selected, update,
@@ -1389,7 +1391,7 @@ export function createGlyphStrokeEditor(): {
             message(String(error));
         }
     });
-    seedSpanish.addEventListener("click", () => {
+    const fillSpanishAccents = (normalization: "NFC" | "NFD"): void => {
         if (!active) return;
         try {
             if (drawing !== null) {
@@ -1400,10 +1402,12 @@ export function createGlyphStrokeEditor(): {
                 ["u", "ú"], ["n", "ñ"], ["u", "ü"],
             ];
             const authored = new Set(strokes.map((stroke) => stroke.grapheme));
-            const missing = targets.filter(([, target]) =>
-                !authored.has(target));
+            const missing = targets.map(([base, target]) =>
+                [base, target.normalize(normalization)] as const)
+                .filter(([, target]) => !authored.has(target));
             if (missing.length === 0) {
-                message("All seven Spanish lowercase accents are authored");
+                message(`All seven Spanish lowercase ${normalization}`
+                    + " accents are authored");
                 return;
             }
             const withoutBases = missing.flatMap(([base]) =>
@@ -1422,12 +1426,15 @@ export function createGlyphStrokeEditor(): {
             strokes = next;
             selectedIndex = null;
             render();
-            message(`Filled ${missing.length} missing Spanish accents (`
-                + `${added.length} sampled strokes); unsaved draft`);
+            message(`Filled ${missing.length} missing Spanish `
+                + `${normalization} accents (${added.length} sampled `
+                + "strokes); unsaved draft");
         } catch (error) {
             message(String(error));
         }
-    });
+    };
+    seedSpanish.addEventListener("click", () => fillSpanishAccents("NFC"));
+    seedSpanishNfd.addEventListener("click", () => fillSpanishAccents("NFD"));
     copy.addEventListener("click", () => {
         if (!active) return;
         try {

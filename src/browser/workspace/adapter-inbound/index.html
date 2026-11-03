@@ -611,6 +611,9 @@
             <button id="glyph-seed-spanish" type="button" disabled>
               Fill missing Spanish accents (unsaved)
             </button>
+            <button id="glyph-seed-spanish-nfd" type="button" disabled>
+              Fill missing decomposed Spanish accents (unsaved)
+            </button>
           </div>
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the highest story, positioned from geometry
@@ -623,9 +626,10 @@
             drawn. Review and download the TSV explicitly; this does not
             add uppercase, accents, or automatic handwritten text. Fill
             missing Spanish accents separately copies authored lowercase
-            bases into á, é, í, ó, ú, ñ, ü only; custom targets are kept.
-            A missing base, ambiguous dotted i or clipped mark refuses the
-            whole batch. NFC and NFD keys remain separate.</p>
+            bases into á, é, í, ó, ú, ñ, ü (NFC). The decomposed button
+            independently constructs their seven NFD forms, keeping exact
+            Unicode keys and custom target ink separate. A missing base,
+            ambiguous dotted i or clipped mark refuses the entire batch.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>
           <svg id="glyph-ideal-preview" class="glyph-stroke-preview"

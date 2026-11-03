@@ -447,6 +447,26 @@ punctuation, native vector curves and automatic text layout remain open.
 The rendered ink remains deterministic geometric starting material,
 not handwriting inferred from a particular writer.
 
+## Explicit NFD Spanish accent fill (partial) — 2026-11-03
+
+A second admitted-session action now seeds only missing **decomposed**
+`á é í ó ú ñ ü` from the same six authored lowercase bases. It uses
+the existing exact Unicode accent composer, preserving independent NFC and
+NFD shapes, previous target ink, order, and source colors. The batch
+validates the entire candidate before changing the unsaved draft, including
+missing bases, ambiguous `i` dots, native stroke count and TSV size. Neither
+a repeated click nor a refused batch replaces earlier authored strokes.
+
+Two browser regressions verify session gating, previously authored NFC and
+custom NFD preservation, idempotence and atomic dot-refusal; the 50 focused
+glyph tests pass. TypeScript check/build succeeded. The combined default
+26-letter/7-NFC/7-NFD library has **1,233 sampled strokes across 40 exact
+graphemes**; native Rust CLI audited all 14 accented forms with **zero
+missing authored glyphs**, and emitted an actual one-page PDF plus a
+transparent 596×842 RGBA PNG for `ñ í` at 72 DPI. No analytic curves or
+live mark attachment persist through the TSV, and punctuation, capitals,
+math symbols and cursive joins remain unfinished.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
