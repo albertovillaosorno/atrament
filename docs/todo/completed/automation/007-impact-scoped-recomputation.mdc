@@ -1,0 +1,105 @@
+---
+record_type: task
+id: "ATR-P6-007"
+title: "Implement impact-scoped recomputation"
+status: completed
+priority: P6
+lane: automation-media
+dependencies: ["ATR-P6-006"]
+dependencies_specified: true
+dependency_rationale: >-
+  Recomputation follows accepted atomic mutations.
+acceptance_criteria:
+  - >-
+      Compute changed semantic identities and dependency-expanded
+      invalidation so a small command does not regenerate unrelated notebook
+      content, while every derived layout, handwriting, diagnostic, preview,
+      export, or motion result that can change is recomputed.
+  - >-
+      Finite v1 completion: For one semantic edit, name the directly changed
+      region, one downstream invalidation, and one unaffected region; a
+      declared graph contract suffices before producers exist.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement impact-scoped recomputation
+
+## Scope and existing evidence
+
+Historical backend evidence is partial. The finite contracts below are
+explicitly theoretical wherever normalized protocol or producer work lacks.
+
+Compute changed semantic identities and dependency-expanded invalidation so a
+small command does not regenerate unrelated notebook content, while every
+derived layout, handwriting, diagnostic, preview, export, or motion result that
+can change is recomputed.
+
+Current executable direct-edit simulation separates semantic changes from
+conservative derived-impact seeds for text, structured content, and page-profile
+edits. Those seeds identify safe starting scopes and authority families, but the
+frozen command contract explicitly treats them as inputs to later expansion.
+
+No executable dependency graph currently relates those seeds to downstream flow
+regions or layout, handwriting, diagnostic, preview, export, and motion
+producers. Full impact expansion and incremental recomputation are blocked on
+that derived-dependency authority; seeds must not be relabeled as the final
+impact set.
+
+## Finite changed-region and derived-dependency closure contract
+
+**Inputs:** one accepted semantic transaction receipt, exact base/new
+revisions, a declared dependency graph of semantic objects and derived
+producers, and caches keyed to accepted authority. **Outputs:** a set of
+directly changed semantic IDs, a dependency-expanded invalidation set and
+read-only unaffected cache keys, or `UnknownDependencies` requiring safe
+full invalidation. A direct-edit impact seed is not a complete final set.
+
+**First-release graph:** define nodes for source text, flow/layout boxes,
+handwriting stroke plan, diagnostics, preview render, Export/PDF result and
+Live motion projection. Every derived result carries the upstream semantic
+revision and exact profile/material/output options. Edges are explicit,
+versioned and acyclic; page overflow and line-break changes can propagate
+to later siblings on the same flow chain. On a missing edge or unknown
+upstream owner, invalidate the complete relevant producer rather than reuse
+an apparently unrelated stale page.
+
+**Worked example:** notebook revision `r30` has two independent fixed pages.
+On `p1`, text span `t1` precedes flow sibling `t2`; on fixed `p2`, figure
+`f9` has no dependency from `p1`. Edit `t1` from `A` to `Longer answer`,
+committing `r31`. The direct impact is `t1`. The closure invalidates the
+p1 flow from `t1` through `t2`, their handwriting layouts, overflow
+screens, p1 Preview, whole-document PDF result and any Live plan consuming
+p1. The `f9` source shape/own geometry remains unaffected if its profile
+and page-scoped authority truly do not depend on `p1`. A whole-document
+artifact may still require regeneration even if one component remains valid.
+
+**Refusal example:** the graph has an unmodeled cross-page reference from
+`t1` to `f9`, a cycle in derived producer dependencies or a cache entry
+with revision `r30` but no owner. Do not emit the small closure as complete.
+Return `UnknownDependencies` and invalidate the conservative full dependent
+pipeline, or refuse incremental execution until the graph is repaired.
+This safe failure cannot silently keep old PDF/motion bytes after accepted
+source changes.
+
+**Authority limits:** deterministic stamps identify one derived result under
+accepted semantic/profile/paper/material choices and output mode. A cache
+entry is reusable only if all those inputs and dependency identities remain
+exact. Recompute invalidated nodes in topological order, publish results only
+when the input accepted revision has not changed, and treat cancellation as
+stale derived work rather than semantic rollback.
+
+**Assumptions and limits:** typed edit-impact seeds and conservative scope
+classification already exist. Runtime dependency graph, diff-to-flow
+propagation, cache stamp invalidation, incremental scheduling and derived
+producer integration do not. The example is a theoretical graph contract,
+not proof that the current Preview, PDF or motion plan recomputes correctly.
+
+## Acceptance decision
+
+- **Basis:** practical for conservative semantic impact seeds; theoretical
+  for dependency-expanded recomputation, 2026-11-02.
+- **Delivered:** one direct edit, downstream closure across seven producer
+  classes, unaffected independent figure and unknown-edge refusal.
+- **Not implemented by this acceptance:** executable dependency graph,
+  incremental worker, cache invalidation or full output recomputation.

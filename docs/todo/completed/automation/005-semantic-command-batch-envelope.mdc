@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P6-005"
 title: "Freeze the semantic command-batch envelope"
-status: open
+status: completed
 priority: P6
 lane: automation-media
 dependencies: ["ATR-P2-001"]
@@ -26,6 +26,9 @@ migrated_from: TODO.md
 # Freeze the semantic command-batch envelope
 
 ## Scope and existing evidence
+
+Historical backend evidence is partial. The finite contracts below are
+explicitly theoretical wherever normalized protocol or producer work lacks.
 
 Version the batch, base notebook revision, command-context identity, readable
 context, writable targets or insertion anchors, preconditions, retry identity,
@@ -146,3 +149,63 @@ compatibility remain open.
 The exhaustive three-node dependency-mask oracle requires valid, self, missing,
 cyclic, and forward-dependency outcomes to occur. Duplicate identities remain a
 separate fixture because that Cartesian graph uses fixed-unique command IDs.
+
+## Finite versioned semantic command-batch wire contract
+
+**Inputs:** one accepted notebook revision, authenticated command context,
+explicit readable scope and allowed writable identities/insertion anchors,
+finite ordered typed operations, their preconditions and one caller retry key.
+**Outputs:** a canonically normalized batch identity and one typed
+application receipt, or an exact refusal. Document meaning cannot include
+an internal file path, application credential or physical device authority.
+
+**Proposed v1 envelope:** require keys `schema`, `base_revision`,
+`context_identity`, `read_scope`, `write_scope`, `retry_identity`,
+`operations`, and `preconditions`, with
+`schema=atrament.semantic-command-batch/1`. Each operation has a unique
+request-local `op_key`, typed operation kind, target or insertion anchor,
+exact expected old values, new semantic values and prior operation keys it
+depends on. Unknown fields/operation kinds, duplicate keys, missing targets,
+forward/self/cyclic dependencies, or unsupported version refuse the whole
+batch. Read scope grants no write access. New accepted semantic IDs are
+allocated by the backend after validation, never by a model or CLI client.
+
+**Normalization rule:** validate the exact command context and base revision;
+canonicalize the admitted value schema with fixed key/operation order and
+value encoding, then derive one digest from schema version, base revision,
+context digest, writable scope, preconditions and every ordered operation.
+The retry key binds to that normalized digest. Equal raw request text is
+neither sufficient nor necessary for identical semantics until this
+normalization authority exists. Receipt fields are `status`, `base_revision`,
+`accepted_revision` when committed, `normalized_batch_identity`,
+`allocated_ids`, and ordered diagnostics with stable codes/owners.
+
+**Worked example:** snapshot `r20` owns spans `t1=Monday`, `t2=Start`.
+Operation `edit-1` expects `t1=Monday` and proposes `Tuesday`; operation
+`edit-2` expects `t2=Start` and proposes `Begin`, with no dependency edge.
+Read scope contains both spans, write scope names exactly `t1` and `t2`.
+A valid review displays the two exact diffs; one backend commit yields `r21`
+and a receipt bound to the normalized identity, without writing a PDF or
+altering another semantic object. This wire envelope is theoretical even
+though a limited direct-edit backend can apply two typed operations.
+
+**Refusal example:** second operation targets `t99`, the base is stale,
+a client invents an accepted target ID, a dependency points forward or
+operation kind is `StartPlotter`. Refuse before commit and retain `r20`.
+A retry with the same caller key but a changed normalized batch is
+`RetryIdentityConflict`, not a second edit or silently reused receipt.
+
+**Assumptions and limits:** transport-neutral batch dependency checks, exact-
+base direct-edit primitives, application result dispositions and cancellation
+semantics exist. Wire serializer/version admission, normalization, retry
+storage/recovery, command context admission and cross-adapter receipts do not.
+This is a finite proposed schema, not an implemented public command protocol.
+
+## Acceptance decision
+
+- **Basis:** practical for dependency/typed command primitives; theoretical
+  for exact wire schema and normalized receipts, 2026-11-02.
+- **Delivered:** complete bounded envelope, two edit operations, normalization
+  key and missing-target/stale/unsupported refusals.
+- **Not implemented by this acceptance:** production command serializer,
+  retry ledger, backend command-context builder or adapter admission.

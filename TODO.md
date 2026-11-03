@@ -20,32 +20,6 @@ labels belong here.
 
 ## P6 — LLM, CLI, MCP, and media intake
 
-### TODO - Freeze the semantic command-batch envelope
-
-Version the batch, base notebook revision, command-context identity, readable
-context, writable targets or insertion anchors, preconditions, retry
-identity, and normalized application receipt without exposing storage paths
-as document semantics.
-
-[docs/todo/open/automation/005-semantic-command-batch-envelope.mdc](docs/todo/open/automation/005-semantic-command-batch-envelope.mdc)
-
-### TODO - Implement atomic command validation and apply
-
-Validate the whole batch against one accepted snapshot, reject stale or
-invalid commands without partial mutation, and make retry behavior idempotent
-enough for CLI and MCP automation.
-
-[docs/todo/open/automation/006-atomic-command-validation-apply.mdc](docs/todo/open/automation/006-atomic-command-validation-apply.mdc)
-
-### TODO - Implement impact-scoped recomputation
-
-Compute changed semantic identities and dependency-expanded invalidation so a
-small command does not regenerate unrelated notebook content, while every
-derived layout, handwriting, diagnostic, preview, export, or motion result
-that can change is recomputed.
-
-[docs/todo/open/automation/007-impact-scoped-recomputation.mdc](docs/todo/open/automation/007-impact-scoped-recomputation.mdc)
-
 ### TODO - Add clipboard command-mode round trips
 
 Let the backend present a self-contained command-mode prompt for an accepted

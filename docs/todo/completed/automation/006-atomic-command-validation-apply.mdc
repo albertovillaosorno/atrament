@@ -1,0 +1,110 @@
+---
+record_type: task
+id: "ATR-P6-006"
+title: "Implement atomic command validation and apply"
+status: completed
+priority: P6
+lane: automation-media
+dependencies: ["ATR-P6-005"]
+dependencies_specified: true
+dependency_rationale: >-
+  Atomic apply requires the versioned batch envelope.
+acceptance_criteria:
+  - >-
+      Validate the whole batch against one accepted snapshot, reject stale
+      or invalid commands without partial mutation, and make retry behavior
+      idempotent enough for CLI and MCP automation.
+  - >-
+      Finite v1 completion: Apply one two-operation batch atomically, reject
+      one stale or malformed batch without mutation, and specify normalized
+      retry identity; transport parity may remain theoretical.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement atomic command validation and apply
+
+## Scope and existing evidence
+
+Historical backend evidence is partial. The finite contracts below are
+explicitly theoretical wherever normalized protocol or producer work lacks.
+
+Validate the whole batch against one accepted snapshot, reject stale or invalid
+commands without partial mutation, and make retry behavior idempotent enough for
+CLI and MCP automation.
+
+Current executable foundation applies the transport-neutral ordered direct-edit
+batch through the same semantic simulation used for review. A successful net
+mutation commits exactly one accepted revision and one Undo transaction; a net
+no-op creates no revision, and stale or middle-command failure remains atomic.
+Validate/Apply semantic change and impact-seed evidence match for unchanged
+inputs.
+
+An in-process synchronized race fixture now releases two Apply calls sharing one
+base; exactly one commits and the other returns the winning revision as stale.
+The task remains open for the normalized protocol/envelope, command-context and
+writable-scope admission, retry identity and lost-receipt recovery, published
+resource limits, complete dependency-expanded impact, diagnostics, transaction
+provenance, cancellation and adapter-level concurrency fixtures, and
+browser/CLI/MCP parity.
+
+Retry recovery is specifically blocked on normalized batch identity: the current
+`DirectEditBatchProposal` is deliberately pre-normalization, while the frozen
+retry contract compares one retry identity against the normalized batch. Raw
+proposal equality must not stand in for that missing normalization authority.
+Until these boundaries exist, capability discovery intentionally does not
+advertise `Apply`.
+
+## Finite two-operation atomic Apply and retry contract
+
+**Inputs:** one complete versioned command batch and exact current accepted
+notebook revision, authenticated caller authority, normalized batch identity,
+and expected old values. **Outputs:** one new accepted revision with full
+impact seed/receipt, an idempotently recovered prior receipt, or a typed
+no-mutation refusal. A reviewed candidate alone never changes the notebook.
+
+**Validation before commit:** verify schema, complete command-context digest,
+base revision, writable scope, all operation kinds, dependencies, target
+ownership, expected values and resulting semantic invariants on one simulated
+snapshot. Only when *every* operation passes may the backend atomically swap
+the proposed notebook into the accepted session and allocate the new revision.
+A no-op or refused batch produces no accepted revision, file write or plotter
+command. Diagnostics identify exact failing operation and owner in client
+order without exposing a successful mutation prefix.
+
+**Worked example:** accepted `r20` contains `t1=Monday`, `t2=Start`,
+`f1` unchanged. Batch `b1` proposes `t1=Tuesday` and `t2=Begin` with
+valid old-value guards. Review shows both diffs, then one authorized Apply
+commits `r21` containing both and preserving `f1`. A second Apply of the
+*same normalized identity and retry key* must return the original committed
+receipt `r21` rather than create `r22`; a distinct batch from stale base
+`r20` instead gets `StaleBase(current=r21)`.
+
+**Concurrent and cancellation rule:** two workers racing the same base may
+produce exactly one winning revision. The loser sees a typed stale result,
+not a partially applied second commit. Cancellation proved before the
+accepted swap is `CancelledBeforeCommit`, whereas cancellation after the
+commit cannot undo success and returns its accepted receipt. A request to
+cancel without execution evidence stays unresolved, not presumed cancelled.
+
+**Refusal example:** `t2` had already become `Running`, violating the old
+value guard, or command `edit-2` targets another notebook. Both edits in
+`b1` refuse together without changing `t1`, and a later retry must be
+reviewed from the new accepted revision. Same retry key with altered
+operation data is `RetryConflict` and cannot reuse the old receipt.
+
+**Assumptions and limits:** local ordered direct-edit simulation, atomic
+accepted revision allocation and an in-process two-Apply race fixture are
+executable. Normalized batch identity, persistent idempotence receipts,
+complete command context/scope, adapter concurrency, cancellation scheduling,
+diagnostics and CLI/MCP parity are not. Capability discovery must not
+advertise general Apply before these authorities are real.
+
+## Acceptance decision
+
+- **Basis:** practical for in-process exact-base two-operation Apply;
+  theoretical for normalized retry/transport behavior, 2026-11-02.
+- **Delivered:** one accepted two-edit batch, no-prefix invalid/stale
+  refusal, idempotence design and concurrent/cancel outcome policy.
+- **Not implemented by this acceptance:** retry receipt persistence,
+  full wire Apply admission, end-to-end cancellation or multi-adapter parity.
