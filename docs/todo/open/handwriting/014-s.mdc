@@ -159,6 +159,15 @@ pass. The independent Rust CLI accepted a 49-stroke native `ó` variant with
 **zero missing exact glyphs**, read it back byte-for-byte and emitted a real
 one-page PDF and transparent 596×842 RGBA PNG at 72 DPI containing `óó`.
 
+The real Firefox/Rust localhost acceptance journey now independently
+captures the **actual** `my-varied-glyph-strokes.tsv` download Blob after
+clicking the admitted sample-2 button (not a test-only surrogate encoder).
+Its UTF-8 bytes are written only to a disposable test directory, reopened
+by the separate Rust CLI with exact byte equality, audited as `ó` with
+49 authored strokes and zero missing glyphs, and rendered to both actual
+PDF and PNG. The test restores temporary browser API interception and
+removes its transient session/files afterward.
+
 The native PDF draws the **same chosen variant** for both `ó` repetitions;
 it does not yet sample each occurrence on a Rust notebook page or preserve
 variation settings across sessions. User-selected seeded variation is a

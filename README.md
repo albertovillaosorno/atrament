@@ -903,10 +903,12 @@ cargo run -q -p atrament_profile_editor_cli -- notebook \
   --place-text 1 25400 30000 'óó' --output varied.pdf
 ```
 
-A native smoke validated a 49-stroke selected `ó` sample with zero missing
-shapes, byte-identical TSV readback, a real A4 one-page PDF and transparent
-72-DPI 596×842 RGBA PNG. This is **one chosen stored variant per Unicode
-key**, not a different shape for each repeated letter: both `ó` occurrences
+A real Firefox/Rust localhost test captures the actual selected-sample TSV
+download in a disposable session. Rust audits the browser-exported
+49-stroke `ó` with zero missing shapes and byte-identical readback, then
+renders a genuine A4 one-page PDF and transparent 72-DPI 596×842 RGBA PNG.
+This is **one chosen stored variant per Unicode key**, not a different
+shape for each repeated letter: both `ó` occurrences
 in the example have the same selected template. There is still no automatic
 multi-line seeded variation in notebook PDF/PNG, no persisted Rust variation
 settings, joined cursive or learned style. These browser-only spread knobs

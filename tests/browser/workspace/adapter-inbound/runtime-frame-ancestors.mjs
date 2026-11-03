@@ -3754,6 +3754,89 @@ test(
             });
             assert.equal(cliBuild.status, 0, "profile CLI builds offline");
             const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            // Capture the real explicit variant download in the admitted
+            // browser, not a reimplementation of the UI export in Node.
+            // Override the click only for this ephemeral glyph download;
+            // restore browser APIs before the rest of the session journey.
+            const savedVariation = await bidi.command("script.evaluate", {
+                expression: `(async () => {
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    let captured = null;
+                    URL.createObjectURL = (blob) => {
+                        captured = blob;
+                        return create.call(URL, blob);
+                    };
+                    HTMLAnchorElement.prototype.click = function () {
+                        if (this.download === "my-varied-glyph-strokes.tsv") {
+                            return;
+                        }
+                        return click.call(this);
+                    };
+                    try {
+                        const edit = (id, value) => {
+                            const control = document.getElementById(id);
+                            control.value = value;
+                            control.dispatchEvent(new Event("input", {
+                                bubbles: true
+                            }));
+                        };
+                        edit("glyph-variation-width", "6");
+                        edit("glyph-variation-sample", "2");
+                        document.getElementById(
+                            "glyph-variation-download"
+                        ).click();
+                        return captured ? await captured.text() : "";
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                awaitPromise: true,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(savedVariation.type, "success");
+            assert.equal(savedVariation.result.type, "string");
+            const variationText = savedVariation.result.value;
+            assert.ok(variationText.startsWith(
+                "atrament.glyph-strokes.v1\nó\t"));
+            const variationFile = path.join(root, "browser-varied-glyph.tsv");
+            fs.writeFileSync(variationFile, variationText);
+            const readback = spawnSync(cli, [
+                "glyphs", "--profile", variationFile,
+            ], { encoding: "utf8", stdio: "pipe" });
+            assert.equal(readback.status, 0);
+            assert.equal(readback.stdout, variationText,
+                "Rust accepts exact browser-selected sample bytes");
+            const glyphAudit = spawnSync(cli, [
+                "glyphs", "--profile", variationFile,
+                "--audit-text", "ó",
+            ], { encoding: "utf8", stdio: "pipe" });
+            assert.equal(glyphAudit.status, 0);
+            assert.match(glyphAudit.stdout, /Missing authored glyphs: 0/);
+            assert.match(glyphAudit.stdout, /49 authored strokes/);
+            for (const format of ["pdf", "png"]) {
+                const output = path.join(root,
+                    `browser-varied-glyph.${format}`);
+                const rendered = spawnSync(cli, [
+                    "notebook", "--printed-sheet", "true",
+                    "--export-paper", format,
+                    ...(format === "png"
+                        ? ["--png-page", "1", "--dpi", "72"] : []),
+                    "--glyph-file", variationFile,
+                    "--place-text", "1", "25400", "30000", "óó",
+                    "--output", output,
+                ], { stdio: "pipe" });
+                assert.equal(rendered.status, 0,
+                    `native ${format} accepts selected browser glyph ink`);
+                const bytes = fs.readFileSync(output);
+                assert.ok(bytes.length > 100);
+                assert.equal(format === "pdf"
+                    ? bytes.subarray(0, 5).toString("ascii")
+                    : bytes.subarray(0, 8).toString("hex"),
+                format === "pdf" ? "%PDF-" : "89504e470d0a1a0a");
+            }
             // Inventory checks exact graphemes without falsely claiming
             // visible strokes or rendering fallback for math symbols.
             const inventory = spawnSync(cli, [
