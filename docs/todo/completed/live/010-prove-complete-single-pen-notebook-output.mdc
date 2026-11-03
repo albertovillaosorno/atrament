@@ -40,22 +40,30 @@ shape provenance and planned page boundaries; not plotted sheets.
 **Page 1 — English, "Motion and energy":** A4 portrait with 20 mm margins,
 one 14 mm title at `(25,30) mm`, a 3-line prose block beginning `(25,50)`:
 "Motion changes when a force acts. Energy is conserved in a closed
-system. Record the units next to each measurement." A source-math line
+system. Record the units next to each measurement."
+
+A source-math line
 `E = 1/2 mv²` begins at `(25,85)`. A 2-column table at `(25,105)` has
 headers `Quantity | Unit` and rows `Mass | kg`, `Speed | m/s`,
 `Energy | J`; its grid is composed from admitted single-pen straight
-strokes. Under the table, a simple arrow-free line-art slope and a
+strokes.
+
+Under the table, a simple arrow-free line-art slope and a
 labeled resting block occupy a bounded `80 x 50 mm` region from `(25,155)`.
 Avoid unsupported photographic content, colors and decorative layers.
 
 **Page 2 — Spanish, "Movimiento y energía":** identical A4 page/margins,
 a 14 mm title at `(25,30)`, a 3-line paragraph at `(25,50)`:
 "Una fuerza cambia el movimiento. La energía se conserva en un
-sistema cerrado. Anota siempre las unidades." Place source math
+sistema cerrado. Anota siempre las unidades."
+
+Place source math
 `v = d/t` at `(25,85)` and a two-column grid at `(25,105)` with
 `Magnitud | Unidad`, `Distancia | m`, `Tiempo | s`, `Velocidad | m/s`.
 At `(25,155)`, one simple line-art distance-over-time graph uses
-single-pen axes and two labels. All intended marks remain inside
+single-pen axes and two labels.
+
+All intended marks remain inside
 `x=20..190, y=20..277 mm` in the design; real glyph extents are unknown.
 
 **Conceptual acceptance checklist:** each page preserves its exact title,

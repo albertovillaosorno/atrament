@@ -53,15 +53,30 @@ result. **Outputs:** `AdmitCurrentReadOnly`, `PreserveUnknownOptional`, or
 or silently upgrades it. All write/migration effects require a separate,
 explicit operator-selected target and a future versioned converter.
 
-| Format case | Profile outcome | Notebook outcome |
-| --- | --- | --- |
-| Current v1 with valid bytes and features | Read-only admit; original bytes unchanged | Admit only if a current version is actually declared and supported |
-| Prior v0 | Refuse unsupported; no historical migrator exists | Refuse if no defined prior notebook schema exists |
-| Future v2 | Refuse unsupported required version | Refuse unsupported version |
-| Corrupted checksum/ZIP or invalid JSON | Refuse typed integrity failure | Refuse unparseable source |
-| Truncated archive or missing declared entry | Refuse incomplete source | Refuse incomplete data |
-| Current v1 with unknown optional metadata | Admit known parts and retain unknown opaque data | Preserve optional data only where a declared schema permits it |
-| Unknown required feature | Refuse rather than ignore | Refuse rather than silently strip |
+- **Current v1 with valid bytes and features**
+  - **Profile outcome:** Read-only admit; original bytes unchanged
+  - **Notebook outcome:** Admit only if a current version is actually
+    declared and supported
+- **Prior v0**
+  - **Profile outcome:** Refuse unsupported; no historical migrator exists
+  - **Notebook outcome:** Refuse if no defined prior notebook schema exists
+- **Future v2**
+  - **Profile outcome:** Refuse unsupported required version
+  - **Notebook outcome:** Refuse unsupported version
+- **Corrupted checksum/ZIP or invalid JSON**
+  - **Profile outcome:** Refuse typed integrity failure
+  - **Notebook outcome:** Refuse unparseable source
+- **Truncated archive or missing declared entry**
+  - **Profile outcome:** Refuse incomplete source
+  - **Notebook outcome:** Refuse incomplete data
+- **Current v1 with unknown optional metadata**
+  - **Profile outcome:** Admit known parts and retain unknown opaque data
+  - **Notebook outcome:** Preserve optional data only where a declared
+    schema permits it
+- **Unknown required feature**
+  - **Profile outcome:** Refuse rather than ignore
+  - **Notebook outcome:** Refuse rather than silently strip
+
 
 **Worked case:** a current-version profile with a correctly declared known
 entry and a clearly optional key `future_note` is inspected without writing

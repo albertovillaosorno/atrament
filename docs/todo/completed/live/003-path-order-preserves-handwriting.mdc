@@ -63,25 +63,36 @@ order with a typed reason. The proposal is not a motion command.
 **Algorithm:** start from the original order and consider only its single
 adjacent swaps, at most `n - 1` proposals for `n` operations. Do not swap a
 pause/checkpoint, cross a fixed semantic group boundary, or reverse any
-required precedence edge. Check each candidate using the existing exact-plan
+required precedence edge.
+
+Check each candidate using the existing exact-plan
 order-constraint validation. The proposed order must be a full permutation;
 pen-down paths, endpoints, speed, pressure, and semantic identities are
 unchanged. Score each admitted ordering lexicographically by (1) declared
 drying-conflict count, then (2) Euclidean pen-up travel in millimetres,
-including the initial pen position. If more than one swap has the same best
+including the initial pen position.
+
+If more than one swap has the same best
 score, choose the lexicographically smallest original-operation index list.
+
 Commit a proposal only when it strictly improves at least one cost dimension
-without worsening a higher-priority one. Otherwise return the original order.
+without worsening a higher-priority one.
+
+Otherwise return the original order.
 No nondeterministic random search, second pass, or inferred ink kinetics.
 
 **Worked four-stroke example:** initial pen position is `(0,0) mm`.
 Operation `0` writes `(0,0)` to `(1,0)`, `1` writes `(80,0)` to `(81,0)`,
 `2` writes `(2,0)` to `(3,0)`, and `3` writes `(82,0)` to `(83,0)`.
+
 Preserve `0 < 2` for a join and `1 < 3` for ink behavior. The caller has
 explicitly classified every candidate as having zero drying conflicts.
+
 Original `[0,1,2,3]` travels `79 + 79 + 79 = 237 mm` between strokes;
 swapping adjacent operations 1 and 2 yields `[0,2,1,3]`, with
-`1 + 77 + 1 = 79 mm`. It preserves both edges, all four stroke centerlines,
+`1 + 77 + 1 = 79 mm`.
+
+It preserves both edges, all four stroke centerlines,
 and the original first contact point. This is an arithmetic design example,
 not a measured print or executed optimization.
 

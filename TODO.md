@@ -21,7 +21,8 @@ labels belong here.
 No open TODO records remain as of November 2, 2026. The finite task
 records were accepted as practical or theoretical deliverables under the
 [acceptance policy](docs/todo/README.md); that does **not** establish a
-production-ready application or certified machine. The dated
-[release decision ledger](docs/todo/completed/release/008-close-every-known-reproducible-defect.mdc)
-remains **NO-GO** because identified security, PDF, packaging, and verification
-work is not complete. Optional P9 hardware also has design acceptance only.
+production-ready application or certified machine.
+
+The dated `ATR-P8-008` release decision ledger remains **NO-GO** because
+identified security, PDF, packaging, and verification work is incomplete.
+Optional P9 hardware also has design acceptance only.

@@ -38,16 +38,47 @@ not an implicit Atrament desktop release feature. No machine was built,
 connected or certified. The following are sequential design gates; each
 requires independent practical evidence before physical operator use.
 
-| Gate | Required artifact | Acceptance or refusal |
-| --- | --- | --- |
-| 1. Electronics | Power tree, motor limits, wiring map, protected interlocks | Refuse unknown current/thermal or unprotected fault paths |
-| 2. Firmware | Versioned command protocol, watchdog, bounded stops and status | Refuse commands with unknown version or unobserved position |
-| 3. Mechanics/enclosure | Guarded pinch points, safe park, rack and clamp envelope | Refuse reachable moving hazard or unguarded pen/clip strike |
-| 4. Independent stop | Physical emergency-stop and power-fault isolation design | Refuse any software-only claim of effective emergency stop |
-| 5. Registration | Four tool-offset records, page corners and clearance maps | Refuse unknown orientation, measured error or partial tool pickup |
-| 6. Endurance | Repeat docking, long-page cycles, noise/thermal/ink logs | Refuse unmeasured wear, drift, spills or tip collisions |
-| 7. Manufacturing | Traceable bill of materials, calibration jig and service plan | Refuse untraceable revisions or service without protective procedure |
-| 8. Legal/product release | Region-specific safety/EMC review by competent experts | Refuse sale or certification claim absent applicable evidence |
+- **1. Electronics**
+  - **Required artifact:** Power tree, motor limits, wiring map, protected
+    interlocks
+  - **Acceptance or refusal:** Refuse unknown current/thermal or unprotected
+    fault paths
+- **2. Firmware**
+  - **Required artifact:** Versioned command protocol, watchdog, bounded
+    stops and status
+  - **Acceptance or refusal:** Refuse commands with unknown version or
+    unobserved position
+- **3. Mechanics/enclosure**
+  - **Required artifact:** Guarded pinch points, safe park, rack and clamp
+    envelope
+  - **Acceptance or refusal:** Refuse reachable moving hazard or unguarded
+    pen/clip strike
+- **4. Independent stop**
+  - **Required artifact:** Physical emergency-stop and power-fault isolation
+    design
+  - **Acceptance or refusal:** Refuse any software-only claim of effective
+    emergency stop
+- **5. Registration**
+  - **Required artifact:** Four tool-offset records, page corners and
+    clearance maps
+  - **Acceptance or refusal:** Refuse unknown orientation, measured error or
+    partial tool pickup
+- **6. Endurance**
+  - **Required artifact:** Repeat docking, long-page cycles,
+    noise/thermal/ink logs
+  - **Acceptance or refusal:** Refuse unmeasured wear, drift, spills or tip
+    collisions
+- **7. Manufacturing**
+  - **Required artifact:** Traceable bill of materials, calibration jig and
+    service plan
+  - **Acceptance or refusal:** Refuse untraceable revisions or service
+    without protective procedure
+- **8. Legal/product release**
+  - **Required artifact:** Region-specific safety/EMC review by competent
+    experts
+  - **Acceptance or refusal:** Refuse sale or certification claim absent
+    applicable evidence
+
 
 **Finite theoretical bench sequence:** with power isolated, first inspect
 fused supply and cable-routing diagrams; validate a simulated disconnect

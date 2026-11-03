@@ -36,11 +36,25 @@ four pens/markers, explicit safe tool separation, low perceived noise,
 serviceable inks and no implicit tool-change motions. The analysis uses
 relative qualitative expectations only; none are measured noise or costs.
 
-| Design alternative | Noise hypothesis | Desk footprint | Cost and service | Registration and safety risk |
-| --- | --- | --- | --- | --- |
-| Four-position rotating pen carousel | Motor/gear indexing noise; potentially brief | Small dock, more height | Moderate hardware, complex alignment | Angular indexing error, pinch zone and adjacent-tip collisions |
-| Four-slot linear side rack with one XY carrier | Side-to-side docking noise; predictable stops | More width, low height | Simple replaceable slots; moderate precision | Wrong-tool pickup, rack strikes and uncapped tip leakage |
-| Four independent tool heads on one rail | Multiple drives and vibration sources | Wide and mechanically heavy | Highest wiring/control and maintenance effort | Carriage collisions, duplicate active pens and interlock complexity |
+- **Four-position rotating pen carousel**
+  - **Noise hypothesis:** Motor/gear indexing noise; potentially brief
+  - **Desk footprint:** Small dock, more height
+  - **Cost and service:** Moderate hardware, complex alignment
+  - **Registration and safety risk:** Angular indexing error, pinch zone and
+    adjacent-tip collisions
+- **Four-slot linear side rack with one XY carrier**
+  - **Noise hypothesis:** Side-to-side docking noise; predictable stops
+  - **Desk footprint:** More width, low height
+  - **Cost and service:** Simple replaceable slots; moderate precision
+  - **Registration and safety risk:** Wrong-tool pickup, rack strikes and
+    uncapped tip leakage
+- **Four independent tool heads on one rail**
+  - **Noise hypothesis:** Multiple drives and vibration sources
+  - **Desk footprint:** Wide and mechanically heavy
+  - **Cost and service:** Highest wiring/control and maintenance effort
+  - **Registration and safety risk:** Carriage collisions, duplicate active
+    pens and interlock complexity
+
 
 **Decision:** use the **linear side rack** only as the preferred conceptual
 prototype because each individual slot can be inspected and replaced and the

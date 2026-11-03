@@ -37,18 +37,51 @@ software defect was corrected. **Release result: `NO_GO` for real end users,
 production security, finished notebook PDF exports, or physical plotting.**
 A theoretical completed TODO never counts as a tested functional release.
 
-| Issue / missing evidence | Impact and severity | Disposition |
-| --- | --- | --- |
-| P1: session URL fragment exposed in browser opener argv | Credential disclosure to other same-user processes; known security defect | `UNRESOLVED / RELEASE BLOCKER`; redesign credential handoff and test process visibility before production |
-| Notebook-to-PDF path, layout/renderer and final PDF serializer absent | Primary notebook/PDF digital deliverable not actually generated | `DESIGN ONLY / RELEASE BLOCKER`; implement and demonstrate accepted PDF bytes |
-| No built cross-platform desktop archives, reproducibility evidence or signed distribution | No deployable Linux/Windows/macOS first-release package | `DESIGN ONLY / RELEASE BLOCKER`; produce actual target binaries and digests |
-| Full adversarial input/fuzz and renderer pixel-golden campaigns incomplete | Unbounded quality/security claims unsupported | `EVIDENCE MISSING / RELEASE BLOCKER`; run and triage bounded representative suites before launch |
-| Full frontend regression suite exceeded its 120-second command budget on a memory-pressured host | Complete suite pass not established on this run | `NOT VERIFIED`; rerun on suitable hardware, investigate any failures before launch |
-| Physical safety, calibration, vendor commands and recovery not device tested | Plotter could move unexpectedly or resume from unknown location | `UNAVAILABLE / PHYSICAL NO_GO`; no actual device connection or motor commands |
-| Legacy profile/notebook migration not defined | Historical data cannot be migrated as a supported contract | `REFUSE UNSUPPORTED`; retain original data; no invented migration |
-| P9 optional multi-color mechanism has no prototype/certification | Custom hardware not available | `DEFERRED OPTIONAL`, separate from single-pen and PDF goals |
+- **P1: session URL fragment exposed in browser opener argv**
+  - **Impact and severity:** Credential disclosure to other same-user
+    processes; known security defect
+  - **Disposition:** `UNRESOLVED / RELEASE BLOCKER`; redesign credential
+    handoff and test process visibility before production
+- **Notebook-to-PDF path, layout/renderer and final PDF serializer absent**
+  - **Impact and severity:** Primary notebook/PDF digital deliverable not
+    actually generated
+  - **Disposition:** `DESIGN ONLY / RELEASE BLOCKER`; implement and
+    demonstrate accepted PDF bytes
+- **No built cross-platform desktop archives, reproducibility evidence or
+  signed distribution**
+  - **Impact and severity:** No deployable Linux/Windows/macOS first-release
+    package
+  - **Disposition:** `DESIGN ONLY / RELEASE BLOCKER`; produce actual target
+    binaries and digests
+- **Full adversarial input/fuzz and renderer pixel-golden campaigns
+  incomplete**
+  - **Impact and severity:** Unbounded quality/security claims unsupported
+  - **Disposition:** `EVIDENCE MISSING / RELEASE BLOCKER`; run and triage
+    bounded representative suites before launch
+- **Full frontend regression suite exceeded its 120-second command budget on
+  a memory-pressured host**
+  - **Impact and severity:** Complete suite pass not established on this run
+  - **Disposition:** `NOT VERIFIED`; rerun on suitable hardware, investigate
+    any failures before launch
+- **Physical safety, calibration, vendor commands and recovery not device
+  tested**
+  - **Impact and severity:** Plotter could move unexpectedly or resume from
+    unknown location
+  - **Disposition:** `UNAVAILABLE / PHYSICAL NO_GO`; no actual device
+    connection or motor commands
+- **Legacy profile/notebook migration not defined**
+  - **Impact and severity:** Historical data cannot be migrated as a
+    supported contract
+  - **Disposition:** `REFUSE UNSUPPORTED`; retain original data; no invented
+    migration
+- **P9 optional multi-color mechanism has no prototype/certification**
+  - **Impact and severity:** Custom hardware not available
+  - **Disposition:** `DEFERRED OPTIONAL`, separate from single-pen and PDF
+    goals
 
-**Concrete known-defect source:** `src/backend/browser-launch/adapter-outbound/lib.rs`
+
+**Concrete known-defect source:**
+`src/backend/browser-launch/adapter-outbound/lib.rs`
 documents the argv credential leak near the public `launch()` entrypoint;
 `docs/technical/first-release-troubleshooting.md` marks the same unresolved
 P1 condition. The browser's in-memory fragment removal is insufficient to

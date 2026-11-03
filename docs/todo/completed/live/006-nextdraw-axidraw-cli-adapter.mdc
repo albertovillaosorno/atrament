@@ -45,11 +45,14 @@ Only an explicitly armed Plot state may launch a command without `--preview`.
 
 **Finite state flow:** `Prepared -> Previewed -> Armed -> Running ->
 Paused -> Resuming -> Completed`, with independent `Cancelled`, `Failed`
-and `PositionUnknown` terminal states. Preview example is an argv vector,
+and `PositionUnknown` terminal states.
+
+Preview example is an argv vector,
 not a shell command: `axicli page.svg --model 1 --mode plot
 --reordering 4 --preview --rendering 3 --output_file preview.svg`.
 The vendor documents that `--preview` disables USB communication, while
 `--reordering 4` preserves file order *and* prevents implicit path joining.
+
 Neither flag alone proves safe boundaries. The proposal rejects SVG layer
 controls that could supersede caller settings, unsupported path content, and
 an unrecognized CLI version before admission.
@@ -57,11 +60,14 @@ an unrecognized CLI version before admission.
 **Explicit physical intent:** after operator verification of bounds, pen,
 model, origin, selected device, and preview, an authorized process would use
 `axicli page.svg --model 1 --mode plot --reordering 4
---output_file paused.svg`. The adapter must spawn fixed argv with no shell,
+--output_file paused.svg`.
+
+The adapter must spawn fixed argv with no shell,
 private bounded diagnostics, an owned process group, a command deadline, and
 no ambient credential in arguments. A documented AxiDraw pause is requested
 by the device pause control or supported CLI interruption; a saved progress
 SVG is a **candidate** only after verified completion of the paused command.
+
 An authorized resume uses the vendor `--mode res_plot` against that artifact
 with identical model/pen options, but only after independently confirming
 reliable carriage position and unchanged source plan. A cancellation is not

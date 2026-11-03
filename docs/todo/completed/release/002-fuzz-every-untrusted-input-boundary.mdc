@@ -199,18 +199,46 @@ refusal. Runs are bounded by explicit byte and time budgets; parser and
 routing errors must not panic or trigger an effect. This is a **design**
 for future runs, not a claim of actual broad coverage-guided fuzzing.
 
-| Input family | Representative malformed corpus member | Expected refusal |
-| --- | --- | --- |
-| Notebook bundle | Truncated or duplicate required section | Reject as incomplete without applying |
-| `.atrament` profile | ZIP path `../entry` or bad CRC | Reject unsafe path/integrity, no imported profile |
-| Clipboard HTML | Script tag with remote image URL | Treat as inert/untrusted; never execute or fetch |
-| Images | Truncated PNG metadata and huge declared dimensions | Refuse decode/size before allocation or placement |
-| TeX math | Unclosed group `\frac{a}{` | Syntax diagnostic; retain source |
-| Model response | Unknown command with altered base revision | Reject unrecognized or stale command, no apply |
-| Media metadata | Forged mime and external locator | Refuse unsupported media, no network follow |
-| CLI | Unexpected arg or path containing newline | Reject command, never shell-interpret |
-| MCP request | Malformed identity and missing authorization | Reject without effect or credential disclosure |
-| Hardware status | Unrecognized code, truncated coordinates | Position unknown; no resume or motion |
+- **Notebook bundle**
+  - **Representative malformed corpus member:** Truncated or duplicate
+    required section
+  - **Expected refusal:** Reject as incomplete without applying
+- **`.atrament` profile**
+  - **Representative malformed corpus member:** ZIP path `../entry` or bad
+    CRC
+  - **Expected refusal:** Reject unsafe path/integrity, no imported profile
+- **Clipboard HTML**
+  - **Representative malformed corpus member:** Script tag with remote image
+    URL
+  - **Expected refusal:** Treat as inert/untrusted; never execute or fetch
+- **Images**
+  - **Representative malformed corpus member:** Truncated PNG metadata and
+    huge declared dimensions
+  - **Expected refusal:** Refuse decode/size before allocation or placement
+- **TeX math**
+  - **Representative malformed corpus member:** Unclosed group `\frac{a}{`
+  - **Expected refusal:** Syntax diagnostic; retain source
+- **Model response**
+  - **Representative malformed corpus member:** Unknown command with altered
+    base revision
+  - **Expected refusal:** Reject unrecognized or stale command, no apply
+- **Media metadata**
+  - **Representative malformed corpus member:** Forged mime and external
+    locator
+  - **Expected refusal:** Refuse unsupported media, no network follow
+- **CLI**
+  - **Representative malformed corpus member:** Unexpected arg or path
+    containing newline
+  - **Expected refusal:** Reject command, never shell-interpret
+- **MCP request**
+  - **Representative malformed corpus member:** Malformed identity and
+    missing authorization
+  - **Expected refusal:** Reject without effect or credential disclosure
+- **Hardware status**
+  - **Representative malformed corpus member:** Unrecognized code, truncated
+    coordinates
+  - **Expected refusal:** Position unknown; no resume or motion
+
 
 **One bounded scenario:** a 2 MiB-plus-one-body-byte authenticated request
 is rejected before draft mutation, with a stable error class and no echo of

@@ -51,16 +51,41 @@ operator recovery authority. **Output:** a read-only decision `ResumeCandidate`,
 `OperatorRecoveryRequired`, or `DoNotMove`, with explicit reasons. No
 state transition itself sends motion, homing or emergency-stop commands.
 
-| Event | Evidence after stop | Decision before independent recovery |
-| --- | --- | --- |
-| User pause | Verified pen lift, XY position, plan progress and intact bounds | Resume candidate only with renewed operator permission |
-| USB disconnect | Device may have buffered motion; position uncertain | Do not move; re-probe offline and require recovery |
-| Power loss | Motor state and homing lost | Do not move; operator-managed re-registration |
-| Emergency stop | Stop action alone is not coordinate evidence | Do not move; separate safety reset and inspection |
-| Process crash | Progress file may be stale and stroke partial | Do not move; preserve uncertain journal |
-| Partial stroke | Endpoint and deposited geometry disagree | Do not move; refuse automatic suffix replay |
-| Unknown carriage position | No trustworthy XY anchor | Do not move; physical registration required |
-| Restart | Current process did not observe previous motion | Do not move by default; reconstruct only from proof |
+- **User pause**
+  - **Evidence after stop:** Verified pen lift, XY position, plan progress
+    and intact bounds
+  - **Decision before independent recovery:** Resume candidate only with
+    renewed operator permission
+- **USB disconnect**
+  - **Evidence after stop:** Device may have buffered motion; position
+    uncertain
+  - **Decision before independent recovery:** Do not move; re-probe offline
+    and require recovery
+- **Power loss**
+  - **Evidence after stop:** Motor state and homing lost
+  - **Decision before independent recovery:** Do not move; operator-managed
+    re-registration
+- **Emergency stop**
+  - **Evidence after stop:** Stop action alone is not coordinate evidence
+  - **Decision before independent recovery:** Do not move; separate safety
+    reset and inspection
+- **Process crash**
+  - **Evidence after stop:** Progress file may be stale and stroke partial
+  - **Decision before independent recovery:** Do not move; preserve
+    uncertain journal
+- **Partial stroke**
+  - **Evidence after stop:** Endpoint and deposited geometry disagree
+  - **Decision before independent recovery:** Do not move; refuse automatic
+    suffix replay
+- **Unknown carriage position**
+  - **Evidence after stop:** No trustworthy XY anchor
+  - **Decision before independent recovery:** Do not move; physical
+    registration required
+- **Restart**
+  - **Evidence after stop:** Current process did not observe previous motion
+  - **Decision before independent recovery:** Do not move by default;
+    reconstruct only from proof
+
 
 **Worked pause:** a revision-bound six-event single-pen plan stops after
 checkpoint 2. If fresh feedback confirms the correct device, unchanged

@@ -83,10 +83,14 @@ introduce.
 
 **Present operator quick-start:** launch the local `atrament` runtime through
 its automatic browser-opening path; wait for the browser's authenticated
-`Session ready` status before editing. Enter Task, Source and Model response
+`Session ready` status before editing.
+
+Enter Task, Source and Model response
 in their labeled editors. Use `Copy prompt` only as an explicit clipboard
 action for a separately selected chat; pasting into an external provider
-shares data with that provider, not with a private local model. Browser
+shares data with that provider, not with a private local model.
+
+Browser
 drafts are disposable; do not assume they persist on close. Use the keyboard
 skip links and visible zoom controls for preview navigation.
 
@@ -99,15 +103,26 @@ PDF export, physical plot, CLI notebook API or MCP session available.
 
 **Failure/recovery table:**
 
-| Observed problem | Operator rule |
-| --- | --- |
-| Browser launch or loopback startup fails | Stop and restart via admitted automatic launcher; never print credentials |
-| Handshake rejected or incompatible | Use matching local artifacts; no bypass of Host/Origin/version |
-| Draft too large | Reduce the affected field; previous accepted field persists |
-| Draft transport retry offered | Use visible Retry while session credential remains valid |
-| Profile integrity or unsupported features | Inspect read-only; do not overwrite or guess a migration |
-| No PDF/Render/Export adapter | State `Unavailable`, never fabricate a delivered file |
-| Live dry-run or recovery uncertainty | Do not send motion or resume an unknown position |
+- **Browser launch or loopback startup fails**
+  - **Operator rule:** Stop and restart via admitted automatic launcher;
+    never print credentials
+- **Handshake rejected or incompatible**
+  - **Operator rule:** Use matching local artifacts; no bypass of
+    Host/Origin/version
+- **Draft too large**
+  - **Operator rule:** Reduce the affected field; previous accepted field
+    persists
+- **Draft transport retry offered**
+  - **Operator rule:** Use visible Retry while session credential remains
+    valid
+- **Profile integrity or unsupported features**
+  - **Operator rule:** Inspect read-only; do not overwrite or guess a
+    migration
+- **No PDF/Render/Export adapter**
+  - **Operator rule:** State `Unavailable`, never fabricate a delivered file
+- **Live dry-run or recovery uncertainty**
+  - **Operator rule:** Do not send motion or resume an unknown position
+
 
 **Developer interface index:** `localhost-session-runtime-contract.md`
 for listener, admission and session lifecycle;

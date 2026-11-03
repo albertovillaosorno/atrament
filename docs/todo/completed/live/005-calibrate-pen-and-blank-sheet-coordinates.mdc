@@ -56,10 +56,14 @@ read-only proposed-path dry run and do not arm or plot automatically.
 
 **Worked arithmetic, not measurements:** suppose the first three registered
 fiducials read `(0,0)`, `(170,0)`, `(0,257) mm` in device coordinates, so
-this example maps page `(x,y)` to device `(x-20,y-20)`. An independently
+this example maps page `(x,y)` to device `(x-20,y-20)`.
+
+An independently
 observed check point `(170.3,257.2)` differs from its predicted `(170,257)`
 by about `0.36 mm`. Declare a `0.5 mm` hypothetical registration tolerance;
-this example is inside it. If a pen mark is hypothetically displaced
+this example is inside it.
+
+If a pen mark is hypothetically displaced
 `(+0.4,-0.2) mm` in device axes, subtract this offset from planned contact
 coordinates and keep its observation uncertainty `±0.2 mm` explicit. No
 actual machine origin, contact height, scale, offset or safe motion follows

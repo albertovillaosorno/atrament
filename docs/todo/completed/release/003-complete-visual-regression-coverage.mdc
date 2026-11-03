@@ -59,17 +59,34 @@ with corresponding paper and live single-pen theme declarations.
 **Outputs:** 18 axis/viewport comparison records, not a single visually
 plausible screenshot. No golden pixels are claimed to exist today.
 
-| Independent axis | Candidate golden | Proposed comparison |
-| --- | --- | --- |
-| Semantic layout | Element IDs, order and rectangles | Exact IDs/order; measured boxes within 0.25 mm |
-| Vector topology | Paths, joins, pen-contact kinds | Exact path count, endpoint and adjacency graph |
-| Layer composition | Ordered material/layer owner list | Exact layering and clipping policy |
-| Render seed | Stable seed and semantic revision | Exact identity |
-| Physical bounds | Page, safety inset and overflow | Exact declared bounds; 0 out-of-page marks |
-| Final pixels | Reference PNG for each width | At most 1% pixels exceed 1/255 channel error |
-| Digital theme | Foreground/background tokens | Exact role tokens and minimum contrast policy |
-| Live theme | Pen ink, stroke and blank-sheet model | Exact selected tool, contact and geometry |
-| Overflow overlays | Owner IDs, issue shape and count | Exact issue count/owner, 0 missed overflow |
+- **Semantic layout**
+  - **Candidate golden:** Element IDs, order and rectangles
+  - **Proposed comparison:** Exact IDs/order; measured boxes within 0.25 mm
+- **Vector topology**
+  - **Candidate golden:** Paths, joins, pen-contact kinds
+  - **Proposed comparison:** Exact path count, endpoint and adjacency graph
+- **Layer composition**
+  - **Candidate golden:** Ordered material/layer owner list
+  - **Proposed comparison:** Exact layering and clipping policy
+- **Render seed**
+  - **Candidate golden:** Stable seed and semantic revision
+  - **Proposed comparison:** Exact identity
+- **Physical bounds**
+  - **Candidate golden:** Page, safety inset and overflow
+  - **Proposed comparison:** Exact declared bounds; 0 out-of-page marks
+- **Final pixels**
+  - **Candidate golden:** Reference PNG for each width
+  - **Proposed comparison:** At most 1% pixels exceed 1/255 channel error
+- **Digital theme**
+  - **Candidate golden:** Foreground/background tokens
+  - **Proposed comparison:** Exact role tokens and minimum contrast policy
+- **Live theme**
+  - **Candidate golden:** Pen ink, stroke and blank-sheet model
+  - **Proposed comparison:** Exact selected tool, contact and geometry
+- **Overflow overlays**
+  - **Candidate golden:** Owner IDs, issue shape and count
+  - **Proposed comparison:** Exact issue count/owner, 0 missed overflow
+
 
 **Golden inventory:** `page-a4-320` and `page-a4-1024`, each with one
 semantic JSON representation, vector trace, layer snapshot, render seed,
