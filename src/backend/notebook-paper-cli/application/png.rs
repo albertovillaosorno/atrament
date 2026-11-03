@@ -31,6 +31,7 @@
 // - Defaults:
 //   - Unmarked pixels stay fully transparent; no white underpainting.
 //
+
 //! Paper-only transparent raster export, without external image subprocesses.
 
 use atrament_pdf_vector_serializer::{

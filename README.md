@@ -132,6 +132,7 @@ After a compatible session handshake, `GET /api/paper/profile` returns the
 canonical default JSON; `POST /api/paper/profile` checks and canonicalizes a
 paper-only profile; `POST /api/paper/pdf` produces its physical vector
 PDF; and `POST /api/paper/png` produces transparent RGBA paper bytes.
+
 PNG POST also requires exactly one `X-Atrament-Png-Dpi: 150` header
 (value 72–300) and returns `Content-Type: image/png`. Every POST
 requires the exact session Origin, Bearer credential and bounded JSON
@@ -302,6 +303,7 @@ With `page_numbers: true`, Rust prints page numbers 1–32 in the bottom
 margin using compact block numerals; each PDF page receives its own number.
 A PNG export can select page 1–32 with `--png-page N` (defaults to page 1).
 The PNG exporter emits one physical sheet per invocation, not an image bundle.
+
 Numbering requires at least 7 mm of bottom margin; invalid profiles refuse.
 Numbered sheets retain the number and date placeholder when `printed_sheet`
 suppresses the existing paper marks.
