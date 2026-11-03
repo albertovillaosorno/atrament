@@ -51,10 +51,15 @@ python3 cli/notebook.py set-paper --config my-notebook.json \
   --margin-left-mm 20 --margin-right-mm 14 \
   --corner-radius-mm 3 --date-style box \
   --out grid-notebook.json
-# Edit the JSON for content, photographs and handwriting details.
-python3 cli/notebook.py render --config grid-notebook.json \
+# Set global handwriting shape statistics and pen color.
+python3 cli/notebook.py set-handwriting --config grid-notebook.json \
+  --ink '#173b73' --seed 41 --height-mm-mean 3.5 \
+  --height-mm-median 3.45 --height-mm-stddev 0.27 \
+  --out writing-notebook.json
+# Edit the JSON for content, photographs and custom per-glyph shapes.
+python3 cli/notebook.py render --config writing-notebook.json \
   --format pdf --dpi 300 --out homework.pdf
-python3 cli/notebook.py render --config grid-notebook.json \
+python3 cli/notebook.py render --config writing-notebook.json \
   --format png --dpi 300 --transparent --out transparent-pages/
 # Optional: explicitly send the generated PDF to the local printer.
 python3 cli/notebook.py print --pdf homework.pdf
@@ -107,6 +112,12 @@ The `handwriting` JSON object contains per-glyph statistics. For example:
 }
 ```
 
+- `set-handwriting` can change ink, font, stroke width, texture, seed, and
+  letter/line spacing, plus the global `minimum`, `mean`, `median`, `maximum`,
+  `stddev`, and `distribution` for `height_mm`, `width_scale`, `baseline_mm`,
+  and `rotation_deg`. Example: `--rotation-deg-minimum=-4` or
+  `--height-mm-maximum 4.5`. Inconsistent statistics are rejected before
+  saving the configuration; per-character glyph overrides remain separate.
 - In `gaussian` mode the mean and standard deviation drive the sampled value;
   minimum/maximum clamp it. The median is preserved as measured metadata.
   In `triangular` mode the median is the distribution's mode. Neither method

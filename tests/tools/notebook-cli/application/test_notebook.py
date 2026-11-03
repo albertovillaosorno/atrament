@@ -132,6 +132,78 @@ class NotebookCliTests(unittest.TestCase):
                 self.assertEqual(run.returncode, 2, run.stderr)
                 self.assertFalse(target.exists())
 
+    def test_set_handwriting_updates_ink_and_global_distributions(self):
+        target = self.root / "custom-handwriting.json"
+        run = self.run_cli(
+            "set-handwriting",
+            "--config",
+            str(self.config),
+            "--ink",
+            "#3467ab",
+            "--seed",
+            "137",
+            "--texture",
+            "0.4",
+            "--line-height-mm",
+            "6.5",
+            "--letter-spacing-mm",
+            "0.2",
+            "--height-mm-mean",
+            "3.7",
+            "--height-mm-median",
+            "3.6",
+            "--height-mm-stddev",
+            "0.2",
+            "--width-scale-mean",
+            "1.02",
+            "--baseline-mm-distribution",
+            "triangular",
+            "--rotation-deg-minimum",
+            "-4",
+            "--rotation-deg-maximum",
+            "4",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        result = notebook.read_json(target)
+        hw = result["handwriting"]
+        self.assertEqual(hw["ink"], "#3467ab")
+        self.assertEqual(hw["seed"], 137)
+        self.assertEqual(hw["height_mm"]["mean"], 3.7)
+        self.assertEqual(hw["height_mm"]["median"], 3.6)
+        self.assertEqual(hw["width_scale"]["mean"], 1.02)
+        self.assertEqual(hw["rotation_deg"]["minimum"], -4)
+        self.assertEqual(hw["rotation_deg"]["maximum"], 4)
+        self.assertEqual(hw["baseline_mm"]["distribution"], "triangular")
+        self.assertEqual(self.doc["handwriting"]["height_mm"]["mean"], 3.5)
+        self.assertIsNotNone(
+            notebook.render_page(result, 0, 100, self.root).getbbox()
+        )
+
+    def test_set_handwriting_rejects_invalid_profiles_before_write(self):
+        invalid = (
+            (),
+            ("--height-mm-minimum", "5"),
+            ("--height-mm-stddev", "100"),
+            ("--ink", "purple"),
+            ("--stroke-px", "12"),
+            ("--width-scale-mean", "7"),
+        )
+        for options in invalid:
+            with self.subTest(options=options):
+                target = self.root / "bad-handwriting.json"
+                run = self.run_cli(
+                    "set-handwriting",
+                    "--config",
+                    str(self.config),
+                    *options,
+                    "--out",
+                    str(target),
+                )
+                self.assertEqual(run.returncode, 2, run.stderr)
+                self.assertFalse(target.exists())
+
     def test_multi_page_pdf_is_a_real_print_size_pdf(self):
         target = self.root / "notes.pdf"
         run = self.run_cli(

@@ -130,6 +130,15 @@ PAPER_CHOICE_OPTIONS = {
 }
 PAPER_COLOR_OPTIONS = ("line_color", "margin_color", "border_color")
 PAPER_BOOLEAN_OPTIONS = ("draw_margin", "draw_border")
+HANDWRITING_NUMBERS = {
+    "line_height_mm": (2, 40),
+    "letter_spacing_mm": (-1, 3),
+    "texture": (0, 1),
+    "stroke_px": (0, 8),
+    "seed": (-2_147_483_648, 2_147_483_647),
+}
+HANDWRITING_STATS = ("height_mm", "width_scale", "baseline_mm", "rotation_deg")
+STAT_FIELDS = ("minimum", "mean", "median", "maximum", "stddev")
 
 
 def require_number(value, name, low=None, high=None):
@@ -1028,6 +1037,44 @@ def do_set_paper(args):
     print(args.out)
 
 
+def do_set_handwriting(args):
+    doc = read_json(Path(args.config))
+    profile = doc.get("handwriting")
+    if not isinstance(profile, dict):
+        raise TypeError("handwriting must be an object")
+    changed = False
+    if args.font is not None:
+        if not args.font or "\x00" in args.font:
+            raise ValueError("font must be a nonempty path without NUL")
+        profile["font"] = args.font
+        changed = True
+    if args.ink is not None:
+        color(args.ink)
+        profile["ink"] = args.ink
+        changed = True
+    for key, (low, high) in HANDWRITING_NUMBERS.items():
+        value = getattr(args, key)
+        if value is not None:
+            require_number(value, f"handwriting.{key}", low, high)
+            profile[key] = value
+            changed = True
+    for key in HANDWRITING_STATS:
+        for field in (*STAT_FIELDS, "distribution"):
+            value = getattr(args, f"{key}_{field}")
+            if value is not None:
+                stats = profile.get(key)
+                if not isinstance(stats, dict):
+                    raise TypeError(f"handwriting.{key} must be statistics")
+                stats[field] = value
+                changed = True
+    if not changed:
+        raise ValueError("set-handwriting requires at least one option")
+    for key in HANDWRITING_STATS:
+        stat_sample(profile[key], random.Random(0), key)
+    write_json(args.out, doc, args.replace)
+    print(args.out)
+
+
 def do_calibrate(args):
     source = Path(args.config)
     doc = read_json(source)
@@ -1183,6 +1230,25 @@ def main(argv=None):
     p.add_argument("--out", required=True)
     p.add_argument("--replace", action="store_true")
     p.set_defaults(run=do_set_paper)
+    p = cmds.add_parser(
+        "set-handwriting", help="tune ink and global glyph distributions"
+    )
+    p.add_argument("--config", required=True)
+    p.add_argument("--font")
+    p.add_argument("--ink")
+    for key in HANDWRITING_NUMBERS:
+        option_type = int if key in {"stroke_px", "seed"} else float
+        p.add_argument(f"--{key.replace('_', '-')}", type=option_type)
+    for key in HANDWRITING_STATS:
+        for field in STAT_FIELDS:
+            p.add_argument(f"--{key.replace('_', '-')}-{field}", type=float)
+        p.add_argument(
+            f"--{key.replace('_', '-')}-distribution",
+            choices=("gaussian", "triangular"),
+        )
+    p.add_argument("--out", required=True)
+    p.add_argument("--replace", action="store_true")
+    p.set_defaults(run=do_set_handwriting)
     p = cmds.add_parser(
         "calibrate",
         help="enter manually measured per-letter geometry samples",
