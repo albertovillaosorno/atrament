@@ -3556,6 +3556,7 @@ test(
                 } catch { return null; }
             }, 15_000, runtime);
             const launchUrl = fs.readFileSync(capturedUrlFile, "utf8").trim();
+            fs.unlinkSync(capturedUrlFile);
             assert.equal(launchUrl.startsWith(`${origin}#session=`), true);
             assert.equal(/^http:\/\/127\.0\.0\.1:\d+#session=[a-f0-9]{64}$/
                 .test(launchUrl), true, "private test session URL is bounded");
@@ -3688,6 +3689,57 @@ test(
             assert.equal(nativeNotebook.page_numbers, true);
             assert.equal(nativeNotebook.printed_sheet, true);
 
+            // The exact notebook profile saved by the web editor must also
+            // open in the separate Rust CLI and produce real paper-layer
+            // PDF/PNG bytes. This is not a handwritten-content export.
+            const cliBuild = spawnSync(PINNED_CARGO, [
+                "build", "--offline", "--quiet",
+                "-p", "atrament_profile_editor_cli",
+                "--bin", "atrament-profiles",
+            ], {
+                env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR },
+                stdio: "pipe",
+            });
+            assert.equal(cliBuild.status, 0, "profile CLI builds offline");
+            const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            const pdfFile = path.join(root, "browser-saved-paper.pdf");
+            const pngFile = path.join(root, "browser-saved-page-2.png");
+            for (const [format, output, argumentsAfterFormat] of [
+                ["pdf", pdfFile, ["--pages", "2"]],
+                ["png", pngFile, [
+                    "--dpi", "150", "--png-page", "2",
+                ]],
+            ]) {
+                const rendered = spawnSync(cli, [
+                    "notebook", "--profile", notebookFile,
+                    "--export-paper", format,
+                    ...argumentsAfterFormat, "--output", output,
+                ], { stdio: "pipe" });
+                assert.equal(rendered.status, 0,
+                    "Rust CLI accepted browser-saved notebook JSON");
+            }
+            const pdfBytes = fs.readFileSync(pdfFile);
+            const pngBytes = fs.readFileSync(pngFile);
+            assert.ok(pdfBytes.subarray(0, 8).toString("ascii")
+                .startsWith("%PDF-"));
+            assert.ok(pdfBytes.toString("latin1").includes("/Count 2"));
+            const refusedExport = spawnSync(cli, [
+                "notebook", "--profile", notebookFile,
+                "--export-paper", "pdf", "--pages", "2",
+                "--output", pdfFile,
+            ], { stdio: "pipe" });
+            assert.notEqual(refusedExport.status, 0,
+                "existing PDF cannot be overwritten without --replace");
+            assert.deepEqual(fs.readFileSync(pdfFile), pdfBytes);
+            assert.ok(pngBytes.subarray(0, 8).equals(
+                Buffer.from("89504e470d0a1a0a", "hex")));
+            assert.ok(pngBytes.readUInt32BE(16) > 0);
+            assert.ok(pngBytes.readUInt32BE(20) >
+                pngBytes.readUInt32BE(16));
+            assert.deepEqual(JSON.parse(
+                fs.readFileSync(notebookFile, "utf8")), nativeNotebook,
+                "CLI rendering does not alter the browser-saved profile");
+
             // Unsaved UI edits must not pollute the checked disk profile.
             await browserScript(`JSON.stringify((() => {
                 const seed = document.getElementById("handwriting-seed");
@@ -3739,11 +3791,19 @@ test(
             assert.ok(sampled.includes("ñ"));
             assert.ok(sampled.includes("#18446744073709551615"));
             await browserScript(`JSON.stringify((() => {
+                const page = document.getElementById("notebook-png-page");
+                page.value = "2";
+                page.dispatchEvent(new Event("input", { bubbles: true }));
+                const originalCreateObjectURL = URL.createObjectURL;
+                URL.createObjectURL = (blob) => {
+                    window.atramentTestPreviewBlob = blob;
+                    return originalCreateObjectURL.call(URL, blob);
+                };
                 document.getElementById("notebook-preview").click();
                 return true;
             })())`);
             await waitStatus("notebook-status",
-                "Rendered PNG preview for page 1.");
+                "Rendered PNG preview for page 2.");
             const previewed = await browserScript(`JSON.stringify((() => ({
                 visible: !document.getElementById(
                     "notebook-preview-frame").hidden,
@@ -3755,6 +3815,25 @@ test(
             assert.equal(previewed.visible, true);
             assert.ok(previewed.naturalWidth > 0);
             assert.ok(previewed.naturalHeight > 0);
+            // The browser preview and CLI output must be identical Rust PNG
+            // bytes for the same saved profile, physical DPI and page index.
+            const browserPng = await bidi.command("script.evaluate", {
+                expression: `(async () => {
+                    const bytes = await window.atramentTestPreviewBlob
+                        .arrayBuffer();
+                    const digest = await crypto.subtle.digest(
+                        "SHA-256", bytes);
+                    return Array.from(new Uint8Array(digest)).map(
+                        (item) => item.toString(16).padStart(2, "0"),
+                    ).join("");
+                })()`,
+                awaitPromise: true, resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(browserPng.type, "success");
+            assert.equal(browserPng.result.type, "string");
+            assert.equal(browserPng.result.value,
+                crypto.createHash("sha256").update(pngBytes).digest("hex"));
             await browserScript(`JSON.stringify((() => {
                 const mean = document.getElementById("handwriting-mean");
                 mean.value = "99999";

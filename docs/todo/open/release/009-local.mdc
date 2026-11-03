@@ -34,6 +34,34 @@ records. This record is **open executable integration work**. It must not be
 closed merely because a prior design was accepted or a different
 implementation was proposed.
 
+## Verified partial local journey — 2026-11-03
+
+The executable Firefox/Rust integration test starts a disposable localhost
+session with `--profiles-dir`, edits an exact Spanish `ñ` glyph's statistics,
+adjusts both global handwriting and notebook paper values, saves both profiles
+to Rust-owned local files, and reopens the selected values. The native PNG
+paper preview is decoded by Firefox, and rejected invalid handwriting
+statistics leave the existing file unchanged.
+
+The independent `atrament-profiles` Rust CLI then reopens that **same saved
+notebook JSON** and exports a two-page PDF plus a transparent page-two PNG at
+150 DPI. The page-two browser preview and CLI PNG have identical SHA-256
+hashes, proving the web and CLI paths share exact output bytes for one
+admitted page. Re-exporting onto the existing PDF without `--replace` refuses
+and preserves the original PDF.
+
+**Test:** `node --test --test-name-pattern='Firefox edits, saves and reopens
+both profiles through Rust localhost'
+tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs`.
+The test uses only disposable profile files, a stubbed test-owned browser
+opener, real Firefox and the native Rust server and CLI.
+
+**Remaining:** the PDF and PNG contain physical-size *paper-layer* marks,
+selected date placeholders, outline and page numbers, **not actual handwritten
+text, diacritic strokes, image overlays or general notebook content**.
+This is concrete partial evidence, not completion of P8-009 or readiness for
+production printing. P4-012, P5-011 and P5-012 remain open prerequisites.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

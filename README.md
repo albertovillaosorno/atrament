@@ -54,6 +54,12 @@ and maximum unsigned 64-bit seed survive the round-trip, while invalid
 statistics cannot overwrite the accepted file. PNG preview is the notebook
 **paper layer**; handwriting remains numeric-only, not generated ink.
 
+The same browser-saved notebook profile also opens in the independent Rust
+`atrament-profiles` CLI and exports a real two-page paper PDF and 150-DPI
+transparent PNG. The selected PNG page has an identical SHA-256 digest to
+the browser preview. These remain paper-layer exports, not drawn handwriting
+or full notebook content.
+
 The earlier 77 tasks were accepted as bounded academic/design artifacts, not
 as proof of a finished product. **Four of nine executable TODOs remain**
 for actual Spanish/English glyph coverage, rendered notebook content,
