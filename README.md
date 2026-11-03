@@ -534,8 +534,9 @@ entries retain their relative order and ink. The native TSV sequence remains
 the chosen drawing order, but v1 line segments do not represent a grouped
 curved pen stroke.
 
-For a geometric starting point, choose exact `o`, `a`, `ó`, `á`, `n` or `u`
-and select its matching geometric starter. Adjust the center and radius in
+For a geometric starting point, choose an explicitly supported glyph
+(`o`, `a`, `ó`, `á`, `n`, `u`, `c`, `e`, `i` or `í`) and its matching
+geometric starter. Adjust the center and radius in
 micrometres, then deliberately replace that letter's unsaved strokes.
 The `o`/`a` forms share a true analytic circle.
 
@@ -563,6 +564,22 @@ Compose `n` into `ñ` or `u` into `ü` with **Compose accent from authored
 base**; these produce respectively 37 and 36 sampled segments at the default
 center/radius. The original `n` and `u` are unchanged. Neither glyph is an
 entire alphabet or a continuous native quadratic in the exported PDF.
+
+The lowercase `c` is a 270-degree exact SVG circular arc with a right-hand
+gap, serialized as 36 rounded chords. The `e` reuses precisely those chords
+and adds a horizontal crossbar (37 segments); both remain editable.
+
+A dotted `i` has one straight stem plus one short dot stroke (2 segments).
+A separately selectable `í` instead keeps the stem and puts a rising acute
+above it (2 segments) **without an extra dot**. Compose an authored `e`
+into `é` to add the acute as a separate final segment (38 total here).
+
+A general-purpose **Compose accent from authored base** action copies every
+source stroke, including any manually drawn dot. When creating `í` from an
+ordinary dotted `i`, prefer the explicit dotless geometric starter or
+independently remove the copied dot before final export; accent composition
+does not guess which user-drawn marks are detachable. Native v1 export still
+contains sampled line ink, not a real analytic font or Bézier resources.
 
 For `ó` and both `á` variants, **Acute horizontal shift**
 (-500 to +500 µm) and **Acute lift** (0 to 500 µm) move the accent
@@ -620,8 +637,8 @@ there is no automatic saving or new server-side file endpoint. The Rust CLI
 still validates the file on `glyphs --profile` or `notebook --glyph-file`.
 Invalid/oversized files and Unicode controls refuse.
 
-Session end drops the unsaved draft. Outside these explicit `o`/`a`
-geometric starters, the browser does not generate a font, joined cursive,
+Session end drops the unsaved draft. Outside its small explicit geometric
+starter set, the browser does not generate a font, joined cursive,
 all baseline outlines, or a writing style.
 
 The saved glyph shape library is separate from `atrament.notebook.v1`;

@@ -260,6 +260,21 @@ out-of-cell dimensions. The true SVG quadratics are **not** retained in the
 native v1 stroke file or PDF/PNG. Other Spanish/English letters still need
 actual geometric templates, and general script joining remains open.
 
+## Open circular c/e and dotted/dotless i starters (partial) — 2026-11-03
+
+The geometric starter menu can now produce an analytic open circular C-shaped
+arc for c and a matching e with an added crossbar. The SVG retains the
+270-degree arc primitive; native TSV samples 36 chords (37 with e's bar).
+An i shape uses an explicit stem and separate dot, while í chooses the same
+stem plus an acute without duplicating the dot (two segments each).
+
+Browser tests check arc continuity, circle-radius error, SVG guide selection,
+explicit Unicode identity, the correct dotless acute, and atomic refusal of
+clipped or crowded forms. The native text CLI remains the export authority.
+These are only manually selected starter shapes: full Spanish/English
+coverage, automatic cursor joins, native analytic curves and handwriting
+calibration remain unfinished.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

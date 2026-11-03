@@ -100,7 +100,9 @@ function mountEditor() {
         "glyph-accent-lift", "glyph-ideal-preview",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
-        "glyph-ideal-rounded-right", "glyph-ideal-accent",
+        "glyph-ideal-rounded-right", "glyph-ideal-c-loop",
+        "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
+        "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
         "glyph-earlier", "glyph-later",
         "glyph-save", "glyph-preview",
@@ -848,6 +850,108 @@ test("n/u guides replace only matching glyphs", async () => {
         editor.reset();
         assert.equal(get("ideal-rounded").attributes.get("visibility"),
             "hidden");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("c and e open-circle arcs and dotted i have ordered ink", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const c = geometricStarter("c", ...args);
+    const e = geometricStarter("e", ...args);
+    const i = geometricStarter("i", ...args);
+    const acuteI = geometricStarter("í", ...args);
+    assert.equal(c.length, 36);
+    assert.equal(e.length, 37);
+    assert.deepEqual(e.slice(0, 36), c.map((line) => ({
+        ...line, grapheme: "e",
+    })));
+    assert.deepEqual(e.at(-1), {
+        grapheme: "e", x1: 450, y1: 2450,
+        x2: 2155, y2: 2450, width: 250, color: "#123456",
+    });
+    assert.deepEqual(acuteI, [
+        { grapheme: "í", x1: 1550, y1: 2010,
+            x2: 1550, y2: 3550, width: 250, color: "#123456" },
+        { grapheme: "í", x1: 1165, y1: 980,
+            x2: 1825, y2: 485, width: 250, color: "#123456" },
+    ], "the accented i uses an acute instead of a dot");
+    assert.deepEqual(i, [
+        { grapheme: "i", x1: 1550, y1: 2010,
+            x2: 1550, y2: 3550, width: 250, color: "#123456" },
+        { grapheme: "i", x1: 1550, y1: 1350,
+            x2: 1550, y2: 1430, width: 250, color: "#123456" },
+    ]);
+    for (let index = 0; index < c.length; index += 1) {
+        const line = c[index];
+        if (index > 0) {
+            assert.deepEqual([line.x1, line.y1],
+                [c[index - 1].x2, c[index - 1].y2]);
+        }
+        for (const [x, y] of [
+            [line.x1, line.y1], [line.x2, line.y2],
+        ]) assert.ok(Math.abs(Math.hypot(x - 1550, y - 2450) - 1100) < 1);
+    }
+    assert.notDeepEqual([c[0].x1, c[0].y1],
+        [c.at(-1).x2, c.at(-1).y2], "C-shaped arc remains open");
+    const acuteE = composeAccentedGlyph(e, "e", "é", "#123456");
+    assert.equal(acuteE.length, 38);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary([
+        ...c, ...e, ...i, ...acuteE, ...acuteI,
+    ])).length, 115);
+    assert.throws(() => geometricStarter("i", 1550, 2450, 200, 250,
+        "#123456"), /Dotted i requires visible pen-clearance/);
+    assert.throws(() => geometricStarter("e", 150, 2450, 500, 250,
+        "#123456"), /Shape and pen/);
+});
+
+test("open arc and dotted stem guides replace exact glyphs only", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        for (const [glyph, total] of [
+            ["c", 36], ["e", 37], ["i", 2], ["í", 2],
+        ]) {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            get("form").value = glyph;
+            get("form").dispatch("change");
+            assert.equal(get("ideal-circle").attributes.get("visibility"),
+                "hidden");
+            assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+                ["i", "í"].includes(glyph) ? "hidden" : "visible");
+            assert.equal(get("ideal-e-bar").attributes.get("visibility"),
+                glyph === "e" ? "visible" : "hidden");
+            assert.equal(get("ideal-i-dot").attributes.get("visibility"),
+                glyph === "i" ? "visible" : "hidden");
+            assert.equal(get("ideal-i-stem").attributes.get("visibility"),
+                ["i", "í"].includes(glyph) ? "visible" : "hidden");
+            assert.equal(get("ideal-accent").attributes.get("visibility"),
+                glyph === "í" ? "visible" : "hidden");
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, total);
+        }
+        assert.match(get("ideal-c-loop").attributes.get("d"),
+            / A 1100 1100 0 1 1 /);
+        get("character").value = "é";
+        get("character").dispatch("input");
+        get("copy-from").value = "e";
+        get("compose").dispatch("click");
+        assert.equal(get("preview").children.length, 38);
+        get("save").dispatch("click");
+        const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.equal(accepted.length, 115);
+        get("form").value = "i";
+        get("form").dispatch("change");
+        get("character").value = "i";
+        get("character").dispatch("input");
+        get("circle-radius").value = "200";
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Dotted i requires/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            accepted, "invalid dot clearance leaves all templates intact");
     } finally {
         ui.restore();
     }

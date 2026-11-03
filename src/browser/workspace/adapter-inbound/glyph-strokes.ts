@@ -38,6 +38,7 @@ const MAX_BYTES = 524_288;
 const MAX_STROKES = 4096;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const CIRCLE_SEGMENTS = 48;
+const OPEN_ARC_SEGMENTS = 36;
 const ARCH_SEGMENTS = 16;
 const AXES = ["x1", "y1", "x2", "y2", "width"] as const;
 type Axis = typeof AXES[number];
@@ -170,6 +171,33 @@ function upperStory(cx: number, cy: number, radius: number) {
 
 // The n upper hump and u lower bowl use two smooth quadratic arcs.
 // Their exact guides are retained only in SVG; v1 TSV samples the arcs.
+// The C-shaped circular arc is exact in SVG; its open ends leave a
+// quarter-circle gap to the right. The native TSV rounds 36 arc chords.
+function openCirclePoint(
+    cx: number, cy: number, radius: number, step: number,
+): Point {
+    const radians = Math.PI / 4
+        + 3 * Math.PI / 2 * step / OPEN_ARC_SEGMENTS;
+    return {
+        x: cx + radius * Math.cos(radians),
+        y: cy + radius * Math.sin(radians),
+    };
+}
+
+function dottedI(cx: number, cy: number, radius: number, pen: number) {
+    const dotY = cy - radius;
+    const stemY = cy - Math.round(radius * 0.4);
+    if (stemY - (dotY + 80) < pen + 100) {
+        throw new Error("Dotted i requires visible pen-clearance above stem");
+    }
+    return {
+        dot: { from: { x: cx, y: dotY },
+            to: { x: cx, y: dotY + 80 } },
+        stem: { from: { x: cx, y: stemY },
+            to: { x: cx, y: cy + radius } },
+    };
+}
+
 function roundedStory(
     cx: number, cy: number, radius: number, g: "n" | "u",
 ) {
@@ -213,8 +241,8 @@ export function geometricStarter(
     color: string, pos?: { dx: number; lift: number },
     kind: "single" | "two-storey" = "single",
 ): Stroke[] {
-    if (!["o", "a", "ó", "á", "n", "u"].includes(g)) {
-        throw new Error("Geometric starter requires o, a, ó, á, n or u");
+    if (!["o", "a", "ó", "á", "n", "u", "c", "e", "i", "í"].includes(g)) {
+        throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
         || (kind === "two-storey" && !["a", "á"].includes(g))) {
@@ -259,6 +287,45 @@ export function geometricStarter(
         }
         output.push(line(bow.lastStem.from, bow.lastStem.to));
         return output;
+    }
+    if (g === "c" || g === "e") {
+        const result = Array.from({ length: OPEN_ARC_SEGMENTS },
+            (_, index) => {
+                const first = openCirclePoint(cx, cy, radius, index);
+                const last = openCirclePoint(cx, cy, radius, index + 1);
+                return validateStroke({
+                    grapheme: g, x1: Math.round(first.x),
+                    y1: Math.round(first.y), x2: Math.round(last.x),
+                    y2: Math.round(last.y), width: pen, color,
+                });
+            });
+        if (g === "e") result.push(validateStroke({
+            grapheme: g, x1: cx - radius, y1: cy,
+            x2: cx + Math.round(radius * 0.55), y2: cy,
+            width: pen, color,
+        }));
+        return result;
+    }
+    if (g === "i" || g === "í") {
+        const parts = dottedI(cx, cy, radius, pen);
+        const segments = [parts.stem];
+        if (g === "i") {
+            segments.push(parts.dot);
+        } else {
+            const acute = acuteAccent(cx, cy, radius, pen, dx, lift);
+            if (acute.y2 < halfPen || acute.x1 < halfPen
+                || acute.x2 + halfPen > 3500) {
+                throw new Error("Acute accent clips glyph cell");
+            }
+            segments.push({
+                from: { x: acute.x1, y: acute.y1 },
+                to: { x: acute.x2, y: acute.y2 },
+            });
+        }
+        return segments.map((part) => validateStroke({
+            grapheme: g, x1: part.from.x, y1: part.from.y,
+            x2: part.to.x, y2: part.to.y, width: pen, color,
+        }));
     }
     const point = (step: number): Point => {
         const radians = 2 * Math.PI * step / CIRCLE_SEGMENTS;
@@ -423,6 +490,10 @@ export function createGlyphStrokeEditor(): {
     const roundedPath = required<SVGPathElement>("glyph-ideal-rounded");
     const roundedLeft = required<SVGLineElement>("glyph-ideal-rounded-left");
     const roundedRight = required<SVGLineElement>("glyph-ideal-rounded-right");
+    const openPath = required<SVGPathElement>("glyph-ideal-c-loop");
+    const eBar = required<SVGLineElement>("glyph-ideal-e-bar");
+    const iStem = required<SVGLineElement>("glyph-ideal-i-stem");
+    const iDot = required<SVGLineElement>("glyph-ideal-i-dot");
     const selected = required<HTMLSelectElement>("glyph-selected");
     const update = required<HTMLButtonElement>("glyph-update");
     const remove = required<HTMLButtonElement>("glyph-remove");
@@ -556,7 +627,49 @@ export function createGlyphStrokeEditor(): {
             roundedPath.setAttribute("visibility", roundedState);
             roundedLeft.setAttribute("visibility", roundedState);
             roundedRight.setAttribute("visibility", roundedState);
+            const openStart = openCirclePoint(cx, cy, r, 0);
+            const openEnd = openCirclePoint(cx, cy, r,
+                OPEN_ARC_SEGMENTS);
+            const arcHeader = ["M", openStart.x, openStart.y];
+            const arcTail = ["A", r, r, 0, 1, 1,
+                openEnd.x, openEnd.y];
+            const openD = [...arcHeader, ...arcTail].join(" ");
+            openPath.setAttribute("d", openD);
+            openPath.setAttribute("stroke-width", numeric.width.value);
+            openPath.setAttribute("stroke", color.value);
+            const openVisible = active && ["c", "e"]
+                .includes(chosen.grapheme);
+            const openState = openVisible ? "visible" : "hidden";
+            openPath.setAttribute("visibility", openState);
+            eBar.setAttribute("x1", String(cx - r));
+            eBar.setAttribute("y1", String(cy));
+            eBar.setAttribute("x2", String(cx + Math.round(r * 0.55)));
+            eBar.setAttribute("y2", String(cy));
+            eBar.setAttribute("stroke-width", numeric.width.value);
+            eBar.setAttribute("stroke", color.value);
+            const barState = active && chosen.grapheme === "e"
+                ? "visible" : "hidden";
+            eBar.setAttribute("visibility", barState);
             const pen = Number(numeric.width.value);
+            const iParts = ["i", "í"].includes(chosen.grapheme)
+                ? dottedI(cx, cy, r, pen)
+                : dottedI(cx, cy, 1100, 250);
+            for (const [iElement, part] of [
+                [iStem, iParts.stem], [iDot, iParts.dot],
+            ] as [SVGLineElement, { from: Point; to: Point }][]) {
+                iElement.setAttribute("x1", String(part.from.x));
+                iElement.setAttribute("y1", String(part.from.y));
+                iElement.setAttribute("x2", String(part.to.x));
+                iElement.setAttribute("y2", String(part.to.y));
+                iElement.setAttribute("stroke-width", numeric.width.value);
+                iElement.setAttribute("stroke", color.value);
+            }
+            const iState = active && ["i", "í"].includes(chosen.grapheme)
+                ? "visible" : "hidden";
+            const dotState = active && chosen.grapheme === "i"
+                ? "visible" : "hidden";
+            iStem.setAttribute("visibility", iState);
+            iDot.setAttribute("visibility", dotState);
             const dx = Number(accentShift.value);
             const lift = Number(accentLift.value);
             const top = chosen.variant === "two-storey" ? 2 * r : r;
@@ -566,7 +679,7 @@ export function createGlyphStrokeEditor(): {
             }
             idealAccent.setAttribute("stroke-width", numeric.width.value);
             idealAccent.setAttribute("stroke", color.value);
-            const hasAcute = ["ó", "á"].includes(chosen.grapheme);
+            const hasAcute = ["ó", "á", "í"].includes(chosen.grapheme);
             const accentState = active && hasAcute ? "visible" : "hidden";
             idealAccent.setAttribute("visibility", accentState);
             ideal.setAttribute("aria-label", "Analytic geometric "
@@ -578,6 +691,10 @@ export function createGlyphStrokeEditor(): {
             roundedPath.setAttribute("visibility", "hidden");
             roundedLeft.setAttribute("visibility", "hidden");
             roundedRight.setAttribute("visibility", "hidden");
+            openPath.setAttribute("visibility", "hidden");
+            eBar.setAttribute("visibility", "hidden");
+            iStem.setAttribute("visibility", "hidden");
+            iDot.setAttribute("visibility", "hidden");
             idealAccent.setAttribute("visibility", "hidden");
             ideal.setAttribute("aria-label", "Invalid geometric settings");
         }

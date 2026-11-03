@@ -532,7 +532,10 @@
           <p class="field-help">Geometric starters: exact o is an analytic
             circle, simple a adds a right stem, and two-storey a adds an
             analytic upper arch. The n upper hump and u lower bowl use
-            analytic quadratic arches. Acute ó/á add a rising accent. Native v1
+            analytic quadratic arches. The c/e open loop samples a circular
+            arc; i uses a vertical stem and separate dot, while í replaces
+            its dot with an acute. Acute ó/á also add a rising accent.
+            Native v1
             TSV/PDF ink samples these curves as line segments rather than
             preserving exact circle or quadratic primitives.
             The explicit replacement affects only the selected grapheme.</p>
@@ -540,6 +543,10 @@
             <label>Geometric starter
               <select id="glyph-form" disabled>
                 <option value="o">Circle o</option>
+                <option value="c">Open circle c</option>
+                <option value="e">Open loop e (with bar)</option>
+                <option value="i">Dotted i (stem and dot)</option>
+                <option value="í">Acute í (stem, no dot)</option>
                 <option value="n">Rounded n (upper hump)</option>
                 <option value="u">Rounded u (lower bowl)</option>
                 <option value="a">Simple a (circle + stem)</option>
@@ -600,6 +607,18 @@
               stroke-linecap="round" visibility="hidden"></line>
             <line id="glyph-ideal-rounded-right" x1="2650" y1="2450"
               x2="2650" y2="3550" stroke="#243647" stroke-width="250"
+              stroke-linecap="round" visibility="hidden"></line>
+            <path id="glyph-ideal-c-loop" d="" fill="none"
+              stroke="#243647" stroke-width="250" stroke-linecap="round"
+              stroke-linejoin="round" visibility="hidden"></path>
+            <line id="glyph-ideal-e-bar" x1="450" y1="2450"
+              x2="2155" y2="2450" stroke="#243647" stroke-width="250"
+              stroke-linecap="round" visibility="hidden"></line>
+            <line id="glyph-ideal-i-stem" x1="1550" y1="2010"
+              x2="1550" y2="3550" stroke="#243647" stroke-width="250"
+              stroke-linecap="round" visibility="hidden"></line>
+            <line id="glyph-ideal-i-dot" x1="1550" y1="1350"
+              x2="1550" y2="1430" stroke="#243647" stroke-width="250"
               stroke-linecap="round" visibility="hidden"></line>
             <line id="glyph-ideal-accent" x1="1165" y1="980"
               x2="1825" y2="485" stroke="#243647" stroke-width="250"
