@@ -60,13 +60,17 @@ minimum row pitch is 9 mm. Page breaks are automatic, up to 32 pages and
 An explicit `--pages` smaller than the measured PDF count refuses.
 
 The limited Markdown subset recognizes `#`, `##`, and `###` single-line
-headings and `-` or `*` list items. Headings get an explicit ink underline,
-and list items a physical ink marker and indentation.
+headings and `-` or `*` list items. Headings default to an explicit ink
+underline, while `--heading-style marker` can place a colored four-stroke
+opaque highlight **behind** authored heading ink; `none` suppresses the
+heading mark without changing text. List items keep their distinct physical
+ink mark and indentation. Heading styling is CLI-only and does not create
+semantic block styles or persistent title identities.
 
-Ordinary source lines are independently wrapped at word or grapheme boundaries; blank lines add
-paragraph spacing. Long headings refuse their single-line fixed region.
+Ordinary source lines are independently wrapped at word or grapheme
+boundaries; blank lines add paragraph spacing. Long headings refuse their single-line fixed region.
 This does **not** implement inline Markdown styling, combined soft-wrapped
-paragraphs, full ordered-list formatting or decorative marker lettering.
+paragraphs, full ordered-list formatting or custom marker letterforms.
 
 Only caller-authored exact glyph strokes render; missing visible shapes still
 refuse with codepoints instead of silently substituting font characters.
@@ -78,10 +82,11 @@ selected paper margins, exact file-vs-inline output, invalid UTF-8/oversize
 file refusal, and immutable existing output on oversized headings, missing
 shapes and insufficient explicitly requested pages.
 
-The source and resulting ink are export-only CLI state, **not** a persisted semantic notebook model.
+The source and resulting ink are export-only CLI state, **not** a
+persisted semantic notebook model.
 Browser paste/edit, stable semantic block identities, complete Markdown,
-fixed image regions, true glyph outlines, aesthetic titles and persisted
-notebook body content remain open.
+fixed image regions, true glyph outlines, editable aesthetic title styles
+and persisted notebook body content remain open.
 
 This partial slice does not meet the finite two-page saved-notebook
 acceptance criterion.
