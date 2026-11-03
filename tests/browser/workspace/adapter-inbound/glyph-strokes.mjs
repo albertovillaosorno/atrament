@@ -1132,6 +1132,73 @@ test("v/w exact SVG lines and native TSV remain session-safe", async () => {
     }
 });
 
+test("dotted j has separate pen dot and 16 connected hook chords", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const j = geometricStarter("j", ...args);
+    assert.equal(j.length, 18);
+    assert.deepEqual(j[0], {
+        grapheme: "j", x1: 1550, y1: 2010,
+        x2: 1550, y2: 3220, width: 250, color: "#123456",
+    });
+    assert.deepEqual([j[1].x1, j[1].y1], [1550, 3220]);
+    assert.deepEqual([j[16].x2, j[16].y2], [1000, 3990]);
+    assert.deepEqual(j[17], {
+        grapheme: "j", x1: 1550, y1: 1350,
+        x2: 1550, y2: 1430, width: 250, color: "#123456",
+    });
+    for (let index = 2; index <= 16; index += 1) {
+        assert.deepEqual([j[index].x1, j[index].y1],
+            [j[index - 1].x2, j[index - 1].y2]);
+    }
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(j)), j);
+    assert.throws(() => geometricStarter("j", 1550, 3150, 1100,
+        250, "#123456"), /Hooked descender and pen/);
+    assert.throws(() => geometricStarter("j", ...args,
+        undefined, "two-storey"), /Two-storey/);
+});
+
+test("j SVG and TSV agree; clipping refuses edits", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("character").value = "j";
+        get("character").dispatch("input");
+        get("form").value = "j";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 1550 3220 Q 1550 3990 1000 3990");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-i-stem").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-i-stem").attributes.get("y2"), "3220");
+        assert.equal(get("ideal-i-dot").attributes.get("visibility"),
+            "visible");
+        for (const hidden of ["ideal-rounded-left", "ideal-rounded-right",
+            "ideal-circle", "ideal-e-bar"]) {
+            assert.equal(get(hidden).attributes.get("visibility"), "hidden");
+        }
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 18);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, geometricStarter("j", 1550, 2450, 1100,
+            250, "#243647"));
+        get("circle-y").value = "3150";
+        get("circle-y").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Hooked descender and pen/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "invalid j must not replace authored ink");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("f is taller and r has an n shoulder without right stem", () => {
     const args = [1550, 2450, 1100, 250, "#123456"];
     const f = geometricStarter("f", ...args);

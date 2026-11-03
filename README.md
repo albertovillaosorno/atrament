@@ -578,7 +578,7 @@ curved pen stroke.
 For a geometric starting point, choose an explicitly supported glyph
 (`o`, `a`, `ó`, `á`, `b`, `d`, `p`, `q`, `n`, `u`, `h`, `m`,
 `l`, `t`, `f`, `r`, `v`, `w`, `k`, `x`, `y`, `z`, `c`, `e`,
-`i` or `í`) and its matching
+`i`, `í` or `j`) and its matching
 geometric starter. Adjust the center and radius in
 micrometres, then deliberately replace that letter's unsaved strokes.
 The `o`/`a` forms share a true analytic circle.
@@ -658,7 +658,11 @@ pen's half-width margin, without replacing saved shapes.
 
 A dotted `i` has one straight stem plus one short dot stroke (2 segments).
 A separately selectable `í` instead keeps the stem and puts a rising acute
-above it (2 segments) **without an extra dot**. Compose an authored `e`
+above it (2 segments) **without an extra dot**. The dotted `j` extends its
+stem into a quadratic descender hook: the SVG keeps the ideal curve and
+native TSV samples 16 connected chords, for 18 ordered segments with
+stem and dot. The hook and pen width must fit the cell; invalid placement
+refuses without changing saved ink. Compose an authored `e`
 into `é` to add the acute as a separate final segment (38 total here).
 
 A general-purpose **Compose accent from authored base** action copies every

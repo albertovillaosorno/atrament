@@ -170,6 +170,20 @@ function dottedI(cx, cy, radius, pen) {
             to: { x: cx, y: cy + radius } },
     };
 }
+// The j is a straight downstroke, a short separate dot, and one ideal
+// quadratic turn. Native TSV samples only the turn into ordered chords.
+function hookedJ(cx, cy, radius, pen) {
+    const dotted = dottedI(cx, cy, radius, pen);
+    const turnY = cy + Math.round(radius * 1.4);
+    const start = { x: cx, y: cy + Math.round(radius * 0.7) };
+    const control = { x: cx, y: turnY };
+    const end = { x: cx - Math.round(radius / 2), y: turnY };
+    return {
+        stem: { from: dotted.stem.from, to: start },
+        dot: dotted.dot,
+        turn: [start, control, end],
+    };
+}
 // Closed-bowl letters share exactly the same circle as o/a. Ascenders
 // extend above the bowl; descenders extend below it. In v1 only their
 // integer straight-stem geometry survives the explicit TSV export.
@@ -334,7 +348,7 @@ function quadratic(from, control, to, step) {
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
-        "k", "x", "y", "z", "c", "e", "i", "í"].includes(g)) {
+        "k", "x", "y", "z", "c", "e", "i", "í", "j"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -448,6 +462,22 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
                 width: pen, color,
             }));
         return result;
+    }
+    if (g === "j") {
+        const parts = hookedJ(cx, cy, radius, pen);
+        if (parts.turn[1].y + halfPen > 4500
+            || parts.turn[2].x < halfPen) {
+            throw new Error("Hooked descender and pen must fit glyph cell");
+        }
+        const line = (from, to) => validateStroke({ grapheme: g, x1: from.x, y1: from.y,
+            x2: to.x, y2: to.y, width: pen, color });
+        const segments = [line(parts.stem.from, parts.stem.to)];
+        const [from, control, to] = parts.turn;
+        for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
+            segments.push(line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1)));
+        }
+        segments.push(line(parts.dot.from, parts.dot.to));
+        return segments;
     }
     if (g === "i" || g === "í") {
         const parts = dottedI(cx, cy, radius, pen);
@@ -755,9 +785,17 @@ export function createGlyphStrokeEditor() {
             const isStraight = ["v", "w", "k", "x", "y", "z"]
                 .includes(chosen.grapheme);
             const straightD = isStraight ? straightGuide(straightLines(cx, cy, r, chosen.grapheme)) : "";
+            const jParts = chosen.grapheme === "j"
+                ? hookedJ(cx, cy, r, Number(numeric.width.value)) : null;
+            const jTurn = jParts?.turn;
+            const jD = jTurn === undefined ? ""
+                : `M ${jTurn[0].x} ${jTurn[0].y}`
+                    + ` Q ${jTurn[1].x} ${jTurn[1].y}`
+                    + ` ${jTurn[2].x} ${jTurn[2].y}`;
             const roundedD = isStraight ? straightD
-                : chosen.grapheme === "m" ? doubledD
-                    : [roundedStart, roundedFirst, roundedSecond].join(" ");
+                : chosen.grapheme === "j" ? jD
+                    : chosen.grapheme === "m" ? doubledD
+                        : [roundedStart, roundedFirst, roundedSecond].join(" ");
             roundedPath.setAttribute("d", roundedD);
             roundedPath.setAttribute("stroke-width", numeric.width.value);
             roundedPath.setAttribute("stroke", color.value);
@@ -775,11 +813,12 @@ export function createGlyphStrokeEditor() {
                 element.setAttribute("stroke", color.value);
             }
             const roundedVisible = active
-                && ["n", "u", "h", "m", "r",
+                && ["n", "u", "h", "m", "r", "j",
                     "v", "w", "k", "x", "y", "z"]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
+                && chosen.grapheme !== "j"
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
             roundedLeft.setAttribute("visibility", roundedStemState);
@@ -809,9 +848,12 @@ export function createGlyphStrokeEditor() {
                 .includes(chosen.grapheme) ? "visible" : "hidden";
             eBar.setAttribute("visibility", barState);
             const pen = Number(numeric.width.value);
-            const iParts = ["i", "í"].includes(chosen.grapheme)
+            const iParts = ["i", "í", "j"].includes(chosen.grapheme)
                 ? dottedI(cx, cy, r, pen)
                 : dottedI(cx, cy, 1100, 250);
+            if (jParts !== null) {
+                iParts.stem = jParts.stem;
+            }
             if (["l", "t", "f"].includes(chosen.grapheme)) {
                 const tallKind = chosen.grapheme === "l" ? "l"
                     : chosen.grapheme === "f" ? "f" : "t";
@@ -827,9 +869,9 @@ export function createGlyphStrokeEditor() {
                 iElement.setAttribute("stroke-width", numeric.width.value);
                 iElement.setAttribute("stroke", color.value);
             }
-            const iState = active && ["i", "í", "l", "t", "f"]
+            const iState = active && ["i", "í", "j", "l", "t", "f"]
                 .includes(chosen.grapheme) ? "visible" : "hidden";
-            const dotState = active && chosen.grapheme === "i"
+            const dotState = active && ["i", "j"].includes(chosen.grapheme)
                 ? "visible" : "hidden";
             iStem.setAttribute("visibility", iState);
             iDot.setAttribute("visibility", dotState);

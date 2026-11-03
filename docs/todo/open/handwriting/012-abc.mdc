@@ -376,6 +376,22 @@ missing exact-glyph audit and real one-page PDF plus transparent 72-DPI
 RGBA PNG export for `frfr`. Automatic cursive, the full Spanish/English
 inventory and native vector-curve persistence remain unfinished.
 
+## Dotted j with bounded analytic hook (partial) — 2026-11-03
+
+The localhost geometric starter picker now offers lowercase `j` as an
+ordered stem, 16 connected samples of a single ideal quadratic descender,
+and a separately authored dot (18 strokes total). The SVG retains the
+analytic `Q` hook while Rust v1 TSV records its sampled integer chords.
+The exact `j` selector is independent from the existing dotted `i` and
+acute `í` forms.
+
+Two browser tests prove ordered endpoints, continuous hook chords, dot
+identity, exact guide visibility, UTF-8 TSV readback, and atomic refusal
+when its below-baseline hook and pen would leave the glyph cell. Rust CLI
+read the 18-stroke library byte-for-byte, reported no missing `j` and
+exported one-page PDF and transparent 72-DPI RGBA PNG for `jj`.
+This does not establish automatic curves in native PDF or cursive joins.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
