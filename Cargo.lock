@@ -477,6 +477,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "atrament_notebook_paper_cli"
+version = "0.1.0"
+dependencies = [
+ "atrament_paper_mark_geometry",
+ "atrament_pdf_composition_plan",
+ "atrament_pdf_vector_serializer",
+ "atrament_physical_page_profile",
+]
+
+[[package]]
 name = "atrament_one_shot_formatting_prompt"
 version = "0.1.0"
 

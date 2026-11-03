@@ -72,6 +72,7 @@ members = [
     "src/backend/mcp-operation-lifecycle-projection",
     "src/backend/mcp-semantic-command-admission-projection",
     "src/backend/mcp-semantic-command-result-projection",
+    "src/backend/notebook-paper-cli",
     "src/backend/pdf-composition-plan",
     "src/backend/pdf-vector-serializer",
     "src/backend/physical-compatibility-ledger",

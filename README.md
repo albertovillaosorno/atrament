@@ -50,6 +50,27 @@ for Rust profile editing, localhost sliders, Spanish/English glyph coverage,
 and real Rust PDF/PNG output. The previous NO-GO decision still applies to
 production claims, and physical hardware is not required for local use.
 
+### Native Rust printable-paper PDF (limited first slice)
+
+The `atrament-paper` Rust CLI can already generate a physically sized **blank,
+ruled, squared-grid, or dotted sheet** using the existing Rust page-profile,
+nominal paper-mark, and vector PDF components. For example:
+
+```sh
+cargo run -q -p atrament_notebook_paper_cli -- \
+  --style grid --width-mm 210 --height-mm 297 --spacing-mm 5 \
+  --margin-top-mm 22 --margin-bottom-mm 16 \
+  --margin-left-mm 20 --margin-right-mm 14 \
+  --line-color '#c5d4e7' > paper.pdf
+```
+
+The default is an A4 5-mm square grid; `--style ruled`, `--style dot`, and
+`--style blank` select other paper. All measurements are millimeters and the
+PDF uses physical point dimensions, not screenshot pixels. Invalid options
+fail before the CLI writes PDF bytes. This is a **paper-only** CLI: it does not
+load/save notebook or handwriting profiles, draw handwriting, embed images,
+or provide localhost sliders yet. Those are still open Rust integration tasks.
+
 ## The workspace
 
 The following is the intended notebook workflow, not a claim that the

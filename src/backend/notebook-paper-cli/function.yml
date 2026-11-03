@@ -1,0 +1,9 @@
+identity:
+  id: function:notebook-paper-cli
+  name: notebook-paper-cli
+  path: src/backend/notebook-paper-cli
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: composition
