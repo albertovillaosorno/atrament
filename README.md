@@ -576,7 +576,7 @@ the chosen drawing order, but v1 line segments do not represent a grouped
 curved pen stroke.
 
 For a geometric starting point, choose an explicitly supported glyph
-(`o`, `a`, `ó`, `á`, `b`, `d`, `p`, `q`, `n`, `u`, `h`, `m`,
+(`o`, `a`, `ó`, `á`, `b`, `d`, `p`, `q`, `g`, `n`, `u`, `h`, `m`,
 `l`, `t`, `f`, `r`, `v`, `w`, `k`, `x`, `y`, `z`, `c`, `e`,
 `i`, `í` or `j`) and its matching
 geometric starter. Adjust the center and radius in
@@ -640,6 +640,12 @@ shoulder and left stem but deliberately omits the `n` right stem: one
 straight stroke and 32 sampled chords (33 TSV segments). Its SVG keeps
 both ideal quadratic arcs. Both templates remain user-selectable and refuse
 clipped geometry without changing saved ink; this is still not cursive.
+
+The `g` starter keeps precisely the same analytic circle as `o` and adds
+a right-hand stem followed by an ideal quadratic descender hook. The TSV
+contains 48 rounded circle chords, one exact stem and 16 connected hook
+chords (65 ordered segments). The SVG retains the exact circle and curve,
+while clipping of the descender or pen refuses replacement atomically.
 
 The symmetric `v` uses two exact straight segments and `w` uses four
 connected straight segments, reusing one SVG guide with no additional

@@ -184,6 +184,19 @@ function hookedJ(cx, cy, radius, pen) {
         turn: [start, control, end],
     };
 }
+// Lowercase g reuses the unmodified ideal o circle and adds an ordered
+// right stem plus a separate quadratic descender with bounded pen width.
+function hookedG(cx, cy, radius) {
+    const x = cx + radius;
+    const from = { x, y: cy + Math.round(radius * 0.65) };
+    const bottom = cy + Math.round(radius * 1.45);
+    const control = { x, y: bottom };
+    const end = { x: cx + Math.round(radius / 2), y: bottom };
+    return {
+        stem: { from: { x, y: cy }, to: from },
+        turn: [from, control, end],
+    };
+}
 // Closed-bowl letters share exactly the same circle as o/a. Ascenders
 // extend above the bowl; descenders extend below it. In v1 only their
 // integer straight-stem geometry survives the explicit TSV export.
@@ -348,7 +361,7 @@ function quadratic(from, control, to, step) {
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
-        "k", "x", "y", "z", "c", "e", "i", "í", "j"].includes(g)) {
+        "k", "x", "y", "z", "c", "e", "i", "í", "j", "g"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -516,6 +529,20 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
             x2: last.x, y2: last.y, width: pen, color,
         });
     });
+    if (g === "g") {
+        const parts = hookedG(cx, cy, radius);
+        if (parts.turn[1].y + halfPen > 4500) {
+            throw new Error("Loop hook and pen must fit inside glyph cell");
+        }
+        const line = (from, to) => validateStroke({ grapheme: g, x1: from.x, y1: from.y,
+            x2: to.x, y2: to.y, width: pen, color });
+        lines.push(line(parts.stem.from, parts.stem.to));
+        const [from, control, to] = parts.turn;
+        for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
+            lines.push(line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1)));
+        }
+        return lines;
+    }
     if (kind === "two-storey") {
         if (cy - topOffset < halfPen) {
             throw new Error("Two-storey arch exceeds glyph cell");
@@ -734,21 +761,23 @@ export function createGlyphStrokeEditor() {
             const shown = active ? "visible" : "hidden";
             const chosen = selectedForm();
             const circleVisible = ["o", "a", "ó", "á", "b", "d",
-                "p", "q"].includes(chosen.grapheme);
+                "p", "q", "g"].includes(chosen.grapheme);
             const circleState = circleVisible ? shown : "hidden";
             idealCircle.setAttribute("visibility", circleState);
             const stemGlyph = ["a", "á", "b", "d", "p", "q"]
                 .includes(chosen.grapheme)
                 ? chosen.grapheme
                 : "a";
-            const stem = loopStem(cx, cy, r, stemGlyph);
+            const stem = chosen.grapheme === "g"
+                ? hookedG(cx, cy, r).stem
+                : loopStem(cx, cy, r, stemGlyph);
             idealStem.setAttribute("x1", String(stem.from.x));
             idealStem.setAttribute("y1", String(stem.from.y));
             idealStem.setAttribute("x2", String(stem.to.x));
             idealStem.setAttribute("y2", String(stem.to.y));
             idealStem.setAttribute("stroke-width", numeric.width.value);
             idealStem.setAttribute("stroke", color.value);
-            const stemVisible = active && ["a", "á", "b", "d", "p", "q"]
+            const stemVisible = active && ["a", "á", "b", "d", "p", "q", "g"]
                 .includes(chosen.grapheme);
             const stemState = stemVisible ? "visible" : "hidden";
             idealStem.setAttribute("visibility", stemState);
@@ -787,15 +816,23 @@ export function createGlyphStrokeEditor() {
             const straightD = isStraight ? straightGuide(straightLines(cx, cy, r, chosen.grapheme)) : "";
             const jParts = chosen.grapheme === "j"
                 ? hookedJ(cx, cy, r, Number(numeric.width.value)) : null;
+            const gParts = chosen.grapheme === "g"
+                ? hookedG(cx, cy, r) : null;
             const jTurn = jParts?.turn;
             const jD = jTurn === undefined ? ""
                 : `M ${jTurn[0].x} ${jTurn[0].y}`
                     + ` Q ${jTurn[1].x} ${jTurn[1].y}`
                     + ` ${jTurn[2].x} ${jTurn[2].y}`;
+            const gTurn = gParts?.turn;
+            const gD = gTurn === undefined ? ""
+                : `M ${gTurn[0].x} ${gTurn[0].y}`
+                    + ` Q ${gTurn[1].x} ${gTurn[1].y}`
+                    + ` ${gTurn[2].x} ${gTurn[2].y}`;
             const roundedD = isStraight ? straightD
                 : chosen.grapheme === "j" ? jD
-                    : chosen.grapheme === "m" ? doubledD
-                        : [roundedStart, roundedFirst, roundedSecond].join(" ");
+                    : chosen.grapheme === "g" ? gD
+                        : chosen.grapheme === "m" ? doubledD
+                            : [roundedStart, roundedFirst, roundedSecond].join(" ");
             roundedPath.setAttribute("d", roundedD);
             roundedPath.setAttribute("stroke-width", numeric.width.value);
             roundedPath.setAttribute("stroke", color.value);
@@ -813,12 +850,12 @@ export function createGlyphStrokeEditor() {
                 element.setAttribute("stroke", color.value);
             }
             const roundedVisible = active
-                && ["n", "u", "h", "m", "r", "j",
+                && ["n", "u", "h", "m", "r", "j", "g",
                     "v", "w", "k", "x", "y", "z"]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
-                && chosen.grapheme !== "j"
+                && chosen.grapheme !== "j" && chosen.grapheme !== "g"
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
             roundedLeft.setAttribute("visibility", roundedStemState);

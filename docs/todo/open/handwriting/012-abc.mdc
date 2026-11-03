@@ -392,6 +392,22 @@ read the 18-stroke library byte-for-byte, reported no missing `j` and
 exported one-page PDF and transparent 72-DPI RGBA PNG for `jj`.
 This does not establish automatic curves in native PDF or cursive joins.
 
+## Exact o-loop plus g descender hook (partial) — 2026-11-03
+
+Lowercase `g` now reuses the same exact SVG circle and sampled 48-segment
+bowl as `o`, with an independent right-side straight stem and a single
+analytic quadratic descender sampled into 16 ordered native TSV chords.
+This 65-segment letter has independently visible circle, stem and hook
+SVG guides; the unrelated n/u stems stay hidden. The editor refuses a
+clipped curve including the pen half-width without replacing authored ink.
+
+Two browser regressions verify coordinate equality with the `o` bowl,
+ordered hook endpoints, SVG guide visibility, UTF-8 TSV readback and
+atomic clipping refusal. Rust CLI read the `g` library byte-for-byte,
+reported zero missing shapes, and produced real one-page PDF plus
+transparent 72-DPI RGBA PNG for `gg`. This remains a manual geometric
+starter, not whole-alphabet coverage or native editable circle/curve ink.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

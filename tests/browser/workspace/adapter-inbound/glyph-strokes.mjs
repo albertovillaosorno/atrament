@@ -1132,6 +1132,73 @@ test("v/w exact SVG lines and native TSV remain session-safe", async () => {
     }
 });
 
+test("g reuses exact o circle with a separate quadratic hook", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const o = geometricStarter("o", ...args);
+    const g = geometricStarter("g", ...args);
+    assert.equal(g.length, 65);
+    assert.deepEqual(g.slice(0, 48), o.map((stroke) => ({
+        ...stroke, grapheme: "g",
+    })));
+    assert.deepEqual(g[48], {
+        grapheme: "g", x1: 2650, y1: 2450,
+        x2: 2650, y2: 3165, width: 250, color: "#123456",
+    });
+    assert.deepEqual([g[49].x1, g[49].y1], [2650, 3165]);
+    assert.deepEqual([g[64].x2, g[64].y2], [2100, 4045]);
+    for (let index = 50; index <= 64; index += 1) {
+        assert.deepEqual([g[index].x1, g[index].y1],
+            [g[index - 1].x2, g[index - 1].y2]);
+    }
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(g)), g);
+    assert.throws(() => geometricStarter("g", 1550, 3150, 1100,
+        250, "#123456"), /Loop hook and pen/);
+    assert.throws(() => geometricStarter("g", ...args,
+        undefined, "two-storey"), /Two-storey/);
+});
+
+test("g ideal circle and hook preserve authored TSV on clipping", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("character").value = "g";
+        get("character").dispatch("input");
+        get("form").value = "g";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-stem").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-stem").attributes.get("y2"), "3165");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 2650 3165 Q 2650 4045 2100 4045");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "visible");
+        for (const id of ["ideal-rounded-left", "ideal-rounded-right",
+            "ideal-e-bar", "ideal-i-stem", "ideal-i-dot"]) {
+            assert.equal(get(id).attributes.get("visibility"), "hidden");
+        }
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 65);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, geometricStarter("g", 1550, 2450, 1100,
+            250, "#243647"));
+        get("circle-y").value = "3150";
+        get("circle-y").dispatch("input");
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Loop hook and pen/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "clipped g must preserve previous ink");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("dotted j has separate pen dot and 16 connected hook chords", () => {
     const args = [1550, 2450, 1100, 250, "#123456"];
     const j = geometricStarter("j", ...args);
