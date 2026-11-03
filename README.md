@@ -125,7 +125,9 @@ margins, `corner_radius_mm`, and date style (`none`, `plain`, `box`,
 `underline`). Each `pages[]` entry owns its `text` lines, `images`, `date`,
 optional `number`, and `printed` flag. `printed: true` omits the paper
 background and ruling; it still renders handwriting and overlays, so a
-preprinted page can receive the ink layer only.
+preprinted page can receive the ink layer only. Date and page-number
+labels must fit their physical sheet and header/footer areas; out-of-bounds
+labels are refused rather than silently clipped.
 
 ```sh
 python3 cli/notebook.py mark-printed --config my-notebook.json \

@@ -281,6 +281,33 @@ class NotebookCliTests(unittest.TestCase):
         result = notebook.render_page(self.doc, 0, 120, self.root)
         self.assertIsNotNone(result.getchannel("A").getbbox())
 
+    def test_page_number_cannot_render_beyond_bottom_sheet_edge(self):
+        self.doc["paper"]["margin_bottom_mm"] = 0
+        self.doc["paper"]["page_number_style"] = "bottom-right"
+        with self.assertRaisesRegex(ValueError, "page number.*physical sheet"):
+            notebook.render_page(self.doc, 0, 120, self.root)
+
+    def test_wide_page_number_cannot_render_off_left_edge(self):
+        self.doc["paper"]["width_mm"] = 40
+        self.doc["paper"]["page_number_style"] = "bottom-right"
+        self.doc["pages"][0]["number"] = "W" * 24
+        self.doc["pages"][0]["text"] = []
+        with self.assertRaisesRegex(ValueError, "page number.*physical sheet"):
+            notebook.render_page(self.doc, 0, 120, self.root)
+
+    def test_boxed_date_cannot_be_silently_cropped_at_sheet_edge(self):
+        self.doc["paper"].update(
+            {
+                "margin_left_mm": 0,
+                "date_style": "box",
+                "date_side": "left",
+                "date_y_mm": 0,
+            }
+        )
+        self.doc["pages"][0]["date"] = "02/11/2026"
+        with self.assertRaisesRegex(ValueError, "date label.*physical sheet"):
+            notebook.render_page(self.doc, 0, 120, self.root)
+
     def test_bad_image_shape_yields_readable_refusal(self):
         self.doc["pages"][0]["images"] = ["malformed"]
         with self.assertRaisesRegex(

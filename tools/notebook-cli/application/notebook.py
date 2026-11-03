@@ -731,39 +731,48 @@ def render_page(doc, index, dpi, base, transparent=False, keep_rules=False):
     if date and date_style != "none":
         if not isinstance(date, str) or len(date) > 60:
             raise ValueError("date must be short text")
+        if date_style not in {"plain", "box", "underline"}:
+            raise ValueError(
+                "date_style must be none, plain, box, or underline"
+            )
         font = ImageFont.truetype(pen.font_path, max(12, point_mm(3.5, dpi)))
         draw = ImageDraw.Draw(canvas)
         box = draw.textbbox((0, 0), date, font=font)
-        tw, th = box[2] - box[0], box[3] - box[1]
+        tw = box[2] - box[0]
         side = paper.get("date_side", "right")
         if side not in {"left", "right"}:
             raise ValueError("date_side must be left or right")
         xx = left if side == "left" else right - tw - point_mm(4, dpi)
+        xx -= box[0]
         yy = point_mm(
             require_number(paper.get("date_y_mm", 7), "date_y_mm", 0, 50), dpi
         )
-        if xx < 0 or yy + th > top or xx + tw > width:
-            raise ValueError("date label does not fit in the header")
+        l, t, r, b = (xx + box[0], yy + box[1], xx + box[2], yy + box[3])
+        if date_style == "box":
+            outline = (
+                l - point_mm(2, dpi),
+                t - point_mm(1, dpi),
+                r + point_mm(2, dpi),
+                b + point_mm(1, dpi),
+            )
+            l, t, r, b = outline
+        elif date_style == "underline":
+            b += 2
+        if l < 0 or t < 0 or r > width or b > top:
+            raise ValueError("date label exceeds header or physical sheet")
         draw.text((xx, yy), date, font=font, fill=pen.ink)
         if date_style == "box":
             draw.rounded_rectangle(
-                (
-                    xx - point_mm(2, dpi),
-                    yy - point_mm(1, dpi),
-                    xx + tw + point_mm(2, dpi),
-                    yy + th + point_mm(1, dpi),
-                ),
+                outline,
                 radius=max(1, point_mm(1.5, dpi)),
                 outline=pen.ink,
                 width=1,
             )
         elif date_style == "underline":
             draw.line(
-                (xx, yy + th + 2, xx + tw, yy + th + 2), fill=pen.ink, width=1
-            )
-        elif date_style != "plain":
-            raise ValueError(
-                "date_style must be none, plain, box, or underline"
+                (xx + box[0], b, xx + box[2], b),
+                fill=pen.ink,
+                width=1,
             )
     number_style = paper.get("page_number_style", "none")
     if number_style != "none":
@@ -776,11 +785,15 @@ def render_page(doc, index, dpi, base, transparent=False, keep_rules=False):
             raise ValueError("page number label too long")
         draw = ImageDraw.Draw(canvas)
         font = ImageFont.truetype(pen.font_path, max(12, point_mm(3, dpi)))
-        tw = draw.textbbox((0, 0), label, font=font)[2]
-        xx = right - tw if number_style == "bottom-right" else left
-        draw.text(
-            (xx, bottom + point_mm(2, dpi)), label, font=font, fill=pen.ink
+        box = draw.textbbox((0, 0), label, font=font)
+        xx = (
+            right - box[2] if number_style == "bottom-right" else left - box[0]
         )
+        yy = bottom + point_mm(2, dpi)
+        l, t, r, b = (xx + box[0], yy + box[1], xx + box[2], yy + box[3])
+        if l < 0 or t < 0 or r > width or b > height:
+            raise ValueError("page number label exceeds physical sheet")
+        draw.text((xx, yy), label, font=font, fill=pen.ink)
     for item in data.get("images", []):
         if item.get("layer") == "over":
             draw_picture(canvas, base, item, dpi)
