@@ -467,6 +467,30 @@ transparent 596×842 RGBA PNG for `ñ í` at 72 DPI. No analytic curves or
 live mark attachment persist through the TSV, and punctuation, capitals,
 math symbols and cursive joins remain unfinished.
 
+## Spanish and English punctuation starters (partial) — 2026-11-03
+
+The admitted localhost glyph editor now offers independently selectable
+`.` `,` `!` `¡` `?` and `¿` pen guides, alongside an explicit fill-missing
+punctuation action. Periods/commas and both exclamation orientations
+use exact straight stroke endpoints; questions use three SVG quadratic
+arcs, an independent stem and dot, and 50 sampled TSV strokes per glyph.
+The inverted forms rotate the normal samples by 180 degrees using exact
+integer micrometre coordinates, avoiding separate float-rounding drift.
+Dot clearance, ink bounds and the TSV size/stroke limits refuse atomically.
+Custom glyphs are preserved; no file is downloaded without an explicit
+save gesture.
+
+Four focused browser regressions verify the six shapes, exact inversion,
+separate pen lifts and SVG guide, refusal at small radii, session gating,
+custom ink preservation and over-cap atomicity. The 54 focused glyph
+tests pass, including a now 5,040-case geometry-and-pen boundary grid.
+The 46-grapheme default lowercase/NFC/NFD/punctuation library has 1,339
+sampled strokes; Rust audited `¡hola! ¿qué? ,.` with **zero missing ink**
+and exported `¡hola! ¿qué?` as a real one-page PDF and 72-DPI 596×842
+transparent RGBA PNG. Capital letters, guillemets, quotes, numerals and
+mathematics remain missing; no analytic native curves or joined cursive
+can yet be claimed.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

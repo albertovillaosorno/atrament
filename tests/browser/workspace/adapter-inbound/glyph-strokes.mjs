@@ -97,6 +97,7 @@ function mountEditor() {
         "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
         "glyph-seed-spanish", "glyph-seed-spanish-nfd",
+        "glyph-seed-punctuation",
         "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
@@ -1567,9 +1568,152 @@ test("decomposed Spanish batch rejects ambiguous i atomically", async () => {
     }
 });
 
+test("Spanish punctuation has exact pen lifts and inverted geometry", () => {
+    const counts = { ".": 1, ",": 1, "!": 2, "¡": 2,
+        "?": 50, "¿": 50 };
+    for (const [glyph, expected] of Object.entries(counts)) {
+        const lines = geometricStarter(glyph, 1550, 2450, 1100,
+            250, "#243647");
+        assert.equal(lines.length, expected, `sampled ${glyph}`);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(lines)),
+            lines, `native TSV keeps exact ${glyph}`);
+    }
+    assert.deepEqual(geometricStarter("!", 1550, 2450, 1100,
+        250, "#243647").map(({ x1, y1, x2, y2 }) =>
+        [x1, y1, x2, y2]), [
+        [1550, 1460, 1550, 2835], [1550, 3308, 1550, 3440],
+    ]);
+    assert.deepEqual(geometricStarter(".", 1550, 2450, 1100,
+        250, "#243647")[0], {
+        grapheme: ".", x1: 1550, y1: 3308,
+        x2: 1550, y2: 3440, width: 250, color: "#243647",
+    });
+    for (const [standard, upsideDown] of [["!", "¡"], ["?", "¿"]]) {
+        const normal = geometricStarter(standard, 1550, 2450, 1100,
+            250, "#243647");
+        const turned = geometricStarter(upsideDown, 1550, 2450, 1100,
+            250, "#243647");
+        assert.deepEqual(turned.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), normal.map(({ x1, y1, x2, y2 }) =>
+            [3100 - x1, 4900 - y1, 3100 - x2, 4900 - y2]),
+        `${upsideDown} is precisely the rotated ${standard} outline`);
+    }
+    for (const glyph of ["!", "¡", "?", "¿"]) {
+        assert.throws(() => geometricStarter(glyph, 1550, 2450,
+            200, 250, "#243647"), /visible pen-clearance/);
+    }
+});
+
+test("question SVG guide stays analytic; TSV samples curves", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("form").value = "?";
+        get("character").value = "?";
+        get("form").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 945 1955 Q 835 1460 1550 1460"
+            + " Q 2540 1460 2265 2175"
+            + " Q 2210 2450 1550 2725 L 1550 2835"
+            + " M 1550 3308 L 1550 3440");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-rounded-left").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 50);
+        get("form").value = "¿";
+        get("character").value = "¿";
+        get("form").dispatch("input");
+        assert.match(get("ideal-rounded").attributes.get("d"),
+            /^M 2155 2945 Q /);
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, ["?", "¿"].flatMap((glyph) =>
+            geometricStarter(glyph, 1550, 2450, 1100,
+                250, "#243647")));
+        get("circle-radius").value = "200";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden", "refused punctuation must hide stale guide");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /visible pen-clearance/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "invalid geometry leaves prior punctuation untouched");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("fill missing punctuation never replaces custom ink", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        assert.equal(get("seed-punctuation").disabled, true);
+        editor.start();
+        const original = [stroke("!"), stroke("ñ")];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(original));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-punctuation").dispatch("click");
+        assert.match(get("status").textContent, /Filled 5 missing punctuation/);
+        assert.equal(downloads.length, 0, "the draft is not auto-downloaded");
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, [...original,
+            ...[".", ",", "¡", "?", "¿"].flatMap((glyph) =>
+                geometricStarter(glyph, 1550, 2450, 1100,
+                    250, "#243647"))]);
+        get("seed-punctuation").dispatch("click");
+        assert.match(get("status").textContent, /All six basic punctuation/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "second click does not change custom punctuation");
+        get("circle-radius").value = "200";
+        get("seed-punctuation").dispatch("click");
+        assert.match(get("status").textContent, /All six basic punctuation/);
+        editor.reset();
+        assert.equal(get("seed-punctuation").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("punctuation batch refuses invalid geometry and too much ink", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("circle-radius").value = "200";
+        get("seed-punctuation").dispatch("click");
+        assert.match(get("status").textContent, /visible pen-clearance/);
+        assert.equal(get("preview").children.length, 0);
+        get("circle-radius").value = "1100";
+        const full = Array.from({ length: 4090 }, () => stroke("∞"));
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(full));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-punctuation").dispatch("click");
+        assert.match(get("status").textContent, /Save requires 1..4096/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            full, "refused batch cannot partially append punctuation");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("all geometric starters respect pen margins over a boundary grid", () => {
     const forms = ["o", "a", "ó", "á", "b", "d", "p", "q",
         "g", "n", "u", "h", "m", "r", "s", "l", "t", "f", "v", "w",
+        ".", ",", "!", "¡", "?", "¿",
         "k", "x", "y", "z", "c", "e", "i", "í", "j"];
     let accepted = 0;
     let checked = 0;
@@ -1608,7 +1752,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 4176);
+    assert.equal(checked, 5040);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

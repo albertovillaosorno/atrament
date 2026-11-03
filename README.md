@@ -532,7 +532,20 @@ shapes, and exported `ñ í` to a real one-page PDF and transparent 72-DPI
 RGBA PNG. A refused NFD batch leaves the prior draft unchanged; downloading
 and Rust export remain explicit gestures.
 
-These actions do not seed uppercase, punctuation or the
+For notebook sentences, choose the explicit geometric starters **. , ! ¡ ? ¿**
+or click **Fill missing basic punctuation (unsaved)** after selecting center,
+radius, pen width and ink. Full and inverted exclamation marks retain exact
+straight strokes; `?` and `¿` share three ideal quadratic arcs with a
+separate dot and exact 180-degree rotation of the exported integer samples.
+A short pen stroke forms each period and comma. A missing mark is added only
+after the whole batch passes bounds and native TSV caps. Existing ink remains
+unchanged. The combined 26 lowercase, 14 accents and six punctuation forms
+produce **1,339 strokes across 46 exact glyphs**. Rust audited the mixed
+phrase `¡hola! ¿qué? ,.` with zero missing forms and exported `¡hola! ¿qué?`
+to real PDF and transparent 72-DPI RGBA PNG. Question-mark curves remain
+sampled segments in the native stroke TSV, not analytic PDF primitives.
+
+These actions do not seed uppercase or the
 complete 114-entry inventory. It does not connect semantic Markdown text
 to notebook flow, and the native renderer still caps output at 512 physical
 ink strokes per export. The shapes are editable geometric starters, not

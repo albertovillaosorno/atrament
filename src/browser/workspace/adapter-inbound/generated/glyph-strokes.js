@@ -299,6 +299,55 @@ function straightLines(cx, cy, radius, glyph) {
         { from: { x: left, y: cy }, to: { x: right, y: bottom } },
     ];
 }
+function punctuationParts(cx, cy, r, glyph) {
+    const point = (x, y) => ({
+        x: cx + Math.round(x * r), y: cy + Math.round(y * r),
+    });
+    const dot = () => ({
+        from: point(0, 0.78), to: point(0, 0.9),
+    });
+    if (glyph === ".")
+        return [dot()];
+    if (glyph === ",")
+        return [{
+                from: point(0.12, 0.72), to: point(-0.17, 0.98),
+            }];
+    const upsideDown = glyph === "¡" || glyph === "¿";
+    const rotate = (p) => upsideDown
+        ? { x: 2 * cx - p.x, y: 2 * cy - p.y } : p;
+    const rotatePart = (piece) => ({
+        from: rotate(piece.from), to: rotate(piece.to),
+        ...(piece.control ? { control: rotate(piece.control) } : {}),
+    });
+    const stem = glyph === "!" || glyph === "¡"
+        ? [{ from: point(0, -0.9), to: point(0, 0.35) }, dot()]
+        : [
+            { from: point(-0.55, -0.45),
+                control: point(-0.65, -0.9), to: point(0, -0.9) },
+            { from: point(0, -0.9),
+                control: point(0.9, -0.9), to: point(0.65, -0.25) },
+            { from: point(0.65, -0.25),
+                control: point(0.6, 0), to: point(0, 0.25) },
+            { from: point(0, 0.25), to: point(0, 0.35) },
+            dot(),
+        ];
+    return stem.map(rotatePart);
+}
+function punctuationGuide(parts) {
+    const commands = [];
+    let pen = null;
+    for (const part of parts) {
+        if (pen === null || pen.x !== part.from.x
+            || pen.y !== part.from.y) {
+            commands.push(`M ${part.from.x} ${part.from.y}`);
+        }
+        commands.push(part.control
+            ? `Q ${part.control.x} ${part.control.y} ${part.to.x} ${part.to.y}`
+            : `L ${part.to.x} ${part.to.y}`);
+        pen = part.to;
+    }
+    return commands.join(" ");
+}
 function straightGuide(lines) {
     const commands = [];
     let pen = null;
@@ -392,7 +441,8 @@ function quadratic(from, control, to, step) {
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
-        "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s"].includes(g)) {
+        "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s",
+        ".", ",", "!", "¡", "?", "¿"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -415,6 +465,40 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         || cx + radius + halfPen > 3500
         || cy + radius + halfPen > 4500) {
         throw new Error("Shape and pen thickness must fit inside glyph cell");
+    }
+    if ([".", ",", "!", "¡", "?", "¿"].includes(g)) {
+        // Rotate already-rounded native samples so the inverted template
+        // remains an exact integer transform, not a separately rounded curve.
+        const inverted = g === "¡" || g === "¿";
+        const source = g === "¡" ? "!" : g === "¿" ? "?"
+            : g;
+        const parts = punctuationParts(cx, cy, radius, source);
+        const orient = (point) => inverted
+            ? { x: 2 * cx - point.x, y: 2 * cy - point.y } : point;
+        if (g === "!" || g === "¡" || g === "?" || g === "¿") {
+            const before = parts.at(-2);
+            const dot = parts.at(-1);
+            if (before === undefined || dot === undefined
+                || Math.abs(dot.from.y - before.to.y) < pen + 100) {
+                throw new Error("Punctuation dot needs visible pen-clearance");
+            }
+        }
+        const line = (from, to) => {
+            for (const point of [from, to]) {
+                if (point.x < halfPen || point.x + halfPen > 3500
+                    || point.y < halfPen || point.y + halfPen > 4500) {
+                    throw new Error("Punctuation ink must fit inside glyph cell");
+                }
+            }
+            return validateStroke({ grapheme: g,
+                x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+                width: pen, color });
+        };
+        return parts.flatMap(({ from, to, control }) => {
+            if (control === undefined)
+                return [line(orient(from), orient(to))];
+            return Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(orient(quadratic(from, control, to, step)), orient(quadratic(from, control, to, step + 1))));
+        });
     }
     if (g === "s") {
         const lines = [];
@@ -737,6 +821,7 @@ export function createGlyphStrokeEditor() {
     const seedLowercase = required("glyph-seed-lowercase");
     const seedSpanish = required("glyph-seed-spanish");
     const seedSpanishNfd = required("glyph-seed-spanish-nfd");
+    const seedPunctuation = required("glyph-seed-punctuation");
     const centerX = required("glyph-circle-x");
     const centerY = required("glyph-circle-y");
     const radius = required("glyph-circle-radius");
@@ -771,6 +856,7 @@ export function createGlyphStrokeEditor() {
     }
     const controls = [character, color, source, add, copyFrom, copy, compose,
         form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
+        seedPunctuation,
         centerX, centerY, radius,
         accentShift, accentLift,
         selected, update,
@@ -898,12 +984,17 @@ export function createGlyphStrokeEditor() {
             const sD = chosen.grapheme === "s"
                 ? smoothS(cx, cy, r).map(([from, control, to], index) => `${index === 0 ? `M ${from.x} ${from.y} ` : ""}`
                     + `Q ${control.x} ${control.y} ${to.x} ${to.y}`).join(" ") : "";
-            const roundedD = isStraight ? straightD
-                : chosen.grapheme === "s" ? sD
-                    : chosen.grapheme === "j" ? jD
-                        : chosen.grapheme === "g" ? gD
-                            : chosen.grapheme === "m" ? doubledD
-                                : [roundedStart, roundedFirst, roundedSecond].join(" ");
+            const isPunctuation = [".", ",", "!", "¡", "?", "¿"]
+                .includes(chosen.grapheme);
+            const punctuationD = isPunctuation
+                ? punctuationGuide(punctuationParts(cx, cy, r, chosen.grapheme)) : "";
+            const roundedD = isPunctuation ? punctuationD
+                : isStraight ? straightD
+                    : chosen.grapheme === "s" ? sD
+                        : chosen.grapheme === "j" ? jD
+                            : chosen.grapheme === "g" ? gD
+                                : chosen.grapheme === "m" ? doubledD
+                                    : [roundedStart, roundedFirst, roundedSecond].join(" ");
             roundedPath.setAttribute("d", roundedD);
             roundedPath.setAttribute("stroke-width", numeric.width.value);
             roundedPath.setAttribute("stroke", color.value);
@@ -922,10 +1013,12 @@ export function createGlyphStrokeEditor() {
             }
             const roundedVisible = active
                 && ["n", "u", "h", "m", "r", "j", "g", "s",
-                    "v", "w", "k", "x", "y", "z"]
+                    "v", "w", "k", "x", "y", "z",
+                    ".", ",", "!", "¡", "?", "¿"]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
+                && !isPunctuation
                 && !["j", "g", "s"].includes(chosen.grapheme)
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
@@ -995,9 +1088,13 @@ export function createGlyphStrokeEditor() {
             const hasAcute = ["ó", "á", "í"].includes(chosen.grapheme);
             const accentState = active && hasAcute ? "visible" : "hidden";
             idealAccent.setAttribute("visibility", accentState);
-            const guideLabel = isStraight
-                ? `Exact straight ${form.value} guide, retained in TSV`
-                : `Analytic geometric ${form.value} guide, not retained in TSV`;
+            const guideLabel = isPunctuation
+                ? (["?", "¿"].includes(chosen.grapheme)
+                    ? `Analytic ${form.value} guide, sampled to TSV`
+                    : `Exact straight ${form.value} punctuation ink`)
+                : isStraight
+                    ? `Exact straight ${form.value} guide, retained in TSV`
+                    : `Analytic geometric ${form.value} guide, not retained in TSV`;
             ideal.setAttribute("aria-label", guideLabel);
         }
         catch {
@@ -1313,6 +1410,33 @@ export function createGlyphStrokeEditor() {
             selectedIndex = null;
             render();
             message(`Filled ${missing.length} missing lowercase templates (`
+                + `${added.length} sampled strokes); unsaved draft`);
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    seedPunctuation.addEventListener("click", () => {
+        if (!active)
+            return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before seeding");
+            }
+            const glyphs = [".", ",", "!", "¡", "?", "¿"];
+            const authored = new Set(strokes.map((stroke) => stroke.grapheme));
+            const missing = glyphs.filter((g) => !authored.has(g));
+            if (missing.length === 0) {
+                message("All six basic punctuation glyphs have authored ink");
+                return;
+            }
+            const added = missing.flatMap((g) => geometricStarter(g, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value));
+            const next = [...strokes, ...added];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${missing.length} missing punctuation glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         }
         catch (error) {

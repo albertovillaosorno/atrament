@@ -549,6 +549,12 @@
           <div class="handwriting-controls">
             <label>Geometric starter
               <select id="glyph-form" disabled>
+                <option value=".">Period . (short ink dot)</option>
+                <option value=",">Comma , (diagonal tail)</option>
+                <option value="!">Exclamation ! (stem and dot)</option>
+                <option value="¡">Inverted exclamation ¡</option>
+                <option value="?">Question ? (curved hook and dot)</option>
+                <option value="¿">Inverted question ¿</option>
                 <option value="o">Circle o</option>
                 <option value="b">Ascender b (left stem)</option>
                 <option value="d">Ascender d (right stem)</option>
@@ -614,6 +620,9 @@
             <button id="glyph-seed-spanish-nfd" type="button" disabled>
               Fill missing decomposed Spanish accents (unsaved)
             </button>
+            <button id="glyph-seed-punctuation" type="button" disabled>
+              Fill missing basic punctuation (unsaved)
+            </button>
           </div>
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the highest story, positioned from geometry
@@ -629,7 +638,10 @@
             bases into á, é, í, ó, ú, ñ, ü (NFC). The decomposed button
             independently constructs their seven NFD forms, keeping exact
             Unicode keys and custom target ink separate. A missing base,
-            ambiguous dotted i or clipped mark refuses the entire batch.</p>
+            ambiguous dotted i or clipped mark refuses the entire batch.
+            Basic punctuation can be filled independently: . , ! ¡ ? ¿,
+            including exact inverse exclamation and sampled question curves.
+            Every fill preserves existing ink and remains unsaved.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>
           <svg id="glyph-ideal-preview" class="glyph-stroke-preview"

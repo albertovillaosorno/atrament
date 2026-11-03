@@ -342,6 +342,63 @@ function straightLines(
     ];
 }
 
+// Manually selected Spanish/English punctuation uses explicit pen-down
+// order. Questions retain three ideal quadratic arcs in SVG; native v1 TSV
+// contains only sampled chords. Inverted marks rotate all control points.
+type PunctuationGlyph = "." | "," | "!" | "¡" | "?" | "¿";
+type MarkPiece = { from: Point; to: Point; control?: Point };
+
+function punctuationParts(
+    cx: number, cy: number, r: number, glyph: PunctuationGlyph,
+): MarkPiece[] {
+    const point = (x: number, y: number): Point => ({
+        x: cx + Math.round(x * r), y: cy + Math.round(y * r),
+    });
+    const dot = (): MarkPiece => ({
+        from: point(0, 0.78), to: point(0, 0.9),
+    });
+    if (glyph === ".") return [dot()];
+    if (glyph === ",") return [{
+        from: point(0.12, 0.72), to: point(-0.17, 0.98),
+    }];
+    const upsideDown = glyph === "¡" || glyph === "¿";
+    const rotate = (p: Point): Point => upsideDown
+        ? { x: 2 * cx - p.x, y: 2 * cy - p.y } : p;
+    const rotatePart = (piece: MarkPiece): MarkPiece => ({
+        from: rotate(piece.from), to: rotate(piece.to),
+        ...(piece.control ? { control: rotate(piece.control) } : {}),
+    });
+    const stem = glyph === "!" || glyph === "¡"
+        ? [{ from: point(0, -0.9), to: point(0, 0.35) }, dot()]
+        : [
+            { from: point(-0.55, -0.45),
+                control: point(-0.65, -0.9), to: point(0, -0.9) },
+            { from: point(0, -0.9),
+                control: point(0.9, -0.9), to: point(0.65, -0.25) },
+            { from: point(0.65, -0.25),
+                control: point(0.6, 0), to: point(0, 0.25) },
+            { from: point(0, 0.25), to: point(0, 0.35) },
+            dot(),
+        ];
+    return stem.map(rotatePart);
+}
+
+function punctuationGuide(parts: MarkPiece[]): string {
+    const commands: string[] = [];
+    let pen: Point | null = null;
+    for (const part of parts) {
+        if (pen === null || pen.x !== part.from.x
+            || pen.y !== part.from.y) {
+            commands.push(`M ${part.from.x} ${part.from.y}`);
+        }
+        commands.push(part.control
+            ? `Q ${part.control.x} ${part.control.y} ${part.to.x} ${part.to.y}`
+            : `L ${part.to.x} ${part.to.y}`);
+        pen = part.to;
+    }
+    return commands.join(" ");
+}
+
 function straightGuide(lines: StraightLine[]): string {
     const commands: string[] = [];
     let pen: Point | null = null;
@@ -450,7 +507,8 @@ export function geometricStarter(
 ): Stroke[] {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
-        "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s"].includes(g)) {
+        "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s",
+        ".", ",", "!", "¡", "?", "¿"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -474,6 +532,42 @@ export function geometricStarter(
         || cx + radius + halfPen > 3500
         || cy + radius + halfPen > 4500) {
         throw new Error("Shape and pen thickness must fit inside glyph cell");
+    }
+    if ([".", ",", "!", "¡", "?", "¿"].includes(g)) {
+        // Rotate already-rounded native samples so the inverted template
+        // remains an exact integer transform, not a separately rounded curve.
+        const inverted = g === "¡" || g === "¿";
+        const source = g === "¡" ? "!" : g === "¿" ? "?"
+            : g as PunctuationGlyph;
+        const parts = punctuationParts(cx, cy, radius, source);
+        const orient = (point: Point): Point => inverted
+            ? { x: 2 * cx - point.x, y: 2 * cy - point.y } : point;
+        if (g === "!" || g === "¡" || g === "?" || g === "¿") {
+            const before = parts.at(-2);
+            const dot = parts.at(-1);
+            if (before === undefined || dot === undefined
+                || Math.abs(dot.from.y - before.to.y) < pen + 100) {
+                throw new Error("Punctuation dot needs visible pen-clearance");
+            }
+        }
+        const line = (from: Point, to: Point): Stroke => {
+            for (const point of [from, to]) {
+                if (point.x < halfPen || point.x + halfPen > 3500
+                    || point.y < halfPen || point.y + halfPen > 4500) {
+                    throw new Error(
+                        "Punctuation ink must fit inside glyph cell");
+                }
+            }
+            return validateStroke({ grapheme: g,
+                x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+                width: pen, color });
+        };
+        return parts.flatMap(({ from, to, control }) => {
+            if (control === undefined) return [line(orient(from), orient(to))];
+            return Array.from({ length: ARCH_SEGMENTS }, (_, step) =>
+                line(orient(quadratic(from, control, to, step)),
+                    orient(quadratic(from, control, to, step + 1))));
+        });
     }
     if (g === "s") {
         const lines: Stroke[] = [];
@@ -816,6 +910,8 @@ export function createGlyphStrokeEditor(): {
     const seedSpanish = required<HTMLButtonElement>("glyph-seed-spanish");
     const seedSpanishNfd =
         required<HTMLButtonElement>("glyph-seed-spanish-nfd");
+    const seedPunctuation =
+        required<HTMLButtonElement>("glyph-seed-punctuation");
     const centerX = required<HTMLInputElement>("glyph-circle-x");
     const centerY = required<HTMLInputElement>("glyph-circle-y");
     const radius = required<HTMLInputElement>("glyph-circle-radius");
@@ -850,6 +946,7 @@ export function createGlyphStrokeEditor(): {
     }
     const controls = [character, color, source, add, copyFrom, copy, compose,
         form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
+        seedPunctuation,
         centerX, centerY, radius,
         accentShift, accentLift,
         selected, update,
@@ -989,7 +1086,13 @@ export function createGlyphStrokeEditor(): {
                     `${index === 0 ? `M ${from.x} ${from.y} ` : ""}`
                     + `Q ${control.x} ${control.y} ${to.x} ${to.y}`,
                 ).join(" ") : "";
-            const roundedD = isStraight ? straightD
+            const isPunctuation = [".", ",", "!", "¡", "?", "¿"]
+                .includes(chosen.grapheme);
+            const punctuationD = isPunctuation
+                ? punctuationGuide(punctuationParts(cx, cy, r,
+                    chosen.grapheme as PunctuationGlyph)) : "";
+            const roundedD = isPunctuation ? punctuationD
+                : isStraight ? straightD
                 : chosen.grapheme === "s" ? sD
                 : chosen.grapheme === "j" ? jD
                     : chosen.grapheme === "g" ? gD
@@ -1013,10 +1116,12 @@ export function createGlyphStrokeEditor(): {
             }
             const roundedVisible = active
                 && ["n", "u", "h", "m", "r", "j", "g", "s",
-                    "v", "w", "k", "x", "y", "z"]
+                    "v", "w", "k", "x", "y", "z",
+                    ".", ",", "!", "¡", "?", "¿"]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
+                && !isPunctuation
                 && !["j", "g", "s"].includes(chosen.grapheme)
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
@@ -1087,7 +1192,11 @@ export function createGlyphStrokeEditor(): {
             const hasAcute = ["ó", "á", "í"].includes(chosen.grapheme);
             const accentState = active && hasAcute ? "visible" : "hidden";
             idealAccent.setAttribute("visibility", accentState);
-            const guideLabel = isStraight
+            const guideLabel = isPunctuation
+                ? (["?", "¿"].includes(chosen.grapheme)
+                    ? `Analytic ${form.value} guide, sampled to TSV`
+                    : `Exact straight ${form.value} punctuation ink`)
+                : isStraight
                 ? `Exact straight ${form.value} guide, retained in TSV`
                 : `Analytic geometric ${form.value} guide, not retained in TSV`;
             ideal.setAttribute("aria-label", guideLabel);
@@ -1386,6 +1495,34 @@ export function createGlyphStrokeEditor(): {
             selectedIndex = null;
             render();
             message(`Filled ${missing.length} missing lowercase templates (`
+                + `${added.length} sampled strokes); unsaved draft`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    seedPunctuation.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before seeding");
+            }
+            const glyphs = [".", ",", "!", "¡", "?", "¿"];
+            const authored = new Set(strokes.map((stroke) => stroke.grapheme));
+            const missing = glyphs.filter((g) => !authored.has(g));
+            if (missing.length === 0) {
+                message("All six basic punctuation glyphs have authored ink");
+                return;
+            }
+            const added = missing.flatMap((g) => geometricStarter(g,
+                Number(centerX.value), Number(centerY.value),
+                Number(radius.value), Number(numeric.width.value),
+                color.value));
+            const next = [...strokes, ...added];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${missing.length} missing punctuation glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         } catch (error) {
             message(String(error));
