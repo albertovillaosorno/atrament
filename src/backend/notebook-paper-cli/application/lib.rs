@@ -83,6 +83,7 @@ const DATE_HEIGHT_UM: u64 = 8_000;
 const PAGE_NUMBER_CELL_UM: u64 = 600;
 const PAGE_NUMBER_STEP_UM: u64 = 750;
 const PAGE_NUMBER_BOTTOM_MARGIN_UM: u32 = 7_000;
+const NOTEBOOK_BORDER_STROKE_UM: u32 = 120;
 // Three columns by five rows, with a bounded, legible printed numeral.
 // This is intentionally a print annotation, not synthesized handwriting.
 const PAGE_NUMBER_DIGITS: [[u8; 5]; 10] = [
@@ -150,6 +151,18 @@ pub enum PaperDatePlaceholder {
     RightBox,
     /// One writable line at the right of the top margin.
     RightLine,
+}
+
+// An admitted printable-region outline shared by PDF and transparent PNG.
+// Radius zero is intentionally borderless in the notebook v1 profile.
+#[derive(Clone, Copy)]
+struct RoundedPaperBorder {
+    bottom_um: u32,
+    color: PdfRgb,
+    left_um: u32,
+    radius_um: u32,
+    right_um: u32,
+    top_um: u32,
 }
 
 #[derive(Clone, Debug)]
@@ -1033,9 +1046,114 @@ fn append_date_placeholder(
     Ok(())
 }
 
+fn rounded_border(
+    options: Options, radius_um: u32,
+) -> Result<Option<RoundedPaperBorder>, String> {
+    if radius_um == 0 {
+        return Ok(None);
+    }
+    let right_um = options.width_um
+        .checked_sub(options.margin_right_um)
+        .ok_or("notebook border exceeds sheet width")?;
+    let bottom_um = options.height_um
+        .checked_sub(options.margin_bottom_um)
+        .ok_or("notebook border exceeds sheet height")?;
+    let width = right_um.checked_sub(options.margin_left_um)
+        .ok_or("notebook border has invalid horizontal margins")?;
+    let height = bottom_um.checked_sub(options.margin_top_um)
+        .ok_or("notebook border has invalid vertical margins")?;
+    if u64::from(radius_um).saturating_mul(2)
+        > u64::from(width.min(height))
+    {
+        return Err("border radius exceeds half the printable area".into());
+    }
+    // The stroke is centered on the printable region. Keep its ink inside
+    // the sheet even when page margins are reduced to near zero.
+    let clearance = NOTEBOOK_BORDER_STROKE_UM.div_ceil(2);
+    if options.margin_left_um < clearance
+        || options.margin_right_um < clearance
+        || options.margin_top_um < clearance
+        || options.margin_bottom_um < clearance
+    {
+        return Err("rounded border needs 0.06 mm sheet-edge clearance".into());
+    }
+    Ok(Some(RoundedPaperBorder {
+        left_um: options.margin_left_um,
+        top_um: options.margin_top_um,
+        right_um,
+        bottom_um,
+        radius_um,
+        color: options.color,
+    }))
+}
+
+#[expect(
+    clippy::arithmetic_side_effects,
+    clippy::integer_division,
+    clippy::integer_division_remainder_used,
+    reason = "admitted radius and page dimensions bound curve calculations",
+)]
+fn border_path(border: RoundedPaperBorder) -> Result<PdfVectorPath, String> {
+    let left = u64::from(border.left_um);
+    let top = u64::from(border.top_um);
+    let right = u64::from(border.right_um);
+    let bottom = u64::from(border.bottom_um);
+    let radius = u64::from(border.radius_um);
+    // Four cubic quarter circles, with physically bounded control points.
+    let tangent = (radius * 552_285 + 500_000) / 1_000_000;
+    let inner = radius - tangent;
+    let point = |x: u64, y: u64| -> Result<PdfPoint, String> {
+        Ok(PdfPoint { x_um: position(x)?, y_um: position(y)? })
+    };
+    Ok(PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(left + radius, top)?),
+            PdfPathCommand::LineTo(point(right - radius, top)?),
+            PdfPathCommand::CubicTo(
+                point(right - inner, top)?,
+                point(right, top + inner)?,
+                point(right, top + radius)?,
+            ),
+            PdfPathCommand::LineTo(point(right, bottom - radius)?),
+            PdfPathCommand::CubicTo(
+                point(right, bottom - inner)?,
+                point(right - inner, bottom)?,
+                point(right - radius, bottom)?,
+            ),
+            PdfPathCommand::LineTo(point(left + radius, bottom)?),
+            PdfPathCommand::CubicTo(
+                point(left + inner, bottom)?,
+                point(left, bottom - inner)?,
+                point(left, bottom - radius)?,
+            ),
+            PdfPathCommand::LineTo(point(left, top + radius)?),
+            PdfPathCommand::CubicTo(
+                point(left, top + inner)?,
+                point(left + inner, top)?,
+                point(left + radius, top)?,
+            ),
+            PdfPathCommand::Close,
+        ],
+        paint: PdfPathPaint::Stroke {
+            color: border.color,
+            width_um: NOTEBOOK_BORDER_STROKE_UM,
+        },
+    })
+}
+
+/// Check rounded printable-region borders before accepting a notebook profile.
+///
+/// # Errors
+/// Refuses impossible radius, margins or insufficient edge clearance.
+pub fn validate_paper_border_clearance(
+    profile: &[u8], radius_um: u32,
+) -> Result<(), String> {
+    rounded_border(decode_profile(profile)?, radius_um).map(|_| ())
+}
+
 fn render_png(opts: Options, dpi: u32) -> Result<Vec<u8>, String> {
     let paths = paper_paths(opts)?;
-    png::render_paper_png(opts.width_um, opts.height_um, dpi, &paths)
+    png::render_paper_png(opts.width_um, opts.height_um, dpi, &paths, None)
 }
 
 fn serialize_paths(
@@ -1173,6 +1291,26 @@ pub fn paper_profile_pdf_pages_with_annotations(
     date: Option<PaperDatePlaceholder>,
     page_numbers: bool,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_pdf_pages_with_border(
+        profile, pages, include_marks, date, page_numbers, 0,
+    )
+}
+
+/// Render notebook annotations and an optional rounded printable border.
+///
+/// Radius zero keeps legacy borderless output byte-for-byte unchanged.
+/// The 120-micrometre outline is independently rendered on preprinted sheets.
+///
+/// # Errors
+/// Refuses invalid geometry, sheet-edge clearance or PDF limits.
+pub fn paper_profile_pdf_pages_with_border(
+    profile: &[u8],
+    pages: usize,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+    border_radius_um: u32,
+) -> Result<Vec<u8>, String> {
     let options = decode_profile(profile)?;
     if !(1..=MAX_PAGES).contains(&pages) {
         return Err("paper PDF needs 1 to 32 pages".into());
@@ -1184,6 +1322,9 @@ pub fn paper_profile_pdf_pages_with_annotations(
     };
     if let Some(placeholder) = date {
         append_date_placeholder(&mut base, options, placeholder)?;
+    }
+    if let Some(border) = rounded_border(options, border_radius_um)? {
+        base.push(border_path(border)?);
     }
     if !page_numbers {
         return serialize_paths(options, base, pages);
@@ -1273,6 +1414,27 @@ pub fn paper_profile_png_page_with_annotations(
     page_numbers: bool,
     page: usize,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_png_page_with_border(
+        profile, dpi, include_marks, date, page_numbers, page, 0,
+    )
+}
+
+/// Rasterize a selected notebook sheet with optional rounded border.
+///
+/// Radius zero preserves the original paper-only output; nonzero radius
+/// adds the same physical outline as the PDF to transparent RGBA pixels.
+///
+/// # Errors
+/// Refuses invalid geometry, sheet-edge clearance or raster limits.
+pub fn paper_profile_png_page_with_border(
+    profile: &[u8],
+    dpi: u32,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+    page: usize,
+    border_radius_um: u32,
+) -> Result<Vec<u8>, String> {
     if !(1..=MAX_PAGES).contains(&page) {
         return Err("PNG notebook page must be within 1..32".into());
     }
@@ -1288,7 +1450,10 @@ pub fn paper_profile_png_page_with_annotations(
     if page_numbers {
         append_page_number(&mut paths, options, page)?;
     }
-    png::render_paper_png(options.width_um, options.height_um, dpi, &paths)
+    let border = rounded_border(options, border_radius_um)?;
+    png::render_paper_png(
+        options.width_um, options.height_um, dpi, &paths, border,
+    )
 }
 
 fn execute(request: CliRequest) -> Result<Option<Vec<u8>>, String> {

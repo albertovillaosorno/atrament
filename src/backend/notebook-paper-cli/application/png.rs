@@ -38,7 +38,7 @@ use atrament_pdf_vector_serializer::{
     PdfPathCommand, PdfPathPaint, PdfPoint, PdfRgb, PdfVectorPath,
 };
 
-use super::MAX_OUTPUT_BYTES;
+use super::{MAX_OUTPUT_BYTES, NOTEBOOK_BORDER_STROKE_UM, RoundedPaperBorder};
 
 const MICROMETRES_PER_INCH: u64 = 25_400;
 const MAX_PIXELS: usize = 5_000_000;
@@ -168,6 +168,66 @@ fn paint_rectangle(
                 .ok_or("PNG channel access outside raster")?;
             pixel.copy_from_slice(&[color.red, color.green, color.blue, 255]);
         }
+    }
+    Ok(())
+}
+
+// Unlike the rectangular paper marks, the optional notebook border is a
+// rounded contour. Its signed distance is evaluated at physical pixel centers
+// so its circular corners use the same admitted geometry at any DPI. The
+// half-pixel margin prevents hairline strokes from disappearing at 72 DPI.
+fn paint_rounded_border(
+    pixels: &mut [u8],
+    width: usize,
+    height: usize,
+    dpi: u32,
+    border: RoundedPaperBorder,
+) -> Result<(), String> {
+    let pitch = 25_400.0f64 / f64::from(dpi);
+    let half_width = (f64::from(border.right_um)
+        - f64::from(border.left_um)) / 2.0f64;
+    let half_height = (f64::from(border.bottom_um)
+        - f64::from(border.top_um)) / 2.0f64;
+    let center_x = f64::midpoint(
+        f64::from(border.left_um), f64::from(border.right_um),
+    );
+    let center_y = f64::midpoint(
+        f64::from(border.top_um), f64::from(border.bottom_um),
+    );
+    let radius = f64::from(border.radius_um);
+    let threshold = f64::from(NOTEBOOK_BORDER_STROKE_UM) / 2.0f64
+        + pitch / 2.0f64;
+    let mut y = pitch / 2.0f64;
+    for row in 0..height {
+        if (y - center_y).abs() > half_height + threshold {
+            y += pitch;
+            continue;
+        }
+        let mut x = pitch / 2.0f64;
+        for column in 0..width {
+            if (x - center_x).abs() <= half_width + threshold {
+                let dx = (x - center_x).abs() - (half_width - radius);
+                let dy = (y - center_y).abs() - (half_height - radius);
+                let distance = dx.max(0.0).hypot(dy.max(0.0))
+                    + dx.max(dy).min(0.0) - radius;
+                if distance.abs() <= threshold {
+                    let offset = row.checked_mul(width)
+                        .and_then(|index| index.checked_add(column))
+                        .and_then(|index| index.checked_mul(4))
+                        .ok_or("border raster offset overflow")?;
+                    let end = offset.checked_add(4)
+                        .ok_or("border channel offset overflow")?;
+                    let pixel = pixels.get_mut(offset..end)
+                        .ok_or("border raster exceeds pixel budget")?;
+                    pixel.copy_from_slice(&[
+                        border.color.red, border.color.green,
+                        border.color.blue, 255,
+                    ]);
+                }
+            }
+            x += pitch;
+        }
+        y += pitch;
     }
     Ok(())
 }
@@ -307,6 +367,7 @@ pub(super) fn render_paper_png(
     height_um: u32,
     dpi: u32,
     paths: &[PdfVectorPath],
+    border: Option<RoundedPaperBorder>,
 ) -> Result<Vec<u8>, String> {
     if !(72..=300).contains(&dpi) {
         return Err("PNG DPI must be between 72 and 300".into());
@@ -328,6 +389,9 @@ pub(super) fn render_paper_png(
     for path in paths {
         let (rectangle, color) = rectangle_for_path(path)?;
         paint_rectangle(&mut raster, width, height, dpi, rectangle, color)?;
+    }
+    if let Some(outline) = border {
+        paint_rounded_border(&mut raster, width, height, dpi, outline)?;
     }
     encode_rgba(
         u32::try_from(width)

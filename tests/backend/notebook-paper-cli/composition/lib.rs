@@ -577,6 +577,80 @@ fn stored_png_pixels(bytes: &[u8]) -> (usize, usize, Vec<u8>) {
 }
 
 #[test]
+fn rounded_notebook_border_matches_pdf_and_transparent_png() {
+    let paper = default_paper_profile_json();
+    let pdf = paper_profile_pdf_pages_with_border(
+        paper.as_bytes(), 2, false, None, false, 5_000,
+    ).expect("two outlined pages");
+    let pdf_text = String::from_utf8_lossy(&pdf);
+    assert_eq!(pdf_text.matches(" c\n").count(), 8);
+    assert_eq!(pdf_text.matches(" m\n").count(), 2);
+    assert_ne!(
+        pdf,
+        paper_profile_pdf_pages(paper.as_bytes(), 2, false)
+            .expect("borderless PDF"),
+    );
+    let outlined = paper_profile_png_page_with_border(
+        paper.as_bytes(), 72, false, None, false, 1, 5_000,
+    ).expect("transparent rounded outline");
+    let (width, _, raw) = stored_png_pixels(&outlined);
+    let alpha = |x: usize, y: usize| -> u8 {
+        let offset = y.checked_mul(width * 4 + 1)
+            .and_then(|index| index.checked_add(x * 4 + 4))
+            .expect("bounded RGBA offset");
+        *raw.get(offset).expect("pixel is in raster")
+    };
+    assert_eq!(alpha(57, 62), 0, "corner is truly rounded");
+    assert_eq!(alpha(85, 62), 255, "top straight side exists");
+    assert_eq!(alpha(56, 85), 255, "left straight side exists");
+    assert_eq!(alpha(85, 85), 0, "unpainted inside stays transparent");
+    assert_eq!(
+        paper_profile_png_page_with_border(
+            paper.as_bytes(), 72, false, None, false, 1, 0,
+        ).expect("no border"),
+        paper_profile_png_layer(paper.as_bytes(), 72, false)
+            .expect("legacy borderless output"),
+    );
+    assert_eq!(
+        paper_profile_pdf_pages_with_border(
+            paper.as_bytes(), 1, false, None, false, 0,
+        ).expect("no border"),
+        paper_profile_pdf_pages(paper.as_bytes(), 1, false)
+            .expect("legacy borderless output"),
+    );
+}
+
+#[test]
+fn rounded_border_refuses_unprintable_radius_and_missing_edge_clearance() {
+    let paper = default_paper_profile_json();
+    assert!(validate_paper_border_clearance(paper.as_bytes(), 100_000)
+        .is_err(), "radius larger than half printable height");
+    let edge = paper.replace(
+        "\"margin_left_um\": 20000", "\"margin_left_um\": 0",
+    );
+    // The base vector serializer also refuses zero margin when the mark
+    // stroke would extend outside the physical page.
+    assert!(paper_profile_pdf_pages(edge.as_bytes(), 1, false).is_err());
+    assert!(rounded_border(Options {
+        margin_left_um: 0,
+        ..Options::default()
+    }, 500).is_err(), "border must independently enforce edge clearance");
+    assert!(validate_paper_border_clearance(edge.as_bytes(), 500)
+        .is_err(), "border stroke must stay inside sheet");
+    let just_clear = paper.replace(
+        "\"margin_left_um\": 20000", "\"margin_left_um\": 60",
+    );
+    assert!(validate_paper_border_clearance(just_clear.as_bytes(), 500)
+        .is_ok(), "60 micrometres are enough for a centered stroke");
+    assert!(paper_profile_pdf_pages_with_border(
+        edge.as_bytes(), 1, false, None, false, 500,
+    ).is_err());
+    assert!(paper_profile_png_page_with_border(
+        edge.as_bytes(), 72, false, None, false, 1, 500,
+    ).is_err());
+}
+
+#[test]
 fn transparent_png_grid_has_real_ink_and_physical_resolution() {
     let options = Options {
         color: PdfRgb { red: 0x12, green: 0x34, blue: 0x56 },

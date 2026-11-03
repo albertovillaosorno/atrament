@@ -308,9 +308,14 @@ Numbering requires at least 7 mm of bottom margin; invalid profiles refuse.
 Numbered sheets retain the number and date placeholder when `printed_sheet`
 suppresses the existing paper marks.
 
-This is **not** a complete notebook export: actual date text, rounded borders,
-handwriting and image overlays are not rendered. Page numbers are printed
-markers, not sampled pen strokes.
+A nonzero `border_radius_um` draws a 0.12-mm rounded outline along the
+printable region in both PDF and transparent PNG; zero leaves the border off.
+The radius must fit half the printable area, and each sheet-edge margin must
+be at least 0.06 mm to contain the outline's centered stroke.
+
+This is **not** a complete notebook export: actual date text, handwriting
+and image overlays are not rendered. Page numbers are printed markers,
+not sampled pen strokes.
 
 The localhost Rust runtime also exposes authenticated
 `GET /api/notebook/profile` (default profile) and
@@ -331,20 +336,21 @@ CLI. The web editor supplies page/DPI headers from its PDF and PNG controls,
 then downloads the selected physical paper layer. One PNG contains one sheet.
 
 Preprinted-sheet suppression applies to ruling in both formats; explicitly
-selected date placeholders and page numbers remain visible. No date text,
-border, handwriting or image content is drawn in these outputs.
+selected date placeholders, rounded outlines and page numbers remain visible.
+No date text, handwriting or image content is drawn in these outputs.
 
 The localhost web editor now also offers **Notebook page profile** controls
 for date placeholder style and placement, border radius, page numbers and
 preprinted-sheet intent. PDF/PNG exports draw selected date placeholders
-and page numbers only when physically admissible. **Use current paper** includes
+page numbers and rounded borders only when physically admissible.
+**Use current paper** includes
 unsaved sheet settings before Rust validation.
 
 **Edit notebook paper** sends the notebook's embedded sheet into the visual
 paper editor through Rust validation; **Use current paper** copies edited
 settings back only when requested. Load and Save JSON use explicitly
 selected files; no browser state is silently persisted or unsupported
-metadata drawn.
+metadata rendered beyond these annotations.
 
 ## The workspace
 

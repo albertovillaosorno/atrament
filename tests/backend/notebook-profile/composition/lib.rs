@@ -209,6 +209,35 @@ fn notebook_dates_and_printed_page_numbers_render() {
 }
 
 #[test]
+fn saved_notebook_radius_draws_without_reprinting_ruled_paper() {
+    let notebook = NotebookProfile {
+        border_radius_um: 4_000,
+        printed_sheet: true,
+        page_numbers: true,
+        ..NotebookProfile::default()
+    };
+    let saved = notebook.canonical_json().expect("border profile admitted");
+    let reopened = NotebookProfile::from_json(saved.as_bytes())
+        .expect("reopen saved notebook radius");
+    let pdf = reopened.paper_layer_pdf(2).expect("border PDF");
+    assert_eq!(String::from_utf8_lossy(&pdf).matches(" c\n").count(), 8);
+    let png = reopened.paper_layer_png_page(72, 2)
+        .expect("border PNG for second sheet");
+    let mut borderless = reopened.clone();
+    borderless.border_radius_um = 0;
+    assert_ne!(pdf, borderless.paper_layer_pdf(2).expect("plain PDF"));
+    assert_ne!(png, borderless.paper_layer_png_page(72, 2)
+        .expect("plain PNG"));
+    let mut no_clearance = reopened;
+    no_clearance.paper_json = no_clearance.paper_json.replace(
+        "\"margin_left_um\": 20000", "\"margin_left_um\": 0",
+    );
+    assert!(no_clearance.validate().is_err());
+    assert!(no_clearance.paper_layer_pdf(2).is_err());
+    assert!(no_clearance.paper_layer_png(72).is_err());
+}
+
+#[test]
 fn selected_png_page_matches_printed_pdf_index() {
     let mut notebook = NotebookProfile {
         printed_sheet: true,

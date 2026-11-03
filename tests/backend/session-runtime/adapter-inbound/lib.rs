@@ -5803,6 +5803,60 @@ fn notebook_date_box_and_line_round_trip_through_authenticated_http() {
 }
 
 #[test]
+fn notebook_rounded_outline_matches_rust_pdf_and_png_over_http() {
+    let notebook = NotebookProfile {
+        border_radius_um: 4_000,
+        printed_sheet: true,
+        page_numbers: true,
+        ..NotebookProfile::default()
+    };
+    let body = notebook.canonical_json().expect("admitted profile");
+    let pdf = route_runtime(&notebook_paper_request(
+        "pdf", "X-Atrament-Pdf-Pages: 2\r\n", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"), body.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&pdf), "HTTP/1.1 200 OK");
+    assert_eq!(
+        paper_http_body(&pdf),
+        notebook.paper_layer_pdf(2).expect("canonical rounded PDF"),
+    );
+    assert_eq!(
+        String::from_utf8_lossy(paper_http_body(&pdf))
+            .matches(" c\n").count(), 8,
+        "four curved border corners on each page",
+    );
+    let png = route_runtime(&notebook_paper_request(
+        "png", "X-Atrament-Png-Dpi: 72\r\nX-Atrament-Png-Page: 2\r\n",
+        Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+        Some("application/json"), body.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&png), "HTTP/1.1 200 OK");
+    assert_eq!(
+        paper_http_body(&png),
+        notebook.paper_layer_png_page(72, 2)
+            .expect("canonical rounded PNG"),
+    );
+    let invalid = body.replace(
+        "\"border_radius_um\": 4000",
+        "\"border_radius_um\": 100000",
+    );
+    assert_ne!(invalid, body, "fixture radius changed");
+    for (format, headers) in [
+        ("pdf", "X-Atrament-Pdf-Pages: 2\r\n"),
+        ("png", "X-Atrament-Png-Dpi: 72\r\n"),
+    ] {
+        let refused = route_runtime(&notebook_paper_request(
+            format, headers, Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            invalid.as_bytes(),
+        ), EXPECTED_HOST);
+        assert_eq!(status_line(&refused), "HTTP/1.1 400 Bad Request");
+        assert!(!paper_http_body(&refused).starts_with(b"%PDF"));
+        assert!(!paper_http_body(&refused).starts_with(b"\x89PNG"));
+    }
+}
+
+#[test]
 fn notebook_paper_routes_refuse_unauthorized_headers_and_bad_profiles() {
     let profile = NotebookProfile::default()
         .canonical_json().expect("default JSON");

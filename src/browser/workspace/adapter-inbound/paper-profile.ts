@@ -912,9 +912,9 @@ export function createNotebookProfileEditor(
                         ? `atrament-notebook-page-${page}.png`
                         : `atrament-notebook-paper.${format}`;
                     download(blob, filename);
-                    status.textContent = "Notebook paper, selected dates"
-                        + " and page numbers downloaded · no actual date text,"
-                        + " borders or ink."
+                    status.textContent = "Notebook paper, selected dates,"
+                        + " borders and page numbers downloaded · no date text,"
+                        + " handwriting or images."
                         + (format === "png" ? ` PNG sheet ${page}.` : "");
                 }
             });

@@ -658,6 +658,50 @@ fn saved_notebook_date_export_matches_rust_layers_in_cli() {
 }
 
 #[test]
+fn saved_notebook_rounded_border_exports_in_cli_pdf_and_png() {
+    let saved = test_path();
+    let source = saved.to_str().expect("profile filename");
+    assert!(execute_notebook(&args(&[
+        "--border-radius-um", "5000", "--printed-sheet", "true",
+        "--output", source,
+    ])).expect("save rounded notebook").is_none());
+    let stored = fs::read(&saved).expect("saved notebook source");
+    let reopened = NotebookProfile::from_json(&stored)
+        .expect("roundtrip rounded notebook");
+    assert_eq!(reopened.border_radius_um, 5_000);
+
+    let pdf = execute_notebook(&args(&[
+        "--profile", source, "--export-paper", "pdf", "--pages", "2",
+    ])).expect("two-page PDF").expect("PDF stdout");
+    assert_eq!(pdf, reopened.paper_layer_pdf(2).expect("shared Rust PDF"));
+    assert_eq!(
+        String::from_utf8_lossy(&pdf).matches(" c\n").count(), 8,
+        "four rounded corners on each preprinted page",
+    );
+    assert_eq!(
+        String::from_utf8_lossy(&pdf).matches(" m\n").count(), 2,
+        "one border per page without duplicating printed ruling",
+    );
+    let png = execute_notebook(&args(&[
+        "--profile", source, "--export-paper", "png", "--dpi", "72",
+        "--png-page", "2",
+    ])).expect("selected rounded PNG").expect("PNG stdout");
+    assert_eq!(
+        png,
+        reopened.paper_layer_png_page(72, 2).expect("shared Rust PNG"),
+    );
+    let mut borderless = reopened;
+    borderless.border_radius_um = 0;
+    assert_ne!(pdf, borderless.paper_layer_pdf(2).expect("plain PDF"));
+    assert_ne!(
+        png, borderless.paper_layer_png_page(72, 2)
+            .expect("transparent page without border"),
+    );
+    assert_eq!(fs::read(&saved).expect("original saved intact"), stored);
+    fs::remove_file(saved).expect("remove test-owned notebook");
+}
+
+#[test]
 fn saved_notebook_page_numbers_export_sequential_pdf_and_png() {
     let saved = test_path();
     let name = saved.to_str().expect("profile path");

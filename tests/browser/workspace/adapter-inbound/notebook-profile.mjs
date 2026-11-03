@@ -165,7 +165,7 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.match(elements.get("notebook-status").textContent,
             /PNG sheet 10/);
         assert.match(elements.get("notebook-status").textContent,
-            /no actual date text, borders or ink/);
+            /no date text, handwriting or images/);
         const beforeBadPng = requests.length;
         elements.get("notebook-png-page").value = "33";
         elements.get("notebook-export-png").dispatch("click");
