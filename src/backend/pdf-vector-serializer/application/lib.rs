@@ -33,7 +33,7 @@
 
 //! Deterministic in-memory PDF 1.4 for vector-only, fully resolved pages.
 
-use std::fmt::{Arguments, Write as _};
+use std::fmt;
 
 use atrament_pdf_composition_plan::{
     PdfAssetResource, PdfCompositionPlan, PdfPagePlan, SearchableSemanticText,
@@ -223,10 +223,9 @@ impl ContourAreaWitness {
 // the sink reports an error rather than silently losing a path command.
 fn push_formatted(
     stream: &mut String,
-    arguments: Arguments<'_>,
+    arguments: fmt::Arguments<'_>,
 ) -> Result<(), PdfVectorError> {
-    stream
-        .write_fmt(arguments)
+    fmt::write(stream, arguments)
         .map_err(|_error| PdfVectorError::AllocationFailed)
 }
 

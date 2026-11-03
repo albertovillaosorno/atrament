@@ -2565,8 +2565,10 @@ function unreviewedCargoSourceTargets(metadata, resolveSource = realpathSync) {
         if (!owners.has(pkg.id)) continue;
         for (const target of pkg.targets) {
             const [kind] = target.kind;
+            // Cargo examples are executable fixtures, not shipped adapters.
+            // Admit them only under the same canonical test source root.
             const root = target.kind.length !== 1 ? null
-                : kind === "test" ? tests
+                : kind === "test" || kind === "example" ? tests
                 : kind === "lib" || kind === "bin" ? backend : null;
             let source = null;
             try {
@@ -2616,6 +2618,7 @@ test("Cargo executable source targets cannot escape reviewed trees", () => {
         ["lib", backend],
         ["bin", backend],
         ["test", testRoot],
+        ["example", testRoot],
         ["test", path.join(BACKEND_ROOT, "session-secret",
             "../../../tests/backend/session-secret/adapter-outbound/lib.rs")],
     ]) {
@@ -2629,11 +2632,18 @@ test("Cargo executable source targets cannot escape reviewed trees", () => {
     assert.deepEqual(unreviewedCargoSourceTargets(
         metadata("lib", alias), aliasTarget,
     ), ["test_owner:test_target"]);
+    assert.deepEqual(unreviewedCargoSourceTargets(
+        metadata("example", testRoot), () =>
+            path.join(BACKEND_ROOT, "session-secret", "injected.rs"),
+    ), ["test_owner:test_target"],
+    "symlinked Cargo examples outside the test root must still refuse");
     for (const [kind, source] of [
         ["lib", testRoot],
         ["bin", testRoot],
         ["test", backend],
         ["example", backend],
+        ["example", path.join(REPOSITORY_ROOT, "README.md")],
+        ["example", path.join(BACKEND_ROOT, "missing.rs")],
         ["lib", path.join(REPOSITORY_ROOT, "README.md")],
         ["bin", path.join(BACKEND_ROOT, "missing.rs")],
     ]) {
