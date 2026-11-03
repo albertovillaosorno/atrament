@@ -449,7 +449,7 @@ distinct. The same flags can export
 transparent PNG using `--export-paper png --png-page 2 --dpi 72`; page 1
 remains unmarked by page-2 ink.
 
-There are at most 256 authored template
+There are at most 4096 authored template
 segments, 16 text runs of up to 96 graphemes each, and 512 final pen
 segments combined with `--ink-line`. Physical placement and ink width are
 checked by the existing PDF/PNG compositor before the selected output changes.
@@ -489,7 +489,7 @@ its actual authored stroke count or missing status; it does not confuse the
 statistical/text baseline with renderable ink. The versioned format
 starts with `atrament.glyph-strokes.v1`, followed by one **tab-separated**
 `GRAPHEME X1 Y1 X2 Y2 WIDTH_UM #RRGGBB` record per line (UTF-8, LF).
-It supports 256 strokes and up to 64 KiB, checks exact grapheme identity
+It supports 4096 strokes and up to 512 KiB, checks exact grapheme identity
 without normalizing NFC/NFD, and refuses malformed, missing, oversized or
 unprintable input before PDF/PNG output replacement. The file is an
 **authored shape library**, not a sampled writer model; no Python is used.
@@ -527,6 +527,15 @@ load its saved coordinates, thickness and color into the controls. **Update
 selected stroke** validates and replaces only that segment; **Remove selected
 stroke** deletes only that segment, not the other shapes for the grapheme.
 Invalid updates leave the saved draft untouched.
+
+Drag across the SVG preview with a mouse, pen or touch to trace a letterform
+as up to 128 connected line segments per gesture. Canceled, zero-length and
+oversized gestures do not change the saved draft. To develop a related form,
+enter a different exact source grapheme under **Copy strokes from exact
+grapheme** and choose **Replace selected glyph with copy**. This explicitly
+replaces only the target glyph's unsaved template; its strokes can then be
+edited independently. It does not silently substitute symbols or synthesize
+handwriting.
 
 **Load stroke TSV** reads an explicit existing glyph file into an in-memory
 draft. **Download stroke TSV** saves the canonical native-compatible file;

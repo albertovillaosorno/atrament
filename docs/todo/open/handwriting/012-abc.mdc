@@ -146,9 +146,18 @@ Invalid changes preserve the previous library. Focused frontend tests cover
 mixed-grapheme imports, middle-segment editing, wrong-length refusal and
 explicit TSV output.
 
-Not yet implemented: drawing by mouse/touch, automatically generating the
-entire required 114-glyph baseline, browser-native notebook ink composition,
-and learned writer calibration. This task remains open.
+Direct SVG pointer drawing now records up to 128 connected native-unit
+segments per gesture, with canceled and oversized traces refusing atomically.
+The editor can explicitly copy a source glyph's authored strokes into a
+separate exact Unicode target, then independently edit those segments.
+Browser and Rust CLI glyph library caps are now 4096 authored strokes and
+512 KiB; a real 600-stroke mixed composed/decomposed Unicode library passes
+byte-identical Rust readback. Rendered text still has its distinct bound
+of 512 physical ink lines, and no baseline outlines are auto-generated.
+
+Not yet implemented: automatically generating the entire required 114-glyph
+baseline, browser-native notebook ink composition, and learned writer
+calibration. This task remains open.
 
 ## Acceptance decision
 
