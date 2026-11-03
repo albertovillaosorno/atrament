@@ -66,6 +66,11 @@ custom glyph-image paths are resolved relative to the notebook JSON file.
 Raster PNG pages are full-sheet RGBA, so they align with a photographed or
 preprinted physical page.
 
+Multi-page PNG rendering stages all pages before publishing any; a later-page
+layout failure leaves existing exported pages untouched. Filesystem failures
+during publication to an existing folder can still leave a partial set of
+updated files.
+
 The PDF is a **raster print PDF at the selected DPI**, not searchable/vector
 handwriting. Print it at **100% / actual size**, never with automatic
 fit-to-page scaling.
@@ -107,7 +112,11 @@ python3 cli/notebook.py calibrate --config my-notebook.json --glyph a \
 
 For precise letter shape, draw a transparent PNG for the character and set
 `glyphs["a"].image` to its path. You can adjust every glyph and every sign in
-JSON, without a camera or a trainable algorithm.
+JSON, without a camera or a trainable algorithm. Canonically equivalent
+accent spellings are normalized to NFC before glyph matching. If the fallback
+`DejaVuSans.ttf` font is not installed, Linux Fontconfig (`fc-match`) can
+select an installed sans-serif; explicit relative font files remain relative
+to the notebook JSON.
 
 ## Sheet layouts, photos, and printed-page flags
 

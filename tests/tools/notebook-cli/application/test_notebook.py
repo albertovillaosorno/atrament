@@ -225,6 +225,53 @@ class NotebookCliTests(unittest.TestCase):
         self.assertEqual(run.returncode, 2)
         self.assertEqual(target.read_bytes(), b"keep-me")
 
+    def test_trailing_spaces_and_tabs_cannot_escape_right_margin(self):
+        for whitespace in (" " * 150, "\t" * 15):
+            with self.subTest(character=repr(whitespace[0])):
+                self.doc["pages"][0]["text"] = ["Hola" + whitespace]
+                with self.assertRaisesRegex(
+                    ValueError, "overflows right margin"
+                ):
+                    notebook.render_page(self.doc, 0, 120, self.root)
+
+    def test_decomposed_accents_render_like_precomposed_spanish(self):
+        self.doc["pages"][0]["text"] = ["pin\u0303ata, cafe\u0301"]
+        decomposed = notebook.render_page(self.doc, 0, 120, self.root)
+        self.doc["pages"][0]["text"] = ["piñata, café"]
+        precomposed = notebook.render_page(self.doc, 0, 120, self.root)
+        self.assertEqual(decomposed.tobytes(), precomposed.tobytes())
+
+    @unittest.skipUnless(shutil.which("fc-match"), "Fontconfig absent")
+    def test_fontconfig_fallback_without_config_local_copy(self):
+        self.doc["handwriting"]["font"] = "DejaVuSans.ttf"
+        self.assertFalse((self.root / "DejaVuSans.ttf").exists())
+        result = notebook.render_page(self.doc, 0, 120, self.root)
+        self.assertIsNotNone(result.getchannel("A").getbbox())
+
+    def test_png_export_keeps_existing_pages_if_later_page_fails(self):
+        target = self.root / "pages"
+        target.mkdir()
+        existing = target / "page-001.png"
+        existing.write_bytes(b"keep-original-page")
+        self.doc["pages"][1]["text"] = ["a" * 1000]
+        notebook.write_json(self.config, self.doc, replace=True)
+        run = self.run_cli(
+            "render",
+            "--config",
+            str(self.config),
+            "--format",
+            "png",
+            "--dpi",
+            "100",
+            "--replace",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(run.returncode, 2, run.stderr)
+        self.assertIn("overflows right margin", run.stderr)
+        self.assertEqual(existing.read_bytes(), b"keep-original-page")
+        self.assertFalse((target / "page-002.png").exists())
+
     def test_relative_font_used_for_header_and_page_number(self):
         (self.root / "font.otf").symlink_to(notebook.DEFAULT_FONT)
         self.doc["handwriting"]["font"] = "font.otf"

@@ -20,6 +20,7 @@ import re
 import statistics
 import subprocess
 import tempfile
+import unicodedata
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -461,9 +462,33 @@ class Pen:
     def __init__(self, cfg, dpi, base):
         self.cfg, self.dpi, self.base = cfg, dpi, base
         font_path = cfg.get("font", DEFAULT_FONT)
-        if not Path(font_path).is_absolute():
-            font_path = base / font_path
-        self.font_path = str(font_path)
+        if not isinstance(font_path, str) or not font_path:
+            raise ValueError("handwriting.font must be a font file path")
+        resolved = Path(font_path)
+        if not resolved.is_absolute():
+            resolved = base / resolved
+            if font_path == "DejaVuSans.ttf" and not resolved.is_file():
+                # Pillow does not bundle DejaVu on every Linux distribution.
+                # Fontconfig supplies an installed sans-serif when necessary.
+                try:
+                    match = subprocess.run(
+                        ["fc-match", "-f", "%{file}", "sans-serif"],
+                        capture_output=True,
+                        check=True,
+                        text=True,
+                        timeout=3,
+                    )
+                except (
+                    FileNotFoundError,
+                    subprocess.CalledProcessError,
+                    subprocess.TimeoutExpired,
+                ):
+                    pass
+                else:
+                    fallback = Path(match.stdout.strip())
+                    if fallback.is_file():
+                        resolved = fallback
+        self.font_path = str(resolved)
         self.font = ImageFont.truetype(self.font_path, 150)
         self.mask_cache = {}
         self.ink = color(cfg.get("ink", "#173b73"))
@@ -578,6 +603,9 @@ class Pen:
     def draw_line(self, page, text, x, y, right, page_number, line_index):
         if not isinstance(text, str) or len(text) > 10_000:
             raise ValueError("line must be text of at most 10000 characters")
+        # Canonically equivalent Spanish accents must use the same glyph and
+        # per-character override, regardless of keyboard/input composition.
+        text = unicodedata.normalize("NFC", text)
         seed = self.cfg.get("seed", 0)
         if not isinstance(seed, int):
             raise TypeError("handwriting seed must be an integer")
@@ -601,11 +629,13 @@ class Pen:
         for index, char in enumerate(text):
             if char in "\r\n\x00":
                 raise ValueError("split input into separate explicit lines")
-            if char == "\t":
-                cursor += point_mm(8, self.dpi)
-                continue
-            if char == " ":
-                cursor += point_mm(2.1, self.dpi)
+            if char in {"\t", " "}:
+                cursor += point_mm(8 if char == "\t" else 2.1, self.dpi)
+                if cursor > right:
+                    raise ValueError(
+                        f"page {page_number}: line {line_index + 1} "
+                        "overflows right margin"
+                    )
                 continue
             rngseed = hashlib.sha256(
                 f"{seed}:{page_number}:{line_index}:{index}:{char}".encode()
@@ -848,22 +878,43 @@ def do_render(args):
         out = Path(args.out)
         if out.exists() and not out.is_dir():
             raise ValueError("PNG output must be a directory")
-        out.mkdir(parents=True, exist_ok=True)
-        for i in range(len(doc["pages"])):
-            image = render_page(
-                doc, i, dpi, config_base, args.transparent, args.keep_rules
-            )
-            name = out / f"page-{i + 1:03d}.png"
-            # Keep physical scale when transparent sheets are composited or
-            # printed by an image editor that reads PNG resolution metadata.
-            atomic_write(
-                name,
-                lambda f, im=image: im.save(
-                    f, "PNG", optimize=True, dpi=(dpi, dpi)
-                ),
-                args.replace,
-            )
-            print(name)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        names = [f"page-{i + 1:03d}.png" for i in range(len(doc["pages"]))]
+        if out.is_dir() and not args.replace:
+            for name in names:
+                if (out / name).exists():
+                    raise FileExistsError(
+                        f"refusing to overwrite {out / name}; pass --replace"
+                    )
+        # Stage every page before publishing any. A later-page layout failure
+        # must never overwrite successful earlier pages in the output folder.
+        with tempfile.TemporaryDirectory(
+            dir=out.parent, prefix=".atrament-pages-"
+        ) as temporary:
+            staging = Path(temporary)
+            for i, name in enumerate(names):
+                image = render_page(
+                    doc,
+                    i,
+                    dpi,
+                    config_base,
+                    args.transparent,
+                    args.keep_rules,
+                )
+                # Keep physical print scale when importing into image editors.
+                image.save(
+                    staging / name, "PNG", optimize=True, dpi=(dpi, dpi)
+                )
+            if not out.exists():
+                staging.rename(out)
+            else:
+                for name in names:
+                    if args.replace:
+                        os.replace(staging / name, out / name)
+                    else:
+                        os.link(staging / name, out / name)
+        for name in names:
+            print(out / name)
     else:
 
         def save(f):
