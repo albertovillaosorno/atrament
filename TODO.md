@@ -18,15 +18,6 @@ remain in typed records under `docs/todo/open/`. Completed work belongs under
 then one direct Markdown link to the complete typed record. No per-item field
 labels belong here.
 
-## P1 — Localhost runtime and ephemeral session
-
-### TODO - Define one typed diagnostic envelope
-
-Represent field, object, page, source, glyph, collision, capability,
-renderer, and hardware errors with stable codes and actionable locations.
-
-[docs/todo/open/runtime/004-define-one-typed-diagnostic-envelope.mdc](docs/todo/open/runtime/004-define-one-typed-diagnostic-envelope.mdc)
-
 ## P2 — Semantic notebook and physical layout
 
 ### TODO - Implement the semantic notebook model

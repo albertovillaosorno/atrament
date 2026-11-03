@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P1-004"
 title: "Define one typed diagnostic envelope"
-status: open
+status: completed
 priority: P1
 lane: localhost-runtime
 dependencies: []
@@ -25,6 +25,10 @@ migrated_from: TODO.md
 # Define one typed diagnostic envelope
 
 ## Scope and existing evidence
+
+Historical implementation notes below use their original open-task status.
+The acceptance decision at the end closes only the finite typed design
+contract, not incomplete adapter implementations or future diagnostics.
 
 Represent field, object, page, source, glyph, collision, capability, renderer,
 and hardware errors with stable codes and actionable locations.
@@ -191,3 +195,62 @@ empty chunks followed by valid JSON previously parsed as a compatible payload;
 now it cancels and refuses, while sixty-four empty chunks followed by valid
 JSON remain admitted. The same bound covers the larger draft reader and does
 not change backend diagnostic authority.
+
+## Finite typed diagnostic contract
+
+**Inputs:** the owning application operation, its revision or request context,
+a condition admitted by the backend, typed semantic owner locations, and
+bounded evidence. **Output:** one `atrament.diagnostic/1` diagnostic set with
+explicit `Complete` or `Incomplete` status; each diagnostic records a stable
+code, severity, operation-specific blocking disposition, ordered semantic
+locations, typed evidence, and backend-owned remediation categories.
+
+The current domain implements `Diagnostic`, `DiagnosticSet`, `Severity`,
+`SemanticLocation`, `DiagnosticCode`, and `Remediation`. Its four admitted
+code families are handshake version mismatch, session draft resource limit,
+fixed-region layout overflow, and semantic-command precondition rejection.
+All share the same shape but not necessarily the same adapter coverage.
+An application result remains the authority for whether an operation applied;
+a diagnostic explains the result without replacing its type.
+
+**Worked example:** a fixed region extends 6 mm below an admitted writable
+page boundary. The layout producer returns
+`atrament.layout.fixed-region-overflow`, severity `Error`, disposition
+`Blocking`, the owning object and page locations, typed bottom-boundary
+and physical overflow evidence, and `ChangeConstraint` or `EditContent`
+remediation. The human editor may explain that evidence differently from an
+automation client but must not change its semantic code or measurement.
+
+**Refusal:** a handshake version-mismatch response with the wrong operation,
+missing required version evidence, an unrecognized route code, or an
+incomplete set must be refused as invalid rather than treated as an ordinary
+compatible handshake. Likewise, no successful operation may omit a required
+blocking diagnostic when a response budget is exceeded. A remediation class
+cannot itself authorize a file write, semantic edit, or physical action.
+
+**Unknown-family fallback contract:** a future condition outside the four
+admitted codes must preserve its owning operation and `Blocking` or
+`Incomplete` safety disposition in a typed non-success or explicitly
+unsupported diagnostic result. It must never coerce a new condition into an
+unrelated known code, invent semantic coordinates, or fall back to success
+with message-only detail. This is a design rule; a general unknown-code
+runtime variant has not been added to the current closed Rust enum.
+
+**Assumptions and residual risks:** full schema and identity serialization
+for browser, CLI, and MCP remain unfinished, as do diagnostic producers for
+Render, full Export, Plan, and live hardware. Opaque Rust Debug identities
+are internal evidence, not portable semantic locations. A theoretical schema
+is not evidence of parity, localization, or complete future family coverage.
+
+## Acceptance decision
+
+- **Basis:** theoretical, 2026-11-02, for the finite v1 shared diagnostic
+  shape, four named present families, and a fail-closed future fallback.
+- **Delivered:** the frozen technical contract, existing typed domain source,
+  current-family example, refusal and completeness rules, and a residual-risk
+  inventory. Historical fixture descriptions are not independently reverified
+  by this decision; `evidence_status` remains unchanged.
+- **Not implemented by this acceptance:** universal adapter-stable semantic
+  identity encoding, future diagnostic-family runtime fallback, Render/Plan
+  producers, full Export diagnostics, or cross-adapter parity. These remain
+  separate integration limitations rather than evidence of a complete product.
