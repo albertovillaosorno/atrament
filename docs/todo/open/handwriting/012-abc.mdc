@@ -408,6 +408,24 @@ reported zero missing shapes, and produced real one-page PDF plus
 transparent 72-DPI RGBA PNG for `gg`. This remains a manual geometric
 starter, not whole-alphabet coverage or native editable circle/curve ink.
 
+## Smooth s starter completes manual lowercase a–z (partial) — 2026-11-03
+
+The localhost editor now includes lowercase `s` as four tangent-continuous
+ideal quadratic arcs, with all shared handles reflected exactly at each join.
+Its single smooth SVG guide is sampled into 64 ordered integer-micrometre
+TSV line segments without a pen lift. This is a manually selected starter,
+not a stored analytic primitive or an automatically seeded alphabet.
+
+A browser regression proves that **each of the 26 lowercase ASCII letters**
+has a selectable geometric starter, and checks the exact S control points,
+sampled endpoints, curve continuity, SVG visibility and atomic refusal of
+clipped replacements. The shared parameter-grid regression now checks 4,176
+letter/size/pen combinations. The generated 64-stroke library passed
+byte-identical Rust CLI readback and an exact `ss` audit with zero missing
+strokes; the native CLI exported one-page PDF and transparent 72-DPI PNG for
+`ss`. This does not mean all 114 admitted bilingual graphemes are authored,
+that the baseline glyphs seed themselves, or that native PDF preserves curves.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

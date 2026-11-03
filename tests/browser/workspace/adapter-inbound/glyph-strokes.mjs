@@ -1132,9 +1132,102 @@ test("v/w exact SVG lines and native TSV remain session-safe", async () => {
     }
 });
 
+test("s completes selectable lowercase starters with a smooth S path", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    for (const glyph of "abcdefghijklmnopqrstuvwxyz") {
+        assert.ok(geometricStarter(glyph, ...args).length > 0,
+            `missing lowercase geometric starter: ${glyph}`);
+    }
+    const s = geometricStarter("s", ...args);
+    assert.equal(s.length, 64, "four analytic arcs, 16 ordered chords each");
+    assert.deepEqual([s[0].x1, s[0].y1], [2320, 1570]);
+    assert.deepEqual([s.at(-1).x2, s.at(-1).y2], [780, 3330]);
+    const spans = [
+        [[2320, 1570], [1550, 1350], [780, 1900]],
+        [[780, 1900], [10, 2450], [1550, 2450]],
+        [[1550, 2450], [3090, 2450], [2320, 3000]],
+        [[2320, 3000], [1550, 3550], [780, 3330]],
+    ];
+    for (let i = 0; i < spans.length; i += 1) {
+        const [start, control, end] = spans[i];
+        for (let j = 0; j < 16; j += 1) {
+            const t = (j + 1) / 16;
+            const u = 1 - t;
+            const sampled = s[i * 16 + j];
+            assert.ok(Math.abs(sampled.x2 -
+                (u * u * start[0] + 2 * t * u * control[0]
+                    + t * t * end[0])) <= 0.5);
+            assert.ok(Math.abs(sampled.y2 -
+                (u * u * start[1] + 2 * t * u * control[1]
+                    + t * t * end[1])) <= 0.5);
+            if (i * 16 + j > 0) {
+                const previous = s[i * 16 + j - 1];
+                assert.deepEqual([sampled.x1, sampled.y1],
+                    [previous.x2, previous.y2], "no pen lift within S");
+            }
+        }
+        if (i > 0) {
+            const [, priorControl, joint] = spans[i - 1];
+            assert.deepEqual(start, joint);
+            assert.deepEqual(
+                start.map((value, axis) => value - priorControl[axis]),
+                control.map((value, axis) => value - start[axis]),
+                "quadratic handles give exact C1 tangent continuity",
+            );
+        }
+    }
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(s)), s);
+    assert.throws(() => geometricStarter("s", 200, 2450, 1100,
+        250, "#123456"), /Shape and pen/);
+    assert.throws(() => geometricStarter("s", ...args,
+        undefined, "two-storey"), /Two-storey/);
+});
+
+test("s SVG and authored TSV replacement stay separate", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("character").value = "s";
+        get("character").dispatch("input");
+        get("form").value = "s";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 2320 1570 Q 1550 1350 780 1900"
+            + " Q 10 2450 1550 2450 Q 3090 2450 2320 3000"
+            + " Q 1550 3550 780 3330");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "visible");
+        for (const part of ["ideal-circle", "ideal-rounded-left",
+            "ideal-rounded-right", "ideal-i-stem", "ideal-accent"]) {
+            assert.equal(get(part).attributes.get("visibility"), "hidden");
+        }
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 64);
+        get("save").dispatch("click");
+        const original = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(original, geometricStarter("s", 1550, 2450,
+            1100, 250, "#243647"));
+        get("circle-x").value = "200";
+        get("circle-x").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden", "invalid dimensions must hide outdated SVG");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Shape and pen/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            original, "invalid construction preserves the authored glyph");
+        editor.reset();
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("all geometric starters respect pen margins over a boundary grid", () => {
     const forms = ["o", "a", "ó", "á", "b", "d", "p", "q",
-        "g", "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
+        "g", "n", "u", "h", "m", "r", "s", "l", "t", "f", "v", "w",
         "k", "x", "y", "z", "c", "e", "i", "í", "j"];
     let accepted = 0;
     let checked = 0;
@@ -1173,7 +1266,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 4032);
+    assert.equal(checked, 4176);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

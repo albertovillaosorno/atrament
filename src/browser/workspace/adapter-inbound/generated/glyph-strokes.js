@@ -348,6 +348,37 @@ function doubleHump(cx, cy, radius) {
         },
     };
 }
+// Four tangent-continuous quadratic arcs give lowercase s a smooth
+// upper turn and mirrored lower turn. The handles are reflected at each
+// join, so changing radius cannot introduce an angular kink in SVG.
+function smoothS(cx, cy, radius) {
+    const half = Math.round(radius * 0.7);
+    const mid = Math.round(radius * 0.5);
+    const upper = { x: cx - half, y: cy - mid };
+    const topHandle = { x: cx, y: cy - radius };
+    const leftHandle = {
+        x: 2 * upper.x - topHandle.x,
+        y: 2 * upper.y - topHandle.y,
+    };
+    const center = { x: cx, y: cy };
+    const rightHandle = {
+        x: 2 * center.x - leftHandle.x,
+        y: 2 * center.y - leftHandle.y,
+    };
+    const lower = { x: cx + half, y: cy + mid };
+    const bottomHandle = {
+        x: 2 * lower.x - rightHandle.x,
+        y: 2 * lower.y - rightHandle.y,
+    };
+    return [
+        [{ x: cx + half, y: cy - Math.round(radius * 0.8) },
+            topHandle, upper],
+        [upper, leftHandle, center],
+        [center, rightHandle, lower],
+        [lower, bottomHandle,
+            { x: cx - half, y: cy + Math.round(radius * 0.8) }],
+    ];
+}
 function quadratic(from, control, to, step) {
     const t = step / ARCH_SEGMENTS;
     const u = 1 - t;
@@ -361,7 +392,7 @@ function quadratic(from, control, to, step) {
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
-        "k", "x", "y", "z", "c", "e", "i", "í", "j", "g"].includes(g)) {
+        "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -384,6 +415,20 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         || cx + radius + halfPen > 3500
         || cy + radius + halfPen > 4500) {
         throw new Error("Shape and pen thickness must fit inside glyph cell");
+    }
+    if (g === "s") {
+        const lines = [];
+        for (const [from, control, to] of smoothS(cx, cy, radius)) {
+            for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
+                const first = quadratic(from, control, to, step);
+                const last = quadratic(from, control, to, step + 1);
+                lines.push(validateStroke({
+                    grapheme: g, x1: first.x, y1: first.y,
+                    x2: last.x, y2: last.y, width: pen, color,
+                }));
+            }
+        }
+        return lines;
     }
     if (["n", "u", "h", "m", "r"].includes(g)) {
         const line = (first, last) => {
@@ -828,11 +873,15 @@ export function createGlyphStrokeEditor() {
                 : `M ${gTurn[0].x} ${gTurn[0].y}`
                     + ` Q ${gTurn[1].x} ${gTurn[1].y}`
                     + ` ${gTurn[2].x} ${gTurn[2].y}`;
+            const sD = chosen.grapheme === "s"
+                ? smoothS(cx, cy, r).map(([from, control, to], index) => `${index === 0 ? `M ${from.x} ${from.y} ` : ""}`
+                    + `Q ${control.x} ${control.y} ${to.x} ${to.y}`).join(" ") : "";
             const roundedD = isStraight ? straightD
-                : chosen.grapheme === "j" ? jD
-                    : chosen.grapheme === "g" ? gD
-                        : chosen.grapheme === "m" ? doubledD
-                            : [roundedStart, roundedFirst, roundedSecond].join(" ");
+                : chosen.grapheme === "s" ? sD
+                    : chosen.grapheme === "j" ? jD
+                        : chosen.grapheme === "g" ? gD
+                            : chosen.grapheme === "m" ? doubledD
+                                : [roundedStart, roundedFirst, roundedSecond].join(" ");
             roundedPath.setAttribute("d", roundedD);
             roundedPath.setAttribute("stroke-width", numeric.width.value);
             roundedPath.setAttribute("stroke", color.value);
@@ -850,12 +899,12 @@ export function createGlyphStrokeEditor() {
                 element.setAttribute("stroke", color.value);
             }
             const roundedVisible = active
-                && ["n", "u", "h", "m", "r", "j", "g",
+                && ["n", "u", "h", "m", "r", "j", "g", "s",
                     "v", "w", "k", "x", "y", "z"]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
-                && chosen.grapheme !== "j" && chosen.grapheme !== "g"
+                && !["j", "g", "s"].includes(chosen.grapheme)
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
             roundedLeft.setAttribute("visibility", roundedStemState);
