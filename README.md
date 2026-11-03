@@ -406,6 +406,47 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --output notebook-page-10.png
 ```
 
+### CLI text and Markdown flow onto notebook pages
+
+The Rust notebook CLI can now turn **caller-supplied text or a restricted
+Markdown file** into page-local handwriting strokes using the selected
+notebook paper and **only glyphs you have actually authored**. In the localhost
+**Authored glyph strokes** editor, select a geometric `a`, click
+**Construct**, and explicitly download its TSV as `ink.tsv`. Then:
+
+```sh
+printf '# a\n\na a a\n- a\n' > notes.md
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --printed-sheet false --export-paper pdf \
+  --glyph-file ink.tsv --flow-markdown-file notes.md \
+  --output notes.pdf
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --printed-sheet false --export-paper png \
+  --png-page 1 --dpi 72 --glyph-file ink.tsv \
+  --flow-markdown-file notes.md --output notes-page-1.png
+```
+
+Both exports were smoke-tested with the editor's geometric `a` strokes;
+the PDF is a real one-page document and PNG is 72-DPI RGBA. A heading
+gets a pen underline and a list item gets an ink marker. For a notebook
+profile already saved as `notebook.json`, supply `--profile notebook.json`
+before the flow options to use its paper/margins instead of defaults.
+
+Use `--flow-text-file` for plain text, or `--flow-text` and
+`--flow-markdown` for inline command arguments. Blank lines create gaps;
+ordinary lines wrap onto additional pages automatically (up to 32).
+The Markdown subset supports single-line `#`, `##`, `###` headings and
+`-`/`*` bullets, **not** inline styles, tables or full Markdown.
+The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.
+The same 512 total exported pen-segment limit still applies.
+
+If `notes.md` includes an unauthored character (for example `ñ` when
+only `a` was saved), export refuses with its exact Unicode identity;
+no PDF/PNG is created or overwritten. Author more glyphs in the editor
+or select a deliberate native `--fallback-glyph` mapping. The CLI does
+not yet save semantic notebook body content or offer browser Markdown
+paste/preview, automatic handwriting shapes, cursive joining or aesthetic
+heading lettering.
 
 The same Rust-only CLI can draw **explicit caller-owned pen segments** over
 paper, printed dates, and page numbers. A separate `--ink-line` is repeated
