@@ -244,8 +244,8 @@ web controls remain open implementation tasks.
 The `atrament-profiles notebook` subcommand creates a **versioned
 `atrament.notebook.v1` profile** containing the existing Rust-validated
 `atrament.paper.v1` sheet plus date placeholder style and location, border
-radius in micrometres, page-number intent, and a printed-sheet flag. It is a
-starting page-profile envelope, **not** yet notebook content or rendered dates.
+radius in micrometres, optional page numbers, and a printed-sheet flag. It
+is a starting page-profile envelope, **not** notebook content or date text.
 
 ```sh
 cargo run -q -p atrament_profile_editor_cli -- \
@@ -286,7 +286,8 @@ cargo run -q -p atrament_profile_editor_cli -- \
 PDF allows 1–32 physical pages; transparent RGBA PNG renders one page at
 72–300 DPI with physical resolution metadata. For `printed_sheet: true`,
 existing ruling is suppressed to avoid duplicating marks on stationery.
-When no date placeholder is selected, PDF and PNG are unmarked overlays.
+When no date or page numbers are selected, preprinted PDF/PNG overlays are
+unmarked.
 
 No profile file is changed by rendering. Output is explicit and existing paths
 require `--replace`; invalid options refuse before changing output bytes.
@@ -295,8 +296,17 @@ When a notebook selects a date placeholder (`line` or `box` at the top left
 or top right), the same Rust PDF/PNG renderer draws the empty 36 × 8 mm
 placeholder in the top margin. It requires at least 10 mm of top clearance
 and 36 mm of usable width; invalid placements refuse profile validation.
-This is **not** a complete notebook export: actual date text, rounded
-borders, page numbers, handwriting and image overlays are not rendered.
+
+With `page_numbers: true`, Rust prints page numbers 1–32 in the bottom
+margin using compact block numerals; each PDF page receives its own number,
+while the single transparent PNG sheet contains page 1. This requires at
+least 7 mm of bottom margin and refuses invalid profiles before export.
+Numbered sheets retain the number and date placeholder when `printed_sheet`
+suppresses the existing paper marks.
+
+This is **not** a complete notebook export: actual date text, rounded borders,
+handwriting and image overlays are not rendered. Page numbers are printed
+markers, not sampled pen strokes.
 
 The localhost Rust runtime also exposes authenticated
 `GET /api/notebook/profile` (default profile) and
@@ -313,14 +323,14 @@ validator and paper serializer as the CLI. The web editor supplies these
 headers from its PDF-page and PNG-DPI controls and downloads the resulting
 paper layer.
 
-Preprinted-sheet suppression applies to ruling in both formats; an explicitly
-selected date placeholder remains visible. No date text, border, page
-number, handwriting or image content is drawn in these outputs.
+Preprinted-sheet suppression applies to ruling in both formats; explicitly
+selected date placeholders and page numbers remain visible. No date text,
+border, handwriting or image content is drawn in these outputs.
 
 The localhost web editor now also offers **Notebook page profile** controls
 for date placeholder style and placement, border radius, page numbers and
-preprinted-sheet intent. PDF/PNG exports draw the empty date placeholder
-only when selected and physically admissible. **Use current paper** includes
+preprinted-sheet intent. PDF/PNG exports draw selected date placeholders
+and page numbers only when physically admissible. **Use current paper** includes
 unsaved sheet settings before Rust validation.
 
 **Edit notebook paper** sends the notebook's embedded sheet into the visual

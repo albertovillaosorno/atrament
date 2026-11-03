@@ -11,7 +11,7 @@
 // - Owns:
 //   - Versioned notebook page metadata composed with Rust-canonical paper.
 // - Must-Not:
-//   - Claim that date text, borders, or page numbers are rendered.
+//   - Claim that date text, borders, or handwriting are rendered.
 // - Allows:
 //   - Inputs: Bounded notebook JSON and admitted native paper profile JSON.
 //   - Outputs: Canonical notebook JSON or explicit typed-field refusal.
@@ -34,8 +34,9 @@
 
 use atrament_notebook_paper_cli::{
     PaperDatePlaceholder, canonical_paper_profile_json,
-    default_paper_profile_json, paper_profile_pdf_pages_with_date,
-    paper_profile_png_layer_with_date, validate_paper_date_clearance,
+    default_paper_profile_json, paper_profile_pdf_pages_with_annotations,
+    paper_profile_png_layer_with_annotations, validate_paper_date_clearance,
+    validate_paper_page_number_clearance,
 };
 use atrament_profile_json_syntax::{
     ProfileJsonSyntaxLimits, ValidatedProfileJsonObject,
@@ -129,7 +130,7 @@ pub struct NotebookProfile {
     pub date_placement: DatePlacement,
     /// Reserved date placeholder style.
     pub date_style: DateStyle,
-    /// Whether a future renderer should show page numbers.
+    /// Whether to draw small printed page numerals in the bottom margin.
     pub page_numbers: bool,
     /// Canonical `atrament.paper.v1` JSON; no second page codec is invented.
     pub paper_json: String,
@@ -232,17 +233,18 @@ impl NotebookProfile {
 
     /// Export physical PDF paper layers from a valid notebook profile.
     ///
-    /// A selected empty date box/line is drawn in the top margin; actual date
-    /// text, borders, page numbers, images and handwriting are not rendered.
+    /// A selected empty date box/line is drawn in the top margin; printed
+    /// page numbers are drawn below the marks. Date text, borders, images
+    /// and handwriting are not rendered.
     /// Preprinted stationery suppresses ruling but keeps the date placeholder.
     ///
     /// # Errors
     /// Refuses invalid metadata, geometry, page count or output limits.
     pub fn paper_layer_pdf(&self, pages: usize) -> Result<Vec<u8>, String> {
         self.validate()?;
-        paper_profile_pdf_pages_with_date(
+        paper_profile_pdf_pages_with_annotations(
             self.paper_json.as_bytes(), pages, !self.printed_sheet,
-            self.date_placeholder(),
+            self.date_placeholder(), self.page_numbers,
         )
     }
 
@@ -252,9 +254,9 @@ impl NotebookProfile {
     /// Refuses invalid metadata, paper geometry, DPI or raster budgets.
     pub fn paper_layer_png(&self, dpi: u32) -> Result<Vec<u8>, String> {
         self.validate()?;
-        paper_profile_png_layer_with_date(
+        paper_profile_png_layer_with_annotations(
             self.paper_json.as_bytes(), dpi, !self.printed_sheet,
-            self.date_placeholder(),
+            self.date_placeholder(), self.page_numbers,
         )
     }
 
@@ -273,6 +275,9 @@ impl NotebookProfile {
         let paper = canonical_paper_profile_json(self.paper_json.as_bytes())?;
         if self.date_placeholder().is_some() {
             validate_paper_date_clearance(paper.as_bytes())?;
+        }
+        if self.page_numbers {
+            validate_paper_page_number_clearance(paper.as_bytes())?;
         }
         let root = parse_root(paper.as_bytes())?;
         let measure = |key: &str| -> Result<u64, String> {

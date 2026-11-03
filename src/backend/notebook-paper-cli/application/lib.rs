@@ -80,6 +80,23 @@ pub const MAX_PAPER_OUTPUT_BYTES: usize = MAX_OUTPUT_BYTES;
 const PAPER_PROFILE_SCHEMA: &str = "atrament.paper.v1";
 const DATE_WIDTH_UM: u64 = 36_000;
 const DATE_HEIGHT_UM: u64 = 8_000;
+const PAGE_NUMBER_CELL_UM: u64 = 600;
+const PAGE_NUMBER_STEP_UM: u64 = 750;
+const PAGE_NUMBER_BOTTOM_MARGIN_UM: u32 = 7_000;
+// Three columns by five rows, with a bounded, legible printed numeral.
+// This is intentionally a print annotation, not synthesized handwriting.
+const PAGE_NUMBER_DIGITS: [[u8; 5]; 10] = [
+    [0b111, 0b101, 0b101, 0b101, 0b111],
+    [0b010, 0b110, 0b010, 0b010, 0b111],
+    [0b111, 0b001, 0b111, 0b100, 0b111],
+    [0b111, 0b001, 0b111, 0b001, 0b111],
+    [0b101, 0b101, 0b111, 0b001, 0b001],
+    [0b111, 0b100, 0b111, 0b001, 0b111],
+    [0b111, 0b100, 0b111, 0b101, 0b111],
+    [0b111, 0b001, 0b001, 0b001, 0b001],
+    [0b111, 0b101, 0b111, 0b101, 0b111],
+    [0b111, 0b101, 0b111, 0b001, 0b111],
+];
 const DEFAULT_COLOR: PdfRgb = PdfRgb {
     red: 197,
     green: 212,
@@ -652,6 +669,125 @@ fn dot(
     })
 }
 
+fn filled_square(
+    x: u64,
+    y: u64,
+    side: u64,
+    color: PdfRgb,
+) -> Result<PdfVectorPath, String> {
+    let right = x.checked_add(side).ok_or("number square overflow")?;
+    let bottom = y.checked_add(side).ok_or("number square overflow")?;
+    Ok(PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(PdfPoint {
+                x_um: position(x)?,
+                y_um: position(y)?,
+            }),
+            PdfPathCommand::LineTo(PdfPoint {
+                x_um: position(right)?,
+                y_um: position(y)?,
+            }),
+            PdfPathCommand::LineTo(PdfPoint {
+                x_um: position(right)?,
+                y_um: position(bottom)?,
+            }),
+            PdfPathCommand::LineTo(PdfPoint {
+                x_um: position(x)?,
+                y_um: position(bottom)?,
+            }),
+            PdfPathCommand::Close,
+        ],
+        paint: PdfPathPaint::Fill {
+            color,
+            rule: PdfFillRule::NonZero,
+        },
+    })
+}
+
+fn append_page_number(
+    paths: &mut Vec<PdfVectorPath>,
+    opts: Options,
+    page: usize,
+) -> Result<(), String> {
+    if !(1..=MAX_PAGES).contains(&page) {
+        return Err("page number must be within 1..32".into());
+    }
+    if opts.margin_bottom_um < PAGE_NUMBER_BOTTOM_MARGIN_UM {
+        return Err("page numbers need 7 mm bottom margin".into());
+    }
+    let printable_width = opts.width_um
+        .checked_sub(opts.margin_left_um)
+        .and_then(|value| value.checked_sub(opts.margin_right_um))
+        .ok_or("page number requires valid horizontal margins")?;
+    let digits = page.to_string();
+    let count = u64::try_from(digits.len())
+        .map_err(|error| format!("page number length refused: {error}"))?;
+    let digit_width = PAGE_NUMBER_STEP_UM
+        .checked_mul(2)
+        .and_then(|value| value.checked_add(PAGE_NUMBER_CELL_UM))
+        .ok_or("page number glyph width overflow")?;
+    let total_width = count.checked_mul(digit_width)
+        .and_then(|width| {
+            count.checked_sub(1)
+                .and_then(|gaps| gaps.checked_mul(PAGE_NUMBER_STEP_UM))
+                .and_then(|gap_width| width.checked_add(gap_width))
+        })
+        .ok_or("page number width overflow")?;
+    let height = PAGE_NUMBER_STEP_UM
+        .checked_mul(4)
+        .and_then(|value| value.checked_add(PAGE_NUMBER_CELL_UM))
+        .ok_or("page number glyph height overflow")?;
+    let left = u64::from(printable_width)
+        .checked_sub(total_width)
+        .and_then(|room| room.checked_div(2))
+        .and_then(|offset| u64::from(opts.margin_left_um).checked_add(offset))
+        .ok_or("page number exceeds printable width")?;
+    let top = opts.height_um.checked_sub(opts.margin_bottom_um)
+        .map(u64::from)
+        .and_then(|start| {
+            u64::from(opts.margin_bottom_um)
+                .checked_sub(height)
+                .and_then(|room| room.checked_div(2))
+                .and_then(|offset| start.checked_add(offset))
+        })
+        .ok_or("page number exceeds bottom margin")?;
+    for (digit_index, digit) in digits.bytes().enumerate() {
+        let index = digit.checked_sub(b'0')
+            .ok_or("invalid page-number digit")?;
+        let pattern = PAGE_NUMBER_DIGITS
+            .get(usize::from(index))
+            .ok_or("invalid page-number digit")?;
+        let x = u64::try_from(digit_index)
+            .map_err(|error| format!("page digit index refused: {error}"))?
+            .checked_mul(
+                digit_width.checked_add(PAGE_NUMBER_STEP_UM)
+                    .ok_or("page number glyph spacing overflow")?,
+            )
+            .and_then(|offset| left.checked_add(offset))
+            .ok_or("page number digit position overflow")?;
+        for (row, bits) in pattern.iter().enumerate() {
+            let y = u64::try_from(row)
+                .map_err(|error| format!("page number row refused: {error}"))?
+                .checked_mul(PAGE_NUMBER_STEP_UM)
+                .and_then(|offset| top.checked_add(offset))
+                .ok_or("page number row position overflow")?;
+            for column in 0..3u32 {
+                if bits & (0b100 >> column) == 0 {
+                    continue;
+                }
+                let pixel_x = u64::from(column)
+                    .checked_mul(PAGE_NUMBER_STEP_UM)
+                    .and_then(|offset| x.checked_add(offset))
+                    .ok_or("page number column position overflow")?;
+                paths.push(filled_square(
+                    pixel_x, y, PAGE_NUMBER_CELL_UM, opts.color,
+                )?);
+            }
+        }
+    }
+    Ok(())
+}
+
 fn append_lines(
     paths: &mut Vec<PdfVectorPath>,
     series: atrament_paper_mark_geometry::AxisSeries,
@@ -907,20 +1043,24 @@ fn serialize_paths(
     paths: Vec<PdfVectorPath>,
     page_count: usize,
 ) -> Result<Vec<u8>, String> {
+    serialize_page_paths(opts, vec![paths; page_count])
+}
+
+fn serialize_page_paths(
+    opts: Options,
+    pages: Vec<Vec<PdfVectorPath>>,
+) -> Result<Vec<u8>, String> {
     let doc = PdfCompositionPlan {
         assets: Vec::new(),
-        pages: vec![
-            PdfPagePlan {
-                color_intent: PdfVectorColorIntent::DeviceRgb,
-                physical_page_box: PdfVectorPageBox {
-                    width_um: opts.width_um,
-                    height_um: opts.height_um,
-                },
-                searchable_text: SearchableSemanticText::OmittedAsIncompatible,
-                vector_authority: paths,
-            };
-            page_count
-        ],
+        pages: pages.into_iter().map(|paths| PdfPagePlan {
+            color_intent: PdfVectorColorIntent::DeviceRgb,
+            physical_page_box: PdfVectorPageBox {
+                width_um: opts.width_um,
+                height_um: opts.height_um,
+            },
+            searchable_text: SearchableSemanticText::OmittedAsIncompatible,
+            vector_authority: paths,
+        }).collect(),
         render_manifest_identity: "paper-profile.v1",
     };
     serialize_vector_pdf(
@@ -1003,19 +1143,60 @@ pub fn paper_profile_pdf_pages_with_date(
     include_marks: bool,
     date: Option<PaperDatePlaceholder>,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_pdf_pages_with_annotations(
+        profile, pages, include_marks, date, false,
+    )
+}
+
+/// Validate that a page number can fit in the bottom margin.
+///
+/// # Errors
+/// Refuses insufficient clearance or invalid profile geometry.
+pub fn validate_paper_page_number_clearance(
+    profile: &[u8],
+) -> Result<(), String> {
+    let options = decode_profile(profile)?;
+    append_page_number(&mut Vec::new(), options, MAX_PAGES)
+}
+
+/// Render separate page-number annotations with optional dates and ruling.
+///
+/// Numbering begins at 1 for each export; PDF pages may differ even when
+/// their source paper layer is identical. No user handwriting is synthesized.
+///
+/// # Errors
+/// Refuses invalid geometry, page count, or insufficient bottom clearance.
+pub fn paper_profile_pdf_pages_with_annotations(
+    profile: &[u8],
+    pages: usize,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+) -> Result<Vec<u8>, String> {
     let options = decode_profile(profile)?;
     if !(1..=MAX_PAGES).contains(&pages) {
         return Err("paper PDF needs 1 to 32 pages".into());
     }
-    let mut paths = if include_marks {
+    let mut base = if include_marks {
         paper_paths(options)?
     } else {
         Vec::new()
     };
     if let Some(placeholder) = date {
-        append_date_placeholder(&mut paths, options, placeholder)?;
+        append_date_placeholder(&mut base, options, placeholder)?;
     }
-    serialize_paths(options, paths, pages)
+    if !page_numbers {
+        return serialize_paths(options, base, pages);
+    }
+    let mut numbered = Vec::new();
+    numbered.try_reserve_exact(pages)
+        .map_err(|error| format!("page allocation refused: {error}"))?;
+    for page in 1..=pages {
+        let mut paths = base.clone();
+        append_page_number(&mut paths, options, page)?;
+        numbered.push(paths);
+    }
+    serialize_page_paths(options, numbered)
 }
 
 /// Render one versioned paper-only profile as a transparent RGBA PNG.
@@ -1055,6 +1236,22 @@ pub fn paper_profile_png_layer_with_date(
     include_marks: bool,
     date: Option<PaperDatePlaceholder>,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_png_layer_with_annotations(
+        profile, dpi, include_marks, date, false,
+    )
+}
+
+/// Rasterize notebook paper, optional date and first-page print number.
+///
+/// # Errors
+/// Refuses invalid profile, missing annotation clearance or raster limits.
+pub fn paper_profile_png_layer_with_annotations(
+    profile: &[u8],
+    dpi: u32,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+) -> Result<Vec<u8>, String> {
     let options = decode_profile(profile)?;
     let mut paths = if include_marks {
         paper_paths(options)?
@@ -1063,6 +1260,9 @@ pub fn paper_profile_png_layer_with_date(
     };
     if let Some(placeholder) = date {
         append_date_placeholder(&mut paths, options, placeholder)?;
+    }
+    if page_numbers {
+        append_page_number(&mut paths, options, 1)?;
     }
     png::render_paper_png(options.width_um, options.height_um, dpi, &paths)
 }

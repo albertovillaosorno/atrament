@@ -157,7 +157,7 @@ fn notebook_paper_layer_honors_preprinted_and_bounds() {
 }
 
 #[test]
-fn notebook_dates_render_but_not_as_actual_text_or_page_numbers() {
+fn notebook_dates_and_printed_page_numbers_render() {
     let mut notebook = NotebookProfile {
         printed_sheet: true,
         ..NotebookProfile::default()
@@ -182,15 +182,65 @@ fn notebook_dates_render_but_not_as_actual_text_or_page_numbers() {
             .expect("box PDF")).matches(" m\n").count(), 8,
     );
     let without_numbering = notebook.paper_layer_pdf(2).expect("no number");
+    let without_number_png = notebook.paper_layer_png(72).expect("no number");
     notebook.page_numbers = true;
-    assert_eq!(
-        without_numbering,
-        notebook.paper_layer_pdf(2).expect("page-number flag not rendered"),
+    let numbered = notebook.paper_layer_pdf(2).expect("numbered pages");
+    assert_ne!(without_numbering, numbered);
+    assert_ne!(
+        without_number_png,
+        notebook.paper_layer_png(72).expect("first page PNG number"),
     );
+    let pdf_text = String::from_utf8_lossy(&numbered);
+    let page_streams = pdf_text.split("\nstream\n").skip(1)
+        .map(|entry| entry.split("\nendstream").next().unwrap_or(""))
+        .collect::<Vec<_>>();
+    assert_eq!(page_streams.len(), 2);
+    assert_ne!(
+        page_streams.first().expect("PDF page stream"),
+        page_streams.get(1).expect("PDF page stream"),
+    );
+    assert!(page_streams.iter().all(|stream| stream.contains("\nf\n")));
     notebook.paper_json = notebook.paper_json.replace(
         "\"margin_top_um\": 22000", "\"margin_top_um\": 9000",
     );
     assert!(notebook.validate().is_err(), "refuse date overlap at admission");
     assert!(notebook.paper_layer_pdf(2).is_err());
     assert!(notebook.paper_layer_png(72).is_err());
+}
+
+#[test]
+fn page_number_clearance_refuses_at_admission_and_two_digit_pages_differ() {
+    let mut notebook = NotebookProfile {
+        printed_sheet: true,
+        page_numbers: true,
+        ..NotebookProfile::default()
+    };
+    notebook.paper_json = notebook.paper_json.replace(
+        "\"margin_bottom_um\": 16000", "\"margin_bottom_um\": 6000",
+    );
+    assert!(notebook.validate().is_err(), "7 mm clearance required");
+    assert!(notebook.paper_layer_pdf(1).is_err());
+    assert!(notebook.paper_layer_png(72).is_err());
+    notebook.page_numbers = false;
+    assert!(notebook.validate().is_ok());
+    notebook.paper_json = NotebookProfile::default().paper_json;
+    notebook.page_numbers = true;
+    let pdf = notebook.paper_layer_pdf(32).expect("all 32 pages numbered");
+    let text = String::from_utf8_lossy(&pdf);
+    let streams = text.split("\nstream\n").skip(1)
+        .map(|entry| entry.split("\nendstream").next().unwrap_or(""))
+        .collect::<Vec<_>>();
+    assert_eq!(streams.len(), 32);
+    assert_ne!(
+        streams.get(8).expect("PDF page stream"),
+        streams.get(9).expect("PDF page stream"),
+        "9 differs from 10",
+    );
+    assert_ne!(
+        streams.get(30).expect("PDF page stream"),
+        streams.get(31).expect("PDF page stream"),
+        "31 differs from 32",
+    );
+    assert!(streams.get(9).expect("PDF page stream").matches("\nf\n").count()
+        > streams.first().expect("PDF page stream").matches("\nf\n").count());
 }

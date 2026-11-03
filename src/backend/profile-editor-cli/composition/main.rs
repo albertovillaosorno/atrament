@@ -82,7 +82,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--dpi 72..300 (PNG only)] [--output FILE [--replace]]\n\
     Paper-layer export uses nested Rust paper settings and skips ruling \
     on preprinted sheets. The selected empty date line or box is drawn; \
-    date text, borders, page numbers and ink do not render.";
+    date text, borders and ink do not render. Page numbers use a \
+    small printed bitmap in the bottom margin.";
 
 #[derive(Debug)]
 struct HandwritingRequest {

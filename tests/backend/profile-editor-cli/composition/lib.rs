@@ -658,6 +658,44 @@ fn saved_notebook_date_export_matches_rust_layers_in_cli() {
 }
 
 #[test]
+fn saved_notebook_page_numbers_export_sequential_pdf_and_png() {
+    let saved = test_path();
+    let name = saved.to_str().expect("profile path");
+    assert!(execute_notebook(&args(&[
+        "--page-numbers", "true", "--printed-sheet", "true",
+        "--output", name,
+    ])).expect("save page numbers").is_none());
+    let source = fs::read(&saved).expect("saved profile");
+    let profile = NotebookProfile::from_json(&source).expect("load profile");
+    assert!(profile.page_numbers);
+    let pdf = execute_notebook(&args(&[
+        "--profile", name, "--export-paper", "pdf", "--pages", "12",
+    ]))
+    .expect("sequential PDF").expect("PDF output");
+    assert_eq!(pdf, profile.paper_layer_pdf(12).expect("canonical output"));
+    let pdf_text = String::from_utf8_lossy(&pdf);
+    let streams = pdf_text.split("\nstream\n").skip(1)
+        .map(|entry| entry.split("\nendstream").next().unwrap_or(""))
+        .collect::<Vec<_>>();
+    assert_eq!(streams.len(), 12);
+    assert_ne!(
+        streams.first().expect("PDF page stream"),
+        streams.get(1).expect("PDF page stream"),
+    );
+    assert_ne!(
+        streams.get(8).expect("PDF page stream"),
+        streams.get(9).expect("PDF page stream"),
+    );
+    let png = execute_notebook(&args(&[
+        "--profile", name, "--export-paper", "png", "--dpi", "72",
+    ]))
+    .expect("numbered PNG").expect("PNG bytes");
+    assert_eq!(png, profile.paper_layer_png(72).expect("canonical PNG"));
+    assert_eq!(fs::read(&saved).expect("source remains"), source);
+    fs::remove_file(saved).expect("remove owned profile");
+}
+
+#[test]
 fn notebook_printed_sheet_suppresses_marks_without_editing_profile() {
     let original = execute_notebook(&args(&["--printed-sheet", "true"]))
         .expect("default notebook")

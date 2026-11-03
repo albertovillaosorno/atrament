@@ -784,8 +784,9 @@ export function createNotebookProfileEditor(context) {
                 if (active(secret, observed)) {
                     display(result.profile);
                     download(blob, `atrament-notebook-paper.${format}`);
-                    status.textContent = "Notebook paper and date placeholder "
-                        + "downloaded · no actual date text, borders or ink.";
+                    status.textContent = "Notebook paper, selected dates"
+                        + " and page numbers downloaded · no actual date text,"
+                        + " borders or ink.";
                 }
             });
         });
