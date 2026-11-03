@@ -1,0 +1,76 @@
+---
+record_type: task
+id: "ATR-P3-011"
+title: "Localhost visual notebook and handwriting editors"
+status: completed
+priority: P3
+lane: editor
+dependencies: ["ATR-P1-006", "ATR-P2-010", "ATR-P4-011"]
+dependencies_specified: true
+dependency_rationale: >-
+  The UI must edit the Rust-owned profiles, not parallel JavaScript/Python
+  models.
+acceptance_criteria:
+  - >-
+      Provide notebook and handwriting profile tabs in the existing localhost
+      UI, open/save actions, and a bounded preview with sliders and numeric
+      controls for every admitted editable scalar.
+  - >-
+      Finite executable completion: One locally saved notebook and one
+      handwriting profile are loaded, changed with a slider and numeric input,
+      saved, reopened, and previewed with matching admitted values. Unsupported
+      controls are labeled rather than faked.
+evidence_status: tested_locally
+migrated_from: rust-cli-localhost-priority.md
+---
+
+# Localhost visual notebook and handwriting editors
+
+## Scope and existing evidence
+
+Provide notebook and handwriting profile tabs in the existing localhost UI,
+open/save actions, and a bounded preview with sliders and numeric controls for
+every admitted editable scalar.
+
+## Practical acceptance — 2026-11-03
+
+**Basis:** real Firefox against the existing Rust localhost process with
+`--profiles-dir`, rather than a mock server or theoretical design.
+
+**Accepted:** one test-owned session edits the nested paper profile (6-mm
+grid via slider, 25-mm top margin via numeric input), the notebook profile
+(3-mm border radius, date line/placement, page numbers and preprinted flag),
+and the separate handwriting statistics profile (exact `ñ` height
+override with numeric and slider inputs and full-width seed). It explicitly
+saves both native JSON files through authenticated, revision-checked Rust
+endpoints. After unsaved changes, both profiles reopen with matching values.
+
+The browser displays an actual Rust PNG notebook page and a separate labeled
+seeded *numeric* handwriting preview. All ten admitted handwriting dimensions
+have numeric fields and sliders; enum/checkbox controls cover the admitted
+page settings. The existing paper editor covers physical dimensions/margins.
+
+**Refused:** a subsequently entered invalid handwriting mean cannot replace
+the previously saved native JSON. Existing mock and native Rust tests also
+verify stale revisions and unsafe names are rejected. No browser-only save
+or silently preserved unsaved model is considered persistent.
+
+**Evidence:** `node --test --test-name-pattern='Firefox edits, saves and
+reopens both profiles through Rust localhost'
+tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs`, plus
+`handwriting-profile.mjs`, `notebook-profile.mjs` and Rust codec/CLI
+tests. This finite Linux workflow passed with test-owned profile files.
+
+**Still unavailable:** handwritten glyph outlines, rendered handwritten text,
+image overlays and complete notebook content. The PNG is clearly labeled
+as a **paper layer**; seeded numbers are not represented as ink. Full glyph
+coverage and composed PDF/PNG content remain P4-012/P5-011 work.
+
+## Acceptance decision
+
+- **Basis:** practical Linux Firefox with authenticated Rust local-file
+  controls, numeric/slider round-trip and native preview, 2026-11-03.
+- **Delivered:** typed page and handwriting edits, separate file persistence,
+  reopened exact values, one accepted and one refused example.
+- **Not delivered:** actual handwritten content, full Unicode glyph shapes,
+  image overlays or complete final notebook PDF (remaining tasks stay open).

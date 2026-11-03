@@ -1,0 +1,80 @@
+---
+record_type: task
+id: "ATR-P4-011"
+title: "Rust statistical handwriting and per-glyph controls"
+status: completed
+priority: P4
+lane: handwriting
+dependencies: ["ATR-P1-005"]
+dependencies_specified: true
+dependency_rationale: >-
+  The authoritative statistical profile must share native persistence.
+acceptance_criteria:
+  - >-
+      Implement typed manual statistics for height, width, spacing, baseline,
+      slant, roundness, ink, texture, per-glyph shape and variation context in
+      Rust, reusing existing bounds.
+  - >-
+      Finite executable completion: A global parameter and a per-letter
+      override each accept min, max, mean, median and deviation where
+      applicable; identical seeds replay, invalid statistics refuse, and
+      unimplemented dimensions are visibly unavailable.
+evidence_status: tested_locally
+migrated_from: rust-cli-localhost-priority.md
+---
+
+# Rust statistical handwriting and per-glyph controls
+
+## Scope and existing evidence
+
+Implement typed manual statistics for height, width, spacing, baseline, slant,
+roundness, ink, texture, per-glyph shape and variation context in Rust, reusing
+existing bounds.
+
+## Practical acceptance — 2026-11-03
+
+**Basis:** tested native Rust statistics and executable CLI/browser controls,
+not a theoretical-only completion. The finite v1 target is **bounded numeric
+statistics**, not glyph outlines or calibrated pen strokes.
+
+- `atrament_handwriting_statistics` owns ten exact dimensions: height,
+  width, letter spacing, baseline offset, slant, roundness, flattening,
+  ink thickness, pressure and texture. All have Rust-enforced bounds.
+- Each global dimension and exact per-grapheme override accepts minimum,
+  maximum, mean, median and standard deviation. NFC and NFD remain distinct.
+  The CLI and local browser submit proposals to the same Rust JSON codec.
+- `preview_value` uses an exact seed, grapheme and occurrence key for
+  reproducible **numeric estimates**. It does not preserve calibrated moments
+  or draw strokes. Unavailable ink/shape/joins are labeled as unavailable
+  in the browser and README, not represented as generated ink.
+
+**Accepted:** the live Firefox/Rust local-file journey saves an exact `ñ`
+height override (2600..3400 µm, mean 3100, median 3000, deviation 60)
+with seed `18446744073709551615`, reopens it from the Rust server,
+replays a numeric preview with the maximum occurrence key, and restores the
+numeric and slider values. Domain/CLI tests also cover globally edited
+statistics, repeatability, and NFC/NFD differences.
+
+**Refused:** a mean of 99999 µm fails without modifying the saved JSON.
+Other domain tests refuse inverted limits, impossible deviations, repeated
+dimensions, and invalid/multigrapheme identities.
+
+**Evidence:** `cargo test --offline -p atrament_handwriting_statistics
+-p atrament_handwriting_statistics_json -p atrament_profile_editor_cli`
+(18 domain, 8 codec, 27 CLI tests); real headless Firefox test
+`Firefox edits, saves and reopens both profiles through Rust localhost` in
+`tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs`.
+
+**Still unavailable:** actual per-letter stroke geometry, contextual forms,
+writer calibration, true target moments, complete glyph coverage, and ink
+rendering. Those cannot be inferred from a numeric preview. P4-012 and P5-011
+remain open executable tasks; this acceptance does not close them.
+
+## Acceptance decision
+
+- **Basis:** practical for bounded native numeric statistical editing and
+  deterministic estimates; test-owned Linux browser/CLI evidence, 2026-11-03.
+- **Delivered:** ten bounded variables, exact per-glyph overrides, numeric
+  preview, native file round-trip, an accepted example and a refused update.
+- **Not delivered:** authentic handwriting strokes, calibrated moment
+  distributions or context-dependent shaping (P4-012/P5-011 remain open).

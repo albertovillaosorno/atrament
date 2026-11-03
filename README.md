@@ -46,11 +46,20 @@ PDF/PNG paper preview are connected. Local profile file read/write now has an
 explicit opt-in directory; full rendered handwriting is still unfinished.
 The available CLI commands are documented below.
 
+The native bounded statistical controls and the localhost profile editing
+workflow now have a real Firefox-to-Rust acceptance test: separate notebook
+and handwriting profiles are edited with sliders/numeric inputs, saved to
+the opted-in local directory, reopened, and previewed. An exact `ñ` override
+and maximum unsigned 64-bit seed survive the round-trip, while invalid
+statistics cannot overwrite the accepted file. PNG preview is the notebook
+**paper layer**; handwriting remains numeric-only, not generated ink.
+
 The earlier 77 tasks were accepted as bounded academic/design artifacts, not
-as proof of a finished product. **Six of nine executable TODOs remain**
-for localhost editing, Spanish/English glyph coverage,
-and real Rust PDF/PNG output. The previous NO-GO decision still applies to
-production claims, and physical hardware is not required for local use.
+as proof of a finished product. **Four of nine executable TODOs remain**
+for actual Spanish/English glyph coverage, rendered notebook content,
+explicit local printing and the complete personal end-to-end journey.
+The previous NO-GO decision still applies to production claims, and
+physical hardware is not required for local use.
 
 ### Localhost Open/Save for notebook and handwriting profiles (opt-in)
 

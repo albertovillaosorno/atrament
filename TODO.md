@@ -13,29 +13,16 @@ never proves the corresponding feature runs. Hardware, multi-platform
 installers, cloud, MCP, advanced semantic/LLM editing, and physical plotters
 are retained for later, not needed to complete the first local workflow.
 
-Six of nine **new executable integration tasks** remain open. The Rust
+Four of nine **new executable integration tasks** remain open. The Rust
 notebook and handwriting CLI file round-trip, authenticated localhost file
-operations, and notebook geometry are complete. Remaining work retains
-its original task identity, finite scope and dependencies.
+operations, notebook geometry, bounded statistics controls and the local
+visual profile round-trip are complete. Actual handwriting, complete glyph
+shapes, image layers, and printing remain open executable work.
 
 See the [Rust-first roadmap](docs/technical/rust-cli-localhost-priority.md) and
 [task policy](docs/todo/README.md). Keep the index unfinished-only.
 
-## P3 — Localhost profile UI
-
-### TODO - Localhost visual notebook and handwriting editors
-
-Open, preview, change every admitted scalar, and save separate profile files.
-
-[docs/todo/open/editor/011-ui.mdc](docs/todo/open/editor/011-ui.mdc)
-
 ## P4 — Personal statistical handwriting
-
-### TODO - Rust statistical handwriting and per-glyph controls
-
-Own bounded handwriting distributions and every existing editable variable.
-
-[docs/todo/open/handwriting/011-ink.mdc](docs/todo/open/handwriting/011-ink.mdc)
 
 ### TODO - Spanish and English glyph coverage and fallback
 

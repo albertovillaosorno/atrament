@@ -3508,6 +3508,276 @@ test(
 );
 
 test(
+    "Firefox edits, saves and reopens both profiles through Rust localhost",
+    { skip: !FIREFOX_AVAILABLE, timeout: 110_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const root = fs.mkdtempSync(".temp/profile-journey-");
+        const browserProfile = path.join(root, "firefox");
+        const profiles = path.join(root, "profiles");
+        const bin = path.join(root, "bin");
+        const capturedUrlFile = path.join(root, "test-launch-url");
+        for (const dir of [browserProfile, profiles, bin]) {
+            fs.mkdirSync(dir, { mode: 0o700 });
+        }
+        // This test owns both the opener and its disposable session. Never
+        // publish the captured fragment or reuse an unrelated live session.
+        fs.writeFileSync(path.join(bin, "xdg-open"),
+            '#!/bin/sh\numask 077\nprintf "%s\\n" "$1" > '
+            + '"$ATRAMENT_TEST_LAUNCH_URL_FILE"\n', { mode: 0o700 });
+        const children = [];
+        let bidi;
+        try {
+            const build = spawnSync(PINNED_CARGO, [
+                "build", "--offline", "--quiet", "-p",
+                "atrament_runtime_bootstrap", "--bin", "atrament",
+            ], {
+                env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR },
+                stdio: "inherit",
+            });
+            assert.equal(build.status, 0, "Rust localhost binary builds");
+            const runtimeEnv = {
+                ...process.env,
+                DISPLAY: ":atrament-test",
+                PATH: `${bin}:${process.env.PATH ?? ""}`,
+                ATRAMENT_TEST_LAUNCH_URL_FILE: capturedUrlFile,
+            };
+            delete runtimeEnv.WAYLAND_DISPLAY;
+            const runtime = spawn(RUNTIME_BINARY,
+                ["--profiles-dir", profiles], {
+                    env: runtimeEnv,
+                    stdio: ["ignore", "pipe", "pipe"],
+                });
+            children.push(runtime);
+            const origin = await waitForLine(runtime.stdout, (line) => {
+                try {
+                    const item = JSON.parse(line);
+                    return item.state === "ready" ? item.origin : null;
+                } catch { return null; }
+            }, 15_000, runtime);
+            const launchUrl = fs.readFileSync(capturedUrlFile, "utf8").trim();
+            assert.equal(launchUrl.startsWith(`${origin}#session=`), true);
+            assert.equal(/^http:\/\/127\.0\.0\.1:\d+#session=[a-f0-9]{64}$/
+                .test(launchUrl), true, "private test session URL is bounded");
+            bidi = await startBidiFirefox(browserProfile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context, url: launchUrl, wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+
+            async function browserScript(expression) {
+                const reply = await bidi.command("script.evaluate", {
+                    expression, awaitPromise: false,
+                    resultOwnership: "none", target: { context: tab.context },
+                });
+                assert.equal(reply.type, "success");
+                assert.equal(reply.result.type, "string");
+                return JSON.parse(reply.result.value);
+            }
+            async function waitStatus(id, expected) {
+                for (let attempt = 0; attempt < 100; attempt += 1) {
+                    const value = await browserScript(
+                        `JSON.stringify(document.getElementById(`
+                        + `${JSON.stringify(id)}).textContent)`);
+                    if (value === expected) return;
+                    await new Promise((resolve) => setTimeout(resolve, 50));
+                }
+                throw new Error("Rust-backed profile action did not settle");
+            }
+            await waitStatus("handwriting-status",
+                "Native statistics loaded · edit, validate, "
+                + "and download JSON. No glyph rendering yet.");
+            await waitStatus("paper-status",
+                "Paper profile loaded · edit fields, then save or export.");
+            await waitStatus("notebook-status",
+                "Edit metadata, then save JSON.");
+
+            // Exercise both a numeric input and its slider, plus an exact
+            // Spanish grapheme override. The browser never owns admission.
+            await browserScript(`JSON.stringify((() => {
+                const edit = (id, value, type = "input") => {
+                    const el = document.getElementById(id);
+                    el.value = value;
+                    el.dispatchEvent(new Event(type, { bubbles: true }));
+                };
+                edit("handwriting-seed", "18446744073709551615");
+                edit("handwriting-dimension", "height", "change");
+                edit("handwriting-scope", "glyph", "change");
+                edit("handwriting-new-glyph", "ñ");
+                document.getElementById("handwriting-add-glyph").click();
+                edit("handwriting-minimum", "2600");
+                edit("handwriting-maximum", "3400");
+                edit("handwriting-mean-range", "3100");
+                edit("handwriting-median", "3000");
+                edit("handwriting-standard_deviation-range", "60");
+                edit("handwriting-scope", "global", "change");
+                edit("handwriting-dimension", "width", "change");
+                edit("handwriting-minimum", "2100");
+                edit("handwriting-maximum", "2500");
+                edit("handwriting-mean-range", "2300");
+                edit("handwriting-median", "2300");
+                edit("handwriting-standard_deviation-range", "80");
+                edit("handwriting-scope", "glyph", "change");
+                edit("handwriting-dimension", "height", "change");
+                edit("notebook-date-style", "line");
+                edit("notebook-date-placement", "top-left");
+                edit("notebook-radius-range", "3");
+                document.getElementById("notebook-page-numbers").checked = true;
+                document.getElementById("notebook-printed-sheet")
+                    .checked = true;
+                document.getElementById("handwriting-local-name").value =
+                    "journey.json";
+                document.getElementById("notebook-local-name").value =
+                    "journey.json";
+                document.getElementById("handwriting-local-save").click();
+                return true;
+            })())`);
+            await waitStatus("handwriting-status",
+                "Native handwriting saved in local directory.");
+            await browserScript(`JSON.stringify((() => {
+                const spacing = document.getElementById("paper-spacing-range");
+                spacing.value = "6";
+                spacing.dispatchEvent(new Event(
+                    "input", { bubbles: true }));
+                const upper = document.getElementById("paper-upper");
+                upper.value = "25";
+                upper.dispatchEvent(new Event(
+                    "input", { bubbles: true }));
+                document.getElementById("notebook-use-paper").click();
+                return true;
+            })())`);
+            await waitStatus("notebook-status",
+                "Current sheet settings validated.");
+            await browserScript(`JSON.stringify((() => {
+                document.getElementById("notebook-local-save").click();
+                return true;
+            })())`);
+            await waitStatus("notebook-status",
+                "Native notebook saved in selected local directory.");
+            const handwritingFile = path.join(profiles,
+                "handwriting-journey.json");
+            const notebookFile = path.join(profiles, "notebook-journey.json");
+            const nativeHandwriting = fs.readFileSync(handwritingFile, "utf8");
+            const nativeNotebook = JSON.parse(
+                fs.readFileSync(notebookFile, "utf8"));
+            // Check exact source bytes before converting bounded values to JS.
+            assert.ok(nativeHandwriting.includes(
+                '"seed":18446744073709551615'));
+            const handwriting = JSON.parse(nativeHandwriting);
+            const glyph = handwriting.glyphs.find(
+                (item) => item.grapheme === "ñ");
+            const height = glyph?.parameters.find(
+                (entry) => entry.dimension === "height");
+            assert.deepEqual(height, {
+                dimension: "height", minimum: 2600, maximum: 3400,
+                mean: 3100, median: 3000, standard_deviation: 60,
+            });
+            assert.deepEqual(handwriting.globals.find(
+                (entry) => entry.dimension === "width"), {
+                dimension: "width", minimum: 2100, maximum: 2500,
+                mean: 2300, median: 2300, standard_deviation: 80,
+            });
+            assert.equal(nativeNotebook.border_radius_um, 3000);
+            assert.equal(nativeNotebook.paper.spacing_um, 6000);
+            assert.equal(nativeNotebook.paper.margin_top_um, 25000);
+            assert.equal(nativeNotebook.date_style, "line");
+            assert.equal(nativeNotebook.date_placement, "top-left");
+            assert.equal(nativeNotebook.page_numbers, true);
+            assert.equal(nativeNotebook.printed_sheet, true);
+
+            // Unsaved UI edits must not pollute the checked disk profile.
+            await browserScript(`JSON.stringify((() => {
+                const seed = document.getElementById("handwriting-seed");
+                seed.value = "7";
+                seed.dispatchEvent(new Event("input", { bubbles: true }));
+                const radius = document.getElementById("notebook-radius");
+                radius.value = "0";
+                radius.dispatchEvent(new Event("input", { bubbles: true }));
+                document.getElementById("handwriting-local-load").click();
+                return true;
+            })())`);
+            await waitStatus("handwriting-status",
+                "Handwriting reopened from local Rust file.");
+            await browserScript(`JSON.stringify((() => {
+                document.getElementById("notebook-local-load").click();
+                return true;
+            })())`);
+            await waitStatus("notebook-status",
+                "Notebook reopened from local Rust profile file.");
+            const reopened = await browserScript(`JSON.stringify((() => ({
+                seed: document.getElementById("handwriting-seed").value,
+                glyph: document.getElementById("handwriting-glyph").value,
+                mean: document.getElementById("handwriting-mean").value,
+                slider: document.getElementById("handwriting-mean-range").value,
+                radius: document.getElementById("notebook-radius").value,
+                radiusSlider: document.getElementById(
+                    "notebook-radius-range").value,
+            }))())`);
+            assert.deepEqual(reopened, {
+                seed: "18446744073709551615", glyph: "ñ",
+                mean: "3100", slider: "3100", radius: "3",
+                radiusSlider: "3",
+            });
+            // Numeric handwriting is a Rust-only estimate; the actual
+            // drawable page preview is Rust PNG, not browser CSS geometry.
+            await browserScript(`JSON.stringify((() => {
+                document.getElementById("handwriting-sample-glyph").value = "ñ";
+                document.getElementById("handwriting-sample-occurrence")
+                    .value = "18446744073709551615";
+                document.getElementById("handwriting-sample").click();
+                return true;
+            })())`);
+            await waitStatus("handwriting-status",
+                "Native numeric preview generated from unsaved "
+                + "statistics. No profile was saved.");
+            const sampled = await browserScript(`JSON.stringify(
+                document.getElementById(
+                    "handwriting-sample-result").textContent)`);
+            assert.ok(sampled.includes("ñ"));
+            assert.ok(sampled.includes("#18446744073709551615"));
+            await browserScript(`JSON.stringify((() => {
+                document.getElementById("notebook-preview").click();
+                return true;
+            })())`);
+            await waitStatus("notebook-status",
+                "Rendered PNG preview for page 1.");
+            const previewed = await browserScript(`JSON.stringify((() => ({
+                visible: !document.getElementById(
+                    "notebook-preview-frame").hidden,
+                naturalWidth: document.getElementById(
+                    "notebook-preview-image").naturalWidth,
+                naturalHeight: document.getElementById(
+                    "notebook-preview-image").naturalHeight,
+            }))())`);
+            assert.equal(previewed.visible, true);
+            assert.ok(previewed.naturalWidth > 0);
+            assert.ok(previewed.naturalHeight > 0);
+            await browserScript(`JSON.stringify((() => {
+                const mean = document.getElementById("handwriting-mean");
+                mean.value = "99999";
+                mean.dispatchEvent(new Event("input", { bubbles: true }));
+                document.getElementById("handwriting-local-save").click();
+                return true;
+            })())`);
+            await waitStatus("handwriting-status",
+                "Invalid statistics or unavailable Rust backend; "
+                + "no file saved.");
+            assert.equal(fs.readFileSync(handwritingFile, "utf8"),
+                nativeHandwriting, "refused statistics leave file unchanged");
+            assert.deepEqual(JSON.parse(fs.readFileSync(notebookFile, "utf8")),
+                nativeNotebook);
+        } finally {
+            bidi?.close();
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox without JavaScript keeps both static workspace surfaces visible",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
