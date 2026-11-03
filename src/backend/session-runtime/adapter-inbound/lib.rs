@@ -46,6 +46,10 @@ use std::str;
 use std::time::{Duration, Instant};
 
 #[cfg(test)]
+use atrament_notebook_profile as _;
+#[cfg(test)]
+use atrament_unicode_grapheme_segmentation as _;
+#[cfg(test)]
 use atrament_session_draft as _;
 #[cfg(test)]
 #[cfg(test)]
@@ -227,6 +231,57 @@ pub trait NotebookProfileGateway {
     }
 }
 
+/// File authority is supplied only after an explicit local host selection.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileFileKind {
+    /// Versioned handwriting statistics JSON.
+    Handwriting,
+    /// Versioned notebook profile JSON.
+    Notebook,
+}
+
+/// Typed refusal without leaking a local path into HTTP responses.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ProfileFileError {
+    /// Creation collided or the observed revision is stale.
+    Conflict,
+    /// Local file read, verification or commit failed.
+    FileIo,
+    /// Target name, revision token or admitted JSON was invalid.
+    InvalidInput,
+    /// Selected entry does not exist.
+    NotFound,
+    /// The file transport cannot safely commit on this platform.
+    Unavailable,
+}
+
+/// One exact decoded profile and its opaque content revision.
+#[derive(Debug)]
+pub struct LoadedProfileFile {
+    /// Rust-canonical versioned profile JSON.
+    pub json: Vec<u8>,
+    /// Revision token of exact bytes on disk, not the canonical rewrite.
+    pub revision: String,
+}
+
+/// Explicit session file authority, separate from pure profile validation.
+pub trait ProfileFileGateway {
+    /// Read one named profile from the host-authorized local directory.
+    ///
+    /// # Errors
+    /// Refuses names, sources and IO that fail native admission.
+    fn load(&self, kind: ProfileFileKind, name: &str)
+        -> Result<LoadedProfileFile, ProfileFileError>;
+
+    /// Save only if the exact previously observed revision still matches.
+    /// Revision "new" means create only; a digest means replace.
+    ///
+    /// # Errors
+    /// Refuses malformed profiles and any changed or unsafe target.
+    fn save(&self, kind: ProfileFileKind, name: &str, json: &[u8],
+        revision: &str) -> Result<String, ProfileFileError>;
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ParsedRequestTarget<'request> {
     host: &'request str,
@@ -242,6 +297,7 @@ pub struct RouteRequestContext<'context> {
     handshake: &'context dyn SessionHandshake,
     handwriting_gateway: &'context dyn HandwritingProfileGateway,
     notebook_gateway: &'context dyn NotebookProfileGateway,
+    profile_file_gateway: Option<&'context dyn ProfileFileGateway>,
 }
 
 impl fmt::Debug for RouteRequestContext<'_> {
@@ -272,7 +328,17 @@ impl<'context> RouteRequestContext<'context> {
             handshake,
             handwriting_gateway,
             notebook_gateway,
+            profile_file_gateway: None,
         }
+    }
+
+    /// Attach a host-selected local directory file gateway to this session.
+    #[must_use]
+    pub const fn with_profile_file_gateway(
+        mut self, gateway: &'context dyn ProfileFileGateway,
+    ) -> Self {
+        self.profile_file_gateway = Some(gateway);
+        self
     }
 }
 
@@ -335,10 +401,11 @@ impl Runtime {
         expected_secret: &str,
         handwriting_gateway: &dyn HandwritingProfileGateway,
         notebook_gateway: &dyn NotebookProfileGateway,
+        profile_file_gateway: Option<&dyn ProfileFileGateway>,
         handshake: &dyn SessionHandshake,
         draft: &mut dyn SessionDraft,
     ) {
-        let context = RouteRequestContext::new(
+        let base_context = RouteRequestContext::new(
             &self.expected_host,
             &self.origin,
             expected_secret,
@@ -346,6 +413,10 @@ impl Runtime {
             handwriting_gateway,
             notebook_gateway,
         );
+        let context = match profile_file_gateway {
+            Some(gateway) => base_context.with_profile_file_gateway(gateway),
+            None => base_context,
+        };
         for incoming in self.listener.incoming() {
             let Ok(mut connection) = incoming else {
                 break;
@@ -1358,6 +1429,108 @@ fn route_handwriting_profile(
     }
 }
 
+fn profile_file_response_error(error: ProfileFileError) -> Vec<u8> {
+    match error {
+        ProfileFileError::InvalidInput => json_response(
+            "400 Bad Request", br#"{"error":"invalid_profile_file"}"#,
+        ),
+        ProfileFileError::NotFound => json_response(
+            "404 Not Found", br#"{"error":"profile_file_missing"}"#,
+        ),
+        ProfileFileError::Conflict => json_response(
+            "409 Conflict", br#"{"error":"stale_profile_file"}"#,
+        ),
+        ProfileFileError::FileIo => json_response(
+            "500 Internal Server Error", br#"{"error":"profile_file_io"}"#,
+        ),
+        ProfileFileError::Unavailable => json_response(
+            "503 Service Unavailable", br#"{"error":"profile_file_unavailable"}"#,
+        ),
+    }
+}
+
+fn route_profile_file(
+    request: &[u8], method: &str, kind: ProfileFileKind,
+    context: &RouteRequestContext<'_>,
+) -> Vec<u8> {
+    let origin_ok = if method == "GET" {
+        request_origin_is_admitted(request, context.expected_origin)
+    } else {
+        request_has_exact_origin(request, context.expected_origin)
+    };
+    if !request_has_session_credential(request, context.expected_secret)
+        || !origin_ok {
+        return json_response(
+            "401 Unauthorized", br#"{"error":"unauthenticated"}"#,
+        );
+    }
+    let Some(gateway) = context.profile_file_gateway else {
+        return profile_file_response_error(ProfileFileError::Unavailable);
+    };
+    let Some(name) = single_header_value(request, "x-atrament-profile-name")
+    else {
+        return profile_file_response_error(ProfileFileError::InvalidInput);
+    };
+    if name.len() > 64 || name.rsplit_once('.').is_none_or(|(_, extension)| extension != "json")
+        || name.starts_with('.') || name.contains("..")
+        || !name.bytes().all(|byte| byte.is_ascii_alphanumeric()
+            || matches!(byte, b'-' | b'_' | b'.')) {
+        return profile_file_response_error(ProfileFileError::InvalidInput);
+    }
+    match method {
+        "GET" => match gateway.load(kind, name) {
+            Ok(file) => {
+                // Only the native gateway may produce the JSON value here.
+                let mut body = format!(
+                    "{{\"revision\":\"{}\",\"profile\":", file.revision,
+                ).into_bytes();
+                body.extend_from_slice(&file.json);
+                body.push(b'}');
+                json_response("200 OK", &body)
+            },
+            Err(error) => profile_file_response_error(error),
+        },
+        "POST" => {
+            let Some(revision) = single_header_value(
+                request, "x-atrament-profile-revision",
+            ) else {
+                return profile_file_response_error(ProfileFileError::InvalidInput);
+            };
+            if revision != "new" && (revision.len() != 71
+                || !revision.starts_with("sha256:")
+                || !revision.get(7..).is_some_and(|hex| hex.bytes().all(|byte|
+                    byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))) {
+                return profile_file_response_error(ProfileFileError::InvalidInput);
+            }
+            if !single_header_value(request, "content-type")
+                .is_some_and(|value| value.eq_ignore_ascii_case(
+                    "application/json") || value.eq_ignore_ascii_case(JSON_CONTENT_TYPE))
+            {
+                return profile_file_response_error(ProfileFileError::InvalidInput);
+            }
+            let Some(body) = request_body(request) else {
+                return profile_file_response_error(ProfileFileError::InvalidInput);
+            };
+            let limit = match kind {
+                ProfileFileKind::Notebook => context.notebook_gateway.max_input_bytes(),
+                ProfileFileKind::Handwriting => MAXIMUM_STATISTICS_JSON_BYTES,
+            };
+            if body.len() > limit {
+                return json_response(
+                    "413 Content Too Large", br#"{"error":"profile_file_too_large"}"#,
+                );
+            }
+            match gateway.save(kind, name, body, revision) {
+                Ok(saved) => json_response(
+                    "200 OK", format!("{{\"revision\":\"{saved}\"}}").as_bytes(),
+                ),
+                Err(error) => profile_file_response_error(error),
+            }
+        },
+        _ => profile_file_response_error(ProfileFileError::InvalidInput),
+    }
+}
+
 fn route_profile_transport(
     request: &[u8],
     method: &str,
@@ -1365,6 +1538,12 @@ fn route_profile_transport(
     context: &RouteRequestContext<'_>,
 ) -> Option<Vec<u8>> {
     match target {
+        "/api/notebook/file" => Some(route_profile_file(
+            request, method, ProfileFileKind::Notebook, context,
+        )),
+        "/api/handwriting/file" => Some(route_profile_file(
+            request, method, ProfileFileKind::Handwriting, context,
+        )),
         "/api/notebook/profile" | "/api/notebook/paper/pdf"
         | "/api/notebook/paper/png" => {
             Some(route_notebook_profile(request, method, target, context))

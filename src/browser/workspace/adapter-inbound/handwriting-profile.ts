@@ -200,6 +200,9 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
     const upload = required<HTMLInputElement>("handwriting-load");
     const resetButton = required<HTMLButtonElement>("handwriting-reset");
     const save = required<HTMLButtonElement>("handwriting-save");
+    const localName = required<HTMLInputElement>("handwriting-local-name");
+    const localLoad = required<HTMLButtonElement>("handwriting-local-load");
+    const localSave = required<HTMLButtonElement>("handwriting-local-save");
     const status = required<HTMLElement>("handwriting-status");
     const preview = required<HTMLElement>("handwriting-preview");
     const fields = FIELDS.map((field) => ({
@@ -209,14 +212,36 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
     }));
     const controls = [scope, dimensionSelect, glyphSelect, newGlyph,
         addGlyph, removeGlyph, addOverride, removeOverride, seed,
-        upload, resetButton, save];
+        upload, resetButton, save,
+        localName, localLoad, localSave];
     let dimensions: Dimension[] = [];
     let profile: Profile | null = null;
     let generation = 0;
     let busy = false;
     let downloadUrl: string | null = null;
     let selectedGlyph = "";
+    let trackedName: string | null = null;
+    let trackedRevision = "new";
     let drafts = new WeakMap<Parameter, Partial<Record<Field, string>>>();
+
+    function clearTracking(): void {
+        trackedName = null;
+        trackedRevision = "new";
+    }
+
+    function selectedName(): string {
+        const value = localName.value;
+        if (value.length > 64 || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.json$/.test(value)
+            || value.includes("..")) {
+            throw new Error("Choose a simple .json filename (max 64 characters)");
+        }
+        return value;
+    }
+
+    function validRevision(value: unknown): value is string {
+        return typeof value === "string"
+            && /^sha256:[0-9a-f]{64}$/.test(value);
+    }
 
     function currentGlyph(): Glyph | undefined {
         const glyphs = profile?.glyphs;
@@ -354,6 +379,47 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
         });
     }
 
+    async function fileRequest(
+        secret: string, name: string, json?: string, revision = "new",
+    ): Promise<{ revision: string; profile?: unknown }> {
+        const response = await fetch("./api/handwriting/file", {
+            method: json === undefined ? "GET" : "POST",
+            headers: {
+                Authorization: `Bearer ${secret}`,
+                "X-Atrament-Profile-Name": name,
+                ...(json === undefined ? {} : {
+                    "Content-Type": "application/json",
+                    "X-Atrament-Profile-Revision": revision,
+                }),
+            },
+            ...(json === undefined ? {} : { body: json }),
+            credentials: "omit",
+            cache: "no-store",
+            mode: "same-origin",
+            redirect: "error",
+            referrerPolicy: "origin",
+            signal: AbortSignal.any([
+                context.sessionSignal, AbortSignal.timeout(30_000),
+            ]),
+        });
+        if (response.status === 401) {
+            context.unauthorized();
+            throw new Error("Session expired");
+        }
+        if (response.status === 409) throw new Error("stale-file");
+        if (response.status === 503) throw new Error("disabled-file");
+        if (!response.ok || !response.headers.get("content-type")
+            ?.startsWith("application/json")) {
+            throw new Error("Rust file operation refused");
+        }
+        const value: unknown = await response.json();
+        if (typeof value !== "object" || value === null
+            || !validRevision((value as {revision?: unknown}).revision)) {
+            throw new Error("Invalid native file response");
+        }
+        return value as { revision: string; profile?: unknown };
+    }
+
     async function fetchJson(secret: string, endpoint:
         "/api/handwriting/profile" | "/api/handwriting/dimensions",
         json?: string,
@@ -451,8 +517,18 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
         sync();
         try {
             await work(secret, observed);
-        } catch {
+        } catch (error) {
             if (isCurrent(secret, observed)) {
+                if (error instanceof Error && error.message === "stale-file") {
+                    status.textContent = "Local handwriting changed; reopen first. "
+                        + "No overwrite.";
+                    return;
+                }
+                if (error instanceof Error && error.message === "disabled-file") {
+                    status.textContent = "Local files disabled; launch Rust "
+                        + "with --profiles-dir.";
+                    return;
+                }
                 status.textContent = "Invalid statistics or unavailable "
                     + "Rust backend; "
                     + "no file saved.";
@@ -470,6 +546,7 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
         const observed = generation;
         profile = null;
         dimensions = [];
+        clearTracking();
         busy = true;
         sync();
         status.textContent = "Loading native handwriting bounds and profile…";
@@ -515,6 +592,7 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
         busy = false;
         profile = null;
         dimensions = [];
+        clearTracking();
         drafts = new WeakMap();
         selectedGlyph = "";
         upload.value = "";
@@ -622,11 +700,49 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
         status.textContent = "Unsaved override removal; missing dimensions "
             + "inherit global statistics.";
     });
+    localName.addEventListener("input", clearTracking);
+    localLoad.addEventListener("click", (): void => {
+        void action(async (secret, observed) => {
+            const name = selectedName();
+            const result = await fileRequest(secret, name);
+            if (!isCurrent(secret, observed)) return;
+            const checked = await fetchJson(
+                secret, "/api/handwriting/profile",
+                JSON.stringify(result.profile),
+            );
+            if (!isCurrent(secret, observed)) return;
+            showProfile(parseProfile(checked, dimensions));
+            trackedName = name;
+            trackedRevision = result.revision;
+            status.textContent = "Handwriting reopened from local Rust file.";
+        });
+    });
+    localSave.addEventListener("click", (): void => {
+        void action(async (secret, observed) => {
+            const proposal = JSON.stringify(candidate());
+            if (new TextEncoder().encode(proposal).length > MAX_JSON_BYTES) {
+                throw new Error("Statistics proposal exceeds 1 MiB");
+            }
+            const name = selectedName();
+            const checked = await fetchJson(
+                secret, "/api/handwriting/profile", proposal,
+            );
+            if (!isCurrent(secret, observed)) return;
+            const revision = trackedName === name ? trackedRevision : "new";
+            const result = await fileRequest(secret, name, checked, revision);
+            if (!isCurrent(secret, observed)) return;
+            showProfile(parseProfile(checked, dimensions));
+            trackedName = name;
+            trackedRevision = result.revision;
+            status.textContent = "Native handwriting saved in local directory.";
+        });
+    });
     resetButton.addEventListener("click", (): void => {
         void action(async (secret, observed) => {
             const json = await fetchJson(secret, "/api/handwriting/profile");
             if (!isCurrent(secret, observed)) return;
             showProfile(parseProfile(json, dimensions));
+            clearTracking();
             status.textContent = "Restored native uncalibrated defaults.";
         });
     });
@@ -660,6 +776,7 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
             const json = await fetchJson(secret, endpoint, text);
             if (!isCurrent(secret, observed)) return;
             showProfile(parseProfile(json, dimensions));
+            clearTracking();
             status.textContent = "Rust-validated handwriting JSON loaded.";
         });
     });

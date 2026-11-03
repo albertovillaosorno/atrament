@@ -2512,7 +2512,7 @@ fn session_end_terminates_listener_and_destroys_process_owned_draft() {
         let mut draft = seeded_private_draft();
         runtime.serve(
             EXPECTED_SECRET, &GATEWAY, &NOTEBOOK_GATEWAY,
-            &HANDSHAKE, &mut draft,
+            None, &HANDSHAKE, &mut draft,
         );
         assert_private_draft_unchanged(&draft);
         // Draft bytes are dropped after the listener returns.
@@ -2591,7 +2591,7 @@ fn abandoned_end_reply_still_drops_private_draft_after_complete_request() {
         };
         runtime.serve(
             EXPECTED_SECRET, &GATEWAY, &NOTEBOOK_GATEWAY,
-            &HANDSHAKE, &mut draft,
+            None, &HANDSHAKE, &mut draft,
         );
         assert_private_draft_unchanged(&draft.inner);
         // The owner is disposed even if the End acknowledgement is unread.
@@ -5913,4 +5913,129 @@ fn notebook_paper_routes_refuse_unauthorized_headers_and_bad_profiles() {
         None, None, b"",
     ), EXPECTED_HOST);
     assert_eq!(status_line(&wrong_method), "HTTP/1.1 400 Bad Request");
+}
+
+
+struct TestFileGateway;
+
+impl runtime::ProfileFileGateway for TestFileGateway {
+    fn load(&self, kind: runtime::ProfileFileKind, name: &str)
+        -> Result<runtime::LoadedProfileFile, runtime::ProfileFileError> {
+        if name == "missing.json" {
+            return Err(runtime::ProfileFileError::NotFound);
+        }
+        let json = match kind {
+            runtime::ProfileFileKind::Notebook => NotebookProfile::default()
+                .canonical_json().expect("canonical native notebook").into_bytes(),
+            runtime::ProfileFileKind::Handwriting => encode_statistics_json(
+                &HandwritingStatisticsProfile::baseline(0),
+                &UnicodeGraphemeSegmentation,
+            ).expect("canonical native handwriting"),
+        };
+        Ok(runtime::LoadedProfileFile {
+            json,
+            revision: format!("sha256:{}", "a".repeat(64)),
+        })
+    }
+
+    fn save(&self, _kind: runtime::ProfileFileKind, _name: &str,
+        _json: &[u8], revision: &str)
+        -> Result<String, runtime::ProfileFileError> {
+        if revision == "new" {
+            Ok(format!("sha256:{}", "b".repeat(64)))
+        } else {
+            Err(runtime::ProfileFileError::Conflict)
+        }
+    }
+}
+
+fn route_with_profile_file_gateway(request: &[u8]) -> Vec<u8> {
+    let gateway = TestFileGateway;
+    let context = route_context(EXPECTED_HOST, EXPECTED_SECRET, &HANDSHAKE)
+        .with_profile_file_gateway(&gateway);
+    let mut draft = SessionDraftService::default();
+    runtime::route_request(request, &context, &mut draft)
+}
+
+#[test]
+fn profile_file_routes_require_selected_store_and_exact_session_admission() {
+    let authorized = format!(
+        "GET /api/notebook/file HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\
+         Authorization: Bearer {EXPECTED_SECRET}\r\n\
+         X-Atrament-Profile-Name: local.json\r\n\r\n",
+    );
+    assert_eq!(status_line(&route_runtime(authorized.as_bytes(), EXPECTED_HOST)),
+        "HTTP/1.1 503 Service Unavailable");
+    let loaded = route_with_profile_file_gateway(authorized.as_bytes());
+    assert_eq!(status_line(&loaded), "HTTP/1.1 200 OK");
+    let (_, body) = response_parts(&loaded);
+    let decoded = std::str::from_utf8(body).expect("JSON response UTF-8");
+    assert!(decoded.starts_with(&format!(
+        "{{\"revision\":\"sha256:{}\",\"profile\":", "a".repeat(64),
+    )));
+    assert!(decoded.contains("\"atrament.notebook.v1\""));
+
+    let missing_auth = authorized.replace(
+        &format!("Authorization: Bearer {EXPECTED_SECRET}\r\n"), "",
+    );
+    assert_eq!(status_line(&route_with_profile_file_gateway(missing_auth.as_bytes())),
+        "HTTP/1.1 401 Unauthorized");
+    let wrong_origin = authorized.replace(
+        "X-Atrament-Profile-Name:",
+        "Origin: http://evil.invalid\r\nX-Atrament-Profile-Name:",
+    );
+    assert_eq!(status_line(&route_with_profile_file_gateway(wrong_origin.as_bytes())),
+        "HTTP/1.1 401 Unauthorized");
+    for name in ["../wrong.json", ".private.json", "bad!.json", "noextension",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json"] {
+        let request = authorized.replace("local.json", name);
+        assert_eq!(status_line(&route_with_profile_file_gateway(request.as_bytes())),
+            "HTTP/1.1 400 Bad Request", "name {name:?}");
+    }
+    let duplicate = authorized.replace(
+        "X-Atrament-Profile-Name: local.json\r\n",
+        "X-Atrament-Profile-Name: local.json\r\n\
+         X-Atrament-Profile-Name: local.json\r\n",
+    );
+    assert_eq!(status_line(&route_with_profile_file_gateway(duplicate.as_bytes())),
+        "HTTP/1.1 400 Bad Request");
+    let handwriting = authorized.replace("notebook/file", "handwriting/file");
+    let handwriting_response = route_with_profile_file_gateway(handwriting.as_bytes());
+    let (_, body) = response_parts(&handwriting_response);
+    let data = std::str::from_utf8(body).expect("handwriting JSON UTF-8");
+    assert!(data.contains("\"atrament.handwriting.statistics.v1\""));
+}
+
+#[test]
+fn profile_file_post_refuses_missing_origin_and_stale_revision() {
+    let profile = NotebookProfile::default().canonical_json()
+        .expect("canonical notebook");
+    let post = |revision: &str, origin: &str, body: &str| format!(
+        "POST /api/notebook/file HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n\
+         Authorization: Bearer {EXPECTED_SECRET}\r\n\
+         X-Atrament-Profile-Name: local.json\r\n\
+         X-Atrament-Profile-Revision: {revision}\r\n\
+         Content-Type: application/json\r\n{origin}\
+         Content-Length: {}\r\n\r\n{body}", body.len(),
+    );
+    let valid = post("new", &format!("Origin: {EXPECTED_ORIGIN}\r\n"), &profile);
+    let saved = route_with_profile_file_gateway(valid.as_bytes());
+    assert_eq!(status_line(&saved), "HTTP/1.1 200 OK");
+    let (_, json) = response_parts(&saved);
+    let parsed = std::str::from_utf8(json).expect("saved revision UTF-8");
+    assert_eq!(parsed, format!("{{\"revision\":\"sha256:{}\"}}", "b".repeat(64)));
+    let stale = post(&format!("sha256:{}", "a".repeat(64)),
+        &format!("Origin: {EXPECTED_ORIGIN}\r\n"), &profile);
+    assert_eq!(status_line(&route_with_profile_file_gateway(stale.as_bytes())),
+        "HTTP/1.1 409 Conflict");
+    assert_eq!(status_line(&route_with_profile_file_gateway(
+        post("new", "", &profile).as_bytes())),
+        "HTTP/1.1 401 Unauthorized");
+    assert_eq!(status_line(&route_with_profile_file_gateway(
+        post("bad-token", &format!("Origin: {EXPECTED_ORIGIN}\r\n"),
+            &profile).as_bytes())), "HTTP/1.1 400 Bad Request");
+    assert_eq!(status_line(&route_with_profile_file_gateway(
+        post("new", &format!("Origin: {EXPECTED_ORIGIN}\r\n"),
+            "{}").as_bytes())), "HTTP/1.1 200 OK",
+        "mock accepts body; native gateway separately validates canonicality");
 }

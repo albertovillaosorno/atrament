@@ -591,6 +591,9 @@ export function createNotebookProfileEditor(
     const editPaper = required<HTMLButtonElement>("notebook-edit-paper");
     const defaults = required<HTMLButtonElement>("notebook-default");
     const save = required<HTMLButtonElement>("notebook-save");
+    const localName = required<HTMLInputElement>("notebook-local-name");
+    const localLoad = required<HTMLButtonElement>("notebook-local-load");
+    const localSave = required<HTMLButtonElement>("notebook-local-save");
     const exportPdf = required<HTMLButtonElement>("notebook-export-pdf");
     const exportPng = required<HTMLButtonElement>("notebook-export-png");
     const previewButton = required<HTMLButtonElement>("notebook-preview");
@@ -602,12 +605,34 @@ export function createNotebookProfileEditor(
     const status = required<HTMLElement>("notebook-status");
     const controls = [style, placement, radius, slider, numbers, printed,
         load, usePaper, editPaper, defaults, save,
+        localName, localLoad, localSave,
         exportPdf, exportPng, previewButton, pdfPages, pngDpi, pngPage];
     let admitted: NotebookProfile | null = null;
     let generation = 0;
     let busy = false;
     let downloadUrl: string | null = null;
     let previewUrl: string | null = null;
+    let trackedName: string | null = null;
+    let trackedRevision = "new";
+
+    function clearTracking(): void {
+        trackedName = null;
+        trackedRevision = "new";
+    }
+
+    function selectedName(): string {
+        const value = localName.value;
+        if (value.length > 64 || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.json$/.test(value)
+            || value.includes("..")) {
+            throw new Error("Choose a simple .json filename (max 64 characters)");
+        }
+        return value;
+    }
+
+    function validRevision(value: unknown): value is string {
+        return typeof value === "string"
+            && /^sha256:[0-9a-f]{64}$/.test(value);
+    }
 
     function clearPreview(): void {
         previewFrame.hidden = true;
@@ -672,6 +697,47 @@ export function createNotebookProfileEditor(
             throw new Error("Rust notebook validation refused");
         }
         return response.text();
+    }
+
+    async function fileRequest(
+        secret: string, name: string, json?: string, revision = "new",
+    ): Promise<{ revision: string; profile?: unknown }> {
+        const response = await fetch("./api/notebook/file", {
+            method: json === undefined ? "GET" : "POST",
+            headers: {
+                Authorization: `Bearer ${secret}`,
+                "X-Atrament-Profile-Name": name,
+                ...(json === undefined ? {} : {
+                    "Content-Type": "application/json",
+                    "X-Atrament-Profile-Revision": revision,
+                }),
+            },
+            ...(json === undefined ? {} : { body: json }),
+            credentials: "omit",
+            cache: "no-store",
+            mode: "same-origin",
+            redirect: "error",
+            referrerPolicy: "origin",
+            signal: AbortSignal.any([
+                context.sessionSignal, AbortSignal.timeout(30_000),
+            ]),
+        });
+        if (response.status === 401) {
+            context.unauthorized();
+            throw new Error("Session expired");
+        }
+        if (response.status === 409) throw new Error("stale-file");
+        if (response.status === 503) throw new Error("disabled-file");
+        if (!response.ok || !response.headers.get("content-type")
+            ?.startsWith("application/json")) {
+            throw new Error("Rust file operation refused");
+        }
+        const value: unknown = await response.json();
+        if (typeof value !== "object" || value === null
+            || !validRevision((value as {revision?: unknown}).revision)) {
+            throw new Error("Invalid native file response");
+        }
+        return value as { revision: string; profile?: unknown };
     }
 
     async function canonical(secret: string, proposed: string):
@@ -774,9 +840,14 @@ export function createNotebookProfileEditor(
         sync();
         try {
             await work(secret, observed);
-        } catch {
+        } catch (error) {
             if (active(secret, observed)) {
-                status.textContent = "Notebook refused; nothing saved.";
+                status.textContent = error instanceof Error
+                    && error.message === "stale-file"
+                    ? "Local notebook changed; reopen before saving. No overwrite."
+                    : error instanceof Error && error.message === "disabled-file"
+                        ? "Local files disabled; launch Rust with --profiles-dir."
+                        : "Notebook refused; nothing saved.";
             }
         } finally {
             if (active(secret, observed)) {
@@ -790,6 +861,7 @@ export function createNotebookProfileEditor(
         generation += 1;
         const observed = generation;
         clearPreview();
+        clearTracking();
         admitted = null;
         busy = true;
         sync();
@@ -815,6 +887,7 @@ export function createNotebookProfileEditor(
     function reset(): void {
         generation += 1;
         clearPreview();
+        clearTracking();
         admitted = null;
         busy = false;
         load.value = "";
@@ -862,11 +935,46 @@ export function createNotebookProfileEditor(
             }
         });
     });
+    localName.addEventListener("input", clearTracking);
+    localLoad.addEventListener("click", (): void => {
+        void action(async (secret, observed) => {
+            const name = selectedName();
+            const result = await fileRequest(secret, name);
+            if (!active(secret, observed)) return;
+            const canonicalProfile = await canonical(
+                secret, JSON.stringify(result.profile),
+            );
+            if (!active(secret, observed)) return;
+            display(canonicalProfile.profile);
+            trackedName = name;
+            trackedRevision = result.revision;
+            status.textContent = "Notebook reopened from local Rust profile file.";
+        });
+    });
+    localSave.addEventListener("click", (): void => {
+        void action(async (secret, observed) => {
+            const name = selectedName();
+            const canonicalProfile = await canonical(
+                secret, JSON.stringify(proposal()),
+            );
+            if (!active(secret, observed)) return;
+            const revision = trackedName === name ? trackedRevision : "new";
+            const result = await fileRequest(
+                secret, name, canonicalProfile.json, revision,
+            );
+            if (!active(secret, observed)) return;
+            display(canonicalProfile.profile);
+            trackedName = name;
+            trackedRevision = result.revision;
+            status.textContent = "Native notebook saved in selected local directory.";
+        });
+    });
     defaults.addEventListener("click", (): void => {
         void action(async (secret, observed) => {
             const profile = readNotebook(await request(secret));
             if (active(secret, observed)) {
                 display(profile);
+                clearTracking();
                 status.textContent = "Notebook reset to Rust defaults.";
             }
         });
@@ -885,6 +993,7 @@ export function createNotebookProfileEditor(
             const result = await canonical(secret, proposed);
             if (active(secret, observed)) {
                 display(result.profile);
+                clearTracking();
                 status.textContent = "Validated notebook JSON loaded.";
             }
         });

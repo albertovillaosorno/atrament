@@ -2928,3 +2928,137 @@ fn cli_refuses_sha_valid_but_invalid_section_json_atomically() {
     assert!(!executed.status.success());
     assert!(executed.stdout.is_empty());
 }
+
+
+#[cfg(target_os = "linux")]
+#[test]
+fn localhost_file_store_roundtrips_two_native_profiles_and_refuses_stale() {
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_session_runtime::{ProfileFileError, ProfileFileGateway, ProfileFileKind};
+    use atrament_handwriting_statistics::HandwritingStatisticsProfile;
+    use atrament_handwriting_statistics_json::encode_statistics_json;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let parent = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.temp");
+    fs::create_dir_all(&parent).expect("project scratch directory");
+    let directory = OwnedProfileDirectory::new(parent.join(format!(
+        "local-profile-store-{}-{}", process::id(),
+        TEST_FILE_ID.fetch_add(1, Ordering::Relaxed),
+    )));
+    let store = bootstrap::ProfileFileStore::from_directory(&directory.0)
+        .expect("real user-selected directory");
+    let notebook = NotebookProfile::default().canonical_json()
+        .expect("native default notebook JSON");
+    let handwriting = encode_statistics_json(
+        &HandwritingStatisticsProfile::baseline(19),
+        &UnicodeGraphemeSegmentation,
+    ).expect("native handwriting JSON");
+    let invalid_name = store.save(
+        ProfileFileKind::Notebook, "../escape.json", notebook.as_bytes(), "new",
+    );
+    assert_eq!(invalid_name, Err(ProfileFileError::InvalidInput));
+    let revision = store.save(
+        ProfileFileKind::Notebook, "paper.json", notebook.as_bytes(), "new",
+    ).expect("create selected notebook profile");
+    assert!(revision.starts_with("sha256:"));
+    assert_eq!(revision.len(), 71);
+    let loaded = store.load(ProfileFileKind::Notebook, "paper.json")
+        .expect("reopen selected notebook profile");
+    assert_eq!(loaded.json, notebook.as_bytes());
+    assert_eq!(loaded.revision, revision);
+    assert_eq!(store.save(ProfileFileKind::Notebook, "paper.json",
+        notebook.as_bytes(), "new"), Err(ProfileFileError::Conflict));
+    assert_eq!(store.save(ProfileFileKind::Notebook, "paper.json",
+        br#"{"bad":true}"#, &revision), Err(ProfileFileError::InvalidInput));
+    assert_eq!(store.save(ProfileFileKind::Notebook, "paper.json",
+        notebook.as_bytes(), "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        Err(ProfileFileError::Conflict));
+    let mut updated = NotebookProfile::default();
+    updated.page_numbers = true;
+    let edited = updated.canonical_json().expect("edited native notebook");
+    let next_revision = store.save(ProfileFileKind::Notebook, "paper.json",
+        edited.as_bytes(), &revision).expect("replace observed notebook");
+    assert_ne!(revision, next_revision);
+    assert_eq!(store.load(ProfileFileKind::Notebook, "paper.json")
+        .expect("reopen modified notebook").json, edited.as_bytes());
+    assert_eq!(store.save(ProfileFileKind::Notebook, "paper.json",
+        notebook.as_bytes(), &revision), Err(ProfileFileError::Conflict));
+    assert_eq!(fs::read(directory.0.join("notebook-paper.json"))
+        .expect("changed disk file"), edited.as_bytes());
+
+    let ink_revision = store.save(ProfileFileKind::Handwriting, "paper.json",
+        &handwriting, "new").expect("separate native handwriting profile");
+    let ink = store.load(ProfileFileKind::Handwriting, "paper.json")
+        .expect("reopen handwriting statistics");
+    assert_eq!(ink.revision, ink_revision);
+    assert_eq!(ink.json, handwriting);
+    assert_eq!(store.load(ProfileFileKind::Notebook, "missing.json")
+        .expect_err("missing must refuse"), ProfileFileError::NotFound);
+
+    // The production HTTP router and production file gateway are bound
+    // together here: unauthorized/stale POSTs cannot change the actual disk.
+    use atrament_session_runtime::{RouteRequestContext, route_request};
+    let secret = "d".repeat(64);
+    let host = "127.0.0.1:48901";
+    let origin = format!("http://{host}");
+    let handshake = atrament_session_handshake::HandshakeService;
+    let context = RouteRequestContext::new(
+        host, &origin, &secret, &handshake,
+        &bootstrap::HandwritingGateway, &bootstrap::NotebookGateway,
+    ).with_profile_file_gateway(&store);
+    let mut application = atrament_session_application::SessionApplication::default();
+    let request = |method: &str, endpoint: &str, revision: &str,
+        authenticated: bool, body: &str| -> Vec<u8> {
+        let authorization = if authenticated {
+            format!("Authorization: Bearer {secret}\r\n")
+        } else { String::new() };
+        let mutation = if method == "POST" {
+            format!("Origin: {origin}\r\nContent-Type: application/json\r\n\
+                X-Atrament-Profile-Revision: {revision}\r\nContent-Length: {}\r\n",
+                body.len())
+        } else { String::new() };
+        format!("{method} {endpoint} HTTP/1.1\r\nHost: {host}\r\n\
+            {authorization}{mutation}X-Atrament-Profile-Name: paper.json\r\n\r\n{body}")
+            .into_bytes()
+    };
+    let snapshot = fs::read(directory.0.join("notebook-paper.json"))
+        .expect("save baseline exists");
+    let bad = route_request(&request("POST", "/api/notebook/file",
+        &next_revision, false, &notebook), &context, &mut application);
+    assert!(bad.starts_with(b"HTTP/1.1 401 Unauthorized"));
+    assert_eq!(fs::read(directory.0.join("notebook-paper.json"))
+        .expect("unauthorized leaves disk unchanged"), snapshot);
+    let stale = route_request(&request("POST", "/api/notebook/file",
+        &revision, true, &notebook), &context, &mut application);
+    assert!(stale.starts_with(b"HTTP/1.1 409 Conflict"));
+    assert_eq!(fs::read(directory.0.join("notebook-paper.json"))
+        .expect("stale leaves disk unchanged"), snapshot);
+    let read = route_request(&request("GET", "/api/notebook/file",
+        "", true, ""), &context, &mut application);
+    assert!(read.starts_with(b"HTTP/1.1 200 OK"));
+    assert!(String::from_utf8_lossy(&read).contains(&next_revision));
+    let save = route_request(&request("POST", "/api/notebook/file",
+        &next_revision, true, &notebook), &context, &mut application);
+    assert!(save.starts_with(b"HTTP/1.1 200 OK"),
+        "current revision allows a canonical notebook edit");
+    assert_eq!(fs::read(directory.0.join("notebook-paper.json"))
+        .expect("HTTP file commit exists"), notebook.as_bytes());
+    let ink_read = route_request(&request("GET", "/api/handwriting/file",
+        "", true, ""), &context, &mut application);
+    assert!(ink_read.starts_with(b"HTTP/1.1 200 OK"));
+    assert!(String::from_utf8_lossy(&ink_read).contains(&ink_revision));
+
+    let outside = OwnedProfileFile::new(notebook.as_bytes());
+    std::os::unix::fs::symlink(&outside.0, directory.0.join("notebook-link.json"))
+        .expect("test-owned symlink");
+    assert_eq!(store.load(ProfileFileKind::Notebook, "link.json")
+        .expect_err("symlink cannot leak outside file"), ProfileFileError::InvalidInput);
+    assert_eq!(store.save(ProfileFileKind::Notebook, "link.json",
+        edited.as_bytes(), "new"), Err(ProfileFileError::InvalidInput));
+    fs::remove_file(directory.0.join("notebook-link.json"))
+        .expect("remove test-owned symlink");
+    fs::remove_file(directory.0.join("notebook-paper.json"))
+        .expect("remove test-owned notebook");
+    fs::remove_file(directory.0.join("handwriting-paper.json"))
+        .expect("remove test-owned handwriting");
+}

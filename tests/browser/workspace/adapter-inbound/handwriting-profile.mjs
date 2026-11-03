@@ -41,6 +41,8 @@ const ids = ["handwriting-scope", "handwriting-dimension",
     "handwriting-remove-glyph", "handwriting-add-override",
     "handwriting-remove-override", "handwriting-seed", "handwriting-load",
     "handwriting-reset", "handwriting-save", "handwriting-status",
+    "handwriting-local-name", "handwriting-local-load",
+    "handwriting-local-save",
     "handwriting-preview", ...fields.flatMap((field) => [
         `handwriting-${field}`, `handwriting-${field}-range`])];
 
@@ -74,6 +76,7 @@ function mountBackend(implementation = {}) {
     let secret = "private-session-credential";
     const controller = new AbortController();
     elements.get("handwriting-scope").value = "global";
+    elements.get("handwriting-local-name").value = "my-handwriting.json";
     globalThis.document = {
         getElementById: (id) => elements.get(id) ?? null,
         createElement: (tag) => {
@@ -291,6 +294,90 @@ test("handwriting editor rejects imprecise u64 seed", async () => {
         assert.equal(b.elements.get("handwriting-save").disabled, true);
         assert.match(b.elements.get("handwriting-status").textContent,
             /seed too large/);
+    } finally {
+        b.restore();
+    }
+});
+
+
+test("handwriting local file stores checked revisions and declines stale saves", async () => {
+    let diskProfile = null;
+    let diskRevision = null;
+    let revisionStep = 0;
+    const b = mountBackend({
+        fetch(endpoint, init) {
+            if (endpoint === "./api/handwriting/dimensions") {
+                return Response.json(catalog);
+            }
+            if (endpoint === "./api/handwriting/file") {
+                assert.equal(init.headers["X-Atrament-Profile-Name"],
+                    "my-handwriting.json");
+                assert.equal(init.credentials, "omit");
+                assert.equal(init.cache, "no-store");
+                assert.equal(init.mode, "same-origin");
+                if (init.method === "GET") {
+                    return diskRevision === null
+                        ? Response.json({error: "profile_file_missing"},
+                            {status: 404})
+                        : Response.json({
+                            profile: diskProfile, revision: diskRevision,
+                        });
+                }
+                const revision = init.headers["X-Atrament-Profile-Revision"];
+                if (diskRevision === null ? revision !== "new"
+                    : revision !== diskRevision) {
+                    return Response.json({ error: "stale_profile_file" },
+                        { status: 409 });
+                }
+                diskProfile = JSON.parse(init.body);
+                revisionStep += 1;
+                diskRevision = "sha256:" + String.fromCharCode(96 + revisionStep).repeat(64);
+                return Response.json({ revision: diskRevision });
+            }
+            if (init.method === "GET") return Response.json(defaultProfile());
+            return Response.json(JSON.parse(init.body));
+        },
+    });
+    try {
+        await b.editor.start("private-session-credential");
+        edit(b.elements, "handwriting-seed", "11");
+        b.elements.get("handwriting-local-save").dispatch("click");
+        await tick();
+        await tick();
+        assert.equal(b.requests.at(-1).endpoint, "./api/handwriting/file");
+        assert.equal(b.requests.at(-1).headers["X-Atrament-Profile-Revision"],
+            "new");
+        assert.equal(diskProfile.seed, 11);
+        assert.match(b.elements.get("handwriting-status").textContent,
+            /saved in local directory/);
+        b.elements.get("handwriting-local-load").dispatch("click");
+        await tick();
+        await tick();
+        assert.equal(b.elements.get("handwriting-seed").value, "11");
+        edit(b.elements, "handwriting-seed", "12");
+        b.elements.get("handwriting-local-save").dispatch("click");
+        await tick();
+        await tick();
+        assert.equal(b.requests.at(-1).headers["X-Atrament-Profile-Revision"],
+            "sha256:" + "a".repeat(64));
+        assert.equal(diskProfile.seed, 12);
+        diskRevision = "sha256:" + "c".repeat(64);
+        edit(b.elements, "handwriting-seed", "13");
+        b.elements.get("handwriting-local-save").dispatch("click");
+        await tick();
+        await tick();
+        assert.equal(diskProfile.seed, 12);
+        assert.match(b.elements.get("handwriting-status").textContent,
+            /changed; reopen first/);
+        b.elements.get("handwriting-local-name").value = "../unsafe.json";
+        b.elements.get("handwriting-local-name").dispatch("input");
+        const before = b.requests.length;
+        b.elements.get("handwriting-local-save").dispatch("click");
+        await tick();
+        assert.equal(b.requests.length, before,
+            "unsafe browser-selected names never reach local Rust file API");
+        b.editor.reset();
+        assert.equal(b.elements.get("handwriting-local-load").disabled, true);
     } finally {
         b.restore();
     }

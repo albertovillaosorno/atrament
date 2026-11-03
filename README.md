@@ -41,14 +41,64 @@ Atrament already has a Rust localhost server and browser workspace,
 authenticated draft transport, physical-page and handwriting domain contracts,
 and a local `.atrament` profile verifier, inspector, and canonical repacker.
 Run the Rust binary without arguments for the existing localhost workspace;
-its notebook/handwriting visual controls and native PDF pipeline are not yet
-connected end to end. The available CLI commands are documented below.
+its notebook metadata, paper, handwriting statistics controls and native
+PDF/PNG paper preview are connected. Local profile file read/write now has an
+explicit opt-in directory; full rendered handwriting is still unfinished. The available CLI commands are documented below.
 
 The earlier 77 tasks were accepted as bounded academic/design artifacts, not
-as proof of a finished product. **Eight of nine executable TODOs remain**
+as proof of a finished product. **Seven of nine executable TODOs remain**
 for localhost editing, Spanish/English glyph coverage,
 and real Rust PDF/PNG output. The previous NO-GO decision still applies to
 production claims, and physical hardware is not required for local use.
+
+### Localhost Open/Save for notebook and handwriting profiles (opt-in)
+
+The existing **Rust** loopback workspace accepts an explicitly selected,
+pre-existing directory for two distinct native profile types. No server-side
+file writes are enabled in the default no-argument mode:
+
+```sh
+mkdir -p ./my-atrament-profiles
+cargo run -q -p atrament_runtime_bootstrap -- --profiles-dir ./my-atrament-profiles
+```
+
+After the normal authenticated session opens in the browser, use **Notebook
+page profile → Local notebook filename → Save local notebook** or
+**Handwriting statistics → Local handwriting filename → Save local
+handwriting**. **Open local** loads an existing file and its exact revision;
+after editing, **Save local** checks that revision before allowing a
+replacement. The original **Load JSON** file picker and **Save JSON**
+download still work without this directory opt-in.
+
+Names are deliberately limited to one ASCII `*.json` basename (maximum
+64 characters); paths and symlinks cannot be selected by the browser.
+The Rust host stores each type separately as `notebook-NAME` and
+`handwriting-NAME` in the selected directory. For example, entering
+`pages.json` and `writer.json` produces
+`my-atrament-profiles/notebook-pages.json` and
+`my-atrament-profiles/handwriting-writer.json`.
+The directory must exist when the process starts, and the current atomic
+file commit transport supports Linux; neither an upload nor a download
+silently changes this directory.
+
+The authenticated, same-origin `GET /api/notebook/file` and
+`GET /api/handwriting/file` require a unique
+`X-Atrament-Profile-Name: NAME` header. Each returns canonical native
+profile JSON and a `sha256:` revision for the exact source bytes.
+Corresponding `POST` requests also require Origin, JSON body, and
+`X-Atrament-Profile-Revision: new` to create a new target, or the
+previously read SHA-256 revision to replace an observed regular file.
+Existing/new-name collisions and stale revisions return HTTP 409;
+invalid JSON, names, duplicates or unexpected paths refuse before commit.
+Without `--profiles-dir`, these file routes respond HTTP 503, while
+read-only validation and PDF/PNG rendering continue to work.
+
+The selected-directory save uses the existing Rust bounded-reader and
+Linux atomic file commit adapter. It is not a general remote file manager,
+does not persist anything in browser storage, and does not provide a
+cross-process lock against simultaneous external writers. A failed
+or uncertain commit must not be treated as permission to blindly retry an
+overwrite; reopen the profile and inspect the result first.
 
 ### Native Rust printable-paper PDF and PNG (limited first slice)
 
@@ -143,7 +193,8 @@ uncalibrated default, `POST /api/handwriting/profile` for canonical, bounded
 statistics validation, and `GET /api/handwriting/dimensions` for the ten
 variable names, physical units, and domain bounds. All three require the
 current session credential; POST additionally requires the exact Origin.
-These endpoints do not save server-side files or render written glyphs.
+These default validation endpoints do not themselves save files or render
+written glyphs. The opt-in file endpoints above are separate.
 
 The localhost workspace presents a **paper profile** editor after a
 successful session handshake. It offers A3/A4/A5/B5/Letter/Legal presets,
@@ -169,8 +220,9 @@ units come from Rust; this is a numeric statistics preview, not actual ink
 rendering.
 
 Large `u64` seeds outside JavaScript safe integer precision
-must be edited using the Rust CLI. There is no server-side file persistence
-or complete notebook profile editor yet.
+must be edited using the Rust CLI. Server-side file persistence is available only by explicitly launching the
+Rust runtime with a selected directory as described below; full notebook
+content and handwriting rendering are not implemented yet.
 
 For a reusable paper-only profile, the same CLI can emit versioned JSON,
 read it again, and apply further explicit edits:
@@ -185,8 +237,9 @@ cargo run -q -p atrament_notebook_paper_cli -- \
 `--profile` must precede edit flags. The `atrament.paper.v1` profile uses
 integer micrometers, has a 4-KiB input ceiling, rejects duplicate or unknown
 fields, and is validated against the actual PDF path before acceptance.
-The shell chooses the output file and handles any overwrite; this is not a
-localhost Open/Save UI or a general notebook/handwriting profile schema.
+The shell chooses the output file and handles any overwrite; this
+paper-only CLI is separate from the opt-in localhost notebook/handwriting
+profile Open/Save feature above.
 
 ### Shared native paper and handwriting profile CLI
 

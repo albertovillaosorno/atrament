@@ -262,14 +262,17 @@ test("static workspace starts session controls disabled", async () => {
 
 // Count all literal fetch references, not just direct fetch(...) calls.
 // Captured or bracket-indexed fetch values can be invoked later under an
-// unrelated identifier. The paper module has three reviewed fetch sites.
+// unrelated identifier. The paper module has four reviewed fetch sites
+// (paper validation/export and notebook validation/export/file read-write),
+// and handwriting has two (native validation and selected file read-write).
 // Unlike fetch(), fetchLater() can dispatch after the
 // page is disposed, bypassing page-lifetime cancellation entirely.
 // Full-line comments are not executable authority.
 function hasUnreviewedFetchReference(source, main, paper = false) {
     const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     const references = executable.match(/\bfetch\b/gu) ?? [];
-    const reviewedCount = paper === 2 ? 3 : Number(paper);
+    const reviewedCount = paper === 2 ? 4 : paper === 1 ? 2
+        : Number(paper);
     return references.length !== (main ? 4 : reviewedCount)
         || /\bfetchLater\b/u.test(executable);
 }
@@ -320,7 +323,7 @@ test("browser source and generated modules reject undeclared transport",
         const paper = profileModuleCount(filename);
         const fetchCalls = source.match(/\bfetch\s*\(/gu) ?? [];
         assert.equal(fetchCalls.length,
-            main ? 4 : paper === 2 ? 3 : paper,
+            main ? 4 : paper === 2 ? 4 : paper === 1 ? 2 : paper,
             `${filename} must retain the reviewed fetch sites`);
         assert.equal(hasUnreviewedFetchReference(source, main, paper), false,
             `${filename} gained an unreviewed fetch reference`);

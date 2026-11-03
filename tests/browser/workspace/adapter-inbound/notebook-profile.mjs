@@ -9,6 +9,7 @@ const ids = ["notebook-date-style", "notebook-date-placement",
     "notebook-printed-sheet", "notebook-load", "notebook-use-paper",
     "notebook-edit-paper",
     "notebook-default", "notebook-save", "notebook-status",
+    "notebook-local-name", "notebook-local-load", "notebook-local-save",
     "notebook-export-pdf", "notebook-export-png", "notebook-preview",
     "notebook-preview-frame", "notebook-preview-image",
     "notebook-pdf-pages", "notebook-png-dpi", "notebook-png-page"];
@@ -51,10 +52,14 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         revoke: URL.revokeObjectURL,
     };
     const elements = new Map(ids.map((id) => [id, new Control()]));
+    elements.get("notebook-local-name").value = "my-notebook.json";
     const downloads = [];
     const revoked = [];
     const requests = [];
     const adoptedPapers = [];
+    let diskRevision = null;
+    let diskProfile = null;
+    let revisionStep = 0;
     let secret = "session-local";
     let paperDraft = { ...paper, style: "ruled" };
     const controller = new AbortController();
@@ -69,6 +74,33 @@ test("notebook form validates page metadata and downloads native JSON", async ()
     globalThis.fetch = async (url, init) => {
         requests.push({ url, init });
         assert.equal(init.headers.Authorization, `Bearer ${secret}`);
+        if (url === "./api/notebook/file") {
+            assert.equal(init.headers["X-Atrament-Profile-Name"],
+                "my-notebook.json");
+            assert.equal(init.credentials, "omit");
+            assert.equal(init.cache, "no-store");
+            assert.equal(init.mode, "same-origin");
+            assert.equal(init.redirect, "error");
+            if (init.method === "GET") {
+                return diskRevision === null
+                    ? Response.json({ error: "profile_file_missing" },
+                        { status: 404 })
+                    : Response.json({
+                        revision: diskRevision, profile: diskProfile,
+                    });
+            }
+            assert.equal(init.headers["Content-Type"], "application/json");
+            const revision = init.headers["X-Atrament-Profile-Revision"];
+            if (diskRevision === null ? revision !== "new"
+                : revision !== diskRevision) {
+                return Response.json({ error: "stale_profile_file" },
+                    { status: 409 });
+            }
+            diskProfile = JSON.parse(init.body);
+            revisionStep += 1;
+            diskRevision = "sha256:" + String.fromCharCode(96 + revisionStep).repeat(64);
+            return Response.json({ revision: diskRevision });
+        }
         if (url.startsWith("./api/notebook/paper/")) {
             assert.equal(init.method, "POST");
             assert.equal(init.headers["Content-Type"], "application/json");
@@ -150,6 +182,34 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.deepEqual(downloads, ["atrament-notebook.json"]);
         assert.match(elements.get("notebook-status").textContent,
             /Validated notebook JSON downloaded/);
+        elements.get("notebook-local-save").dispatch("click");
+        await settle();
+        await settle();
+        assert.equal(requests.at(-1).url, "./api/notebook/file");
+        assert.equal(requests.at(-1).init.headers[
+            "X-Atrament-Profile-Revision"], "new");
+        assert.equal(diskProfile.page_numbers, true);
+        assert.match(elements.get("notebook-status").textContent,
+            /saved in selected local directory/);
+        elements.get("notebook-local-load").dispatch("click");
+        await settle();
+        await settle();
+        assert.match(elements.get("notebook-status").textContent,
+            /reopened from local Rust/);
+        elements.get("notebook-printed-sheet").checked = false;
+        elements.get("notebook-local-save").dispatch("click");
+        await settle();
+        await settle();
+        assert.equal(diskProfile.printed_sheet, false);
+        assert.equal(requests.at(-1).init.headers[
+            "X-Atrament-Profile-Revision"], "sha256:" + "a".repeat(64));
+        diskRevision = "sha256:" + "c".repeat(64);
+        elements.get("notebook-local-save").dispatch("click");
+        await settle();
+        await settle();
+        assert.match(elements.get("notebook-status").textContent,
+            /changed; reopen/);
+        elements.get("notebook-printed-sheet").checked = true;
         const beforeExport = requests.length;
         elements.get("notebook-pdf-pages").value = "3";
         elements.get("notebook-png-dpi").value = "72";

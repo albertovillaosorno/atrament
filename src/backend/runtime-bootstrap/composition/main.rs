@@ -40,6 +40,8 @@ use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fmt::Write as _;
 use std::io::{self, Write as _};
+use std::fs::{self, OpenOptions};
+use std::path::Path;
 use std::path::PathBuf;
 use std::str::from_utf8;
 
@@ -57,6 +59,8 @@ use atrament_profile_export_assembly::{
     ProfileExportArtifact, ProfileExportAssemblyLimits,
     ProfileExportPayload, assemble_profile_export_artifact,
 };
+use atrament_profile_entry_sha256::sha256_profile_bytes;
+use atrament_profile_file_reader::read_bounded_profile_file;
 use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };
@@ -81,11 +85,13 @@ use atrament_session_handshake::{
 };
 use atrament_session_runtime::{
     HandwritingProfileError, HandwritingProfileGateway,
-    NotebookProfileError, NotebookProfileGateway, Runtime,
+    LoadedProfileFile, NotebookProfileError, NotebookProfileGateway,
+    ProfileFileError, ProfileFileGateway, ProfileFileKind, Runtime,
 };
 use atrament_handwriting_statistics::HandwritingStatisticsProfile;
 use atrament_handwriting_statistics_json::{
-    decode_statistics_json, encode_statistics_json,
+    MAXIMUM_STATISTICS_JSON_BYTES, decode_statistics_json,
+    encode_statistics_json,
 };
 use atrament_session_secret::SessionSecret;
 
@@ -99,7 +105,7 @@ const PROFILE_INSPECT_MAX_MEMBER_BYTES_U64: u64 = 2 * 1024 * 1024;
 const PROFILE_INSPECT_MAX_ROOT_BYTES: usize = 128 * 1024;
 
 /// Compose the real Rust statistics codec and Unicode adapter for HTTP use.
-struct HandwritingGateway;
+pub(crate) struct HandwritingGateway;
 
 impl HandwritingProfileGateway for HandwritingGateway {
     fn canonical_json(
@@ -123,7 +129,7 @@ impl HandwritingProfileGateway for HandwritingGateway {
 
 
 /// Compose the native notebook profile codec for the HTTP transport.
-struct NotebookGateway;
+pub(crate) struct NotebookGateway;
 
 impl NotebookProfileGateway for NotebookGateway {
     fn canonical_json(
@@ -170,6 +176,129 @@ impl NotebookProfileGateway for NotebookGateway {
     }
 }
 
+
+/// A trusted caller selects this existing directory at process startup.
+/// Browser requests may choose only a single bounded JSON basename within it.
+pub(crate) struct ProfileFileStore {
+    directory: PathBuf,
+}
+
+impl ProfileFileStore {
+    fn canonical(kind: ProfileFileKind, json: &[u8])
+        -> Result<Vec<u8>, ProfileFileError> {
+        match kind {
+            ProfileFileKind::Notebook => NotebookGateway.canonical_json(json)
+                .map_err(|_error| ProfileFileError::InvalidInput),
+            ProfileFileKind::Handwriting => HandwritingGateway.canonical_json(json)
+                .map_err(|_error| ProfileFileError::InvalidInput),
+        }
+    }    pub(crate) fn from_directory(path: &Path) -> io::Result<Self> {
+        let metadata = fs::symlink_metadata(path)?;
+        if !metadata.file_type().is_dir() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "profile directory must be a real existing directory",
+            ));
+        }
+        Ok(Self { directory: fs::canonicalize(path)? })
+    }
+
+    #[expect(clippy::filetype_is_file, reason = "Only regular selected profile files are allowed")]
+    fn read_raw(&self, kind: ProfileFileKind, name: &str)
+        -> Result<Vec<u8>, ProfileFileError> {
+        let path = self.selected_path(kind, name)?;
+        let metadata = fs::symlink_metadata(&path).map_err(|error| {
+            if error.kind() == io::ErrorKind::NotFound {
+                ProfileFileError::NotFound
+            } else {
+                ProfileFileError::FileIo
+            }
+        })?;
+        if !metadata.file_type().is_file() {
+            return Err(ProfileFileError::InvalidInput);
+        }
+        let mut options = OpenOptions::new();
+        let _options = options.read(true);
+        #[cfg(target_os = "linux")]
+        {
+            use std::os::unix::fs::OpenOptionsExt as _;
+            use nix::libc::{O_NOFOLLOW, O_NONBLOCK};
+            let _flags = options.custom_flags(O_NOFOLLOW | O_NONBLOCK);
+        }
+        let file = options.open(&path).map_err(|_error| ProfileFileError::FileIo)?;
+        let limit = match kind {
+            ProfileFileKind::Notebook => MAX_NOTEBOOK_JSON_BYTES,
+            ProfileFileKind::Handwriting => MAXIMUM_STATISTICS_JSON_BYTES,
+        };
+        let bytes = read_bounded_profile_file(file, limit)
+            .map_err(|_error| ProfileFileError::InvalidInput)?;
+        Ok(bytes.bytes().to_vec())
+    }
+
+    fn selected_path(&self, kind: ProfileFileKind, name: &str)
+        -> Result<PathBuf, ProfileFileError> {
+        if name.len() > 64 || name.rsplit_once('.').is_none_or(|(_, extension)| extension != "json")
+            || name.starts_with('.') || name.contains("..")
+            || !name.bytes().all(|byte| byte.is_ascii_alphanumeric()
+                || matches!(byte, b'-' | b'_' | b'.')) {
+            return Err(ProfileFileError::InvalidInput);
+        }
+        let prefix = match kind {
+            ProfileFileKind::Notebook => "notebook-",
+            ProfileFileKind::Handwriting => "handwriting-",
+        };
+        Ok(self.directory.join(format!("{prefix}{name}")))
+    }
+
+}
+
+
+impl ProfileFileGateway for ProfileFileStore {
+    fn load(&self, kind: ProfileFileKind, name: &str)
+        -> Result<LoadedProfileFile, ProfileFileError> {
+        let original = self.read_raw(kind, name)?;
+        let json = Self::canonical(kind, &original)?;
+        Ok(LoadedProfileFile { json, revision: file_revision(&original) })
+    }
+
+    #[expect(clippy::wildcard_enum_match_arm, reason = "Other atomic commit errors map to IO refusal")]
+    fn save(&self, kind: ProfileFileKind, name: &str, json: &[u8],
+        revision: &str) -> Result<String, ProfileFileError> {
+        let path = self.selected_path(kind, name)?;
+        // Admission and content validation occur before touching the target.
+        let canonical = Self::canonical(kind, json)?;
+        let existing = match self.read_raw(kind, name) {
+            Ok(bytes) => Some(bytes),
+            Err(ProfileFileError::NotFound) => None,
+            Err(error) => return Err(error),
+        };
+        let disposition = match existing {
+            None if revision == "new" => {
+                ProfileFileCommitDisposition::PreserveExisting
+            },
+            Some(bytes) if revision == file_revision(&bytes) => {
+                ProfileFileCommitDisposition::ReplaceExisting
+            },
+            _ => return Err(ProfileFileError::Conflict),
+        };
+        let limit = match kind {
+            ProfileFileKind::Notebook => MAX_NOTEBOOK_JSON_BYTES,
+            ProfileFileKind::Handwriting => MAXIMUM_STATISTICS_JSON_BYTES,
+        };
+        let _evidence = commit_profile_file(&path, &canonical, limit, disposition)
+            .map_err(|error| match error {
+                atrament_profile_file_commit::ProfileFileCommitError::TargetExists
+                | atrament_profile_file_commit::ProfileFileCommitError::SelectedTargetChanged
+                => ProfileFileError::Conflict,
+                atrament_profile_file_commit::ProfileFileCommitError::UnsupportedPlatform
+                => ProfileFileError::Unavailable,
+                _ => ProfileFileError::FileIo,
+            })?;
+        Ok(file_revision(&canonical))
+    }
+}
+
+
 /// Private, path-free canonicality refusal after complete source verification.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ProfileCanonicalityMismatch {
@@ -190,6 +319,15 @@ impl ProfileCanonicalityMismatch {
             }
         }
     }
+}
+
+fn file_revision(bytes: &[u8]) -> String {
+    let digest = sha256_profile_bytes(bytes).bytes();
+    let mut revision = String::from("sha256:");
+    for byte in digest {
+        let _write_result = write!(revision, "{byte:02x}");
+    }
+    revision
 }
 
 fn publish_startup(state: &str, origin: Option<&str>) -> io::Result<()> {
@@ -770,12 +908,23 @@ pub(crate) fn inspect_cli_args(
 fn main() -> io::Result<()> {
     #[cfg(target_os = "linux")]
     protect_process_memory_from_crash_snapshots()?;
-    if let Some(inspected) = inspect_cli_args(env::args_os().skip(1))? {
-        let stdout = io::stdout();
-        let mut output = stdout.lock();
-        output.write_all(inspected.as_bytes())?;
-        return output.flush();
-    }
+    let arguments: Vec<OsString> = env::args_os().skip(1).collect();
+    let profile_store = if arguments.first().is_some_and(|arg|
+        arg == OsStr::new("--profiles-dir")) {
+        let [_, path] = arguments.as_slice() else {
+            return Err(io::Error::new(io::ErrorKind::InvalidInput,
+                "usage: atrament --profiles-dir EXISTING_DIRECTORY"));
+        };
+        Some(ProfileFileStore::from_directory(Path::new(path))?)
+    } else {
+        if let Some(inspected) = inspect_cli_args(arguments)? {
+            let stdout = io::stdout();
+            let mut output = stdout.lock();
+            output.write_all(inspected.as_bytes())?;
+            return output.flush();
+        }
+        None
+    };
     publish_startup("starting", None)?;
     let mut application = SessionApplication::default();
     let handshake = HandshakeService;
@@ -786,9 +935,13 @@ fn main() -> io::Result<()> {
     browser_launch::launch(&initial_browser_url)
         .map_err(|error| browser_launch_failure(&error))?;
     publish_startup("ready", Some(runtime.origin()))?;
+    let selected_gateway = profile_store.as_ref()
+        .map(|gateway| -> &dyn ProfileFileGateway { gateway });
     runtime.serve(
         secret.encoded(), &HandwritingGateway,
-        &NotebookGateway, &handshake, &mut application,
+        &NotebookGateway,
+        selected_gateway,
+        &handshake, &mut application,
     );
     Ok(())
 }

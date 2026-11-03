@@ -829,6 +829,7 @@ dependencies = [
  "atrament_profile_entry_sha256",
  "atrament_profile_export_assembly",
  "atrament_profile_file_commit",
+ "atrament_profile_file_reader",
  "atrament_profile_import_preflight",
  "atrament_profile_import_verification",
  "atrament_profile_json_syntax",

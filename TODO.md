@@ -13,19 +13,11 @@ never proves the corresponding feature runs. Hardware, multi-platform
 installers, cloud, MCP, advanced semantic/LLM editing, and physical plotters
 are retained for later, not needed to complete the first local workflow.
 
-Eight of nine **new executable integration tasks** remain open. The
+Seven of nine **new executable integration tasks** remain open. The
 Rust notebook and handwriting CLI file round-trip is complete; other tasks
 retain their original identities, finite scope and dependencies. See the
 [Rust-first roadmap](docs/technical/rust-cli-localhost-priority.md) and
 [task policy](docs/todo/README.md). Keep the index unfinished-only.
-
-## P1 — Rust profiles and local runtime
-
-### TODO - Authenticated localhost profile file operations
-
-Use the existing loopback Rust server for authorized profile load and save.
-
-[docs/todo/open/runtime/006-web.mdc](docs/todo/open/runtime/006-web.mdc)
 
 ## P2 — Notebook geometry
 

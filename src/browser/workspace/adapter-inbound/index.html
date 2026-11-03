@@ -337,6 +337,23 @@
             <button id="notebook-preview" type="button"
               disabled>Preview selected page</button>
           </div>
+          <div class="paper-actions" aria-label="Notebook local Rust files">
+            <label>Local notebook filename (.json)
+              <input id="notebook-local-name" type="text"
+                maxlength="64" value="my-notebook.json"
+                autocomplete="off" spellcheck="false" disabled>
+            </label>
+            <button id="notebook-local-load" type="button" disabled>
+              Open local notebook
+            </button>
+            <button id="notebook-local-save" type="button" disabled>
+              Save local notebook
+            </button>
+          </div>
+          <p class="field-help">Local files require launching Atrament
+            with --profiles-dir and an existing directory. New names create;
+            reopening a name allows checked replacements. Existing files
+            and stale edits are never silently overwritten.</p>
           <figure id="notebook-preview-frame"
             class="notebook-output-preview" hidden>
             <img id="notebook-preview-image" alt=""
@@ -445,6 +462,22 @@
             <button id="handwriting-save" type="button"
               class="primary-button" disabled>Save JSON</button>
           </div>
+          <div class="paper-actions" aria-label="Handwriting local Rust files">
+            <label>Local handwriting filename (.json)
+              <input id="handwriting-local-name" type="text"
+                maxlength="64" value="my-handwriting.json"
+                autocomplete="off" spellcheck="false" disabled>
+            </label>
+            <button id="handwriting-local-load" type="button" disabled>
+              Open local handwriting
+            </button>
+            <button id="handwriting-local-save" type="button" disabled>
+              Save local handwriting
+            </button>
+          </div>
+          <p class="field-help">Saving to an opted-in local directory uses
+            Rust validation and a required revision; JSON download stays
+            available without a directory.</p>
           <p id="handwriting-status" class="action-status" role="status"
             aria-live="polite">Requires a compatible backend session.</p>
         </section>

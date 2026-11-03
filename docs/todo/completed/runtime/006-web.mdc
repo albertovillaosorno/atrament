@@ -1,0 +1,72 @@
+---
+record_type: task
+id: "ATR-P1-006"
+title: "Authenticated localhost profile file operations"
+status: completed
+priority: P1
+lane: runtime
+dependencies: ["ATR-P1-005"]
+dependencies_specified: true
+dependency_rationale: >-
+  The HTTP adapter must invoke the same Rust profile admission as the CLI.
+acceptance_criteria:
+  - >-
+      Expose caller-authorized load/save for versioned notebook and handwriting
+      profiles through the existing loopback-only Rust runtime.
+  - >-
+      Finite executable completion: Opening a profile in localhost and saving a
+      modified copy works; an unauthorized or stale write refuses without
+      changing the selected file.
+evidence_status: not_independently_verified
+migrated_from: rust-cli-localhost-priority.md
+---
+
+# Authenticated localhost profile file operations
+
+## Scope and existing evidence
+
+Expose caller-authorized load/save for versioned notebook and handwriting
+profiles through the existing loopback-only Rust runtime.
+
+The historical accepted theoretical design is preserved in completed P1–P9
+records. This record is **open executable integration work**. It must not be
+closed merely because a prior design was accepted or a different
+implementation was proposed.
+
+## Acceptance decision
+
+Completed — practical native Rust and localhost UI integration on November 3, 2026.
+
+Starting the existing Rust runtime with `--profiles-dir EXISTING_DIRECTORY`
+explicitly selects a bounded local profile folder. The authenticated browser
+notebook and handwriting editors expose separate open/save actions for versioned
+native profiles, without persistent browser state or a second application engine.
+
+The Rust runtime exposes GET/POST on `/api/notebook/file` and
+`/api/handwriting/file`; POST requires the current bearer, same-origin admission,
+a single simple JSON basename, and either a create-only marker or exact source
+SHA-256 revision. Native adapters reuse bounded reads, canonical validation
+and Linux atomic file commits.
+
+Accepted example: the focused Rust integration test created a notebook file,
+reopened it, edited page-number preference and saved with a known revision;
+handwriting profiles independently round-tripped and retained their namespace.
+Browser mock tests exercised open, revise, save and returned revision on both
+local editors. A valid HTTP POST through the production router and real store
+replaced the observed notebook file on disk.
+
+Refused examples: the integrated HTTP path returned 401 for an unauthorized
+notebook POST and 409 for a stale revision; both retained byte-identical disk
+contents. Real file tests also refused symlinks, unknown paths, malformed
+profiles and create collisions.
+
+Checks performed: 59 Rust runtime-bootstrap tests and 104 Rust session-runtime
+tests passed; frontend typecheck and build passed, focused browser editors
+passed and 70 browser privacy/security regression tests passed. Full browser
+Firefox suite did not complete successfully owing to prolonged Firefox test
+failures under concurrent runs; no complete browser E2E pass is claimed.
+
+Known limits: file commit currently Linux-only, no native Windows/macOS file
+save guarantee, no cross-process locking or guarantee against an external
+writer racing the last revision check, and no handwriting-stroke rendering.
+Historical academic evidence remains not independently reverified.
