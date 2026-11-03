@@ -1,315 +1,161 @@
-# Atrament
+# Atrament — less handwriting, more living
 
-> Project started: August 31, 2026
+Atrament is **my personal CLI notebook generator**. I dislike compulsory
+handwriting: for me it is a repetitive, bureaucratic use of time, not a better
+way to learn. I would rather spend that time thinking, imagining, learning,
+and living. This project automates the preparation of handwritten-looking
+pages, so the useful work can stay useful and the mechanical copying can stop.
 
-**An artificial penmanship atelier that alchemizes text, lectures, formulas,
-and photographs into uncannily human notebooks—PDF or real ink.**
+**Actual priority:** configure a notebook, describe handwriting statistically,
+compose content and pictures, export pages as **printable PDF or PNG**, and
+optionally print them. I can also generate transparent pages to combine with a
+photo of a physical notebook in an image editor. This is a personal tool, not
+an attempt to ship an enterprise app or build a physical writing robot.
 
-Atrament is a disposable localhost workspace for composing polished handwritten
-notes. The first-release design admits either a complete structured notebook or
-a targeted semantic command batch from an LLM, then validates accepted state
-before PDF, preview, live-plan, or physical-output projections.
+## Scope: the smallest useful thing
 
-It is not a word processor, a handwriting font, or a cloud notebook. Content is
-semantic, layout is compiled against a physical page, handwriting comes from a
-calibrated personal profile, and every visual adjustment remains an explicit
-constraint.
+- **Only a Linux command-line interface.** No browser workflow, Windows/macOS
+  distributions, servers, accounts, hosted AI, MCP, or GUI are needed here.
+- **Paper profiles:** arbitrary physical sheet width/height in millimeters;
+  blank, ruled, grid, or dot backgrounds; line/grid spacing and colors;
+  separate top/bottom/left/right margins; rounded borders and a binding line;
+  configurable date location/style and page labels.
+- **Handwriting:** ink color, simulated pen width and grain, base glyph font,
+  reproducible random seed, line height and letter spacing. Set bounded mean,
+  median, minimum, maximum, and standard deviation for size, width, baseline,
+  and rotation. Override every character individually, including Spanish
+  accents, punctuation, symbols, and custom transparent glyph-image shapes.
+  The photo-measuring helper is **manual**, not an unreliable automatic
+  handwriting-recognition pipeline.
+- **Assets:** local PNG, JPG, WebP, or restricted SVG, in front of or behind
+  writing; change size/position, saturation, color tint, and opacity.
+- **Pages and exports:** explicit page ordering, dates, printed-sheet flags,
+  per-page transparent PNGs, and physical-size print PDFs. Already printed
+  sheets can omit grid/background so only remaining content is printed.
+  Printing to a CUPS printer requires an explicit command.
+- **No plotter/hardware requirement.** The former single-pen and multi-tool
+  designs are theoretical history, not a mandatory product or release gate.
 
-## Current implementation and release status (November 2, 2026)
+## Run it now
 
-Atrament currently has a localhost browser workspace, authenticated draft
-transport, and local `.atrament` profile verification/repack commands.
-Notebook-to-PDF delivery, desktop installers, and physical plotting are not
-available as end-to-end user features.
-
-All 77 task records have finite practical or theoretical acceptance decisions.
-Those decisions do not mean every proposed feature was implemented or tested.
-For limitations and release blockers, see [TODO.md](TODO.md), which references
-the dated P8-008 decision ledger. Production status remains **NO-GO** while
-known security and missing output/package functionality remain unresolved.
-
-## The workspace
-
-The primary interface is a 16:9 split workspace with both editors visible:
-
-- **LLM editor:** task, structured notebook source, validation diagnostics, and
-  the one-shot chat exchange.
-- **Human editor:** live page preview, text correction, selection, movement,
-  resize, crop, layering, and physical-page controls.
-
-The first LLM workflow requires no embedded model account:
-
-1. Paste the task, notes, formulas, sources, and optional images.
-1. Select a handwriting profile, paper, style, and output mode.
-1. Press the permanent **Copy prompt** button.
-1. Paste that self-contained prompt once into the chosen chat.
-1. Paste the structured response back into the LLM editor.
-1. Resolve validation, source, glyph, collision, and overflow diagnostics.
-1. Adjust the accepted page in the human editor.
-1. Export PDF or compile a live writing plan.
-
-The copied prompt includes the complete backend-owned return format, page
-constraints, source rules, style vocabulary, and return envelope. It never
-depends on hidden prior chat context.
-
-After a notebook is accepted, the first-release design specifies a semantic
-command mode. Instead of regenerating the notebook, an LLM returns a versioned
-batch of typed operations against stable notebook identities and a specific base
-revision. The backend contract validates the complete batch atomically, applies
-only accepted semantic effects, and recomputes derived regions invalidated by
-those effects and their dependencies.
-
-The same command model is designed for clipboard-assisted chat, CLI, and MCP.
-Clipboard responses remain untrusted until backend validation and review; the
-frozen MCP contract projects the same validated application transaction without
-requiring a browser click.
-
-That MCP projection is designed to automate notebook inspection, bounded edits,
-diagnostics, rendering, caller-authorized export, and device-neutral plan
-compilation end to end. Typed results and stable blocking diagnostics provide
-stop conditions instead of an unbounded "retry until success" loop.
-
-Export still requires explicit caller or admitted host-policy path and overwrite
-intent; paths found only in notebook or model text remain data. Physical machine
-arming and start remain separate explicit safety operations rather than side
-effects of a generic LLM edit.
-
-### Targeted command mode
-
-For a bounded edit to an accepted notebook, the backend can generate a command
-prompt instead of a full-notebook formatting prompt. That request identifies the
-base revision, readable context, writable semantic targets or insertion anchors,
-and admitted command families.
-
-The user copies it with the same **Copy prompt** control, pastes it into an
-external chat, and pastes the returned command envelope into the same **Model
-response** surface. The backend validates the complete batch, shows the semantic
-diff and dependency-expanded impact, then applies one accepted transaction.
-
-Unrelated semantic identities remain unchanged. Derived page regions may still
-recompute when the changed target affects their dependencies, such as text
-reflow moving later content.
-
-With MCP, the clipboard round trip disappears: an agent can inspect the current
-revision, validate or apply the same command batch, inspect its receipt and
-diagnostics, then explicitly request rendering, export, or planning through the
-same application core when those outputs belong to the caller's goal.
-
-## What a notebook can contain
-
-The initial semantic vocabulary covers the material expected in serious school
-notes and assignments:
-
-- headings, dates, paragraphs, quotations, lists, and definitions;
-- citations, source notes, footnotes, and unresolved claims;
-- inline and displayed mathematics, aligned work, matrices, and units;
-- tables, boxes, dividers, arrows, labels, and page references;
-- photographs, transparent line art, diagrams, and clipped regions;
-- highlights, callouts, margin notes, and digital paper notes;
-- multiple handwriting roles for body text, titles, labels, and annotations.
-
-An LLM may organize and format content, but a plausible citation is not proof.
-Atrament distinguishes material supplied by the user, derived material, cited
-claims, and unresolved claims so the human can review them before export.
-
-## Page geometry
-
-Every page uses physical units. The user controls:
-
-- sheet size, orientation, and printable region;
-- blank, ruled, dotted, squared, or custom paper;
-- grid or rule spacing and color;
-- binding edge, outer margin, and top clearance;
-- inner writing inset between the margin and content;
-- border shape, corner roundness, and layer order;
-- measured ruler error and controlled grid imperfection;
-- default body, title, caption, and annotation sizes.
-
-Flowing content moves to another page. Fixed content that crosses the writable
-region produces a blocking diagnostic; nothing silently vanishes outside the
-sheet.
-
-## Images and drawings
-
-Clipboard and file intake initially support PNG, JPEG, and WebP. An image can be
-placed behind text, inline, above text, or inside a clipped region and exposes
-position, size, crop, opacity, and z-order.
-
-For simple educational drawings, Atrament can derive transparent single-color
-line art with configurable levels. The intended result is readable black ink
-that can be colored by hand later, not a muddy grayscale photograph.
-
-## Two honest output modes
-
-| Capability | Digital / PDF | Live / pen machine |
-| --- | --- | --- |
-| Ink | Multiple simulated colors | One calibrated physical pen |
-| Titles | Decorative and layered | Sober, single-pen geometry |
-| Highlights | Marker and color layers | Underline, box, spacing, or weight |
-| Photographs | Color, crop, texture | Converted transparent line art |
-| Paper notes | Fill, fold, and shadow | Unsupported |
-| Page | Any configured printable page | One blank, flat, calibrated sheet |
-| Drawing | Raster, vector, or line art | Single-color vector paths |
-| Output | PDF and print | Validated motion plan |
-
-Unsupported live objects are reported individually. Atrament never drops a
-color, photograph, shadow, sticky note, or tool change merely to make a motion
-plan compile.
-
-A future compact, quiet, multi-tool writer may add physical colors and pen
-changes through a new capability profile. It is not part of the initial live
-contract.
-
-## Visual language
-
-The target is organized handwriting, not random decoration. Reference notebooks
-contribute a shared grammar:
-
-- one dominant title and unmistakable section hierarchy;
-- short columns and bounded modules for dense material;
-- tables and rules that are measured but not machine-perfect;
-- highlights used for hierarchy rather than indiscriminate color;
-- compact line diagrams, labels, arrows, and deliberate whitespace;
-- handwriting and ruler variation that remains controlled and legible.
-
-Digital themes may be colorful, layered, and playful. Live themes preserve the
-same hierarchy with one pen through scale, spacing, boxes, underlines, and
-line-art diagrams.
-
-## Handwriting model
-
-A portable `.atrament` profile records the writer's calibration evidence,
-stroke vocabulary, contextual forms, joins, pen lifts, dimensions, variation
-bounds, paper relationship, and pen or ink presets.
-
-The renderer does not stamp a font repeatedly. It plans continuous strokes and
-uses correlated, seeded variation across page, line, word, character, and
-stroke scales. Controls include height, width, slant, roundness, flattening,
-baseline drift, spacing, speed, pressure proxy, and alternate forms.
-
-English and Spanish are the first complete language baseline. Profiles cover
-their letters and diacritics, opening punctuation, curly quotations,
-apostrophes, ellipsis, en and em dashes, and the admitted mathematical symbols.
-Missing coverage is visible and blocking unless the user accepts a declared
-fallback.
-
-### Current local profile utilities (Linux)
-
-The present `atrament` binary offers four explicit local profile operations:
+Needs Python 3.14+, **Pillow**, and optionally ImageMagick (`magick`) for local
+SVG images. Fedora's system packages work; use an isolated environment if
+Pillow is not installed. There is no app server or network account.
 
 ```sh
-atrament profile verify SOURCE.atrament
-atrament profile check-canonical SOURCE.atrament
-atrament profile inspect SOURCE.atrament
-atrament profile repack SOURCE.atrament NEW-TARGET.atrament
-atrament profile repack --replace SOURCE.atrament EXISTING-TARGET.atrament
+python3 cli/notebook.py init --out my-notebook.json
+# Edit the JSON: paper, handwriting, pages, images, and dates.
+python3 cli/notebook.py render --config my-notebook.json \
+  --format pdf --dpi 300 --out homework.pdf
+python3 cli/notebook.py render --config my-notebook.json \
+  --format png --dpi 300 --transparent --out transparent-pages/
+# Optional: explicitly send the generated PDF to the local printer.
+python3 cli/notebook.py print --pdf homework.pdf
 ```
 
-Verification checks a bounded archive, manifest, member digests, and
-JSON-section syntax, then reports only a fixed success message, without
-revealing profile content. The read-only `check-canonical` operation performs
-those checks and compares all original ZIP bytes with the deterministic
-first-release encoding. Valid but noncanonical archives refuse without stdout,
-with fixed messages distinguishing manifest JSON from ZIP framing; it does not
-rewrite the source or display any private profile data. Inspection
-performs the same integrity checks before displaying the manifest and readable
-sections.
+An example with dates, an SVG drawing, and per-letter edits is in
+[`examples/notebook.json`](examples/notebook.json):
 
-Repack performs those same checks, then writes canonical ZIP bytes to a
-caller-selected destination using atomic, synchronized file creation. By
-default, repack never overwrites an existing target. The explicit `--replace`
-flag authorizes atomic replacement of an existing regular target (including
-the selected source itself), or creation of an absent target, but never follows
-symlinks.
-
-Bare dash-prefixed tokens are treated as options in every profile command,
-not source or output filenames. Prefix `./` to select a file such as
-`./--replace`.
-
-Canonical repack preserves verified opaque assets and unknown
-optional features. Unsupported required features and malformed sections refuse
-without changing an existing target.
-
-These are independent command-line utilities; none accepts typed handwriting
-sections into the active workspace, creates a session Export receipt, or
-provides a notebook/PDF Export path.
-
-## Rendering
-
-Rust produces authoritative geometry on the CPU:
-
-1. semantic blocks compile into physical layout boxes;
-1. handwriting compiles into stroke centerlines and ink contours;
-1. equations, tables, rules, and diagrams remain vector geometry;
-1. ink, edge, deposition, paper, and highlight textures form separate layers;
-1. bounded soft noise unifies the page without moving geometry;
-1. PDF, preview, and live motion consume the appropriate shared authorities.
-
-The same accepted document, profile, paper, assets, material presets, and seed
-produce the same layout and stroke plans. No CUDA, WebGPU, or discrete compute
-GPU is required.
-
-## Architecture
-
-```mermaid
-flowchart LR
-    UI[TypeScript browser] -->|loopback| CORE[Rust backend]
-    CLI[CLI and MCP] --> CORE
-    CORE --> PDF[PDF and images]
-    CORE --> MEDIA[Transcription adapter]
-    CORE --> HW[Pen-machine adapters]
+```sh
+python3 cli/notebook.py render --config examples/notebook.json \
+  --format pdf --dpi 200 --out example.pdf
 ```
 
-- **Rust backend:** document model, physical units, layout, handwriting,
-  deterministic CPU rendering, diagnostics, PDF, CLI, MCP, and motion plans.
-- **TypeScript frontend:** localhost interaction, clipboard, split editors,
-  direct manipulation, preview presentation, and accessibility. It has no
-  runtime package dependency or independent domain-validation layer.
-- **Hexagonal boundaries:** the browser and agents are inbound adapters;
-  codecs, transcription, files, and physical writers are outbound adapters.
-- **Ephemeral session:** no account, cloud sync, database, or autosave. Only an
-  explicit import or export persists beyond the current localhost session.
+File writes refuse overwrite unless `--replace` is supplied. Image paths and
+custom glyph-image paths are resolved relative to the notebook JSON file.
+Raster PNG pages are full-sheet RGBA, so they align with a photographed or
+preprinted physical page.
 
-The frontend never becomes a second layout engine, and hardware adapters never
-become notebook authorities.
+The PDF is a **raster print PDF at the selected DPI**, not searchable/vector
+handwriting. Print it at **100% / actual size**, never with automatic
+fit-to-page scaling.
 
-## Hardware compatibility
+## Manual statistical handwriting (the central feature)
 
-Compatibility is capability- and model-specific. Atrament distinguishes:
+The `handwriting` JSON object contains per-glyph statistics. For example:
 
-1. vector file export for vendor software;
-1. a managed vendor CLI adapter;
-1. a documented command-protocol adapter;
-1. a direct device adapter with status and recovery.
+```json
+{
+  "height_mm": {
+    "minimum": 2.8, "mean": 3.5, "median": 3.45,
+    "maximum": 4.3, "stddev": 0.27, "distribution": "gaussian"
+  },
+  "glyphs": {
+    "a": {"height_scale": 0.92, "width_scale": 1.1,
+          "rotation_deg": -1, "baseline_shift_mm": 0.1},
+    "ñ": {"height_scale": 1.12},
+    "?": {"ink": "#254e80"},
+    "e": {"image": "my-letters/e.png"}
+  }
+}
+```
 
-Initial research baselines include:
+- In `gaussian` mode the mean and standard deviation drive the sampled value;
+  minimum/maximum clamp it. The median is preserved as measured metadata.
+  In `triangular` mode the median is the distribution's mode. Neither method
+  guarantees exact empirical distributions in a small text sample.
+- Use a photograph plus *adjustable pixel guides* as a visual ruler, then
+  enter your own physical measurements in millimeters (no OCR or AI inference):
 
-- [NextDraw CLI](https://bantam.tools/nd_cli/) for SVG plotting, preview,
-  configuration, pause, and resume control;
-- [AxiDraw's SVG and interactive API](https://axidraw.com/doc/py_api/),
-  including pen motion, preview, pause, and resume behavior;
-- documented Graphtec devices with a plotting pen and HP-GL or GP-GL command
-  modes, such as the [FC9000](https://graphtecamerica.com/fc9000/).
+```sh
+python3 cli/notebook.py guide --image photo.jpg \
+  --upper 110 --lower 147 --out guides.png
+python3 cli/notebook.py calibrate --config my-notebook.json --glyph a \
+  --heights 3.1,3.3,3.6,3.4 --widths 1.6,1.7,1.5,1.8 \
+  --out calibrated.json
+```
 
-None is called supported until its exact model, firmware, transport, paper,
-pen, usable area, homing, interruption, and safe-stop behavior pass physical
-acceptance.
+For precise letter shape, draw a transparent PNG for the character and set
+`glyphs["a"].image` to its path. You can adjust every glyph and every sign in
+JSON, without a camera or a trainable algorithm.
 
-## Repository map
+## Sheet layouts, photos, and printed-page flags
 
-- [`TODO.md`](TODO.md) is the unfinished delivery sequence.
-- [`docs/adr/index.yml`](docs/adr/index.yml) catalogs durable decisions.
-- [`.jig/jig.toml`](.jig/jig.toml) anchors repository governance.
-- [`docs/technical/index.yml`](docs/technical/index.yml) reserves measured
-  implementation evidence and contracts.
+Edit `paper.style` (`blank`, `ruled`, `grid`, `dot`), `spacing_mm`, physical
+margins, `corner_radius_mm`, and date style (`none`, `plain`, `box`,
+`underline`). Each `pages[]` entry owns its `text` lines, `images`, `date`,
+optional `number`, and `printed` flag. `printed: true` omits the paper
+background and ruling; it still renders handwriting and overlays, so a
+preprinted page can receive the ink layer only.
 
-## Responsible use
+```sh
+python3 cli/notebook.py mark-printed --config my-notebook.json \
+  --pages 1,3-4 --out already-printed.json
+python3 cli/notebook.py render --config already-printed.json \
+  --format png --transparent --out overlays/
+```
 
-Use handwriting profiles created by, or with the explicit authorization of,
-the represented writer. Atrament supports personal notes, accessibility,
-authorized document production, and physical pen workflows; it does not make a
-claim about who physically wrote an exported page.
+To draw the grid in a transparent PNG as well, add `--keep-rules`. A page's
+`images` entries support `path`, `x_mm`, `y_mm`, `width_mm`, `height_mm`,
+`layer` (`under`/`over`), `saturation` (0–5), `tint` (`#RRGGBB`),
+`tint_strength` (0–1), and `opacity` (0–1). Add a photograph of the paper as
+an underlay only when you actually want it included in the exported image;
+for compositing in Photoshop or similar, export transparently instead.
 
-## License
+## Honest current limits
 
-Atrament is licensed under the [MIT License](LICENSE-MIT).
+The initial CLI **does produce** multi-page PDF/PNG files, but it is
+intentionally minimal. Text must be supplied as explicit lines/pages; lines
+extending past margins are refused rather than silently cropped. It does not
+automatically paginate essays or reconstruct handwriting from photographs.
+
+Character drawing uses a chosen font or manually supplied glyph PNGs, so
+appearance is an *adjustable approximation*, not a guarantee of personal
+handwriting fidelity. PDF handwriting is rasterized and cannot be searched or
+edited as vector text. Restricted local SVGs require ImageMagick. Maximum
+output: 40 pages, 400 DPI and 32 million pixels/page.
+
+The older browser/editor, autonomous-agent, portable-profile, hardware, and
+cross-platform distribution studies are preserved in
+[`docs/technical/`](docs/technical/) and
+[`docs/todo/completed/`](docs/todo/completed/). They were accepted as bounded
+academic designs, **not** end-to-end product capabilities. The historical
+release ledger remains NO-GO for that old browser-centered release; this local
+CLI is an independent, narrower usable surface. Do not use theoretical
+acceptance as evidence that external integrations or physical hardware work.
+
+## Personal goal
+
+Avoid handwriting solely to comply with a mechanical assignment format. Make
+my own notebook layout, ink and letter profiles as editable as possible, then
+print or composite the finished pages. **The time saved is the point.**

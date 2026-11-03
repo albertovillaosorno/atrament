@@ -102,3 +102,19 @@ move the record to `completed/`, and remove it from `TODO.md`. Update internal
 links.
 Do not automatically close a task merely because this policy exists: its
 particular bounded deliverable must actually be written or supplied.
+
+## Owner's narrower product decision — November 2, 2026
+
+The current executable product goal is **Linux CLI, personal use, notebook
+profiles, statistical per-letter handwriting, and PDF/PNG printing**.
+Multiplatform native installers, a browser editor, MCP automation, external
+LLM accounts, a physical plotter, and a custom writing robot are **not
+completion prerequisites**. Previous task acceptance records remain archived
+as academic/design evidence and should not be rewritten to simulate practical
+software validation. Hardware tasks are satisfied by finite theoretical
+plans; they do not require a device, prototype, firmware or test bench.
+
+Use an actual CLI-exported PDF or PNG when claiming the new digital pathway
+works. When a feature is theoretical, label it theoretical; neither a closed
+TODO nor a design specification is proof of a running feature. Follow the
+short practical scope and limits in the root README.

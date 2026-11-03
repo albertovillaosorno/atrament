@@ -26,3 +26,22 @@ production-ready application or certified machine.
 The dated `ATR-P8-008` release decision ledger remains **NO-GO** because
 identified security, PDF, packaging, and verification work is incomplete.
 Optional P9 hardware also has design acceptance only.
+
+## Scope correction — personal CLI, November 2, 2026
+
+The owner's latest requirement replaces the old multiplatform/browser/plotter
+product ambition with a **single Linux CLI notebook-to-PDF/PNG generator**.
+The critical experience is statistical handwriting editing, physical-page
+profiles, manual per-character refinement, custom images, and printed-page
+handling. This is a personal academic aid, not a hardware project.
+
+The 77 prior items were **accepted as finite practical or theoretical design
+deliverables**, not certified as running product features; preserve their
+completed records and historical evidence. None of their speculative
+multiplatform, web, MCP, plotter, or robot requirements may delay the scoped
+CLI. Physical hardware is research-only; no physical demonstration is needed.
+Theoretical acceptance still must never be described as executed functionality.
+
+The standalone CLI at `cli/notebook.py` now implements a bounded user path.
+For scope and what is still unavailable, follow [README.md](README.md), not
+the superseded full-platform product narrative in old design records.
