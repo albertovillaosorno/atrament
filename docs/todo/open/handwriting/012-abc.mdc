@@ -55,7 +55,8 @@ an honest, user-owned fallback. This evidence does not imply full Unicode
 coverage, automatic handwriting, or a completed font/shape engine.
 
 **Test:** `Firefox edits, saves and reopens both profiles through Rust
-localhost` in `tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs`.
+localhost` in
+`tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs`.
 
 ## Acceptance decision
 
