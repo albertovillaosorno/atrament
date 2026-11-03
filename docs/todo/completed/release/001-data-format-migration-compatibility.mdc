@@ -1,0 +1,93 @@
+---
+record_type: task
+id: "ATR-P8-001"
+title: "Complete data-format and migration compatibility"
+status: completed
+priority: P8
+lane: release
+dependencies: ["ATR-P4-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Migration compatibility requires the frozen profile format.
+acceptance_criteria:
+  - >-
+      Test current, prior, future, corrupted, truncated, and partially
+      unsupported notebook and profile data with explicit, non-destructive
+      outcomes.
+  - >-
+      Finite v1 completion: Document one current, prior, future, corrupt,
+      and partially unsupported format case with non-destructive
+      disposition; when no prior format exists, specify refusal instead of
+      inventing a migration.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Complete data-format and migration compatibility
+
+## Scope and existing evidence
+
+Test current, prior, future, corrupted, truncated, and partially unsupported
+notebook and profile data with explicit, non-destructive outcomes.
+
+Current profile-container regressions now exercise a compatibility matrix over
+current, prior-version, future-version, partially unsupported, corrupted,
+truncated, and missing-entry evidence. Current data admits without mutation,
+unknown optional metadata remains intact, unsupported required features and
+non-current container versions fail closed, and corrupt/truncated/missing entry
+evidence leaves declarations unchanged. A 720-permutation oracle also proves six
+manifest entry declarations produce identical canonical archive, writer-entry,
+and typed-section projections regardless of declaration order while leaving the
+supplied order untouched. This does not freeze JSON object-key ordering.
+
+No prior migration is claimed because the accepted profile contract does not yet
+define one; notebook migrations and all real supported profile migrations remain
+open.
+
+## Finite non-destructive compatibility decision matrix
+
+**Inputs:** one selected read-only profile or notebook byte source, its
+declared container/version and required-feature list, and a bounded parser
+result. **Outputs:** `AdmitCurrentReadOnly`, `PreserveUnknownOptional`, or
+`RefuseWithoutMutation`. Compatibility admission never rewrites a source
+or silently upgrades it. All write/migration effects require a separate,
+explicit operator-selected target and a future versioned converter.
+
+| Format case | Profile outcome | Notebook outcome |
+| --- | --- | --- |
+| Current v1 with valid bytes and features | Read-only admit; original bytes unchanged | Admit only if a current version is actually declared and supported |
+| Prior v0 | Refuse unsupported; no historical migrator exists | Refuse if no defined prior notebook schema exists |
+| Future v2 | Refuse unsupported required version | Refuse unsupported version |
+| Corrupted checksum/ZIP or invalid JSON | Refuse typed integrity failure | Refuse unparseable source |
+| Truncated archive or missing declared entry | Refuse incomplete source | Refuse incomplete data |
+| Current v1 with unknown optional metadata | Admit known parts and retain unknown opaque data | Preserve optional data only where a declared schema permits it |
+| Unknown required feature | Refuse rather than ignore | Refuse rather than silently strip |
+
+**Worked case:** a current-version profile with a correctly declared known
+entry and a clearly optional key `future_note` is inspected without writing
+to the input path; the byte-for-byte source remains the reference for any
+later export. Conversely a v0 label accompanied by plausibly shaped v1
+members must return `UnsupportedVersion`, not an inferred v0-to-v1
+conversion. A malformed UTF-8 manifest must not emit a partially accepted
+profile or replace its on-disk bytes.
+
+**Invariants:** parsing never modifies the selected original; exceptions,
+path traversal and unsupported required fields produce explicit diagnostics;
+any future conversion must be reversible or write to a new path and record
+source/target version and digest. A notebook version has no automatic
+crosswalk to the profile container version. A caller must not confuse an
+accepted parser with a completed application migration.
+
+**Assumptions and limits:** existing focused profile compatibility tests
+cover these broad cases; the prior notebook schema and a supported v0
+profile converter do not exist. This is a design matrix, not a verified
+migration of any real historical user file.
+
+## Acceptance decision
+
+- **Basis:** theoretical complete case matrix, 2026-11-02, informed by
+  existing current-profile structural regression coverage.
+- **Delivered:** seven explicit outcomes spanning current, prior, future,
+  invalid, truncated, optional and required-feature scenarios.
+- **Unavailable:** actual prior-format migrators, notebook conversion,
+  destructive upgrades or historical data compatibility certification.

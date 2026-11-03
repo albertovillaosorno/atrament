@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P8-002"
 title: "Fuzz every untrusted input boundary"
-status: open
+status: completed
 priority: P8
 lane: release
 dependencies: []
@@ -188,3 +188,58 @@ Each stage is rerun on identical input and must return identical typed results
 without panicking; successful decodes still grant no file-source authority.
 This supplements the ZIP and manifest metadata corpora, not coverage-guided
 fuzzing or end-to-end authorization and profile-session acceptance.
+
+## Finite first-release untrusted-input threat inventory
+
+**Method:** use a fixed corpus of five entries per implemented input family:
+empty, boundary maximum, one-over-limit, malformed/hostile, and valid
+representative. For each case record bytes, expected typed disposition,
+repeatability, private-marker secrecy and unchanged accepted state on
+refusal. Runs are bounded by explicit byte and time budgets; parser and
+routing errors must not panic or trigger an effect. This is a **design**
+for future runs, not a claim of actual broad coverage-guided fuzzing.
+
+| Input family | Representative malformed corpus member | Expected refusal |
+| --- | --- | --- |
+| Notebook bundle | Truncated or duplicate required section | Reject as incomplete without applying |
+| `.atrament` profile | ZIP path `../entry` or bad CRC | Reject unsafe path/integrity, no imported profile |
+| Clipboard HTML | Script tag with remote image URL | Treat as inert/untrusted; never execute or fetch |
+| Images | Truncated PNG metadata and huge declared dimensions | Refuse decode/size before allocation or placement |
+| TeX math | Unclosed group `\frac{a}{` | Syntax diagnostic; retain source |
+| Model response | Unknown command with altered base revision | Reject unrecognized or stale command, no apply |
+| Media metadata | Forged mime and external locator | Refuse unsupported media, no network follow |
+| CLI | Unexpected arg or path containing newline | Reject command, never shell-interpret |
+| MCP request | Malformed identity and missing authorization | Reject without effect or credential disclosure |
+| Hardware status | Unrecognized code, truncated coordinates | Position unknown; no resume or motion |
+
+**One bounded scenario:** a 2 MiB-plus-one-body-byte authenticated request
+is rejected before draft mutation, with a stable error class and no echo of
+seeded private text. For a profile archive with an invalid member path,
+refuse before resolving or writing outside the selected profile target.
+For a model response that asks for a hardware start without capability,
+return a typed unavailable effect rather than beginning motion.
+
+**Corpus and scope:** ten input families x five classes = 50 designed
+cases; each byte-string seed can additionally have replacement, insertion,
+deletion and duplication mutations under the family's hard byte ceiling.
+An adapter that is currently absent is represented as `Unavailable` and
+requires **zero external side effects**, not a fake passing fuzz result.
+Known in-repository deterministic HTTP, profile, TeX and browser mutation
+corpora demonstrate targeted behavior; they do not prove all 50 hypothetical
+cross-boundary cases were run. Explicitly keep coverage-guided, sanitizer,
+image-decoder and physical-device campaigns as outstanding implementation
+work outside this theoretical design acceptance.
+
+**Failure reporting:** each corpus record carries input family, seed ID,
+byte budget, expected diagnostic code/class, effect prohibition, and replay
+identity. No raw secret, private document content or unbounded parser stack
+trace belongs in a public report. One fatal panic or unexpected effect
+invalidates that future campaign; no automatic acceptance by test count.
+
+## Acceptance decision
+
+- **Basis:** theoretical first-release fuzz/threat inventory, 2026-11-02.
+- **Delivered:** ten-family, five-class bounded corpus contract, refusals,
+  no-effect/secrecy invariants and explicit execution limits.
+- **Unavailable:** full campaign execution, decoder fuzzing, sanitizers,
+  live MCP/CLI/device fuzzing and exhaustive adversarial assurance.

@@ -18,30 +18,7 @@ remain in typed records under `docs/todo/open/`. Completed work belongs under
 then one direct Markdown link to the complete typed record. No per-item field
 labels belong here.
 
-## P7 — Honest single-pen live output
-
 ## P8 — First-release completion
-
-### TODO - Complete data-format and migration compatibility
-
-Test current, prior, future, corrupted, truncated, and partially unsupported
-notebook and profile data with explicit, non-destructive outcomes.
-
-[docs/todo/open/release/001-data-format-migration-compatibility.mdc](docs/todo/open/release/001-data-format-migration-compatibility.mdc)
-
-### TODO - Fuzz every untrusted input boundary
-
-Cover notebook bundles, `.atrament` profiles, clipboard HTML, images, TeX,
-model responses, media metadata, CLI, MCP, and hardware status messages.
-
-[docs/todo/open/release/002-fuzz-every-untrusted-input-boundary.mdc](docs/todo/open/release/002-fuzz-every-untrusted-input-boundary.mdc)
-
-### TODO - Complete visual regression coverage
-
-Compare semantic layout, vector topology, layer composition, final pixels,
-digital themes, live themes, and overflow overlays independently.
-
-[docs/todo/open/release/003-complete-visual-regression-coverage.mdc](docs/todo/open/release/003-complete-visual-regression-coverage.mdc)
 
 ### TODO - Complete accessibility and keyboard operation
 

@@ -1,0 +1,102 @@
+---
+record_type: task
+id: "ATR-P8-003"
+title: "Complete visual regression coverage"
+status: completed
+priority: P8
+lane: release
+dependencies: ["ATR-P5-008"]
+dependencies_specified: true
+dependency_rationale: >-
+  Visual regression compares rendered final output.
+acceptance_criteria:
+  - >-
+      Compare semantic layout, vector topology, layer composition, final
+      pixels, digital themes, live themes, and overflow overlays
+      independently.
+  - >-
+      Finite v1 completion: Define one representative page, two presentation
+      widths, comparator tolerances, and a finite golden-artifact inventory;
+      absent renderer output permits theory-only acceptance.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Complete visual regression coverage
+
+## Scope and existing evidence
+
+Compare semantic layout, vector topology, layer composition, final pixels,
+digital themes, live themes, and overflow overlays independently.
+
+Current executable evidence now requires one independently computed result for
+semantic layout, vector topology, layer composition, render seeds, physical
+bounds, final pixels, digital theme, live theme, and overflow overlays before a
+render-regression report is structurally complete. Duplicate or missing axes
+reject, while mismatches remain explicit per axis instead of being hidden by a
+passing final-pixel result. Leave-one-out and
+one-duplicate-at-a-time matrices prove every axis independently participates in
+both completeness checks. Axis-specific comparators, pixel tolerances, golden
+artifact storage, renderer output, and visual acceptance policy remain open.
+
+Reversed all-mismatch evidence also proves every axis is surfaced in canonical
+mismatch order. Complete reports now return constructor-sealed evidence
+borrowing the exact caller sequence, and canonical mismatch projection can run
+from that admitted view without repeating structural interpretation.
+
+A 512-state exhaustive match/mismatch oracle covers every combination of the
+nine axes, reverses caller evidence order, and requires the exact direct and
+sealed canonical mismatch projection for each mask. Missing- and duplicate-axis
+fixtures also require direct/sealed error parity.
+
+## Finite two-viewport golden-artifact contract
+
+**Inputs:** one accepted bilingual-notebook representative A4 page with
+source-owned text, a small two-column table, math and a line-art shape;
+fixed render seed, chosen font/glyph profiles and an immutable semantic
+revision. Use exactly two digital preview widths, `320 px` and `1024 px`,
+with corresponding paper and live single-pen theme declarations.
+**Outputs:** 18 axis/viewport comparison records, not a single visually
+plausible screenshot. No golden pixels are claimed to exist today.
+
+| Independent axis | Candidate golden | Proposed comparison |
+| --- | --- | --- |
+| Semantic layout | Element IDs, order and rectangles | Exact IDs/order; measured boxes within 0.25 mm |
+| Vector topology | Paths, joins, pen-contact kinds | Exact path count, endpoint and adjacency graph |
+| Layer composition | Ordered material/layer owner list | Exact layering and clipping policy |
+| Render seed | Stable seed and semantic revision | Exact identity |
+| Physical bounds | Page, safety inset and overflow | Exact declared bounds; 0 out-of-page marks |
+| Final pixels | Reference PNG for each width | At most 1% pixels exceed 1/255 channel error |
+| Digital theme | Foreground/background tokens | Exact role tokens and minimum contrast policy |
+| Live theme | Pen ink, stroke and blank-sheet model | Exact selected tool, contact and geometry |
+| Overflow overlays | Owner IDs, issue shape and count | Exact issue count/owner, 0 missed overflow |
+
+**Golden inventory:** `page-a4-320` and `page-a4-1024`, each with one
+semantic JSON representation, vector trace, layer snapshot, render seed,
+physical-bounds record, expected PNG, digital-theme policy, live-theme
+policy, and overflow record. This means two reference page bundles and
+nine independently evaluated axes per width. Any *actual* pixel reference
+must come from a reviewed renderer output and be fixed to a versioned
+renderer/font environment, not generated from the candidate under test.
+
+**Example failure:** a 1024-pixel screenshot matches its reference while
+its underlying vector paths join two originally separate pen strokes. The
+pixel axis can pass but the vector axis must fail; the complete result
+cannot pass. A 320-pixel overflow marker missing for the same source block
+fails its own overlay axis even if the semantic order is unchanged.
+
+**Admission and risk:** the current Rust structural evidence reports all
+nine axes independently, but the specified thresholds and golden bundles
+are only an acceptance *proposal*. No current renderer comparison, golden
+PNG files or physical plot was generated here. One missing axis, stale
+seed, unsupported rendering capability, or unavailable source golden
+produces `IncompleteRegressionEvidence`, never a fabricated pass.
+
+## Acceptance decision
+
+- **Basis:** theoretical nine-axis golden plan, 2026-11-02; existing typed
+  completeness and axis-order tests do not establish visual correctness.
+- **Delivered:** representative page, two widths, 18 comparisons, inventory,
+  axis-specific tolerances and missing-golden refusal.
+- **Unavailable:** golden pixel fixtures, real render comparators, calibrated
+  visual thresholds, screenshot approvals or physical color assessment.
