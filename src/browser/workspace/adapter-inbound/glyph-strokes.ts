@@ -218,11 +218,11 @@ function loopStem(
 }
 
 function roundedStory(
-    cx: number, cy: number, radius: number, g: "n" | "u",
+    cx: number, cy: number, radius: number, g: "n" | "u" | "h",
 ) {
     const high = cy - radius;
     const low = cy + radius;
-    const bowY = g === "n" ? high : low;
+    const bowY = g === "u" ? low : high;
     const leftX = cx - radius;
     const rightX = cx + radius;
     return {
@@ -232,12 +232,48 @@ function roundedStory(
         left: { x: leftX, y: bowY },
         right: { x: rightX, y: bowY },
         firstStem: {
-            from: { x: leftX, y: g === "n" ? low : high },
-            to: { x: leftX, y: g === "n" ? high : cy },
+            from: { x: leftX, y: g === "u" ? high : low },
+            to: { x: leftX, y: g === "h"
+                ? cy - Math.round(radius * 1.5)
+                : g === "n" ? high : cy },
         },
         lastStem: {
             from: { x: rightX, y: cy },
-            to: { x: rightX, y: g === "n" ? low : high },
+            to: { x: rightX, y: g === "u" ? high : low },
+        },
+    };
+}
+
+// An m is two exact quadratic upper humps inside the same horizontal
+// cell, plus three explicit stems. The m SVG keeps those quadratics; TSV
+// exports 64 rounded chords and three independently ordered pen lines.
+function doubleHump(cx: number, cy: number, radius: number) {
+    const left = cx - radius;
+    const right = cx + radius;
+    const high = cy - radius;
+    const bottom = cy + radius;
+    const firstPeak = cx - Math.round(radius / 2);
+    const secondPeak = cx + Math.round(radius / 2);
+    const arcs: [Point, Point, Point][] = [
+        [{ x: left, y: cy }, { x: left, y: high },
+            { x: firstPeak, y: high }],
+        [{ x: firstPeak, y: high }, { x: cx, y: high },
+            { x: cx, y: cy }],
+        [{ x: cx, y: cy }, { x: cx, y: high },
+            { x: secondPeak, y: high }],
+        [{ x: secondPeak, y: high }, { x: right, y: high },
+            { x: right, y: cy }],
+    ];
+    return {
+        arcs,
+        firstStem: {
+            from: { x: left, y: bottom }, to: { x: left, y: high },
+        },
+        middleStem: {
+            from: { x: cx, y: cy }, to: { x: cx, y: bottom },
+        },
+        lastStem: {
+            from: { x: right, y: cy }, to: { x: right, y: bottom },
         },
     };
 }
@@ -261,7 +297,7 @@ export function geometricStarter(
     kind: "single" | "two-storey" = "single",
 ): Stroke[] {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
-        "n", "u", "c", "e", "i", "í"].includes(g)) {
+        "n", "u", "h", "m", "c", "e", "i", "í"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -286,14 +322,35 @@ export function geometricStarter(
         || cy + radius + halfPen > 4500) {
         throw new Error("Shape and pen thickness must fit inside glyph cell");
     }
-    if (g === "n" || g === "u") {
-        const bow = roundedStory(cx, cy, radius, g);
+    if (["n", "u", "h", "m"].includes(g)) {
         const line = (first: Point, last: Point): Stroke => {
             return validateStroke({
                 grapheme: g, x1: first.x, y1: first.y,
                 x2: last.x, y2: last.y, width: pen, color,
             });
         };
+        if (g === "m") {
+            const parts = doubleHump(cx, cy, radius);
+            const lines = [line(parts.firstStem.from, parts.firstStem.to)];
+            for (const [index, [from, control, to]]
+                of parts.arcs.entries()) {
+                for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
+                    const first = quadratic(from, control, to, step);
+                    const last = quadratic(from, control, to, step + 1);
+                    lines.push(line(first, last));
+                }
+                if (index === 1) {
+                    const middle = parts.middleStem;
+                    lines.push(line(middle.from, middle.to));
+                }
+            }
+            lines.push(line(parts.lastStem.from, parts.lastStem.to));
+            return lines;
+        }
+        const bow = roundedStory(cx, cy, radius, g as "n" | "u" | "h");
+        if (g === "h" && bow.firstStem.to.y < halfPen) {
+            throw new Error("Ascender stem and pen must fit inside glyph cell");
+        }
         const output = [line(bow.firstStem.from, bow.firstStem.to)];
         for (const [from, control, to] of [
             [bow.start, bow.left, bow.peak],
@@ -627,23 +684,36 @@ export function createGlyphStrokeEditor(): {
             const archVisible = active && chosen.variant === "two-storey";
             const archState = archVisible ? "visible" : "hidden";
             idealArch.setAttribute("visibility", archState);
-            const roundedKind: "n" | "u" = chosen.grapheme === "n"
-                ? "n" : "u";
+            const roundedKind: "n" | "u" | "h" =
+                chosen.grapheme === "u" ? "u"
+                    : chosen.grapheme === "h" ? "h" : "n";
             const rounded = roundedStory(cx, cy, r, roundedKind);
+            const doubled = doubleHump(cx, cy, r);
             const roundedStart = ["M", rounded.start.x,
                 rounded.start.y].join(" ");
             const roundedFirst = ["Q", rounded.left.x, rounded.left.y,
                 rounded.peak.x, rounded.peak.y].join(" ");
             const roundedSecond = ["Q", rounded.right.x, rounded.right.y,
                 rounded.end.x, rounded.end.y].join(" ");
-            const roundedD = [roundedStart, roundedFirst,
-                roundedSecond].join(" ");
+            const doubledCommands = doubled.arcs.map(([, control, end]) => {
+                const coordinates = [control.x, control.y, end.x, end.y];
+                return ["Q", ...coordinates].join(" ");
+            });
+            const doubledD = [
+                `M ${cx - r} ${cy}`,
+                ...doubledCommands,
+                `M ${cx} ${cy} L ${cx} ${cy + r}`,
+            ].join(" ");
+            const roundedD = chosen.grapheme === "m" ? doubledD
+                : [roundedStart, roundedFirst, roundedSecond].join(" ");
             roundedPath.setAttribute("d", roundedD);
             roundedPath.setAttribute("stroke-width", numeric.width.value);
             roundedPath.setAttribute("stroke", color.value);
             for (const [element, part] of [
-                [roundedLeft, rounded.firstStem],
-                [roundedRight, rounded.lastStem],
+                [roundedLeft, chosen.grapheme === "m"
+                    ? doubled.firstStem : rounded.firstStem],
+                [roundedRight, chosen.grapheme === "m"
+                    ? doubled.lastStem : rounded.lastStem],
             ] as [SVGLineElement, { from: Point; to: Point }][]) {
                 element.setAttribute("x1", String(part.from.x));
                 element.setAttribute("y1", String(part.from.y));
@@ -653,7 +723,7 @@ export function createGlyphStrokeEditor(): {
                 element.setAttribute("stroke", color.value);
             }
             const roundedVisible = active
-                && ["n", "u"].includes(chosen.grapheme);
+                && ["n", "u", "h", "m"].includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
             roundedLeft.setAttribute("visibility", roundedState);

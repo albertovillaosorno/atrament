@@ -535,8 +535,8 @@ the chosen drawing order, but v1 line segments do not represent a grouped
 curved pen stroke.
 
 For a geometric starting point, choose an explicitly supported glyph
-(`o`, `a`, `ó`, `á`, `b`, `d`, `p`, `q`, `n`, `u`, `c`, `e`, `i`
-or `í`) and its matching
+(`o`, `a`, `ó`, `á`, `b`, `d`, `p`, `q`, `n`, `u`, `h`, `m`,
+`c`, `e`, `i` or `í`) and its matching
 geometric starter. Adjust the center and radius in
 micrometres, then deliberately replace that letter's unsaved strokes.
 The `o`/`a` forms share a true analytic circle.
@@ -566,6 +566,16 @@ constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each
 TSV template contains their 32 line samples and two stems (34 segments).
 The marks retain explicit pen order and can be selected, reversed or moved.
+
+A lowercase `h` reuses `n`'s upper quadratic arch with an extended left
+ascender; its template still contains 34 ordered sampled segments. A
+lowercase `m` adds a second quadratic hump: four exact SVG quadratic arcs,
+64 exported curve chords and three explicitly ordered stems (67 segments).
+The SVG is an ideal construction guide; its TSV/PDF/PNG ink is sampled.
+
+A clipped ascender refuses before replacing the previously authored glyph.
+A byte-identical 101-segment `hm` library also passed the Rust CLI readback
+and exported a real one-page PDF and transparent RGBA PNG.
 
 Compose `n` into `ñ` or `u` into `ü` with **Compose accent from authored
 base**; these produce respectively 37 and 36 sampled segments at the default

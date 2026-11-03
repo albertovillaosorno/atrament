@@ -293,6 +293,22 @@ one-page PDF and transparent 72-DPI RGBA PNG. This is bounded geometric
 progress only, not whole-alphabet generation, cursive connections or native
 analytic curves. The larger P1-012 acceptance remains open.
 
+## Quadratic h/m geometric starters (partial) — 2026-11-03
+
+The localhost editor now adds lowercase `h` by extending the left ascender
+of the existing `n` upper-hump quadratic. It also adds lowercase `m` as two
+adjacent upper humps built from four analytic SVG quadratic spans, with
+three ordered stems. Their native TSV outlines use 34 and 67 integer line
+segments respectively; exact analytic curves remain SVG-guide-only.
+
+Two browser regressions verify exact quadratic SVG guide commands, shared
+`n`-to-`h` samples, continuous `m` chord groups, stroke order, Unicode
+replacement, and refusal of clipped ascender ink without changing the
+previous draft. A 101-segment `hm` library roundtripped byte-for-byte
+through the Rust CLI and produced an actual one-page PDF and transparent
+72-DPI RGBA PNG of `hmhm`. Full alphabets, native curve persistence and
+cursive joining remain unfinished; P1-012 remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

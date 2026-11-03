@@ -950,6 +950,112 @@ test("n/u guides replace only matching glyphs", async () => {
     }
 });
 
+test("h extends the n ascender; m samples two exact quadratic humps", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const n = geometricStarter("n", ...args);
+    const h = geometricStarter("h", ...args);
+    const m = geometricStarter("m", ...args);
+    assert.equal(h.length, 34);
+    assert.deepEqual(h[0], {
+        grapheme: "h", x1: 450, y1: 3550, x2: 450, y2: 800,
+        width: 250, color: "#123456",
+    });
+    assert.deepEqual(h.slice(1), n.slice(1).map((line) => ({
+        ...line, grapheme: "h",
+    })), "h preserves the analytic n upper-hump samples");
+    assert.equal(m.length, 67, "64 quadratic chords, three stems");
+    for (const [index, expected] of [
+        [0, [450, 3550, 450, 1350]],
+        [1, [450, 2450]],
+        [16, [1000, 1350]],
+        [32, [1550, 2450]],
+        [33, [1550, 2450, 1550, 3550]],
+        [34, [1550, 2450]],
+        [49, [2100, 1350]],
+        [65, [2650, 2450]],
+        [66, [2650, 2450, 2650, 3550]],
+    ]) {
+        const stroke = m[index];
+        const actual = expected.length === 2
+            ? index === 1 || index === 34
+                ? [stroke.x1, stroke.y1] : [stroke.x2, stroke.y2]
+            : [stroke.x1, stroke.y1, stroke.x2, stroke.y2];
+        assert.deepEqual(actual, expected, `m geometric point ${index}`);
+    }
+    for (const [start, finish] of [[1, 32], [34, 65]]) {
+        for (let index = start + 1; index <= finish; index += 1) {
+            assert.deepEqual([m[index].x1, m[index].y1],
+                [m[index - 1].x2, m[index - 1].y2]);
+        }
+    }
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary([
+        ...h, ...m,
+    ])).length, 101);
+    assert.throws(() => geometricStarter("h", 1550, 1450, 1100,
+        250, "#123456"), /Ascender stem and pen/);
+    assert.throws(() => geometricStarter("m", 1550, 3900, 500,
+        250, "#123456"), /Shape and pen/);
+    assert.throws(() => geometricStarter("m", ...args,
+        undefined, "two-storey"), /Two-storey/);
+});
+
+test("h/m SVG guides and TSV replacement remain session-safe", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("character").value = "h";
+        get("character").dispatch("input");
+        get("form").value = "h";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 450 2450 Q 450 1350 1550 1350 Q 2650 1350 2650 2450");
+        assert.equal(get("ideal-rounded-left").attributes.get("y2"),
+            "800");
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 34);
+        get("character").value = "m";
+        get("character").dispatch("input");
+        get("form").value = "m";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 450 2450 Q 450 1350 1000 1350 Q 1550 1350 1550 2450"
+            + " Q 1550 1350 2100 1350 Q 2650 1350 2650 2450"
+            + " M 1550 2450 L 1550 3550");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-rounded-right").attributes.get("y2"),
+            "3550");
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 67);
+        get("save").dispatch("click");
+        const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.equal(accepted.length, 101);
+        for (const glyph of ["h", "m"]) {
+            assert.deepEqual(accepted.filter((item) => item.grapheme === glyph),
+                geometricStarter(glyph, 1550, 2450, 1100, 250,
+                    "#243647"));
+        }
+        get("character").value = "h";
+        get("character").dispatch("input");
+        get("form").value = "h";
+        get("form").dispatch("change");
+        get("circle-y").value = "1450";
+        get("circle-y").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden", "an invalid ascender hides stale geometry");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Ascender stem and pen/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            accepted, "a refused h must not change either saved form");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("c and e open-circle arcs and dotted i have ordered ink", () => {
     const args = [1550, 2450, 1100, 250, "#123456"];
     const c = geometricStarter("c", ...args);
