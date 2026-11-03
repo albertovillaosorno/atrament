@@ -182,6 +182,7 @@ enum LineStyle {
     Body,
     Bullet,
     Heading,
+    Ordered,
 }
 
 struct Layout<'model> {
@@ -337,7 +338,9 @@ impl Layout<'_> {
             .left
             .checked_add(INSET_UM)
             .and_then(|x| {
-                x.checked_add(if matches!(style, LineStyle::Bullet) {
+                x.checked_add(if matches!(
+                    style, LineStyle::Bullet | LineStyle::Ordered
+                ) {
                     6_000
                 } else {
                     0
@@ -491,6 +494,33 @@ fn measured_word<'text>(
     Ok((glyphs, width))
 }
 
+// Restrict Markdown ordered markers to at most nine ASCII digits followed
+// by ". " or ") ". The number and delimiter remain authored text ink;
+// only unordered bullets receive a synthetic short line ornament.
+fn markdown_line(line: &str) -> (LineStyle, &str) {
+    let raw = line.trim_end_matches(' ');
+    for heading in ["### ", "## ", "# "] {
+        if let Some(body) = line.strip_prefix(heading) {
+            return (LineStyle::Heading, body.trim_end_matches(' '));
+        }
+    }
+    if let Some(bullet) = line.strip_prefix("- ")
+        .or_else(|| line.strip_prefix("* "))
+    {
+        return (LineStyle::Bullet, bullet.trim_end_matches(' '));
+    }
+    if let Some((marker, item)) = line.split_once(' ')
+        && let Some(digits) = marker.strip_suffix('.')
+            .or_else(|| marker.strip_suffix(')'))
+        && (1..=9).contains(&digits.len())
+        && digits.bytes().all(|digit| digit.is_ascii_digit())
+    {
+        return (LineStyle::Ordered,
+            if item.trim().is_empty() { "" } else { raw });
+    }
+    (LineStyle::Body, raw)
+}
+
 /// Compile bounded visible text on the caller-selected native page profile.
 /// This does not create persistent notebook semantic state.
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
@@ -555,22 +585,7 @@ pub(super) fn layout_flow(
             continue;
         }
         let (style, body) = if source.format == FlowFormat::Markdown {
-            ["### ", "## ", "# "]
-                .iter()
-                .find_map(|prefix| input_line.strip_prefix(prefix))
-                .map_or_else(
-                    || {
-                        input_line.strip_prefix("- ")
-                            .or_else(|| input_line.strip_prefix("* "))
-                            .map_or((LineStyle::Body, raw), |bullet| {
-                                (LineStyle::Bullet,
-                                    bullet.trim_end_matches(' '))
-                            })
-                    },
-                    |heading| {
-                        (LineStyle::Heading, heading.trim_end_matches(' '))
-                    },
-                )
+            markdown_line(input_line)
         } else {
             (LineStyle::Body, raw)
         };

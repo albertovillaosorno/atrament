@@ -123,8 +123,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     for one missing exact grapheme; no implicit or chained mappings. \
     --flow-text keeps explicit lines; --flow-markdown joins ordinary lines \
     into paragraphs (two trailing spaces force a new row), and recognizes \
-    # headings and -/* list markers; -file options read one bounded local \
-    UTF-8 file. Both use physical printable regions and exact authored ink; \
+    # headings, -/* bullets and numbered 1./1) list items (digits and \
+    separators need authored ink); -file reads a bounded local UTF-8 file. \
+    Both use physical printable regions and exact authored ink; \
     it auto-selects PDF page count unless --pages is explicit. \
     Markdown headings default to dark underlines; select a user-colored \
     underline, opaque pastel marker band or no ornament. \

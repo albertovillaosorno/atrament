@@ -2491,6 +2491,98 @@ fn markdown_invalid_structural_block_preserves_existing_output() {
 }
 
 #[test]
+fn ordered_markdown_list_numbers_remain_authored_ink_without_bullets() {
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "# a\n1. a\n2) a\n- a",
+    ).expect("bounded mixed Markdown");
+    let (runs, ornaments, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("ordered list compiled");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.iter().map(|run| run.text.as_str())
+        .collect::<Vec<_>>(), ["a", "1. a", "2) a", "a"]);
+    assert_eq!(ornaments.len(), 2, "heading and unordered bullet only");
+    assert_eq!(runs[1].origin_um.0, runs[2].origin_um.0);
+    assert_eq!(runs[1].origin_um.0, runs[3].origin_um.0);
+    assert_eq!(runs[1].origin_um.0 - runs[0].origin_um.0, 6_000);
+    let mut glyphs = GlyphOverlay::default();
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--flow-markdown", "# a\n1. a\n2) a\n- a",
+    ]);
+    for grapheme in ["a", "1", ".", "2", ")"] {
+        let values = args(&[
+            grapheme, "0", "0", "3500", "4500", "250", "#204060",
+        ]);
+        glyphs.parse("--glyph-stroke", &mut values.iter())
+            .expect("one native authored ink shape");
+        command.extend(args(&["--glyph-stroke", grapheme, "0", "0",
+            "3500", "4500", "250", "#204060"]));
+    }
+    glyphs.runs = runs;
+    assert_eq!(glyphs.expand(&[], None).expect("authored ordered ink").len(),
+        8, "numbers and separators are real authored glyphs");
+    let pdf = execute_notebook(&command).expect("native PDF")
+        .expect("PDF bytes");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    let format_at = command.iter().position(|item| item == "pdf")
+        .expect("format option");
+    command[format_at] = "png".into();
+    command.extend(args(&["--dpi", "72"]));
+    let png = execute_notebook(&command).expect("native PNG")
+        .expect("PNG bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+}
+
+#[test]
+fn ordered_markdown_wrap_does_not_repeat_number_on_continuation() {
+    let source = FlowSource::new(
+        FlowFormat::Markdown, &format!("1. {}", "a ".repeat(50)),
+    ).expect("bounded long list item");
+    let (runs, marks, _) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("wrapped ordered item");
+    assert!(runs.len() > 1);
+    assert!(runs[0].text.starts_with("1. "));
+    assert!(runs.iter().skip(1).all(|run| !run.text.contains("1.")));
+    assert!(runs.iter().all(|run| run.origin_um.0 == runs[0].origin_um.0));
+    assert!(marks.is_empty(), "ordered numeral is authored, not a bullet");
+    let unrecognized = FlowSource::new(
+        FlowFormat::Markdown, "1234567890. a",
+    ).expect("ten-digit marker treated as text");
+    let (runs, _, _) = layout_flow(
+        &unrecognized, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("unrecognized numbered marker is ordinary text");
+    assert_eq!(runs[0].origin_um.0 + 6_000,
+        28_500, "ordinary long number has no list indentation");
+}
+
+#[test]
+fn ordered_markdown_refuses_unwritten_numbers_and_empty_items_atomically() {
+    let target = test_path();
+    let filename = target.to_str().expect("owned path");
+    fs::write(&target, b"preserved PDF").expect("sentinel");
+    for (markdown, expected) in [
+        ("a\n1. ", "empty Markdown block"),
+        ("a\n2) ", "empty Markdown block"),
+        ("1. a", "U+0031"),
+    ] {
+        let error = execute_notebook(&args(&[
+            "--export-paper", "pdf", "--glyph-stroke", "a", "0", "0",
+            "3500", "4500", "250", "#123456", "--flow-markdown",
+            markdown, "--output", filename, "--replace",
+        ])).expect_err("invalid ordered list refuses");
+        assert!(error.contains(expected), "{error}");
+        assert_eq!(fs::read(&target).expect("original output"),
+            b"preserved PDF");
+    }
+    fs::remove_file(target).expect("remove owned output");
+}
+
+#[test]
 fn flow_wraps_long_unicode_words_by_exact_grapheme_and_preserves_ink() {
     let source = FlowSource::new(
         FlowFormat::Plain, &"n\u{303}".repeat(130),

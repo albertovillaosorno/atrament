@@ -70,10 +70,13 @@ semantic block styles or persistent title identities.
 Plain-text lines wrap independently at word or grapheme boundaries;
 Markdown ordinary lines now combine as soft-wrapped paragraphs, with two
 trailing spaces preserving a hard row break. Blank lines add paragraph
-spacing; Markdown headings and bullets end pending body paragraphs before
-their own styled rows. Long headings refuse their single-line fixed region.
-This does **not** implement inline Markdown styling, full ordered-list
-formatting or custom marker letterforms.
+spacing; Markdown headings and lists end pending body paragraphs before
+their own styled rows. One-to-nine-digit `1.`/`1)` numbered items now retain
+their literal label as exact authored glyph ink, indent continuations and
+do not receive synthetic bullet strokes. Missing digit or separator shapes
+refuse at native export. Long headings refuse their one-line fixed region.
+This does **not** implement inline Markdown styling, nested lists,
+semantic list identities or custom marker letterforms.
 
 Only caller-authored exact glyph strokes render; missing visible shapes still
 refuse with codepoints instead of silently substituting font characters.
@@ -93,6 +96,15 @@ same 40 source lines. Existing two-page PDF/PNG and seeded variation tests
 now use deliberate hard breaks instead of relying on non-Markdown line
 semantics. Real PDF/PNG parity and atomic empty-heading/list refusal are
 also verified. This is still a restricted export-only parser.
+
+Three additional ordered-list tests verify mixed heading, decimal and
+parenthesized numbering alongside bullet marks; native PDF and transparent
+PNG use the same user-authored numerals and delimiters. Wrapped numbered
+items retain their indentation without duplicating the label, and a
+10-digit marker remains ordinary text instead of silently accepting an
+unsupported list syntax. Missing number glyphs and empty numbered items
+refuse before replacing an existing PDF. Numbering is not computed or
+persisted in a semantic document.
 
 The source and resulting ink are export-only CLI state, **not** a
 persisted semantic notebook model.

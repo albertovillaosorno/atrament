@@ -450,8 +450,12 @@ start a physical row. In Markdown, consecutive ordinary lines form one
 soft-wrapped paragraph, while two spaces before a newline request a hard
 row break. Blank lines add spacing and headings/lists end a paragraph.
 Long text wraps and paginates automatically (up to 32 physical pages).
-The Markdown subset supports single-line `#`, `##`, `###` headings and
-`-`/`*` bullets, **not** inline styles, tables or full Markdown.
+The Markdown subset supports single-line `#`, `##`, `###` headings,
+`-`/`*` bullets, and numbered list items such as `1. text` or `2) text`
+(with one to nine ASCII digits). Numbered items use your **authored** digit
+and `.` or `)` glyph ink; unlike unordered bullets, there is no automatic
+number shape. Each list item has its own row and wrapped continuation.
+Inline styles, tables and full Markdown are not yet supported.
 The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.
 The same 512 total exported pen-segment limit still applies.
 
