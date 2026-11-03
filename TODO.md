@@ -20,34 +20,6 @@ labels belong here.
 
 ## P5 — Deterministic CPU rendering and digital output
 
-### TODO - Implement authoritative vector geometry
-
-Generate layout boxes, stroke centerlines, expanded ink contours, equations,
-rules, tables, and diagram paths with physical units and semantic provenance.
-
-[docs/todo/open/render/001-implement-authoritative-vector-geometry.mdc](docs/todo/open/render/001-implement-authoritative-vector-geometry.mdc)
-
-### TODO - Implement layered ink materials
-
-Compose base deposition, edges, starvation, pooling, paper interaction,
-color, and highlight layers without altering vector authority.
-
-[docs/todo/open/render/002-implement-layered-ink-materials.mdc](docs/todo/open/render/002-implement-layered-ink-materials.mdc)
-
-### TODO - Implement bounded page texture and soft noise
-
-Apply seeded low-frequency texture at declared physical scale and prove it
-does not move geometry, obscure small writing, or create repeated tiles.
-
-[docs/todo/open/render/003-page-texture-soft-noise.mdc](docs/todo/open/render/003-page-texture-soft-noise.mdc)
-
-### TODO - Implement fast and final CPU quality profiles
-
-Use the same vectors, seeds, blend order, and page geometry while varying
-only declared texture resolution and sampling cost.
-
-[docs/todo/open/render/004-cpu-quality-profiles.mdc](docs/todo/open/render/004-cpu-quality-profiles.mdc)
-
 ### TODO - Implement configurable line-art extraction
 
 Convert images to transparent single-color paths with levels, threshold,

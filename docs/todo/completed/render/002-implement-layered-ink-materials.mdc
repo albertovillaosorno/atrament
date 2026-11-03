@@ -1,0 +1,120 @@
+---
+record_type: task
+id: "ATR-P5-002"
+title: "Implement layered ink materials"
+status: completed
+priority: P5
+lane: cpu-rendering
+dependencies: ["ATR-P5-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Ink materials apply to authoritative vector paths.
+acceptance_criteria:
+  - >-
+      Compose base deposition, edges, starvation, pooling, paper
+      interaction, color, and highlight layers without altering vector
+      authority.
+  - >-
+      Finite v1 completion: Specify layered ink, pressure proxy, and overlap
+      order for one stroke stack with deterministic compositing; wet-ink
+      physics is out of scope.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement layered ink materials
+
+## Scope and existing evidence
+
+Historical implementation evidence covers typed structures only, unless
+explicitly stated otherwise; the finite contract is not rendered output.
+
+Compose base deposition, edges, starvation, pooling, paper interaction, color,
+and highlight layers without altering vector authority.
+
+Current executable evidence now also freezes the six accepted material-layer
+families: base ink, edge variation, deposition texture, paper interaction,
+highlight, and color. Layer plans preserve caller-owned clip geometry, material
+inputs, physical bounds, and blend order without evaluation. Every layer marked
+stochastic carries the complete document-seed, semantic-identity, profile, and
+material-preset replay key.
+
+A 46,080-state exhaustive oracle crosses all 720 six-family blend orders with
+all 64 deterministic/stochastic masks and requires
+exact order, clipping, material inputs, and replay tuples to survive unchanged.
+Required-layer policy, transfer equations, blending, texture sampling, color
+spaces, rasterization, and output formats remain open.
+
+Current executable evidence now freezes transport-neutral empirical
+contact-model inputs before material evaluation. Force-calibrated pressure and
+named dimensionless proxies are distinct, fitted parameter evidence retains
+caller-owned units, provenance, confidence, error measures, and calibrated input
+range, and out-of-range inputs require explicit extrapolation.
+
+The same boundary now retains the six accepted observable output families:
+trace width, coverage, starvation, pooling, edge displacement, and absorption or
+drying response. A caller-owned inclusive output envelope can classify observed
+values as bounded or outside the declared range and rejects inverted
+envelopes. Preset evidence also retains caller-owned pen, ink, paper,
+conditions, calibrated input ranges, bounded output-range evidence, error
+measures, and known failure modes.
+
+Two exhaustive 343-case compact integer oracles cross every
+minimum/maximum/value triple in `[-3, 3]` for calibrated inputs and observable
+outputs. They require inverted-range rejection before classification, inclusive
+boundaries, and explicit extrapolation/outside-envelope outcomes. Transfer
+functions, concrete output units/ranges, preset vocabularies, force units, proxy
+scales, and rendering remain open.
+
+## Finite six-layer deterministic ink stack and pressure contract
+
+**Inputs:** one immutable vector stroke mask, selected material preset,
+source/ink/paper identities, optional measured contact-model input, current
+semantic owner and document seed. **Outputs:** an ordered six-family material
+plan or an out-of-calibration refusal. Layer effects may decorate only the
+clipped authoritative path; none may reposition or rejoin its centerline.
+
+**First-release stack (proposed):** apply `BaseInk` deposition first,
+`EdgeVariation` second, `DepositionTexture` third, `PaperInteraction` fourth,
+`Color` fifth and optional `Highlight` last. Each layer records its exact
+clip geometry, physical page bounds, blend mode and color/opacity policy.
+Stochastic layers must derive variation only from the full replay tuple
+`(document seed, semantic ID, profile, material preset)` and a layer label;
+no run-global noise or GPU-specific nondeterminism is allowed.
+
+**Contact model example:** for one measured 0.25 mm centerline contour
+`t1`, a declared dimensionless pressure proxy `0.6` lies in a calibrated
+input range `0..1`. A proposed preset predicts coverage `0.85`, trace width
+`0.30 mm`, starvation `0.08` and pooling `0.05`, each within independently
+approved output envelopes. Edge displacement and paper absorption retain
+their own measured/calibrated limits. Stochastic deposition uses the same
+seed on repeated Preview and Final, not a fresh noise field each redraw.
+These numbers are illustrative; no empirical pen model is inferred here.
+
+**Blend rule:** use ordered source-over alpha composition in a declared
+linear-light color space; define premultiplied alpha and convert to display
+color only after compositing. Highlight may appear only where the selected
+output mode admits color and transparency. Starvation removes coverage only
+inside the source stroke clip; pooling may increase local density but cannot
+create an unrelated stroke beyond the declared edge envelope. Wet-ink
+fluid simulation is explicitly outside first-release scope.
+
+**Refusal example:** a calibrated proxy range ends at 0.8 but the caller
+requests 0.9, one predicted stroke width exceeds the admitted maximum, or a
+Live mode asks for a full-color highlight. Reject the effect or require an
+explicit supported conversion; do not clamp unknown pressure silently,
+switch to another pen or claim sensor measurements exist.
+
+**Assumptions and limits:** typed six-layer plans, replay keys and empirical
+contact evidence envelopes exist. The actual transfer equations, calibrated
+units, compositing, color transforms, PDF embedding and visible stroke output
+do not. This accepted stack is a finite rendering policy, not drawn ink.
+
+## Acceptance decision
+
+- **Basis:** practical for layer plan/replay and contact envelope structure;
+  theoretical for compositing/transfer functions, 2026-11-02.
+- **Delivered:** one six-layer order, pressure-proxy example, deterministic
+  alpha policy and explicit out-of-range/output-capability refusals.
+- **Not implemented by this acceptance:** wet/raster material evaluation,
+  real pen calibration, physical simulation or output pixels.

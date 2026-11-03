@@ -1,0 +1,106 @@
+---
+record_type: task
+id: "ATR-P5-001"
+title: "Implement authoritative vector geometry"
+status: completed
+priority: P5
+lane: cpu-rendering
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Vector geometry is derived from semantic page state.
+acceptance_criteria:
+  - >-
+      Generate layout boxes, stroke centerlines, expanded ink contours,
+      equations, rules, tables, and diagram paths with physical units and
+      semantic provenance.
+  - >-
+      Finite v1 completion: Emit one deterministic physical-unit path
+      representation for text strokes, rules, images, and clipping on a
+      single page; unsupported paint effects are declared.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement authoritative vector geometry
+
+## Scope and existing evidence
+
+Historical implementation evidence covers typed structures only, unless
+explicitly stated otherwise; the finite contract is not rendered output.
+
+Generate layout boxes, stroke centerlines, expanded ink contours, equations,
+rules, tables, and diagram paths with physical units and semantic provenance.
+
+Current executable evidence now centralizes those seven authoritative vector
+primitive families. Every primitive structurally carries caller-owned geometry
+and semantic provenance, while page geometry retains caller-owned physical
+bounds and composition order. A read-only provenance projection returns the
+exact composition-order primitive indices owned by one semantic origin without
+interpreting or mutating geometry.
+
+An exhaustive 4,096-mask oracle crosses semantic-origin membership over twelve
+ordered primitives while cycling all seven primitive families. It requires exact
+composition-order indices, an empty result for an absent origin, and byte-for-
+byte-equivalent page value semantics before and after projection. Geometry
+generation, physical unit vocabulary, contour expansion, tessellation,
+rasterization, material behavior, PDF, and live-motion projection remain open.
+
+## Finite one-page physical-vector authority contract
+
+**Inputs:** an accepted A4 page revision, measured semantic layout boxes,
+stroke centerlines, admitted figures, table/equation/diagram geometry, and
+stable semantic owner IDs. **Outputs:** an ordered vector page in millimeters
+with explicit bounds and owner mappings, or a blocking geometry diagnostic.
+The same vector authority must feed Preview, Final, PDF and physical planning;
+paint and texture never edit its coordinates.
+
+**First-release geometry:** use an A4 `210 x 297 mm` page with a declared
+writable rectangle `x=20..190`, `y=20..277`. Every vector primitive has
+finite coordinates, measured width/height where applicable, explicit clip
+owner and a source identity. The seven admitted primitive families are
+`LayoutBox`, `StrokeCenterline`, `ExpandedInkContour`, `RulePath`, `Equation`,
+`Table` and `DiagramPath`. A placed image remains linked to its original
+asset bytes and measured clip rectangle, rather than falsely becoming a
+fully editable vector object. A converted line-art image is a distinct
+source-linked `DiagramPath` proposal.
+
+**Worked composition (one page):**
+
+| Primitive | Geometry in mm | Semantic origin |
+| --- | --- | --- |
+| LayoutBox | `(20,20,170,40)` | Page section `sec1` |
+| StrokeCenterline | `(22,32)` to `(52,32)` | Text span `t1` |
+| ExpandedInkContour | 0.25 mm around `t1` | Text span `t1` |
+| RulePath | `(20,60)` to `(190,60)` | Rule `r1` |
+| Equation | Box `(20,70,90,20)` | Formula `e1` |
+| Table | 2 x 2 grid at `(20,95,100,40)` | Table `tab1` |
+| DiagramPath | Clipped `x=130..190,y=95..155` | Figure `f1` |
+
+**Clipping and order:** keep caller-approved composition order and exact
+source-to-vector provenance, including every table cell, mathematical symbol
+and original figure identity. Derived contours may expand around centerlines
+but cannot change centerline contact order. A clip must be an explicit
+physical rectangle, not a CSS viewport. A stroke that leaves the writable
+rectangle fails output preflight even when a digital preview could paint it.
+
+**Refusal example:** an equation path contains NaN, a table border extends to
+x=195 mm, or a source image has no approved clip or decoder. Preserve the
+original semantic notebook and return the offending owner/coordinates;
+never truncate, normalize, or silently recolor. Unsupported raster-only
+shadow/texture effects remain separate material requests, not vector claims.
+
+**Assumptions and limits:** the repository has seven typed primitive families,
+ordered page provenance and read-only owner projection, but not the geometry
+generator, physical units enforcement, path expansion, clipping renderer,
+PDF encoding or motion projection. The example is a theoretical vector plan,
+not an actually emitted render surface.
+
+## Acceptance decision
+
+- **Basis:** practical for typed vector/page provenance; theoretical for
+  geometric generation and physical path validation, 2026-11-02.
+- **Delivered:** one seven-primitive A4 page, measured clips/owners,
+  deterministic composition and invalid-geometry refusals.
+- **Not implemented by this acceptance:** authoritatively generated strokes,
+  vector paint, table/equation tessellation, image decoding, PDF or live paths.

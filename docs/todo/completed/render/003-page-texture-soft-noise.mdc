@@ -1,0 +1,98 @@
+---
+record_type: task
+id: "ATR-P5-003"
+title: "Implement bounded page texture and soft noise"
+status: completed
+priority: P5
+lane: cpu-rendering
+dependencies: ["ATR-P5-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Paper texture is layered with vector page geometry.
+acceptance_criteria:
+  - >-
+      Apply seeded low-frequency texture at declared physical scale and
+      prove it does not move geometry, obscure small writing, or create
+      repeated tiles.
+  - >-
+      Finite v1 completion: Define bounded seeded paper texture and two
+      noise amplitudes with a noise-off mode; physically measured paper
+      variation is optional.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement bounded page texture and soft noise
+
+## Scope and existing evidence
+
+Historical implementation evidence covers typed structures only, unless
+explicitly stated otherwise; the finite contract is not rendered output.
+
+Apply seeded low-frequency texture at declared physical scale and prove it does
+not move geometry, obscure small writing, or create repeated tiles.
+
+Current executable evidence now freezes page-level texture intent without
+generating pixels. A plan retains read-only vector-geometry authority, physical
+page bounds, caller-owned physical noise scale, a bounded strength envelope, and
+the complete stochastic replay key reused by material layers. Strength validates
+inside its inclusive envelope before generation, and successful validation now
+returns constructor-sealed evidence borrowing the exact plan.
+
+An exhaustive 343-case integer oracle covers every minimum/maximum/selected
+triple in `[-3, 3]` and requires both direct and sealed admission to preserve
+inverted-envelope-before-selected-value precedence. Frequency models, texture
+generation, tile detection, legibility thresholds, units, rasterization, and
+visual evaluation remain open.
+
+## Finite seeded paper texture with an exact off mode
+
+**Inputs:** one immutable vector page, physical paper dimensions, accepted
+document seed, material preset, physical noise scale and bounded amplitude.
+**Outputs:** a proposed page-background texture field or a refused
+out-of-envelope plan. Texture cannot move vectors, alter stroke contact,
+obscure text or change physical page boxes.
+
+**Physical-scale policy:** for one A4 page define a low-frequency field with
+4 mm correlation length in page millimeters. The default `Off` choice has
+zero field and zero additional sampling cost. `Soft` admits luminance delta
+up to 1% absolute; `Visible` admits up to 2% when measured contrast remains
+above the approved readability bound. Both are evaluated at a fixed physical
+coordinate system independent of zoom or raster output DPI. The declared
+variation strength is inclusive within a caller-owned admitted range.
+
+**Worked example:** page `p1`, source seed `doc-42`, preset `paper-soft`
+selects `Soft`, 4 mm physical scale and maximum 0.01 luminance shift. At page
+coordinate `(25,30) mm`, the same keyed procedural sample must be identical
+in Preview and Final; only sampling density changes. A switch to `Off`
+returns uniform paper white without touching the `t1` text path or changing
+its source/semantic provenance. Independent page identity and position keep
+repeated printable tiles from being byte-repeated by mistake.
+
+**Safety limits:** prove texture does not alter source vector coordinates by
+treating the geometry authority as read-only and clipping the texture to
+paper background. A readability observation must cover the smallest text
+role and relevant contrast; absent measurement returns `UnverifiedContrast`
+and disables the stronger mode. Tile repetition is a separately reported
+quality risk, not assumed absent just because a seed exists.
+
+**Refusal example:** a requested amplitude of 5%, negative physical scale,
+reused stochastic key across incompatible pages, or no contrast observation
+for `Visible` refuses the effect or falls back to `Off` only with explicit
+user choice. Never claim empirical paper realism without photographed paper
+data. Unsupported live material effects remain unavailable to a single pen.
+
+**Assumptions and limits:** page texture plans already preserve vector
+identity, physical scale, replay key and inclusive amplitude bounds. Actual
+noise frequency model, pixel evaluation, tile-detection algorithm, contrast
+testing and page rendering remain open. The two amplitudes are theoretical
+modes, not measured visual evidence.
+
+## Acceptance decision
+
+- **Basis:** practical for bounded texture intent; theoretical for sampled
+  pixels, contrast and repeat detection, 2026-11-02.
+- **Delivered:** `Off`/`Soft`/`Visible` at fixed scale, two amplitudes,
+  deterministic sample example and explicit unverified/invalid refusals.
+- **Not implemented by this acceptance:** generated page noise,
+  texture compositing, real contrast scoring or tile artifact detection.
