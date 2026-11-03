@@ -104,6 +104,17 @@ contains no inferred notebook layout, complete manifest, file path,
 filesystem effect, or user-authorized Export operation. It is not evidence
 that a pasted assignment can be turned into a PDF by the current UI/CLI.
 
+Each closed filled contour must have a non-collinear geometric witness among
+its endpoints and cubic control points. A closed line segment, an all-collinear
+polygon, or an all-collinear cubic refuses as `InvalidPath` rather than
+silently producing invisible fill ink. One degenerate member refuses an
+entire compound fill, even when other contours are valid.
+
+This check is necessary, not a full visible-area proof. Legitimate curved
+loops and self-crossing contours remain admitted without using a signed-area
+heuristic, which would incorrectly discard some filled self-intersections.
+The same collinearity check does not apply to stroked lines.
+
 A local smoke fixture fed real output bytes to Poppler `pdfinfo` and
 `pdftoppm`; both accepted and rendered an A4 page (595.276 by 841.89 points).
 The fixture is a synthetic vector path, not a source notebook or visual

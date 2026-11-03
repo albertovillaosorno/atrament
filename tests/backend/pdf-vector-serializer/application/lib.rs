@@ -297,6 +297,98 @@ fn malformed_geometry_and_spatial_overflow_are_rejected() {
     );
 }
 
+#[test]
+fn filled_contours_refuse_collinear_ink_but_accept_curved_ink() {
+    let color = PdfRgb {
+        red: 190,
+        green: 50,
+        blue: 80,
+    };
+    let square = vec![
+        PdfPathCommand::MoveTo(point(20_000, 20_000)),
+        PdfPathCommand::LineTo(point(80_000, 20_000)),
+        PdfPathCommand::LineTo(point(80_000, 80_000)),
+        PdfPathCommand::Close,
+    ];
+    let degenerate_contours = [
+        vec![
+            PdfPathCommand::MoveTo(point(20_000, 20_000)),
+            PdfPathCommand::LineTo(point(80_000, 20_000)),
+            PdfPathCommand::Close,
+        ],
+        vec![
+            PdfPathCommand::MoveTo(point(20_000, 20_000)),
+            PdfPathCommand::LineTo(point(50_000, 20_000)),
+            PdfPathCommand::LineTo(point(80_000, 20_000)),
+            PdfPathCommand::Close,
+        ],
+        vec![
+            PdfPathCommand::MoveTo(point(20_000, 20_000)),
+            PdfPathCommand::CubicTo(
+                point(30_000, 20_000),
+                point(60_000, 20_000),
+                point(80_000, 20_000),
+            ),
+            PdfPathCommand::Close,
+        ],
+        {
+            let mut compound = square.clone();
+            compound.extend([
+                PdfPathCommand::MoveTo(point(20_000, 100_000)),
+                PdfPathCommand::LineTo(point(80_000, 100_000)),
+                PdfPathCommand::Close,
+            ]);
+            compound
+        },
+    ];
+    let mut composition = document();
+    for commands in degenerate_contours {
+        composition.pages = vec![page(vec![PdfVectorPath {
+            commands,
+            paint: PdfPathPaint::Fill {
+                color,
+                rule: PdfFillRule::EvenOdd,
+            },
+        }])];
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidPath),
+            "an unpaintable fill contour must not disappear silently",
+        );
+    }
+    for commands in [
+        square,
+        vec![
+            PdfPathCommand::MoveTo(point(20_000, 20_000)),
+            PdfPathCommand::CubicTo(
+                point(30_000, 50_000),
+                point(60_000, 50_000),
+                point(80_000, 20_000),
+            ),
+            PdfPathCommand::Close,
+        ],
+        vec![
+            PdfPathCommand::MoveTo(point(20_000, 20_000)),
+            PdfPathCommand::LineTo(point(80_000, 80_000)),
+            PdfPathCommand::LineTo(point(20_000, 80_000)),
+            PdfPathCommand::LineTo(point(80_000, 20_000)),
+            PdfPathCommand::Close,
+        ],
+    ] {
+        composition.pages = vec![page(vec![PdfVectorPath {
+            commands,
+            paint: PdfPathPaint::Fill {
+                color,
+                rule: PdfFillRule::EvenOdd,
+            },
+        }])];
+        assert!(
+            serialize_vector_pdf(&composition, limits()).is_ok(),
+            "curved and crossed filled contours must remain accepted",
+        );
+    }
+}
+
 #[expect(
     clippy::indexing_slicing,
     reason = "fixture has one known page and two paths"

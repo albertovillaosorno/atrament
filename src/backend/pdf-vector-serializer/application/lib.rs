@@ -176,6 +176,49 @@ pub enum PdfVectorError {
     UnsupportedSearchableText,
 }
 
+// A filled contour with all line endpoints and curve controls on one axis
+// cannot enclose ink. This is a necessary area witness, not a general
+// intersection, winding, or image-coverage predicate; crossing contours may
+// have zero signed area while still legitimately painting visible regions.
+#[derive(Default)]
+struct ContourAreaWitness {
+    axis: Option<PdfPoint>,
+    first: Option<PdfPoint>,
+    spans_plane: bool,
+}
+
+impl ContourAreaWitness {
+    fn include(&mut self, point: PdfPoint) {
+        let Some(first) = self.first else {
+            self.first = Some(point);
+            return;
+        };
+        if let Some(axis) = self.axis {
+            if self.spans_plane {
+                return;
+            }
+            let base_x =
+                i64::from(axis.x_um).saturating_sub(i64::from(first.x_um));
+            let base_y =
+                i64::from(axis.y_um).saturating_sub(i64::from(first.y_um));
+            let point_x =
+                i64::from(point.x_um).saturating_sub(i64::from(first.x_um));
+            let point_y =
+                i64::from(point.y_um).saturating_sub(i64::from(first.y_um));
+            self.spans_plane = base_x.saturating_mul(point_y)
+                != base_y.saturating_mul(point_x);
+        } else if point != first {
+            self.axis = Some(point);
+        }
+    }
+
+    fn include_cubic(&mut self, points: [PdfPoint; 3]) {
+        for point in points {
+            self.include(point);
+        }
+    }
+}
+
 // Formatting into String cannot normally fail, but retain typed refusal if
 // the sink reports an error rather than silently losing a path command.
 fn push_formatted(
@@ -273,6 +316,7 @@ fn render_path(
     let mut active = false;
     let mut drawn = false;
     let mut saw_segment = false;
+    let mut contour_area = ContourAreaWitness::default();
     for command in &path.commands {
         match *command {
             PdfPathCommand::MoveTo(point) => {
@@ -294,6 +338,8 @@ fn render_path(
                 )?;
                 active = true;
                 drawn = false;
+                contour_area = ContourAreaWitness::default();
+                contour_area.include(point);
             },
             PdfPathCommand::LineTo(point) if active => {
                 if !point_inside(point, page, stroke_margin_um) {
@@ -309,6 +355,9 @@ fn render_path(
                 )?;
                 drawn = true;
                 saw_segment = true;
+                if fill {
+                    contour_area.include(point);
+                }
             },
             PdfPathCommand::CubicTo(first, second, last) if active => {
                 if !point_inside(first, page, stroke_margin_um)
@@ -331,8 +380,14 @@ fn render_path(
                 )?;
                 drawn = true;
                 saw_segment = true;
+                if fill {
+                    contour_area.include_cubic([first, second, last]);
+                }
             },
             PdfPathCommand::Close if active && drawn => {
+                if fill && !contour_area.spans_plane {
+                    return Err(PdfVectorError::InvalidPath);
+                }
                 stream.push_str("h\n");
                 active = false;
                 drawn = false;
