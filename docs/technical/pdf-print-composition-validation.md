@@ -126,8 +126,9 @@ The final byte budget applies to the header, page tree, page objects, content
 streams, metadata, cross-reference entries and trailer. A red/green regression
 confirmed that the old all-pages-first approach could inspect a later invalid
 page even after the final PDF overhead had already exhausted the byte budget.
-It now refuses as `ResourceLimit` before that later page is rendered. The
-existing oversized-stream regression, large-content fixture and exact-limit
+It now refuses as `ResourceLimit` before that later page is rendered.
+
+The existing oversized-stream regression, large-content fixture and exact-limit
 boundary regressions still apply. Output bytes and PDF object order are
 unchanged.
 
