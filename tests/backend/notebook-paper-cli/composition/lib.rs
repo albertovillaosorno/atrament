@@ -292,6 +292,9 @@ fn paper_preset_overrides_are_ordered_and_invalid_choices_fail() {
         vec!["--width-mm", "200", "--paper-size", "a4"],
         vec!["--paper-size", "a4", "--paper-size", "letter"],
         vec!["--landscape", "--landscape"],
+        vec!["--portrait", "--portrait"],
+        vec!["--landscape", "--portrait"],
+        vec!["--portrait", "--landscape"],
         vec!["--landscape", "--paper-size", "a4"],
     ] {
         let inputs = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
@@ -303,4 +306,36 @@ fn paper_preset_overrides_are_ordered_and_invalid_choices_fail() {
         .expect("not help");
     assert_eq!(request.options.width_um, 150_000);
     assert_eq!(request.options.height_um, 210_000);
+}
+
+#[test]
+fn loaded_landscape_profile_does_not_flip_again_and_can_return_to_portrait() {
+    use std::fs;
+    use std::process;
+
+    let path = env::temp_dir()
+        .join(format!("atrament-paper-orientation-{}.json", process::id()));
+    let name = path.to_str().expect("temporary path is UTF-8");
+    let start = parse_options(
+        &["--paper-size", "a4", "--landscape"].map(str::to_owned),
+    )
+    .expect("landscape A4")
+    .expect("not help");
+    fs::write(&path, encode_profile(start.options))
+        .expect("landscape fixture written");
+    let landscape =
+        parse_options(&["--profile", name, "--landscape"].map(str::to_owned))
+            .expect("idempotent landscape")
+            .expect("not help");
+    assert_eq!(landscape.options.width_um, 297_000);
+    assert_eq!(landscape.options.height_um, 210_000);
+    assert_eq!(render(landscape.options), render(start.options));
+    let portrait =
+        parse_options(&["--profile", name, "--portrait"].map(str::to_owned))
+            .expect("portrait conversion")
+            .expect("not help");
+    assert_eq!(portrait.options.width_um, 210_000);
+    assert_eq!(portrait.options.height_um, 297_000);
+    assert!(render(portrait.options).is_ok());
+    fs::remove_file(path).expect("temporary orientation fixture removed");
 }

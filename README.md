@@ -66,7 +66,8 @@ cargo run -q -p atrament_notebook_paper_cli -- \
 
 The default is an A4 5-mm square grid; `--style ruled`, `--style dot`, and
 `--style blank` select other paper. `--paper-size a3|a4|a5|b5|letter|legal`
-selects standard physical dimensions, and `--landscape` rotates the sheet.
+selects standard physical dimensions. `--landscape` or `--portrait`
+explicitly chooses orientation, including for a loaded paper profile.
 Set a paper-size preset before any manual `--width-mm` or `--height-mm`
 overrides; the saved JSON retains the resulting exact dimensions. All
 measurements are millimeters and the PDF uses physical point dimensions,

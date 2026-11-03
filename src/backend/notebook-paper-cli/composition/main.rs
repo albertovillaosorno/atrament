@@ -72,7 +72,7 @@ const DEFAULT_COLOR: PdfRgb = PdfRgb {
 
 const USAGE: &str = "Usage: atrament-paper [--profile paper.json] \
     [--style blank|ruled|grid|dot] [--paper-size a3|a4|a5|b5|letter|legal] \
-    [--landscape] [--width-mm N] [--height-mm N] [--spacing-mm N] \
+    [--landscape|--portrait] [--width-mm N] [--height-mm N] [--spacing-mm N] \
     [--margin-top-mm N] [--margin-bottom-mm N] \
     [--margin-left-mm N] [--margin-right-mm N] \
     [--line-color '#RRGGBB'] [--emit-profile] > output-file";
@@ -318,7 +318,7 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
     let mut seen_profile = false;
     let mut seen_size_override = false;
     let mut seen_preset = false;
-    let mut seen_landscape = false;
+    let mut seen_orientation = false;
     let mut items = args.iter();
     while let Some(name) = items.next() {
         if name == "--help" {
@@ -328,12 +328,17 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
             emit_profile = true;
             continue;
         }
-        if name == "--landscape" {
-            if seen_landscape {
-                return Err("--landscape may appear only once".into());
+        if name == "--landscape" || name == "--portrait" {
+            if seen_orientation {
+                return Err("choose only one page orientation".into());
             }
-            swap(&mut opts.width_um, &mut opts.height_um);
-            seen_landscape = true;
+            let wider = opts.width_um > opts.height_um;
+            if (name == "--landscape" && !wider)
+                || (name == "--portrait" && wider)
+            {
+                swap(&mut opts.width_um, &mut opts.height_um);
+            }
+            seen_orientation = true;
             seen_size_override = true;
             seen_edit = true;
             continue;
