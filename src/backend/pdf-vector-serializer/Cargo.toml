@@ -18,3 +18,7 @@ workspace = true
 [[test]]
 name = "pdf_vector_serializer_application"
 path = "../../../tests/backend/pdf-vector-serializer/application/lib.rs"
+
+[[example]]
+name = "synthetic_vector_pdf"
+path = "../../../tests/backend/pdf-vector-serializer/application/synthetic_vector_pdf.rs"

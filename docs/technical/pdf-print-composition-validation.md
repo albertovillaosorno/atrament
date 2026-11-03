@@ -116,6 +116,27 @@ was white for even-odd and colored for nonzero, while the surrounding ink and
 page background remained consistent. This verifies the vector-rule difference
 with an independent renderer, not handwriting or print fidelity.
 
+A test-only, reproducible two-page smoke can also be generated without
+loading any notebook. The Cargo example lives under `tests/backend/`, so the
+production application has no fixture module or file-output authority. It
+writes PDF bytes to stdout, and redirection is an explicit tester choice:
+
+```sh
+cargo +stable run --offline -p atrament_pdf_vector_serializer \
+  --example synthetic_vector_pdf --quiet > .temp/pdf-vector-demo.pdf
+pdfinfo -f 1 -l 2 -box .temp/pdf-vector-demo.pdf
+pdftoppm -f 1 -l 2 -r 72 -png \
+  .temp/pdf-vector-demo.pdf .temp/pdf-vector-demo
+```
+
+The two pages are A4 with a colored stroke and US Letter with a compound
+rectangle containing an even-odd hole. On November 2, 2026, Poppler
+`pdfinfo` recognized both MediaBoxes, and `pdftoppm` at 72 DPI showed the
+Letter contour pixel `(190, 50, 80)` with a white hole `(255, 255, 255)`.
+Two independent runs produced identical 1,086-byte PDF output. This example
+does not accept semantic notebooks, images, fonts, or output paths and does
+not demonstrate Export.
+
 ### Render manifests retain reproducibility inputs
 
 `RenderManifest` groups source, behavior, and appearance inputs without defining
