@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P2-009"
 title: "Make missing glyph coverage impossible to miss"
-status: open
+status: completed
 priority: P2
 lane: semantic-layout
 dependencies: ["ATR-P4-004"]
@@ -25,6 +25,9 @@ migrated_from: TODO.md
 # Make missing glyph coverage impossible to miss
 
 ## Scope and existing evidence
+
+Historical evidence below describes current implementation limits. The
+accepted finite contract may be theoretical and does not implement them.
 
 Report every unsupported grapheme by profile and offer only a visible declared
 fallback, profile repair, content replacement, or export refusal.
@@ -100,3 +103,72 @@ all eight fallback evidence states.
 
 Style selection, consent UI, semantic locations, diagnostics, and rendering
 remain open.
+
+## Finite selected-profile glyph admission and Export contract
+
+**Inputs:** one selected profile identity and revision, its declared exact
+extended-grapheme inventory and compositional-rule identities, an ordered list
+of already segmented text graphemes with owning semantic IDs, and optional
+explicit fallback evidence. **Outputs:** an occurrence-preserving coverage
+report, a proposed visible fallback decision per missing occurrence, or a
+blocking projection/Export refusal. None of these outputs changes authored
+text or profile declarations.
+
+**Coverage rule:** match the exact grapheme first; only then consider rule
+matches supplied by a separately trusted evaluator and declared by the same
+profile. A named rule without confirmed applicability is not coverage.
+Keep each unsupported occurrence, including repeats and its query index, in
+source order; distinguish NFC and NFD spellings rather than normalizing away
+an unmet requirement.
+
+Link a future diagnostic to profile identity, accepted revision and owning
+text span so an operator can find the offending content.
+A diagnostic without a trustworthy semantic owner cannot be declared complete.
+
+**Resolution rule:** for each missing occurrence, show the exact character,
+profile and proposed remedy. The choices are (1) a declared replacement style
+that remains visibly marked and is explicitly accepted by the user, (2)
+repair/reselect the profile followed by fresh coverage admission, (3) replace
+source content through an independently accepted semantic edit followed by
+fresh admission, or (4) refuse Export. No automatic font substitution,
+normalization, deleted character, or invisible glyph is permitted. The
+already implemented fallback admission boundary recognizes only declared,
+visible, accepted evidence; it does not build the UI or draw replacement ink.
+
+**Worked example:** profile `student-A` declares `a` and `ñ` exactly but no
+accented `á`, decomposed `a` plus U+0301, or em dash. Source span `s1` is
+`aáá—ñ`, segmented into five graphemes. The report is the ordered missing
+occurrences `(1, á)`, `(2, a + U+0301)`, `(3, —)`. The two accented spellings
+remain different requirements.
+
+If the user explicitly accepts a visible, declared style `printed-marker`
+for all three, the proposed projection may
+retain each source grapheme and annotate each style use; it must not claim the
+handwriting profile can synthesize these forms. Without a renderer for that
+style, actual Export stays unavailable even when evidence is admitted.
+
+**Refusal example:** on the same span, an undeclared `system-font` fallback,
+an accepted but invisible style, or an unanswered consent request leaves all
+three occurrences blocking. A complete Export gate must refuse with the exact
+missing indices; it cannot make a PDF or physical plan by silently discarding
+the em dash. A changed text revision invalidates the old coverage report.
+
+**Assumptions and residual risks:** the existing profile-scoped classifier,
+ordered missing report, bilingual inventory and explicit fallback admission
+are executable boundaries. They do not supply source-to-span ownership,
+revision-coupled glyph diagnostics, trustworthy rule applicability for all
+profile shapes, candidate UI, fallback rendering, or final Export preflight.
+Physical pen compatibility and mathematical symbol coverage are separate
+capabilities. Theoretical acceptance documents this contract; it does not
+establish usable glyph output or a verified Export refusal in every frontend.
+
+## Acceptance decision
+
+- **Basis:** practical for existing profile classification, occurrence report,
+  and fallback-evidence admission; theoretical for the complete visible
+  remediation/Export contract, 2026-11-02.
+- **Delivered:** selected-profile exact/declared-rule policy, stable ordered
+  missing occurrences, one worked Unicode case, explicit fallback choices,
+  stale-revision invalidation, and an Export refusal path.
+- **Not implemented by this acceptance:** end-to-end semantic diagnostics,
+  consent UI, fallback rendering, full glyph inventory, or Export integration.

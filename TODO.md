@@ -18,24 +18,7 @@ remain in typed records under `docs/todo/open/`. Completed work belongs under
 then one direct Markdown link to the complete typed record. No per-item field
 labels belong here.
 
-## P2 — Semantic notebook and physical layout
-
-### TODO - Make missing glyph coverage impossible to miss
-
-Report every unsupported grapheme by profile and offer only a visible
-declared fallback, profile repair, content replacement, or export refusal.
-
-[docs/todo/open/semantic/009-missing-glyph-coverage.mdc](docs/todo/open/semantic/009-missing-glyph-coverage.mdc)
-
 ## P3 — The dual human and LLM editor
-
-### TODO - Build the responsive 16:9 split shell
-
-Show both editors concurrently with adjustable division, stable selection,
-keyboard navigation, zoom, page list, diagnostics, and no hidden main
-surface.
-
-[docs/todo/open/editor/001-build-the-responsive-16-9-split-shell.mdc](docs/todo/open/editor/001-build-the-responsive-16-9-split-shell.mdc)
 
 ### TODO - Build the structured LLM editor
 

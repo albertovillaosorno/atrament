@@ -1,0 +1,127 @@
+---
+record_type: task
+id: "ATR-P3-001"
+title: "Build the responsive 16:9 split shell"
+status: completed
+priority: P3
+lane: dual-editor
+dependencies: []
+dependencies_specified: true
+dependency_rationale: >-
+  The editor shell is a standalone presentation foundation.
+acceptance_criteria:
+  - >-
+      Show both editors concurrently with adjustable division, stable
+      selection, keyboard navigation, zoom, page list, diagnostics, and no
+      hidden main surface.
+  - >-
+      Finite v1 completion: Deliver a desktop split view and a compact
+      stacked fallback with a controllable separator, keyboard focus, and
+      visible diagnostics; only these two layouts are first-release targets.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build the responsive 16:9 split shell
+
+## Scope and existing evidence
+
+Historical evidence below describes current implementation limits. The
+accepted finite contract may be theoretical and does not implement them.
+
+Show both editors concurrently with adjustable division, stable selection,
+keyboard navigation, zoom, page list, diagnostics, and no hidden main surface.
+
+Current frontend evidence: both editors are visible in one 16:9 workspace. The
+splitter supports pointer and keyboard adjustment from 35% through 65% without
+forcing horizontal grid overflow, including at a 1024 px viewport, and exposes
+a wider invisible pointer target than its visual rule. Preview zoom remains
+local from 60% through 160%, with layout-aware page geometry keeping every edge
+scroll-reachable at narrow, short, and wide browser sizes.
+
+At 480 px and below, both panels stay visible at a fixed 50/50 split so the
+document reflows without horizontal page scrolling; wider viewports restore the
+adjustable 35-65% range. The workspace is viewport-bounded, with source and
+preview overflow contained by their own scroll surfaces. At 320 by 480 px, the
+Task field and page stage are both visible in the initial frame.
+
+Very-short reflow keeps both Task and the page stage visible down to 225 px of
+viewport height without document overflow. A checked-in 32-case Firefox matrix
+crosses 320, 480, 481, and 1024 px widths with 225, 360, 480, and 576 px
+heights, plus both split and 60%/160% zoom extremes. Every state keeps the
+document and workspace viewport-bounded, both editor surfaces visible, and all
+four page edges scroll-reachable.
+
+A checked-in JavaScript-disabled Firefox fixture keeps the short-height
+warning visible without taking workspace flow and observes only document and
+stylesheet requests. BiDi viewport emulation at 320 and 481 pixels confirms the
+static shell remains 50/50 with an inert divider, visible Task and page-stage
+surfaces, and no document overflow before `main.js` is available.
+
+The task stays open for backend-fed page navigation and stable semantic
+selection.
+
+## Finite dual-surface layout and navigation contract
+
+**Inputs:** viewport width and height, a current accepted notebook revision,
+selected semantic object and page, an optional pointer/keyboard divider
+command, and a preview zoom command. **Outputs:** two concurrent editor
+surfaces, one consistent selected identity and page focus, a reachable page
+list, a diagnostics region, and bounded scroll/zoom state. Layout changes do
+not alter notebook text, page geometry, or accepted revision.
+
+**Desktop layout:** above 480 CSS px, use a 16:9-inspired split workspace with
+source/LLM editor on the left and human page preview on the right. Both stay
+visible. An operable divider is initially 50% and clamps to 35%-65%; a
+keyboard-focusable separator supports left/right arrow steps of 5 percentage
+points, announces its current value, and does not consume normal editor arrow
+keys while focus remains in a text field.
+
+Each panel owns its content scroll,
+so reducing width must not create top-level document overflow. Page list and
+diagnostics remain independently discoverable rather than covering a panel.
+
+**Compact layout:** at or below 480 CSS px, stack the same two editors within
+the viewport: task/source above, preview below, both visible as bounded
+independently scrolling regions. The divider ceases to be draggable and is
+not presented as an operable separator. Page list and diagnostics remain
+accessible through labeled regions without replacing either editor. A compact
+stack is a theoretical target, not a description of the current 50/50
+side-by-side narrow implementation.
+
+**Navigation and zoom:** page-list selection changes preview focus and
+requests the matching stable semantic owner in source, without losing unsaved
+source drafts. Diagnostics activate the exact owning object and accepted
+revision; a missing/stale owner produces a visible non-destructive refusal
+instead of selecting a similarly numbered object. Preview zoom clamps to
+60%-160%, keeps all four page edges scroll-reachable, and never changes
+physical page size or source identity. Keyboard Tab order exposes both editors,
+page navigation, diagnostics and zoom without requiring a pointer.
+
+**Worked example:** at 1024 x 576 CSS px, a 50/50 split exposes both editors;
+pressing Right Arrow twice on the focused separator requests 60/40 while the
+selected object `block-7` remains selected. At 320 x 480 CSS px the same
+revision uses vertically bounded top/bottom editor regions, each scrollable;
+selecting page 2 still focuses `block-7` when its accepted owner is on page 2.
+At either size, 160% zoom may create preview scroll but no document overflow.
+
+**Refusal and limits:** a page absent from the accepted notebook, stale
+revision, unavailable source mapping, or non-finite zoom command leaves
+selection and notebook unchanged and reports a visible diagnostic. The
+existing frontend has working 35%-65% desktop resizing, a narrow fixed
+side-by-side split and local preview zoom; it does **not** implement the
+compact stack, backend-owned page list or semantic cross-panel selection.
+Firefox viewport fixtures are evidence about the existing shell, not proof
+of the future stacked layout. No cross-browser or assistive-technology
+certification follows from this design.
+
+## Acceptance decision
+
+- **Basis:** practical for the existing bounded desktop split and local
+  scroll/zoom; theoretical for stacked compact behavior and backend-linked
+  navigation, 2026-11-02.
+- **Delivered:** finite desktop/compact layouts, keyboard separator contract,
+  retained two-surface visibility, example viewport and selection behavior,
+  explicit stale-target refusals and usability boundaries.
+- **Not implemented by this acceptance:** compact stack, backend page-list
+  navigation, stable semantic cross-panel focus, and certified accessibility.
