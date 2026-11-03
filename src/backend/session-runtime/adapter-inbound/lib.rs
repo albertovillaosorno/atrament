@@ -48,6 +48,7 @@ use std::time::{Duration, Instant};
 #[cfg(test)]
 use atrament_session_draft as _;
 #[cfg(test)]
+#[cfg(test)]
 use atrament_session_handshake as _;
 
 use atrament_handwriting_statistics::{Dimension, Unit};
@@ -170,6 +171,31 @@ pub trait HandwritingProfileGateway {
 }
 
 
+/// Refusal from the native notebook codec, with no file authority.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NotebookProfileError;
+
+/// Canonical notebook codec supplied by trusted Rust composition.
+pub trait NotebookProfileGateway {
+    /// Validate and canonicalize one bounded notebook profile.
+    ///
+    /// # Errors
+    /// Refuses invalid or unencodable notebook profiles.
+    fn canonical_json(
+        &self,
+        input: &[u8],
+    ) -> Result<Vec<u8>, NotebookProfileError>;
+
+    /// Produce the default notebook through the canonical Rust codec.
+    ///
+    /// # Errors
+    /// Refuses a default profile that cannot be encoded.
+    fn default_json(&self) -> Result<Vec<u8>, NotebookProfileError>;
+
+    /// Native codec JSON size limit.
+    fn max_input_bytes(&self) -> usize;
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct ParsedRequestTarget<'request> {
     host: &'request str,
@@ -184,6 +210,7 @@ pub struct RouteRequestContext<'context> {
     expected_secret: &'context str,
     handshake: &'context dyn SessionHandshake,
     handwriting_gateway: &'context dyn HandwritingProfileGateway,
+    notebook_gateway: &'context dyn NotebookProfileGateway,
 }
 
 impl fmt::Debug for RouteRequestContext<'_> {
@@ -205,6 +232,7 @@ impl<'context> RouteRequestContext<'context> {
         expected_secret: &'context str,
         handshake: &'context dyn SessionHandshake,
         handwriting_gateway: &'context dyn HandwritingProfileGateway,
+        notebook_gateway: &'context dyn NotebookProfileGateway,
     ) -> Self {
         Self {
             expected_host,
@@ -212,6 +240,7 @@ impl<'context> RouteRequestContext<'context> {
             expected_secret,
             handshake,
             handwriting_gateway,
+            notebook_gateway,
         }
     }
 }
@@ -274,6 +303,7 @@ impl Runtime {
         self,
         expected_secret: &str,
         handwriting_gateway: &dyn HandwritingProfileGateway,
+        notebook_gateway: &dyn NotebookProfileGateway,
         handshake: &dyn SessionHandshake,
         draft: &mut dyn SessionDraft,
     ) {
@@ -283,6 +313,7 @@ impl Runtime {
             expected_secret,
             handshake,
             handwriting_gateway,
+            notebook_gateway,
         );
         for incoming in self.listener.incoming() {
             let Ok(mut connection) = incoming else {
@@ -949,6 +980,71 @@ fn request_origin_is_admitted(request: &[u8], expected_origin: &str) -> bool {
     request_has_exact_origin(request, expected_origin)
 }
 
+fn route_notebook_profile(
+    request: &[u8],
+    method: &str,
+    context: &RouteRequestContext<'_>,
+) -> Vec<u8> {
+    let origin_ok = if method == "GET" {
+        request_origin_is_admitted(request, context.expected_origin)
+    } else {
+        request_has_exact_origin(request, context.expected_origin)
+    };
+    if !request_has_session_credential(request, context.expected_secret)
+        || !origin_ok
+    {
+        return json_response(
+            "401 Unauthorized",
+            br#"{"error":"unauthenticated"}"#,
+        );
+    }
+    if method == "GET" {
+        return match context.notebook_gateway.default_json() {
+            Ok(json) => json_response("200 OK", json.as_slice()),
+            Err(_error) => json_response(
+                "500 Internal Server Error",
+                br#"{"error":"notebook_profile_unavailable"}"#,
+            ),
+        };
+    }
+    if method != "POST" {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    }
+    if !single_header_value(request, "content-type").is_some_and(
+        |media_type| {
+            media_type.eq_ignore_ascii_case("application/json")
+                || media_type.eq_ignore_ascii_case(JSON_CONTENT_TYPE)
+        },
+    ) {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    }
+    let Some(body) = request_body(request) else {
+        return json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_request"}"#,
+        );
+    };
+    if body.len() > context.notebook_gateway.max_input_bytes() {
+        return json_response(
+            "413 Content Too Large",
+            br#"{"error":"notebook_profile_too_large"}"#,
+        );
+    }
+    match context.notebook_gateway.canonical_json(body) {
+        Ok(json) => json_response("200 OK", json.as_slice()),
+        Err(_error) => json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_notebook_profile"}"#,
+        ),
+    }
+}
+
 fn route_paper_profile(
     request: &[u8],
     method: &str,
@@ -1125,6 +1221,26 @@ fn route_handwriting_profile(
             "400 Bad Request",
             br#"{"error":"invalid_handwriting_profile"}"#,
         ),
+    }
+}
+
+fn route_profile_transport(
+    request: &[u8],
+    method: &str,
+    target: &str,
+    context: &RouteRequestContext<'_>,
+) -> Option<Vec<u8>> {
+    match target {
+        "/api/notebook/profile" => {
+            Some(route_notebook_profile(request, method, context))
+        }
+        "/api/paper/profile" | "/api/paper/pdf" => {
+            Some(route_paper_profile(request, method, target, context))
+        }
+        "/api/handwriting/profile" | "/api/handwriting/dimensions" => {
+            Some(route_handwriting_profile(request, method, target, context))
+        }
+        _ => None,
     }
 }
 
@@ -1468,21 +1584,10 @@ pub fn route_request(
         }
         return accepted_end_response();
     }
-    if matches!(parsed.target, "/api/paper/profile" | "/api/paper/pdf") {
-        return route_paper_profile(
-            request,
-            parsed.method,
-            parsed.target,
-            context,
-        );
-    }
-    if matches!(
-        parsed.target,
-        "/api/handwriting/profile" | "/api/handwriting/dimensions"
+    if let Some(profile_response) = route_profile_transport(
+        request, parsed.method, parsed.target, context,
     ) {
-        return route_handwriting_profile(
-            request, parsed.method, parsed.target, context,
-        );
+        return profile_response;
     }
     if let Some(field) = draft_field_for_target(parsed.target) {
         return match parsed.method {

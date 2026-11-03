@@ -50,6 +50,7 @@ use atrament_session_handshake::{
     CAPABILITY_VERSION, HandshakeService, PRODUCT_VERSION, PROFILE_VERSION,
     PROMPT_VERSION, PROTOCOL_VERSION, RENDERER_VERSION,
 };
+use atrament_notebook_profile::{MAX_NOTEBOOK_JSON_BYTES, NotebookProfile};
 use atrament_session_runtime as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 use atrament_handwriting_statistics::HandwritingStatisticsProfile;
@@ -88,6 +89,33 @@ impl runtime::HandwritingProfileGateway for TestHandwritingGateway {
 
 
 static GATEWAY: TestHandwritingGateway = TestHandwritingGateway;
+struct TestNotebookGateway;
+
+impl runtime::NotebookProfileGateway for TestNotebookGateway {
+    fn canonical_json(
+        &self,
+        input: &[u8],
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        NotebookProfile::from_json(input)
+            .and_then(|profile| profile.canonical_json())
+            .map(String::into_bytes)
+            .map_err(|_error| runtime::NotebookProfileError)
+    }
+
+    fn default_json(&self) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        NotebookProfile::default()
+            .canonical_json()
+            .map(String::into_bytes)
+            .map_err(|_error| runtime::NotebookProfileError)
+    }
+
+    fn max_input_bytes(&self) -> usize {
+        MAX_NOTEBOOK_JSON_BYTES
+    }
+}
+
+static NOTEBOOK_GATEWAY: TestNotebookGateway = TestNotebookGateway;
+
 
 struct MustNotEvaluateHandshake;
 
@@ -114,7 +142,7 @@ fn route_context<'context>(
         EXPECTED_ORIGIN,
         secret,
         handshake,
-        &GATEWAY,
+        &GATEWAY, &NOTEBOOK_GATEWAY,
     )
 }
 
@@ -506,7 +534,7 @@ fn response_for_incomplete_body(close_write: bool) -> Vec<u8> {
         &host,
         "http://127.0.0.1:1",
         EXPECTED_SECRET,
-        &HANDSHAKE, &GATEWAY,
+        &HANDSHAKE, &GATEWAY, &NOTEBOOK_GATEWAY,
     );
     let mut draft = SessionDraftService::default();
     assert!(!runtime::serve_connection(&mut server, &context, &mut draft)
@@ -2459,7 +2487,10 @@ fn session_end_terminates_listener_and_destroys_process_owned_draft() {
     let origin = runtime.origin().to_owned();
     let server = thread::spawn(move || {
         let mut draft = seeded_private_draft();
-        runtime.serve(EXPECTED_SECRET, &GATEWAY, &HANDSHAKE, &mut draft);
+        runtime.serve(
+            EXPECTED_SECRET, &GATEWAY, &NOTEBOOK_GATEWAY,
+            &HANDSHAKE, &mut draft,
+        );
         assert_private_draft_unchanged(&draft);
         // Draft bytes are dropped after the listener returns.
     });
@@ -2535,7 +2566,10 @@ fn abandoned_end_reply_still_drops_private_draft_after_complete_request() {
             inner: seeded_private_draft(),
             dropped: server_dropped,
         };
-        runtime.serve(EXPECTED_SECRET, &GATEWAY, &HANDSHAKE, &mut draft);
+        runtime.serve(
+            EXPECTED_SECRET, &GATEWAY, &NOTEBOOK_GATEWAY,
+            &HANDSHAKE, &mut draft,
+        );
         assert_private_draft_unchanged(&draft.inner);
         // The owner is disposed even if the End acknowledgement is unread.
     });
@@ -2621,7 +2655,8 @@ fn accepted_end_is_terminal_when_acknowledgement_cannot_be_written() {
     assert!(server.write_all(b"probe").is_err(),
         "disabled server socket cannot send acknowledgement bytes");
     let context = runtime::RouteRequestContext::new(
-        &host, &origin, EXPECTED_SECRET, &HANDSHAKE, &GATEWAY,
+        &host, &origin, EXPECTED_SECRET, &HANDSHAKE,
+        &GATEWAY, &NOTEBOOK_GATEWAY,
     );
     let mut draft = seeded_private_draft();
     assert!(runtime::serve_connection(&mut server, &context, &mut draft)
@@ -3446,7 +3481,8 @@ fn loopback_draft_mutation_requires_declared_utf8_text_media_type() {
         runtime::configure_connection_deadline(&server)
             .expect("server deadline configures");
         let context = runtime::RouteRequestContext::new(
-            &host, &origin, EXPECTED_SECRET, &HANDSHAKE, &GATEWAY,
+            &host, &origin, EXPECTED_SECRET, &HANDSHAKE,
+        &GATEWAY, &NOTEBOOK_GATEWAY,
         );
         let mut draft = seeded_private_draft();
         assert!(!runtime::serve_connection(&mut server, &context, &mut draft)
@@ -5266,4 +5302,179 @@ fn handwriting_dimension_catalog_uses_rust_domain_bounds() {
         EXPECTED_HOST,
     );
     assert_eq!(status_line(&denied), "HTTP/1.1 400 Bad Request");
+}
+
+#[test]
+fn notebook_profile_http_roundtrip_uses_canonical_rust_model() {
+    let get = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/notebook/profile", Some(EXPECTED_SECRET),
+            None, None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&get), "HTTP/1.1 200 OK");
+    let original = paper_http_body(&get);
+    let original_text = std::str::from_utf8(original)
+        .expect("notebook default UTF-8");
+    assert!(original_text.contains("atrament.notebook.v1"));
+    assert!(original_text.contains("atrament.paper.v1"));
+    let unchanged = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/notebook/profile", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"), original,
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&unchanged), "HTTP/1.1 200 OK");
+    assert_eq!(paper_http_body(&unchanged), original);
+    let edited = original_text
+        .replace("\"date_style\": \"none\"", "\"date_style\": \"box\"")
+        .replace(
+            "\"date_placement\": \"none\"",
+            "\"date_placement\": \"top-right\"",
+        )
+        .replace("\"page_numbers\": false", "\"page_numbers\": true")
+        .replace("\"style\": \"grid\"", "\"style\": \"ruled\"");
+    let edited_response = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/notebook/profile", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            edited.as_bytes(),
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&edited_response), "HTTP/1.1 200 OK");
+    let body = std::str::from_utf8(paper_http_body(&edited_response))
+        .expect("admitted JSON is UTF-8");
+    assert!(body.contains("\"date_style\": \"box\""));
+    assert!(body.contains("\"date_placement\": \"top-right\""));
+    assert!(body.contains("\"page_numbers\": true"));
+    assert!(body.contains("\"style\": \"ruled\""));
+    let second = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/notebook/profile", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            paper_http_body(&edited_response),
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(paper_http_body(&second), paper_http_body(&edited_response));
+    let fresh = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/notebook/profile", Some(EXPECTED_SECRET),
+            None, None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(paper_http_body(&fresh), original);
+}
+
+#[test]
+fn notebook_profile_http_rejects_missing_authority_or_wrong_origin() {
+    for method in ["GET", "POST"] {
+        for secret in [None, Some("b".repeat(64))] {
+            let reply = route_runtime(
+                &paper_endpoint_request(
+                    method, "/api/notebook/profile", secret.as_deref(),
+                    Some(EXPECTED_ORIGIN), Some("application/json"),
+                    if method == "POST" { b"{}" } else { b"" },
+                ),
+                EXPECTED_HOST,
+            );
+            assert_eq!(status_line(&reply), "HTTP/1.1 401 Unauthorized");
+            assert!(!String::from_utf8_lossy(&reply)
+                .contains("atrament.notebook.v1"));
+        }
+    }
+    for origin in [None, Some("null"), Some("http://evil.local")] {
+        let reply = route_runtime(
+            &paper_endpoint_request(
+                "POST", "/api/notebook/profile", Some(EXPECTED_SECRET),
+                origin, Some("application/json"), b"{}",
+            ),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&reply), "HTTP/1.1 401 Unauthorized");
+    }
+    let reply = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/notebook/profile", Some(EXPECTED_SECRET),
+            Some("http://evil.local"), None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&reply), "HTTP/1.1 401 Unauthorized");
+}
+
+#[test]
+fn notebook_profile_http_rejects_invalid_json_content_type_and_size() {
+    let get = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/notebook/profile", Some(EXPECTED_SECRET),
+            None, None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    let profile = std::str::from_utf8(paper_http_body(&get))
+        .expect("default notebook JSON");
+    let invalid = [
+        profile.replace("atrament.notebook.v1", "atrament.notebook.v2"),
+        profile.replace("\"page_numbers\": false", "\"page_numbers\": 0"),
+        profile.replace(
+            "\"border_radius_um\": 0",
+            "\"border_radius_um\": 999999",
+        ),
+        profile.replace("\"style\": \"grid\"", "\"style\": \"unreal\""),
+        profile.replace(
+            "\"printed_sheet\": false",
+            "\"printed_sheet\": false, \"printed_sheet\": false",
+        ),
+    ];
+    for invalid_json in invalid {
+        let reply = route_runtime(
+            &paper_endpoint_request(
+                "POST", "/api/notebook/profile", Some(EXPECTED_SECRET),
+                Some(EXPECTED_ORIGIN), Some("application/json"),
+                invalid_json.as_bytes(),
+            ),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&reply), "HTTP/1.1 400 Bad Request");
+        assert_eq!(
+            paper_http_body(&reply),
+            br#"{"error":"invalid_notebook_profile"}"#,
+        );
+    }
+    for content_type in [None, Some("text/plain"), Some("application/pdf")] {
+        let reply = route_runtime(
+            &paper_endpoint_request(
+                "POST", "/api/notebook/profile", Some(EXPECTED_SECRET),
+                Some(EXPECTED_ORIGIN), content_type, profile.as_bytes(),
+            ),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&reply), "HTTP/1.1 400 Bad Request");
+    }
+    let oversized = vec![b' '; 8_193];
+    let reply = route_runtime(
+        &paper_endpoint_request(
+            "POST", "/api/notebook/profile", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"), &oversized,
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&reply), "HTTP/1.1 413 Content Too Large");
+    assert_eq!(
+        paper_http_body(&reply),
+        br#"{"error":"notebook_profile_too_large"}"#,
+    );
+    let wrong_method = route_runtime(
+        &paper_endpoint_request(
+            "PUT", "/api/notebook/profile", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"), profile.as_bytes(),
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&wrong_method), "HTTP/1.1 400 Bad Request");
 }

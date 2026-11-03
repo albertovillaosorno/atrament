@@ -22,6 +22,7 @@ test = false
 workspace = true
 
 [dev-dependencies]
+atrament_notebook_profile = { workspace = true }
 atrament_handwriting_statistics_json = { workspace = true }
 atrament_handwriting_statistics = { workspace = true }
 atrament_unicode_grapheme_segmentation = { workspace = true }

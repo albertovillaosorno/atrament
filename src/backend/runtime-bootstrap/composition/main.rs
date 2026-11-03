@@ -46,6 +46,7 @@ use std::str::from_utf8;
 #[cfg(target_os = "linux")]
 use nix::sys::prctl;
 
+use atrament_notebook_profile::{MAX_NOTEBOOK_JSON_BYTES, NotebookProfile};
 use atrament_browser_launch as browser_launch;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 use atrament_explicit_file_path_intent::{
@@ -79,7 +80,8 @@ use atrament_session_handshake::{
     HandshakeService, PRODUCT_VERSION, PROTOCOL_VERSION,
 };
 use atrament_session_runtime::{
-    HandwritingProfileError, HandwritingProfileGateway, Runtime,
+    HandwritingProfileError, HandwritingProfileGateway,
+    NotebookProfileError, NotebookProfileGateway, Runtime,
 };
 use atrament_handwriting_statistics::HandwritingStatisticsProfile;
 use atrament_handwriting_statistics_json::{
@@ -119,6 +121,32 @@ impl HandwritingProfileGateway for HandwritingGateway {
     }
 }
 
+
+/// Compose the native notebook profile codec for the HTTP transport.
+struct NotebookGateway;
+
+impl NotebookProfileGateway for NotebookGateway {
+    fn canonical_json(
+        &self,
+        input: &[u8],
+    ) -> Result<Vec<u8>, NotebookProfileError> {
+        NotebookProfile::from_json(input)
+            .and_then(|profile| profile.canonical_json())
+            .map(String::into_bytes)
+            .map_err(|_error| NotebookProfileError)
+    }
+
+    fn default_json(&self) -> Result<Vec<u8>, NotebookProfileError> {
+        NotebookProfile::default()
+            .canonical_json()
+            .map(String::into_bytes)
+            .map_err(|_error| NotebookProfileError)
+    }
+
+    fn max_input_bytes(&self) -> usize {
+        MAX_NOTEBOOK_JSON_BYTES
+    }
+}
 
 /// Private, path-free canonicality refusal after complete source verification.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -738,7 +766,7 @@ fn main() -> io::Result<()> {
     publish_startup("ready", Some(runtime.origin()))?;
     runtime.serve(
         secret.encoded(), &HandwritingGateway,
-        &handshake, &mut application,
+        &NotebookGateway, &handshake, &mut application,
     );
     Ok(())
 }

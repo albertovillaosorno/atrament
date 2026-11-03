@@ -254,6 +254,13 @@ The paper-only PDF command continues to draw sheet marks. Dates, border
 rounding, page numbers, printed-sheet handling, handwriting, and PNG remain
 unrendered in this slice.
 
+The localhost Rust runtime also exposes authenticated
+`GET /api/notebook/profile` (default profile) and
+`POST /api/notebook/profile` (bounded JSON validation and canonicalization).
+These endpoints are in-memory only; POST does not persist a file or set
+session-wide defaults. They require the existing session bearer credential
+and same-origin admission, like the paper profile endpoint.
+
 ## The workspace
 
 The following is the intended notebook workflow, not a claim that the
