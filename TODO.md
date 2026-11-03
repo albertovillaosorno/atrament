@@ -20,38 +20,6 @@ labels belong here.
 
 ## P6 — LLM, CLI, MCP, and media intake
 
-### TODO - Freeze the one-shot formatting prompt
-
-Include the complete backend-owned return format, allowed styles, output
-mode, source rules, ambiguity behavior, and exact return envelope in one copy
-action.
-
-[docs/todo/open/automation/001-one-shot-formatting-prompt.mdc](docs/todo/open/automation/001-one-shot-formatting-prompt.mdc)
-
-### TODO - Implement assignment-to-notebook structuring
-
-Support titles, explanations, derivations, tables, equations, diagrams,
-citations, examples, and conclusions without inventing missing task facts.
-
-[docs/todo/open/automation/002-assignment-notebook-structuring.mdc](docs/todo/open/automation/002-assignment-notebook-structuring.mdc)
-
-### TODO - Implement source and claim provenance
-
-Distinguish provided, derived, cited, and unverified content and link every
-citation to the exact claim and source metadata the user must review. Keep
-that semantic provenance separate from application transaction provenance
-recording whether an accepted mutation entered through direct human editing,
-clipboard-assisted model response, CLI, or MCP.
-
-[docs/todo/open/automation/003-source-claim-provenance.mdc](docs/todo/open/automation/003-source-claim-provenance.mdc)
-
-### TODO - Prove complex educational coverage
-
-Exercise bilingual mathematics, physics, chemistry, biology, history, and
-language assignments with dense but readable page organization.
-
-[docs/todo/open/automation/004-prove-complex-educational-coverage.mdc](docs/todo/open/automation/004-prove-complex-educational-coverage.mdc)
-
 ### TODO - Freeze the semantic command-batch envelope
 
 Version the batch, base notebook revision, command-context identity, readable

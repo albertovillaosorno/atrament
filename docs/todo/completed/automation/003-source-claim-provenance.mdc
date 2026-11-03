@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P6-003"
 title: "Implement source and claim provenance"
-status: open
+status: completed
 priority: P6
 lane: automation-media
 dependencies: ["ATR-P2-001"]
@@ -28,6 +28,9 @@ migrated_from: TODO.md
 # Implement source and claim provenance
 
 ## Scope and existing evidence
+
+Historical implementation notes concern structural admission. The bounded
+design below is not a running model or verified educational output.
 
 Distinguish provided, derived, cited, and unverified content and link every
 citation to the exact claim and source metadata the user must review. Keep that
@@ -78,3 +81,60 @@ schema, source-quality and claim-sufficiency policy, provenance diagnostics,
 citation parsing/formatting and review UI, candidate-response integration, and
 cross-adapter projection. Those owners must consume the existing revision-owned
 provenance and citation linkage rather than inventing parallel source status.
+
+## Finite semantic claim, source and transaction provenance contract
+
+**Inputs:** stable source identities, exact quoted or cited source spans,
+accepted semantic claim IDs, claim-kind declarations and an independently
+trusted application mutation origin. **Outputs:** a source-to-claim graph
+retaining provided, derived, cited or unverified status, plus visible
+citation/export annotations, or one typed missing/ambiguous-source refusal.
+Semantic content provenance is independent from *who initiated* an edit.
+
+**Four semantic classes:** `Provided` means source text directly supplied by
+the user; `Derived` is explicitly reasoned from exact referenced claims;
+`Cited` has a verifiable source metadata link and a user-review state;
+`Unverified` carries an unresolved claim with no accepted support. A source
+record retains identity, title/author if known, acquisition mode, content
+fingerprint, quoted range and review status. Unknown author or timestamp is
+recorded as absent, not fabricated. Citation format is a presentation choice,
+not a proof that external content was verified.
+
+**Worked three-claim ledger:** source `src-1`, supplied text `The sample is
+10 mm long`, has a stable exact offset/owner. Claim `c1` repeats 10 mm and
+is `Provided(src-1)`; `c2` computes doubled length 20 mm and is
+`Derived(c1)` with arithmetic justification. Claim `c3`, `The sample was
+collected in Madrid`, is `Unverified` because the location is absent.
+The export annotation for `c1` names `src-1`; `c2` names `c1` and identifies
+its derivation; `c3` prints `Source not established` and must not silently
+acquire a citation. A notebook edit preserves those claim IDs/references
+unless a backend-accepted change explicitly invalidates them.
+
+**Separate mutation provenance:** a trusted human edit, clipboard-reviewed
+model candidate, CLI Apply or MCP Apply is stamped at the application adapter
+after authorization and linked to the accepted transaction receipt. Source
+content cannot self-assign this stamp. A model-derived sentence may enter
+through a human-edited transaction without becoming `Provided`, and a
+CLI-authored citation remains `Cited` only when source evidence warrants it.
+
+**Refusal example:** a citation targets a missing `src-9`, a claim
+misrepresents an unsupported quoted range, two source IDs conflict, or an
+unreviewed web page is presented as verified. Retain a visible `Unverified`
+or blocking citation diagnostic; no auto-retrieval or forged bibliography.
+If an Export lacks a supported citation projection, omit the false link and
+mark the claim unresolved rather than claiming complete provenance.
+
+**Assumptions and limits:** typed source/claim owner links and revision-bound
+structural admission exist. Full source metadata, retrieval, citation
+formatting, quality judgment, review UI and cross-adapter audit projection
+are incomplete. The three claims are a finite provenance policy, not
+verification of any external citation or all application event origins.
+
+## Acceptance decision
+
+- **Basis:** practical for graph and revision linkage; theoretical for
+  source metadata, review and Export annotations, 2026-11-02.
+- **Delivered:** supplied source and three claims, four status rules,
+  distinct trusted transaction origin and unresolved/missing-source refusals.
+- **Not implemented by this acceptance:** source retrieval, substantive
+  fact-checking, citation UI, complete audit transport or rendered footnotes.

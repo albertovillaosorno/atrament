@@ -1,0 +1,122 @@
+---
+record_type: task
+id: "ATR-P6-004"
+title: "Prove complex educational coverage"
+status: completed
+priority: P6
+lane: automation-media
+dependencies: ["ATR-P2-001", "ATR-P6-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Coverage tests require a model and assignment structuring.
+acceptance_criteria:
+  - >-
+      Exercise bilingual mathematics, physics, chemistry, biology, history,
+      and language assignments with dense but readable page organization.
+  - >-
+      Finite v1 completion: Define a fixed English-and-Spanish educational
+      fixture including prose, mathematics, table, citation, and figure,
+      plus a finite coverage ledger; open-ended subject coverage is
+      excluded.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Prove complex educational coverage
+
+## Scope and existing evidence
+
+Historical implementation notes concern structural admission. The bounded
+design below is not a running model or verified educational output.
+
+Exercise bilingual mathematics, physics, chemistry, biology, history, and
+language assignments with dense but readable page organization.
+
+Current executable evidence now names all six required subject families in one
+canonical completeness-check order and requires every admitted exercise
+observation to carry caller-established
+bilingual, dense-organization, and readable-organization evidence. Complete
+coverage requires at least one fully evidenced observation for mathematics,
+physics, chemistry, biology, history, and language while permitting additional
+subject observations and preserving their caller-owned artifact identities.
+A 64-case subject-presence oracle proves every subset rejects at the first
+missing subject, while 48 single-position property cases pin local
+bilingual/dense/readable precedence. An exhaustive 262,144-case six-observation
+Cartesian oracle now crosses all three evidence bits at every subject position
+and requires validation/projection parity for the first caller-order property
+failure.
+
+After complete validation, a constructor-owned read-only projection groups the
+exact caller observations in canonical required-subject order while preserving
+all observations and their relative order inside each subject; it does not pick
+a representative artifact or score quality.
+
+A checked-in fixture set now supplies concrete bilingual assignment prompts for
+all six subjects. Each prompt has three compact authored modules and links its
+stable artifact identity to the existing caller-declared coverage observation;
+fixture validation does not infer those evidence statuses from prose.
+
+Curriculum/source correctness, natural-language verification, language
+selection, density/readability measurement and thresholds, page layout,
+rendering, and pedagogical quality policy remain open.
+
+## Finite six-subject bilingual educational coverage ledger
+
+**Inputs:** one frozen pair of English/Spanish prompts per subject, accepted
+source provenance declarations, one proposed semantic notebook per fixture,
+and caller-produced property observations. **Outputs:** a canonical
+six-subject coverage ledger reporting `Supported`, `Unsupported` or
+`TheoryOnly` per required property, not a general curriculum claim.
+No pedagogical correctness is inferred from a complete fixture count.
+
+**Finite first-release fixture matrix:**
+
+| Subject | English fixture | Spanish fixture |
+| --- | --- | --- |
+| Mathematics | Solve `2x + 3 = 9` | Resolver `2x + 3 = 9` |
+| Physics | Explain speed = distance/time | Explicar rapidez |
+| Chemistry | Balance `H2 + O2 -> H2O` | Balancear reacción |
+| Biology | Explain photosynthesis | Explicar fotosíntesis |
+| History | Compare two supplied dates | Comparar dos fechas |
+| Language | Compare word order | Comparar orden de palabras |
+
+Each fixture must include at least one source-linked prose claim. Across the
+fixed twelve-prompt corpus, require mathematics/equation notation,
+figure/diagram intent, a typed table, source citations and explicitly
+unresolved facts. The biology fixture includes a 2-column comparison table,
+a schematic leaf diagram, a source citation and one unresolved mechanism
+question; none of those may be silently invented from a missing source.
+
+**Coverage ledger:** for each subject record exact fixture IDs, language,
+required semantic roles, accepted source link, layout constraints, current
+application capability, unmeasured properties and known failures. A subject
+with both languages but no equation renderer may be `TheoryOnly` for math
+presentation rather than `Supported`. The complete subject list is finite;
+no claim covers every language, proof system, diagram type or curriculum.
+
+**Worked example:** math source asks to solve `2x + 3 = 9`. A candidate may
+supply `x = 3` with a checked algebra derivation, a title, explanation and
+exact source link. A Spanish parallel uses the same equation with Spanish
+explanatory labels. The ledgers record equation semantics as structurally
+represented, while handwriting glyph coverage, layout density, references
+and final page legibility remain `TheoryOnly` until real output exists.
+
+**Refusal example:** chemistry requests an unknown reagent that is absent
+from source; keep the equation `Unresolved` rather than invent balancing
+terms. A claimed fixture lacks Spanish source provenance or fails a required
+math glyph; mark that property unsupported, not a successful bilingual page.
+
+**Assumptions and limits:** checked-in bilingual subject fixtures and a
+transport-neutral six-subject completeness/projection validator exist.
+Natural-language checking, curriculum truth, measured page readability,
+rendered equations, diagrams and all-subject educational quality remain
+unimplemented. A finite theoretical ledger replaces open-ended proof claims.
+
+## Acceptance decision
+
+- **Basis:** practical for six-subject structural evidence and fixed prompts;
+  theoretical for semantic correctness and rendering, 2026-11-02.
+- **Delivered:** twelve bilingual fixtures by six subjects, required modality
+  ledger, algebra example and missing-fact/source refusals.
+- **Not implemented by this acceptance:** universal educational coverage,
+  rendered bilingual outputs, correctness certification or measured readability.

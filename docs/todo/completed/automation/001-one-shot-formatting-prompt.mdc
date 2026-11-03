@@ -1,0 +1,108 @@
+---
+record_type: task
+id: "ATR-P6-001"
+title: "Freeze the one-shot formatting prompt"
+status: completed
+priority: P6
+lane: automation-media
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  The prompt must describe the semantic return format.
+acceptance_criteria:
+  - >-
+      Include the complete backend-owned return format, allowed styles,
+      output mode, source rules, ambiguity behavior, and exact return
+      envelope in one copy action.
+  - >-
+      Finite v1 completion: Freeze one self-contained prompt with a
+      versioned response schema, one accepted notebook example, and one
+      explicit refusal example; provider-specific prompts are excluded.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Freeze the one-shot formatting prompt
+
+## Scope and existing evidence
+
+Historical implementation notes concern structural admission. The bounded
+design below is not a running model or verified educational output.
+
+Include the complete backend-owned return format, allowed styles, output mode,
+source rules, ambiguity behavior, and exact return envelope in one copy action.
+
+Current executable evidence now freezes the transport-neutral initial formatting
+request as one self-contained value. It retains task, complete source material,
+paper/style constraints, output targets, backend-owned semantic format, source
+and provenance rules, diagnostic/ambiguity expectations, required return
+envelope, prompt identity, and prompt version. Exact current-version admission
+now returns constructor-sealed evidence borrowing the whole prompt.
+
+A generated mutation corpus rejects every one-byte ASCII deletion, substitution,
+and insertion around `atrament.prompt/1`, plus whitespace/newline/NUL aliases,
+through both direct and sealed admission. Prompt text wording/serialization,
+identity computation, clipboard presentation, response parsing, and semantic
+command refinement remain separate open authorities.
+
+## Finite provider-independent one-shot formatting envelope
+
+**Inputs:** one backend-owned `atrament.prompt/1` identity, exact task and
+source material, permitted notebook blocks, paper/profile and output-mode
+constraints, citation policy, ambiguity behavior and user-facing diagnostics.
+**Outputs:** exactly one inert copyable prompt with a versioned candidate
+response envelope, or `UnsupportedPromptVersion`. The browser must copy
+backend-produced bytes, never invent the response schema.
+
+**Complete v1 candidate envelope (proposed):** require top-level keys
+`schema`, `prompt_identity`, `source_revision`, `candidate`, `unresolved`,
+and `diagnostics`, with `schema=atrament.notebook-candidate/1`. `candidate`
+contains ordered `pages[]`; each has a temporary `candidate_key`, accepted
+paper reference and ordered `blocks[]`. A block has `candidate_key`,
+`kind`, exact `text` or typed `content`, semantic role and `source_links[]`.
+V1 allows `title`, `paragraph`, `equation`, `table`, `figure`, `citation`, and
+`unresolved` content, with finite page/block budgets provided by backend.
+Candidate keys cannot masquerade as accepted notebook IDs. `unresolved[]`
+contains exact missing-field label, source span and resolution request;
+`diagnostics[]` has stable code/severity/target key. Unknown top-level or
+block kinds refuse the whole candidate; no application file path, command,
+plugin token or Export permission belongs inside the response.
+
+**One self-contained prompt template:** the single copied request includes
+all exact task/source text inside separately delimited *untrusted data*
+sections, the above full schema and admitted block vocabulary, A4 and
+selected output/profile constraints, source attribution/quotation rules,
+no-guessing semantics, and a requirement to return just one complete
+candidate envelope. It expressly tells the model to mark missing data as
+`unresolved`, not infer it from nearby prose. A clipboard Copy receipt is
+bound to prompt identity and exact copied bytes, not to a successful model run.
+
+**Worked example:** task `Summarize photosynthesis`, source `Plants turn
+light into stored chemical energy`, A4 Digital target and profile
+`student-A` yield candidate page `tmp-page-1` with title `Photosynthesis`
+and paragraph repeating the supplied fact, linked to `source-1`. The
+candidate is reviewed against base revision `r3`; only a separately
+accepted backend transaction may allocate durable semantic block IDs.
+This is one theoretically valid candidate shape, not actual model output.
+
+**Refusal example:** a source asks for an unsupported chemical equation with
+missing reagents. The candidate places `Unknown reactants` in `unresolved[]`
+instead of fabricating a balanced equation. A response with schema version
+`2`, missing `source_revision`, or executable file instructions fails
+candidate admission without partial changes. Provider-specific prompts or
+hidden tools are outside this finite first-release contract.
+
+**Assumptions and limits:** a typed self-contained prompt value with all
+required fields and exact `atrament.prompt/1` admission already exists.
+Canonical prompt wording, serialization, identity hashing, response parsing,
+source/diagnostic adapters and user review remain unfinished. The envelope
+above freezes theoretical semantics, not a deployed formatting service.
+
+## Acceptance decision
+
+- **Basis:** practical for typed prompt field/version admission; theoretical
+  for canonical prompt text and candidate parser, 2026-11-02.
+- **Delivered:** one complete candidate envelope, copyable-request fields,
+  accepted-shape notebook example and missing-fact/version refusal.
+- **Not implemented by this acceptance:** working model formatting, exact
+  prompt serialization, candidate decoder or automatic notebook acceptance.

@@ -1,0 +1,115 @@
+---
+record_type: task
+id: "ATR-P6-002"
+title: "Implement assignment-to-notebook structuring"
+status: completed
+priority: P6
+lane: automation-media
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Assignment structuring outputs typed semantic notebook data.
+acceptance_criteria:
+  - >-
+      Support titles, explanations, derivations, tables, equations,
+      diagrams, citations, examples, and conclusions without inventing
+      missing task facts.
+  - >-
+      Finite v1 completion: Convert one assignment source into ordered
+      headings, tasks, citations, and typed unresolved facts without
+      inventing missing information.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement assignment-to-notebook structuring
+
+## Scope and existing evidence
+
+Historical implementation notes concern structural admission. The bounded
+design below is not a running model or verified educational output.
+
+Support titles, explanations, derivations, tables, equations, diagrams,
+citations, examples, and conclusions without inventing missing task facts.
+
+Current executable evidence now freezes those nine assignment-organization roles
+without creating parallel semantic block kinds. An ordered structure plan points
+to existing notebook blocks; represented entries must resolve to non-Unresolved
+blocks, while explicitly missing or ambiguous task facts must point to typed
+Unresolved blocks. Empty plans and repeated roles remain valid because source
+content, not this boundary, decides which organizational roles are needed. A
+54-case role/disposition oracle proves all nine roles obey only that block
+resolution authority instead of gaining hidden role-to-kind mappings.
+
+After complete structural validation, a read-only projection returns the exact
+referenced semantic blocks in caller plan order. Repeated entries remain
+repeated references, unresolved entries remain typed unresolved blocks, and a
+failing plan exposes no partial projection. A constructor-sealed view now binds
+the exact notebook snapshot, caller plan, and projected block sequence after the
+same admission succeeds.
+
+An exhaustive 216-case three-entry disposition oracle proves the first invalid
+entry wins in caller order and requires direct validation, projection, and
+sealed admission to agree without exposing a valid prefix. Content generation,
+role
+selection, source/provenance inference, candidate construction, layout,
+rendering, and assignment-quality policy remain open.
+
+## Finite assignment-to-notebook structure with unresolved facts
+
+**Inputs:** one immutable source assignment span, one accepted notebook
+snapshot and a user/model proposed ordered organization plan. **Outputs:**
+one typed candidate sequence of titles, explanations, derivations,
+equations, tables, diagrams, citations, examples and conclusions, plus
+explicit unresolved entries. The source assignment and accepted notebook
+remain unchanged until an independent validation/acceptance transaction.
+
+**Role mapping:** all nine assignment roles must point to admitted existing
+semantic block kinds, never a parallel source-of-truth model. Every proposed
+item identifies the exact source span or declares itself derived/unverified.
+A reference to an unresolved fact stays an `Unresolved` block, never a
+completed explanation, equation or citation. A candidate may repeat a
+source reference without duplicating accepted semantic identity.
+
+**Worked assignment:** source `You have 2 apples, receive 3 more. How many
+apples? What is their total price?` has no per-apple price. Produce an
+ordered one-page plan with:
+
+| Role | Candidate content | Evidence |
+| --- | --- | --- |
+| Title | `Apples: addition` | Assignment topic |
+| Explanation | `Two apples plus three` | Source quote |
+| Derivation | `2 + 3 = 5` | Arithmetic from source |
+| Equation | `2 + 3 = 5` | Derived; checked separately |
+| Table | Initial 2, added 3, total 5 | Source + derived |
+| Diagram | Two and three counted circles | Suggested illustration |
+| Citation | Exact source `src-1` | Source span preserved |
+| Example | `Five apples` | Derived result |
+| Conclusion | `Count = 5` | Derived result |
+
+The price answer remains `Unresolved(price_per_apple)` with a question for
+the user. The table and diagram are merely typed candidate descriptions;
+no vector geometry or page layout is inferred from these rows. Role choice
+cannot override actual notebook block-kind validation.
+
+**Refusal example:** the model writes `Each apple costs $2` without that
+fact, points a citation to nonexistent `src-99`, or attempts to turn the
+unresolved price into a represented conclusion. Reject the affected
+candidate atomically with source-linked diagnostics; do not silently insert
+the invented price. An unchanged source yields no new accepted revision.
+
+**Assumptions and limits:** nine organization roles, block resolution,
+ordered references and no-prefix-on-invalid projection already exist as
+domain primitives. Content generation, source interpretation, source-quality
+checking, role classification, visual layout and structured model response
+parsing are not implemented. The apple example is a finite theoretical
+notebook plan, not a generated assignment answer.
+
+## Acceptance decision
+
+- **Basis:** practical for ordered plan and block-kind admission; theoretical
+  for assignment parsing and generation, 2026-11-02.
+- **Delivered:** one finite assignment, nine ordered items, explicit price
+  uncertainty, source citation and fabricated-fact refusal.
+- **Not implemented by this acceptance:** model structuring, semantic
+  candidate construction, claimed source correctness or rendered notebook.
