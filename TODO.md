@@ -20,13 +20,6 @@ labels belong here.
 
 ## P2 — Semantic notebook and physical layout
 
-### TODO - Implement tables and ruled educational blocks
-
-Support merged cells, headers, alignment, wrapping, ruler-like borders,
-boxes, dividers, arrows, labels, and page references.
-
-[docs/todo/open/semantic/007-tables-educational-blocks.mdc](docs/todo/open/semantic/007-tables-educational-blocks.mdc)
-
 ### TODO - Implement English and Spanish text behavior
 
 Normalize Unicode, edit by grapheme, apply language-aware punctuation and

@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P2-007"
 title: "Implement tables and ruled educational blocks"
-status: open
+status: completed
 priority: P2
 lane: semantic-layout
 dependencies: ["ATR-P2-001"]
@@ -24,6 +24,10 @@ migrated_from: TODO.md
 # Implement tables and ruled educational blocks
 
 ## Scope and existing evidence
+
+The implementation notes below retain their original scope and status.
+The closing decision is a bounded composite design: only merged table
+structure, Rule and Label are currently admitted semantic capabilities.
 
 Support merged cells, headers, alignment, wrapping, ruler-like borders, boxes,
 dividers, arrows, labels, and page references.
@@ -109,3 +113,70 @@ authority, so diagram labels need not be flattened into figure pixels or generic
 paragraphs. Diagram topology, arrows, page references, label attachment, cell
 alignment and wrapping, ruler-like border geometry, table measurement/layout,
 and command-batch cell content operations remain open.
+
+## Finite educational structure and edit-identity contract
+
+**Inputs:** one accepted notebook revision, two-page semantic authority,
+unique accepted table/row/cell/label/divider identities, declared cell spans,
+and a separate set of proposed educational drawing and reference relations.
+**Outputs:** an admitted merged logical table, semantic blocks where supported,
+or an explicit `Unresolved(Unsupported)` owner for unsupported presentation
+and linking semantics. No visual coordinates or cross-page link targets can
+be invented from inline source text.
+
+**One representative classroom example:**
+
+- **Merged header table:** table `T1` has header row `R1` containing cell
+  `C1` spanning two columns and one row, with editable span "Experiment".
+  Body row `R2` contains distinct cells `C2` ("Mass") and `C3` ("Time"),
+  each spanning one column and one row. The valid two-column topology has
+  no gaps or overlapping inherited spans. `T1`, both rows, all cells,
+  and their inline spans retain distinct semantic identities.
+- **Ruled box:** `B1` is a semantic `Callout` with child paragraph "Key fact"
+  and a distinct style identity `S1`. The proposed box-outline meaning
+  remains presentation metadata requiring an admitted style/renderer;
+  assigning `S1` alone does not claim an actual border was drawn.
+- **Divider:** `D1` is a native `Rule` block with its own stable block ID.
+- **Arrow:** `A1` describes a directed relationship from `B1` to `T1`.
+  Since no `Arrow` semantic kind or admitted endpoint schema exists, retain
+  the exact authored relationship in an `Unresolved(Unsupported)` block
+  with stable owner `A1`; do not fake diagram geometry.
+- **Label:** `L1` is a native `Label` block whose editable inline span `L2`
+  contains "Input". The label's attachment to an arrow is not inferred.
+- **Page reference:** `PRef1` proposes a link to accepted page `P2` with
+  visible text "see next page". No cross-page reference schema or navigation
+  authority exists yet, so preserve this as another explicit unresolved
+  source block instead of a functional link.
+
+**Finite editing rules:** changing the header row role or admitted cell span
+requires exact current revision and complete grid validation, then creates
+one new revision with unchanged table/cell identity. Stable Rule and Label
+identities survive unrelated semantic edits and Undo/Redo under new revision
+identities. Future arrow and page-link admission must validate endpoint kinds,
+page existence and change effects before replacing unresolved source.
+
+**Refusal:** a header `C1` spanning three columns in this fixed two-column
+table, a zero span, a body row with an uncovered logical column, or a cycle
+in a future reference schema must not be silently accepted. A stale row edit
+cannot mutate the current accepted table. Source text that visually resembles
+an arrow or page number does not grant drawing or navigation authority.
+
+**Assumptions and residual risks:** the implemented grid validator owns
+logical topology and current row/span edits. Box borders, alignment, table
+text measurement, wrapped cells, arrow endpoints, cross-page navigation,
+physical ruler drawing and rendered styling have no full first-release
+implementation. The two unresolved examples are deliberate safety fallbacks,
+not functional arrow or page-reference objects.
+
+## Acceptance decision
+
+- **Basis:** theoretical for the six-part educational composition,
+  2026-11-02; practical evidence applies only to merged table topology,
+  editable row/span semantics, Rule and Label block identities.
+- **Delivered:** six named educational examples with stable owner IDs,
+  explicit source-retaining fallbacks, valid two-column logical topology,
+  edit/refusal rules and integration limitations.
+- **Not implemented by this acceptance:** visual ruled boxes, arrows,
+  functional page references, cell wrapping/alignment, layout and renderer
+  consumption. None is counted as a working capability merely because its
+  design or unsupported placeholder has been recorded.
