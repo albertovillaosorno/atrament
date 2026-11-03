@@ -50,7 +50,7 @@ for Rust profile editing, localhost sliders, Spanish/English glyph coverage,
 and real Rust PDF/PNG output. The previous NO-GO decision still applies to
 production claims, and physical hardware is not required for local use.
 
-### Native Rust printable-paper PDF (limited first slice)
+### Native Rust printable-paper PDF and PNG (limited first slice)
 
 The `atrament-paper` Rust CLI can already generate a physically sized **blank,
 ruled, squared-grid, or dotted sheet** using the existing Rust page-profile,
@@ -91,6 +91,21 @@ cargo run -q -p atrament_notebook_paper_cli -- \
 Pages contain the selected paper marks only; they do not yet include
 handwriting, dates, page numbers, or custom per-page content.
 
+For a **transparent PNG** of one physical paper sheet, select Rust PNG export
+and DPI instead of the default vector PDF:
+
+```sh
+cargo run -q -p atrament_notebook_paper_cli -- \
+  --paper-size a5 --style grid --spacing-mm 5 \
+  --format png --dpi 150 --output sheet.png
+```
+
+Rust renders paper marks as RGBA pixels over transparency and writes the
+physical DPI into PNG metadata. The supported DPI range is 72–300; output
+is limited to five million pixels and 24 MB. A4 at 300 DPI is too large,
+so use a lower DPI for larger sheets. The PNG exporter supports one sheet,
+not handwriting, embedded image assets, or PDF's `--pages` option.
+
 For explicit file saving instead of shell redirection, pass `--output FILE`.
 It uses the existing Rust atomic file-commit adapter and refuses to overwrite
 an existing file or symlink. `--replace` permits replacement of an existing
@@ -109,14 +124,18 @@ cargo run -q -p atrament_notebook_paper_cli -- \
 ```
 
 The explicit file-saving transport is Linux-only for now. Without `--output`,
-the original stdout PDF/JSON behavior remains unchanged.
+the original stdout PDF/JSON behavior remains unchanged. PNG may also be
+written to stdout explicitly with `--format png`.
 
 The authenticated localhost runtime also exposes this **same Rust authority**.
 After a compatible session handshake, `GET /api/paper/profile` returns the
 canonical default JSON; `POST /api/paper/profile` checks and canonicalizes a
-paper-only profile; and `POST /api/paper/pdf` produces its physical vector
-PDF. The POST routes require the exact session Origin, Bearer credential and
-bounded JSON input. This API does not yet save files or render handwriting.
+paper-only profile; `POST /api/paper/pdf` produces its physical vector
+PDF; and `POST /api/paper/png` produces transparent RGBA paper bytes.
+PNG POST also requires exactly one `X-Atrament-Png-Dpi: 150` header
+(value 72–300) and returns `Content-Type: image/png`. Every POST
+requires the exact session Origin, Bearer credential and bounded JSON
+input. These routes do not save files server-side or render handwriting.
 
 The same Rust session now admits `GET /api/handwriting/profile` for the
 uncalibrated default, `POST /api/handwriting/profile` for canonical, bounded
@@ -131,9 +150,10 @@ blank/ruled/grid/dot patterns, physical dimensions, editable spacing and
 four margins (numeric fields and synchronized sliders), and line color.
 
 Choose **Load JSON** to validate a selected paper-only profile through Rust,
-**Save JSON** to download the Rust-canonicalized profile, or **Export PDF** to
-download the Rust-rendered paper sheet. The browser does not generate PDFs or
-persist the profile in browser storage; downloads are explicit user actions.
+**Save JSON** to download the Rust-canonicalized profile, **Export PDF** for
+vector paper, or **Export transparent PNG** for a pixel image. PNG DPI has
+linked numeric and slider inputs. The browser renders neither PDF nor PNG
+and persists no profile in browser storage; downloads are explicit actions.
 
 A separate **handwriting statistics** section loads the Rust dimension
 catalog and versioned JSON profile only after session admission. It allows

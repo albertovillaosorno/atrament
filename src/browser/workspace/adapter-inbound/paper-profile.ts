@@ -22,7 +22,7 @@
 // - Merge-When:
 //   - Shared browser workspace integration owns these controls.
 // - Summary:
-//   - Provides local paper editing with Rust-owned admission and PDF output.
+//   - Provides paper editing with Rust-owned PDF and transparent PNG export.
 // - Description:
 //   - Client-side values are proposals, never authoritative geometry.
 // - Usage:
@@ -129,6 +129,9 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
     const resetButton = required<HTMLButtonElement>("paper-reset");
     const saveButton = required<HTMLButtonElement>("paper-save");
     const exportButton = required<HTMLButtonElement>("paper-export");
+    const exportPng = required<HTMLButtonElement>("paper-export-png");
+    const pngDpi = required<HTMLInputElement>("paper-png-dpi");
+    const pngDpiRange = required<HTMLInputElement>("paper-png-dpi-range");
     const status = required<HTMLElement>("paper-status");
     const numbers = NUMERIC_CONTROLS.map(([key, id]) => (
         [key, required<HTMLInputElement>(id)] as const
@@ -137,8 +140,8 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
         required<HTMLInputElement>(`${id}-range`)
     ));
     const controls = [preset, pattern, color, upload, resetButton,
-        saveButton, exportButton, ...numbers.map(([, input]) => input),
-        ...sliders];
+        saveButton, exportButton, exportPng, pngDpi, pngDpiRange,
+        ...numbers.map(([, input]) => input), ...sliders];
     let admitted: PaperProfile | null = null;
     let generation = 0;
     let busy = false;
@@ -205,8 +208,10 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
 
     async function requestPaper(
         secret: string,
-        endpoint: "/api/paper/profile" | "/api/paper/pdf",
+        endpoint: "/api/paper/profile" | "/api/paper/pdf"
+            | "/api/paper/png",
         json?: string,
+        dpi?: number,
     ): Promise<Response> {
         return fetch(`.${endpoint}`, {
             method: json === undefined ? "GET" : "POST",
@@ -214,6 +219,9 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
                 Authorization: `Bearer ${secret}`,
                 ...(json === undefined ? {} : {
                     "Content-Type": "application/json",
+                }),
+                ...(dpi === undefined ? {} : {
+                    "X-Atrament-Png-Dpi": String(dpi),
                 }),
             },
             ...(json === undefined ? {} : { body: json }),
@@ -348,6 +356,8 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
         admitted = null;
         busy = false;
         upload.value = "";
+        pngDpi.value = "150";
+        pngDpiRange.value = "150";
         for (const [, input] of numbers) {
             input.value = "";
         }
@@ -389,6 +399,12 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
             }
         });
     }
+    pngDpi.addEventListener("input", (): void => {
+        pngDpiRange.value = pngDpi.value;
+    });
+    pngDpiRange.addEventListener("input", (): void => {
+        pngDpi.value = pngDpiRange.value;
+    });
     resetButton.addEventListener("click", (): void => {
         void action(async (secret, observed) => {
             const response = await requestPaper(
@@ -444,6 +460,36 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
             if (isCurrent(secret, observed)) {
                 offerDownload(pdf, "atrament-paper.pdf");
                 setStatus("Rust PDF downloaded · paper only.");
+            }
+        });
+    });
+    exportPng.addEventListener("click", (): void => {
+        void action(async (secret, observed) => {
+            if (pngDpi.value === "" || !pngDpi.validity.valid) {
+                throw new Error("Choose a valid PNG resolution");
+            }
+            const dpi = Number(pngDpi.value);
+            if (!Number.isSafeInteger(dpi) || dpi < 72 || dpi > 300) {
+                throw new Error("PNG DPI must be 72 through 300");
+            }
+            const response = await requestPaper(
+                secret, "/api/paper/png", proposedJson(), dpi,
+            );
+            if (!isCurrent(secret, observed)) {
+                return;
+            }
+            if (response.status === 401) {
+                context.unauthorized();
+                return;
+            }
+            if (!response.ok || response.headers.get("content-type")
+                !== "image/png") {
+                throw new Error("Rust PNG export refused");
+            }
+            const png = await response.blob();
+            if (isCurrent(secret, observed)) {
+                offerDownload(png, "atrament-paper.png");
+                setStatus("Rust transparent PNG downloaded · paper only.");
             }
         });
     });

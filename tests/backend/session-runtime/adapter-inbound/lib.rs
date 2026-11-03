@@ -5478,3 +5478,128 @@ fn notebook_profile_http_rejects_invalid_json_content_type_and_size() {
     );
     assert_eq!(status_line(&wrong_method), "HTTP/1.1 400 Bad Request");
 }
+
+fn paper_png_request(
+    dpi: Option<&str>,
+    authorization: Option<&str>,
+    origin: Option<&str>,
+    media_type: Option<&str>,
+    body: &[u8],
+) -> Vec<u8> {
+    let mut head = format!(
+        "POST /api/paper/png HTTP/1.1\r\nHost: {EXPECTED_HOST}\r\n",
+    );
+    if let Some(value) = authorization {
+        head.push_str(&format!("Authorization: Bearer {value}\r\n"));
+    }
+    if let Some(value) = origin {
+        head.push_str(&format!("Origin: {value}\r\n"));
+    }
+    if let Some(value) = media_type {
+        head.push_str(&format!("Content-Type: {value}\r\n"));
+    }
+    if let Some(value) = dpi {
+        head.push_str(&format!("X-Atrament-Png-Dpi: {value}\r\n"));
+    }
+    head.push_str(&format!("Content-Length: {}\r\n\r\n", body.len()));
+    let mut request = head.into_bytes();
+    request.extend_from_slice(body);
+    request
+}
+
+#[test]
+fn authenticated_paper_png_route_returns_rust_rgba_and_physical_dpi() {
+    let get = route_runtime(
+        &paper_endpoint_request(
+            "GET", "/api/paper/profile", Some(EXPECTED_SECRET),
+            None, None, b"",
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&get), "HTTP/1.1 200 OK");
+    let profile = paper_http_body(&get);
+    let rendered = route_runtime(
+        &paper_png_request(
+            Some("150"), Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), profile,
+        ),
+        EXPECTED_HOST,
+    );
+    assert_eq!(status_line(&rendered), "HTTP/1.1 200 OK");
+    assert!(rendered.windows(b"Content-Type: image/png".len()).any(
+        |window| window == b"Content-Type: image/png"
+    ));
+    let png = paper_http_body(&rendered);
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(png.get(24..26), Some(&[8, 6][..]));
+    let phys = png.windows(4).position(|window| window == b"pHYs")
+        .expect("PNG contains physical resolution marker");
+    assert_eq!(png.get(phys + 4..phys + 13), Some(&[
+        0, 0, 23, 18, 0, 0, 23, 18, 1,
+    ][..]));
+    assert!(png.len() > 300_000, "nonempty physical PNG page");
+    // Read-only raster exports never mutate the existing draft session.
+    assert_eq!(
+        route_runtime(&paper_png_request(
+            Some("150"), Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), profile,
+        ), EXPECTED_HOST),
+        rendered,
+    );
+}
+
+#[test]
+fn paper_png_route_rejects_auth_origin_media_and_ambiguous_dpi() {
+    let profile = atrament_notebook_paper_cli::default_paper_profile_json();
+    for (authorization, origin, media_type, dpi, expected) in [
+        (None, Some(EXPECTED_ORIGIN), Some("application/json"),
+            Some("150"), "HTTP/1.1 401 Unauthorized"),
+        (Some(EXPECTED_SECRET), None, Some("application/json"),
+            Some("150"), "HTTP/1.1 401 Unauthorized"),
+        (Some(EXPECTED_SECRET), Some("http://evil.example"),
+            Some("application/json"), Some("150"),
+            "HTTP/1.1 401 Unauthorized"),
+        (Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("text/plain"), Some("150"),
+            "HTTP/1.1 400 Bad Request"),
+        (Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), None,
+            "HTTP/1.1 400 Bad Request"),
+        (Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), Some("71"),
+            "HTTP/1.1 400 Bad Request"),
+        (Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), Some("301"),
+            "HTTP/1.1 400 Bad Request"),
+        (Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), Some("nan"),
+            "HTTP/1.1 400 Bad Request"),
+        (Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"),
+            Some("150\r\nX-Atrament-Png-Dpi: 72"),
+            "HTTP/1.1 400 Bad Request"),
+    ] {
+        let response = route_runtime(
+            &paper_png_request(dpi, authorization, origin,
+                media_type, profile.as_bytes()),
+            EXPECTED_HOST,
+        );
+        assert_eq!(status_line(&response), expected);
+        assert!(!paper_http_body(&response).starts_with(b"\x89PNG"));
+    }
+    for invalid in [
+        b"{}".as_slice(),
+        br#"{"schema":"unknown"}"#,
+        &vec![b'x'; atrament_notebook_paper_cli::MAX_PROFILE_BYTES + 1],
+    ] {
+        let response = route_runtime(
+            &paper_png_request(
+                Some("150"), Some(EXPECTED_SECRET),
+                Some(EXPECTED_ORIGIN), Some("application/json"), invalid,
+            ),
+            EXPECTED_HOST,
+        );
+        assert!(status_line(&response).starts_with("HTTP/1.1 4"));
+        assert!(!paper_http_body(&response).starts_with(b"\x89PNG"));
+    }
+}

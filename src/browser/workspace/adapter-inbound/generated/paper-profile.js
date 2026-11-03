@@ -22,7 +22,7 @@
 // - Merge-When:
 //   - Shared browser workspace integration owns these controls.
 // - Summary:
-//   - Provides local paper editing with Rust-owned admission and PDF output.
+//   - Provides paper editing with Rust-owned PDF and transparent PNG export.
 // - Description:
 //   - Client-side values are proposals, never authoritative geometry.
 // - Usage:
@@ -88,12 +88,15 @@ export function createPaperProfileEditor(context) {
     const resetButton = required("paper-reset");
     const saveButton = required("paper-save");
     const exportButton = required("paper-export");
+    const exportPng = required("paper-export-png");
+    const pngDpi = required("paper-png-dpi");
+    const pngDpiRange = required("paper-png-dpi-range");
     const status = required("paper-status");
     const numbers = NUMERIC_CONTROLS.map(([key, id]) => [key, required(id)]);
     const sliders = NUMERIC_CONTROLS.map(([, id]) => (required(`${id}-range`)));
     const controls = [preset, pattern, color, upload, resetButton,
-        saveButton, exportButton, ...numbers.map(([, input]) => input),
-        ...sliders];
+        saveButton, exportButton, exportPng, pngDpi, pngDpiRange,
+        ...numbers.map(([, input]) => input), ...sliders];
     let admitted = null;
     let generation = 0;
     let busy = false;
@@ -150,13 +153,16 @@ export function createPaperProfileEditor(context) {
         candidate.line_color = color.value;
         return JSON.stringify(candidate);
     }
-    async function requestPaper(secret, endpoint, json) {
+    async function requestPaper(secret, endpoint, json, dpi) {
         return fetch(`.${endpoint}`, {
             method: json === undefined ? "GET" : "POST",
             headers: {
                 Authorization: `Bearer ${secret}`,
                 ...(json === undefined ? {} : {
                     "Content-Type": "application/json",
+                }),
+                ...(dpi === undefined ? {} : {
+                    "X-Atrament-Png-Dpi": String(dpi),
                 }),
             },
             ...(json === undefined ? {} : { body: json }),
@@ -279,6 +285,8 @@ export function createPaperProfileEditor(context) {
         admitted = null;
         busy = false;
         upload.value = "";
+        pngDpi.value = "150";
+        pngDpiRange.value = "150";
         for (const [, input] of numbers) {
             input.value = "";
         }
@@ -319,6 +327,12 @@ export function createPaperProfileEditor(context) {
             }
         });
     }
+    pngDpi.addEventListener("input", () => {
+        pngDpiRange.value = pngDpi.value;
+    });
+    pngDpiRange.addEventListener("input", () => {
+        pngDpi.value = pngDpiRange.value;
+    });
     resetButton.addEventListener("click", () => {
         void action(async (secret, observed) => {
             const response = await requestPaper(secret, "/api/paper/profile");
@@ -367,6 +381,34 @@ export function createPaperProfileEditor(context) {
             if (isCurrent(secret, observed)) {
                 offerDownload(pdf, "atrament-paper.pdf");
                 setStatus("Rust PDF downloaded · paper only.");
+            }
+        });
+    });
+    exportPng.addEventListener("click", () => {
+        void action(async (secret, observed) => {
+            if (pngDpi.value === "" || !pngDpi.validity.valid) {
+                throw new Error("Choose a valid PNG resolution");
+            }
+            const dpi = Number(pngDpi.value);
+            if (!Number.isSafeInteger(dpi) || dpi < 72 || dpi > 300) {
+                throw new Error("PNG DPI must be 72 through 300");
+            }
+            const response = await requestPaper(secret, "/api/paper/png", proposedJson(), dpi);
+            if (!isCurrent(secret, observed)) {
+                return;
+            }
+            if (response.status === 401) {
+                context.unauthorized();
+                return;
+            }
+            if (!response.ok || response.headers.get("content-type")
+                !== "image/png") {
+                throw new Error("Rust PNG export refused");
+            }
+            const png = await response.blob();
+            if (isCurrent(secret, observed)) {
+                offerDownload(png, "atrament-paper.png");
+                setStatus("Rust transparent PNG downloaded · paper only.");
             }
         });
     });

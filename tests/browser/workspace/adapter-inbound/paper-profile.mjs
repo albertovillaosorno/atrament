@@ -7,7 +7,8 @@ import { createPaperProfileEditor } from "../../../../src/browser/workspace/adap
 const numericIds = ["paper-width", "paper-height", "paper-spacing",
     "paper-upper", "paper-bottom", "paper-left", "paper-right"];
 const otherIds = ["paper-preset", "paper-pattern", "paper-color", "paper-load",
-    "paper-reset", "paper-save", "paper-export", "paper-status"];
+    "paper-reset", "paper-save", "paper-export", "paper-export-png",
+    "paper-png-dpi", "paper-png-dpi-range", "paper-status"];
 const defaults = {
     schema: "atrament.paper.v1",
     style: "grid",
@@ -38,10 +39,12 @@ function setupControls() {
         ...numericIds.map((id) => `${id}-range`)]) {
         elements.set(id, new FakeControl());
     }
+    elements.get("paper-png-dpi").value = "150";
+    elements.get("paper-png-dpi-range").value = "150";
     return elements;
 }
 
-test("paper editor round-trips local profile and Rust PDF without ambient storage", async () => {
+test("paper editor exports Rust PDF and PNG", async () => {
     const original = {
         document: globalThis.document,
         fetch: globalThis.fetch,
@@ -90,6 +93,12 @@ test("paper editor round-trips local profile and Rust PDF without ambient storag
                 headers: { "Content-Type": "application/json" },
             });
         }
+        if (endpoint === "./api/paper/png") {
+            assert.equal(init.headers["X-Atrament-Png-Dpi"], "200");
+            return new Response(Uint8Array.of(137, 80, 78, 71), {
+                headers: { "Content-Type": "image/png" },
+            });
+        }
         assert.equal(endpoint, "./api/paper/pdf");
         return new Response(new TextEncoder().encode("%PDF-1.4\n"), {
             headers: { "Content-Type": "application/pdf" },
@@ -102,8 +111,10 @@ test("paper editor round-trips local profile and Rust PDF without ambient storag
             unauthorized() { throw Error("unexpected 401"); },
         });
         assert.equal(elements.get("paper-export").disabled, true);
+        assert.equal(elements.get("paper-export-png").disabled, true);
         await editor.start(secret);
         assert.equal(elements.get("paper-export").disabled, false);
+        assert.equal(elements.get("paper-export-png").disabled, false);
         assert.equal(elements.get("paper-width").value, "210");
         assert.equal(elements.get("paper-width-range").value, "210");
         elements.get("paper-preset").value = "letter";
@@ -121,6 +132,20 @@ test("paper editor round-trips local profile and Rust PDF without ambient storag
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(links[1].download, "atrament-paper.pdf");
         assert.equal(requests.at(-1).endpoint, "./api/paper/pdf");
+        elements.get("paper-png-dpi-range").value = "200";
+        elements.get("paper-png-dpi-range").dispatch("input");
+        assert.equal(elements.get("paper-png-dpi").value, "200");
+        elements.get("paper-export-png").dispatch("click");
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(links[2].download, "atrament-paper.png");
+        assert.equal(requests.at(-1).endpoint, "./api/paper/png");
+        assert.equal(requests.at(-1).headers["X-Atrament-Png-Dpi"],
+            "200");
+        const pngRequests = requests.length;
+        elements.get("paper-png-dpi").value = "999";
+        elements.get("paper-export-png").dispatch("click");
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(requests.length, pngRequests);
         const fileText = JSON.stringify({ ...defaults, style: "ruled" });
         elements.get("paper-load").files = { item: () => ({
             size: fileText.length, text: async () => fileText,
@@ -130,8 +155,14 @@ test("paper editor round-trips local profile and Rust PDF without ambient storag
         assert.equal(elements.get("paper-pattern").value, "ruled");
         editor.reset();
         assert.equal(elements.get("paper-export").disabled, true);
+        assert.equal(elements.get("paper-export-png").disabled, true);
+        assert.equal(elements.get("paper-png-dpi").value, "150");
         assert.ok(urls.some((url) => url.startsWith("revoke:")));
         assert.equal(requests.filter((r) => r.endpoint === "./api/paper/pdf").length, 1);
+        const pngDownloads = requests.filter(
+            (r) => r.endpoint === "./api/paper/png",
+        );
+        assert.equal(pngDownloads.length, 1);
     } finally {
         globalThis.document = original.document;
         globalThis.fetch = original.fetch;

@@ -61,7 +61,7 @@ use atrament_diagnostic::{
 };
 use atrament_notebook_paper_cli::{
     MAX_PROFILE_BYTES, canonical_paper_profile_json,
-    default_paper_profile_json, paper_profile_pdf,
+    default_paper_profile_json, paper_profile_pdf, paper_profile_png,
 };
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
@@ -78,6 +78,7 @@ const JAVASCRIPT_CONTENT_TYPE: &str = "text/javascript; charset=utf-8";
 const TEXT_CONTENT_TYPE: &str = "text/plain; charset=utf-8";
 const JSON_CONTENT_TYPE: &str = "application/json; charset=utf-8";
 const PDF_CONTENT_TYPE: &str = "application/pdf";
+const PNG_CONTENT_TYPE: &str = "image/png";
 const RESPONSE_TRAILERS: &str = concat!(
     "Cache-Control: no-store\r\n",
     // A hostile local page must not keep an opener reference to the
@@ -1118,6 +1119,25 @@ fn route_paper_profile(
                 br#"{"error":"invalid_paper_profile"}"#,
             ),
         },
+        "/api/paper/png" => {
+            // Requiring exactly one header avoids ambiguous duplicate DPI.
+            let Some(dpi) = single_header_value(
+                request, "x-atrament-png-dpi",
+            ).and_then(|value| value.parse::<u32>().ok())
+                .filter(|dpi| (72..=300).contains(dpi)) else {
+                    return json_response(
+                        "400 Bad Request",
+                        br#"{"error":"invalid_png_dpi"}"#,
+                    );
+                };
+            match paper_profile_png(body, dpi) {
+                Ok(png) => response("200 OK", PNG_CONTENT_TYPE, &png),
+                Err(_error) => json_response(
+                    "400 Bad Request",
+                    br#"{"error":"invalid_paper_profile"}"#,
+                ),
+            }
+        },
         _ => json_response(
             "400 Bad Request",
             br#"{"error":"invalid_request"}"#,
@@ -1234,7 +1254,7 @@ fn route_profile_transport(
         "/api/notebook/profile" => {
             Some(route_notebook_profile(request, method, context))
         }
-        "/api/paper/profile" | "/api/paper/pdf" => {
+        "/api/paper/profile" | "/api/paper/pdf" | "/api/paper/png" => {
             Some(route_paper_profile(request, method, target, context))
         }
         "/api/handwriting/profile" | "/api/handwriting/dimensions" => {

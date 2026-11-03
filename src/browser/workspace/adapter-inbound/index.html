@@ -150,7 +150,7 @@
               </h3>
               <p class="field-help">
                 Editable sheet geometry. The Rust backend validates every
-                profile and generates the PDF; no handwriting yet.
+                profile and exports PDF or transparent PNG; no handwriting yet.
               </p>
             </div>
             <span class="panel-badge">Paper only</span>
@@ -199,6 +199,13 @@
             <label>Line color
               <input id="paper-color" type="color" disabled>
             </label>
+            <label>PNG resolution (DPI)
+              <input id="paper-png-dpi" type="number" min="72" max="300"
+                step="1" value="150" inputmode="numeric" disabled>
+              <input id="paper-png-dpi-range" type="range" min="72"
+                max="300" step="1" value="150"
+                aria-label="PNG resolution slider" disabled>
+            </label>
             <label>Top margin (mm)
               <input id="paper-upper" type="number" min="0" max="500"
                 step="0.001" inputmode="decimal" disabled>
@@ -238,6 +245,8 @@
             <button id="paper-save" type="button" disabled>Save JSON</button>
             <button id="paper-export" type="button" class="primary-button"
               disabled>Export PDF</button>
+            <button id="paper-export-png" type="button"
+              disabled>Export transparent PNG</button>
           </div>
           <p id="paper-status" class="action-status" role="status"
             aria-live="polite">Requires a compatible backend session.</p>
