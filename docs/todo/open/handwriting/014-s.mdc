@@ -66,6 +66,14 @@ preserve a live stroke/mark association through later edits. Correlated
 seeded variation, joined cursive, multi-stroke pen lifts and continuous
 curve primitives are still open.
 
+## Reusable curved n/u sources (partial) — 2026-11-03
+
+Two explicitly selected rounded-letter starters now supply mathematical
+quadratic guides and ordered n/u line samples. The existing exact-glyph
+accent action can append tilde/diaeresis to these samples. Neither
+composition nor export retains live joins or a parametric curve primitive;
+seeded correlated handwriting variation remains unfinished.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

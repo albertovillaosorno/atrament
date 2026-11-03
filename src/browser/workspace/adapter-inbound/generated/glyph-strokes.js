@@ -144,6 +144,30 @@ function upperStory(cx, cy, radius) {
     const right = { x: cx + radius, y: peak.y };
     return { start, peak, end, left, right };
 }
+// The n upper hump and u lower bowl use two smooth quadratic arcs.
+// Their exact guides are retained only in SVG; v1 TSV samples the arcs.
+function roundedStory(cx, cy, radius, g) {
+    const high = cy - radius;
+    const low = cy + radius;
+    const bowY = g === "n" ? high : low;
+    const leftX = cx - radius;
+    const rightX = cx + radius;
+    return {
+        start: { x: leftX, y: cy },
+        peak: { x: cx, y: bowY },
+        end: { x: rightX, y: cy },
+        left: { x: leftX, y: bowY },
+        right: { x: rightX, y: bowY },
+        firstStem: {
+            from: { x: leftX, y: g === "n" ? low : high },
+            to: { x: leftX, y: g === "n" ? high : cy },
+        },
+        lastStem: {
+            from: { x: rightX, y: cy },
+            to: { x: rightX, y: g === "n" ? low : high },
+        },
+    };
+}
 function quadratic(from, control, to, step) {
     const t = step / ARCH_SEGMENTS;
     const u = 1 - t;
@@ -155,8 +179,8 @@ function quadratic(from, control, to, step) {
     };
 }
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
-    if (!["o", "a", "ó", "á"].includes(g)) {
-        throw new Error("Circle starter requires exact o, a, ó or á");
+    if (!["o", "a", "ó", "á", "n", "u"].includes(g)) {
+        throw new Error("Geometric starter requires o, a, ó, á, n or u");
     }
     if (kind !== "single" && kind !== "two-storey"
         || (kind === "two-storey" && !["a", "á"].includes(g))) {
@@ -177,7 +201,29 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         || cy - radius < halfPen
         || cx + radius + halfPen > 3500
         || cy + radius + halfPen > 4500) {
-        throw new Error("Circle and pen thickness must fit inside glyph cell");
+        throw new Error("Shape and pen thickness must fit inside glyph cell");
+    }
+    if (g === "n" || g === "u") {
+        const bow = roundedStory(cx, cy, radius, g);
+        const line = (first, last) => {
+            return validateStroke({
+                grapheme: g, x1: first.x, y1: first.y,
+                x2: last.x, y2: last.y, width: pen, color,
+            });
+        };
+        const output = [line(bow.firstStem.from, bow.firstStem.to)];
+        for (const [from, control, to] of [
+            [bow.start, bow.left, bow.peak],
+            [bow.peak, bow.right, bow.end],
+        ]) {
+            for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
+                const first = quadratic(from, control, to, step);
+                const last = quadratic(from, control, to, step + 1);
+                output.push(line(first, last));
+            }
+        }
+        output.push(line(bow.lastStem.from, bow.lastStem.to));
+        return output;
     }
     const point = (step) => {
         const radians = 2 * Math.PI * step / CIRCLE_SEGMENTS;
@@ -329,6 +375,9 @@ export function createGlyphStrokeEditor() {
     const idealStem = required("glyph-ideal-stem");
     const idealAccent = required("glyph-ideal-accent");
     const idealArch = required("glyph-ideal-arch");
+    const roundedPath = required("glyph-ideal-rounded");
+    const roundedLeft = required("glyph-ideal-rounded-left");
+    const roundedRight = required("glyph-ideal-rounded-right");
     const selected = required("glyph-selected");
     const update = required("glyph-update");
     const remove = required("glyph-remove");
@@ -399,14 +448,17 @@ export function createGlyphStrokeEditor() {
             idealCircle.setAttribute("stroke-width", numeric.width.value);
             idealCircle.setAttribute("stroke", color.value);
             const shown = active ? "visible" : "hidden";
-            idealCircle.setAttribute("visibility", shown);
+            const chosen = selectedForm();
+            const circleVisible = ["o", "a", "ó", "á"]
+                .includes(chosen.grapheme);
+            const circleState = circleVisible ? shown : "hidden";
+            idealCircle.setAttribute("visibility", circleState);
             idealStem.setAttribute("x1", String(cx + r));
             idealStem.setAttribute("y1", String(cy - r));
             idealStem.setAttribute("x2", String(cx + r));
             idealStem.setAttribute("y2", String(cy + r));
             idealStem.setAttribute("stroke-width", numeric.width.value);
             idealStem.setAttribute("stroke", color.value);
-            const chosen = selectedForm();
             const stemVisible = active && ["a", "á"].includes(chosen.grapheme);
             const stemState = stemVisible ? "visible" : "hidden";
             idealStem.setAttribute("visibility", stemState);
@@ -421,6 +473,37 @@ export function createGlyphStrokeEditor() {
             const archVisible = active && chosen.variant === "two-storey";
             const archState = archVisible ? "visible" : "hidden";
             idealArch.setAttribute("visibility", archState);
+            const roundedKind = chosen.grapheme === "n"
+                ? "n" : "u";
+            const rounded = roundedStory(cx, cy, r, roundedKind);
+            const roundedStart = ["M", rounded.start.x,
+                rounded.start.y].join(" ");
+            const roundedFirst = ["Q", rounded.left.x, rounded.left.y,
+                rounded.peak.x, rounded.peak.y].join(" ");
+            const roundedSecond = ["Q", rounded.right.x, rounded.right.y,
+                rounded.end.x, rounded.end.y].join(" ");
+            const roundedD = [roundedStart, roundedFirst,
+                roundedSecond].join(" ");
+            roundedPath.setAttribute("d", roundedD);
+            roundedPath.setAttribute("stroke-width", numeric.width.value);
+            roundedPath.setAttribute("stroke", color.value);
+            for (const [element, part] of [
+                [roundedLeft, rounded.firstStem],
+                [roundedRight, rounded.lastStem],
+            ]) {
+                element.setAttribute("x1", String(part.from.x));
+                element.setAttribute("y1", String(part.from.y));
+                element.setAttribute("x2", String(part.to.x));
+                element.setAttribute("y2", String(part.to.y));
+                element.setAttribute("stroke-width", numeric.width.value);
+                element.setAttribute("stroke", color.value);
+            }
+            const roundedVisible = active
+                && ["n", "u"].includes(chosen.grapheme);
+            const roundedState = roundedVisible ? "visible" : "hidden";
+            roundedPath.setAttribute("visibility", roundedState);
+            roundedLeft.setAttribute("visibility", roundedState);
+            roundedRight.setAttribute("visibility", roundedState);
             const pen = Number(numeric.width.value);
             const dx = Number(accentShift.value);
             const lift = Number(accentLift.value);
@@ -441,8 +524,11 @@ export function createGlyphStrokeEditor() {
             idealCircle.setAttribute("visibility", "hidden");
             idealStem.setAttribute("visibility", "hidden");
             idealArch.setAttribute("visibility", "hidden");
+            roundedPath.setAttribute("visibility", "hidden");
+            roundedLeft.setAttribute("visibility", "hidden");
+            roundedRight.setAttribute("visibility", "hidden");
             idealAccent.setAttribute("visibility", "hidden");
-            ideal.setAttribute("aria-label", "Invalid circle settings");
+            ideal.setAttribute("aria-label", "Invalid geometric settings");
         }
     };
     const render = () => {
@@ -701,7 +787,7 @@ export function createGlyphStrokeEditor() {
             const chosen = selectedForm();
             const target = chosen.grapheme;
             if (character.value !== target) {
-                throw new Error("Choose matching o, a, ó or á");
+                throw new Error("Choose the matching geometric starter glyph");
             }
             const lines = starterFromInputs();
             const next = [

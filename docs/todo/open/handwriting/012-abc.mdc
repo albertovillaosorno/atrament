@@ -245,6 +245,21 @@ TSV replacement. There is no stored accent-anchor primitive, native curved
 PDF path, automatic inventory fill, or general diacritic synthesis. All
 remaining P1 glyph-coverage criteria are open.
 
+## Analytic n/u geometric starters (partial) — 2026-11-03
+
+The localhost editor now offers two additional lowercase templates based on
+smooth quadratic SVG constructions: n with an upper hump, u with a lower
+bowl. Both use two stems and two continuous 16-segment samples for their
+bow in Rust-compatible integer-micrometre TSV (34 strokes each). A source n
+or u can be explicitly composed into separate ñ or ü ink with the bounded
+accent action above (37 and 36 strokes respectively).
+
+Browser regressions verify exact endpoint continuity, quadratic guide
+control points, Unicode-specific replacement, TSV roundtrip and refusal of
+out-of-cell dimensions. The true SVG quadratics are **not** retained in the
+native v1 stroke file or PDF/PNG. Other Spanish/English letters still need
+actual geometric templates, and general script joining remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

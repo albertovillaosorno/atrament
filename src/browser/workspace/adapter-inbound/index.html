@@ -531,7 +531,8 @@
           </div>
           <p class="field-help">Geometric starters: exact o is an analytic
             circle, simple a adds a right stem, and two-storey a adds an
-            analytic upper arch. Acute ó/á add a rising accent. Native v1
+            analytic upper arch. The n upper hump and u lower bowl use
+            analytic quadratic arches. Acute ó/á add a rising accent. Native v1
             TSV/PDF ink samples these curves as line segments rather than
             preserving exact circle or quadratic primitives.
             The explicit replacement affects only the selected grapheme.</p>
@@ -539,6 +540,8 @@
             <label>Geometric starter
               <select id="glyph-form" disabled>
                 <option value="o">Circle o</option>
+                <option value="n">Rounded n (upper hump)</option>
+                <option value="u">Rounded u (lower bowl)</option>
                 <option value="a">Simple a (circle + stem)</option>
                 <option value="a-two">Printed two-storey a (upper arch)</option>
                 <option value="ó">Acute ó (circle + accent)</option>
@@ -546,15 +549,15 @@
                 <option value="á-two">Acute printed two-storey á</option>
               </select>
             </label>
-            <label>Circle center X (µm)
+            <label>Geometry center X (µm)
               <input id="glyph-circle-x" type="number" min="0" max="3500"
                 step="1" value="1550" disabled>
             </label>
-            <label>Circle center Y (µm)
+            <label>Geometry center Y (µm)
               <input id="glyph-circle-y" type="number" min="0" max="4500"
                 step="1" value="2450" disabled>
             </label>
-            <label>Circle radius (200–1600 µm)
+            <label>Shape radius (200–1600 µm)
               <input id="glyph-circle-radius" type="number" min="200"
                 max="1600" step="1" value="1100" disabled>
             </label>
@@ -589,6 +592,15 @@
             <path id="glyph-ideal-arch" d="" fill="none"
               stroke="#243647" stroke-width="250" stroke-linecap="round"
               stroke-linejoin="round" visibility="hidden"></path>
+            <path id="glyph-ideal-rounded" d="" fill="none"
+              stroke="#243647" stroke-width="250" stroke-linecap="round"
+              stroke-linejoin="round" visibility="hidden"></path>
+            <line id="glyph-ideal-rounded-left" x1="450" y1="3550"
+              x2="450" y2="1350" stroke="#243647" stroke-width="250"
+              stroke-linecap="round" visibility="hidden"></line>
+            <line id="glyph-ideal-rounded-right" x1="2650" y1="2450"
+              x2="2650" y2="3550" stroke="#243647" stroke-width="250"
+              stroke-linecap="round" visibility="hidden"></line>
             <line id="glyph-ideal-accent" x1="1165" y1="980"
               x2="1825" y2="485" stroke="#243647" stroke-width="250"
               stroke-linecap="round" visibility="hidden"></line>

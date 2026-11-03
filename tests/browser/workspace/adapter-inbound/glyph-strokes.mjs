@@ -99,7 +99,8 @@ function mountEditor() {
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
-        "glyph-ideal-accent",
+        "glyph-ideal-rounded", "glyph-ideal-rounded-left",
+        "glyph-ideal-rounded-right", "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
         "glyph-earlier", "glyph-later",
         "glyph-save", "glyph-preview",
@@ -746,6 +747,112 @@ test("accent action replaces target and refuses atomically", async () => {
     }
 });
 
+test("rounded n and u use smooth quadratic guides and sampled TSV", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const n = geometricStarter("n", ...args);
+    const u = geometricStarter("u", ...args);
+    assert.equal(n.length, 34, "one stem, 32 bow samples, one stem");
+    assert.equal(u.length, 34);
+    assert.deepEqual([n[0].x1, n[0].y1, n[0].x2, n[0].y2],
+        [450, 3550, 450, 1350]);
+    assert.deepEqual([n[1].x1, n[1].y1], [450, 2450]);
+    assert.deepEqual([n[16].x2, n[16].y2], [1550, 1350]);
+    assert.deepEqual([n[32].x2, n[32].y2], [2650, 2450]);
+    assert.deepEqual([n[33].x1, n[33].y1,
+        n[33].x2, n[33].y2], [2650, 2450, 2650, 3550]);
+    assert.deepEqual([u[0].x1, u[0].y1,
+        u[0].x2, u[0].y2], [450, 1350, 450, 2450]);
+    assert.deepEqual([u[16].x2, u[16].y2], [1550, 3550]);
+    assert.deepEqual([u[33].x1, u[33].y1,
+        u[33].x2, u[33].y2], [2650, 2450, 2650, 1350]);
+    for (const lines of [n, u]) {
+        for (let i = 1; i < 33; i += 1) {
+            if (i > 1) assert.deepEqual(
+                [lines[i - 1].x2, lines[i - 1].y2],
+                [lines[i].x1, lines[i].y1],
+                "the two 16-segment bows have continuous sampling",
+            );
+        }
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(lines)),
+            lines);
+    }
+    const tilde = composeAccentedGlyph(n, "n", "ñ", "#123456");
+    const diaeresis = composeAccentedGlyph(u, "u", "ü", "#123456");
+    assert.equal(tilde.length, 37);
+    assert.equal(diaeresis.length, 36);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary([
+        ...n, ...u, ...tilde, ...diaeresis,
+    ])).length, 141);
+    assert.throws(() => geometricStarter("n", ...args,
+        undefined, "two-storey"), /Two-storey/);
+    assert.throws(() => geometricStarter("u", 1550, 2450, 1600, 250,
+        "#123456"), /Shape and pen/);
+});
+
+test("n/u guides replace only matching glyphs", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("character").value = "n";
+        get("character").dispatch("input");
+        get("form").value = "n";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "hidden", "n is not a circular bowl");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-rounded-left").attributes.get("x1"),
+            "450");
+        assert.equal(get("ideal-rounded-right").attributes.get("y2"),
+            "3550");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 450 2450 Q 450 1350 1550 1350 Q 2650 1350 2650 2450");
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 34);
+        get("character").value = "u";
+        get("character").dispatch("input");
+        get("form").value = "u";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 450 2450 Q 450 3550 1550 3550 Q 2650 3550 2650 2450");
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 34);
+        get("character").value = "ñ";
+        get("character").dispatch("input");
+        get("copy-from").value = "n";
+        get("compose").dispatch("click");
+        assert.equal(get("preview").children.length, 37);
+        get("character").value = "ü";
+        get("character").dispatch("input");
+        get("copy-from").value = "u";
+        get("compose").dispatch("click");
+        assert.equal(get("preview").children.length, 36);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads[0].text());
+        assert.equal(saved.length, 141);
+        for (const [glyph, expected] of [
+            ["n", 34], ["u", 34], ["ñ", 37], ["ü", 36],
+        ]) assert.equal(saved.filter((line) => line.grapheme === glyph)
+            .length, expected);
+        get("circle-radius").value = "1600";
+        get("form").value = "u";
+        get("form").dispatch("change");
+        get("character").value = "u";
+        get("character").dispatch("input");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Shape and pen/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "invalid quadratic parameters preserve target strokes");
+        editor.reset();
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("geometric replacement preserves glyph identity and bounds", async () => {
     const ui = mountEditor();
     try {
@@ -758,7 +865,8 @@ test("geometric replacement preserves glyph identity and bounds", async () => {
         }];
         await get("load").dispatch("change");
         get("construct").dispatch("click");
-        assert.match(get("status").textContent, /Choose matching o, a, ó or á/);
+        assert.match(get("status").textContent,
+            /Choose the matching geometric starter glyph/);
         get("character").value = "o";
         get("character").dispatch("input");
         get("circle-radius").value = "3200";

@@ -534,10 +534,10 @@ entries retain their relative order and ink. The native TSV sequence remains
 the chosen drawing order, but v1 line segments do not represent a grouped
 curved pen stroke.
 
-For a geometric starting point, choose exact `o`, `a`, `ó`, or `á` and
-select its matching geometric starter. Adjust circle center and radius in
+For a geometric starting point, choose exact `o`, `a`, `ó`, `á`, `n` or `u`
+and select its matching geometric starter. Adjust the center and radius in
 micrometres, then deliberately replace that letter's unsaved strokes.
-All forms share a true analytic circle.
+The `o`/`a` forms share a true analytic circle.
 
 A simple `a` adds a right stem. A separately selectable
 **printed two-storey `a`** adds two smooth quadratic upper arches
@@ -552,6 +552,17 @@ simple `á`).
 Two-storey `a` adds 32 upper-arch samples and a right stem
 (81 lines); two-storey `á` adds an accent (82). This is **sampled near-curve
 ink**, not an exact vector-curve PDF export.
+
+Lowercase `n` and `u` now have separately selectable analytic quadratic
+constructions: `n` uses an upper hump and two stems, while `u` uses a lower
+bowl and two stems. Each SVG guide shows two exact quadratic arcs; each
+TSV template contains their 32 line samples and two stems (34 segments).
+The marks retain explicit pen order and can be selected, reversed or moved.
+
+Compose `n` into `ñ` or `u` into `ü` with **Compose accent from authored
+base**; these produce respectively 37 and 36 sampled segments at the default
+center/radius. The original `n` and `u` are unchanged. Neither glyph is an
+entire alphabet or a continuous native quadratic in the exported PDF.
 
 For `ó` and both `á` variants, **Acute horizontal shift**
 (-500 to +500 µm) and **Acute lift** (0 to 500 µm) move the accent
