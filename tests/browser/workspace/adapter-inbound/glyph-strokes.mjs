@@ -92,7 +92,8 @@ function mountEditor() {
         revokeObjectURL: URL.revokeObjectURL,
     };
     const ids = ["glyph-character", "glyph-color", "glyph-load",
-        "glyph-add", "glyph-selected", "glyph-update", "glyph-remove",
+        "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-selected",
+        "glyph-update", "glyph-remove",
         "glyph-save", "glyph-preview",
         "glyph-status", ...["x1", "y1", "x2", "y2", "width"]
             .flatMap((axis) => [`glyph-${axis}`, `glyph-${axis}-range`])];
@@ -376,6 +377,44 @@ test("curved pointer traces preserve samples and refuse excess", async () => {
         assert.match(get("status").textContent, /128 sampled/);
         assert.equal(preview.children.length, 3,
             "overlong gesture must not partially append segments");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("copy creates an independent exact-glyph shape", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        get("copy").dispatch("click");
+        assert.equal(get("preview").children.length, 0);
+        editor.start();
+        get("add").dispatch("click");
+        get("character").value = "n\u{303}";
+        get("character").dispatch("input");
+        get("copy-from").value = "ñ";
+        get("copy").dispatch("click");
+        assert.equal(get("preview").children.length, 1);
+        assert.match(get("status").textContent, /Copied 1 strokes/);
+        get("selected").value = "1";
+        get("selected").dispatch("change");
+        get("x1").value = "600";
+        get("update").dispatch("click");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()), [
+            { ...stroke(), color: "#243647" },
+            { ...stroke("n\u{303}"), x1: 600, color: "#243647" },
+        ]);
+        get("copy-from").value = "n\u{303}";
+        get("copy").dispatch("click");
+        assert.match(get("status").textContent, /different exact graphemes/);
+        get("copy-from").value = "∞";
+        get("copy").dispatch("click");
+        assert.match(get("status").textContent, /no authored strokes/);
+        get("copy-from").value = "ñ";
+        editor.reset();
+        assert.equal(get("copy-from").value, "");
+        assert.equal(get("copy").disabled, true);
     } finally {
         ui.restore();
     }

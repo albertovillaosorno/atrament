@@ -569,6 +569,17 @@
             line to select
             it; the dropdown works without a pointer.</p>
           <div class="paper-actions">
+            <label>Copy strokes from exact grapheme
+              <input id="glyph-copy-from" type="text" maxlength="64"
+                spellcheck="false" autocomplete="off" disabled>
+            </label>
+            <button id="glyph-copy" type="button" disabled>
+              Replace selected glyph with copy
+            </button>
+          </div>
+          <p class="field-help">Copy replaces only the selected glyph's
+            unsaved strokes. Edit the copied form before downloading.</p>
+          <div class="paper-actions">
             <label>Existing stroke for this grapheme
               <select id="glyph-selected" disabled>
                 <option value="">Choose a stroke to edit</option>

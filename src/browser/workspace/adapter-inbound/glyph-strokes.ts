@@ -152,6 +152,8 @@ export function createGlyphStrokeEditor(): {
     const color = required<HTMLInputElement>("glyph-color");
     const source = required<HTMLInputElement>("glyph-load");
     const add = required<HTMLButtonElement>("glyph-add");
+    const copyFrom = required<HTMLInputElement>("glyph-copy-from");
+    const copy = required<HTMLButtonElement>("glyph-copy");
     const selected = required<HTMLSelectElement>("glyph-selected");
     const update = required<HTMLButtonElement>("glyph-update");
     const remove = required<HTMLButtonElement>("glyph-remove");
@@ -164,7 +166,8 @@ export function createGlyphStrokeEditor(): {
         numeric[axis] = required<HTMLInputElement>(`glyph-${axis}`);
         ranges[axis] = required<HTMLInputElement>(`glyph-${axis}-range`);
     }
-    const controls = [character, color, source, add, selected, update,
+    const controls = [character, color, source, add, copyFrom, copy,
+        selected, update,
         remove, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
@@ -403,6 +406,35 @@ export function createGlyphStrokeEditor(): {
         }
         render();
     });
+    copy.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            const target = character.value;
+            const origin = copyFrom.value;
+            if (!exactGrapheme(target) || !exactGrapheme(origin)
+                || target === origin) {
+                throw new Error("Copy needs two different exact graphemes");
+            }
+            const templates = strokes.filter((stroke) => {
+                return stroke.grapheme === origin;
+            });
+            if (templates.length === 0) {
+                throw new Error("Source grapheme has no authored strokes");
+            }
+            const next = [
+                ...strokes.filter((stroke) => stroke.grapheme !== target),
+                ...templates.map((stroke) => ({ ...stroke, grapheme: target })),
+            ];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message("Copied " + templates.length
+                + " strokes to the exact selected grapheme (unsaved)");
+        } catch (error) {
+            message(String(error));
+        }
+    });
     add.addEventListener("click", () => {
         if (!active) return;
         try {
@@ -502,6 +534,7 @@ export function createGlyphStrokeEditor(): {
         selectedIndex = null;
         for (const control of controls) control.disabled = true;
         source.value = "";
+        copyFrom.value = "";
         if (downloadUrl !== null) {
             URL.revokeObjectURL(downloadUrl);
             downloadUrl = null;
