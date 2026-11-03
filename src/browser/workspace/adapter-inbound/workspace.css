@@ -803,3 +803,87 @@ button:focus-visible {
     line-height: 1.15;
   }
 }
+
+.paper-config {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #d5cec1;
+  border-radius: 12px;
+  background: #f4f0e8;
+}
+
+.paper-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.paper-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: #4c473f;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.paper-controls input,
+.paper-controls select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid #cbc5b8;
+  border-radius: 8px;
+  background: #fffdfa;
+  color: #28251f;
+  font: inherit;
+}
+
+.paper-controls input[type="color"] {
+  height: 34px;
+  padding: 2px;
+}
+
+.paper-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.paper-upload-label {
+  position: relative;
+  overflow: hidden;
+  padding: 8px 12px;
+  border: 1px solid #cbc5b8;
+  border-radius: 8px;
+  background: #faf8f3;
+  color: #2d2a25;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.paper-upload-label:has(input:disabled) {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.paper-upload-label input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.paper-upload-label:focus-within {
+  outline: 2px solid #45413a;
+  outline-offset: 2px;
+}
+
+.paper-controls input[type="range"] {
+  padding: 0;
+  margin: 0;
+  accent-color: #45413a;
+}

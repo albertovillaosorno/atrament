@@ -1,0 +1,397 @@
+// Copyright:
+//   - Copyright © 2026 Alberto Villa Osorno.
+// SPDX-License-Identifier:
+//   - MIT
+// Confidential:
+//   - false
+// License-File:
+//   - LICENSE-MIT
+//
+// Boundary-Contract:
+// - Owns:
+//   - Browser input widgets and file downloads for paper-only profiles.
+// - Must-Not:
+//   - Admit invalid geometry, compile PDFs, or render notebook pages.
+//   - Persist profiles or credentials in browser storage.
+// - Allows:
+//   - Inputs: User fields and authenticated Rust paper-profile HTTP results.
+//   - Outputs: Editable controls and explicit user-selected downloads.
+//   - Side effects: DOM changes, file selection, Blob download and requests.
+// - Split-When:
+//   - An independent paper-profile editor application is implemented.
+// - Merge-When:
+//   - Shared browser workspace integration owns these controls.
+// - Summary:
+//   - Provides local paper editing with Rust-owned admission and PDF output.
+// - Description:
+//   - Client-side values are proposals, never authoritative geometry.
+// - Usage:
+//   - Imported by the authenticated workspace after session handshake.
+// - Defaults:
+//   - Controls stay disabled until the backend supplies a profile.
+//
+const NUMERIC_CONTROLS = [
+    ["width_um", "paper-width"],
+    ["height_um", "paper-height"],
+    ["spacing_um", "paper-spacing"],
+    ["margin_top_um", "paper-upper"],
+    ["margin_bottom_um", "paper-bottom"],
+    ["margin_left_um", "paper-left"],
+    ["margin_right_um", "paper-right"],
+];
+// Presets are ergonomic field suggestions. Rust validates each proposed size.
+const SHEET_PRESETS = {
+    a3: [297_000, 420_000],
+    a4: [210_000, 297_000],
+    a5: [148_000, 210_000],
+    b5: [176_000, 250_000],
+    letter: [215_900, 279_400],
+    legal: [215_900, 355_600],
+};
+function required(id) {
+    const element = document.getElementById(id);
+    if (element === null) {
+        throw new Error(`Missing paper editor control: ${id}`);
+    }
+    return element;
+}
+function isPaperStyle(value) {
+    return value === "blank" || value === "grid"
+        || value === "ruled" || value === "dot";
+}
+function readCanonicalProfile(json) {
+    const parsed = JSON.parse(json);
+    if (typeof parsed !== "object" || parsed === null) {
+        throw new Error("Missing canonical paper profile");
+    }
+    const profile = parsed;
+    if (Object.keys(profile).length !== 10
+        || profile.schema !== "atrament.paper.v1"
+        || typeof profile.style !== "string"
+        || !isPaperStyle(profile.style)
+        || typeof profile.line_color !== "string"
+        || !/^#[0-9a-fA-F]{6}$/.test(profile.line_color)) {
+        throw new Error("Invalid paper profile response");
+    }
+    for (const [key] of NUMERIC_CONTROLS) {
+        if (!Number.isSafeInteger(profile[key]) || Number(profile[key]) < 0) {
+            throw new Error("Invalid paper dimensions from backend");
+        }
+    }
+    return profile;
+}
+export function createPaperProfileEditor(context) {
+    const preset = required("paper-preset");
+    const pattern = required("paper-pattern");
+    const color = required("paper-color");
+    const upload = required("paper-load");
+    const resetButton = required("paper-reset");
+    const saveButton = required("paper-save");
+    const exportButton = required("paper-export");
+    const status = required("paper-status");
+    const numbers = NUMERIC_CONTROLS.map(([key, id]) => [key, required(id)]);
+    const sliders = NUMERIC_CONTROLS.map(([, id]) => (required(`${id}-range`)));
+    const controls = [preset, pattern, color, upload, resetButton,
+        saveButton, exportButton, ...numbers.map(([, input]) => input),
+        ...sliders];
+    let admitted = null;
+    let generation = 0;
+    let busy = false;
+    let downloadUrl = null;
+    function setStatus(message) {
+        status.textContent = message;
+    }
+    function isCurrent(secret, observed) {
+        return generation === observed
+            && context.currentSecret() === secret
+            && !context.sessionSignal.aborted;
+    }
+    function syncControls() {
+        const disabled = busy || admitted === null
+            || context.currentSecret() === null;
+        for (const control of controls) {
+            control.disabled = disabled;
+        }
+    }
+    function showProfile(profile) {
+        admitted = profile;
+        pattern.value = profile.style;
+        color.value = profile.line_color;
+        for (const [index, [key, input]] of numbers.entries()) {
+            input.value = String(profile[key] / 1000);
+            const slider = sliders[index];
+            if (slider !== undefined) {
+                slider.value = input.value;
+            }
+        }
+        preset.value = Object.entries(SHEET_PRESETS).find(([, dimensions]) => dimensions[0] === profile.width_um
+            && dimensions[1] === profile.height_um)?.[0] ?? "custom";
+        syncControls();
+    }
+    function proposedJson() {
+        if (admitted === null) {
+            throw new Error("No backend paper profile loaded");
+        }
+        const candidate = { ...admitted };
+        for (const [key, input] of numbers) {
+            if (input.value === "" || !input.validity.valid) {
+                throw new Error("Check the highlighted paper dimensions");
+            }
+            const mm = Number(input.value);
+            if (!Number.isFinite(mm) || mm < 0) {
+                throw new Error("Paper dimensions must be finite");
+            }
+            candidate[key] = Math.round(mm * 1000);
+        }
+        if (!isPaperStyle(pattern.value)) {
+            throw new Error("Choose a supported paper pattern");
+        }
+        candidate.style = pattern.value;
+        candidate.line_color = color.value;
+        return JSON.stringify(candidate);
+    }
+    async function requestPaper(secret, endpoint, json) {
+        return fetch(`.${endpoint}`, {
+            method: json === undefined ? "GET" : "POST",
+            headers: {
+                Authorization: `Bearer ${secret}`,
+                ...(json === undefined ? {} : {
+                    "Content-Type": "application/json",
+                }),
+            },
+            ...(json === undefined ? {} : { body: json }),
+            credentials: "omit",
+            cache: "no-store",
+            mode: "same-origin",
+            redirect: "error",
+            referrerPolicy: "origin",
+            signal: AbortSignal.any([
+                context.sessionSignal,
+                AbortSignal.timeout(30_000),
+            ]),
+        });
+    }
+    async function canonicalize(secret, json) {
+        const response = await requestPaper(secret, "/api/paper/profile", json);
+        if (response.status === 401) {
+            context.unauthorized();
+            throw new Error("Session expired");
+        }
+        if (!response.ok) {
+            throw new Error("Rust rejected the paper profile");
+        }
+        if (!response.headers.get("content-type")?.startsWith("application/json")) {
+            throw new Error("Unexpected paper profile response");
+        }
+        const acceptedJson = await response.text();
+        if (new TextEncoder().encode(acceptedJson).length > 4096) {
+            throw new Error("Paper profile response exceeds limit");
+        }
+        return {
+            json: acceptedJson,
+            profile: readCanonicalProfile(acceptedJson),
+        };
+    }
+    function offerDownload(blob, filename) {
+        if (downloadUrl !== null) {
+            URL.revokeObjectURL(downloadUrl);
+        }
+        const url = URL.createObjectURL(blob);
+        downloadUrl = url;
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.rel = "noopener";
+        link.click();
+        window.setTimeout(() => {
+            if (downloadUrl === url) {
+                URL.revokeObjectURL(url);
+                downloadUrl = null;
+            }
+        }, 60_000);
+    }
+    async function action(work) {
+        const secret = context.currentSecret();
+        if (secret === null || busy || admitted === null) {
+            return;
+        }
+        const observed = generation;
+        busy = true;
+        syncControls();
+        try {
+            await work(secret, observed);
+        }
+        catch {
+            if (isCurrent(secret, observed)) {
+                setStatus("Paper action rejected or unavailable; no file saved.");
+            }
+        }
+        finally {
+            if (isCurrent(secret, observed)) {
+                busy = false;
+                syncControls();
+            }
+        }
+    }
+    async function start(secret) {
+        generation += 1;
+        const observed = generation;
+        admitted = null;
+        busy = true;
+        syncControls();
+        setStatus("Loading default paper profile from Rust…");
+        try {
+            const response = await requestPaper(secret, "/api/paper/profile");
+            if (!isCurrent(secret, observed)) {
+                return;
+            }
+            if (response.status === 401) {
+                context.unauthorized();
+                return;
+            }
+            if (!response.ok) {
+                throw new Error("Paper profile request failed");
+            }
+            const json = await response.text();
+            if (!isCurrent(secret, observed)) {
+                return;
+            }
+            if (new TextEncoder().encode(json).length > 4096) {
+                throw new Error("Oversized default paper profile");
+            }
+            showProfile(readCanonicalProfile(json));
+            setStatus("Paper profile loaded · edit fields, then save or export.");
+        }
+        catch {
+            if (isCurrent(secret, observed)) {
+                setStatus("Paper profile unavailable; check the local backend.");
+            }
+        }
+        finally {
+            if (isCurrent(secret, observed)) {
+                busy = false;
+                syncControls();
+            }
+        }
+    }
+    function reset() {
+        generation += 1;
+        admitted = null;
+        busy = false;
+        upload.value = "";
+        for (const [, input] of numbers) {
+            input.value = "";
+        }
+        if (downloadUrl !== null) {
+            URL.revokeObjectURL(downloadUrl);
+            downloadUrl = null;
+        }
+        syncControls();
+        setStatus("Requires a compatible backend session.");
+    }
+    preset.addEventListener("change", () => {
+        const dimensions = SHEET_PRESETS[preset.value];
+        if (dimensions !== undefined) {
+            const width = required("paper-width");
+            const height = required("paper-height");
+            width.value = String(dimensions[0] / 1000);
+            height.value = String(dimensions[1] / 1000);
+            if (sliders[0] !== undefined && sliders[1] !== undefined) {
+                sliders[0].value = width.value;
+                sliders[1].value = height.value;
+            }
+        }
+    });
+    for (const [index, [key, input]] of numbers.entries()) {
+        const slider = sliders[index];
+        input.addEventListener("input", () => {
+            if (slider !== undefined) {
+                slider.value = input.value;
+            }
+            if (key === "width_um" || key === "height_um") {
+                preset.value = "custom";
+            }
+        });
+        slider?.addEventListener("input", () => {
+            input.value = slider.value;
+            if (key === "width_um" || key === "height_um") {
+                preset.value = "custom";
+            }
+        });
+    }
+    resetButton.addEventListener("click", () => {
+        void action(async (secret, observed) => {
+            const response = await requestPaper(secret, "/api/paper/profile");
+            if (!isCurrent(secret, observed)) {
+                return;
+            }
+            if (response.status === 401) {
+                context.unauthorized();
+                return;
+            }
+            if (!response.ok) {
+                throw new Error("Cannot reset paper profile");
+            }
+            const profile = readCanonicalProfile(await response.text());
+            if (isCurrent(secret, observed)) {
+                showProfile(profile);
+                setStatus("Paper profile reset to the Rust default.");
+            }
+        });
+    });
+    saveButton.addEventListener("click", () => {
+        void action(async (secret, observed) => {
+            const result = await canonicalize(secret, proposedJson());
+            if (isCurrent(secret, observed)) {
+                showProfile(result.profile);
+                offerDownload(new Blob([result.json], { type: "application/json" }), "atrament-paper.json");
+                setStatus("Validated paper JSON downloaded.");
+            }
+        });
+    });
+    exportButton.addEventListener("click", () => {
+        void action(async (secret, observed) => {
+            const response = await requestPaper(secret, "/api/paper/pdf", proposedJson());
+            if (!isCurrent(secret, observed)) {
+                return;
+            }
+            if (response.status === 401) {
+                context.unauthorized();
+                return;
+            }
+            if (!response.ok || response.headers.get("content-type")
+                !== "application/pdf") {
+                throw new Error("Rust PDF export refused");
+            }
+            const pdf = await response.blob();
+            if (isCurrent(secret, observed)) {
+                offerDownload(pdf, "atrament-paper.pdf");
+                setStatus("Rust PDF downloaded · paper only.");
+            }
+        });
+    });
+    upload.addEventListener("change", () => {
+        const file = upload.files?.item(0);
+        upload.value = "";
+        if (file === null || file === undefined) {
+            return;
+        }
+        if (file.size > 4096) {
+            setStatus("Paper JSON exceeds the 4096-byte limit.");
+            return;
+        }
+        void action(async (secret, observed) => {
+            const json = await file.text();
+            if (!isCurrent(secret, observed)) {
+                return;
+            }
+            const result = await canonicalize(secret, json);
+            if (isCurrent(secret, observed)) {
+                showProfile(result.profile);
+                setStatus("Validated paper profile loaded from file.");
+            }
+        });
+    });
+    syncControls();
+    return { start, reset };
+}

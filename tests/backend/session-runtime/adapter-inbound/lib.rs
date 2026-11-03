@@ -1867,6 +1867,10 @@ const SESSION_DIAGNOSTIC_JAVASCRIPT: &[u8] = include_bytes!(concat!(
     "../../../../src/browser/workspace/adapter-inbound/",
     "generated/session-diagnostic.js"
 ));
+const PAPER_PROFILE_JAVASCRIPT: &[u8] = include_bytes!(concat!(
+    "../../../../src/browser/workspace/adapter-inbound/",
+    "generated/paper-profile.js"
+));
 const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(concat!(
     "../../../../src/browser/workspace/adapter-inbound/",
     "generated/session-draft.js"
@@ -2047,6 +2051,11 @@ fn serves_embedded_frontend_resources_without_caching() {
             "/generated/session-diagnostic.js",
             "text/javascript; charset=utf-8",
             SESSION_DIAGNOSTIC_JAVASCRIPT,
+        ),
+        (
+            "/generated/paper-profile.js",
+            "text/javascript; charset=utf-8",
+            PAPER_PROFILE_JAVASCRIPT,
         ),
         (
             "/generated/session-draft.js",

@@ -142,6 +142,107 @@
           </div>
         </fieldset>
 
+        <section class="paper-config" aria-labelledby="paper-config-title">
+          <div class="section-row compact">
+            <div>
+              <h3 class="field-label" id="paper-config-title">
+                Paper profile editor
+              </h3>
+              <p class="field-help">
+                Editable sheet geometry. The Rust backend validates every
+                profile and generates the PDF; no handwriting yet.
+              </p>
+            </div>
+            <span class="panel-badge">Paper only</span>
+          </div>
+          <div class="paper-controls">
+            <label>Sheet preset
+              <select id="paper-preset" disabled>
+                <option value="custom">Custom</option>
+                <option value="a3">A3</option>
+                <option value="a4">A4</option>
+                <option value="a5">A5</option>
+                <option value="b5">B5</option>
+                <option value="letter">Letter (Mexico/US)</option>
+                <option value="legal">Legal</option>
+              </select>
+            </label>
+            <label>Pattern
+              <select id="paper-pattern" disabled>
+                <option value="grid">Grid</option>
+                <option value="ruled">Ruled</option>
+                <option value="dot">Dot</option>
+                <option value="blank">Blank</option>
+              </select>
+            </label>
+            <label>Width (mm)
+              <input id="paper-width" type="number" min="10" max="1000"
+                step="0.001" inputmode="decimal" disabled>
+              <input id="paper-width-range" type="range" min="10"
+                max="500" step="0.5"
+                aria-label="Sheet width slider" disabled>
+            </label>
+            <label>Height (mm)
+              <input id="paper-height" type="number" min="10" max="1000"
+                step="0.001" inputmode="decimal" disabled>
+              <input id="paper-height-range" type="range" min="10"
+                max="500" step="0.5"
+                aria-label="Sheet height slider" disabled>
+            </label>
+            <label>Spacing / ruling (mm)
+              <input id="paper-spacing" type="number" min="0.1" max="100"
+                step="0.001" inputmode="decimal" disabled>
+              <input id="paper-spacing-range" type="range" min="0.1"
+                max="30" step="0.1"
+                aria-label="Ruling spacing slider" disabled>
+            </label>
+            <label>Line color
+              <input id="paper-color" type="color" disabled>
+            </label>
+            <label>Top margin (mm)
+              <input id="paper-upper" type="number" min="0" max="500"
+                step="0.001" inputmode="decimal" disabled>
+              <input id="paper-upper-range" type="range" min="0"
+                max="60" step="0.5"
+                aria-label="Top margin slider" disabled>
+            </label>
+            <label>Bottom margin (mm)
+              <input id="paper-bottom" type="number" min="0" max="500"
+                step="0.001" inputmode="decimal" disabled>
+              <input id="paper-bottom-range" type="range" min="0"
+                max="60" step="0.5"
+                aria-label="Bottom margin slider" disabled>
+            </label>
+            <label>Left margin (mm)
+              <input id="paper-left" type="number" min="0" max="500"
+                step="0.001" inputmode="decimal" disabled>
+              <input id="paper-left-range" type="range" min="0"
+                max="60" step="0.5"
+                aria-label="Left margin slider" disabled>
+            </label>
+            <label>Right margin (mm)
+              <input id="paper-right" type="number" min="0" max="500"
+                step="0.001" inputmode="decimal" disabled>
+              <input id="paper-right-range" type="range" min="0"
+                max="60" step="0.5"
+                aria-label="Right margin slider" disabled>
+            </label>
+          </div>
+          <div class="paper-actions">
+            <label class="paper-upload-label" for="paper-load">
+              Load JSON
+              <input id="paper-load" type="file" accept=".json,application/json"
+                aria-label="Load paper-only profile JSON" disabled>
+            </label>
+            <button id="paper-reset" type="button" disabled>Default</button>
+            <button id="paper-save" type="button" disabled>Save JSON</button>
+            <button id="paper-export" type="button" class="primary-button"
+              disabled>Export PDF</button>
+          </div>
+          <p id="paper-status" class="action-status" role="status"
+            aria-live="polite">Requires a compatible backend session.</p>
+        </section>
+
         <section class="prompt-block" aria-labelledby="prompt-title">
           <div class="section-row">
             <div>

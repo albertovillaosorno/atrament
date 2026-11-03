@@ -831,7 +831,7 @@ fn execute(request: CliRequest) -> Result<Option<Vec<u8>>, String> {
 pub fn run_cli() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().skip(1).collect();
     let Some(request) = parse_options(&args)? else {
-        writeln!(io::stderr().lock(), "{USAGE}")?;
+        writeln!(io::stdout().lock(), "{USAGE}")?;
         return Ok(());
     };
     if let Some(bytes) = execute(request)? {

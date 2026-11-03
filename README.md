@@ -74,7 +74,9 @@ measurements are millimeters and the PDF uses physical point dimensions,
 not screenshot pixels. Invalid options
 fail before the CLI writes PDF bytes. This is a **paper-only** CLI: it does not
 load/save notebook or handwriting profiles, draw handwriting, embed images,
-or provide localhost sliders yet. Those are still open Rust integration tasks.
+or provide handwriting controls. The localhost page now has an initial
+paper-only editor with numeric inputs and sliders; notebook-profile and
+handwriting editors are still open integration tasks.
 
 A printable collection of identical paper sheets is possible with `--pages`
 (1–32). This is an output-only choice, not a field in the paper profile:
@@ -86,6 +88,7 @@ cargo run -q -p atrament_notebook_paper_cli -- \
 
 Pages contain the selected paper marks only; they do not yet include
 handwriting, dates, page numbers, or custom per-page content.
+
 For explicit file saving instead of shell redirection, pass `--output FILE`.
 It uses the existing Rust atomic file-commit adapter and refuses to overwrite
 an existing file or symlink. `--replace` permits replacement of an existing
@@ -105,6 +108,7 @@ cargo run -q -p atrament_notebook_paper_cli -- \
 
 The explicit file-saving transport is Linux-only for now. Without `--output`,
 the original stdout PDF/JSON behavior remains unchanged.
+
 The authenticated localhost runtime also exposes this **same Rust authority**.
 After a compatible session handshake, `GET /api/paper/profile` returns the
 canonical default JSON; `POST /api/paper/profile` checks and canonicalizes a
@@ -112,7 +116,15 @@ paper-only profile; and `POST /api/paper/pdf` produces its physical vector
 PDF. The POST routes require the exact session Origin, Bearer credential and
 bounded JSON input. This API does not yet save files or render handwriting.
 
-
+The localhost workspace presents a **paper-only** editor after a successful
+session handshake. It offers A3/A4/A5/B5/Letter/Legal presets, blank/ruled/grid/dot
+patterns, physical dimensions, editable spacing and four margins (numeric
+fields and synchronized sliders), and line color. Choose **Load JSON** to
+validate a selected paper-only profile through Rust, **Save JSON** to download
+the Rust-canonicalized profile, or **Export PDF** to download the Rust-rendered
+paper sheet. The browser does not generate PDFs or persist the profile in
+browser storage; downloaded files are explicit user actions. The editor is
+not yet a visual handwriting renderer or a full notebook-profile editor.
 
 For a reusable paper-only profile, the same CLI can emit versioned JSON,
 read it again, and apply further explicit edits:

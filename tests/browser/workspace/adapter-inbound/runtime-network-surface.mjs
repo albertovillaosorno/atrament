@@ -53,6 +53,11 @@ const LOOPBACK_RUNTIME = path.join(
     "lib.rs",
 );
 
+// One native paper authority is used by the CLI and authenticated localhost.
+const PAPER_CLI = path.join(
+    BACKEND_ROOT, "notebook-paper-cli", "application", "lib.rs",
+);
+
 const BROWSER_LAUNCH = path.join(
     BACKEND_ROOT,
     "browser-launch",
@@ -487,6 +492,12 @@ function unreviewedAmbientProcessInputReads(source, sourcePath) {
             || argumentsRead[0][1] !== "args_os"
             || !/\benv\s*::\s*args_os\s*\(\s*\)\s*\.\s*skip\s*\(\s*1\s*\)/u
                 .test(source);
+    }
+    // The native paper CLI reads its own argv once, never ambient secrets.
+    if (sourcePath === PAPER_CLI) {
+        return reads.length !== 0 || argumentsRead.length !== 1
+            || argumentsRead[0][1] !== "args"
+            || !/\benv\s*::\s*args\s*\(\s*\)\s*\.\s*skip\s*\(\s*1\s*\)/u.test(source);
     }
     if (argumentsRead.length > 0) {
         return true;
@@ -1020,6 +1031,7 @@ test("ambient filesystem reads stay in reviewed profile adapters", async () => {
         }
     }
     assert.deepEqual(readingFiles.sort(), [
+        "notebook-paper-cli/application/lib.rs",
         "profile-export-target-check/composition/lib.rs",
         "profile-export-session/composition/lib.rs",
         "profile-file-commit/adapter-outbound/lib.rs",
@@ -1506,6 +1518,7 @@ test("backend borrowed stream reads stay in reviewed adapters",
         }
     }
     assert.deepEqual(readers.sort(), [
+        PAPER_CLI,
         FILESYSTEM_COMMIT,
         path.join(BACKEND_ROOT, "profile-file-reader", "adapter-outbound",
             "lib.rs"),
@@ -1570,6 +1583,7 @@ test("std::io stream writing stays in reviewed output adapters", async () => {
         }
     }
     assert.deepEqual(writers.sort(), [
+        PAPER_CLI,
         FILESYSTEM_COMMIT,
         path.join(BACKEND_ROOT, "runtime-bootstrap", "composition", "main.rs"),
         LOOPBACK_RUNTIME,
@@ -2268,7 +2282,9 @@ test("backend Rust sources cannot redirect compilation out of inventory",
             redirectFiles.push(sourcePath);
         }
     }
-    assert.deepEqual(redirectFiles, [],
+    // Only this exact test module path is admitted from the shared paper
+    // implementation. It is compiled only when cfg(test) is enabled.
+    assert.deepEqual(redirectFiles, [PAPER_CLI],
         "extra included Rust code needs source-level privacy review");
 });
 
@@ -2317,6 +2333,7 @@ function unreviewedBuildTimeInputs(source, sourcePath) {
             "index.html", "workspace.css", "generated/main.js",
             "generated/session-diagnostic.js", "generated/session-draft.js",
             "generated/session-fragment.js", "generated/session-handshake.js",
+            "generated/paper-profile.js",
         ].map((asset) =>
             `include_bytes!("${assetRoot}${asset}")`
         );
@@ -2334,6 +2351,7 @@ test("backend build-time embed inventory refuses undeclared inputs", () => {
         "index.html", "workspace.css", "generated/main.js",
         "generated/session-diagnostic.js", "generated/session-draft.js",
         "generated/session-fragment.js", "generated/session-handshake.js",
+        "generated/paper-profile.js",
     ];
     const assetRoot = "../../../browser/workspace/adapter-inbound/";
     const approvedAssets = assets.map((asset) =>
@@ -2464,6 +2482,10 @@ function unreviewedStandardStreamAuthority(source, sourcePath) {
     const stdin = [...source.matchAll(
         /\b(?:std\s*::\s*)?io\s*::\s*stdin\b/gu,
     )].length;
+    if (sourcePath === PAPER_CLI) {
+        return stderr !== 0 || stdin !== 0 || stdout !== 2
+            || !source.includes('writeln!(io::stdout().lock(), "{USAGE}")');
+    }
     const expectedStdout = sourcePath === path.join(BACKEND_ROOT,
         "runtime-bootstrap", "composition", "main.rs") ? 2 : 0;
     return stderr !== 0 || stdin !== 0 || stdout !== expectedStdout;

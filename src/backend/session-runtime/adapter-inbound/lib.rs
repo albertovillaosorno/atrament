@@ -121,6 +121,9 @@ const MAIN_JAVASCRIPT: &[u8] = include_bytes!(
 const SESSION_DIAGNOSTIC_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/session-diagnostic.js"
 );
+const PAPER_PROFILE_JAVASCRIPT: &[u8] = include_bytes!(
+    "../../../browser/workspace/adapter-inbound/generated/paper-profile.js"
+);
 const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/session-draft.js"
 );
@@ -1227,6 +1230,11 @@ fn public_get_response(target: &str) -> Option<Vec<u8>> {
             "200 OK",
             JAVASCRIPT_CONTENT_TYPE,
             SESSION_DIAGNOSTIC_JAVASCRIPT,
+        )),
+        "/generated/paper-profile.js" => Some(response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            PAPER_PROFILE_JAVASCRIPT,
         )),
         "/generated/session-draft.js" => Some(response(
             "200 OK",

@@ -55,6 +55,7 @@ const MAIN_MODULE = new URL(
 // Standalone Node tests can run before the TypeScript is rebuilt.
 const REVIEWED_MODULES = [
     "main.js",
+    "paper-profile.js",
     "session-diagnostic.js",
     "session-draft.js",
     "session-fragment.js",
@@ -107,6 +108,14 @@ function usesUnreviewedMarkupRequests(source) {
         }
         remaining = remaining.replace(tag, "");
     }
+    // This one explicitly selected paper JSON input is bounded by Rust;
+    // any additional picker remains an unreviewed request capability.
+    const paperPicker = `<input id="paper-load" type="file" accept=".json,application/json"
+                aria-label="Load paper-only profile JSON" disabled>`;
+    if (remaining.split(paperPicker).length - 1 !== 1) {
+        return true;
+    }
+    remaining = remaining.replace(paperPicker, "");
     return [
         /<\s*(?:a|link|script|base|form|iframe|frame|portal|img)\b/iu,
         /<\s*(?:source|picture|video|audio|track|embed|object)\b/iu,
@@ -223,10 +232,10 @@ test("static workspace starts session controls disabled", async () => {
 // unrelated identifier. Unlike fetch(), fetchLater() can dispatch after the
 // page is disposed, bypassing page-lifetime cancellation entirely.
 // Full-line comments are not executable authority.
-function hasUnreviewedFetchReference(source, main) {
+function hasUnreviewedFetchReference(source, main, paper = false) {
     const executable = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     const references = executable.match(/\bfetch\b/gu) ?? [];
-    return references.length !== (main ? 4 : 0)
+    return references.length !== (main ? 4 : paper ? 1 : 0)
         || /\bfetchLater\b/u.test(executable);
 }
 
@@ -273,10 +282,12 @@ test("browser source and generated modules reject undeclared transport",
     async () => {
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
+        const paper = filename === "paper-profile.ts"
+            || filename === "paper-profile.js";
         const fetchCalls = source.match(/\bfetch\s*\(/gu) ?? [];
-        assert.equal(fetchCalls.length, main ? 4 : 0,
+        assert.equal(fetchCalls.length, main ? 4 : paper ? 1 : 0,
             `${filename} must retain only four reviewed fetch sites`);
-        assert.equal(hasUnreviewedFetchReference(source, main), false,
+        assert.equal(hasUnreviewedFetchReference(source, main, paper), false,
             `${filename} gained an unreviewed fetch reference`);
         if (main) {
             for (const required of [
@@ -332,6 +343,7 @@ function hasUnreviewedExecutableCode(source, filename) {
             'import * as sessionHandshake from "./session-handshake.js";',
             'import { sessionSecretFromFragment } from ' +
                 '"./session-fragment.js";',
+            'import { createPaperProfileEditor } from "./paper-profile.js";',
         ],
         "session-draft": [
             'import { decodeBoundedUtf8Response } from ' +
@@ -358,7 +370,8 @@ function hasUnreviewedExecutableCode(source, filename) {
         "window.setTimeout(() => {",
     ]) {
         if (remaining.split(site).length - 1 !==
-            (moduleName === "main" ? 1 : 0)) {
+            ((moduleName === "main" || (moduleName === "paper-profile"
+                && site === "window.setTimeout(() => {")) ? 1 : 0)) {
             return true;
         }
         remaining = remaining.replace(site, "");
@@ -401,7 +414,7 @@ test("browser runtime code loading requires explicit review", async () => {
 // An alias to the entire global object can retrieve a browser capability
 // without spelling its name in a direct-property audit. Preserve only the
 // reviewed viewport, navigation cleanup, lifecycle and timer references.
-function hasUnreviewedBrowserGlobalAuthority(source, main) {
+function hasUnreviewedBrowserGlobalAuthority(source, main, paper = false) {
     // These exact expressions are the complete reviewed window authority.
     // Removing them before scanning also catches aliases to the root object.
     const allowed = [
@@ -422,7 +435,7 @@ function hasUnreviewedBrowserGlobalAuthority(source, main) {
     ];
     let remaining = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     for (const [site, count] of allowed) {
-        if (remaining.split(site).length - 1 !== (main ? count : 0)) {
+        if (remaining.split(site).length - 1 !== (main ? count : paper && site === "window.setTimeout(() => {" ? 1 : 0)) {
             return true;
         }
         remaining = remaining.replaceAll(site, "");
@@ -448,11 +461,13 @@ test("browser first-class global aliases require explicit review", async () => {
     ];
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
-        assert.equal(hasUnreviewedBrowserGlobalAuthority(source, main),
+        assert.equal(hasUnreviewedBrowserGlobalAuthority(source, main,
+            filename === "paper-profile.ts" || filename === "paper-profile.js"),
             false, `${filename} gained unreviewed browser global authority`);
         for (const candidate of candidates) {
             assert.equal(hasUnreviewedBrowserGlobalAuthority(
-                `${source}\n${candidate}`, main), true,
+                `${source}\n${candidate}`, main,
+                filename === "paper-profile.ts" || filename === "paper-profile.js"), true,
             `${filename}: ${candidate} bypassed the global-object review`);
         }
     }
@@ -461,7 +476,7 @@ test("browser first-class global aliases require explicit review", async () => {
 // A DOM node can recover the full Document through ownerDocument, and a
 // frame can expose another document even without an explicit global window.
 // These references need the same first-class capability review as window.
-function hasUnreviewedDocumentAuthority(source, main, typed) {
+function hasUnreviewedDocumentAuthority(source, main, typed, paper = false) {
     const allowed = [
         [typed ? "document.querySelector<T>(selector)"
             : "document.querySelector(selector)", 1],
@@ -477,6 +492,16 @@ function hasUnreviewedDocumentAuthority(source, main, typed) {
             return true;
         }
         remaining = remaining.replaceAll(site, "");
+    }
+    // Exact documented paper editor control and one Blob download anchor.
+    for (const site of [
+        "document.getElementById(id)",
+        'document.createElement("a")',
+    ]) {
+        if (remaining.split(site).length - 1 !== (paper ? 1 : 0)) {
+            return true;
+        }
+        remaining = remaining.replace(site, "");
     }
     return new RegExp(
         String.raw`\b(?:document|Document|ownerDocument|` +
@@ -505,11 +530,13 @@ test("browser first-class Document authority requires explicit review",
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
         const typed = filename.endsWith(".ts");
-        assert.equal(hasUnreviewedDocumentAuthority(source, main, typed),
+        assert.equal(hasUnreviewedDocumentAuthority(source, main, typed,
+            filename === "paper-profile.ts" || filename === "paper-profile.js"),
             false, `${filename} gained unreviewed Document authority`);
         for (const candidate of probes) {
             assert.equal(hasUnreviewedDocumentAuthority(
-                `${source}\n${candidate}`, main, typed), true,
+                `${source}\n${candidate}`, main, typed,
+                filename === "paper-profile.ts" || filename === "paper-profile.js"), true,
             `${filename}: ${candidate} bypassed Document review`);
         }
     }
@@ -889,7 +916,20 @@ test("browser filesystem authority inventory rejects unreviewed access", () => {
 // Ordinary HTML file inputs, drag-and-drop FileList, and FileReader are
 // distinct paths from the File System Access pickers reviewed above.
 // Requiring review does not imply the user selected any local file.
-function hasUnreviewedBrowserFileIntake(source) {
+function hasUnreviewedBrowserFileIntake(source, paper = false, typed = false) {
+    let reviewed = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
+    // Counts restrict file input to one selected JSON and one Blob download.
+    for (const [site, count] of [
+        ["URL.createObjectURL(blob)", 1],
+        ["upload.files?.item(0)", 1],
+        ['new Blob([result.json], { type: "application/json" })', 1],
+        ["blob: Blob", typed ? 1 : 0],
+    ]) {
+        if (reviewed.split(site).length - 1 !== (paper ? count : 0)) {
+            return true;
+        }
+        reviewed = reviewed.replace(site, "");
+    }
     return [
         new RegExp(
             String.raw`\b(?:FileReader|FileReaderSync|FileList|` +
@@ -899,7 +939,7 @@ function hasUnreviewedBrowserFileIntake(source) {
         ),
         /\.\s*files\b/u,
         /\[\s*['"]files['"]\s*\]/u,
-    ].some((pattern) => pattern.test(source));
+    ].some((pattern) => pattern.test(reviewed));
 }
 
 test("browser ordinary file input and drag-file reads require review",
@@ -917,7 +957,9 @@ test("browser ordinary file input and drag-file reads require review",
         candidate);
     }
     for (const { filename, source } of await browserModuleSources()) {
-        assert.equal(hasUnreviewedBrowserFileIntake(source), false,
+        assert.equal(hasUnreviewedBrowserFileIntake(source,
+            filename === "paper-profile.ts" || filename === "paper-profile.js",
+            filename.endsWith(".ts")), false,
             `${filename} gained an unreviewed local-file read`);
         for (const candidate of [
             "void FileReader;",
@@ -935,7 +977,9 @@ test("browser ordinary file input and drag-file reads require review",
             "dragEvent.dataTransfer.files;",
         ]) {
             assert.equal(hasUnreviewedBrowserFileIntake(
-                `${source}\n${candidate}`), true,
+                `${source}\n${candidate}`,
+                filename === "paper-profile.ts" || filename === "paper-profile.js",
+                filename.endsWith(".ts")), true,
             `${filename}: ${candidate} escaped ordinary-file review`);
         }
     }
@@ -1447,7 +1491,7 @@ test("browser source and emitted modules reject unreviewed host reads",
 // scrubbing and bfcache reload are approved in the main workspace module.
 // This guards obvious source drift, not dynamically aliased objects or the
 // browser's complete navigation and network execution paths.
-function usesUnreviewedBrowserNavigation(source, main) {
+function usesUnreviewedBrowserNavigation(source, main, paper = false) {
     // The complete known location/history authority is in the main module.
     // Permit only these exact expressions: a captured method or computed
     // alias can otherwise navigate without a direct .assign() call.
@@ -1465,6 +1509,11 @@ function usesUnreviewedBrowserNavigation(source, main) {
         }
         remaining = remaining.replaceAll(site, "");
     }
+    // One anchor click is confined to an explicit local Blob download.
+    if (remaining.split("link.click()").length - 1 !== (paper ? 1 : 0)) {
+        return true;
+    }
+    remaining = remaining.replace("link.click()", "");
     const locationMethod = String.raw`(?:assign|replace|reload)`;
     const locationWritable = String.raw`(?:href|search|hash|pathname|` +
         String.raw`host|hostname|protocol)`;
@@ -1594,11 +1643,13 @@ test("browser source and emitted modules reject unreviewed navigation",
     async () => {
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
-        assert.equal(usesUnreviewedBrowserNavigation(source, main), false,
+        assert.equal(usesUnreviewedBrowserNavigation(source, main,
+            filename === "paper-profile.ts" || filename === "paper-profile.js"), false,
             `${filename} gained an unreviewed navigation or form request`);
         for (const candidate of CAPTURED_NAVIGATION_PROBES) {
             assert.equal(usesUnreviewedBrowserNavigation(
-                `${source}\n${candidate}`, main), true,
+                `${source}\n${candidate}`, main,
+                filename === "paper-profile.ts" || filename === "paper-profile.js"), true,
             `${filename}: ${candidate} escaped navigation review`);
         }
     }
@@ -1608,7 +1659,7 @@ test("browser source and emitted modules reject unreviewed navigation",
 // requests without appearing in the static HTML/CSS or four fetch sites.
 // Keep current accessibility attributes and numeric layout properties
 // explicitly reviewed; new DOM sinks require a source-owner decision.
-function hasUnreviewedDynamicResourceAuthority(source, main) {
+function hasUnreviewedDynamicResourceAuthority(source, main, paper = false) {
     let remaining = source;
     for (const [site, count] of [
         ["function setAttributeIfChanged(", 1],
@@ -1635,6 +1686,16 @@ function hasUnreviewedDynamicResourceAuthority(source, main) {
         }
         remaining = remaining.replaceAll(site, "");
     }
+    // The download anchor is the only admitted paper-generated element.
+    for (const site of [
+        'document.createElement("a")',
+        "link.href = url",
+    ]) {
+        if (remaining.split(site).length - 1 !== (paper ? 1 : 0)) {
+            return true;
+        }
+        remaining = remaining.replace(site, "");
+    }
     return [
         new RegExp(
             String.raw`\b(?:createElement|createElementNS|` +
@@ -1660,7 +1721,8 @@ test("browser dynamic markup and CSSOM request sinks require review",
     async () => {
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
-        assert.equal(hasUnreviewedDynamicResourceAuthority(source, main),
+        assert.equal(hasUnreviewedDynamicResourceAuthority(source, main,
+            filename === "paper-profile.ts" || filename === "paper-profile.js"),
             false, `${filename} gained an unreviewed DOM/CSSOM sink`);
         for (const candidate of [
             'document.createElement("img")',
@@ -1679,7 +1741,8 @@ test("browser dynamic markup and CSSOM request sinks require review",
             'document.write(draftText)',
         ]) {
             assert.equal(hasUnreviewedDynamicResourceAuthority(
-                `${source}\n${candidate}`, main), true,
+                `${source}\n${candidate}`, main,
+                filename === "paper-profile.ts" || filename === "paper-profile.js"), true,
             `${filename}: ${candidate} escaped dynamic-resource review`);
         }
     }
