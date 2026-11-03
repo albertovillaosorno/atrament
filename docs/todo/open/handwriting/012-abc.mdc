@@ -341,6 +341,25 @@ The six-segment `vw` library roundtripped byte-for-byte through Rust and
 exported real one-page PDF and transparent 72-DPI RGBA PNG for `vwvw`.
 This is not whole-alphabet coverage or automatic handwritten cursive.
 
+## Exact straight k/x/y/z starters (partial) — 2026-11-03
+
+The localhost editor now offers four more manually selected lowercase
+forms. `k` uses one tall stem plus two diagonals; `x` uses two disconnected
+crossing diagonals, `y` uses a two-line fork and a lower descender, and
+`z` uses three connected angular segments. SVG paths and native TSV
+segments share one integer geometric definition and preserve pen lifts
+with independent path moves. These are stylized geometric starters, not
+calibrated personal handwriting or automatically joined cursive.
+
+Browser tests verify all 11 ordered endpoints and four exact SVG guides,
+including pen lifts, independent UTF-8 TSV readback, SVG visibility and
+refusal of an out-of-cell `k` ascender or `y` descender without overwriting
+saved ink. A Rust CLI smoke test read back the 11-segment `kxyz` TSV
+byte-for-byte, reported zero missing glyphs for `kxyz`, and exported a
+one-page PDF plus a transparent 72-DPI RGBA PNG. The same local export
+route remains explicit and bounded. Full Spanish/English coverage and
+vector-authoritative native curves remain unfinished.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

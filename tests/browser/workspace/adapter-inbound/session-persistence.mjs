@@ -1832,8 +1832,7 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
     "idealAccent.setAttribute(\"stroke-width\", numeric.width.value);",
     "idealAccent.setAttribute(\"stroke\", color.value);",
     "idealAccent.setAttribute(\"visibility\", accentState);",
-    'ideal.setAttribute("aria-label", "Analytic geometric " + ' +
-        'form.value + " guide, not retained in line-segment TSV");',
+    'ideal.setAttribute("aria-label", guideLabel);',
     "idealCircle.setAttribute(\"visibility\", \"hidden\");",
     "idealStem.setAttribute(\"visibility\", \"hidden\");",
     "idealArch.setAttribute(\"visibility\", \"hidden\");",

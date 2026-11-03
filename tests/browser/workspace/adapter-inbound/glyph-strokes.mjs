@@ -1132,6 +1132,104 @@ test("v/w exact SVG lines and native TSV remain session-safe", async () => {
     }
 });
 
+test("k/x/y/z straight templates retain independent pen paths", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const endpoints = {
+        k: [
+            [450, 800, 450, 3550], [2650, 1350, 450, 2450],
+            [450, 2450, 2650, 3550],
+        ],
+        x: [
+            [450, 1350, 2650, 3550], [2650, 1350, 450, 3550],
+        ],
+        y: [
+            [450, 1350, 1550, 2450], [2650, 1350, 1550, 2450],
+            [1550, 2450, 1000, 4100],
+        ],
+        z: [
+            [450, 1350, 2650, 1350], [2650, 1350, 450, 3550],
+            [450, 3550, 2650, 3550],
+        ],
+    };
+    const library = [];
+    for (const [glyph, expected] of Object.entries(endpoints)) {
+        const lines = geometricStarter(glyph, ...args);
+        assert.deepEqual(lines.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), expected);
+        assert.deepEqual(lines.map(({ grapheme, width, color }) =>
+            [grapheme, width, color]),
+        expected.map(() => [glyph, 250, "#123456"]));
+        library.push(...lines);
+        assert.throws(() => geometricStarter(glyph, ...args,
+            undefined, "two-storey"), /Two-storey/);
+    }
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(library)), library);
+    assert.throws(() => geometricStarter("k", 1550, 1350, 1100,
+        250, "#123456"), /Straight strokes and pen/);
+    assert.throws(() => geometricStarter("y", 1550, 3150, 1100,
+        250, "#123456"), /Straight strokes and pen/);
+    assert.throws(() => geometricStarter("y", 1550, 2450, 1100,
+        1500, "#123456"), /Shape and pen/);
+});
+
+test("k/x/y/z SVG pen-up guides and native TSV stay synchronized", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const paths = [
+            ["k", "M 450 800 L 450 3550 M 2650 1350"
+                + " L 450 2450 L 2650 3550", 3],
+            ["x", "M 450 1350 L 2650 3550 M 2650 1350"
+                + " L 450 3550", 2],
+            ["y", "M 450 1350 L 1550 2450 M 2650 1350"
+                + " L 1550 2450 L 1000 4100", 3],
+            ["z", "M 450 1350 L 2650 1350 L 450 3550"
+                + " L 2650 3550", 3],
+        ];
+        for (const [glyph, d, count] of paths) {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            get("form").value = glyph;
+            get("form").dispatch("change");
+            assert.equal(get("ideal-rounded").attributes.get("d"), d);
+            assert.equal(get("ideal-preview").attributes.get("aria-label"),
+                `Exact straight ${glyph} guide, retained in TSV`);
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "visible");
+            for (const other of ["ideal-rounded-left", "ideal-rounded-right",
+                "ideal-circle", "ideal-i-stem", "ideal-e-bar"]) {
+                assert.equal(get(other).attributes.get("visibility"), "hidden");
+            }
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, count);
+        }
+        get("save").dispatch("click");
+        const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(accepted, paths.flatMap(([glyph]) =>
+            geometricStarter(glyph, 1550, 2450, 1100, 250, "#243647")));
+        for (const [glyph, y] of [["k", "1350"], ["y", "3150"]]) {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            get("form").value = glyph;
+            get("form").dispatch("change");
+            get("circle-y").value = y;
+            get("circle-y").dispatch("input");
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "hidden");
+            get("construct").dispatch("click");
+            assert.match(get("status").textContent, /Straight strokes and pen/);
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, `clipped ${glyph} must not replace saved ink`);
+            get("circle-y").value = "2450";
+            get("circle-y").dispatch("input");
+        }
+    } finally {
+        ui.restore();
+    }
+});
+
 test("l and t preserve exact straight ink and bounded ascenders", () => {
     const args = [1550, 2450, 1100, 250, "#123456"];
     const l = geometricStarter("l", ...args);

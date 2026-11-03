@@ -268,6 +268,64 @@ function zigzag(cx: number, cy: number, radius: number, g: "v" | "w") {
     ];
 }
 
+// These straight strokes share one geometric definition for SVG guides
+// and native TSV. Disconnected lines retain separate pen-down commands.
+type StraightGlyph = "v" | "w" | "k" | "x" | "y" | "z";
+type StraightLine = { from: Point; to: Point };
+
+function straightLines(
+    cx: number, cy: number, radius: number, glyph: StraightGlyph,
+): StraightLine[] {
+    const left = cx - radius;
+    const right = cx + radius;
+    const upperY = cy - radius;
+    const bottom = cy + radius;
+    const chain = (vertices: Point[]): StraightLine[] =>
+        vertices.slice(1).map((to, index) => {
+            const from = vertices[index];
+            if (from === undefined) throw new Error("Missing straight vertex");
+            return { from, to };
+        });
+    if (glyph === "v" || glyph === "w") {
+        return chain(zigzag(cx, cy, radius, glyph));
+    }
+    if (glyph === "x") return [
+        { from: { x: left, y: upperY }, to: { x: right, y: bottom } },
+        { from: { x: right, y: upperY }, to: { x: left, y: bottom } },
+    ];
+    if (glyph === "z") return chain([
+        { x: left, y: upperY }, { x: right, y: upperY },
+        { x: left, y: bottom }, { x: right, y: bottom },
+    ]);
+    if (glyph === "y") return [
+        { from: { x: left, y: upperY }, to: { x: cx, y: cy } },
+        { from: { x: right, y: upperY }, to: { x: cx, y: cy } },
+        { from: { x: cx, y: cy }, to: {
+            x: cx - Math.round(radius / 2),
+            y: cy + Math.round(radius * 1.5),
+        } },
+    ];
+    return [
+        { from: { x: left, y: cy - Math.round(radius * 1.5) },
+            to: { x: left, y: bottom } },
+        { from: { x: right, y: upperY }, to: { x: left, y: cy } },
+        { from: { x: left, y: cy }, to: { x: right, y: bottom } },
+    ];
+}
+
+function straightGuide(lines: StraightLine[]): string {
+    const commands: string[] = [];
+    let pen: Point | null = null;
+    for (const { from, to } of lines) {
+        if (pen === null || pen.x !== from.x || pen.y !== from.y) {
+            commands.push(`M ${from.x} ${from.y}`);
+        }
+        commands.push(`L ${to.x} ${to.y}`);
+        pen = to;
+    }
+    return commands.join(" ");
+}
+
 function tallStem(cx: number, cy: number, radius: number, g: "l" | "t") {
     return {
         from: { x: cx, y: g === "l"
@@ -327,7 +385,7 @@ export function geometricStarter(
 ): Stroke[] {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
         "n", "u", "h", "m", "l", "t", "v", "w",
-        "c", "e", "i", "í"].includes(g)) {
+        "k", "x", "y", "z", "c", "e", "i", "í"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -395,16 +453,20 @@ export function geometricStarter(
         output.push(line(bow.lastStem.from, bow.lastStem.to));
         return output;
     }
-    if (g === "v" || g === "w") {
-        const vertices = zigzag(cx, cy, radius, g);
-        return vertices.slice(1).map((end, index) => {
-            const first = vertices[index];
-            if (first === undefined) throw new Error("Missing zigzag point");
-            return validateStroke({
-                grapheme: g, x1: first.x, y1: first.y,
-                x2: end.x, y2: end.y, width: pen, color,
-            });
-        });
+    if (["v", "w", "k", "x", "y", "z"].includes(g)) {
+        const lines = straightLines(cx, cy, radius, g as StraightGlyph);
+        if (lines.some(({ from, to }) => [from, to].some((point) =>
+            point.x < halfPen || point.y < halfPen
+            || point.x + halfPen > 3500
+            || point.y + halfPen > 4500))) {
+            throw new Error(
+                "Straight strokes and pen must fit inside glyph cell",
+            );
+        }
+        return lines.map(({ from, to }) => validateStroke({
+            grapheme: g, x1: from.x, y1: from.y,
+            x2: to.x, y2: to.y, width: pen, color,
+        }));
     }
     if (g === "l" || g === "t") {
         const stem = tallStem(cx, cy, radius, g);
@@ -761,14 +823,12 @@ export function createGlyphStrokeEditor(): {
                 ...doubledCommands,
                 `M ${cx} ${cy} L ${cx} ${cy + r}`,
             ].join(" ");
-            const isZigzag = ["v", "w"].includes(chosen.grapheme);
-            const vertices = zigzag(cx, cy, r,
-                chosen.grapheme === "w" ? "w" : "v");
-            const zigzagD = [
-                `M ${vertices[0]?.x} ${vertices[0]?.y}`,
-                ...vertices.slice(1).map((p) => `L ${p.x} ${p.y}`),
-            ].join(" ");
-            const roundedD = isZigzag ? zigzagD
+            const isStraight = ["v", "w", "k", "x", "y", "z"]
+                .includes(chosen.grapheme);
+            const straightD = isStraight ? straightGuide(straightLines(
+                cx, cy, r, chosen.grapheme as StraightGlyph,
+            )) : "";
+            const roundedD = isStraight ? straightD
                 : chosen.grapheme === "m" ? doubledD
                     : [roundedStart, roundedFirst, roundedSecond].join(" ");
             roundedPath.setAttribute("d", roundedD);
@@ -788,9 +848,10 @@ export function createGlyphStrokeEditor(): {
                 element.setAttribute("stroke", color.value);
             }
             const roundedVisible = active
-                && ["n", "u", "h", "m", "v", "w"].includes(chosen.grapheme);
+                && ["n", "u", "h", "m", "v", "w", "k", "x", "y", "z"]
+                    .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
-            const roundedStemState = roundedVisible && !isZigzag
+            const roundedStemState = roundedVisible && !isStraight
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
             roundedLeft.setAttribute("visibility", roundedStemState);
@@ -854,8 +915,10 @@ export function createGlyphStrokeEditor(): {
             const hasAcute = ["ó", "á", "í"].includes(chosen.grapheme);
             const accentState = active && hasAcute ? "visible" : "hidden";
             idealAccent.setAttribute("visibility", accentState);
-            ideal.setAttribute("aria-label", "Analytic geometric "
-                + form.value + " guide, not retained in line-segment TSV");
+            const guideLabel = isStraight
+                ? `Exact straight ${form.value} guide, retained in TSV`
+                : `Analytic geometric ${form.value} guide, not retained in TSV`;
+            ideal.setAttribute("aria-label", guideLabel);
         } catch {
             idealCircle.setAttribute("visibility", "hidden");
             idealStem.setAttribute("visibility", "hidden");

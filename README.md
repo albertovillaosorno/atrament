@@ -536,7 +536,7 @@ curved pen stroke.
 
 For a geometric starting point, choose an explicitly supported glyph
 (`o`, `a`, `ó`, `á`, `b`, `d`, `p`, `q`, `n`, `u`, `h`, `m`,
-`l`, `t`, `v`, `w`, `c`, `e`, `i` or `í`) and its matching
+`l`, `t`, `v`, `w`, `k`, `x`, `y`, `z`, `c`, `e`, `i` or `í`) and its matching
 geometric starter. Adjust the center and radius in
 micrometres, then deliberately replace that letter's unsaved strokes.
 The `o`/`a` forms share a true analytic circle.
@@ -597,6 +597,15 @@ connected straight segments, reusing one SVG guide with no additional
 resource sink. The exported Rust TSV retains those same integer vertices
 and explicit pen order, not an approximated curve. Failed out-of-cell
 geometry leaves previously authored ink unchanged.
+
+Lowercase `k` has a tall stem and two separate diagonals (3 lines), `x`
+has two disconnected crossing diagonal pen strokes, `y` has two fork
+strokes plus a lower descender (3 lines), and `z` has three connected
+straight strokes. The ideal SVG guide shares exact source coordinates
+with the Rust-compatible authored TSV. It uses explicit SVG `M` moves
+when a pen must be lifted; these are not joined cursive strokes. The
+browser refuses clipped `k` ascenders and `y` descenders, including the
+pen's half-width margin, without replacing saved shapes.
 
 A dotted `i` has one straight stem plus one short dot stroke (2 segments).
 A separately selectable `í` instead keeps the stem and puts a rising acute
