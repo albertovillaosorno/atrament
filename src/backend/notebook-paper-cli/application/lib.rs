@@ -9,12 +9,12 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Thin native CLI projecting valid paper marks into existing Rust PDF.
+//   - Native CLI projecting admitted paper marks to existing Rust outputs.
 // - Must-Not:
 //   - Claim notebook text rendering, image embedding, or profile-file loading.
 // - Allows:
 //   - Inputs: Explicit page options and bounded versioned paper-only JSON.
-//   - Outputs: Canonical paper JSON, vector PDF or explicit CLI refusal.
+//   - Outputs: Canonical paper JSON, vector PDF/PNG or explicit CLI refusal.
 //   - Side effects: Optional caller-selected profile read and explicit file
 //     commit, or stdout write.
 // - Split-When:
@@ -22,9 +22,9 @@
 // - Merge-When:
 //   - A production Rust notebook renderer subsumes this demonstration.
 // - Summary:
-//   - Exercises actual Rust page geometry and vector PDF capabilities together.
+//   - Reuses Rust page geometry for PDF and transparent PNG projection.
 // - Description:
-//   - Projects blank, ruled, squared and dotted paper into physical PDF marks.
+//   - Projects blank, ruled, squared and dotted paper to physical PDF/PNG.
 // - Usage:
 //   - cargo run -q -p atrament_notebook_paper_cli -- --style grid
 //   - --spacing-mm 5 > sheet.pdf
@@ -32,7 +32,9 @@
 //   - A4 grid, 5 mm spacing, 22/16/20/14 mm margins, blue-grey marks.
 //
 
-//! Shared Rust paper-profile validation, CLI operations and PDF rendering.
+//! Shared Rust paper-profile, CLI, PDF and transparent PNG projection.
+
+mod png;
 
 use std::env;
 use std::error::Error;
@@ -71,6 +73,7 @@ const MAX_MARKS: u64 = 10_000;
 /// Maximum admitted versioned paper-profile JSON bytes.
 pub const MAX_PROFILE_BYTES: usize = 4_096;
 const MAX_PAGES: usize = 32;
+const DEFAULT_PNG_DPI: u32 = 150;
 const MAX_OUTPUT_BYTES: usize = 24_000_000;
 const PAPER_PROFILE_SCHEMA: &str = "atrament.paper.v1";
 const DEFAULT_COLOR: PdfRgb = PdfRgb {
@@ -85,6 +88,7 @@ const USAGE: &str = "Usage: atrament-paper [--profile paper.json] \
     [--margin-top-mm N] [--margin-bottom-mm N] \
     [--margin-left-mm N] [--margin-right-mm N] \
     [--line-color '#RRGGBB'] [--pages 1..32] \
+    [--format pdf|png] [--dpi 72..300 (PNG only)] \
     [--emit-profile] [--output FILE [--replace]] > output-file";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -108,9 +112,17 @@ struct Options {
     width_um: u32,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum OutputFormat {
+    Pdf,
+    Png,
+}
+
 #[derive(Clone, Debug)]
 struct CliRequest {
+    dpi: u32,
     emit_profile: bool,
+    format: OutputFormat,
     options: Options,
     output: Option<String>,
     pages: usize,
@@ -380,8 +392,88 @@ fn apply_paper_edit(
     Ok(())
 }
 
+fn parse_output_format(value: &str) -> Result<OutputFormat, String> {
+    match value {
+        "pdf" => Ok(OutputFormat::Pdf),
+        "png" => Ok(OutputFormat::Png),
+        _ => Err("--format must be pdf or png".into()),
+    }
+}
+
+fn parse_png_dpi(value: &str) -> Result<u32, String> {
+    let dpi = value.parse::<u32>()
+        .map_err(|error| format!("--dpi requires an integer: {error}"))?;
+    if !(72..=300).contains(&dpi) {
+        return Err("PNG DPI must be between 72 and 300".into());
+    }
+    Ok(dpi)
+}
+
+fn validate_export_flags(
+    format: OutputFormat,
+    seen_pages: bool,
+    seen_dpi: bool,
+    emit_profile: bool,
+) -> Result<(), String> {
+    if emit_profile && seen_pages {
+        return Err("--pages is only valid when exporting a PDF".into());
+    }
+    if format == OutputFormat::Png && seen_pages {
+        return Err("--pages is only valid for PDF export".into());
+    }
+    if format == OutputFormat::Pdf && seen_dpi {
+        return Err("--dpi requires --format png".into());
+    }
+    if emit_profile && format == OutputFormat::Png {
+        return Err("--emit-profile cannot be combined with PNG export".into());
+    }
+    Ok(())
+}
+
+fn orient_page(opts: &mut Options, name: &str) {
+    let wider = opts.width_um > opts.height_um;
+    if (name == "--landscape" && !wider)
+        || (name == "--portrait" && wider)
+    {
+        swap(&mut opts.width_um, &mut opts.height_um);
+    }
+}
+
+fn parse_image_export_option(
+    name: &str,
+    value: &str,
+    format: &mut OutputFormat,
+    dpi: &mut u32,
+    seen_format: &mut bool,
+    seen_dpi: &mut bool,
+) -> Result<bool, String> {
+    match name {
+        "--format" => {
+            if *seen_format {
+                return Err("--format may appear only once".into());
+            }
+            *format = parse_output_format(value)?;
+            *seen_format = true;
+            Ok(true)
+        }
+        "--dpi" => {
+            if *seen_dpi {
+                return Err("--dpi may appear only once".into());
+            }
+            *dpi = parse_png_dpi(value)?;
+            *seen_dpi = true;
+            Ok(true)
+        }
+        _ => Ok(false),
+    }
+}
+
 fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
     let mut opts = Options::default();
+    let mut dpi = DEFAULT_PNG_DPI;
+    let mut seen_dpi = false;
+    let mut format = OutputFormat::Pdf;
+    let mut seen_format = false;
     let mut emit_profile = false;
     let mut seen_edit = false;
     let mut seen_profile = false;
@@ -412,12 +504,7 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
             if seen_orientation {
                 return Err("choose only one page orientation".into());
             }
-            let wider = opts.width_um > opts.height_um;
-            if (name == "--landscape" && !wider)
-                || (name == "--portrait" && wider)
-            {
-                swap(&mut opts.width_um, &mut opts.height_um);
-            }
+            orient_page(&mut opts, name);
             seen_orientation = true;
             seen_size_override = true;
             seen_edit = true;
@@ -441,6 +528,12 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
             output = Some(value.clone());
             continue;
         }
+        if parse_image_export_option(
+            name, value, &mut format, &mut dpi,
+            &mut seen_format, &mut seen_dpi,
+        )? {
+            continue;
+        }
         seen_edit = true;
         match name.as_str() {
             "--pages" => {
@@ -459,14 +552,14 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
             )?,
         }
     }
-    if emit_profile && seen_pages {
-        return Err("--pages is only valid when exporting a PDF".into());
-    }
+    validate_export_flags(format, seen_pages, seen_dpi, emit_profile)?;
     if replace && output.is_none() {
         return Err("--replace requires --output".into());
     }
     Ok(Some(CliRequest {
+        dpi,
         emit_profile,
+        format,
         options: opts,
         output,
         pages,
@@ -647,6 +740,11 @@ fn render_pages(opts: Options, page_count: usize) -> Result<Vec<u8>, String> {
     if !(1..=MAX_PAGES).contains(&page_count) {
         return Err("paper PDF needs 1 to 32 pages".into());
     }
+    let paths = paper_paths(opts)?;
+    serialize_paths(opts, paths, page_count)
+}
+
+fn paper_paths(opts: Options) -> Result<Vec<PdfVectorPath>, String> {
     let geometry = mark_geometry(opts)?;
     let count = match geometry {
         PaperMarkGeometry::Blank => 0,
@@ -727,7 +825,12 @@ fn render_pages(opts: Options, page_count: usize) -> Result<Vec<u8>, String> {
             }
         }
     }
-    serialize_paths(opts, paths, page_count)
+    Ok(paths)
+}
+
+fn render_png(opts: Options, dpi: u32) -> Result<Vec<u8>, String> {
+    let paths = paper_paths(opts)?;
+    png::render_paper_png(opts.width_um, opts.height_um, dpi, &paths)
 }
 
 fn serialize_paths(
@@ -791,13 +894,29 @@ pub fn paper_profile_pdf(profile: &[u8]) -> Result<Vec<u8>, String> {
     render(options)
 }
 
+/// Render one versioned paper-only profile as a transparent RGBA PNG.
+///
+/// `dpi` determines pixel dimensions and the physical PNG resolution tag.
+/// This does not render notebook text, handwriting, or embedded images.
+///
+/// # Errors
+///
+/// Refuses invalid profiles, geometry, DPI or raster/output budgets.
+pub fn paper_profile_png(profile: &[u8], dpi: u32) -> Result<Vec<u8>, String> {
+    let options = decode_profile(profile)?;
+    render_png(options, dpi)
+}
+
 fn execute(request: CliRequest) -> Result<Option<Vec<u8>>, String> {
     // Admission and rendering complete before any selected target can change.
-    let pdf = render_pages(request.options, request.pages)?;
     let bytes = if request.emit_profile {
+        let _validated = render_pages(request.options, 1)?;
         encode_profile(request.options).into_bytes()
     } else {
-        pdf
+        match request.format {
+            OutputFormat::Pdf => render_pages(request.options, request.pages)?,
+            OutputFormat::Png => render_png(request.options, request.dpi)?,
+        }
     };
     let Some(output) = request.output else {
         return Ok(Some(bytes));

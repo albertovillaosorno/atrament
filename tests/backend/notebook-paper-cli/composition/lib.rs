@@ -11,7 +11,7 @@
 // - Owns:
 //   - Native paper CLI geometry and argument regression fixtures.
 // - Must-Not:
-//   - Claim handwriting, profiles, images, or full notebook PDF rendering.
+//   - Claim handwriting, embedded images, or full notebook rendering.
 // - Allows:
 //   - Inputs: Explicit deterministic page and CLI option values.
 //   - Outputs: Assertions over PDF bytes and typed refusals.
@@ -513,4 +513,229 @@ fn paper_profile_named_pipe_refuses_without_blocking() {
         .expect_err("nonregular profile path must refuse before open");
     assert!(error.contains("NotRegularFile"));
     fs::remove_file(&path).expect("remove test-owned pipe");
+}
+
+// The encoder deliberately uses zlib stored blocks. Recover actual RGBA rows
+// instead of accepting an IHDR alone: a valid header is not a rendered page.
+fn stored_png_pixels(bytes: &[u8]) -> (usize, usize, Vec<u8>) {
+    let width = u32::from_be_bytes(
+        bytes.get(16..20).expect("PNG has IHDR width")
+            .try_into().expect("width has four bytes"),
+    );
+    let height = u32::from_be_bytes(
+        bytes.get(20..24).expect("PNG has IHDR height")
+            .try_into().expect("height has four bytes"),
+    );
+    let chunk = bytes.windows(4).position(|window| window == b"IDAT")
+        .expect("PNG contains IDAT");
+    let idat_length = u32::from_be_bytes(
+        bytes.get(chunk.saturating_sub(4)..chunk).expect("IDAT length exists")
+            .try_into().expect("IDAT length has four bytes"),
+    );
+    let begin = chunk.saturating_add(4);
+    let compressed = bytes.get(
+        begin..begin.saturating_add(
+            usize::try_from(idat_length).expect("IDAT length fits memory"),
+        ),
+    ).expect("IDAT bytes exist");
+    assert!(compressed.starts_with(&[0x78, 0x01]));
+    let mut raw = Vec::new();
+    let mut cursor = 2;
+    loop {
+        let control = *compressed.get(cursor).expect("DEFLATE header exists");
+        assert_eq!(control & 0xfe, 0, "only stored DEFLATE is admitted");
+        let len = u16::from_le_bytes(
+            compressed.get(cursor.saturating_add(1)..cursor.saturating_add(3))
+                .expect("block length exists").try_into()
+                .expect("block length has two bytes"),
+        );
+        let inverse = u16::from_le_bytes(
+            compressed.get(cursor.saturating_add(3)..cursor.saturating_add(5))
+                .expect("block length complement exists").try_into()
+                .expect("block complement has two bytes"),
+        );
+        assert_eq!(inverse, !len);
+        cursor = cursor.saturating_add(5);
+        let end = cursor.saturating_add(usize::from(len));
+        raw.extend_from_slice(
+            compressed.get(cursor..end).expect("stored block is complete"),
+        );
+        cursor = end;
+        if control & 1 != 0 {
+            break;
+        }
+    }
+    assert_eq!(
+        compressed.len(), cursor.saturating_add(4),
+        "zlib Adler32 follows data",
+    );
+    (
+        usize::try_from(width).expect("width fits memory"),
+        usize::try_from(height).expect("height fits memory"),
+        raw,
+    )
+}
+
+#[test]
+fn transparent_png_grid_has_real_ink_and_physical_resolution() {
+    let options = Options {
+        color: PdfRgb { red: 0x12, green: 0x34, blue: 0x56 },
+        style: Style::Grid,
+        width_um: 148_000,
+        height_um: 210_000,
+        ..Options::default()
+    };
+    let bytes = render_png(options, 150).expect("A5 transparent grid");
+    assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(bytes.get(24..26), Some(&[8, 6][..]), "8-bit RGBA");
+    let phys = bytes.windows(4).position(|window| window == b"pHYs")
+        .expect("physical PNG resolution chunk");
+    assert_eq!(bytes.get(phys + 4..phys + 13), Some(&[
+        0, 0, 23, 18, 0, 0, 23, 18, 1,
+    ][..])); // 5906 pixels/metre is approximately 150 DPI.
+    let (width, height, raw) = stored_png_pixels(&bytes);
+    assert_eq!((width, height), (875, 1241));
+    assert_eq!(raw.len(), height * (width * 4 + 1));
+    let mut painted = 0usize;
+    let mut transparent = 0usize;
+    for row in raw.chunks_exact(width * 4 + 1) {
+        assert_eq!(row.first(), Some(&0));
+        for pixel in row.get(1..).expect("one filter byte").as_chunks::<4>().0 {
+            match pixel {
+                [0, 0, 0, 0] => transparent += 1,
+                [0x12, 0x34, 0x56, 255] => painted += 1,
+                _ => panic!(
+                    "PNG paper pixels must be exact ink or transparency"
+                ),
+            }
+        }
+    }
+    assert!(painted > 5_000, "real grid marks are painted");
+    assert!(transparent > painted, "most paper remains transparent");
+    assert_eq!(bytes, render_png(options, 150).expect("deterministic PNG"));
+}
+
+#[test]
+fn transparent_blank_has_no_ink_and_paper_variants_do() {
+    let basic = Options {
+        width_um: 100_000,
+        height_um: 140_000,
+        ..Options::default()
+    };
+    for style in [Style::Blank, Style::Ruled, Style::Grid, Style::Dot] {
+        let options = Options { style, ..basic };
+        let png = render_png(options, 72).expect("raster of all paper styles");
+        let (width, height, raw) = stored_png_pixels(&png);
+        let mut ink_count = 0usize;
+        for row in raw.chunks_exact(width * 4 + 1).take(height) {
+            for pixel in row.get(1..).expect("filter byte").as_chunks::<4>().0 {
+                if pixel.get(3) == Some(&255) {
+                    ink_count += 1;
+                }
+            }
+        }
+        assert_eq!(ink_count == 0, style == Style::Blank);
+    }
+}
+
+#[test]
+fn png_export_flags_and_resource_limits_fail_closed() {
+    let invalid = [
+        vec!["--format", "tiff"],
+        vec!["--format", "png", "--dpi", "71"],
+        vec!["--format", "png", "--dpi", "301"],
+        vec!["--format", "png", "--dpi", "x"],
+        vec!["--dpi", "150"],
+        vec!["--format", "png", "--pages", "1"],
+        vec!["--format", "png", "--emit-profile"],
+        vec!["--format", "png", "--format", "pdf"],
+        vec!["--format", "png", "--dpi", "150", "--dpi", "72"],
+    ];
+    for items in invalid {
+        let args = items.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        assert!(parse_options(&args).is_err(), "{args:?}");
+    }
+    let options = Options::default();
+    for dpi in [0, 71, 301, u32::MAX] {
+        assert!(render_png(options, dpi).is_err());
+    }
+    let oversized = Options {
+        width_um: 500_000,
+        height_um: 700_000,
+        style: Style::Blank,
+        ..options
+    };
+    assert!(render_png(oversized, 300).is_err(), "bounded 5MP budget");
+    let valid = parse_options(&["--format", "png", "--dpi", "150"]
+        .map(str::to_owned))
+        .expect("PNG options accepted").expect("not help");
+    assert_eq!(valid.format, OutputFormat::Png);
+    assert_eq!(valid.dpi, 150);
+    assert!(execute(valid).expect("PNG on stdout").is_some());
+}
+
+#[test]
+fn png_profile_entrypoint_uses_same_canonical_paper_geometry() {
+    let options = Options { style: Style::Ruled, ..Options::default() };
+    let canonical = encode_profile(options);
+    assert_eq!(
+        paper_profile_png(canonical.as_bytes(), 72),
+        render_png(options, 72),
+    );
+    let invalid = canonical.replace("atrament.paper.v1", "unknown.version");
+    assert!(paper_profile_png(invalid.as_bytes(), 72).is_err());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn selected_png_commit_refuses_unsafe_replace_and_preserves_existing() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use std::process;
+
+    let directory = env::temp_dir().join(format!(
+        "atrament-paper-cli-png-save-{}",
+        process::id(),
+    ));
+    fs::create_dir_all(&directory).expect("create test-owned directory");
+    let output = directory.join("physical-paper.png");
+    let filename = output.to_str().expect("test-owned UTF-8 filename");
+    let args = [
+        "--format", "png", "--dpi", "72", "--style", "ruled",
+        "--output", filename,
+    ]
+    .map(str::to_owned);
+    let request = parse_options(&args)
+        .expect("selected PNG options are valid")
+        .expect("not help");
+    assert_eq!(execute(request.clone()).expect("save new PNG"), None);
+    let initial = fs::read(&output).expect("read committed PNG");
+    assert!(initial.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert!(execute(request).is_err(), "existing output needs --replace");
+    assert_eq!(fs::read(&output).expect("preserved output"), initial);
+
+    let invalid = parse_options(
+        &[
+            "--format", "png", "--style", "dot", "--spacing-mm", "1",
+            "--output", filename, "--replace",
+        ]
+        .map(str::to_owned),
+    )
+    .expect("parse invalid geometry")
+    .expect("not help");
+    assert!(execute(invalid).is_err());
+    assert_eq!(fs::read(&output).expect("original preserved"), initial);
+
+    let alias = directory.join("alias.png");
+    symlink(&output, &alias).expect("create test-owned symlink");
+    let alias_filename = alias.to_str().expect("test-owned UTF-8 alias");
+    let alias_request = parse_options(
+        &["--format", "png", "--output", alias_filename, "--replace"]
+            .map(str::to_owned),
+    )
+    .expect("alias request parses")
+    .expect("not help");
+    assert!(execute(alias_request).is_err(), "symlink replacement refused");
+    assert_eq!(fs::read(&output).expect("original preserved"), initial);
+    fs::remove_dir_all(directory).expect("remove test-owned directory");
 }
