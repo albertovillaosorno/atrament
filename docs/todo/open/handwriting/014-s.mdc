@@ -55,6 +55,17 @@ This records **segment order**, not continuous curve grouping, pen lifts,
 joined cursive, accent composition or seeded correlated ink variation.
 Those acceptance criteria remain open.
 
+## Explicit diacritic addition from authored bases (partial) — 2026-11-03
+
+The glyph editor can append an ordered accent, tilde or diaeresis in the
+exact selected Unicode target from existing user-authored base strokes.
+Composition keeps the base untouched, copies its stroke sequence to the
+target and refuses incompatible targets or clipped accent segments. This
+provides an executable, opt-in diacritic composition example; it does not
+preserve a live stroke/mark association through later edits. Correlated
+seeded variation, joined cursive, multi-stroke pen lifts and continuous
+curve primitives are still open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
-    geometricStarter } =
+    geometricStarter, composeAccentedGlyph } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -93,7 +93,8 @@ function mountEditor() {
         revokeObjectURL: URL.revokeObjectURL,
     };
     const ids = ["glyph-character", "glyph-color", "glyph-load",
-        "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-selected",
+        "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-compose",
+        "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
@@ -633,6 +634,116 @@ test("printed two-storey a samples a continuous analytic upper story", () => {
         "#123456", undefined, "two-storey"), /Two-storey arch/);
     assert.throws(() => geometricStarter("á", ...args,
         undefined, "two-storey"), /Acute accent/);
+});
+
+test("accent composition preserves authored base and target Unicode", () => {
+    const base = { ...stroke("e"), x1: 900, y1: 1900,
+        x2: 2350, y2: 3300, color: "#112233" };
+    const source = [base, { ...base, grapheme: "n" },
+        { ...base, grapheme: "u" },
+        { ...base, grapheme: "A" }];
+    const acute = composeAccentedGlyph(source, "e", "é", "#ABCDEF");
+    assert.deepEqual(acute, [
+        { ...base, grapheme: "é" },
+        { grapheme: "é", x1: 1393, y1: 1530,
+            x2: 1857, y2: 1090, width: 250, color: "#ABCDEF" },
+    ]);
+    assert.deepEqual(source[0], base, "composition does not edit the base");
+    const decomposed = composeAccentedGlyph(source, "e", "e\u0301",
+        "#ABCDEF", { dx: -150, lift: 100 });
+    assert.deepEqual(decomposed.slice(0, 1), [{
+        ...base, grapheme: "e\u0301",
+    }]);
+    assert.deepEqual(decomposed.at(-1), {
+        ...acute.at(-1), grapheme: "e\u0301",
+        x1: 1243, x2: 1707, y1: 1430, y2: 990,
+    });
+    assert.notEqual(acute[0].grapheme, decomposed[0].grapheme);
+    const tilde = composeAccentedGlyph(source, "n", "ñ", "#123456");
+    assert.equal(tilde.length, 4, "one base plus ordered wave segments");
+    for (let i = 2; i < tilde.length; i += 1) {
+        assert.deepEqual([tilde[i - 1].x2, tilde[i - 1].y2],
+            [tilde[i].x1, tilde[i].y1]);
+    }
+    const dots = composeAccentedGlyph(source, "u", "u\u0308",
+        "#DDEEFF");
+    assert.equal(dots.length, 3, "one base plus two separate dots");
+    assert.notEqual(dots[1].x1, dots[2].x1);
+    assert.deepEqual(composeAccentedGlyph(source, "A", "Á", "#123456")
+        .map((line) => line.grapheme), ["Á", "Á"]);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary([
+        ...source, ...acute, ...decomposed, ...tilde, ...dots,
+    ])), [...source, ...acute, ...decomposed, ...tilde, ...dots]);
+});
+
+test("accent composition refuses mismatches and clipped marks", () => {
+    const base = { ...stroke("e"), x1: 500, y1: 1500,
+        x2: 2600, y2: 3300 };
+    const cases = [
+        [[base], "o", "ó", "#123456"],
+        [[base], "e", "á", "#123456"],
+        [[base], "e", "è", "#123456"],
+        [[base], "e", "e\u0301\u0301", "#123456"],
+        [[base], "e", "é", "red"],
+        [[base], "e", "é", "#123456", { dx: 501, lift: 0 }],
+        [[base], "e", "é", "#123456", { dx: 0, lift: -1 }],
+        [[base], "e", "é", "#123456", { dx: 0, lift: 501 }],
+        [[{ ...base, y1: 500 }], "e", "é", "#123456"],
+        [[{ ...base, x1: 10, x2: 200 }], "e", "é", "#123456",
+            { dx: -500, lift: 0 }],
+    ];
+    for (const args of cases) {
+        assert.throws(() => composeAccentedGlyph(...args));
+    }
+});
+
+test("accent action replaces target and refuses atomically", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        const base = { ...stroke("e"), x1: 900, y1: 1900,
+            x2: 2350, y2: 3300 };
+        const previous = [base, stroke("∞"), stroke("é")];
+        assert.equal(get("compose").disabled, true);
+        get("compose").dispatch("click");
+        editor.start();
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(previous));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("copy-from").value = "e";
+        get("character").value = "é";
+        get("character").dispatch("input");
+        get("compose").dispatch("click");
+        assert.match(get("status").textContent, /Composed 2 ordered strokes/);
+        assert.equal(get("preview").children.length, 2);
+        get("save").dispatch("click");
+        const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(accepted, [base, previous[1],
+            ...composeAccentedGlyph(previous, "e", "é", "#243647")]);
+        get("accent-lift").value = "501";
+        get("compose").dispatch("click");
+        assert.match(get("status").textContent, /accent lift/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            accepted, "a refused accent does not replace a saved draft");
+        get("accent-lift").value = "0";
+        get("character").value = "è";
+        get("character").dispatch("input");
+        get("compose").dispatch("click");
+        assert.match(get("status").textContent, /Only vowel acute/);
+        get("character").value = "é";
+        get("character").dispatch("input");
+        get("copy-from").value = "u";
+        get("compose").dispatch("click");
+        assert.match(get("status").textContent, /selected base/);
+        editor.reset();
+        assert.equal(get("compose").disabled, true);
+        assert.equal(get("copy-from").value, "");
+    } finally {
+        ui.restore();
+    }
 });
 
 test("geometric replacement preserves glyph identity and bounds", async () => {

@@ -220,6 +220,31 @@ intentionally distinguished.
 Full baseline glyph coverage, italic/cursive joins, glyph-level variant
 persistence and analytic PDF output remain open.
 
+## Exact base-stroke accent composition (partial) — 2026-11-03
+
+The localhost glyph editor can now explicitly construct accented target
+strokes from **already authored** Latin base strokes, without a new font or
+hidden fallback. The base and its pen order/colors remain unchanged while
+an independent target receives one acute, three ordered tilde segments or
+two dot-like umlaut strokes.
+
+Supported base/target pairs are vowels with
+acute, n with tilde, and u with umlaut, in both cases and either NFC or NFD
+exact target form. The editor derives an accent anchor from the source's
+visible line endpoints and pen width, then applies the existing bounded
+horizontal shift and lift controls. Missing sources, mismatched target
+characters, unsupported combining marks and out-of-cell ink refuse before
+target replacement or export.
+
+Browser tests cover explicit Unicode identity,
+source preservation, accent geometry, and atomically refused edits; privacy
+regressions still cover its local-only actions.
+
+The accent only attaches to an explicitly provided stroke base in a one-time
+TSV replacement. There is no stored accent-anchor primitive, native curved
+PDF path, automatic inventory fill, or general diacritic synthesis. All
+remaining P1 glyph-coverage criteria are open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

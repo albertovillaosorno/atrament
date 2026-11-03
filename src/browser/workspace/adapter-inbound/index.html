@@ -558,11 +558,11 @@
               <input id="glyph-circle-radius" type="number" min="200"
                 max="1600" step="1" value="1100" disabled>
             </label>
-            <label>Acute horizontal shift (-500–500 µm)
+            <label>Accent horizontal shift (-500–500 µm)
               <input id="glyph-accent-shift" type="number" min="-500"
                 max="500" step="1" value="0" disabled>
             </label>
-            <label>Acute lift (0–500 µm)
+            <label>Accent lift (0–500 µm)
               <input id="glyph-accent-lift" type="number" min="0"
                 max="500" step="1" value="0" disabled>
             </label>
@@ -640,9 +640,18 @@
             <button id="glyph-copy" type="button" disabled>
               Replace selected glyph with copy
             </button>
+            <button id="glyph-compose" type="button" disabled>
+              Compose accent from authored base
+            </button>
           </div>
           <p class="field-help">Copy replaces only the selected glyph's
-            unsaved strokes. Edit the copied form before downloading.</p>
+            unsaved strokes. To compose, enter a source such as e, n or u
+            above and select its exact accented target (é, ñ/ñ or ü).
+            Precomposed and decomposed targets stay distinct. The selected
+            pen color and accent shift/lift control the new mark. Supports
+            acute vowels, n tilde, and u diaeresis (including capitals).
+            Source strokes and colors are retained; no automatic outlines
+            are invented. Out-of-cell accents refuse atomically.</p>
           <div class="paper-actions">
             <label>Existing stroke for this grapheme
               <select id="glyph-selected" disabled>

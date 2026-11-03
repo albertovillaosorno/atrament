@@ -266,6 +266,82 @@ export function geometricStarter(
     return lines;
 }
 
+// Compose one explicitly selected Latin accent from an already-authored
+// base, never by normalizing or silently substituting another glyph. The
+// authored source strokes and their colors remain unchanged in the draft.
+export function composeAccentedGlyph(
+    strokes: Stroke[], source: string, target: string, color: string,
+    pos: { dx: number; lift: number } = { dx: 0, lift: 0 },
+): Stroke[] {
+    if (!exactGrapheme(source) || !exactGrapheme(target)
+        || !/^[a-zA-Z]$/.test(source)) {
+        throw new Error("Accent requires an exact Latin base and target");
+    }
+    const decomposed = [...target.normalize("NFD")];
+    if (decomposed.length !== 2 || decomposed[0] !== source) {
+        throw new Error("Target must be the selected base plus one accent");
+    }
+    const combining = decomposed[1];
+    const valid = (combining === "\u0301" && /[AEIOUaeiou]/.test(source))
+        || (combining === "\u0303" && /[Nn]/.test(source))
+        || (combining === "\u0308" && /[Uu]/.test(source));
+    if (!valid) {
+        throw new Error("Only vowel acute, n tilde and u diaeresis supported");
+    }
+    if (!Number.isSafeInteger(pos.dx) || pos.dx < -500
+        || pos.dx > 500) {
+        throw new Error("Accent shift must be within -500..500 µm");
+    }
+    const lift = boundedInteger(String(pos.lift), 500, "accent lift");
+    if (!/^#[0-9a-fA-F]{6}$/.test(color)) {
+        throw new Error("Ink color requires #RRGGBB");
+    }
+    const base = strokes.filter((stroke) => stroke.grapheme === source)
+        .map(validateStroke);
+    if (base.length === 0) {
+        throw new Error("Source grapheme has no authored strokes");
+    }
+    const xs = base.flatMap((stroke) => [stroke.x1, stroke.x2]);
+    const topY = Math.min(...base.flatMap((stroke) => [stroke.y1, stroke.y2]));
+    const center = Math.round((Math.min(...xs) + Math.max(...xs)) / 2)
+        + pos.dx;
+    const span = Math.max(...xs) - Math.min(...xs);
+    const half = Math.round(Math.max(240, Math.min(800, span * 0.32)) / 2);
+    const pen = Math.max(...base.map((stroke) => stroke.width));
+    const y = topY - pen - 120 - lift;
+    const rise = Math.round(Math.max(120, Math.min(440, span * 0.35)));
+    const point = (x: number, yCoord: number) => ({
+        x: Math.round(x), y: Math.round(yCoord),
+    });
+    const segments: [Point, Point][] = combining === "\u0301"
+        ? [[point(center - half, y), point(center + half, y - rise)]]
+        : combining === "\u0303" ? [
+            [point(center - half, y), point(center - half / 3, y - 120)],
+            [point(center - half / 3, y - 120),
+                point(center + half / 3, y)],
+            [point(center + half / 3, y), point(center + half, y - 120)],
+        ] : [
+            [point(center - half * 0.55, y),
+                point(center - half * 0.55, y - 80)],
+            [point(center + half * 0.55, y),
+                point(center + half * 0.55, y - 80)],
+        ];
+    const accent = segments.map(([first, last]) => {
+        for (const p of [first, last]) {
+            if (p.x - pen / 2 < 0 || p.x + pen / 2 > 3500
+                || p.y - pen / 2 < 0 || p.y + pen / 2 > 4500) {
+                throw new Error("Accent and pen must fit inside glyph cell");
+            }
+        }
+        return validateStroke({
+            grapheme: target, x1: first.x, y1: first.y,
+            x2: last.x, y2: last.y, width: pen, color,
+        });
+    });
+    return [...base.map((stroke) => ({ ...stroke, grapheme: target })),
+        ...accent];
+}
+
 function required<T extends Element>(id: string): T {
     const node = document.getElementById(id);
     if (node === null) throw new Error(`Missing glyph editor control: ${id}`);
@@ -282,6 +358,7 @@ export function createGlyphStrokeEditor(): {
     const add = required<HTMLButtonElement>("glyph-add");
     const copyFrom = required<HTMLInputElement>("glyph-copy-from");
     const copy = required<HTMLButtonElement>("glyph-copy");
+    const compose = required<HTMLButtonElement>("glyph-compose");
     const form = required<HTMLSelectElement>("glyph-form");
     const construct = required<HTMLButtonElement>("glyph-construct");
     const centerX = required<HTMLInputElement>("glyph-circle-x");
@@ -309,7 +386,7 @@ export function createGlyphStrokeEditor(): {
         numeric[axis] = required<HTMLInputElement>(`glyph-${axis}`);
         ranges[axis] = required<HTMLInputElement>(`glyph-${axis}-range`);
     }
-    const controls = [character, color, source, add, copyFrom, copy,
+    const controls = [character, color, source, add, copyFrom, copy, compose,
         form, construct, centerX, centerY, radius, accentShift, accentLift,
         selected, update,
         remove, reverse, earlier, later, save,
@@ -696,6 +773,30 @@ export function createGlyphStrokeEditor(): {
             render();
             message("Copied " + templates.length
                 + " strokes to the exact selected grapheme (unsaved)");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    compose.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            const target = character.value;
+            const sourceGlyph = copyFrom.value;
+            const lines = composeAccentedGlyph(
+                strokes, sourceGlyph, target, color.value, {
+                    dx: Number(accentShift.value),
+                    lift: Number(accentLift.value),
+                });
+            const next = [
+                ...strokes.filter((stroke) => stroke.grapheme !== target),
+                ...lines,
+            ];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message("Composed " + lines.length + " ordered strokes for "
+                + target + "; base preserved (unsaved)");
         } catch (error) {
             message(String(error));
         }

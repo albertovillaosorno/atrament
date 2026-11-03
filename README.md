@@ -576,6 +576,33 @@ replaces only the target glyph's unsaved template; its strokes can then be
 edited independently. It does not silently substitute symbols or synthesize
 handwriting.
 
+**Compose accent from authored base** uses the same exact base-glyph
+field as Copy, but requires a matching accented target. For example, after
+articulating `e` strokes choose `e` as the source and `é` (or exact `e` plus
+combining acute) as the target.
+
+The editor creates a separate target with original stroke order, endpoints
+and colors unchanged, then appends a bounded ink mark using the selected
+pen color. Supported pairs are `a/e/i/o/u`
+(and their uppercase forms) with acute, `n/N` with tilde and `u/U` with
+umlaut. Accent shift (-500..500 µm) and lift (0..500 µm) apply to the new
+mark; all coordinates remain integer micrometres.
+
+Each mark is one acute segment, three joined tilde segments or two dot-like
+short strokes. It is
+**explicit one-time target replacement**, not attachment metadata or a
+normalization-based runtime fallback: `ñ` and `n` plus combining tilde
+remain distinct keys.
+
+Missing bases, mismatched targets and clipped marks refuse without replacing
+any existing target. In particular, a dotted `i`
+with insufficient space above its strokes may require user adjustment first.
+
+This is bounded compositional ink for shapes the user actually supplied,
+not a full geometric alphabet, analytic accent persistence or automatic
+script joining. The source is never modified; the user can still reorder
+or reverse each target pen segment after composition.
+
 **Load stroke TSV** reads an explicit existing glyph file into an in-memory
 draft. **Download stroke TSV** saves the canonical native-compatible file;
 there is no automatic saving or new server-side file endpoint. The Rust CLI
