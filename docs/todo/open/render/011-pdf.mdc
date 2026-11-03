@@ -34,6 +34,23 @@ records. This record is **open executable integration work**. It must not be
 closed merely because a prior design was accepted or a different
 implementation was proposed.
 
+## Verified printed-date partial integration — 2026-11-03
+
+The Rust notebook profile now admits an optional, validated numeric Gregorian
+date. The same native paper compositor prints the selected date as fixed-width
+vector marks in multi-page PDF and transparent PNG, and refuses impossible
+dates or date text without a placeholder. Existing seven-field notebook v1
+profiles reopen with an empty date and preserve their previous paper output.
+
+Tests cover native serialization, CLI files, authenticated HTTP, and an actual
+Firefox local save/reopen/CLI export. The Firefox test also preserves an exact
+Spanish `ñ` statistical override, without claiming a rendered ink glyph.
+
+**Still missing:** body handwriting strokes, complete Spanish/English glyph
+shapes and fallbacks, embedded image overlays, and a single saved notebook
+containing all content. The output remains a genuine paper layer, not full
+notebook content or complete acceptance of P5-011.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

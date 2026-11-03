@@ -56,11 +56,17 @@ tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs`.
 The test uses only disposable profile files, a stubbed test-owned browser
 opener, real Firefox and the native Rust server and CLI.
 
-**Remaining:** the PDF and PNG contain physical-size *paper-layer* marks,
-selected date placeholders, outline and page numbers, **not actual handwritten
-text, diacritic strokes, image overlays or general notebook content**.
-This is concrete partial evidence, not completion of P8-009 or readiness for
-production printing. P4-012, P5-011 and P5-012 remain open prerequisites.
+**Updated paper-layer evidence (2026-11-03):** the same Firefox-to-Rust
+journey now saves a validated numeric date with the notebook profile.
+Native PDF and PNG print that numeric date using the same Rust drawing path;
+invalid calendar dates refuse before output. Older notebook v1 files with
+seven fields remain readable.
+
+**Remaining:** PDF and PNG now contain physical-size paper marks, printed
+numeric dates, borders and page numbers, **not handwritten text, diacritic
+strokes, image overlays or general notebook content**. These are printed
+annotations, not sampled pen strokes. P4-012, P5-011 and P5-012 remain open
+prerequisites; production printing and the full journey are not verified.
 
 ## Acceptance decision
 
