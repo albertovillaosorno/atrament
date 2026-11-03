@@ -1,0 +1,87 @@
+---
+record_type: task
+id: "ATR-P9-003"
+title: "Build and physically certify the custom hardware"
+status: completed
+priority: P9
+lane: optional-hardware
+dependencies: ["ATR-P9-001", "ATR-P9-002"]
+dependencies_specified: true
+dependency_rationale: >-
+  Hardware certification requires mechanism and capability design.
+acceptance_criteria:
+  - >-
+      Treat the device as a separate product with its own electronics,
+      firmware, enclosure, safety, calibration, endurance, and manufacturing
+      evidence.
+  - >-
+      Finite v1 completion: Publish one finite custom-device engineering and
+      certification plan with electronics, firmware, enclosure, calibration,
+      endurance, and safety gates; theory-only acceptance never authorizes
+      physical operation.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Build and physically certify the custom hardware
+
+## Scope and existing evidence
+
+Treat the device as a separate product with its own electronics, firmware,
+enclosure, safety, calibration, endurance, and manufacturing evidence.
+
+## Finite separate-product engineering and certification plan
+
+**Product boundary:** hypothetical desk-scale four-tool writer with a
+single XY carriage and linear tool rack. It is a *separate future product*,
+not an implicit Atrament desktop release feature. No machine was built,
+connected or certified. The following are sequential design gates; each
+requires independent practical evidence before physical operator use.
+
+| Gate | Required artifact | Acceptance or refusal |
+| --- | --- | --- |
+| 1. Electronics | Power tree, motor limits, wiring map, protected interlocks | Refuse unknown current/thermal or unprotected fault paths |
+| 2. Firmware | Versioned command protocol, watchdog, bounded stops and status | Refuse commands with unknown version or unobserved position |
+| 3. Mechanics/enclosure | Guarded pinch points, safe park, rack and clamp envelope | Refuse reachable moving hazard or unguarded pen/clip strike |
+| 4. Independent stop | Physical emergency-stop and power-fault isolation design | Refuse any software-only claim of effective emergency stop |
+| 5. Registration | Four tool-offset records, page corners and clearance maps | Refuse unknown orientation, measured error or partial tool pickup |
+| 6. Endurance | Repeat docking, long-page cycles, noise/thermal/ink logs | Refuse unmeasured wear, drift, spills or tip collisions |
+| 7. Manufacturing | Traceable bill of materials, calibration jig and service plan | Refuse untraceable revisions or service without protective procedure |
+| 8. Legal/product release | Region-specific safety/EMC review by competent experts | Refuse sale or certification claim absent applicable evidence |
+
+**Finite theoretical bench sequence:** with power isolated, first inspect
+fused supply and cable-routing diagrams; validate a simulated disconnect
+from firmware protocol state; review a static enclosure drawing for tool
+rack clearance; draft a no-motion page registration using four fiducials;
+then define 100 repeated hypothetical dock/undock cycles per slot and the
+fault logs needed to evaluate wear. The number 100 is a future test-plan
+sample count, **not** cycles executed or a claimed endurance guarantee.
+Before any eventual live test, define stop conditions, competent operator,
+protective barrier, measured tool clearance and independent power isolation.
+
+**Worked refusal:** a partial tool pickup after brownout leaves slot 2
+reported but the carriage position unknown. Even if the firmware reconnects,
+reject further tool-change, pen-down or home commands until an authorized
+person isolates power, inspects the machine, restores known mechanical state,
+recalibrates and reissues a plan. Firmware restart is not recovery evidence.
+
+**Cross-product interface:** desktop Atrament may inspect a typed immutable
+plan; only a future independently reviewed physical adapter can arm or send
+commands to this custom machine. Its firmware identity, enclosure state,
+operator training and test ledger may never be fabricated from simulated
+backend domain records. Target noise, vibration and desk dimensions require
+physical measurements with instruments and declared uncertainty.
+
+**Assumptions and risks:** no schematic, firmware, PCB, enclosure, test
+fixture, working emergency stop, EMC evaluation, accredited testing or
+manufacturing evidence was produced. The proposed plan does not establish
+compliance with any particular law or technical standard and authorizes no
+assembly, powered test, product shipment or user operation.
+
+## Acceptance decision
+
+- **Basis:** theoretical finite engineering/certification roadmap, 2026-11-02.
+- **Delivered:** eight sequential evidence gates, 100-cycle future study,
+  power-loss refusal and separation from the single-pen software product.
+- **Unavailable:** built custom device, measured hardware behavior,
+  certification or physical operation authorization.

@@ -18,25 +18,10 @@ remain in typed records under `docs/todo/open/`. Completed work belongs under
 then one direct Markdown link to the complete typed record. No per-item field
 labels belong here.
 
-## P9 — Optional compact multi-color writer
-
-### TODO - Research a quiet compact multi-tool mechanism
-
-Evaluate pen carousels, independent tool heads, registration, vibration,
-noise, desk footprint, serviceability, and safe color-change recovery.
-
-[docs/todo/open/hardware/001-research-a-quiet-compact-multi-tool.mdc](docs/todo/open/hardware/001-research-a-quiet-compact-multi-tool.mdc)
-
-### TODO - Define a multi-tool capability profile
-
-Add colors, highlighters, automatic tool changes, cleaning, verification, and
-resume rules without changing the accepted single-pen plan contract.
-
-[docs/todo/open/hardware/002-define-a-multi-tool-capability-profile.mdc](docs/todo/open/hardware/002-define-a-multi-tool-capability-profile.mdc)
-
-### TODO - Build and physically certify the custom hardware
-
-Treat the device as a separate product with its own electronics, firmware,
-enclosure, safety, calibration, endurance, and manufacturing evidence.
-
-[docs/todo/open/hardware/003-custom-hardware-certification.mdc](docs/todo/open/hardware/003-custom-hardware-certification.mdc)
+No open TODO records remain as of November 2, 2026. The finite task
+records were accepted as practical or theoretical deliverables under the
+[acceptance policy](docs/todo/README.md); that does **not** establish a
+production-ready application or certified machine. The dated
+[release decision ledger](docs/todo/completed/release/008-close-every-known-reproducible-defect.mdc)
+remains **NO-GO** because identified security, PDF, packaging, and verification
+work is not complete. Optional P9 hardware also has design acceptance only.

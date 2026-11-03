@@ -1,0 +1,83 @@
+---
+record_type: task
+id: "ATR-P9-002"
+title: "Define a multi-tool capability profile"
+status: completed
+priority: P9
+lane: optional-hardware
+dependencies: ["ATR-P7-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Multi-tool capabilities extend the single-pen contract.
+acceptance_criteria:
+  - >-
+      Add colors, highlighters, automatic tool changes, cleaning,
+      verification, and resume rules without changing the accepted
+      single-pen plan contract.
+  - >-
+      Finite v1 completion: Define one optional multi-tool capability
+      profile covering tool selection, color, collision, and recovery
+      refusals; single-pen v1 stays independent.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Define a multi-tool capability profile
+
+## Scope and existing evidence
+
+Add colors, highlighters, automatic tool changes, cleaning, verification, and
+resume rules without changing the accepted single-pen plan contract.
+
+## Optional four-tool capability extension
+
+**Inputs:** immutable single-pen plan identity; explicitly selected optional
+`atrament.multi-tool/1` capability, calibrated tool IDs/offsets, verified
+slot-to-tool mapping, available colors, marker/pen contact forces, clearance
+and exclusion envelopes, cleaning status and original page/ink requirements.
+**Outputs:** one proposed multi-tool schedule and typed preflight/refusals,
+not an automatic motion program. Single-pen v1 capability and its schema
+remain unchanged and default when the extension is absent.
+
+**Profile example:** `ToolA` is a black fine pen; `ToolB` is a blue fine pen;
+`ToolC` is a yellow highlighter; `ToolD` is reserved/empty. Tool IDs are
+not merely RGB values: each binds measured offset, tip geometry, contact
+height, drying group, support tier and docking slot. Proposed sequence:
+black title, black prose, deliberate pen-up docking, verify `ToolB`, draw
+blue border, then verify `ToolC` and place one highlight only after the
+relevant text has admitted drying clearance. An unavailable tool is an
+explicit `Unconvertible` item, never automatic substitution of black ink.
+
+**Tool-change gate:** before every change verify all of pen-up state,
+stationary and known XY, safe park path, collision-free rack/pen envelopes,
+firmware/driver authority, current dock identity, tip cleanliness, and an
+explicit operator-authorized tool request. Release and pickup each create
+separate checkpoints, and the selected tool must be reidentified at the
+post-pickup checkpoint. No deposition may occur during a dock transition.
+
+**Recovery/refusal:** `WrongTool`, `ToolMissing`, `OffsetUnknown`,
+`CleaningRequired`, `CollisionEnvelopeUnknown`, `DryingEvidenceMissing`,
+`UncertainDockState`, or `PartialInkStroke` stops the proposed schedule.
+On a crash or power loss, assume neither carriage coordinates nor active
+pen is known; require human inspection, home/calibration and renewed
+operator authorization. Do not replay a tool-change sequence or skip an
+unsupported highlighter without explicit semantic acceptance.
+
+**Compatibility boundary:** the proposed extension compiles only when
+its caller explicitly opts in. A single-pen device continues to receive
+its existing pen-up/down plan unchanged, with unsupported color/tool
+requirements diagnosed one-by-one rather than erased. Hardware actions,
+file exports, calibration and verification remain separate authorities.
+
+**Assumptions and risks:** no actual tool encoder, slot sensor, color
+calibration, ink drying model, maintenance robot or multi-tool machine has
+been implemented. A profile field claiming a verified tool does not prove a
+sensor observed it. This contract cannot arm a device.
+
+## Acceptance decision
+
+- **Basis:** theoretical optional capability extension, 2026-11-02.
+- **Delivered:** one four-slot profile with explicit tool selection, colors,
+  marker use, dock/cleaning/geometry gates, and uncertain-state refusals.
+- **Unavailable:** actual multi-tool motion, measured calibration, sensors,
+  highlighter reliability, collision guarantees or physical certification.

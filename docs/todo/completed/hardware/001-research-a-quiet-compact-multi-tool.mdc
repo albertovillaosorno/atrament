@@ -1,0 +1,78 @@
+---
+record_type: task
+id: "ATR-P9-001"
+title: "Research a quiet compact multi-tool mechanism"
+status: completed
+priority: P9
+lane: optional-hardware
+dependencies: []
+dependencies_specified: true
+dependency_rationale: >-
+  Optional hardware research has no first-release prerequisites.
+acceptance_criteria:
+  - >-
+      Evaluate pen carousels, independent tool heads, registration,
+      vibration, noise, desk footprint, serviceability, and safe
+      color-change recovery.
+  - >-
+      Finite v1 completion: Compare three plausible compact multi-tool
+      mechanisms against noise, size, cost, serviceability, and safety in
+      one decision matrix; no prototype required.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Research a quiet compact multi-tool mechanism
+
+## Scope and existing evidence
+
+Evaluate pen carousels, independent tool heads, registration, vibration, noise,
+desk footprint, serviceability, and safe color-change recovery.
+
+## Finite three-mechanism comparison
+
+**Constraints:** optional desk-scale multi-tool writer, one sheet, up to
+four pens/markers, explicit safe tool separation, low perceived noise,
+serviceable inks and no implicit tool-change motions. The analysis uses
+relative qualitative expectations only; none are measured noise or costs.
+
+| Design alternative | Noise hypothesis | Desk footprint | Cost and service | Registration and safety risk |
+| --- | --- | --- | --- | --- |
+| Four-position rotating pen carousel | Motor/gear indexing noise; potentially brief | Small dock, more height | Moderate hardware, complex alignment | Angular indexing error, pinch zone and adjacent-tip collisions |
+| Four-slot linear side rack with one XY carrier | Side-to-side docking noise; predictable stops | More width, low height | Simple replaceable slots; moderate precision | Wrong-tool pickup, rack strikes and uncapped tip leakage |
+| Four independent tool heads on one rail | Multiple drives and vibration sources | Wide and mechanically heavy | Highest wiring/control and maintenance effort | Carriage collisions, duplicate active pens and interlock complexity |
+
+**Decision:** use the **linear side rack** only as the preferred conceptual
+prototype because each individual slot can be inspected and replaced and the
+single carrier retains one active pen. Reject it if a realistic desk-width
+envelope cannot be met; a carousel then becomes a separate engineering
+alternative, not an assumed interchange. Neither is known quieter or safer
+without acoustic and mechanical evidence. The independent-head design is
+outside a first prototype because it multiplies motion and collision states.
+
+**Bounded work example:** design one four-tool rack at a reserved park edge.
+The carrier moves pen-up to a known park point, confirms `ToolReleased`,
+requests slot 2, checks pickup identity, and leaves the dock only after
+position/contact interlocks admit it. A tool misidentification, protruding
+marker cap, uncertain carriage XY, saturated collision envelope or missed
+release sensor refuses the swap without resuming any pen-down operation.
+
+**Future measurement gates:** one desk-outline check against a declared
+operator limit, audible-event and vibration traces per swap, four-slot
+repeatability and tool-offset drift, deliberate wrong-tool pickup, service
+cycle for dried ink, leak/cleaning containment, and emergency-stop refusal.
+Declare sample count and measurement equipment before tests. A hand-waving
+"quiet" rating never passes acoustic acceptance.
+
+**Assumptions and limits:** this is architecture comparison without CAD,
+component pricing, noise metering, kinematics, prototype, supplier evidence,
+physical device, or electrical safety assessment. No future multi-tool
+mechanism is permitted to redefine the accepted single-pen v1 contract.
+
+## Acceptance decision
+
+- **Basis:** theoretical three-design comparison, 2026-11-02.
+- **Delivered:** relative size/noise/cost/service/safety matrix, a chosen
+  prototype concept, explicit failed-pickup refusal and measurement gates.
+- **Unavailable:** measured acoustic level, real cost, physical dimensions,
+  docking reliability and any manufactured device.

@@ -154,7 +154,10 @@ function checkDependencyGraph(graph) {
 
 
 test("every task links one typed record with matching identity", () => {
-    assert.ok(entries.length > 0, "TODO must contain open records");
+    // A fully accepted finite backlog may have no open records. Require
+    // a nonempty total inventory, not a permanent unfinished obligation.
+    assert.ok(entries.length + discoverRecords(completed, true).length > 0,
+        "typed task inventory must not vanish");
     const seen = new Set();
     for (const entry of entries) {
         assert.ok(!seen.has(entry.id), `duplicate task ID: ${entry.id}`);
@@ -233,7 +236,7 @@ test("completed tasks preserve immutable identities outside open index", () => {
 });
 
 test("index contains no orphan or duplicated records", () => {
-    const discovered = discoverRecords(open);
+    const discovered = discoverRecords(open, true);
     const linked = entries.map((item) => item.path).sort();
     assert.deepEqual(discovered.sort(), linked);
     assert.ok(!todo.includes("## Scope and existing evidence"));
