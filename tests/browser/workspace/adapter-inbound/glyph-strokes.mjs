@@ -1132,6 +1132,51 @@ test("v/w exact SVG lines and native TSV remain session-safe", async () => {
     }
 });
 
+test("all geometric starters respect pen margins over a boundary grid", () => {
+    const forms = ["o", "a", "ó", "á", "b", "d", "p", "q",
+        "g", "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
+        "k", "x", "y", "z", "c", "e", "i", "í", "j"];
+    let accepted = 0;
+    let checked = 0;
+    for (const glyph of forms) {
+        for (const x of [1000, 1550, 2300]) {
+            for (const y of [1000, 1700, 2450, 3150]) {
+                for (const radius of [200, 750, 1100, 1450]) {
+                    for (const width of [100, 250, 750]) {
+                        checked += 1;
+                        let lines;
+                        try {
+                            lines = geometricStarter(glyph, x, y, radius,
+                                width, "#123456");
+                        } catch {
+                            continue;
+                        }
+                        accepted += 1;
+                        assert.ok(lines.length > 0);
+                        for (const line of lines) {
+                            assert.equal(line.grapheme, glyph);
+                            assert.equal(line.width, width);
+                            for (const [px, py] of [
+                                [line.x1, line.y1], [line.x2, line.y2],
+                            ]) {
+                                assert.ok(Number.isInteger(px)
+                                    && Number.isInteger(py));
+                                assert.ok(px - width / 2 >= 0
+                                    && py - width / 2 >= 0
+                                    && px + width / 2 <= 3500
+                                    && py + width / 2 <= 4500,
+                                `clipped ${glyph} at ${x},${y},${radius}`);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert.equal(checked, 4032);
+    assert.ok(accepted > 1500, "boundary grid must test valid shapes");
+});
+
 test("g reuses exact o circle with a separate quadratic hook", () => {
     const args = [1550, 2450, 1100, 250, "#123456"];
     const o = geometricStarter("o", ...args);
