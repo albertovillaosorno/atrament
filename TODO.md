@@ -20,21 +20,6 @@ labels belong here.
 
 ## P7 — Honest single-pen live output
 
-### TODO - Implement the live capability compiler
-
-Reject or explicitly convert every color, highlight, photograph, shadow,
-paper note, raster-only effect, or multi-tool action before motion planning.
-
-[docs/todo/open/live/001-implement-the-live-capability-compiler.mdc](docs/todo/open/live/001-implement-the-live-capability-compiler.mdc)
-
-### TODO - Implement the device-neutral motion plan
-
-Emit ordered pen-up and pen-down paths, speed, acceleration, optional
-pressure, safe bounds, pauses, checkpoints, semantic origin, and estimated
-duration.
-
-[docs/todo/open/live/002-implement-the-device-neutral-motion-plan.mdc](docs/todo/open/live/002-implement-the-device-neutral-motion-plan.mdc)
-
 ### TODO - Optimize path order without changing handwriting
 
 Reduce pen-up travel and drying conflicts while preserving stroke order where

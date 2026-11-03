@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P7-001"
 title: "Implement the live capability compiler"
-status: open
+status: completed
 priority: P7
 lane: live-output
 dependencies: []
@@ -25,6 +25,9 @@ migrated_from: TODO.md
 # Implement the live capability compiler
 
 ## Scope and existing evidence
+
+Historical structural evidence is not machine execution. Finite design
+acceptance below does not grant hardware or device-plan authority.
 
 Reject or explicitly convert every color, highlight, photograph, shadow, paper
 note, raster-only effect, or multi-tool action before motion planning.
@@ -61,3 +64,41 @@ converted, future, rejected, unexpected conversion, and unsupported conversion
 choice together, proving only the two ready statuses are omitted. It assigns no
 diagnostic code or prose. Blocking diagnostics, conversion execution, semantic
 projection construction, and Plan compilation remain open.
+
+## Finite single-pen capability admission and blocker ledger
+
+**Inputs:** one accepted revision, selected physical one-pen profile, ordered
+semantic/decoration uses and explicit caller-authorized conversion evidence.
+**Outputs:** a complete ordered `Accept`, `Convert`, `Reject` or `Future`
+review with source/semantic owner for every use, or a blocking refusal.
+The review cannot silently turn conversion intent into machine paths.
+
+**One-page example:** a black body-text stroke is directly `Accept` when
+profile glyphs and paper bounds are admitted. A bright highlight is `Convert`
+only after user acceptance of one-pen underline; color photographs may
+`Convert` only with accepted transparent black line-art paths. A paper shadow
+is `Reject` in Live; a second colored pen is `Future` for a single-pen
+machine. A decorative title is `Convert` to one sober same-writer title
+with hierarchy retained. All five decisions remain source-linked, and a
+`Convert` item is blocking until its exact conversion kind/provenance passes.
+
+**Blocking example:** a figure still contains photographic colors, a note
+needs raster shadow, or a candidate conversion uses another pen. Compiler
+returns these owner-indexed blockers and refuses Plan compilation. No silent
+monochrome replacement, unsupported tool change, or downgraded output format
+is allowed. Unknown hardware or undeclared limits are unsupported.
+
+**Assumptions and limits:** all 118 Digital/Live capability rows, 27 typed
+Live conversion rows and read-only blocker projection are executable policy
+primitives. Actual conversion geometry, diagnostics transport, capability
+compiler orchestration and physical Plan generation are not implemented.
+The finite example is policy acceptance, not a working machine export.
+
+## Acceptance decision
+
+- **Basis:** practical for capability-table and typed conversion admission;
+  theoretical for complete Live compilation, 2026-11-02.
+- **Delivered:** five source-linked uses with Accept/Convert/Reject/Future,
+  explicit consent and no-silent-conversion refusal.
+- **Not implemented by this acceptance:** real conversion execution,
+  compositor-to-plan wiring, hardware selection or device authority.

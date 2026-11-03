@@ -1,0 +1,101 @@
+---
+record_type: task
+id: "ATR-P7-002"
+title: "Implement the device-neutral motion plan"
+status: completed
+priority: P7
+lane: live-output
+dependencies: ["ATR-P7-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  A motion plan must satisfy the compiled live capability.
+acceptance_criteria:
+  - >-
+      Emit ordered pen-up and pen-down paths, speed, acceleration, optional
+      pressure, safe bounds, pauses, checkpoints, semantic origin, and
+      estimated duration.
+  - >-
+      Finite v1 completion: Produce one device-neutral single-pen path
+      sequence with physical units, lifts, ordering, and safe boundaries for
+      a representative page; no hardware command is issued.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement the device-neutral motion plan
+
+## Scope and existing evidence
+
+Historical structural evidence is not machine execution. Finite design
+acceptance below does not grant hardware or device-plan authority.
+
+Emit ordered pen-up and pen-down paths, speed, acceleration, optional pressure,
+safe bounds, pauses, checkpoints, semantic origin, and estimated duration.
+
+Current executable evidence now freezes the transport-neutral motion-plan
+content
+boundary without hardware authority. Ordered operations retain pen-up/pen-down
+physical geometry, semantic origin, speed/acceleration intent, optional
+pressure,
+pauses/checkpoints, physical/writable-bound evidence, calibrated pen and live
+capability assumptions, accepted revision identity, backend plan identity, and
+optional estimated duration. The plan domain also owns the exact structural
+operation kind (checkpoint, pause, pen-up, or pen-down) so downstream dry-run
+validation does not redefine plan semantics. Path optimization, coordinate
+calibration, plan identity computation, capability compilation, simulation,
+vendor command projection, device I/O, and physical authorization remain open.
+
+Current design evidence freezes Plan as a read-only derived application
+capability bound to one accepted revision and live capability profile, with
+deterministic inputs, blocking diagnostics, plan identity, read-only
+cancellation/progress semantics, typed projection results, no file or device
+side
+effect, safe retry, derived invalidation, and browser/CLI/MCP parity. Backend
+plan compilation remains open.
+
+## Finite one-page device-neutral pen trajectory contract
+
+**Inputs:** accepted revision, one admitted single-pen capability review,
+selected calibrated pen/tool, physical page/writable bounds and ordered
+semantic stroke centerlines. **Outputs:** one immutable read-only motion-plan
+candidate with pen contact, speeds, pauses, checkpoints, semantic origin and
+estimated duration, or an exact non-motion refusal. Planning never arms a
+plotter, opens a USB port or sends an actuator command.
+
+**Bounded A4 example:** use a `210 x 297 mm` page with writable rectangle
+`x=20..190, y=20..277 mm`. A title line owner `t1` uses a pen-up travel to
+`(30,40)` mm, pen-down from `(30,40)` to `(60,40)` mm at declared 20 mm/s,
+then a pen-up travel to `(30,55)` and pen-down from `(30,55)` to `(65,55)`
+for owner `t2`. Insert a checkpoint before the second pen-down and a
+caller-authorized optional pause after it. Record speed, acceleration cap
+at 100 mm/s², pressure as `Unavailable` unless calibrated, all bounding
+coordinates, exact accepted revision, plan identity and estimated duration
+only when path/time model evidence is complete. No machine command is emitted.
+
+**Contact/bounds rule:** pen-up travel cannot be mistaken for deposition;
+pen-down must remain inside both page and calibrated writable rectangle.
+Every operation carries its source identity or an explicit transport-only
+reason, and stable order. A checkpoint records completed operation identity,
+not merely a timestamp. A future duration estimate must include pen-up
+travel, acceleration constraints, pauses and pen contact changes.
+
+**Refusal example:** a title extends to x=194 mm, a requested pressure lacks
+calibration, a required glyph has no admitted stroke, or the Live review
+still contains a `Convert` item without accepted evidence. Refuse plan
+compilation without clipping the stroke or inventing travel coordinates.
+The pen cannot be started or armed by a read-only Plan result.
+
+**Assumptions and limits:** typed plan content, provenance/operation kinds,
+physical bounds, pause/checkpoint, revision and estimated-duration slots
+exist. Path generation, calibration, time integration, simulator, vendor
+projection, I/O and physical authorization are absent. The two-stroke case
+is a theoretical path, not a tested device trajectory.
+
+## Acceptance decision
+
+- **Basis:** practical for typed plan and operation provenance; theoretical
+  for actual trajectory compilation, 2026-11-02.
+- **Delivered:** one A4 two-stroke sequence, pen-up/down/contact, speed,
+  bounds, checkpoint and unsupported-feature refusal.
+- **Not implemented by this acceptance:** executable planner, calibrated
+  kinematics, duration estimator, simulator, vendor commands or arm/start.
