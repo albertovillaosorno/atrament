@@ -639,6 +639,101 @@ test("printed two-storey a samples a continuous analytic upper story", () => {
         undefined, "two-storey"), /Acute accent/);
 });
 
+test("b/d/p/q reuse the exact o bowl with correctly extended stems", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const circle = geometricStarter("o", ...args);
+    const stems = [
+        ["b", 450, 800, 450, 3550],
+        ["d", 2650, 800, 2650, 3550],
+        ["p", 450, 1350, 450, 4100],
+        ["q", 2650, 1350, 2650, 4100],
+    ];
+    for (const [glyph, x1, y1, x2, y2] of stems) {
+        const lines = geometricStarter(glyph, ...args);
+        assert.equal(lines.length, 49);
+        assert.deepEqual(lines.slice(0, 48), circle.map((line) => ({
+            ...line, grapheme: glyph,
+        })), `same o circular segment geometry for ${glyph}`);
+        assert.deepEqual(lines.at(-1), {
+            grapheme: glyph, x1, y1, x2, y2,
+            width: 250, color: "#123456",
+        });
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(lines)),
+            lines);
+    }
+    assert.throws(() => geometricStarter("b", ...args,
+        undefined, "two-storey"), /Two-storey/);
+    assert.throws(() => geometricStarter("b", 1550, 1450, 1100,
+        250, "#123456"), /Loop stem and pen/);
+    assert.throws(() => geometricStarter("d", 1550, 1450, 1100,
+        250, "#123456"), /Loop stem and pen/);
+    assert.throws(() => geometricStarter("p", 1550, 3000, 1100,
+        250, "#123456"), /Loop stem and pen/);
+    assert.throws(() => geometricStarter("q", 1550, 3000, 1100,
+        250, "#123456"), /Loop stem and pen/);
+    assert.throws(() => geometricStarter("p", 1550, 2450, 1100,
+        900, "#123456"), /Loop stem and pen/);
+});
+
+test("loop-stem SVG guide and TSV replacement stay in sync", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const previous = [stroke("∞"), stroke("b")];
+        const input = new TextEncoder().encode(encodeGlyphLibrary(previous));
+        get("load").files = [{
+            size: input.length, arrayBuffer: async () => input.buffer,
+        }];
+        await get("load").dispatch("change");
+        for (const [glyph, x, y1, y2] of [
+            ["b", "450", "800", "3550"],
+            ["d", "2650", "800", "3550"],
+            ["p", "450", "1350", "4100"],
+            ["q", "2650", "1350", "4100"],
+        ]) {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            get("form").value = glyph;
+            get("form").dispatch("change");
+            assert.equal(get("ideal-circle").attributes.get("visibility"),
+                "visible");
+            assert.equal(get("ideal-stem").attributes.get("visibility"),
+                "visible");
+            assert.equal(get("ideal-stem").attributes.get("x1"), x);
+            assert.equal(get("ideal-stem").attributes.get("y1"), y1);
+            assert.equal(get("ideal-stem").attributes.get("x2"), x);
+            assert.equal(get("ideal-stem").attributes.get("y2"), y2);
+            assert.equal(get("ideal-arch").attributes.get("visibility"),
+                "hidden");
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, 49);
+        }
+        get("save").dispatch("click");
+        const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(accepted.slice(0, 1), [previous[0]]);
+        assert.equal(accepted.length, 197);
+        for (const glyph of ["b", "d", "p", "q"]) {
+            assert.deepEqual(accepted.filter((line) => line.grapheme === glyph),
+                geometricStarter(glyph, 1550, 2450, 1100, 250,
+                    "#243647"));
+        }
+        get("character").value = "q";
+        get("character").dispatch("input");
+        get("circle-y").value = "3000";
+        get("circle-y").dispatch("input");
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "hidden", "invalid descender must hide guide");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Loop stem and pen/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            accepted, "refused replacement is atomic for all graphemes");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("accent composition preserves authored base and target Unicode", () => {
     const base = { ...stroke("e"), x1: 900, y1: 1900,
         x2: 2350, y2: 3300, color: "#112233" };

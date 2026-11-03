@@ -275,6 +275,24 @@ These are only manually selected starter shapes: full Spanish/English
 coverage, automatic cursor joins, native analytic curves and handwriting
 calibration remain unfinished.
 
+## Closed-bowl b/d/p/q geometric starters (partial) — 2026-11-03
+
+The localhost editor now includes four additional explicit lowercase
+circle-and-stem templates. Their ideal SVG bowl uses the exact same circle
+as `o`, while `b/d` put longer stems on the left/right above the bowl and
+`p/q` put them on the left/right below it. Each replacement saves 48
+rounded loop chords followed by one ordered stem segment into the existing
+Rust-native TSV. Stems must fit the cell with their pen half-width;
+invalid ascender or descender clearance refuses without replacing old ink.
+
+Two focused browser tests check circle reuse, exact stem coordinates and
+left/right placement, real UI SVG guide visibility, UTF-8 TSV readback and
+atomic refusal with unrelated glyphs preserved. A 196-segment `bdpq` TSV
+also roundtripped byte-for-byte through the Rust CLI and produced an actual
+one-page PDF and transparent 72-DPI RGBA PNG. This is bounded geometric
+progress only, not whole-alphabet generation, cursive connections or native
+analytic curves. The larger P1-012 acceptance remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

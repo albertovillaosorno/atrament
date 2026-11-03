@@ -170,6 +170,21 @@ function dottedI(cx, cy, radius, pen) {
             to: { x: cx, y: cy + radius } },
     };
 }
+// Closed-bowl letters share exactly the same circle as o/a. Ascenders
+// extend above the bowl; descenders extend below it. In v1 only their
+// integer straight-stem geometry survives the explicit TSV export.
+function loopStem(cx, cy, radius, g) {
+    const left = g === "b" || g === "p";
+    const ascender = g === "b" || g === "d";
+    const descender = g === "p" || g === "q";
+    const x = cx + (left ? -radius : radius);
+    return {
+        from: { x, y: ascender ? cy - Math.round(radius * 1.5)
+                : cy - radius },
+        to: { x, y: descender ? cy + Math.round(radius * 1.5)
+                : cy + radius },
+    };
+}
 function roundedStory(cx, cy, radius, g) {
     const high = cy - radius;
     const low = cy + radius;
@@ -203,7 +218,8 @@ function quadratic(from, control, to, step) {
     };
 }
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
-    if (!["o", "a", "ó", "á", "n", "u", "c", "e", "i", "í"].includes(g)) {
+    if (!["o", "a", "ó", "á", "b", "d", "p", "q",
+        "n", "u", "c", "e", "i", "í"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -323,10 +339,14 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
             }
         }
     }
-    if (g === "a" || g === "á") {
+    if (["a", "á", "b", "d", "p", "q"].includes(g)) {
+        const { from, to } = loopStem(cx, cy, radius, g);
+        if (from.y - halfPen < 0 || to.y + halfPen > 4500) {
+            throw new Error("Loop stem and pen must fit inside glyph cell");
+        }
         lines.push(validateStroke({
-            grapheme: g, x1: cx + radius, y1: cy - radius,
-            x2: cx + radius, y2: cy + radius, width: pen, color,
+            grapheme: g, x1: from.x, y1: from.y,
+            x2: to.x, y2: to.y, width: pen, color,
         }));
     }
     if (g === "ó" || g === "á") {
@@ -517,17 +537,23 @@ export function createGlyphStrokeEditor() {
             idealCircle.setAttribute("stroke", color.value);
             const shown = active ? "visible" : "hidden";
             const chosen = selectedForm();
-            const circleVisible = ["o", "a", "ó", "á"]
-                .includes(chosen.grapheme);
+            const circleVisible = ["o", "a", "ó", "á", "b", "d",
+                "p", "q"].includes(chosen.grapheme);
             const circleState = circleVisible ? shown : "hidden";
             idealCircle.setAttribute("visibility", circleState);
-            idealStem.setAttribute("x1", String(cx + r));
-            idealStem.setAttribute("y1", String(cy - r));
-            idealStem.setAttribute("x2", String(cx + r));
-            idealStem.setAttribute("y2", String(cy + r));
+            const stemGlyph = ["a", "á", "b", "d", "p", "q"]
+                .includes(chosen.grapheme)
+                ? chosen.grapheme
+                : "a";
+            const stem = loopStem(cx, cy, r, stemGlyph);
+            idealStem.setAttribute("x1", String(stem.from.x));
+            idealStem.setAttribute("y1", String(stem.from.y));
+            idealStem.setAttribute("x2", String(stem.to.x));
+            idealStem.setAttribute("y2", String(stem.to.y));
             idealStem.setAttribute("stroke-width", numeric.width.value);
             idealStem.setAttribute("stroke", color.value);
-            const stemVisible = active && ["a", "á"].includes(chosen.grapheme);
+            const stemVisible = active && ["a", "á", "b", "d", "p", "q"]
+                .includes(chosen.grapheme);
             const stemState = stemVisible ? "visible" : "hidden";
             idealStem.setAttribute("visibility", stemState);
             const { start, peak, end, left, right } = upperStory(cx, cy, r);

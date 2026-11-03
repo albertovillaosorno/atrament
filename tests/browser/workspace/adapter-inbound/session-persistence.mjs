@@ -1783,10 +1783,12 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
     "idealCircle.setAttribute(\"stroke-width\", numeric.width.value);",
     "idealCircle.setAttribute(\"stroke\", color.value);",
     'idealCircle.setAttribute("visibility", circleState);',
-    "idealStem.setAttribute(\"x1\", String(cx + r));",
-    "idealStem.setAttribute(\"y1\", String(cy - r));",
-    "idealStem.setAttribute(\"x2\", String(cx + r));",
-    "idealStem.setAttribute(\"y2\", String(cy + r));",
+    // Bounded integer points from the reviewed loopStem geometry; only
+    // x/y SVG line attributes change, never a URL-bearing resource sink.
+    "idealStem.setAttribute(\"x1\", String(stem.from.x));",
+    "idealStem.setAttribute(\"y1\", String(stem.from.y));",
+    "idealStem.setAttribute(\"x2\", String(stem.to.x));",
+    "idealStem.setAttribute(\"y2\", String(stem.to.y));",
     "idealStem.setAttribute(\"stroke-width\", numeric.width.value);",
     "idealStem.setAttribute(\"stroke\", color.value);",
     "idealStem.setAttribute(\"visibility\", stemState);",

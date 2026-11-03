@@ -535,10 +535,17 @@ the chosen drawing order, but v1 line segments do not represent a grouped
 curved pen stroke.
 
 For a geometric starting point, choose an explicitly supported glyph
-(`o`, `a`, `ó`, `á`, `n`, `u`, `c`, `e`, `i` or `í`) and its matching
+(`o`, `a`, `ó`, `á`, `b`, `d`, `p`, `q`, `n`, `u`, `c`, `e`, `i`
+or `í`) and its matching
 geometric starter. Adjust the center and radius in
 micrometres, then deliberately replace that letter's unsaved strokes.
 The `o`/`a` forms share a true analytic circle.
+
+The `b` and `d` reuse the same exact circle with a left or right
+ascender stem; `p` and `q` use corresponding descender stems. At the
+default geometry each saves 48 loop chords plus one straight stem, while
+the guide remains a true SVG circle. Stems extend 1.5 radii above or below
+the center, and geometry plus pen width must fit the 3500×4500 µm cell.
 
 A simple `a` adds a right stem. A separately selectable
 **printed two-storey `a`** adds two smooth quadratic upper arches
