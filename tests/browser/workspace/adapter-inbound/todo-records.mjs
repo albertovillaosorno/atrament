@@ -38,12 +38,16 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const todo = readFileSync(resolve(root, "TODO.md"), "utf8");
 const open = resolve(root, "docs/todo/open");
+const completed = resolve(root, "docs/todo/completed");
 
-function discoverRecords(dir) {
+function discoverRecords(dir, ignoreGitkeep = false) {
     return readdirSync(dir, { withFileTypes: true }).flatMap((item) => {
+        if (ignoreGitkeep && item.name === ".gitkeep") {
+            return [];
+        }
         const path = resolve(dir, item.name);
         if (item.isDirectory()) {
-            return discoverRecords(path);
+            return discoverRecords(path, ignoreGitkeep);
         }
         assert.ok(item.isFile(), `unexpected task entry: ${path}`);
         assert.match(item.name, /\.mdc$/, `non-record in ${dir}`);
@@ -70,7 +74,6 @@ function indexEntries() {
             assert.ok(horizon, "task must belong to a horizon");
             title = heading[1];
             paragraph = [];
-            number += 1;
         } else if (title !== null) {
             const link =
                 /^\[(.+?)\]\((docs\/todo\/open\/[^)]+\.mdc)\)$/
@@ -80,8 +83,15 @@ function indexEntries() {
                 assert.ok(summary, `${title}: synthesis paragraph missing`);
                 assert.equal(link[1], link[2],
                     `${title}: link label must be its exact record path`);
+                const basename = /\/(\d{3})-[^/]+\.mdc$/.exec(link[1]);
+                assert.ok(basename, `${title}: record filename lacks ID`);
+                const nextNumber = Number(basename[1]);
+                assert.ok(nextNumber > number,
+                    `${title}: IDs must remain ordered, even with gaps`);
+                number = nextNumber;
+                const id = `ATR-${horizon}-${basename[1]}`;
                 entries.push({
-                    horizon, title, summary, path: link[1], number,
+                    horizon, title, summary, path: link[1], id,
                 });
                 title = null;
             } else if (line.trim()) {
@@ -147,14 +157,13 @@ test("every task links one typed record with matching identity", () => {
     assert.ok(entries.length > 0, "TODO must contain open records");
     const seen = new Set();
     for (const entry of entries) {
-        assert.ok(!seen.has(entry.path), `duplicate record: ${entry.path}`);
-        seen.add(entry.path);
+        assert.ok(!seen.has(entry.id), `duplicate task ID: ${entry.id}`);
+        seen.add(entry.id);
         const target = resolve(root, entry.path);
         assert.ok(target.startsWith(open + "/"), "record escapes open root");
         assert.ok(existsSync(target), `missing record: ${entry.path}`);
         const content = readFileSync(target, "utf8");
-        const suffix = String(entry.number).padStart(3, "0");
-        const id = `ATR-${entry.horizon}-${suffix}`;
+        const id = entry.id;
         assert.ok(
             content.startsWith("---\n"),
             `${id}: YAML frontmatter missing`,
@@ -178,12 +187,16 @@ test("every task links one typed record with matching identity", () => {
 test("reviewed TODO prerequisites exist and form an acyclic graph", () => {
     const graph = new Map();
     let reviewed = 0;
-    for (const entry of entries) {
-        const suffix = String(entry.number).padStart(3, "0");
-        const taskId = `ATR-${entry.horizon}-${suffix}`;
-        const content = readFileSync(resolve(root, entry.path), "utf8");
-        const prerequisites = dependenciesFromRecord(content, taskId);
-        graph.set(taskId, prerequisites);
+    const paths = [
+        ...entries.map((entry) => entry.path),
+        ...discoverRecords(completed, true),
+    ];
+    for (const path of paths) {
+        const content = readFileSync(resolve(root, path), "utf8");
+        const taskId = /^id: "(ATR-P[1-9]-\d{3})"$/m.exec(content)?.[1];
+        assert.ok(taskId, `${path}: task identity missing`);
+        assert.ok(!graph.has(taskId), `${taskId}: duplicate task identity`);
+        graph.set(taskId, dependenciesFromRecord(content, taskId));
         if (/^dependencies_specified: true$/m.test(content)) {
             reviewed += 1;
         }
@@ -200,6 +213,23 @@ test("dependency validation fails closed on orphan and cyclic edges", () => {
         ["ATR-P1-002", ["ATR-P1-001"]],
     ]);
     assert.throws(() => checkDependencyGraph(cyclic), /dependency cycle/);
+});
+
+test("completed tasks preserve immutable identities outside open index", () => {
+    const indexed = new Set(entries.map((entry) => entry.id));
+    const paths = discoverRecords(completed, true);
+    assert.ok(paths.length > 0, "completed record inventory is empty");
+    for (const path of paths) {
+        const content = readFileSync(resolve(root, path), "utf8");
+        const horizon = /^priority: (P[1-9])$/m.exec(content)?.[1];
+        const ordinal = /\/(\d{3})-[^/]+\.mdc$/.exec(path)?.[1];
+        assert.ok(horizon && ordinal, `${path}: canonical identity missing`);
+        const id = `ATR-${horizon}-${ordinal}`;
+        assert.match(content, new RegExp(`^id: "${id}"$`, "m"));
+        assert.match(content, /^status: completed$/m);
+        assert.ok(!indexed.has(id), `${id}: already open`);
+        assert.match(content, /^## Acceptance decision$/m);
+    }
 });
 
 test("index contains no orphan or duplicated records", () => {

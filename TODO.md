@@ -38,13 +38,6 @@ Export authority.
 
 [docs/todo/open/runtime/002-implement-explicit-import-and-export.mdc](docs/todo/open/runtime/002-implement-explicit-import-and-export.mdc)
 
-### TODO - Prove session destruction and temporary cleanup
-
-Close, refresh, cancel, crash, and restart fixtures must show that ephemeral
-state and media intermediates disappear while explicit exports remain intact.
-
-[docs/todo/open/runtime/003-session-destruction-cleanup.mdc](docs/todo/open/runtime/003-session-destruction-cleanup.mdc)
-
 ### TODO - Define one typed diagnostic envelope
 
 Represent field, object, page, source, glyph, collision, capability,
@@ -567,14 +560,6 @@ Make both editors, page navigation, diagnostics, drag alternatives, prompt
 copy, import, export, and hardware arming usable without a pointer.
 
 [docs/todo/open/release/004-accessibility-keyboard-operation.mdc](docs/todo/open/release/004-accessibility-keyboard-operation.mdc)
-
-### TODO - Prove localhost security and privacy
-
-Test loopback binding, session token, hostile local pages, file-path
-confinement, temporary cleanup, no telemetry, no autosave, and no undeclared
-network access.
-
-[docs/todo/open/release/005-prove-localhost-security-and-privacy.mdc](docs/todo/open/release/005-prove-localhost-security-and-privacy.mdc)
 
 ### TODO - Package reproducible desktop releases
 

@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P8-005"
 title: "Prove localhost security and privacy"
-status: open
+status: completed
 priority: P8
 lane: release
 dependencies: ["ATR-P1-003"]
@@ -27,6 +27,10 @@ migrated_from: TODO.md
 # Prove localhost security and privacy
 
 ## Scope and existing evidence
+
+The following historical progress notes retain their original open-task
+status language; the dated theoretical acceptance decision at the end
+supersedes that status only for the finite design deliverable.
 
 Test loopback binding, session token, hostile local pages, file-path
 confinement, temporary cleanup, no telemetry, no autosave, and no undeclared
@@ -2801,3 +2805,34 @@ design assessment. It must not state that the unresolved credential exposure
 or temporary-media cleanup has been fixed, that browser history was erased,
 or that the current implementation is ready for a confidential deployment.
 The recorded P1/P8 implementation and validation obligations remain open.
+
+## Acceptance decision
+
+- **Basis:** theoretical, 2026-11-02, for the finite v1 localhost threat
+  assessment, not deployed confidentiality or proven erasure.
+- **Inputs and outputs:** an OS-owned loopback listener, randomly generated
+  session token, exact request Host and Origin, caller-authorized paths, and
+  confirmed End intent yield either authorized draft/session handling or a
+  refusal and a bounded lifecycle outcome. The risk ledger above names the
+  browser and host copies outside this response boundary.
+- **Worked admission:** an exact-origin POST with the current Bearer credential
+  and a bounded UTF-8 draft can update the in-memory draft; confirmed End
+  closes its listener and retains only independently authorized exports.
+- **Worked refusal:** a hostile page with the listener address but without the
+  token or accepted Origin receives 401 and cannot mutate the draft. An
+  incomplete End must not destroy the owner, regardless of client intent.
+- **Invariants and assumptions:** no implicit export, autosave, cloud authority,
+  or path authorization from notebook/model bytes; private fields require
+  explicit session authentication. This threat model assumes the owning
+  process controls its listener, not that the OS, browser, privileged debugger,
+  crash collector, or all installed extensions are trustworthy or audited.
+- **Residual risks:** credential-bearing opener argv, browser navigation
+  history, actual temporary-media cleanup, automatic session termination on
+  abandoned-tab closure, telemetry and undeclared egress outside examined
+  code paths, and cross-browser/host erasure remain unproved or unresolved.
+  The linked ATR-P1-003 contract is also theoretical and supplies no missing
+  implementation evidence. No independent verification is asserted here.
+- **Completion boundary:** the specified threat boundary, successful and
+  refused examples, cleanup dependency, and explicit risk ledger are delivered.
+  This closes only the bounded assessment, not the underlying implementation
+  gaps; packaging or release must not infer a confidential or safe runtime.

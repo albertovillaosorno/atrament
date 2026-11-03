@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P1-003"
 title: "Prove session destruction and temporary cleanup"
-status: open
+status: completed
 priority: P1
 lane: localhost-runtime
 dependencies: ["ATR-P1-001", "ATR-P1-002"]
@@ -27,6 +27,10 @@ migrated_from: TODO.md
 # Prove session destruction and temporary cleanup
 
 ## Scope and existing evidence
+
+The following historical progress notes retain their original open-task
+status language; the dated theoretical acceptance decision at the end
+supersedes that status only for the finite design deliverable.
 
 Close, refresh, cancel, crash, and restart fixtures must show that ephemeral
 state and media intermediates disappear while explicit exports remain intact.
@@ -566,3 +570,73 @@ This is live Linux same-parent admission evidence with private session data
 resident, not proof of memory erasure on exit, privileged-host resistance,
 filesystem media cleanup, or launcher-argument confidentiality. P1 remains
 open for the broader lifecycle and temporary-file obligations.
+
+## Finite cleanup contract for theoretical v1 acceptance
+
+This finite design covers the currently implemented process-local state and
+one prospective waveform intermediate. It is not a claim that an actual media
+file was ever created, destroyed, or recovered after a crash.
+
+**Inputs:** a confirmation-gated End request; browser refresh, close, or
+`pagehide`; network cancellation; media job creation, terminal outcome, and
+cleanup result; forced process death or restart; and an explicitly authorized
+export path. **Outputs:** listener and application-owner disposition, client
+field availability, per-job cleanup status, and an explicit list of artifacts
+whose durability is not under session authority.
+
+**Lifecycle state machine:**
+
+- **Authenticated, complete confirmed End:** close the listener and drop the
+  process owner; preserve already authorized exports. Client disconnect before
+  admission is not End.
+- **Browser refresh or close:** abort page-scoped requests, scrub local drafts
+  and credentials, and refuse silent reauthentication. The backend may remain
+  live without an explicit End.
+- **Request or media cancellation:** browser abort does not roll back server
+  work. A terminal `Cancelled` media job retains owned cleanup work. Actual
+  conversion-file cancellation is not yet wired.
+- **Browser or backend crash:** no new page or process inherits the old
+  process-local authority. Crash-artifact erasure remains unproved.
+- **Process restart:** use a fresh listener and credential with an empty
+  session, without implicit recovery. External dumps and history may persist.
+- **Explicit export:** preserve only caller-admitted durable output; do not
+  create an implicit autosave or cleanup target.
+
+**One media-intermediate example:** job A begins, registers its sole waveform
+identity W, then finishes as `Cancelled`. The projection returns
+`CleanupRequired`. A failed deletion records `CleanupRetryRequired`; a later
+successful owned deletion records `Settled`. Without a registered waveform,
+terminal completion projects `Settled` immediately.
+
+These are existing in-memory transitions; the filesystem deletion and retry
+driver are not yet implemented. A crash between failed deletion and retry
+loses process-local retry metadata, so a future file-producing adapter must
+use an OS-managed cleanup lifetime or bounded startup orphan reclamation.
+
+**Refusal and invariants:** a job may settle only its own registered waveform;
+foreign or unknown identities must be refused, and a nonterminal job cannot
+masquerade as settled. An incomplete/unauthorized End leaves the owner live;
+request abort must not be called server rollback. No path extracted from model
+text authorizes deletion or export. Session cleanup must never delete a
+caller-authorized explicit export.
+
+**Assumptions and residual risks:** existing Firefox and Linux observations
+apply only to their tested host and launch modes. Opener argv and browser
+history
+credentials can outlive page scrubbing; host crash collectors, swap, OS runtime
+files, other browsers, and absent conversion-file workflows are not proved
+clean. Backend death without End can leave a browser tab and filesystem
+artifacts
+whose fate is outside current ownership evidence.
+
+## Acceptance decision
+
+- **Basis:** theoretical, 2026-11-02, scoped to the finite v1 lifecycle
+  contract and single media-intermediate state-machine example above.
+- **Delivered:** bounded inputs, outcomes, invariants, a refusal, and residual
+  risk inventory; existing code/tests remain historical evidence, not a new
+  verification claim.
+- **Unavailable implementation:** actual media-file deletion, retry after a
+  crashed owner, browser-triggered server destruction without End, and
+  cross-host erasure guarantees. This task closes as a design deliverable only;
+  none of those behaviors is certified as safe or implemented.

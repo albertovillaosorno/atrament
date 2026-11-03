@@ -40,6 +40,12 @@ The frontend regression suite checks that reviewed prerequisites reference
 existing tasks, do not duplicate edges, and form a cycle-free graph. It rejects
 unreviewed edges rather than silently treating them as authoritative.
 
+Task identity is permanent, not its position in `TODO.md`. Closing a task
+leaves gaps in the numbered open index; it never renumbers later records.
+Reviewed dependencies may reference a completed task by its same identity.
+The integrity suite checks both open and completed records so those edges
+remain resolvable without treating theoretical completion as a live feature.
+
 The `Scope and existing evidence` section preserves the task's original
 requirements, progress evidence, and limitations. It does **not** mean those
 statements were reverified during the migration.
