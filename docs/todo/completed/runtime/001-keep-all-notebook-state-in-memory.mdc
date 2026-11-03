@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P1-001"
 title: "Keep all notebook state in memory"
-status: open
+status: completed
 priority: P1
 lane: localhost-runtime
 dependencies: []
@@ -26,6 +26,10 @@ migrated_from: TODO.md
 # Keep all notebook state in memory
 
 ## Scope and existing evidence
+
+The notes below document the work's historical implementation status.
+The dated acceptance decision at the end governs only the finite v1 owner
+boundary; it does not certify future media, render, or plan integrations.
 
 Hold documents, assets, undo history, previews, and derived plans only for the
 active session with no database, autosave, hidden recovery file, or cloud copy.
@@ -336,3 +340,55 @@ The previous source guard admitted a `set_var` call; three temporary
 `session-secret` mutations now fail the zero-owner check and were restored
 byte-for-byte. This is source-level evidence only, not a proof that an
 untrusted parent environment is safe or that all private data stays in RAM.
+
+## Finite in-memory owner contract
+
+**Inputs:** draft-field replacements; accepted semantic candidates; commands,
+Undo/Redo operations, and accepted asset-byte retention; terminal media job
+records; explicit End, replacement of the process owner, and process exit.
+**Outputs:** current draft values, one accepted semantic revision with its
+reachable history and retained asset bytes, process-local media cleanup status,
+and an empty fresh owner after application disposal.
+
+The Linux CLI constructs exactly one `SessionApplication::default()` in
+`runtime-bootstrap` and borrows that owner for `session-runtime::serve`.
+Its private `draft`, `semantic`, `asset_bytes`, and `media` fields share one
+process lifetime. Derived review and layout queries borrow this same state,
+not a separate persistent notebook authority. The browser retains its own
+short-lived draft presentation, which must not be confused with server
+ownership or a second backend session.
+
+**Normal example:** authenticated task, source and candidate replacements
+update their individual in-memory fields. A valid candidate becomes an
+accepted revision; a retained asset's bytes remain bound to its accepted
+identity across reachable Undo/Redo. A divergent edit prunes asset bytes
+reachable only from the abandoned Redo branch, without deleting still-live
+history. A new `SessionApplication::default()` starts with empty drafts, no
+accepted revision, no history, no retained bytes, and no media job authority.
+
+**Refusal example:** an oversized draft replacement or rejected semantic edit
+preserves the prior accepted state instead of partially replacing it. Invalid
+asset identity or stale revision cannot borrow retained raw bytes. A browser
+refresh cannot silently recreate authentication from its consumed fragment.
+
+**Lifecycle invariants:** caller-authorized import/export is the only admitted
+path to a durable product file; model text supplies no independent path
+permission. Explicit End releases the listener and drops the process-owned
+application; forced process death also destroys live process authority, but
+neither mechanism proves byte-level RAM or crash-dump erasure. Replacing an
+accepted semantic revision is an in-session edit, not destruction of the
+owner; explicit process replacement or restart constructs a fresh empty owner.
+
+## Acceptance decision
+
+- **Basis:** practical, 2026-11-02, limited to the implemented
+  `SessionApplication` owner and its current draft, semantic, asset-history,
+  and media-bookkeeping members.
+- **Delivered:** one process-local owner with specified success, refusal,
+  replacement, and shutdown dispositions. Source composition and existing
+  checked-in fixtures describe these behaviors; historical evidence remains
+  `not_independently_verified` here rather than a claim of new re-execution.
+- **Not delivered by this acceptance:** audio/video decoding, temporary-media
+  files or their erasure, all future renderer/plan integrations, browser
+  history clearing, OS-wide zeroization, and arbitrary foreign-process
+  memory confidentiality. Those are not silently treated as implemented.

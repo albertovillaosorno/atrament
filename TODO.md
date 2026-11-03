@@ -20,14 +20,6 @@ labels belong here.
 
 ## P1 — Localhost runtime and ephemeral session
 
-### TODO - Keep all notebook state in memory
-
-Hold documents, assets, undo history, previews, and derived plans only for
-the active session with no database, autosave, hidden recovery file, or cloud
-copy.
-
-[docs/todo/open/runtime/001-keep-all-notebook-state-in-memory.mdc](docs/todo/open/runtime/001-keep-all-notebook-state-in-memory.mdc)
-
 ### TODO - Implement explicit import and export
 
 Allow deliberate notebook bundle and `.atrament` profile reads or writes at
