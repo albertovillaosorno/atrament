@@ -20,28 +20,6 @@ labels belong here.
 
 ## P8 — First-release completion
 
-### TODO - Complete accessibility and keyboard operation
-
-Make both editors, page navigation, diagnostics, drag alternatives, prompt
-copy, import, export, and hardware arming usable without a pointer.
-
-[docs/todo/open/release/004-accessibility-keyboard-operation.mdc](docs/todo/open/release/004-accessibility-keyboard-operation.mdc)
-
-### TODO - Package reproducible desktop releases
-
-Ship the Rust backend and TypeScript frontend as one verifiable installation
-with checksums, licenses, offline startup, diagnostics, and clean uninstall.
-
-[docs/todo/open/release/006-package-reproducible-desktop-releases.mdc](docs/todo/open/release/006-package-reproducible-desktop-releases.mdc)
-
-### TODO - Complete operator and developer documentation
-
-Document calibration, composition, one-shot LLM use, PDF, live safety,
-supported hardware, profile internals, schemas, adapters, validation, and
-troubleshooting.
-
-[docs/todo/open/release/007-operator-developer-documentation.mdc](docs/todo/open/release/007-operator-developer-documentation.mdc)
-
 ### TODO - Close every known reproducible defect
 
 Declare the first release complete only when P1 through P8 are closed, Jig is

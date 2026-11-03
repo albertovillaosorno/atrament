@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P8-004"
 title: "Complete accessibility and keyboard operation"
-status: open
+status: completed
 priority: P8
 lane: release
 dependencies: ["ATR-P3-003"]
@@ -100,3 +100,60 @@ tenth-point ratio from measured workspace geometry and the retained grab offset.
 The inert compact divider restores native touch behavior without an overlapping
 hit target. Backend-owned editing, import, export, diagnostic actions, and
 hardware actions still need complete no-pointer paths before this task closes.
+
+## Finite currently available keyboard-only journey
+
+**Input:** current localhost workspace after authenticated session startup;
+standard desktop keyboard with Tab, Shift+Tab, Enter, Space, arrow keys,
+Home, End, and text editing. **Output:** each implemented action can be
+reached, executed or refused through native keyboard semantics without
+requiring pointer use. Actions not wired in the current release have no
+usable keyboard route to invent.
+
+**Focused sequence:** (1) use Tab to reveal `Skip to source editor`, then
+Enter to focus/reveal `Source and response`; (2) Tab into Task and type;
+(3) Tab into Source and type, then Model response and paste text; (4) reach
+`Copy prompt` through the normal Tab order, activate with Space or Enter,
+and read clipboard status; (5) use `Skip to preview` with Tab/Enter to move
+focus to the preview heading; (6) Tab to `Zoom out`, `Reset preview zoom to
+100%`, and `Zoom in`, using Space/Enter and verifying the live zoom status;
+(7) Tab into the scrollable preview region and diagnostics as available;
+(8) reach `End session` and confirm its irreversible terminal effect by an
+explicit key activation. Only when the session's in-memory credential
+remains valid may `Retry connection` and `Retry edits` be available; keyboard
+activation never bypasses their disabled/hidden gates.
+
+**Wide separator:** at `1024 px`, focus the labeled `Resize source and
+preview panels` separator and use unmodified Left/Right arrows for bounded
+increments, Home/End for limits. Modified keys are not hijacked. If zoom
+reaches its minimum/maximum, focus must move to an enabled sibling, not be
+lost to the browser body.
+
+**Narrow viewport:** at `320 px` the separator is inert and absent from the
+Tab order. Both source and preview remain separate scrollable panels; the
+skip links focus exact headings and reveal their context, while Tab follows
+Task, Source, Copy, Candidate and preview controls in document order. At
+200% text scale or increased spacing, controls must stay reachable without
+horizontal page scrolling; the long skip link may wrap rather than overflow.
+
+**Refusal/inapplicability:** the four disabled profile, paper, style and
+output selectors are explicitly not operational choices. No backend-owned
+page editing, import, PDF Export, CLI/MCP, real diagnostics actions, hardware
+arming or start can be asserted keyboard accessible when its executable
+control does not exist. The route describes present editor and workspace
+controls, not a completed end-to-end notebook workflow.
+
+**Assumptions and risks:** existing trusted Firefox fixtures exercise skip
+links, breakpoint/focus behavior, zoom and splitter boundaries. Full
+assistive-technology certification, alternate browsers, future dialog focus,
+backend controls and hardware permissions remain future implementation work.
+No new keyboard test was run solely for this acceptance record.
+
+## Acceptance decision
+
+- **Basis:** finite present-controls specification and checked-in focused
+  Firefox evidence, 2026-11-02; broader accessibility remains unverified.
+- **Delivered:** keyboard route covering current editors, copy, retry,
+  scrollable preview, zoom, wide splitter, end session and 320-px navigation.
+- **Unavailable:** accessible interactions for absent import/export, page
+  mutations and physical hardware; full assistive-technology certification.

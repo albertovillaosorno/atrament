@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P8-007"
 title: "Complete operator and developer documentation"
-status: open
+status: completed
 priority: P8
 lane: release
 dependencies: []
@@ -78,3 +78,62 @@ and hardware controls unavailable until their owning implementation tasks add
 real operator surfaces. This closes the documentation task for the executable
 first-release surface; future implementation tasks own the documentation they
 introduce.
+
+## Finite operator quick-start and developer interface map
+
+**Present operator quick-start:** launch the local `atrament` runtime through
+its automatic browser-opening path; wait for the browser's authenticated
+`Session ready` status before editing. Enter Task, Source and Model response
+in their labeled editors. Use `Copy prompt` only as an explicit clipboard
+action for a separately selected chat; pasting into an external provider
+shares data with that provider, not with a private local model. Browser
+drafts are disposable; do not assume they persist on close. Use the keyboard
+skip links and visible zoom controls for preview navigation.
+
+**Present profile utilities:** the command set available independently of
+notebook editing includes `atrament profile verify INPUT.atrament`,
+`check-canonical`, `inspect`, and `repack INPUT.atrament OUTPUT.atrament`
+(with explicit `--replace` only for intended replacement). Back up a profile
+before any replace request. Do not infer that this makes a notebook import,
+PDF export, physical plot, CLI notebook API or MCP session available.
+
+**Failure/recovery table:**
+
+| Observed problem | Operator rule |
+| --- | --- |
+| Browser launch or loopback startup fails | Stop and restart via admitted automatic launcher; never print credentials |
+| Handshake rejected or incompatible | Use matching local artifacts; no bypass of Host/Origin/version |
+| Draft too large | Reduce the affected field; previous accepted field persists |
+| Draft transport retry offered | Use visible Retry while session credential remains valid |
+| Profile integrity or unsupported features | Inspect read-only; do not overwrite or guess a migration |
+| No PDF/Render/Export adapter | State `Unavailable`, never fabricate a delivered file |
+| Live dry-run or recovery uncertainty | Do not send motion or resume an unknown position |
+
+**Developer interface index:** `localhost-session-runtime-contract.md`
+for listener, admission and session lifecycle;
+`adapter-boundary-validation.md` for browser, clipboard and unavailable
+MCP/CLI boundaries; `portable-profile-container-validation.md` for manifest,
+ZIP canonicalization and profile file transport;
+`one-shot-formatting-prompt-validation.md` for clipboard/model request
+provenance; `pdf-print-composition-validation.md` for vector/PDF design;
+`handwriting-calibration-evidence-validation.md` for source evidence;
+`live-physical-safety-validation.md` for Plan, dry-run and fail-closed
+recovery; `first-release-troubleshooting.md` for current status meanings;
+`first-release-documentation-coverage.md` for authoritative documentation
+coverage. All paths are under `docs/technical/`.
+
+**Limits:** technical Rust types are not interchangeably frozen JSON wire
+schemas. The PDF/Render pipeline, notebook Import/Export, media/model
+adapters, hardware transport and multiplatform installers remain designs;
+the existing docs may describe their contracts but are not operational
+runbooks for those missing services. No claim is made that a physical
+AxiDraw or other machine is connected or supported.
+
+## Acceptance decision
+
+- **Basis:** current operator controls and linked verified technical guides,
+  with theoretical guidance for missing adapters, 2026-11-02.
+- **Delivered:** finite quick-start, seven-case failure table, profile CLI
+  commands and interface/document index with explicit unimplemented scope.
+- **Unavailable:** executable notebook/PDF exporter, vendor hardware runbook,
+  release installer manual and full future adapter API documentation.
