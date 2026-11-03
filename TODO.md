@@ -20,13 +20,6 @@ labels belong here.
 
 ## P2 — Semantic notebook and physical layout
 
-### TODO - Implement calibrated grid and rule geometry
-
-Preserve nominal spacing and square cells while allowing bounded ruler error,
-rounded joins, layer order, and profile-specific appearance.
-
-[docs/todo/open/semantic/002-calibrated-grid-rule-geometry.mdc](docs/todo/open/semantic/002-calibrated-grid-rule-geometry.mdc)
-
 ### TODO - Implement measured text flow and pagination
 
 Wrap paragraphs, lists, quotations, and citations from actual handwriting

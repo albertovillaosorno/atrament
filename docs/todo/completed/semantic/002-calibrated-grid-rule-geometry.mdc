@@ -1,0 +1,141 @@
+---
+record_type: task
+id: "ATR-P2-002"
+title: "Implement calibrated grid and rule geometry"
+status: completed
+priority: P2
+lane: semantic-layout
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Grid geometry is attached to semantic page objects.
+acceptance_criteria:
+  - >-
+      Preserve nominal spacing and square cells while allowing bounded ruler
+      error, rounded joins, layer order, and profile-specific appearance.
+  - >-
+      Finite v1 completion: Specify one page-profile grid/rule generator
+      with bounded spacing, deterministic seed, and an explicit calibrated
+      variation contract; if samples are unavailable, accept the
+      parameterized theoretical model.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement calibrated grid and rule geometry
+
+## Scope and existing evidence
+
+Historical notes below retain the implementation status when written.
+The dated decision at the end accepts only the parameterized design beyond
+current nominal grid compilation, not measured or rendered variation.
+
+Preserve nominal spacing and square cells while allowing bounded ruler error,
+rounded joins, layer order, and profile-specific appearance.
+
+Current executable evidence compiles blank, ruled, dotted, and squared paper
+into compact exact physical anchor series without allocating one object per
+mark. Squared grids keep identical nominal spacing on both axes. One 20,000-
+case deterministic oracle verifies repeated-mark counts, first and last anchors,
+and full rule spans across dotted, ruled, and squared regions. A second 20,000-
+case oracle verifies signed ruler-sample span and error-bound classification.
+
+Those generated geometry oracles assert every paper pattern, every ruler result
+class, both sheet orientations, and all four binding edges are actually reached.
+
+Accepted page profiles own the maximum ruler-error envelope, rounded or sharp
+join treatment, and mark layer.
+
+Validated ruler samples cannot move nominal anchors. Overflow, zero spacing,
+invalid rounded joins, and unspecified custom geometry fail with typed results.
+Standalone ruler-sample validation now reuses the physical-profile appearance
+validator, so a zero-radius rounded join rejects before sample span or error
+checks instead of bypassing profile-owned appearance authority. A
+constructor-sealed ruler-sample view retains the exact admitted sample, nominal
+line length, and appearance envelope; the 20,000-case ruler oracle requires
+identical direct/sealed outcomes, and all four typed rejection classes retain
+exact parity.
+
+The task remains open for seeded calibrated ruler-path synthesis, additional
+profile-specific visual appearance, and renderer or live-output consumption.
+Seeded path synthesis is blocked on an executable calibrated variation model:
+the accepted contracts define a maximum ruler-error envelope and deterministic
+seed, but not the profile-derived distribution or correlation behavior inside
+that envelope. Independent point jitter must not be invented as a substitute.
+
+## Finite page-mark generator and calibrated variation contract
+
+**Inputs:** one admitted oriented page profile, an explicit bounded mark
+rectangle in micrometres, `Blank`, `Dotted`, `Ruled`, or `Squared` pattern,
+positive nominal spacing `s` for repeated marks, validated appearance and
+layer, a 64-bit replay seed, and an optional calibrated variation envelope.
+**Output:** compact exact nominal `AxisSeries` and spans, with an optional
+proposed bounded presentation path per rule, or a typed refusal. Nominal
+geometry is already implemented by `compile_profile_marks`; seeded paths
+are design-only and not callable in the current runtime.
+
+**Nominal generator:** place the first horizontal/vertical anchor at the
+region origin and repeat the same physical spacing `s` until the last
+admitted anchor inside the rectangle. `Ruled` uses horizontal lines only;
+`Dotted` uses both exact row and column anchors; `Squared` uses equal `s`
+on both axes with exact line spans, retaining nominal square cells.
+`Blank` emits no marks. Requested `Custom` pattern requires independently
+supplied geometry instead of guessing what to draw.
+
+**Proposed calibrated-path parameters:** `E` is the maximum signed normal
+error, `C` is a positive along-line correlation interval, `R` is a valid
+optional rounded join radius, and `S` is the seed. Accept nonzero variation
+only if a specific page/writer calibration supplied `E` and `C`, with
+`0 < E < s/4` and `C > 0`; otherwise emit only exact nominal marks or
+refuse a request explicitly requiring calibration. Rendering may apply
+`AboveInk` or `BelowInk` layering without moving semantic anchors.
+
+**Deterministic theoretical synthesis:** for each horizontal or vertical
+ruler with ordinal `i`, place control positions every `C` micrometres along
+its span, including both endpoints. Derive each interior signed control
+sample from a version-fixed SplitMix64 hash keyed by `(S, axis, i, k)`;
+quantize to a micrometre displacement in `[-E, E]` and force both endpoints
+to zero. Linearly interpolate between adjacent controls so nearby points
+are correlated within each interval, not independently jittered.
+
+The final path is the nominal line plus this normal-only deviation; it never
+rewrites the series anchors or page-profile spacing. Each ruler offset stays
+within `E`, so neighboring parallel ruler separation stays in
+`[s - 2E, s + 2E]` at the same along-line position, and remains positive.
+The seed tuple/hash serialization, profile-approved distribution, and actual
+correlation statistics must be frozen against calibration before any
+executable or cross-platform replay claim is admitted.
+
+**Worked example (illustrative, uncalibrated):** a squared pattern uses
+`s = 5,000 µm`, hypothetical `E = 100 µm`, `C = 25,000 µm`,
+`R = 200 µm`, `S = 42`, and `BelowInk`. Exact nominal anchors stay
+5,000 µm apart on both axes; the proposed deviation would bound adjacent
+parallel-rule spacing to 4,800 through 5,200 µm. With no recorded measured
+calibration authorizing `E` and `C`, this remains a theoretical appearance
+example and only the nominal anchor plan is currently admissible.
+
+**Refusal:** zero/overflowing spacing or region, unsupported custom geometry,
+nonpositive `C`, an `E` that reaches `s/4`, unrepresentable signed offsets,
+and an invalid rounded join must refuse rather than clamp or silently alter
+nominal squares. No grid rendering result, digital preview or physical plan
+may claim calibrated variation from a seed alone.
+
+**Assumptions and residual risks:** the current Rust model validates profile
+appearance and supplied signed ruler samples but has no sample-derived
+probability model, correlation metric, multi-rule joint statistics, renderer
+consumer, or physical writer evidence. A future generator must specify all
+hash/rounding rules, obtain calibration data, verify intersecting-line and
+join behavior, and preserve renderer/live capability boundaries.
+
+## Acceptance decision
+
+- **Basis:** theoretical, 2026-11-02, for one deterministic page-profile
+  nominal/grid generator plus a parameterized bounded variation proposal.
+- **Delivered:** precise inputs/outputs, four admitted patterns, positive
+  spacing, seed and calibration parameters, a worked bounded example,
+  refusal conditions, and a residual-risk ledger. Historical executable
+  evidence is not independently reverified by this decision.
+- **Not implemented by this acceptance:** sampled calibrated ruler-path
+  synthesis, seeded replay in rendered output, handwriting quality evidence,
+  visual comparison or physical execution. The finite design is closed
+  without claiming those unimplemented integrations are complete.
