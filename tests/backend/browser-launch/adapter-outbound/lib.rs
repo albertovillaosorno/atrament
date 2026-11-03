@@ -33,17 +33,19 @@
 
 //! Fail-closed browser opener lifecycle regression tests.
 
-use std::ffi::OsStr;
-#[cfg(unix)]
-use std::time::{Duration, Instant};
-
-#[allow(
+#[expect(
     dead_code,
     unreachable_pub,
+    clippy::redundant_pub_crate,
     reason = "test-only module includes the public opener implementation",
 )]
 #[path = "../../../../src/backend/browser-launch/adapter-outbound/lib.rs"]
 mod browser_launch;
+
+use std::ffi::OsStr;
+#[cfg(unix)]
+use std::time::{Duration, Instant};
+
 use atrament_browser_launch as _;
 
 const ORIGIN: &str = "http://127.0.0.1:43123";
@@ -100,6 +102,10 @@ fn explicit_successful_opener_is_accepted() {
 }
 
 #[cfg(unix)]
+#[expect(
+    clippy::expect_used,
+    reason = "test-only fail-fast assertions for expected launcher refusals",
+)]
 #[test]
 fn explicit_unsuccessful_opener_is_typed() {
     let error = browser_launch::launch_with(OsStr::new("false"), ORIGIN)
@@ -110,6 +116,10 @@ fn explicit_unsuccessful_opener_is_typed() {
     ));
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "test-only fail-fast assertions for expected launcher refusals",
+)]
 #[test]
 fn missing_opener_is_typed_without_exposing_the_origin() {
     let error = browser_launch::launch_with(
@@ -123,11 +133,11 @@ fn missing_opener_is_typed_without_exposing_the_origin() {
 
 #[test]
 fn opener_io_failure_diagnostics_never_expose_underlying_private_text() {
-    use std::error::Error as _;
+    use std::error::Error;
     use std::io;
 
     #[expect(deprecated, reason = "pin legacy diagnostic-chain privacy")]
-    fn assert_legacy_cause_redacted(error: &dyn std::error::Error) {
+    fn assert_legacy_cause_redacted(error: &dyn Error) {
         assert!(
             error.cause().is_none(),
             "legacy error-chain traversal must not expose private text",
@@ -159,6 +169,10 @@ fn opener_io_failure_diagnostics_never_expose_underlying_private_text() {
 }
 
 #[cfg(unix)]
+#[expect(
+    clippy::expect_used,
+    reason = "test-only fail-fast assertions for expected launcher refusals",
+)]
 #[test]
 fn zero_launch_budget_rejects_before_spawning_any_opener() {
     let error = browser_launch::launch_with_timeout(
@@ -172,6 +186,10 @@ fn zero_launch_budget_rejects_before_spawning_any_opener() {
 }
 
 #[cfg(unix)]
+#[expect(
+    clippy::expect_used,
+    reason = "test-only fail-fast assertions for expected launcher refusals",
+)]
 #[test]
 fn credential_echoing_stdout_opener_is_silenced_and_killed_at_deadline() {
     let started = Instant::now();
@@ -189,6 +207,10 @@ fn credential_echoing_stdout_opener_is_silenced_and_killed_at_deadline() {
 }
 
 #[cfg(unix)]
+#[expect(
+    clippy::expect_used,
+    reason = "test-only fail-fast assertions for expected launcher refusals",
+)]
 #[test]
 fn credential_echoing_stderr_opener_is_silenced_and_typed() {
     let error =
@@ -215,6 +237,7 @@ fn assert_linux_failed_opener_reaps_descendant(
     timeout: Duration,
 ) -> browser_launch::LaunchError {
     use std::fs;
+    use std::io::ErrorKind;
     use std::os::unix::fs::PermissionsExt as _;
     use std::path::PathBuf;
     use std::process;
@@ -260,7 +283,7 @@ fn assert_linux_failed_opener_reaps_descendant(
     // A freshly materialized shell script can transiently fail execve with
     // ETXTBSY on this host. Retry only before the opener has started; a
     // successful spawn must still prove the descendant was terminated.
-    let mut busy_retries = 0;
+    let mut busy_retries: u8 = 0;
     let error = loop {
         match browser_launch::launch_with_timeout(
             opener.as_os_str(),
@@ -268,17 +291,20 @@ fn assert_linux_failed_opener_reaps_descendant(
             timeout,
         ) {
             Err(browser_launch::LaunchError::Spawn(error))
-                if error.kind() == std::io::ErrorKind::ExecutableFileBusy
-                    && busy_retries < 8 =>
+                if error.kind() == ErrorKind::ExecutableFileBusy
+                    && busy_retries < 8u8 =>
             {
-                busy_retries += 1;
+                busy_retries = busy_retries.saturating_add(1);
                 thread::sleep(Duration::from_millis(25));
             },
             outcome => break outcome.expect_err("test opener must fail"),
         }
     };
     assert!(started.exists(), "opener must have spawned its child");
-    assert!(!error.to_string().contains(PRIVATE_LAUNCH_URL));
+    assert!(
+        !error.to_string().contains(PRIVATE_LAUNCH_URL),
+        "failed opener must not reveal its private launch URL",
+    );
     thread::sleep(Duration::from_millis(700));
     assert!(
         !marker.exists(),
