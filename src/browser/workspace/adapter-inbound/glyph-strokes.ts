@@ -38,6 +38,7 @@ const MAX_BYTES = 524_288;
 const MAX_STROKES = 4096;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const CIRCLE_SEGMENTS = 48;
+const ARCH_SEGMENTS = 16;
 const AXES = ["x1", "y1", "x2", "y2", "width"] as const;
 type Axis = typeof AXES[number];
 type Point = { x: number; y: number };
@@ -143,9 +144,9 @@ export function encodeGlyphLibrary(strokes: Stroke[]): string {
 // preserve its rounded line-segment approximation, not that ideal primitive.
 function acuteAccent(
     cx: number, cy: number, radius: number, pen: number,
-    dx: number, lift: number,
+    dx: number, lift: number, topOffset = radius,
 ) {
-    const baseline = cy - radius - pen - 120 - lift;
+    const baseline = cy - topOffset - pen - 120 - lift;
     return {
         x1: cx - Math.round(radius * 0.35) + dx, y1: baseline,
         x2: cx + Math.round(radius * 0.25) + dx,
@@ -153,12 +154,44 @@ function acuteAccent(
     };
 }
 
+// Two quadratic arcs give the upper story a smooth horizontal top tangent.
+// The bowl remains an analytic circle. Only the sampled ink is serialized.
+function upperStory(cx: number, cy: number, radius: number) {
+    const start = {
+        x: Math.round(cx - radius / Math.SQRT2),
+        y: Math.round(cy - radius / Math.SQRT2),
+    };
+    const peak = { x: cx, y: cy - 2 * radius };
+    const end = { x: cx + radius, y: cy - radius };
+    const left = { x: cx - radius, y: peak.y };
+    const right = { x: cx + radius, y: peak.y };
+    return { start, peak, end, left, right };
+}
+
+function quadratic(
+    from: Point, control: Point, to: Point, step: number,
+): Point {
+    const t = step / ARCH_SEGMENTS;
+    const u = 1 - t;
+    return {
+        x: Math.round(u * u * from.x + 2 * u * t * control.x
+            + t * t * to.x),
+        y: Math.round(u * u * from.y + 2 * u * t * control.y
+            + t * t * to.y),
+    };
+}
+
 export function geometricStarter(
     g: string, x: number, y: number, r: number, w: number,
     color: string, pos?: { dx: number; lift: number },
+    kind: "single" | "two-storey" = "single",
 ): Stroke[] {
     if (!["o", "a", "ó", "á"].includes(g)) {
         throw new Error("Circle starter requires exact o, a, ó or á");
+    }
+    if (kind !== "single" && kind !== "two-storey"
+        || (kind === "two-storey" && !["a", "á"].includes(g))) {
+        throw new Error("Two-storey construction requires a or á");
     }
     const cx = boundedInteger(String(x), 3500, "center X");
     const cy = boundedInteger(String(y), 4500, "center Y");
@@ -171,6 +204,7 @@ export function geometricStarter(
     const lift = boundedInteger(
         String(pos?.lift ?? 0), 500, "accent lift");
     const halfPen = pen / 2;
+    const topOffset = kind === "two-storey" ? 2 * radius : radius;
     if (radius < 200 || cx - radius < halfPen
         || cy - radius < halfPen
         || cx + radius + halfPen > 3500
@@ -192,6 +226,26 @@ export function geometricStarter(
             x2: last.x, y2: last.y, width: pen, color,
         });
     });
+    if (kind === "two-storey") {
+        if (cy - topOffset < halfPen) {
+            throw new Error("Two-storey arch exceeds glyph cell");
+        }
+        const { start, peak, end, left, right } =
+            upperStory(cx, cy, radius);
+        const spans: [Point, Point, Point][] = [
+            [start, left, peak], [peak, right, end],
+        ];
+        for (const [from, control, to] of spans) {
+            for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
+                const first = quadratic(from, control, to, step);
+                const last = quadratic(from, control, to, step + 1);
+                lines.push(validateStroke({
+                    grapheme: g, x1: first.x, y1: first.y,
+                    x2: last.x, y2: last.y, width: pen, color,
+                }));
+            }
+        }
+    }
     if (g === "a" || g === "á") {
         lines.push(validateStroke({
             grapheme: g, x1: cx + radius, y1: cy - radius,
@@ -199,7 +253,8 @@ export function geometricStarter(
         }));
     }
     if (g === "ó" || g === "á") {
-        const accent = acuteAccent(cx, cy, radius, pen, dx, lift);
+        const accent = acuteAccent(
+            cx, cy, radius, pen, dx, lift, topOffset);
         if (accent.y2 < halfPen || accent.x1 < halfPen
             || accent.x2 + halfPen > 3500) {
             throw new Error("Acute accent and pen must fit inside glyph cell");
@@ -238,6 +293,7 @@ export function createGlyphStrokeEditor(): {
     const idealCircle = required<SVGCircleElement>("glyph-ideal-circle");
     const idealStem = required<SVGLineElement>("glyph-ideal-stem");
     const idealAccent = required<SVGLineElement>("glyph-ideal-accent");
+    const idealArch = required<SVGPathElement>("glyph-ideal-arch");
     const selected = required<HTMLSelectElement>("glyph-selected");
     const update = required<HTMLButtonElement>("glyph-update");
     const remove = required<HTMLButtonElement>("glyph-remove");
@@ -284,15 +340,22 @@ export function createGlyphStrokeEditor(): {
         }
         return null;
     };
+    const selectedForm = () => ({
+        grapheme: form.value.endsWith("-two")
+            ? form.value.slice(0, -4) : form.value,
+        variant: form.value.endsWith("-two")
+            ? "two-storey" as const : "single" as const,
+    });
     const starterFromInputs = (): Stroke[] => {
+        const chosen = selectedForm();
         const values: [string, number, number, number, number, string] = [
-            form.value, Number(centerX.value), Number(centerY.value),
+            chosen.grapheme, Number(centerX.value), Number(centerY.value),
             Number(radius.value), Number(numeric.width.value), color.value,
         ];
         const position = {
             dx: Number(accentShift.value), lift: Number(accentLift.value),
         };
-        return geometricStarter(...values, position);
+        return geometricStarter(...values, position, chosen.variant);
     };
     const renderIdeal = (): void => {
         try {
@@ -315,19 +378,32 @@ export function createGlyphStrokeEditor(): {
             idealStem.setAttribute("y2", String(cy + r));
             idealStem.setAttribute("stroke-width", numeric.width.value);
             idealStem.setAttribute("stroke", color.value);
-            const stemVisible = active && ["a", "á"].includes(form.value);
+            const chosen = selectedForm();
+            const stemVisible = active && ["a", "á"].includes(chosen.grapheme);
             const stemState = stemVisible ? "visible" : "hidden";
             idealStem.setAttribute("visibility", stemState);
+            const { start, peak, end, left, right } = upperStory(cx, cy, r);
+            const beginning = ["M", start.x, start.y].join(" ");
+            const firstArc = ["Q", left.x, left.y, peak.x, peak.y].join(" ");
+            const nextArc = ["Q", right.x, right.y, end.x, end.y].join(" ");
+            const archPath = [beginning, firstArc, nextArc].join(" ");
+            idealArch.setAttribute("d", archPath);
+            idealArch.setAttribute("stroke-width", numeric.width.value);
+            idealArch.setAttribute("stroke", color.value);
+            const archVisible = active && chosen.variant === "two-storey";
+            const archState = archVisible ? "visible" : "hidden";
+            idealArch.setAttribute("visibility", archState);
             const pen = Number(numeric.width.value);
             const dx = Number(accentShift.value);
             const lift = Number(accentLift.value);
-            const accent = acuteAccent(cx, cy, r, pen, dx, lift);
+            const top = chosen.variant === "two-storey" ? 2 * r : r;
+            const accent = acuteAccent(cx, cy, r, pen, dx, lift, top);
             for (const axis of ["x1", "y1", "x2", "y2"] as const) {
                 idealAccent.setAttribute(axis, String(accent[axis]));
             }
             idealAccent.setAttribute("stroke-width", numeric.width.value);
             idealAccent.setAttribute("stroke", color.value);
-            const hasAcute = ["ó", "á"].includes(form.value);
+            const hasAcute = ["ó", "á"].includes(chosen.grapheme);
             const accentState = active && hasAcute ? "visible" : "hidden";
             idealAccent.setAttribute("visibility", accentState);
             ideal.setAttribute("aria-label", "Analytic geometric "
@@ -335,6 +411,7 @@ export function createGlyphStrokeEditor(): {
         } catch {
             idealCircle.setAttribute("visibility", "hidden");
             idealStem.setAttribute("visibility", "hidden");
+            idealArch.setAttribute("visibility", "hidden");
             idealAccent.setAttribute("visibility", "hidden");
             ideal.setAttribute("aria-label", "Invalid circle settings");
         }
@@ -574,12 +651,14 @@ export function createGlyphStrokeEditor(): {
     construct.addEventListener("click", () => {
         if (!active) return;
         try {
-            if (character.value !== form.value) {
+            const chosen = selectedForm();
+            const target = chosen.grapheme;
+            if (character.value !== target) {
                 throw new Error("Choose matching o, a, ó or á");
             }
             const lines = starterFromInputs();
             const next = [
-                ...strokes.filter((stroke) => stroke.grapheme !== form.value),
+                ...strokes.filter((stroke) => stroke.grapheme !== target),
                 ...lines,
             ];
             encodeGlyphLibrary(next);
@@ -587,7 +666,7 @@ export function createGlyphStrokeEditor(): {
             selectedIndex = null;
             render();
             message("Constructed " + lines.length + " sampled segments for "
-                + form.value + "; analytic circle is not retained by TSV");
+                + target + "; curves are sampled into TSV");
         } catch (error) {
             message(String(error));
         }

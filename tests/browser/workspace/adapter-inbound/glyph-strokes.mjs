@@ -97,7 +97,8 @@ function mountEditor() {
         "glyph-form", "glyph-construct", "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
-        "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-accent",
+        "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
+        "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
         "glyph-earlier", "glyph-later",
         "glyph-save", "glyph-preview",
@@ -593,6 +594,47 @@ test("geometric starters share loop and validate acute strokes", () => {
     ]) assert.throws(() => geometricStarter(...bad));
 });
 
+test("printed two-storey a samples a continuous analytic upper story", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const circle = geometricStarter("o", ...args);
+    const two = geometricStarter("a", ...args, undefined, "two-storey");
+    const simple = geometricStarter("a", ...args);
+    assert.equal(two.length, 81, "48 bowl, 32 arch, 1 stem");
+    assert.deepEqual(two.slice(0, 48), circle.map((line) => ({
+        ...line, grapheme: "a",
+    })));
+    assert.deepEqual(two.at(-1), simple.at(-1),
+        "same precisely positioned right stem");
+    const arc = two.slice(48, 80);
+    assert.deepEqual([arc[0].x1, arc[0].y1], [772, 1672]);
+    assert.deepEqual([arc[15].x2, arc[15].y2], [1550, 250]);
+    assert.deepEqual([arc.at(-1).x2, arc.at(-1).y2], [2650, 1350]);
+    for (let i = 0; i < arc.length; i += 1) {
+        const line = arc[i];
+        assert.ok(line.x1 !== line.x2 || line.y1 !== line.y2);
+        if (i + 1 < arc.length) {
+            assert.deepEqual([line.x2, line.y2],
+                [arc[i + 1].x1, arc[i + 1].y1]);
+        }
+    }
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(two)), two);
+    const acuteTwo = geometricStarter("á", 1550, 2450, 600, 250,
+        "#123456", { dx: 150, lift: 100 }, "two-storey");
+    assert.equal(acuteTwo.length, 82);
+    assert.deepEqual(acuteTwo.at(-1), {
+        grapheme: "á", x1: 1490, y1: 780, x2: 1850, y2: 510,
+        width: 250, color: "#123456",
+    });
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(acuteTwo)),
+        acuteTwo);
+    assert.throws(() => geometricStarter("o", ...args,
+        undefined, "two-storey"), /Two-storey/);
+    assert.throws(() => geometricStarter("a", 1550, 2000, 1100, 250,
+        "#123456", undefined, "two-storey"), /Two-storey arch/);
+    assert.throws(() => geometricStarter("á", ...args,
+        undefined, "two-storey"), /Acute accent/);
+});
+
 test("geometric replacement preserves glyph identity and bounds", async () => {
     const ui = mountEditor();
     try {
@@ -631,6 +673,24 @@ test("geometric replacement preserves glyph identity and bounds", async () => {
             get("construct").dispatch("click");
             assert.equal(get("preview").children.length, expected);
         }
+        get("character").value = "a";
+        get("character").dispatch("input");
+        get("form").value = "a-two";
+        get("form").dispatch("change");
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 81);
+        get("character").value = "á";
+        get("character").dispatch("input");
+        get("form").value = "á-two";
+        get("form").dispatch("change");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Acute accent/);
+        assert.equal(get("preview").children.length, 50,
+            "invalid accented upper story leaves previous á intact");
+        get("circle-radius").value = "600";
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 82);
+        get("circle-radius").value = "1100";
         get("character").value = "ó";
         get("character").dispatch("input");
         get("form").value = "ó";
@@ -649,15 +709,22 @@ test("geometric replacement preserves glyph identity and bounds", async () => {
         get("save").dispatch("click");
         const saved = parseGlyphLibrary(await downloads[0].text());
         assert.deepEqual(saved.slice(0, 2), [original[0], original[2]]);
-        assert.deepEqual(saved.slice(2, 50), geometricStarter(
-            "o", 1550, 2450, 1100, 250, "#243647"));
-        assert.deepEqual(saved.slice(50, 99), geometricStarter(
-            "a", 1550, 2450, 1100, 250, "#243647"));
-        assert.deepEqual(saved.slice(99, 148), geometricStarter(
-            "ó", 1550, 2450, 1100, 250, "#243647",
-            { dx: 100, lift: 100 }));
-        assert.deepEqual(saved.slice(148), geometricStarter(
-            "á", 1550, 2450, 1100, 250, "#243647"));
+        for (const [grapheme, lines] of [
+            ["o", geometricStarter(
+                "o", 1550, 2450, 1100, 250, "#243647")],
+            ["a", geometricStarter(
+                "a", 1550, 2450, 1100, 250, "#243647",
+                undefined, "two-storey")],
+            ["ó", geometricStarter(
+                "ó", 1550, 2450, 1100, 250, "#243647",
+                { dx: 100, lift: 100 })],
+            ["á", geometricStarter(
+                "á", 1550, 2450, 600, 250, "#243647",
+                { dx: 0, lift: 0 }, "two-storey")],
+        ]) {
+            assert.deepEqual(saved.filter((item) => item.grapheme ===
+                grapheme), lines);
+        }
         editor.reset();
         assert.equal(get("construct").disabled, true);
     } finally {
@@ -685,8 +752,16 @@ test("exact SVG circle guide tracks parameters without saving", async () => {
         assert.equal(get("ideal-stem").attributes.get("visibility"),
             "visible");
         assert.equal(get("ideal-stem").attributes.get("x1"), "2700");
+        get("form").value = "a-two";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-arch").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-arch").attributes.get("d"),
+            "M 822 1672 Q 500 250 1600 250 Q 2700 250 2700 1350");
         get("form").value = "ó";
         get("form").dispatch("change");
+        assert.equal(get("ideal-arch").attributes.get("visibility"),
+            "hidden");
         assert.equal(get("ideal-stem").attributes.get("visibility"),
             "hidden");
         assert.equal(get("ideal-accent").attributes.get("visibility"),
@@ -708,6 +783,8 @@ test("exact SVG circle guide tracks parameters without saving", async () => {
             "hidden", "invalid acute clearance hides the entire guide");
         assert.equal(get("ideal-accent").attributes.get("visibility"),
             "hidden");
+        assert.equal(get("ideal-arch").attributes.get("visibility"),
+            "hidden");
         get("circle-y").value = "2450";
         get("circle-y").dispatch("input");
         get("circle-radius").value = "1900";
@@ -725,6 +802,8 @@ test("exact SVG circle guide tracks parameters without saving", async () => {
         assert.equal(get("ideal-circle").attributes.get("visibility"),
             "visible");
         editor.reset();
+        assert.equal(get("ideal-arch").attributes.get("visibility"),
+            "hidden");
         assert.equal(get("ideal-circle").attributes.get("visibility"),
             "hidden");
         assert.equal(get("ideal-stem").attributes.get("visibility"),

@@ -191,6 +191,35 @@ the TSV draft. Browser tests cover adjusted placement and refusal; any
 accepted output remains explicit integer line segments rather than a
 persistent accent attachment.
 
+## Printed two-storey a/á browser starter (partial) — 2026-11-03
+
+The geometric starter menu now separately selects single-storey `a` and a
+printed two-storey `a`, plus their accented `á` counterparts. The printed
+form reuses the same mathematically circular SVG lower bowl. Its upper story
+is two smooth analytic quadratic SVG arches joined to the right stem.
+
+Replacing the chosen exact grapheme samples the bowl into 48 segments and
+the arches into 32, plus one stem (81 ink segments), and optionally an
+acute above the arch (82 for `á`). The existing native Rust v1 TSV accepts
+these strokes but **does not retain exact curve primitives or a distinct
+variant label**; replacing the `a` or `á` is an explicit, reversible draft
+choice, not automatic shape switching at render time.
+
+The browser regressions select both variants and prove that a failed
+accent fit leaves the previous `á` unchanged. Other checks confirm 32
+continuously joined upper-arch samples, unchanged lower circle geometry,
+explicit stroke order and UTF-8 TSV roundtrip. The default circle radius
+can fit the unaccented upper story; a smaller radius (600 µm) is required
+for the tested two-storey accent example.
+
+A native integration smoke roundtripped an explicit 163-segment `a` and
+`á` library byte-for-byte and exported a one-page PDF and transparent RGBA
+PNG with text `a á a`. The exact SVG and native TSV representations remain
+intentionally distinguished.
+
+Full baseline glyph coverage, italic/cursive joins, glyph-level variant
+persistence and analytic PDF output remain open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

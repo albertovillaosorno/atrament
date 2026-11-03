@@ -530,17 +530,20 @@
             </label>
           </div>
           <p class="field-help">Geometric starters: exact o is an analytic
-            circle, simple a adds a right stem, and acute ó/á add a rising
-            accent above the same loop. Native v1 TSV/PDF ink still samples
-            the circle as 48 line segments, not an exact persistent curve.
+            circle, simple a adds a right stem, and two-storey a adds an
+            analytic upper arch. Acute ó/á add a rising accent. Native v1
+            TSV/PDF ink samples these curves as line segments rather than
+            preserving exact circle or quadratic primitives.
             The explicit replacement affects only the selected grapheme.</p>
           <div class="handwriting-controls">
             <label>Geometric starter
               <select id="glyph-form" disabled>
                 <option value="o">Circle o</option>
                 <option value="a">Simple a (circle + stem)</option>
+                <option value="a-two">Printed two-storey a (upper arch)</option>
                 <option value="ó">Acute ó (circle + accent)</option>
                 <option value="á">Acute á (simple a + accent)</option>
+                <option value="á-two">Acute printed two-storey á</option>
               </select>
             </label>
             <label>Circle center X (µm)
@@ -568,9 +571,10 @@
             </button>
           </div>
           <p class="field-help">The acute forms use an explicit rising
-            accent stroke above the loop, positioned from circle geometry and
-            pen width. Shift it horizontally or lift it using the controls.
-            If the accent cannot fit, no ink is replaced.</p>
+            accent stroke above the highest story, positioned from geometry
+            and pen width. A two-storey á may require reducing the radius.
+            Shift or lift with the controls. If any ink cannot fit, no glyph
+            is replaced.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>
           <svg id="glyph-ideal-preview" class="glyph-stroke-preview"
@@ -582,6 +586,9 @@
             <line id="glyph-ideal-stem" x1="2650" y1="1350"
               x2="2650" y2="3550" stroke="#243647" stroke-width="250"
               stroke-linecap="round" visibility="hidden"></line>
+            <path id="glyph-ideal-arch" d="" fill="none"
+              stroke="#243647" stroke-width="250" stroke-linecap="round"
+              stroke-linejoin="round" visibility="hidden"></path>
             <line id="glyph-ideal-accent" x1="1165" y1="980"
               x2="1825" y2="485" stroke="#243647" stroke-width="250"
               stroke-linecap="round" visibility="hidden"></line>

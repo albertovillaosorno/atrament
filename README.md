@@ -536,25 +536,34 @@ curved pen stroke.
 
 For a geometric starting point, choose exact `o`, `a`, `ó`, or `á` and
 select its matching geometric starter. Adjust circle center and radius in
-micrometres, then deliberately replace that letter's unsaved strokes. All
-four share a true analytic circle; simple `a` adds a right stem, while the
-acute forms add a rising accent based on loop size and pen width.
+micrometres, then deliberately replace that letter's unsaved strokes.
+All forms share a true analytic circle.
+
+A simple `a` adds a right stem. A separately selectable
+**printed two-storey `a`** adds two smooth quadratic upper arches
+above the same circular bowl. Both forms can have an acute `á` accent.
 
 A separate exact SVG construction guide updates with the numbers without
 writing ink. The existing Rust v1 glyph TSV, PDF and PNG exporters cannot
-retain the circle primitive: explicit replacement samples it into 48 rounded
-straight segments, plus a stem or accent for 49 total lines (`a`/`ó`) or
-both for 50 (`á`). This is **near-circular ink**, not an exact curve export.
+retain circle or quadratic primitives. The 48-segment circular bowl gains
+a stem (49 lines for simple `a`), an acute (49 for `ó`), or both (50 for
+simple `á`).
 
-For `ó` and `á`, **Acute horizontal shift** (-500 to +500 µm) and
-**Acute lift** (0 to 500 µm) adjust the accent's position without moving
-the loop. The exact SVG guide follows those controls before any ink is
-replaced. An invalid offset or insufficient pen clearance refuses the
-entire replacement, leaving the prior glyph untouched.
+Two-storey `a` adds 32 upper-arch samples and a right stem
+(81 lines); two-storey `á` adds an accent (82). This is **sampled near-curve
+ink**, not an exact vector-curve PDF export.
 
-Invalid coordinates, accent clearance, pen thickness or library caps refuse
-without replacing any template; other graphemes remain untouched. General
-accent anchoring, a two-storey `a` and cursive remain unfinished.
+For `ó` and both `á` variants, **Acute horizontal shift**
+(-500 to +500 µm) and **Acute lift** (0 to 500 µm) move the accent
+without moving the loop or upper arch. In two-storey `á`, the accent
+starts above the taller upper story, so the default 1100 µm radius
+does not fit; reduce it (for example to 600 µm). The SVG follows the
+controls before ink replacement, and invalid clearance refuses atomically.
+
+Invalid coordinates, arch/accent clearance, pen thickness or library caps
+refuse without replacing any template; other graphemes remain untouched.
+General analytic persistence, universal accent anchoring, italic and
+cursive remain unfinished.
 
 Drag across the SVG preview with a mouse, pen or touch to trace a letterform
 as up to 128 connected line segments per gesture. Canceled, zero-length and
