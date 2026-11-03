@@ -557,6 +557,17 @@ Rust audited `«¡hola!» “¿qué?” ‘sí’` without missing ink and expor
 `«¡hola!» “¿qué?”` to a real PDF and transparent 72-DPI RGBA PNG.
 The analytic SVG guides are still approximated by straight TSV chords.
 
+For arithmetic exercises, select **+ - − = × ÷** or click
+**Fill missing basic math operators (unsaved)**. These six shapes use
+exact straight, ordered SVG/TSV strokes, with separate Unicode identities
+for ASCII hyphen-minus `-` and the mathematical minus sign `−`.
+Division dots require pen clearance from the bar. Existing glyph ink is
+retained and a bad batch refuses before editing the unsaved draft.
+Together with the earlier 52 forms, this yields **58 exact glyphs and
+1,454 sampled strokes**. Rust audited `a+b−c=d×e÷f` with zero missing
+shapes and exported one-page PDF and transparent 72-DPI RGBA PNG.
+This does not include equation parsing or mathematical layout.
+
 These actions do not seed uppercase or the
 complete 114-entry inventory. It does not connect semantic Markdown text
 to notebook flow, and the native renderer still caps output at 512 physical

@@ -561,6 +561,12 @@
                 <option value="’">Right curly single quote ’</option>
                 <option value="“">Left curly double quote “</option>
                 <option value="”">Right curly double quote ”</option>
+                <option value="+">Math plus +</option>
+                <option value="-">ASCII hyphen-minus -</option>
+                <option value="−">Unicode math minus −</option>
+                <option value="=">Math equals =</option>
+                <option value="×">Math multiplication ×</option>
+                <option value="÷">Math division ÷ (bar and dots)</option>
                 <option value="o">Circle o</option>
                 <option value="b">Ascender b (left stem)</option>
                 <option value="d">Ascender d (right stem)</option>
@@ -632,6 +638,9 @@
             <button id="glyph-seed-quotes" type="button" disabled>
               Fill missing quotation marks (unsaved)
             </button>
+            <button id="glyph-seed-math" type="button" disabled>
+              Fill missing basic math operators (unsaved)
+            </button>
           </div>
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the highest story, positioned from geometry
@@ -654,6 +663,10 @@
             shapes. The angle brackets are exact chevrons; the upper curly
             quotes use sampled quadratic strokes. These forms retain
             independent Unicode identities and earlier authored ink.
+            Fill missing basic math separately adds +, ASCII -, Unicode
+            minus −, =, × and ÷ from exact straight pen paths. Division
+            dots must remain separated by a visible gap. All forms keep
+            independent Unicode keys and existing author ink.
             Every fill remains unsaved.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>

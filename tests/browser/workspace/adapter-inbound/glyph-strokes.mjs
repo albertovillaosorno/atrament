@@ -98,6 +98,7 @@ function mountEditor() {
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
         "glyph-seed-spanish", "glyph-seed-spanish-nfd",
         "glyph-seed-punctuation", "glyph-seed-quotes",
+        "glyph-seed-math",
         "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
@@ -1854,10 +1855,135 @@ test("five fill gestures author 52 exact glyphs", async () => {
     }
 });
 
+test("six math operators have exact bounded pen geometry", () => {
+    const expected = {
+        "+": [[780, 2450, 2320, 2450], [1550, 1680, 1550, 3220]],
+        "-": [[780, 2450, 2320, 2450]],
+        "−": [[780, 2450, 2320, 2450]],
+        "=": [[780, 2120, 2320, 2120], [780, 2780, 2320, 2780]],
+        "×": [[890, 1790, 2210, 3110], [2210, 1790, 890, 3110]],
+        "÷": [[780, 2450, 2320, 2450],
+            [1550, 1680, 1550, 1812], [1550, 3088, 1550, 3220]],
+    };
+    for (const [glyph, segments] of Object.entries(expected)) {
+        const lines = geometricStarter(glyph, 1550, 2450, 1100,
+            250, "#243647");
+        assert.deepEqual(lines.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), segments);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(lines)), lines);
+    }
+    assert.throws(() => geometricStarter("÷", 1550, 2450, 200,
+        250, "#243647"), /Division dots need visible pen-clearance/);
+});
+
+test("math fill keeps custom ink and refuses over-cap", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        assert.equal(get("seed-math").disabled, true);
+        editor.start();
+        const originals = [stroke("−"), stroke("∞")];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(originals));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-math").dispatch("click");
+        assert.match(get("status").textContent, /Filled 5 missing math/);
+        assert.equal(downloads.length, 0);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, [...originals, ...["+", "-", "=", "×", "÷"]
+            .flatMap((glyph) => geometricStarter(glyph, 1550, 2450,
+                1100, 250, "#243647"))]);
+        get("seed-math").dispatch("click");
+        assert.match(get("status").textContent, /All six basic math/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "custom Unicode minus remains untouched");
+        const full = Array.from({ length: 4090 }, () => stroke("∞"));
+        const big = new TextEncoder().encode(encodeGlyphLibrary(full));
+        get("load").files = [{
+            size: big.length, arrayBuffer: async () => big.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-math").dispatch("click");
+        assert.match(get("status").textContent, /Save requires 1..4096/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            full, "invalid math batch is atomic");
+        editor.reset();
+        assert.equal(get("seed-math").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("math SVG respects exact paths and clears invalid preview", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("form").value = "×";
+        get("character").value = "×";
+        get("form").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 890 1790 L 2210 3110 M 2210 1790 L 890 3110");
+        assert.equal(get("ideal-rounded-left").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, geometricStarter("×", 1550, 2450,
+            1100, 250, "#243647"));
+        get("circle-x").value = "150";
+        get("circle-x").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /fit inside glyph cell/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "invalid math geometry keeps authored ink");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("six explicit fill gestures author 58 independent glyphs", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        for (const action of ["seed-lowercase", "seed-spanish",
+            "seed-spanish-nfd", "seed-punctuation", "seed-quotes",
+            "seed-math"]) {
+            get(action).dispatch("click");
+            assert.match(get("status").textContent, /Filled/);
+        }
+        assert.equal(downloads.length, 0);
+        get("save").dispatch("click");
+        const all = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.equal(all.length, 1454);
+        assert.equal(new Set(all.map((line) => line.grapheme)).size, 58);
+        const differentMinuses = ["-", "−"].map((glyph) =>
+            all.filter((line) => line.grapheme === glyph));
+        assert.equal(differentMinuses[0].length, 1);
+        assert.equal(differentMinuses[1].length, 1);
+        assert.notEqual(differentMinuses[0][0].grapheme,
+            differentMinuses[1][0].grapheme);
+        editor.reset();
+        assert.equal(get("seed-math").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
 test("all geometric starters respect pen margins over a boundary grid", () => {
     const forms = ["o", "a", "ó", "á", "b", "d", "p", "q",
         "g", "n", "u", "h", "m", "r", "s", "l", "t", "f", "v", "w",
         ".", ",", "!", "¡", "?", "¿", "«", "»", "‘", "’", "“", "”",
+        "+", "-", "−", "=", "×", "÷",
         "k", "x", "y", "z", "c", "e", "i", "í", "j"];
     let accepted = 0;
     let checked = 0;
@@ -1896,7 +2022,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 5904);
+    assert.equal(checked, 6768);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

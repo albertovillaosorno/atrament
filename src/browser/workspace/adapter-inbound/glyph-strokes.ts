@@ -424,6 +424,36 @@ function quoteMirror(
         ? { x: 2 * cx - p.x, y: p.y } : p;
 }
 
+// Basic math strokes use native-exact straight pen movements, not a
+// font or equation layout. ASCII hyphen and Unicode minus stay distinct.
+type MathGlyph = "+" | "-" | "−" | "=" | "×" | "÷";
+
+function mathParts(
+    cx: number, cy: number, radius: number, glyph: MathGlyph,
+): MarkPiece[] {
+    const point = (x: number, y: number): Point => ({
+        x: cx + Math.round(radius * x),
+        y: cy + Math.round(radius * y),
+    });
+    const horizontal = (y: number): MarkPiece => ({
+        from: point(-0.7, y), to: point(0.7, y),
+    });
+    const vertical = (): MarkPiece => ({
+        from: point(0, -0.7), to: point(0, 0.7),
+    });
+    if (glyph === "-" || glyph === "−") return [horizontal(0)];
+    if (glyph === "+") return [horizontal(0), vertical()];
+    if (glyph === "=") return [horizontal(-0.3), horizontal(0.3)];
+    if (glyph === "×") return [
+        { from: point(-0.6, -0.6), to: point(0.6, 0.6) },
+        { from: point(0.6, -0.6), to: point(-0.6, 0.6) },
+    ];
+    return [horizontal(0),
+        { from: point(0, -0.7), to: point(0, -0.58) },
+        { from: point(0, 0.58), to: point(0, 0.7) },
+    ];
+}
+
 function punctuationGuide(parts: MarkPiece[]): string {
     const commands: string[] = [];
     let pen: Point | null = null;
@@ -550,7 +580,8 @@ export function geometricStarter(
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
         "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s",
         ".", ",", "!", "¡", "?", "¿",
-        "«", "»", "‘", "’", "“", "”"].includes(g)) {
+        "«", "»", "‘", "’", "“", "”",
+        "+", "-", "−", "=", "×", "÷"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -574,6 +605,26 @@ export function geometricStarter(
         || cx + radius + halfPen > 3500
         || cy + radius + halfPen > 4500) {
         throw new Error("Shape and pen thickness must fit inside glyph cell");
+    }
+    if (["+", "-", "−", "=", "×", "÷"].includes(g)) {
+        if (g === "÷" && radius * 0.58 < pen + 100) {
+            throw new Error("Division dots need visible pen-clearance");
+        }
+        return mathParts(cx, cy, radius, g as MathGlyph).map(
+            ({ from, to }) => {
+                for (const point of [from, to]) {
+                    if (point.x - halfPen < 0
+                        || point.x + halfPen > 3500
+                        || point.y - halfPen < 0
+                        || point.y + halfPen > 4500) {
+                        throw new Error("Math ink must fit inside glyph cell");
+                    }
+                }
+                return validateStroke({
+                    grapheme: g, x1: from.x, y1: from.y,
+                    x2: to.x, y2: to.y, width: pen, color,
+                });
+            });
     }
     if (["«", "»", "‘", "’", "“", "”"].includes(g)) {
         const glyph = g as QuoteGlyph;
@@ -977,6 +1028,7 @@ export function createGlyphStrokeEditor(): {
     const seedPunctuation =
         required<HTMLButtonElement>("glyph-seed-punctuation");
     const seedQuotes = required<HTMLButtonElement>("glyph-seed-quotes");
+    const seedMath = required<HTMLButtonElement>("glyph-seed-math");
     const centerX = required<HTMLInputElement>("glyph-circle-x");
     const centerY = required<HTMLInputElement>("glyph-circle-y");
     const radius = required<HTMLInputElement>("glyph-circle-radius");
@@ -1011,7 +1063,7 @@ export function createGlyphStrokeEditor(): {
     }
     const controls = [character, color, source, add, copyFrom, copy, compose,
         form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
-        seedPunctuation, seedQuotes,
+        seedPunctuation, seedQuotes, seedMath,
         centerX, centerY, radius,
         accentShift, accentLift,
         selected, update,
@@ -1166,7 +1218,12 @@ export function createGlyphStrokeEditor(): {
                     ...(control ? { control: quoteMirror(
                         cx, chosen.grapheme as QuoteGlyph, control) } : {}),
                 }))) : "";
-            const roundedD = isQuote ? quoteD
+            const isMath = ["+", "-", "−", "=", "×", "÷"]
+                .includes(chosen.grapheme);
+            const mathD = isMath ? punctuationGuide(mathParts(cx, cy, r,
+                chosen.grapheme as MathGlyph)) : "";
+            const roundedD = isMath ? mathD
+                : isQuote ? quoteD
                 : isPunctuation ? punctuationD
                 : isStraight ? straightD
                 : chosen.grapheme === "s" ? sD
@@ -1194,11 +1251,12 @@ export function createGlyphStrokeEditor(): {
                 && ["n", "u", "h", "m", "r", "j", "g", "s",
                     "v", "w", "k", "x", "y", "z",
                     ".", ",", "!", "¡", "?", "¿",
-                    "«", "»", "‘", "’", "“", "”"]
+                    "«", "»", "‘", "’", "“", "”",
+                    "+", "-", "−", "=", "×", "÷"]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
-                && !isPunctuation && !isQuote
+                && !isPunctuation && !isQuote && !isMath
                 && !["j", "g", "s"].includes(chosen.grapheme)
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
@@ -1269,7 +1327,9 @@ export function createGlyphStrokeEditor(): {
             const hasAcute = ["ó", "á", "í"].includes(chosen.grapheme);
             const accentState = active && hasAcute ? "visible" : "hidden";
             idealAccent.setAttribute("visibility", accentState);
-            const guideLabel = isQuote
+            const guideLabel = isMath
+                ? `Exact mathematical ${form.value} ink guide`
+                : isQuote
                 ? (["«", "»"].includes(chosen.grapheme)
                     ? `Exact geometric ${form.value} chevrons`
                     : `Analytic ${form.value} curls sampled to TSV`)
@@ -1633,6 +1693,34 @@ export function createGlyphStrokeEditor(): {
             render();
             message(`Filled ${missing.length} missing quotation glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    seedMath.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before seeding");
+            }
+            const glyphs = ["+", "-", "−", "=", "×", "÷"];
+            const authored = new Set(strokes.map((stroke) => stroke.grapheme));
+            const missing = glyphs.filter((g) => !authored.has(g));
+            if (missing.length === 0) {
+                message("All six basic math glyphs have authored ink");
+                return;
+            }
+            const added = missing.flatMap((g) => geometricStarter(g,
+                Number(centerX.value), Number(centerY.value),
+                Number(radius.value), Number(numeric.width.value),
+                color.value));
+            const next = [...strokes, ...added];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${missing.length} missing math glyphs (`
+                + `${added.length} exact strokes); unsaved draft`);
         } catch (error) {
             message(String(error));
         }
