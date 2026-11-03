@@ -980,6 +980,7 @@ button:focus-visible {
   border: 1px solid #c7bfb1;
   border-radius: 8px;
   background: #fffefb;
+  touch-action: none;
 }
 
 /* Selected outline is visually marked, but TSV ink stays unchanged. */

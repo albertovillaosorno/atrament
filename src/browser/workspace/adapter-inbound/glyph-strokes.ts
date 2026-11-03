@@ -39,6 +39,7 @@ const MAX_STROKES = 256;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const AXES = ["x1", "y1", "x2", "y2", "width"] as const;
 type Axis = typeof AXES[number];
+type Point = { x: number; y: number };
 type Stroke = {
     grapheme: string;
     x1: number;
@@ -167,6 +168,14 @@ export function createGlyphStrokeEditor(): {
     let generation = 0;
     let strokes: Stroke[] = [];
     let selectedIndex: number | null = null;
+    let drawing: {
+        pointerId: number;
+        grapheme: string;
+        color: string;
+        width: number;
+        first: Point;
+        last: Point;
+    } | null = null;
     let downloadUrl: string | null = null;
 
     const message = (text: string): void => { status.textContent = text; };
@@ -203,8 +212,25 @@ export function createGlyphStrokeEditor(): {
                 line.setAttribute("data-selected", "true");
             }
             line.addEventListener("click", () => { if (active) choose(index); });
+            line.addEventListener("pointerdown", (event) => {
+                event.stopPropagation();
+                if (active && event.button === 0) choose(index);
+            });
             return line;
         });
+        if (drawing !== null && drawing.grapheme === character.value) {
+            const draft = document.createElementNS(SVG_NS, "line");
+            draft.setAttribute("x1", String(drawing.first.x));
+            draft.setAttribute("y1", String(drawing.first.y));
+            draft.setAttribute("x2", String(drawing.last.x));
+            draft.setAttribute("y2", String(drawing.last.y));
+            draft.setAttribute("stroke", drawing.color);
+            draft.setAttribute("stroke-width", String(drawing.width));
+            draft.setAttribute("stroke-linecap", "round");
+            draft.setAttribute("stroke-dasharray", "150 100");
+            draft.setAttribute("data-draft", "true");
+            lines.push(draft);
+        }
         preview.replaceChildren(...lines);
         preview.setAttribute("aria-label",
             shown.length + " authored strokes for the exact selected grapheme");
@@ -230,6 +256,7 @@ export function createGlyphStrokeEditor(): {
     });
 
     character.addEventListener("input", () => {
+        drawing = null;
         selectedIndex = null;
         render();
     });
@@ -250,6 +277,86 @@ export function createGlyphStrokeEditor(): {
             numeric[axis].value = ranges[axis].value;
         });
     }
+    const pointerPoint = (event: PointerEvent): Point | null => {
+        const box = preview.getBoundingClientRect();
+        if (box.width <= 0 || box.height <= 0
+            || !Number.isFinite(event.clientX)
+            || !Number.isFinite(event.clientY)) return null;
+        const x = Math.round(3500 * (event.clientX - box.left) / box.width);
+        const y = Math.round(4500 * (event.clientY - box.top) / box.height);
+        return {
+            x: Math.max(0, Math.min(3500, x)),
+            y: Math.max(0, Math.min(4500, y)),
+        };
+    };
+    preview.addEventListener("pointerdown", (event) => {
+        if (!active || drawing !== null || event.button !== 0
+            || !event.isPrimary) return;
+        const first = pointerPoint(event);
+        if (first === null) return;
+        try {
+            if (!exactGrapheme(character.value)) {
+                throw new Error("Choose exactly one Unicode grapheme to draw");
+            }
+            const width = boundedInteger(numeric.width.value, 1500, "width");
+            if (!/^#[0-9a-fA-F]{6}$/.test(color.value)) {
+                throw new Error("Ink color requires #RRGGBB");
+            }
+            preview.setPointerCapture(event.pointerId);
+            drawing = {
+                pointerId: event.pointerId,
+                grapheme: character.value,
+                color: color.value.toUpperCase(),
+                width,
+                first, last: first,
+            };
+            render();
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    preview.addEventListener("pointermove", (event) => {
+        if (!active || drawing?.pointerId !== event.pointerId) return;
+        const point = pointerPoint(event);
+        if (point === null) return;
+        drawing.last = point;
+        render();
+    });
+    preview.addEventListener("pointerup", (event) => {
+        if (!active || drawing?.pointerId !== event.pointerId) return;
+        const current = drawing;
+        drawing = null;
+        if (preview.hasPointerCapture(event.pointerId)) {
+            preview.releasePointerCapture(event.pointerId);
+        }
+        try {
+            const last = pointerPoint(event) ?? current.last;
+            if (current.first.x === last.x && current.first.y === last.y) {
+                throw new Error("Drag across the preview to draw a segment");
+            }
+            const next = [...strokes, validateStroke({
+                grapheme: current.grapheme,
+                x1: current.first.x, y1: current.first.y,
+                x2: last.x, y2: last.y,
+                width: current.width, color: current.color,
+            })];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = next.length - 1;
+            message(strokes.length + " unsaved authored strokes");
+        } catch (error) {
+            message(String(error));
+        }
+        render();
+    });
+    preview.addEventListener("pointercancel", (event) => {
+        if (drawing?.pointerId !== event.pointerId) return;
+        drawing = null;
+        if (preview.hasPointerCapture(event.pointerId)) {
+            preview.releasePointerCapture(event.pointerId);
+        }
+        render();
+    });
     add.addEventListener("click", () => {
         if (!active) return;
         try {
@@ -307,6 +414,7 @@ export function createGlyphStrokeEditor(): {
             const text = decoder.decode(bytes);
             const checked = parseGlyphLibrary(text);
             strokes = checked;
+            drawing = null;
             selectedIndex = null;
             render();
             message(`Loaded ${checked.length} authored strokes in memory`);
@@ -343,6 +451,7 @@ export function createGlyphStrokeEditor(): {
         generation += 1;
         active = false;
         strokes = [];
+        drawing = null;
         selectedIndex = null;
         for (const control of controls) control.disabled = true;
         source.value = "";

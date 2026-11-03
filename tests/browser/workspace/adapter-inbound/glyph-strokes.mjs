@@ -66,9 +66,17 @@ class FakeElement {
     children = [];
     listeners = new Map();
     addEventListener(type, callback) { this.listeners.set(type, callback); }
-    dispatch(type) { return this.listeners.get(type)?.(); }
+    dispatch(type, event = {}) { return this.listeners.get(type)?.(event); }
     setAttribute(name, value) { this.attributes.set(name, value); }
     replaceChildren(...children) { this.children = children; }
+    getBoundingClientRect() {
+        return { left: 0, top: 0, width: 350, height: 450 };
+    }
+    setPointerCapture(id) { this.captured = id; }
+    hasPointerCapture(id) { return this.captured === id; }
+    releasePointerCapture(id) {
+        if (this.captured === id) this.captured = null;
+    }
 }
 
 function mountEditor() {
@@ -269,6 +277,59 @@ test("choose and revise any imported stroke without altering neighbors", async (
         assert.equal(get("selected").disabled, true);
         assert.equal(get("update").disabled, true);
         assert.equal(get("preview").children.length, 0);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("pointer drawing commits only validated physical segments on release", async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const preview = get("preview");
+        const pointer = (clientX, clientY, pointerId = 12) => ({
+            clientX, clientY, pointerId, isPrimary: true, button: 0,
+        });
+        preview.dispatch("pointerdown", pointer(10, 20));
+        assert.equal(preview.children.length, 0, "no drawing before admission");
+        editor.start();
+        get("character").value = "ñ";
+        get("character").dispatch("input");
+        preview.dispatch("pointerdown", pointer(10, 20));
+        assert.equal(preview.hasPointerCapture(12), true);
+        assert.equal(preview.children[0].attributes.get("data-draft"), "true");
+        preview.dispatch("pointermove", pointer(300, 420));
+        assert.equal(preview.children[0].attributes.get("x2"), "3000");
+        assert.equal(preview.children[0].attributes.get("y2"), "4200");
+        preview.dispatch("pointerup", pointer(300, 420));
+        assert.equal(preview.hasPointerCapture(12), false);
+        assert.equal(preview.children.length, 1);
+        assert.equal(preview.children[0].attributes.has("data-draft"), false);
+        assert.equal(get("selected").value, "0");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()), [{
+            grapheme: "ñ", x1: 100, y1: 200, x2: 3000, y2: 4200,
+            width: 250, color: "#243647",
+        }]);
+        preview.dispatch("pointerdown", pointer(200, 300));
+        preview.dispatch("pointerup", pointer(200, 300));
+        assert.equal(preview.children.length, 1,
+            "zero-length pointer gestures cannot replace the library");
+        assert.match(get("status").textContent, /Drag across/);
+        preview.dispatch("pointerdown", pointer(50, 60));
+        preview.dispatch("pointercancel", pointer(80, 90));
+        assert.equal(preview.children.length, 1, "canceled draw is atomic");
+        get("width").value = "79";
+        preview.dispatch("pointerdown", pointer(10, 20));
+        assert.equal(preview.children.length, 1);
+        assert.match(get("status").textContent, /native bounds/);
+        get("width").value = "250";
+        get("character").value = "∞";
+        get("character").dispatch("input");
+        preview.dispatch("pointerdown", pointer(100, 100));
+        editor.reset();
+        preview.dispatch("pointerup", pointer(300, 400));
+        assert.equal(preview.children.length, 0, "reset invalidates a drag");
     } finally {
         ui.restore();
     }
