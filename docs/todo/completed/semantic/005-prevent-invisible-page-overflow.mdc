@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P2-005"
 title: "Prevent invisible page overflow"
-status: open
+status: completed
 priority: P2
 lane: semantic-layout
 dependencies: ["ATR-P2-004"]
@@ -25,6 +25,10 @@ migrated_from: TODO.md
 # Prevent invisible page overflow
 
 ## Scope and existing evidence
+
+The historical notes below describe a practical read-only bounds and
+layout-preflight implementation. The dated finite acceptance also specifies
+conditional correction examples, not a fully executable Export or editor.
 
 Block export while fixed content crosses the writable region and identify the
 object, violated edge, amount, and valid move, crop, resize, or reflow choices.
@@ -95,3 +99,67 @@ The task remains open until full Export preflight combines layout with semantic,
 source, asset, capability, and format validation before file commit. Move, crop,
 resize, and reflow remediation classes also remain open until the owning fixed
 placement and asset semantics can prove which choices are valid.
+
+## Finite four-edge overflow and correction contract
+
+**Inputs:** exact accepted revision, page, and block identities; one measured
+fixed rectangle in physical units; and the page's admitted writable area
+from its accepted page profile. **Outputs:** a complete set of one blocking
+`atrament.layout.fixed-region-overflow` diagnostic per violated page edge,
+or an explicitly incomplete or typed refusal result if evidence cannot be
+admitted. Each violation records the owning block, page, crossed edge, and
+exact physical overrun; stale evidence cannot be used after a revision change.
+
+**Four-edge worked example:** the writable rectangle is
+`x = 20..190 mm`, `y = 20..277 mm`. Each case below is a separate accepted
+object placement on that page, and none crosses another edge:
+
+| Edge | Object rectangle `(x,y,w,h)` mm | Overflow | Proposed correction |
+| --- | --- | --- | --- |
+| Left | `(14,40,30,20)` | 6 mm | Move right 6 mm |
+| Top | `(40,14,30,20)` | 6 mm | Move down 6 mm |
+| Right | `(170,40,26,20)` | 6 mm | Move left 6 mm |
+| Bottom | `(40,250,30,33)` | 6 mm | Move up 6 mm |
+
+For each row the diagnostic uses the same stable layout condition code,
+`Blocking` disposition, typed edge and 6 mm overflow amount, and exact object
+and page semantic owners. The suggested translation only eliminates this
+particular edge violation. It is allowed as a candidate correction solely
+after a separate caller-authorized layout edit and a fresh revision-bound
+check that it causes no new boundary, collision, or minimum-size failure.
+
+**Multiple-edge rule:** a rectangle violating left and top emits two distinct
+blocking diagnostics, one per edge, with their independent exact distances.
+The code does not silently select one, lower severity, guess crop intent, or
+short-circuit the other violation. A fully contained rectangle yields a
+complete empty overflow set, not a fabricated warning.
+
+**Export boundary and refusals:** layout-only Export preflight returns
+`Blocked` for a current blocking set, `Incomplete` for incomplete evidence,
+and `Ready` only when its layout diagnostic set is complete and nonblocking.
+`Ready` does **not** mean a file was exported or that semantic, asset,
+capability, and destination checks passed. No preflight branch has authority
+to crop, resize, move, save, or publish a file.
+
+Stale revision, mismatched page/block ownership, invalid profile, coordinate
+overflow, forged edge evidence, or a non-layout code must refuse before any
+readiness determination. The allowed correction directions above are human
+review candidates; no automatic move/crop/reflow command is implemented.
+
+**Assumptions and residual risks:** the existing bounds and diagnostic code
+checks solver-provided rectangles but does not solve their placement.
+Correction feasibility depends on future typed anchor and collision policy
+from ATR-P2-004, which was also closed as a theoretical design only.
+Full Export requires independent semantic, source, asset, capability, format,
+path, and commit gates that the layout-only preflight does not supply.
+
+## Acceptance decision
+
+- **Basis:** practical for existing four-edge read-only diagnostics and
+  layout-only preflight; theoretical for correction admission, 2026-11-02.
+- **Delivered:** per-edge object/page identity, amount and blocking semantics,
+  four isolated 6 mm examples, conditional one-step remedies, multiple-edge
+  behavior, typed refusals, and a no-silent-crop Export invariant.
+- **Not implemented by this acceptance:** placement solver, actual movement,
+  cropping, resizing, reflow, and complete notebook or PDF Export gating.
+  No claim that preflight `Ready` implies a successful persistent file.

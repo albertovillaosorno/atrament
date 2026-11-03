@@ -20,14 +20,6 @@ labels belong here.
 
 ## P2 — Semantic notebook and physical layout
 
-### TODO - Prevent invisible page overflow
-
-Block export while fixed content crosses the writable region and identify the
-object, violated edge, amount, and valid move, crop, resize, or reflow
-choices.
-
-[docs/todo/open/semantic/005-prevent-invisible-page-overflow.mdc](docs/todo/open/semantic/005-prevent-invisible-page-overflow.mdc)
-
 ### TODO - Implement mathematics as editable structure
 
 Parse and preserve TeX-compatible inline, displayed, aligned, matrix, unit,
