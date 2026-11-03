@@ -20,14 +20,6 @@ labels belong here.
 
 ## P2 — Semantic notebook and physical layout
 
-### TODO - Implement fixed-region constraint solving
-
-Place titles, figures, callouts, and freeform regions with anchors,
-alignment, minimum size, collision policy, and explicit infeasibility
-diagnostics.
-
-[docs/todo/open/semantic/004-fixed-region-constraints.mdc](docs/todo/open/semantic/004-fixed-region-constraints.mdc)
-
 ### TODO - Prevent invisible page overflow
 
 Block export while fixed content crosses the writable region and identify the

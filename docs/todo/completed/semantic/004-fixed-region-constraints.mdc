@@ -1,0 +1,113 @@
+---
+record_type: task
+id: "ATR-P2-004"
+title: "Implement fixed-region constraint solving"
+status: completed
+priority: P2
+lane: semantic-layout
+dependencies: ["ATR-P2-001"]
+dependencies_specified: true
+dependency_rationale: >-
+  Fixed constraints require typed semantic notebook objects.
+acceptance_criteria:
+  - >-
+      Place titles, figures, callouts, and freeform regions with anchors,
+      alignment, minimum size, collision policy, and explicit infeasibility
+      diagnostics.
+  - >-
+      Finite v1 completion: Define typed anchor, alignment, minimum-size,
+      overlap, and infeasibility outcomes for one page with a fixed title
+      and figure; a deterministic solver contract suffices when no renderer
+      exists.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement fixed-region constraint solving
+
+## Scope and existing evidence
+
+The documented implementation gap remains true: current semantic placement
+constraints do not carry the typed solver inputs defined below. This task
+closes as a bounded theoretical design, not executable placement authority.
+
+Place titles, figures, callouts, and freeform regions with anchors, alignment,
+minimum size, collision policy, and explicit infeasibility diagnostics.
+
+The current semantic `Constraint` owns only the broad
+`ConstraintKind::Placement` classification; it has no typed anchor, alignment,
+minimum-size, or collision fields. The fixed-region bounds and accepted-layout
+components explicitly must not choose those semantics. Solver implementation is
+therefore blocked until an executable placement authority owns the typed
+constraint values and infeasibility policy.
+
+## Finite fixed-region solver contract
+
+**Inputs:** one exact accepted revision, page and writable rectangle in
+physical micrometres; two accepted semantic object identities; each object's
+requested size, minimum size, typed anchor, horizontal alignment, hard
+placement offsets and overlap permission. **Outputs:** one deterministic
+ordered pair of page-relative rectangles, or a typed no-placement result
+with object identities and constraints responsible for infeasibility.
+
+**Proposed typed vocabulary:** `Anchor` is `PageTop { inset }` or
+`Below { owner, gap }` for this first solver. `HorizontalAlignment` is
+`Start`, `Center`, or `End` in the accepted page orientation.
+`SizeRequirement` has explicit requested width/height and minimum
+width/height; `OverlapPolicy` is `Disallow` by default or
+`AllowWith { owner }` by explicit caller intent. A rectangle must remain
+inside the page's accepted writable area; positive physical sizes and
+representable coordinate arithmetic are required.
+
+**Deterministic resolution:** validate all owners, profiles, sizes and
+anchors against the same revision. Reject cycles in `Below` dependencies,
+then visit objects in topological order with accepted object ID as the tie
+breaker. Place a `PageTop` box at writable top plus its explicit inset; place
+`Below` at the referenced box's bottom plus its nonnegative gap.
+
+Horizontal `Center` aligns each requested width around the writable region's
+midpoint; `Start` and `End` align the corresponding writable edges. Treat
+requested positions as hard anchors: if size, bounds, or disallowed overlap
+cannot be satisfied, return a typed infeasibility instead of shifting an
+object or implicitly shrinking it. The output contains rectangles only, not
+renderer geometry or an authorized file/device operation.
+
+**Worked title/figure example:** a page has writable
+`x = 20..190 mm`, `y = 20..277 mm`. The title `T` is
+`PageTop { inset: 5 mm }`, `Center`, requested `100 × 20 mm` and minimum
+`90 × 18 mm`; result `x = 55..155`, `y = 25..45 mm`.
+The figure `F` is `Below { owner: T, gap: 10 mm }`, `Center`, requested
+`80 × 60 mm`, minimum `70 × 50 mm`, and `Disallow` overlap; result
+`x = 65..145`, `y = 55..115 mm`. Both lie inside writable bounds,
+meet minimum sizes, and have a nonoverlapping vertical gap of 10 mm.
+
+**Refusals:** increasing `F`'s minimum width to 180 mm while retaining its
+requested width 80 mm returns `MinimumSizeUnsatisfied { owner: F }` before
+placement. A hard figure top that intersects `T` with `Disallow` returns
+`Collision { primary: F, related: T }`; an anchored box past the page edge
+returns `OutsideWritableRegion` with the object, edge and exact distance.
+An unknown object, stale revision, invalid anchor cycle, arithmetic overflow,
+or unadmitted explicit overlap relation is also a typed refusal.
+
+**Invariant:** solver output must be bound to its accepted revision and page.
+It must not rewrite source order, silently crop geometry, invent a missing
+width from text, or infer overlap permission from diagnostic prose. The
+existing fixed-region bounds checker can inspect a solver-provided rectangle
+but cannot itself grant missing solver authority.
+
+**Assumptions and residual risks:** `ConstraintKind::Placement` currently has
+no typed `Anchor`, `HorizontalAlignment`, `SizeRequirement`, or overlap fields;
+no deterministic constraint solver consumes these proposed inputs. Callout and
+freeform layout, nested constraints, text-size measurement, renderer previews,
+and full Export or physical capability checks remain future integrations.
+
+## Acceptance decision
+
+- **Basis:** theoretical, 2026-11-02, for one page with fixed title and figure
+  using exact page bounds and a deterministic hard-anchor solving policy.
+- **Delivered:** typed input/output vocabulary, resolution order, explicit
+  rectangle example, minimum-size, collision and page-edge refusals, and
+  residual implementation risks. No claim of an executable solver is made.
+- **Not implemented by this acceptance:** typed storage/admission of these
+  constraints, an actual solver, callout/freeform solver integration,
+  measurement-backed sizing, or renderer/Export execution.
