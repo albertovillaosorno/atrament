@@ -50,7 +50,9 @@ The first release accepts a finite deliverable, not an endless claim of
 completeness across all future formats, browsers, machines, or hardware. Each
 open record has a narrower `Finite v1 completion` criterion. One documented
 representative example per named capability is sufficient when the criterion
-does not explicitly demand more. Future variants are separate work, not an
+does not explicitly demand more.
+
+Future variants are separate work, not an
 implicit reason to reopen a bounded task. P9 remains optional.
 
 Use one of two explicit acceptance bases:
@@ -87,8 +89,10 @@ Check that the specific finite deliverable is present in the record. The
 owner may accept it as practical or theoretical without a separate proof or
 test run. Record the basis, produced artifact, unresolved assumptions and
 risks, and any unavailable integrations under `Acceptance decision`; retain
-the honest `evidence_status` rather than inventing verification. Preserve
-the task identity and historical evidence, set `status: completed`, move the
-record to `completed/`, and remove it from `TODO.md`. Update internal links.
+the honest `evidence_status` rather than inventing verification.
+
+Preserve the task identity and historical evidence, set `status: completed`,
+move the record to `completed/`, and remove it from `TODO.md`. Update internal
+links.
 Do not automatically close a task merely because this policy exists: its
 particular bounded deliverable must actually be written or supplied.

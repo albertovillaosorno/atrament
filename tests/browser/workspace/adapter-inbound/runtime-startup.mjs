@@ -145,7 +145,13 @@ function waitForReady(child) {
             "runtime startup output ended before ready",
         ));
         const onData = (chunk) => {
-            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            // A stdout chunk is binary process output, not a caller-supplied
+            // object with valueOf/toString hooks that may throw private data.
+            if (!Buffer.isBuffer(chunk)) {
+                finish(new Error("invalid runtime readiness output encoding"));
+                return;
+            }
+            const bytes = chunk;
             if (bytes.length > MAX_STARTUP_OUTPUT_BYTES - receivedBytes) {
                 finish(new Error("startup output exceeds byte budget"));
                 return;
@@ -242,6 +248,38 @@ test("startup readiness does not reflect untrusted exit metadata", async () => {
     assert.equal(child.stdout.listenerCount("data"), 0);
     child.stdout.destroy();
 });
+
+test("startup readiness refuses non-buffer data without exception leaks",
+    async () => {
+        const marker = "private-startup-data-object-marker-7695";
+        const child = fixtureReadinessChild();
+        const pending = waitForReady(child);
+        let escaped = false;
+        try {
+            child.stdout.emit("data", {
+                valueOf() {
+                    throw new Error(`untrusted child data: ${marker}`);
+                },
+            });
+        } catch {
+            escaped = true;
+            child.emit("exit", 1, null);
+        }
+        await assert.rejects(pending, (error) => {
+            assert.equal(escaped, false,
+                "untrusted stdout must not throw to the event emitter");
+            assert.equal("cause" in error, false);
+            assert.equal(error.message,
+                "invalid runtime readiness output encoding");
+            assert.equal(error.message.includes(marker), false);
+            return true;
+        });
+        assert.equal(child.stdout.listenerCount("data"), 0);
+        assert.equal(child.stdout.listenerCount("error"), 0);
+        assert.equal(child.listenerCount("exit"), 0);
+        child.stdout.destroy();
+    },
+);
 
 test("startup readiness bounds untrusted UTF-8 process output", async () => {
     const child = fixtureReadinessChild();

@@ -2731,8 +2731,22 @@ Linux Firefox browser-integration cases passed, including tab closing,
 explicit End, crash/profile inspection, hostile resource restrictions, and
 private session data lifetimes. All 66 local Firefox/BiDi harness cases and
 190 separate browser-workspace cases also passed; Rust workspace integration
-and frontend TypeScript checks were green. Jig still reports ten pre-existing
+and frontend TypeScript checks were green.
+
+Jig still reports ten pre-existing
 package-materialization and version-catalog findings, plus an unevaluated
 repository-graph rule. This sweep is evidence about the current fixtures,
 not a guarantee of cleanup after external runner termination or production
 opener/browser credential erasure. P1/P8 remain open.
+
+A separate red-first CLI startup-readiness harness regression supplied a
+non-Buffer child-output object whose value-conversion hook threw a synthetic
+private marker. The old `Buffer.from` conversion escaped the stream event
+handler, leaving the readiness promise unresolved until a separate exit.
+The fixture now refuses non-binary output immediately with a fixed encoding
+diagnostic, no private exception cause, and observer cleanup.
+
+All 19 startup
+process tests (including live compiled Linux runtime fixtures) pass. This
+prevents a test-log diagnostic leak, not production opener-argv exposure or
+Firefox history retention; P8 remains open.

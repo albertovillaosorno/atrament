@@ -4,6 +4,7 @@ Only unfinished work appears here. P1 through P8 are the first-release delivery
 horizons, and P9 is optional hardware research. Within each horizon, open work
 retains its original order and stable task identity. Typed records are the
 execution authority for lanes, dependencies, acceptance, and evidence.
+
 Each record now has a finite first-release completion criterion. Where a
 practical demonstration is unavailable, theoretical acceptance can close its
 design scope without claiming the feature works or is safe to operate.
