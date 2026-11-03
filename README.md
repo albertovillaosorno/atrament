@@ -499,7 +499,7 @@ To start a complete **lowercase-only geometric draft** without drawing
 26 letters by hand, open the authenticated localhost glyph editor and click
 **Fill missing lowercase a–z (unsaved)**. It uses the selected center,
 radius, pen width and color; already-authored shapes remain unchanged.
-Review individual letters, then click **Download glyph TSV** explicitly.
+Review individual letters, then click **Download stroke TSV** explicitly.
 For a downloaded `my-glyph-strokes.tsv`, the native CLI can render a short
 word directly onto a selected paper page:
 
@@ -600,7 +600,7 @@ curved pen stroke.
 
 For a geometric starting point, choose an explicitly supported glyph
 (`o`, `a`, `ó`, `á`, `b`, `d`, `p`, `q`, `g`, `n`, `u`, `h`, `m`,
-`l`, `t`, `f`, `r`, `v`, `w`, `k`, `x`, `y`, `z`, `c`, `e`,
+`l`, `t`, `f`, `r`, `s`, `v`, `w`, `k`, `x`, `y`, `z`, `c`, `e`,
 `i`, `í` or `j`) and its matching
 geometric starter. Adjust the center and radius in
 micrometres, then deliberately replace that letter's unsaved strokes.
@@ -694,12 +694,14 @@ stem and dot. The hook and pen width must fit the cell; invalid placement
 refuses without changing saved ink. Compose an authored `e`
 into `é` to add the acute as a separate final segment (38 total here).
 
-A general-purpose **Compose accent from authored base** action copies every
-source stroke, including any manually drawn dot. When creating `í` from an
-ordinary dotted `i`, prefer the explicit dotless geometric starter or
-independently remove the copied dot before final export; accent composition
-does not guess which user-drawn marks are detachable. Native v1 export still
-contains sampled line ink, not a real analytic font or Bézier resources.
+The **Compose accent from authored base** action normally copies each
+source stroke. For `í` and decomposed `i` plus acute, it recognizes only a
+simple two-stroke `i` with a distinctly separated short upper dot. It
+replaces that dot with an acute in the new target, preserving the original
+source `i`. Ambiguous hand-drawn `i` forms refuse rather than discarding a
+potentially intentional stroke; use the explicitly dotless `í` geometric
+starter or manually adjust the source when that happens. Native v1 export
+still contains sampled line ink, not analytic font or Bézier resources.
 
 For `ó` and both `á` variants, **Acute horizontal shift**
 (-500 to +500 µm) and **Acute lift** (0 to 500 µm) move the accent
@@ -743,8 +745,8 @@ normalization-based runtime fallback: `ñ` and `n` plus combining tilde
 remain distinct keys.
 
 Missing bases, mismatched targets and clipped marks refuse without replacing
-any existing target. In particular, a dotted `i`
-with insufficient space above its strokes may require user adjustment first.
+any existing target. For `í`, a simple identifiable dot is removed only from
+the copied target ink; an ambiguous hand-drawn dot refuses atomically.
 
 This is bounded compositional ink for shapes the user actually supplied,
 not a full geometric alphabet, analytic accent persistence or automatic

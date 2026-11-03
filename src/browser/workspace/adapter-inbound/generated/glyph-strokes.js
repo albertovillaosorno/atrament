@@ -656,10 +656,27 @@ export function composeAccentedGlyph(strokes, source, target, color, pos = { dx:
     if (!/^#[0-9a-fA-F]{6}$/.test(color)) {
         throw new Error("Ink color requires #RRGGBB");
     }
-    const base = strokes.filter((stroke) => stroke.grapheme === source)
+    let base = strokes.filter((stroke) => stroke.grapheme === source)
         .map(validateStroke);
     if (base.length === 0) {
         throw new Error("Source grapheme has no authored strokes");
+    }
+    // A precomposed or decomposed acute i has no dot. Only remove a clearly
+    // separate short upper dot; never guess which pen strokes to discard
+    // from a nonstandard user-authored i.
+    if (source === "i" && combining === "\u0301") {
+        const dots = base.flatMap((stroke, index) => {
+            const high = Math.min(stroke.y1, stroke.y2);
+            const low = Math.max(stroke.y1, stroke.y2);
+            const separated = base.every((other, otherIndex) => otherIndex === index || low + stroke.width / 2 + 100
+                < Math.min(other.y1, other.y2) - other.width / 2);
+            return stroke.x1 === stroke.x2 && low - high >= 40
+                && low - high <= 200 && separated ? [index] : [];
+        });
+        if (base.length !== 2 || dots.length !== 1) {
+            throw new Error("Acute i requires one stem and a clear upper dot");
+        }
+        base = base.filter((_, index) => index !== dots[0]);
     }
     const xs = base.flatMap((stroke) => [stroke.x1, stroke.x2]);
     const topY = Math.min(...base.flatMap((stroke) => [stroke.y1, stroke.y2]));

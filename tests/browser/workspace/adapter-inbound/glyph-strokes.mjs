@@ -775,6 +775,99 @@ test("accent composition preserves authored base and target Unicode", () => {
     ])), [...source, ...acute, ...decomposed, ...tilde, ...dots]);
 });
 
+test("acute i composition removes only an identifiable upper dot", () => {
+    const source = geometricStarter("i", 1550, 2450, 1100,
+        250, "#123456");
+    assert.equal(source.length, 2);
+    const before = structuredClone(source);
+    for (const target of ["í", "i\u0301"]) {
+        const result = composeAccentedGlyph(source, "i", target,
+            "#ABCDEF");
+        assert.equal(result.length, 2, "stem and acute, never a second dot");
+        assert.deepEqual(result[0], {
+            ...source[0], grapheme: target,
+        }, "unchanged pen-down stem is copied to target");
+        assert.equal(result[1].grapheme, target);
+        assert.ok(Math.max(result[1].y1, result[1].y2)
+            < Math.min(result[0].y1, result[0].y2),
+        "accent stays above the stem");
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(result)),
+            result);
+    }
+    assert.deepEqual(source, before, "base i keeps its separate dot");
+    const oneStroke = source.slice(0, 1);
+    assert.throws(() => composeAccentedGlyph(
+        oneStroke, "i", "í", "#ABCDEF"), /clear upper dot/);
+    assert.throws(() => composeAccentedGlyph([
+        oneStroke[0], { ...source[1], y1: 1980, y2: 2060 },
+    ], "i", "í", "#ABCDEF"), /clear upper dot/);
+    assert.throws(() => composeAccentedGlyph([
+        ...source, { ...source[0], x1: 2000, x2: 2000 },
+    ], "i", "í", "#ABCDEF"), /clear upper dot/);
+});
+
+test("acute i button distinguishes Unicode targets", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const original = [
+            ...geometricStarter("i", 1550, 2450, 1100, 250,
+                "#123456"), stroke("∞"),
+        ];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(original));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("copy-from").value = "i";
+        get("character").value = "i\u0301";
+        get("character").dispatch("input");
+        get("compose").dispatch("click");
+        assert.match(get("status").textContent, /Composed 2 ordered/);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved.slice(0, 3), original);
+        assert.deepEqual(saved.slice(3), composeAccentedGlyph(
+            original, "i", "i\u0301", "#243647"));
+        get("character").value = "í";
+        get("character").dispatch("input");
+        get("compose").dispatch("click");
+        get("save").dispatch("click");
+        const both = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.equal(both.filter((line) => line.grapheme === "í").length,
+            2, "composed form has two strokes");
+        assert.equal(both.filter((line) => line.grapheme === "i\u0301").length,
+            2, "decomposed form remains independent");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("acute i refuses ambiguous ink without replacing target", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const original = [stroke("i"), stroke("í"), stroke("∞")];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(original));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("copy-from").value = "i";
+        get("character").value = "í";
+        get("character").dispatch("input");
+        get("compose").dispatch("click");
+        assert.match(get("status").textContent, /clear upper dot/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            original, "ambiguous accent must not corrupt existing í");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("accent composition refuses mismatches and clipped marks", () => {
     const base = { ...stroke("e"), x1: 500, y1: 1500,
         x2: 2600, y2: 3300 };

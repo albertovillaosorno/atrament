@@ -66,6 +66,25 @@ preserve a live stroke/mark association through later edits. Correlated
 seeded variation, joined cursive, multi-stroke pen lifts and continuous
 curve primitives are still open.
 
+## Dotless acute i composition (partial) — 2026-11-03
+
+The explicit compose-accent action now handles NFC `í` and NFD `i` plus
+combining acute from the already-authored two-stroke dotted lowercase `i`.
+It copies the stem unchanged and attaches one bounded acute, omitting only
+an independently identifiable short upper dot from the new target. The
+original dotted `i` remains unchanged. Unrecognized multi-stroke or
+ambiguous dot constructions refuse instead of deleting user ink.
+
+Three focused browser regressions verify the two exact Unicode targets,
+source preservation, dotless stroke order, UTF-8 native TSV roundtrip,
+refusal of missing/overlapping dots and the opt-in browser composition
+workflow. The native Rust glyph CLI read the canonical TSV byte-for-byte,
+audited `íí` as **two independent exact Unicode graphemes with two strokes
+each and zero missing**, then exported real one-page PDF and transparent
+72-DPI RGBA PNG. This is a one-time explicit stroke copy, not
+an attached analytic accent or automatic font substitution; cursive and
+seeded correlated handwriting remain open.
+
 ## Reusable curved n/u sources (partial) — 2026-11-03
 
 Two explicitly selected rounded-letter starters now supply mathematical
