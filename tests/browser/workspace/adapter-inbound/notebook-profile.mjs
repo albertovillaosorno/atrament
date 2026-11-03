@@ -7,6 +7,7 @@ import { createNotebookProfileEditor } from "../../../../src/browser/workspace/a
 const ids = ["notebook-date-style", "notebook-date-placement",
     "notebook-radius", "notebook-radius-range", "notebook-page-numbers",
     "notebook-printed-sheet", "notebook-load", "notebook-use-paper",
+    "notebook-edit-paper",
     "notebook-default", "notebook-save", "notebook-status",
     "notebook-export-pdf", "notebook-export-png",
     "notebook-pdf-pages", "notebook-png-dpi"];
@@ -47,6 +48,7 @@ test("notebook form validates page metadata and downloads native JSON", async ()
     const elements = new Map(ids.map((id) => [id, new Control()]));
     const downloads = [];
     const requests = [];
+    const adoptedPapers = [];
     let secret = "session-local";
     let paperDraft = { ...paper, style: "ruled" };
     const controller = new AbortController();
@@ -101,6 +103,10 @@ test("notebook form validates page metadata and downloads native JSON", async ()
             sessionSignal: controller.signal,
             unauthorized() { throw new Error("unexpected 401"); },
             paperDraft: () => JSON.stringify(paperDraft),
+            adoptPaper: async (json) => {
+                adoptedPapers.push(JSON.parse(json));
+                return true;
+            },
         });
         assert.equal(elements.get("notebook-save").disabled, true);
         await editor.start(secret);
@@ -112,8 +118,17 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         elements.get("notebook-date-placement").value = "top-right";
         elements.get("notebook-page-numbers").checked = true;
         elements.get("notebook-printed-sheet").checked = true;
+        elements.get("notebook-edit-paper").dispatch("click");
+        await settle();
+        assert.equal(adoptedPapers.length, 1);
+        assert.equal(adoptedPapers[0].style, "grid");
+        assert.match(elements.get("notebook-status").textContent,
+            /Use current paper/);
         elements.get("notebook-use-paper").dispatch("click");
         await settle();
+        elements.get("notebook-edit-paper").dispatch("click");
+        await settle();
+        assert.equal(adoptedPapers[1].style, "ruled");
         const first = JSON.parse(requests.at(-1).init.body);
         assert.equal(first.paper.style, "ruled");
         assert.equal(first.border_radius_um, 3500);

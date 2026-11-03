@@ -153,7 +153,22 @@ test("paper editor exports Rust PDF and PNG", async () => {
         elements.get("paper-load").dispatch("change");
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(elements.get("paper-pattern").value, "ruled");
+        const notebookPaper = { ...defaults, style: "dot",
+            spacing_um: 7000 };
+        assert.equal(await editor.adoptJson(JSON.stringify(notebookPaper)),
+            true, "notebook sheet admitted by Rust paper endpoint");
+        assert.equal(elements.get("paper-pattern").value, "dot");
+        assert.equal(elements.get("paper-spacing").value, "7");
+        assert.equal(requests.at(-1).endpoint, "./api/paper/profile");
+        const accepted = requests.length;
+        assert.equal(await editor.adoptJson(JSON.stringify({
+            ...notebookPaper, schema: "wrong",
+        })), false, "forged paper response cannot alter visual editor");
+        assert.equal(requests.length, accepted + 1);
+        assert.equal(elements.get("paper-pattern").value, "dot");
         editor.reset();
+        assert.equal(await editor.adoptJson(JSON.stringify(notebookPaper)),
+            false, "ended session cannot load notebook paper");
         assert.equal(elements.get("paper-export").disabled, true);
         assert.equal(elements.get("paper-export-png").disabled, true);
         assert.equal(elements.get("paper-png-dpi").value, "150");

@@ -119,6 +119,7 @@ type PaperEditor = {
     reset: () => void;
     start: (secret: string) => Promise<void>;
     draftJson?: () => string;
+    adoptJson?: (json: string) => Promise<boolean>;
 };
 
 export function createPaperProfileEditor(context: PaperEditorContext): PaperEditor {
@@ -515,8 +516,21 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
             }
         });
     });
+    async function adoptJson(json: string): Promise<boolean> {
+        let applied = false;
+        await action(async (secret, observed) => {
+            const result = await canonicalize(secret, json);
+            if (isCurrent(secret, observed)) {
+                showProfile(result.profile);
+                setStatus("Notebook paper loaded for visual editing.");
+                applied = true;
+            }
+        });
+        return applied;
+    }
+
     syncControls();
-    return { start, reset, draftJson: proposedJson };
+    return { start, reset, draftJson: proposedJson, adoptJson };
 }
 
 // Notebook metadata is a thin browser proposal; Rust owns its nested paper
@@ -533,6 +547,7 @@ type NotebookProfile = {
 
 type NotebookEditorContext = PaperEditorContext & {
     paperDraft: () => string;
+    adoptPaper: (json: string) => Promise<boolean>;
 };
 
 function readNotebook(json: string): NotebookProfile {
@@ -573,6 +588,7 @@ export function createNotebookProfileEditor(
     const printed = required<HTMLInputElement>("notebook-printed-sheet");
     const load = required<HTMLInputElement>("notebook-load");
     const usePaper = required<HTMLButtonElement>("notebook-use-paper");
+    const editPaper = required<HTMLButtonElement>("notebook-edit-paper");
     const defaults = required<HTMLButtonElement>("notebook-default");
     const save = required<HTMLButtonElement>("notebook-save");
     const exportPdf = required<HTMLButtonElement>("notebook-export-pdf");
@@ -581,7 +597,8 @@ export function createNotebookProfileEditor(
     const pngDpi = required<HTMLInputElement>("notebook-png-dpi");
     const status = required<HTMLElement>("notebook-status");
     const controls = [style, placement, radius, slider, numbers, printed,
-        load, usePaper, defaults, save, exportPdf, exportPng, pdfPages, pngDpi];
+        load, usePaper, editPaper, defaults, save,
+        exportPdf, exportPng, pdfPages, pngDpi];
     let admitted: NotebookProfile | null = null;
     let generation = 0;
     let busy = false;
@@ -795,6 +812,18 @@ export function createNotebookProfileEditor(
     });
     slider.addEventListener("input", (): void => {
         radius.value = slider.value;
+    });
+    editPaper.addEventListener("click", (): void => {
+        void action(async (secret, observed) => {
+            const paper = JSON.stringify(proposal().paper);
+            const applied = await context.adoptPaper(paper);
+            if (!active(secret, observed)) return;
+            if (!applied) {
+                throw new Error("Paper editor unavailable");
+            }
+            status.textContent = "Paper loaded into sheet editor. "
+                + "Use current paper to save its edits into this notebook.";
+        });
     });
     usePaper.addEventListener("click", (): void => {
         void action(async (secret, observed) => {

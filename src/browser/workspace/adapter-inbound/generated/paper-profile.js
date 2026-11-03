@@ -434,8 +434,20 @@ export function createPaperProfileEditor(context) {
             }
         });
     });
+    async function adoptJson(json) {
+        let applied = false;
+        await action(async (secret, observed) => {
+            const result = await canonicalize(secret, json);
+            if (isCurrent(secret, observed)) {
+                showProfile(result.profile);
+                setStatus("Notebook paper loaded for visual editing.");
+                applied = true;
+            }
+        });
+        return applied;
+    }
     syncControls();
-    return { start, reset, draftJson: proposedJson };
+    return { start, reset, draftJson: proposedJson, adoptJson };
 }
 function readNotebook(json) {
     if (new TextEncoder().encode(json).length > 8192) {
@@ -469,6 +481,7 @@ export function createNotebookProfileEditor(context) {
     const printed = required("notebook-printed-sheet");
     const load = required("notebook-load");
     const usePaper = required("notebook-use-paper");
+    const editPaper = required("notebook-edit-paper");
     const defaults = required("notebook-default");
     const save = required("notebook-save");
     const exportPdf = required("notebook-export-pdf");
@@ -477,7 +490,8 @@ export function createNotebookProfileEditor(context) {
     const pngDpi = required("notebook-png-dpi");
     const status = required("notebook-status");
     const controls = [style, placement, radius, slider, numbers, printed,
-        load, usePaper, defaults, save, exportPdf, exportPng, pdfPages, pngDpi];
+        load, usePaper, editPaper, defaults, save,
+        exportPdf, exportPng, pdfPages, pngDpi];
     let admitted = null;
     let generation = 0;
     let busy = false;
@@ -674,6 +688,19 @@ export function createNotebookProfileEditor(context) {
     });
     slider.addEventListener("input", () => {
         radius.value = slider.value;
+    });
+    editPaper.addEventListener("click", () => {
+        void action(async (secret, observed) => {
+            const paper = JSON.stringify(proposal().paper);
+            const applied = await context.adoptPaper(paper);
+            if (!active(secret, observed))
+                return;
+            if (!applied) {
+                throw new Error("Paper editor unavailable");
+            }
+            status.textContent = "Paper loaded into sheet editor. "
+                + "Use current paper to save its edits into this notebook.";
+        });
     });
     usePaper.addEventListener("click", () => {
         void action(async (secret, observed) => {

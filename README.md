@@ -313,9 +313,11 @@ handwriting is drawn in these outputs.
 The localhost web editor now also offers **Notebook page profile** controls
 for date placeholder style and placement, border radius, page numbers and
 preprinted-sheet intent. **Use current paper** incorporates unsaved sheet
-settings before Rust validation. Load and Save JSON use explicitly selected
-files; they do not silently persist browser state or render those metadata
-marks.
+settings before Rust validation. **Edit notebook paper** sends the
+notebook's embedded sheet into the visual paper editor through Rust
+validation; **Use current paper** copies edited settings back only when
+requested. Load and Save JSON use explicitly selected files; no browser
+state is silently persisted or unsupported metadata drawn.
 
 ## The workspace
 

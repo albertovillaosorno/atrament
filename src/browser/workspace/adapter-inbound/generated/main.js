@@ -176,6 +176,12 @@ const notebookEditor = createNotebookProfileEditor({
         }
         return paperEditor.draftJson();
     },
+    adoptPaper: async (json) => {
+        if (paperEditor.adoptJson === undefined) {
+            return false;
+        }
+        return paperEditor.adoptJson(json);
+    },
 });
 const handwritingEditor = createHandwritingProfileEditor({
     currentSecret: () => sessionSecret,
