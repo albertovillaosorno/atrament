@@ -14,10 +14,10 @@ acceptance_criteria:
       Accept the smallest actual local workflow, preserve advanced theoretical
       tasks separately, and label unsupported functions accurately.
   - >-
-      Finite executable completion: On Linux, launch Rust CLI and localhost UI,
-      load notebook and handwriting files, adjust one glyph and one page, save
-      them, and generate an actual printable PDF and transparent PNG. Plotter,
-      cloud, native installers, and Windows/macOS are excluded.
+      Finite executable completion: On Linux, load notebook and handwriting
+      profiles, adjust one glyph and one page, paste Markdown with a decorated
+      heading, save, paginate and export printable PDF and transparent PNG.
+      Plotters, cloud and desktop installers are not required.
 evidence_status: not_independently_verified
 migrated_from: rust-cli-localhost-priority.md
 ---

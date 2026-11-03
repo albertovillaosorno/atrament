@@ -16,12 +16,14 @@ source_designs:
   - "ATR-P4-007"
 acceptance_criteria:
   - >-
-      Connect accent placement, contextual joining and seeded cross-line
-      glyph/pressure variation to actual Rust stroke geometry.
+      Compose accents and cursive joins from ideal glyph geometry. Apply
+      seeded height, width, thickness, slant, regularity and spacing changes
+      to the authored strokes, preserving editable order and direction.
   - >-
       Finite executable completion: Two lines with accented repeated glyphs
-      render seeded, bounded joined strokes; replay is identical, collisions
-      and unavailable pressure units are rejected or labelled.
+      render bounded joined strokes and visible variation. The user can reorder
+      strokes and reverse one stroke without changing the base glyph; seeded
+      replay is identical and invalid joins or inversions refuse.
 evidence_status: not_independently_verified
 migrated_from: accepted-theoretical-designs
 ---
@@ -30,8 +32,10 @@ migrated_from: accepted-theoretical-designs
 
 ## Scope and existing evidence
 
-Connect accent placement, contextual joining and seeded cross-line
-glyph/pressure variation to actual Rust stroke geometry.
+Compose accents and joined cursive forms from exact base geometry. Let the
+user edit stroke order and direction, reverse a stroke deliberately, and
+compare ideal versus varied ink with visible controls for thickness, height,
+regularity, spacing and slant.
 
 This is unfinished implementation work. The following original design
 records remain accepted theoretical deliverables and are not reopened:

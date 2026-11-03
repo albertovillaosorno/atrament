@@ -3,7 +3,7 @@ record_type: task
 id: "ATR-P5-014"
 title: "Add pen material texture paper effects and decorative themes"
 status: open
-priority: P2
+priority: P1
 lane: render
 dependencies: ["ATR-P5-011"]
 dependencies_specified: true
@@ -17,13 +17,13 @@ source_designs:
   - "ATR-P5-007"
 acceptance_criteria:
   - >-
-      Implement bounded ink deposition, seeded paper texture, digital
-      note/shadow layers and contrast-aware decorative heading treatments in
-      Rust.
+      Render decorative Markdown headings with adjustable marker ink,
+      highlighter strokes, thickness, color and lettering variants, alongside
+      bounded paper texture in Rust.
   - >-
-      Finite executable completion: One reproducible page shows selectable pen
-      thickness, ink color, texture-off and texture-on states, and a decorative
-      heading; printed-sheet mode omits digital-only shadows.
+      Finite executable completion: A Markdown heading renders as marker
+      lettering with selected ink color, stroke width and highlighter underlay
+      in PDF/PNG; printed-sheet mode omits digital-only shadows.
 evidence_status: not_independently_verified
 migrated_from: accepted-theoretical-designs
 ---
@@ -32,8 +32,9 @@ migrated_from: accepted-theoretical-designs
 
 ## Scope and existing evidence
 
-Implement bounded ink deposition, seeded paper texture, digital note/shadow
-layers and contrast-aware decorative heading treatments in Rust.
+Render aesthetic headings with adjustable marker lettering, highlighter
+strokes, ink color and thickness. Preserve legible body text and allow paper
+textures or shadows to be disabled for preprinted notebook sheets.
 
 This is unfinished implementation work. The following original design
 records remain accepted theoretical deliverables and are not reopened:

@@ -8,24 +8,38 @@ Detailed tasks are in `docs/todo/open/`; completed work is in
 
 ### TODO - Spanish and English glyph coverage and fallback
 
-Render the documented Spanish/English baseline, accents, punctuation,
-guillemets, math symbols, and customizable per-character replacements.
+Build ideal geometric glyphs: o as an exact circle, a as a loop and stem, a
+separate printed two-storey a, cursive forms and placed accents.
 
 [docs/todo/open/handwriting/012-abc.mdc](docs/todo/open/handwriting/012-abc.mdc)
 
 ### TODO - Implement joined strokes diacritics and correlated variation
 
-Connect accent placement, contextual joining and seeded cross-line
-glyph/pressure variation to actual Rust stroke geometry.
+Edit stroke order and direction, including reversal. Apply visible, repeatable
+changes to height, thickness, slant, spacing and line regularity.
 
 [docs/todo/open/handwriting/014-s.mdc](docs/todo/open/handwriting/014-s.mdc)
 
+### TODO - Compile semantic notebooks with measured flow and fixed regions
+
+Paste plain text or Markdown, keep headings and lists, and automatically
+paginate handwriting within the selected paper and margins.
+
+[docs/todo/open/semantic/011-l.mdc](docs/todo/open/semantic/011-l.mdc)
+
 ### TODO - Rust notebook to PDF and transparent PNG
 
-Render real physical-size notebook pages with ink, images, and printable
-output.
+Export paginated text with the selected physical paper, handwriting, dates and
+image overlays as printable PDF and transparent PNG.
 
 [docs/todo/open/render/011-pdf.mdc](docs/todo/open/render/011-pdf.mdc)
+
+### TODO - Add pen material texture paper effects and decorative themes
+
+Style headings with adjustable marker lettering, ink colors, thickness and
+highlighter strokes while keeping ordinary text readable.
+
+[docs/todo/open/render/014-m.mdc](docs/todo/open/render/014-m.mdc)
 
 ### TODO - Edit photo and illustration transforms visually
 
@@ -62,13 +76,6 @@ Wire bounded session-end cleanup and stable typed diagnostics through notebook,
 renderer and optional asset adapters.
 
 [docs/todo/open/runtime/008-l.mdc](docs/todo/open/runtime/008-l.mdc)
-
-### TODO - Compile semantic notebooks with measured flow and fixed regions
-
-Connect the existing semantic notebook model, measured pagination, fixed
-placement and four-edge overflow diagnostics in Rust.
-
-[docs/todo/open/semantic/011-l.mdc](docs/todo/open/semantic/011-l.mdc)
 
 ### TODO - Render editable mathematics tables and educational structures
 
@@ -112,13 +119,6 @@ Connect Rust vector-authoritative geometry and a bounded font/line/path
 resource writer to complete notebook PDF output.
 
 [docs/todo/open/render/013-v.mdc](docs/todo/open/render/013-v.mdc)
-
-### TODO - Add pen material texture paper effects and decorative themes
-
-Implement bounded ink deposition, seeded paper texture, digital note/shadow
-layers and contrast-aware decorative heading treatments in Rust.
-
-[docs/todo/open/render/014-m.mdc](docs/todo/open/render/014-m.mdc)
 
 ### TODO - Optimize CPU preview line art and print scan calibration
 

@@ -12,14 +12,15 @@ dependency_rationale: >-
   inventory.
 acceptance_criteria:
   - >-
-      Connect the existing Spanish/English grapheme inventory, admitted
-      educational symbols, NFC/NFD accents, Spanish guillemets and punctuation,
-      and custom glyph fallback to Rust rendering.
+      Build exact geometric base glyphs for the admitted Spanish/English
+      inventory and math symbols, including a circle-based o, simple a as
+      loop plus stem, separate two-storey a, cursive forms and diacritics.
   - >-
       Finite executable completion: A fixed Mexico/Spain/English test page
       including ñ, ü, accents, ¿¡, «», curly quotes, mathematical symbols, and
       decomposed accents either renders every admitted glyph or lists exact
-      missing graphemes with a user-owned fallback. No claim to all Unicode.
+      missing shapes with a manual fallback. The o/a variant and cursive
+      examples must be explicitly selectable; no claim to all Unicode.
 evidence_status: not_independently_verified
 migrated_from: rust-cli-localhost-priority.md
 ---
@@ -36,6 +37,23 @@ The historical accepted theoretical design is preserved in completed P1–P9
 records. This record is **open executable integration work**. It must not be
 closed merely because a prior design was accepted or a different
 implementation was proposed.
+
+## Owner's glyph geometry target (unfinished)
+
+Start from exact reusable geometric primitives, not a collection of random
+raster marks. A lowercase **o** is a true circle with center and radius;
+a simple single-storey **a** reuses the loop plus a stem. The two-storey
+printed **a** is a separate outline, alongside italic and cursive variants.
+
+Allow the user to edit and preview ordered individual pen strokes, choose
+each stroke direction, and reverse it explicitly. Add precisely anchored
+accents (especially á, é, í, ó, ú), ñ and ü; their placement and stroke
+sequence are visible and tunable. The canonical glyph stays unchanged as
+width, height, thickness, slant, spacing and regularity are adjusted.
+
+Current saved segment geometry does not establish an analytic-circle glyph
+primitive, a built-in two-storey alphabet or automatic joined cursive. These
+requirements remain open until visibly rendered and user-editable.
 
 ## Executable inventory-only progress — 2026-11-03
 

@@ -11,13 +11,13 @@ dependency_rationale: >-
   Rendering needs accepted page geometry and admitted glyphs.
 acceptance_criteria:
   - >-
-      Implement page compilation and real PDF/PNG bytes using Rust page,
-      handwriting and image composition authorities, without invoking the
-      Python prototype.
+      Compile pasted text or Markdown into measured notebook pages with
+      decorative headings, accepted glyphs and image layers. Export real
+      printable PDF/PNG bytes using the existing Rust authorities.
   - >-
-      Finite executable completion: From one saved two-page notebook, Rust
-      emits one print-sized PDF and transparent PNG pages at declared DPI,
-      including date and image overlays; overflow fails explicitly.
+      Finite executable completion: A saved two-page Markdown notebook with
+      a marker-style heading, handwritten body, dates and image overlays emits
+      physical-size PDF and transparent PNG at declared DPI. Overflow refuses.
 evidence_status: not_independently_verified
 migrated_from: rust-cli-localhost-priority.md
 ---
@@ -26,8 +26,9 @@ migrated_from: rust-cli-localhost-priority.md
 
 ## Scope and existing evidence
 
-Implement page compilation and real PDF/PNG bytes using Rust page, handwriting
-and image composition authorities, without invoking the Python prototype.
+Compile pasted text or Markdown into measured physical notebook pages with
+headings, accepted glyphs and image overlays, then export real PDF/PNG using
+the existing Rust authority. Overflow must refuse without silent clipping.
 
 The historical accepted theoretical design is preserved in completed P1–P9
 records. This record is **open executable integration work**. It must not be

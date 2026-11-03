@@ -25,12 +25,24 @@ Mexico, Spain, and English. The editor must load and save separate notebook
 and handwriting profiles, expose all admitted numeric controls with ranges,
 show a real preview, and export printable PDF or transparent PNG pages.
 
+**Target glyph geometry (not yet complete):** The base **o** is a perfect
+circle, and a simple **a** combines that circle with a stem. The printed
+two-storey **a** and joined cursive are separate, selectable forms. Each glyph
+has editable stroke order and direction, including deliberate reversal, plus
+precisely placed accents (especially vowels), ñ and ü.
+
+The user can iteratively tune each glyph and visibly change ink thickness,
+height, slant, spacing and line regularity without losing the ideal base.
+Pasted text or Markdown must wrap into real notebook pages with headings,
+lists and automatic pagination. Titles can have aesthetic marker lettering,
+colors and highlighter strokes before PDF/transparent PNG export.
+
 **Rust is the application authority.** The existing TypeScript UI is a thin
 localhost client, not a separate renderer or profile engine. Do not add a
 Python notebook application, a second server, or parallel profile semantics.
-Complex layout, mathematics, LLM tooling, animation, cross-platform packaging,
-and physical plotters are preserved as future work; they must not block the
-first real notebook-to-PDF journey.
+Advanced layout, mathematics, LLM tooling, animation, desktop packaging
+and plotters remain future work. Basic Markdown pagination and decorative
+headings belong to the first real notebook-to-PDF journey.
 
 For the staged, unfinished work see [TODO.md](TODO.md) and the
 [Rust-first local roadmap](docs/technical/rust-cli-localhost-priority.md).
@@ -509,6 +521,7 @@ The localhost browser now offers an **Authored glyph strokes** section after
 session admission. Choose an exact grapheme, pen color, start/end micrometre
 coordinates, and stroke thickness with numeric fields or matching ranges.
 Click **Add stroke** to inspect the actual segments in the SVG preview.
+
 Choose any existing segment from the selector (or click its drawn line) to
 load its saved coordinates, thickness and color into the controls. **Update
 selected stroke** validates and replaces only that segment; **Remove selected

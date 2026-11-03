@@ -6,6 +6,27 @@ application. The immediate executable target is a **Rust CLI plus a localhost
 web editor** that loads, changes, previews, and saves notebook and handwriting
 profiles, then exports printable PDF and transparent PNG pages.
 
+**Glyph-first vision:** Start with exact, inspectable geometric letterforms,
+not random strokes or an opaque handwriting font. A simple lowercase **o** is
+an analytic circle; a single-storey **a** reuses that loop with a stem, while
+the two-storey printed **a** is a separate selectable form.
+
+Italic/cursive forms and joined writing must also be supported. Accents
+(especially vowels), Spanish ñ/ü and other marks use measured placement,
+not guessed pixels.
+
+Each glyph exposes individual strokes, their order and direction, including
+explicit reversals. A user can redraw, measure and preview every stroke until
+it matches their own handwriting. Width, height, slant, thickness, baseline,
+spacing, regularity, texture and context variation act **on top of** the
+canonical geometry; repeatable settings must visibly change the final ink.
+
+**Notebook workflow:** Paste plain text or Markdown, lay headings and body
+text onto the selected physical pages, paginate without silent clipping, and
+export PDF/transparent PNG. Headings may use decorative lettering, marker
+strokes and highlighter treatments with independently editable colors and
+thicknesses. The local editor and Rust CLI share the same saved profiles.
+
 ## Architecture and ownership
 
 1. **Rust is the source of truth.** Reuse the existing Rust notebook, physical
@@ -73,12 +94,31 @@ profiles, then exports printable PDF and transparent PNG pages.
   choices, not separate hard-coded alphabets. This is **not** a claim that
   every Unicode symbol is implemented. Unsupported grapheme clusters must be
   identified explicitly and permit a manually supplied glyph/shape fallback.
+- Each glyph starts from an exact canonical geometric skeleton. A lowercase
+  **o** uses a circle primitive with an exact center and radius; a simple
+  **a** composes that loop and a stem. A separate two-storey printed **a**,
+  italic and cursive/connected forms are explicit selectable variants.
+- Each glyph has authored pen strokes with editable start/end geometry,
+  stroke order, direction, and safe reversal. Diacritic strokes may be
+  separate, reusable marks with adjustable anchors and clearance; cover
+  á/é/í/ó/ú as well as ñ and ü, without restricting all marks to vowels.
+- Each variation control must change an identifiable rendered property:
+  width, height, slant, thickness, baseline, spacing, regularity, texture,
+  and seeded contextual differences. Keep the ideal skeleton intact for
+  comparison and expose a reproducible before/after preview; do not claim
+  a distribution is rendered if it is only stored in a profile.
 - Each glyph can be tuned independently, including custom stroke/image data,
   distribution bounds, and a reproducible sample preview. A reference photo
   can be used as a **manual** measuring aid, not mandatory OCR.
 
 ### M4. Export and physical notebook workflow
 
+- Paste or load text/Markdown with paragraphs, headings and lists. Apply
+  measured wrapping and automatic page breaks to the configured paper profile
+  before export, with explicit overflow/refusal instead of hidden clipping.
+- Titles can use independently adjustable decorative strokes, marker-style
+  ink and highlighter layers; printing on existing ruled paper must not
+  accidentally duplicate the background.
 - Rust exports a multi-page document with true page dimensions, the selected
   paper profile, handwriting profile, dates, image layers, and page numbers.
 - PDF prints at actual size; PNG can omit the paper image and carry physical
@@ -94,8 +134,8 @@ profiles, then exports printable PDF and transparent PNG pages.
 The historical P1–P9 `.mdc` records are **completed theoretical or partial
 artifacts**, not proof of a working product. They remain in
 `docs/todo/completed/` with their original identities and evidence. Their
-advanced subjects—contextual stroke joining, calibrated handwriting,
-mathematics, pagination, semantic editing, LLM/MCP, theme effects, animation,
+advanced subjects—calibration, extended mathematics, complex page solvers,
+semantic editing, LLM/MCP, further theme effects, animation,
 accessibility, paper realism, plotters, and device safety—remain available as
 future extensions, but none may block M1–M4 unless it is actually required by
 an identified dependency. Physical hardware remains theory-only.
