@@ -86,6 +86,7 @@ members = [
     "src/backend/profile-export-session",
     "src/backend/profile-export-target-check",
     "src/backend/profile-file-commit",
+    "src/backend/profile-editor-cli",
     "src/backend/profile-file-reader",
     "src/backend/profile-entry-sha256",
     "src/backend/profile-entry-stream-reader",
@@ -175,6 +176,7 @@ atrament_media_job_session = { path = "src/backend/media-job-session" }
 atrament_motion_plan_dry_run = { path = "src/backend/motion-plan-dry-run" }
 atrament_one_shot_formatting_prompt = { path = "src/backend/one-shot-formatting-prompt" }
 atrament_output_capability_matrix = { path = "src/backend/output-capability-matrix" }
+atrament_notebook_paper_cli = { path = "src/backend/notebook-paper-cli" }
 atrament_pdf_composition_plan = { path = "src/backend/pdf-composition-plan" }
 atrament_pdf_vector_serializer = { path = "src/backend/pdf-vector-serializer" }
 atrament_physical_page_profile = { path = "src/backend/physical-page-profile" }

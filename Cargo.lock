@@ -567,6 +567,17 @@ name = "atrament_print_scan_measurement"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_profile_editor_cli"
+version = "0.1.0"
+dependencies = [
+ "atrament_handwriting_statistics",
+ "atrament_handwriting_statistics_json",
+ "atrament_notebook_paper_cli",
+ "atrament_profile_file_commit",
+ "atrament_unicode_grapheme_segmentation",
+]
+
+[[package]]
 name = "atrament_profile_entry_sha256"
 version = "0.1.0"
 dependencies = [

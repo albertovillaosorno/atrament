@@ -1,0 +1,9 @@
+identity:
+  id: function:profile-editor-cli
+  name: profile-editor-cli
+  path: src/backend/profile-editor-cli
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: composition

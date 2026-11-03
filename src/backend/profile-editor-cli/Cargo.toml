@@ -1,0 +1,20 @@
+[package]
+name = "atrament_profile_editor_cli"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_handwriting_statistics = { workspace = true }
+atrament_handwriting_statistics_json = { workspace = true }
+atrament_notebook_paper_cli = { workspace = true }
+atrament_profile_file_commit = { workspace = true }
+atrament_unicode_grapheme_segmentation = { workspace = true }
+
+[[bin]]
+name = "atrament-profiles"
+path = "composition/main.rs"
+
+[lints]
+workspace = true

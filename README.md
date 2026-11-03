@@ -68,15 +68,16 @@ The default is an A4 5-mm square grid; `--style ruled`, `--style dot`, and
 `--style blank` select other paper. `--paper-size a3|a4|a5|b5|letter|legal`
 selects standard physical dimensions. `--landscape` or `--portrait`
 explicitly chooses orientation, including for a loaded paper profile.
+
 Set a paper-size preset before any manual `--width-mm` or `--height-mm`
 overrides; the saved JSON retains the resulting exact dimensions. All
 measurements are millimeters and the PDF uses physical point dimensions,
-not screenshot pixels. Invalid options
-fail before the CLI writes PDF bytes. This is a **paper-only** CLI: it does not
-load/save notebook or handwriting profiles, draw handwriting, embed images,
-or provide handwriting controls. The localhost page now has an initial
-paper-only editor with numeric inputs and sliders; notebook-profile and
-handwriting editors are still open integration tasks.
+not screenshot pixels. Invalid options fail before the CLI writes PDF bytes.
+
+This is a **paper-only** CLI: it does not load/save notebook or handwriting
+profiles, draw handwriting, embed images, or provide handwriting controls.
+The localhost page now has an initial paper-only editor with numeric inputs
+and sliders; notebook-profile and handwriting editors remain open tasks.
 
 A printable collection of identical paper sheets is possible with `--pages`
 (1–32). This is an output-only choice, not a field in the paper profile:
@@ -117,14 +118,15 @@ PDF. The POST routes require the exact session Origin, Bearer credential and
 bounded JSON input. This API does not yet save files or render handwriting.
 
 The localhost workspace presents a **paper-only** editor after a successful
-session handshake. It offers A3/A4/A5/B5/Letter/Legal presets, blank/ruled/grid/dot
-patterns, physical dimensions, editable spacing and four margins (numeric
-fields and synchronized sliders), and line color. Choose **Load JSON** to
-validate a selected paper-only profile through Rust, **Save JSON** to download
-the Rust-canonicalized profile, or **Export PDF** to download the Rust-rendered
-paper sheet. The browser does not generate PDFs or persist the profile in
-browser storage; downloaded files are explicit user actions. The editor is
-not yet a visual handwriting renderer or a full notebook-profile editor.
+session handshake. It offers A3/A4/A5/B5/Letter/Legal presets,
+blank/ruled/grid/dot patterns, physical dimensions, editable spacing and
+four margins (numeric fields and synchronized sliders), and line color.
+
+Choose **Load JSON** to validate a selected paper-only profile through Rust,
+**Save JSON** to download the Rust-canonicalized profile, or **Export PDF** to
+download the Rust-rendered paper sheet. The browser does not generate PDFs or
+persist the profile in browser storage; downloads are explicit user actions.
+The editor is not yet a visual handwriting renderer or a full notebook editor.
 
 For a reusable paper-only profile, the same CLI can emit versioned JSON,
 read it again, and apply further explicit edits:
@@ -141,6 +143,46 @@ integer micrometers, has a 4-KiB input ceiling, rejects duplicate or unknown
 fields, and is validated against the actual PDF path before acceptance.
 The shell chooses the output file and handles any overwrite; this is not a
 localhost Open/Save UI or a general notebook/handwriting profile schema.
+
+### Shared native paper and handwriting profile CLI
+
+`atrament-profiles` is the first combined **Rust-only profile CLI**. It
+reuses `atrament-paper` for physical paper/PDF options, and the bounded Rust
+handwriting-statistics codec for separate `atrament.handwriting.statistics.v1`
+files. The paper schema is still paper-only, not a complete notebook schema.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  handwriting --seed 7 --output handwriting.json
+cargo run -q -p atrament_profile_editor_cli -- \
+  handwriting --profile handwriting.json \
+  --set-global height 2500 3500 3000 3000 200 \
+  --set-glyph 'ñ' width 1800 2600 2200 2200 200 \
+  --output handwriting.json --replace
+cargo run -q -p atrament_profile_editor_cli -- \
+  handwriting --profile handwriting.json --inspect
+cargo run -q -p atrament_profile_editor_cli -- \
+  paper --style ruled --emit-profile --output paper.json
+cargo run -q -p atrament_profile_editor_cli -- \
+  paper --profile paper.json --spacing-mm 6 --output sheet.pdf
+```
+
+Each statistical edit requires the dimension name followed by **minimum,
+maximum, mean, median, and standard deviation** in that dimension's native
+units: micrometres, millidegrees, or parts per thousand. Ten named global
+variables and exact per-grapheme overrides, including decomposed accents,
+are supported. The default profile is **not calibrated handwriting**; the
+seed is recorded but no stochastic stroke generator is connected yet.
+
+`--profile` must come before statistical edits. Input is limited to 1 MiB,
+unknown/duplicate fields or impossible statistics refuse, and output is
+canonical JSON. `--output` refuses to overwrite an existing file unless
+`--replace` is explicit; existing symlinks cannot be overwritten.
+
+For example, `--set-global height 2500 3500 4500 3000 200` is invalid and
+refuses before any output file change. The Rust localhost handwriting editor,
+notebook content profiles, actual handwriting rendering, and file Open/Save
+web controls are still open implementation tasks.
 
 ## The workspace
 

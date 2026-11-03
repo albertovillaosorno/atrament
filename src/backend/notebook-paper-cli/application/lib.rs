@@ -823,14 +823,13 @@ fn execute(request: CliRequest) -> Result<Option<Vec<u8>>, String> {
     Ok(None)
 }
 
-/// Generate a reproducible physical-size sheet with Rust geometry and PDF.
+/// Run the shared Rust paper CLI with caller-provided arguments.
 ///
 /// # Errors
 ///
 /// Invalid parameters or output errors abort before reporting success.
-pub fn run_cli() -> Result<(), Box<dyn Error>> {
-    let args: Vec<_> = env::args().skip(1).collect();
-    let Some(request) = parse_options(&args)? else {
+pub fn run_cli_args(args: &[String]) -> Result<(), Box<dyn Error>> {
+    let Some(request) = parse_options(args)? else {
         writeln!(io::stdout().lock(), "{USAGE}")?;
         return Ok(());
     };
@@ -838,6 +837,16 @@ pub fn run_cli() -> Result<(), Box<dyn Error>> {
         io::stdout().lock().write_all(&bytes)?;
     }
     Ok(())
+}
+
+/// Run the standalone paper CLI from process arguments.
+///
+/// # Errors
+///
+/// Invalid parameters or output errors abort before reporting success.
+pub fn run_cli() -> Result<(), Box<dyn Error>> {
+    let args: Vec<_> = env::args().skip(1).collect();
+    run_cli_args(&args)
 }
 
 #[cfg(test)]

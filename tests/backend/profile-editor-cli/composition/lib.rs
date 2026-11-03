@@ -1,0 +1,247 @@
+// Copyright:
+//   - Copyright © 2026 Alberto Villa Osorno.
+// SPDX-License-Identifier:
+//   - MIT
+// Confidential:
+//   - false
+// License-File:
+//   - LICENSE-MIT
+//
+// Boundary-Contract:
+// - Owns:
+//   - Native Rust handwriting profile CLI accepted/refused regressions.
+// - Must-Not:
+//   - Claim handwriting glyph rendering or full notebook editing.
+// - Allows:
+//   - Inputs: Bounded UTF-8 profiles and explicit test-owned file paths.
+//   - Outputs: Exact profile roundtrips and refusal assertions.
+//   - Side effects: Test-owned temporary profile creation and removal.
+// - Split-When:
+//   - Localhost profile transport gains its own test surface.
+// - Merge-When:
+//   - A complete native editor integration suite subsumes these fixtures.
+// - Summary:
+//   - Proves same Rust schema is used for edits, file saves, and refusals.
+// - Description:
+//   - Tests global/Unicode glyph mutations, invalid statistics, write safety.
+// - Usage:
+//   - cargo test -p atrament_profile_editor_cli
+// - Defaults:
+//   - Only exact test-owned files may be removed.
+//
+
+//! Tests for the native shared Rust profile entrypoint.
+
+#![expect(
+    clippy::expect_used,
+    reason = "fail-fast test assertions over CLI profile contracts"
+)]
+
+use super::*;
+use std::fs;
+use std::path::PathBuf;
+use std::process;
+use std::sync::atomic::{AtomicU64, Ordering};
+static NEXT_FILE: AtomicU64 = AtomicU64::new(0);
+
+fn args(values: &[&str]) -> Vec<String> {
+    values.iter().map(|value| (*value).to_owned()).collect()
+}
+
+fn test_path() -> PathBuf {
+    env::temp_dir().join(format!(
+        "atrament-handwriting-cli-{}-{}.json",
+        process::id(),
+        NEXT_FILE.fetch_add(1, Ordering::Relaxed)
+    ))
+}
+
+#[test]
+fn baseline_round_trip_and_inspection_use_single_codec() {
+    let baseline = execute_handwriting(&args(&["--seed", "500"]))
+        .expect("default baseline accepted")
+        .expect("stdout JSON");
+    let decoded =
+        decode_statistics_json(&baseline, &UnicodeGraphemeSegmentation)
+            .expect("canonical JSON reopens");
+    assert_eq!(decoded.seed, 500);
+    assert_eq!(decoded.globals.len(), Dimension::ALL.len());
+    assert!(decoded.glyphs.is_empty());
+    let inspected =
+        parse_handwriting_options(&args(&["--seed", "500", "--inspect"]))
+            .expect("inspection admitted");
+    let display = String::from_utf8(inspect_handwriting(&inspected.profile))
+        .expect("inspection is readable");
+    assert!(display.contains("Seed: 500"));
+    assert!(display.contains("Glyph overrides: 0"));
+    assert!(display.contains("height (micrometres):"));
+}
+
+#[test]
+fn global_and_decomposed_accent_glyph_round_trip() {
+    let edited = execute_handwriting(&args(&[
+        "--set-global",
+        "height",
+        "2500",
+        "3500",
+        "3000",
+        "3000",
+        "200",
+        "--set-glyph",
+        "n\u{303}",
+        "slant",
+        "-1000",
+        "1000",
+        "0",
+        "0",
+        "400",
+        "--set-glyph",
+        "\u{f1}",
+        "width",
+        "1800",
+        "2600",
+        "2200",
+        "2200",
+        "200",
+    ]))
+    .expect("valid glyph edits")
+    .expect("stdout");
+    let decoded = decode_statistics_json(&edited, &UnicodeGraphemeSegmentation)
+        .expect("same Rust codec decodes");
+    assert_eq!(decoded.glyphs.len(), 2);
+    assert_eq!(
+        decoded.glyphs.first().expect("first glyph").grapheme,
+        "n\u{303}"
+    );
+    assert_eq!(
+        decoded.glyphs.get(1).expect("second glyph").grapheme,
+        "\u{f1}"
+    );
+    assert_eq!(
+        decoded
+            .statistics_for("\u{f1}", Dimension::Width)
+            .expect("glyph width")
+            .mean,
+        2_200i32
+    );
+    assert_eq!(
+        decoded
+            .statistics_for("n\u{303}", Dimension::Slant)
+            .expect("glyph slant")
+            .standard_deviation,
+        400
+    );
+}
+
+#[test]
+fn invalid_stats_and_unknown_flags_refuse_before_file_effect() {
+    for values in [
+        args(&[
+            "--set-global",
+            "height",
+            "2500",
+            "3500",
+            "4500",
+            "3000",
+            "200",
+        ]),
+        args(&[
+            "--set-glyph",
+            "ab",
+            "width",
+            "2000",
+            "2200",
+            "2100",
+            "2100",
+            "20",
+        ]),
+        args(&["--set-glyph", "\u{f1}", "bogus", "1", "1", "1", "1", "0"]),
+        args(&["--set-global", "width", "1", "2"]),
+        args(&["--seed", "-1"]),
+        args(&["--replace"]),
+        args(&["--inspect", "--output", "invalid.json"]),
+        args(&["--nonexistent"]),
+    ] {
+        assert!(execute_handwriting(&values).is_err(), "{values:?}");
+    }
+}
+
+#[test]
+fn preserve_existing_on_refused_update_and_allow_explicit_replacement() {
+    let path = test_path();
+    let target = path.to_str().expect("test path UTF-8");
+    let initial = args(&["--seed", "8", "--output", target]);
+    assert!(
+        execute_handwriting(&initial)
+            .expect("first write")
+            .is_none()
+    );
+    let original = fs::read(&path).expect("file committed");
+    let replacing =
+        args(&["--profile", target, "--seed", "9", "--output", target]);
+    assert!(execute_handwriting(&replacing).is_err());
+    assert_eq!(fs::read(&path).expect("still present"), original);
+    let mut approved = replacing;
+    approved.push("--replace".into());
+    assert!(execute_handwriting(&approved).expect("replace").is_none());
+    let revised = fs::read(&path).expect("new file");
+    assert_ne!(revised, original);
+    assert_eq!(
+        decode_statistics_json(&revised, &UnicodeGraphemeSegmentation)
+            .expect("saved profile valid")
+            .seed,
+        9
+    );
+    fs::remove_file(path).expect("owned temp removed");
+}
+
+#[test]
+fn corrupt_and_oversized_sources_do_not_modify_output() {
+    let source = test_path();
+    let output = test_path();
+    let source_name = source.to_str().expect("source path UTF-8");
+    let output_name = output.to_str().expect("output path UTF-8");
+    fs::write(&output, b"preserved").expect("sentinel output");
+    for invalid in [
+        b"not json".to_vec(),
+        vec![b' '; MAXIMUM_STATISTICS_JSON_BYTES + 1],
+        br#"{"version":"atrament.handwriting.statistics.v9"}"#.to_vec(),
+    ] {
+        fs::write(&source, invalid).expect("invalid fixture");
+        let attempt = args(&[
+            "--profile",
+            source_name,
+            "--output",
+            output_name,
+            "--replace",
+        ]);
+        assert!(execute_handwriting(&attempt).is_err());
+        assert_eq!(
+            fs::read(&output).expect("sentinel persisted"),
+            b"preserved"
+        );
+    }
+    fs::remove_file(source).expect("owned source removed");
+    fs::remove_file(output).expect("owned output removed");
+}
+
+#[cfg(unix)]
+#[test]
+fn cannot_replace_symlink_even_with_explicit_replace() {
+    use std::os::unix::fs::symlink;
+    let actual = test_path();
+    let link = test_path();
+    fs::write(&actual, b"original").expect("actual source");
+    symlink(&actual, &link).expect("link fixture");
+    let attempt = args(&[
+        "--seed",
+        "10",
+        "--output",
+        link.to_str().expect("link path"),
+        "--replace",
+    ]);
+    assert!(execute_handwriting(&attempt).is_err());
+    assert_eq!(fs::read(&actual).expect("actual unchanged"), b"original");
+    fs::remove_file(link).expect("owned link removed");
+    fs::remove_file(actual).expect("owned file removed");
+}
