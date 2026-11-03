@@ -115,6 +115,74 @@ fn rectangle_for_path(
     }
 }
 
+// Rasterize caller-authored diagonal ink at physical pixel centers.
+// Axis-aligned ruled lines retain their historical rectangle projection.
+// The bounded physical segment box avoids scanning the entire page per stroke.
+fn paint_diagonal_ink(
+    pixels: &mut [u8],
+    width: usize,
+    height: usize,
+    dpi: u32,
+    (start, end): (PdfPoint, PdfPoint),
+    stroke_width_um: u32,
+    color: PdfRgb,
+) -> Result<(), String> {
+    if stroke_width_um == 0 || start == end {
+        return Err(
+            "diagonal ink needs a nonempty positive-width segment".into()
+        );
+    }
+    let pitch = 25_400.0f64 / f64::from(dpi);
+    let x1 = f64::from(start.x_um);
+    let y1 = f64::from(start.y_um);
+    let x2 = f64::from(end.x_um);
+    let y2 = f64::from(end.y_um);
+    let dx = x2 - x1;
+    let dy = y2 - y1;
+    let length_squared = dx.mul_add(dx, dy * dy);
+    let threshold = f64::from(stroke_width_um) / 2.0f64 + pitch / 2.0f64;
+    let padding = i64::from(stroke_width_um.div_ceil(2))
+        .saturating_add(i64::from(25_400u32.div_ceil(dpi.saturating_mul(2))));
+    let left = pixel_coordinate(
+        i64::from(start.x_um.min(end.x_um)).saturating_sub(padding), dpi, false,
+    )?;
+    let top = pixel_coordinate(
+        i64::from(start.y_um.min(end.y_um)).saturating_sub(padding), dpi, false,
+    )?;
+    let right = pixel_coordinate(
+        i64::from(start.x_um.max(end.x_um)).saturating_add(padding), dpi, true,
+    )?;
+    let bottom = pixel_coordinate(
+        i64::from(start.y_um.max(end.y_um)).saturating_add(padding), dpi, true,
+    )?;
+    for row in top.min(height)..bottom.min(height) {
+        let y_index = u32::try_from(row)
+            .map_err(|error| format!("ink row index refused: {error}"))?;
+        let py = (f64::from(y_index) + 0.5f64) * pitch;
+        for column in left.min(width)..right.min(width) {
+            let x_index = u32::try_from(column)
+                .map_err(|error| format!("ink column index refused: {error}"))?;
+            let px = (f64::from(x_index) + 0.5f64) * pitch;
+            let fraction = ((px - x1).mul_add(dx, (py - y1) * dy)
+                / length_squared).clamp(0.0f64, 1.0f64);
+            let nearest_x = fraction.mul_add(dx, x1);
+            let nearest_y = fraction.mul_add(dy, y1);
+            if (px - nearest_x).hypot(py - nearest_y) <= threshold {
+                let offset = row.checked_mul(width)
+                    .and_then(|index| index.checked_add(column))
+                    .and_then(|index| index.checked_mul(4))
+                    .ok_or("diagonal ink raster offset overflow")?;
+                let pixel = pixels.get_mut(offset..offset.saturating_add(4))
+                    .ok_or("diagonal ink raster exceeds pixel budget")?;
+                pixel.copy_from_slice(&[
+                    color.red, color.green, color.blue, 255,
+                ]);
+            }
+        }
+    }
+    Ok(())
+}
+
 fn pixel_coordinate(
     micrometres: i64,
     dpi: u32,
@@ -387,8 +455,24 @@ pub(super) fn render_paper_png(
         .map_err(|error| format!("PNG raster allocation refused: {error}"))?;
     raster.resize(bytes, 0);
     for path in paths {
-        let (rectangle, color) = rectangle_for_path(path)?;
-        paint_rectangle(&mut raster, width, height, dpi, rectangle, color)?;
+        if let Ok((rectangle, color)) = rectangle_for_path(path) {
+            paint_rectangle(&mut raster, width, height, dpi, rectangle, color)?;
+        } else if let (
+            [PdfPathCommand::MoveTo(start), PdfPathCommand::LineTo(end)],
+            PdfPathPaint::Stroke { color, width_um: line_width_um },
+        ) = (path.commands.as_slice(), path.paint) {
+            if start.x_um == end.x_um || start.y_um == end.y_um {
+                return Err("invalid zero-length paper stroke".into());
+            }
+            paint_diagonal_ink(
+                &mut raster, width, height, dpi, (*start, *end),
+                line_width_um, color,
+            )?;
+        } else {
+            return Err(
+                "PNG path requires a paper rectangle or one ink segment".into()
+            );
+        }
     }
     if let Some(outline) = border {
         paint_rounded_border(&mut raster, width, height, dpi, outline)?;

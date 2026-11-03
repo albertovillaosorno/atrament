@@ -72,6 +72,9 @@ use atrament_profile_json_syntax::{
     validate_profile_json_object,
 };
 
+/// Maximum caller-authored pen segments per document export.
+pub const MAX_NOTEBOOK_INK_LINES: usize = 512;
+
 const MAX_MARKS: u64 = 10_000;
 /// Maximum admitted versioned paper-profile JSON bytes.
 pub const MAX_PROFILE_BYTES: usize = 4_096;
@@ -154,6 +157,24 @@ pub enum PaperDatePlaceholder {
     RightBox,
     /// One writable line at the right of the top margin.
     RightLine,
+}
+
+/// One caller-authored straight physical pen stroke on a numbered page.
+///
+/// This is explicit user ink, not glyph synthesis or statistical handwriting.
+/// Coordinates use micrometres from the top-left sheet edge.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct NotebookInkLine {
+    /// Physical ending position (x, y).
+    pub end_um: (u32, u32),
+    /// One-based document page number.
+    pub page: usize,
+    /// Selected ink RGB, independent of paper ruling.
+    pub rgb: [u8; 3],
+    /// Physical starting position (x, y).
+    pub start_um: (u32, u32),
+    /// Pen thickness in micrometres (80 to 1500).
+    pub width_um: u32,
 }
 
 // An admitted printable-region outline shared by PDF and transparent PNG.
@@ -1336,12 +1357,113 @@ pub fn paper_profile_pdf_pages_with_printed_date(
     border_radius_um: u32,
     date_text: Option<&str>,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_pdf_pages_with_ink(
+        profile,
+        pages,
+        include_marks,
+        date,
+        page_numbers,
+        border_radius_um,
+        date_text,
+        &[],
+    )
+}
+
+fn append_ink_lines(
+    paths: &mut Vec<PdfVectorPath>,
+    options: Options,
+    page: usize,
+    ink: &[NotebookInkLine],
+) -> Result<(), String> {
+    for line in ink.iter().filter(|line| line.page == page) {
+        let clearance = line.width_um.div_ceil(2);
+        let min_x = options
+            .margin_left_um
+            .checked_add(clearance)
+            .ok_or("ink horizontal clearance overflow")?;
+        let min_y = options
+            .margin_top_um
+            .checked_add(clearance)
+            .ok_or("ink vertical clearance overflow")?;
+        let max_x = options
+            .width_um
+            .checked_sub(options.margin_right_um)
+            .and_then(|value| value.checked_sub(clearance))
+            .ok_or("ink exceeds printable horizontal region")?;
+        let max_y = options
+            .height_um
+            .checked_sub(options.margin_bottom_um)
+            .and_then(|value| value.checked_sub(clearance))
+            .ok_or("ink exceeds printable vertical region")?;
+        if !(80..=1_500).contains(&line.width_um)
+            || line.start_um == line.end_um
+            || [line.start_um, line.end_um]
+                .iter()
+                .any(|(x, y)| {
+                    !(min_x..=max_x).contains(x)
+                        || !(min_y..=max_y).contains(y)
+                })
+        {
+            return Err(format!(
+                "page {page} ink needs printable endpoints and valid width"
+            ));
+        }
+        paths.push(PdfVectorPath {
+            commands: vec![
+                PdfPathCommand::MoveTo(PdfPoint {
+                    x_um: position(u64::from(line.start_um.0))?,
+                    y_um: position(u64::from(line.start_um.1))?,
+                }),
+                PdfPathCommand::LineTo(PdfPoint {
+                    x_um: position(u64::from(line.end_um.0))?,
+                    y_um: position(u64::from(line.end_um.1))?,
+                }),
+            ],
+            paint: PdfPathPaint::Stroke {
+                color: PdfRgb {
+                    red: line.rgb[0],
+                    green: line.rgb[1],
+                    blue: line.rgb[2],
+                },
+                width_um: line.width_um,
+            },
+        });
+    }
+    Ok(())
+}
+
+/// Overlay explicit physical pen segments onto normal notebook paper.
+///
+/// This does not shape Unicode glyphs, sample statistics, or persist strokes.
+/// All requested ink must fit the selected 1–32 PDF pages.
+///
+/// # Errors
+/// Refuses stroke limits, invalid coordinates, thickness or pages.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "extends the printed date API with ink"
+)]
+pub fn paper_profile_pdf_pages_with_ink(
+    profile: &[u8],
+    pages: usize,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+    border_radius_um: u32,
+    date_text: Option<&str>,
+    ink: &[NotebookInkLine],
+) -> Result<Vec<u8>, String> {
     let options = decode_profile(profile)?;
     if !(1..=MAX_PAGES).contains(&pages) {
         return Err("paper PDF needs 1 to 32 pages".into());
     }
     if date.is_none() && date_text.is_some_and(|text| !text.is_empty()) {
         return Err("printed date text needs a date placeholder".into());
+    }
+    if ink.len() > MAX_NOTEBOOK_INK_LINES
+        || ink.iter().any(|line| line.page == 0 || line.page > pages)
+    {
+        return Err("ink exceeds 512 segments or declared PDF pages".into());
     }
     let mut base = if include_marks {
         paper_paths(options)?
@@ -1357,15 +1479,19 @@ pub fn paper_profile_pdf_pages_with_printed_date(
     if let Some(border) = rounded_border(options, border_radius_um)? {
         base.push(border_path(border)?);
     }
-    if !page_numbers {
+    if !page_numbers && ink.is_empty() {
         return serialize_paths(options, base, pages);
     }
     let mut numbered = Vec::new();
-    numbered.try_reserve_exact(pages)
+    numbered
+        .try_reserve_exact(pages)
         .map_err(|error| format!("page allocation refused: {error}"))?;
     for page in 1..=pages {
         let mut paths = base.clone();
-        append_page_number(&mut paths, options, page)?;
+        if page_numbers {
+            append_page_number(&mut paths, options, page)?;
+        }
+        append_ink_lines(&mut paths, options, page, ink)?;
         numbered.push(paths);
     }
     serialize_page_paths(options, numbered)
@@ -1490,8 +1616,46 @@ pub fn paper_profile_png_page_with_printed_date(
     border_radius_um: u32,
     date_text: Option<&str>,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_png_page_with_ink(
+        profile,
+        dpi,
+        include_marks,
+        date,
+        page_numbers,
+        page,
+        border_radius_um,
+        date_text,
+        &[],
+    )
+}
+
+/// Rasterize explicit page ink above a selected transparent notebook sheet.
+/// Other numbered-page strokes remain available for separate PNG exports.
+///
+/// # Errors
+/// Refuses invalid page/stroke/geometry/raster limits before output.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "extends the printed date API with ink"
+)]
+pub fn paper_profile_png_page_with_ink(
+    profile: &[u8],
+    dpi: u32,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+    page_numbers: bool,
+    page: usize,
+    border_radius_um: u32,
+    date_text: Option<&str>,
+    ink: &[NotebookInkLine],
+) -> Result<Vec<u8>, String> {
     if !(1..=MAX_PAGES).contains(&page) {
         return Err("PNG notebook page must be within 1..32".into());
+    }
+    if ink.len() > MAX_NOTEBOOK_INK_LINES
+        || ink.iter().any(|line| !(1..=MAX_PAGES).contains(&line.page))
+    {
+        return Err("ink exceeds 512 segments or valid PNG pages".into());
     }
     if date.is_none() && date_text.is_some_and(|text| !text.is_empty()) {
         return Err("printed date text needs a date placeholder".into());
@@ -1510,6 +1674,15 @@ pub fn paper_profile_png_page_with_printed_date(
     }
     if page_numbers {
         append_page_number(&mut paths, options, page)?;
+    }
+    // Refuse invalid off-page ink as well: selecting PNG page 1 must not
+    // silently accept impossible marks intended for another page.
+    for requested_page in 1..=MAX_PAGES {
+        if requested_page == page {
+            append_ink_lines(&mut paths, options, requested_page, ink)?;
+        } else {
+            append_ink_lines(&mut Vec::new(), options, requested_page, ink)?;
+        }
     }
     let border = rounded_border(options, border_radius_um)?;
     png::render_paper_png(

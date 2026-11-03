@@ -11,7 +11,7 @@
 // - Owns:
 //   - Rust CLI editing and inventory inspection of handwriting profiles.
 // - Must-Not:
-//   - Independently validate statistics, sample glyphs, or render ink.
+//   - Independently validate statistics, sample glyphs, or shape glyph ink.
 // - Allows:
 //   - Inputs: Explicit CLI arguments and bounded caller-selected JSON files.
 //   - Outputs: Admitted JSON, exact text-inventory audit, or refusal.
@@ -51,7 +51,8 @@ use atrament_handwriting_statistics_json::{
     encode_statistics_json,
 };
 use atrament_notebook_paper_cli::{
-    MAX_PAPER_OUTPUT_BYTES, canonical_paper_profile_json,
+    MAX_NOTEBOOK_INK_LINES, MAX_PAPER_OUTPUT_BYTES, NotebookInkLine,
+    canonical_paper_profile_json,
 };
 use atrament_notebook_profile::{
     DatePlacement, DateStyle, MAX_NOTEBOOK_JSON_BYTES, NotebookProfile,
@@ -90,11 +91,13 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--printed-sheet true|false] [--inspect] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
+    [--ink-line PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM '#RRGGBB'] \
     [--output FILE [--replace]]\n\
     Paper-layer export uses nested Rust paper settings and skips ruling \
     on preprinted sheets. The optional date prints in its selected box \
-    or line; rounded borders render, but handwriting does not. \
-    Page numbers use a small bitmap in the bottom margin.";
+    or line; rounded borders render. Repeated --ink-line (max 512) draws \
+    explicit, unsaved physical pen segments; no automatic glyphs, handwriting \
+    statistics or images are rendered.";
 
 #[derive(Debug)]
 struct HandwritingRequest {
@@ -110,6 +113,7 @@ struct HandwritingRequest {
 struct NotebookRequest {
     dpi: u32,
     export_paper: Option<NotebookPaperFormat>,
+    ink: Vec<NotebookInkLine>,
     inspect: bool,
     output: Option<String>,
     pages: usize,
@@ -663,10 +667,52 @@ fn export_integer(
     Ok(number)
 }
 
+fn parse_ink_line(
+    iter: &mut Iter<'_, String>,
+) -> Result<NotebookInkLine, String> {
+    let page = export_integer(
+        iter.next().map(String::as_str), "ink page", 1, 32,
+    )?;
+    let x1 = export_integer(
+        iter.next().map(String::as_str), "ink x1", 0, 700_000,
+    )?;
+    let y1 = export_integer(
+        iter.next().map(String::as_str), "ink y1", 0, 700_000,
+    )?;
+    let x2 = export_integer(
+        iter.next().map(String::as_str), "ink x2", 0, 700_000,
+    )?;
+    let y2 = export_integer(
+        iter.next().map(String::as_str), "ink y2", 0, 700_000,
+    )?;
+    let width_um = export_integer(
+        iter.next().map(String::as_str), "ink width", 80, 1_500,
+    )?;
+    let color = iter.next().ok_or("ink line needs #RRGGBB")?;
+    if color.len() != 7 || !color.is_ascii() || !color.starts_with('#') {
+        return Err("ink color must be #RRGGBB".into());
+    }
+    let byte = |start: usize| -> Result<u8, String> {
+        let end = start.saturating_add(2);
+        let digits = color.get(start..end).ok_or("ink color must be #RRGGBB")?;
+        u8::from_str_radix(digits, 16)
+            .map_err(|_error| "ink color must be #RRGGBB".into())
+    };
+    Ok(NotebookInkLine {
+        page: usize::try_from(page)
+            .map_err(|error| format!("invalid ink page: {error}"))?,
+        start_um: (x1, y1),
+        end_um: (x2, y2),
+        width_um,
+        rgb: [byte(1)?, byte(3)?, byte(5)?],
+    })
+}
+
 fn parse_notebook_export_option(
     option: &str,
     iter: &mut Iter<'_, String>,
     export: &mut NotebookExportOptions,
+    ink: &mut Vec<NotebookInkLine>,
 ) -> Result<(), String> {
     match option {
         "--export-paper" => {
@@ -707,7 +753,45 @@ fn parse_notebook_export_option(
             export.png_page = Some(usize::try_from(page)
                 .map_err(|error| format!("PNG page refused: {error}"))?);
         }
+        "--ink-line" => {
+            if ink.len() == MAX_NOTEBOOK_INK_LINES {
+                return Err("ink exceeds 512 explicit line segments".into());
+            }
+            ink.push(parse_ink_line(iter)?);
+        }
         _ => return Err(format!("unknown notebook export option: {option}")),
+    }
+    Ok(())
+}
+
+fn validate_notebook_export_flags(
+    replace: bool,
+    output: Option<&str>,
+    inspect: bool,
+    export: &NotebookExportOptions,
+    ink: &[NotebookInkLine],
+) -> Result<(), String> {
+    if replace && output.is_none() {
+        return Err("--replace requires --output".into());
+    }
+    if inspect && output.is_some() {
+        return Err("--inspect is stdout only; omit --output".into());
+    }
+    if inspect && export.format.is_some() {
+        return Err("--inspect cannot export paper".into());
+    }
+    if export.pages.is_some()
+        && export.format != Some(NotebookPaperFormat::Pdf)
+    {
+        return Err("--pages requires --export-paper pdf".into());
+    }
+    if (export.dpi.is_some() || export.png_page.is_some())
+        && export.format != Some(NotebookPaperFormat::Png)
+    {
+        return Err("--dpi and --png-page require --export-paper png".into());
+    }
+    if !ink.is_empty() && export.format.is_none() {
+        return Err("--ink-line requires --export-paper pdf or png".into());
     }
     Ok(())
 }
@@ -718,6 +802,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut output = None;
     let mut replace = false;
     let mut export = NotebookExportOptions::default();
+    let mut ink = Vec::new();
     let mut loaded = false;
     let mut edited = false;
     let mut iter = args.iter();
@@ -761,8 +846,11 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 }
                 inspect = true;
             }
-            "--export-paper" | "--pages" | "--dpi" | "--png-page" => {
-                parse_notebook_export_option(option, &mut iter, &mut export)?;
+            "--export-paper" | "--pages" | "--dpi" | "--png-page"
+            | "--ink-line" => {
+                parse_notebook_export_option(
+                    option, &mut iter, &mut export, &mut ink,
+                )?;
             }
             "--output" => {
                 let path = iter.next().ok_or("--output requires a filename")?;
@@ -783,29 +871,14 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             _ => return Err(format!("unknown notebook option: {option}")),
         }
     }
-    if replace && output.is_none() {
-        return Err("--replace requires --output".into());
-    }
-    if inspect && output.is_some() {
-        return Err("--inspect is stdout only; omit --output".into());
-    }
-    if inspect && export.format.is_some() {
-        return Err("--inspect cannot export paper".into());
-    }
-    if export.pages.is_some()
-        && export.format != Some(NotebookPaperFormat::Pdf)
-    {
-        return Err("--pages requires --export-paper pdf".into());
-    }
-    if (export.dpi.is_some() || export.png_page.is_some())
-        && export.format != Some(NotebookPaperFormat::Png)
-    {
-        return Err("--dpi and --png-page require --export-paper png".into());
-    }
+    validate_notebook_export_flags(
+        replace, output.as_deref(), inspect, &export, &ink,
+    )?;
     profile.validate()?;
     Ok(NotebookRequest {
         dpi: export.dpi.unwrap_or(150),
         export_paper: export.format,
+        ink,
         inspect,
         output,
         pages: export.pages.unwrap_or(1),
@@ -841,12 +914,14 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     }
     let (bytes, maximum_bytes) = match request.export_paper {
         Some(NotebookPaperFormat::Pdf) => (
-            request.profile.paper_layer_pdf(request.pages)?,
+            request.profile.paper_layer_pdf_with_ink(
+                request.pages, &request.ink,
+            )?,
             MAX_PAPER_OUTPUT_BYTES,
         ),
         Some(NotebookPaperFormat::Png) => (
-            request.profile.paper_layer_png_page(
-                request.dpi, request.png_page,
+            request.profile.paper_layer_png_page_with_ink(
+                request.dpi, request.png_page, &request.ink,
             )?,
             MAX_PAPER_OUTPUT_BYTES,
         ),

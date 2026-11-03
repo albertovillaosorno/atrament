@@ -11,7 +11,7 @@
 // - Owns:
 //   - Versioned notebook page metadata composed with Rust-canonical paper.
 // - Must-Not:
-//   - Claim that date text, embedded images or handwriting are rendered.
+//   - Claim shaped notebook body text, embedded images or synthesized ink.
 // - Allows:
 //   - Inputs: Bounded notebook JSON and admitted native paper profile JSON.
 //   - Outputs: Canonical notebook JSON or explicit typed-field refusal.
@@ -33,9 +33,9 @@
 //! Rust-owned notebook metadata and the canonical nested paper profile.
 
 use atrament_notebook_paper_cli::{
-    PaperDatePlaceholder, canonical_paper_profile_json,
-    default_paper_profile_json, paper_profile_pdf_pages_with_printed_date,
-    paper_profile_png_page_with_printed_date, validate_paper_border_clearance,
+    NotebookInkLine, PaperDatePlaceholder, canonical_paper_profile_json,
+    default_paper_profile_json, paper_profile_pdf_pages_with_ink,
+    paper_profile_png_page_with_ink, validate_paper_border_clearance,
     validate_paper_date_clearance, validate_paper_page_number_clearance,
     validate_printed_date_text,
 };
@@ -254,11 +254,22 @@ impl NotebookProfile {
     /// # Errors
     /// Refuses invalid metadata, geometry, page count or output limits.
     pub fn paper_layer_pdf(&self, pages: usize) -> Result<Vec<u8>, String> {
+        self.paper_layer_pdf_with_ink(pages, &[])
+    }
+
+    /// Compose the paper and explicit caller-owned physical pen segments.
+    /// This does not store ink in notebook v1 or synthesize handwriting.
+    ///
+    /// # Errors
+    /// Refuses invalid notebook, stroke, page or PDF resource limits.
+    pub fn paper_layer_pdf_with_ink(
+        &self, pages: usize, ink: &[NotebookInkLine],
+    ) -> Result<Vec<u8>, String> {
         self.validate()?;
-        paper_profile_pdf_pages_with_printed_date(
+        paper_profile_pdf_pages_with_ink(
             self.paper_json.as_bytes(), pages, !self.printed_sheet,
             self.date_placeholder(), self.page_numbers, self.border_radius_um,
-            Some(&self.date_text),
+            Some(&self.date_text), ink,
         )
     }
 
@@ -280,11 +291,22 @@ impl NotebookProfile {
     pub fn paper_layer_png_page(
         &self, dpi: u32, page: usize,
     ) -> Result<Vec<u8>, String> {
+        self.paper_layer_png_page_with_ink(dpi, page, &[])
+    }
+
+    /// Render a selected transparent page with caller-provided pen segments.
+    /// A PNG of one page omits ink assigned to other pages.
+    ///
+    /// # Errors
+    /// Refuses invalid notebook, stroke, page or PNG resource limits.
+    pub fn paper_layer_png_page_with_ink(
+        &self, dpi: u32, page: usize, ink: &[NotebookInkLine],
+    ) -> Result<Vec<u8>, String> {
         self.validate()?;
-        paper_profile_png_page_with_printed_date(
+        paper_profile_png_page_with_ink(
             self.paper_json.as_bytes(), dpi, !self.printed_sheet,
             self.date_placeholder(), self.page_numbers, page,
-            self.border_radius_um, Some(&self.date_text),
+            self.border_radius_um, Some(&self.date_text), ink,
         )
     }
 

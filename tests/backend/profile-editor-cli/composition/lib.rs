@@ -1108,3 +1108,205 @@ fn numeric_preview_refusals_are_stdout_only_and_preserve_file_bytes() {
     }
     fs::remove_file(target).expect("remove owned sentinel");
 }
+
+#[test]
+fn notebook_cli_exports_manual_pen_ink_to_both_native_formats() {
+    let draw = [
+        "--ink-line",
+        "2",
+        "25400",
+        "25400",
+        "50800",
+        "50800",
+        "700",
+        "#DE1144",
+    ];
+    let mut pdf_args = args(&[
+        "--printed-sheet",
+        "true",
+        "--export-paper",
+        "pdf",
+        "--pages",
+        "2",
+    ]);
+    pdf_args.extend(args(&draw));
+    let pdf = execute_notebook(&pdf_args)
+        .expect("bounded manual ink PDF")
+        .expect("PDF stdout");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    let text = String::from_utf8_lossy(&pdf);
+    assert!(text.contains("/Count 2"));
+    assert_eq!(text.matches(" m\n").count(), 1);
+
+    let mut png_args = args(&[
+        "--printed-sheet",
+        "true",
+        "--export-paper",
+        "png",
+        "--dpi",
+        "72",
+        "--png-page",
+        "2",
+    ]);
+    png_args.extend(args(&draw));
+    let png = execute_notebook(&png_args)
+        .expect("bounded manual ink PNG")
+        .expect("PNG stdout");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_ne!(
+        png,
+        execute_notebook(&args(&[
+            "--printed-sheet",
+            "true",
+            "--export-paper",
+            "png",
+            "--dpi",
+            "72",
+            "--png-page",
+            "2",
+        ]))
+        .expect("blank PNG")
+        .expect("blank stdout")
+    );
+    assert_eq!(
+        png,
+        execute_notebook(&png_args)
+            .expect("repeated export")
+            .expect("deterministic PNG")
+    );
+}
+
+#[test]
+fn notebook_cli_ink_refusals_leave_preexisting_output_unchanged() {
+    let target = test_path();
+    fs::write(&target, b"sentinel").expect("test-owned output exists");
+    let filename = target.to_str().expect("test path is UTF-8");
+    let good = [
+        "--ink-line",
+        "1",
+        "25400",
+        "25400",
+        "50800",
+        "50800",
+        "700",
+        "#DE1144",
+    ];
+    for invalid in [
+        args(&good),
+        args(&["--export-paper", "pdf", "--ink-line"]),
+        args(&[
+            "--export-paper",
+            "pdf",
+            "--ink-line",
+            "0",
+            "25400",
+            "25400",
+            "50800",
+            "50800",
+            "700",
+            "#DE1144",
+        ]),
+        args(&[
+            "--export-paper",
+            "pdf",
+            "--ink-line",
+            "1",
+            "25400",
+            "25400",
+            "25400",
+            "25400",
+            "700",
+            "#DE1144",
+        ]),
+        args(&[
+            "--export-paper",
+            "pdf",
+            "--ink-line",
+            "1",
+            "25400",
+            "25400",
+            "50800",
+            "50800",
+            "79",
+            "#DE1144",
+        ]),
+        args(&[
+            "--export-paper",
+            "pdf",
+            "--ink-line",
+            "1",
+            "25400",
+            "25400",
+            "50800",
+            "50800",
+            "700",
+            "#QQ1144",
+        ]),
+        args(&[
+            "--export-paper",
+            "pdf",
+            "--ink-line",
+            "1",
+            "25400",
+            "25400",
+            "50800",
+            "50800",
+            "700",
+            "#\u{f1}E1144",
+        ]),
+        args(&[
+            "--export-paper",
+            "pdf",
+            "--ink-line",
+            "1",
+            "0",
+            "25400",
+            "50800",
+            "50800",
+            "700",
+            "#DE1144",
+        ]),
+        args(&[
+            "--export-paper",
+            "pdf",
+            "--ink-line",
+            "2",
+            "25400",
+            "25400",
+            "50800",
+            "50800",
+            "700",
+            "#DE1144",
+        ]),
+        args(&[
+            "--export-paper",
+            "pdf",
+            "--inspect",
+            "--ink-line",
+            "1",
+            "25400",
+            "25400",
+            "50800",
+            "50800",
+            "700",
+            "#DE1144",
+        ]),
+    ] {
+        let mut selected = invalid.clone();
+        selected.extend(args(&["--output", filename, "--replace"]));
+        assert!(execute_notebook(&selected).is_err(), "{invalid:?}");
+        assert_eq!(
+            fs::read(&target).expect("sentinel is preserved"),
+            b"sentinel"
+        );
+    }
+    let mut over_budget = args(&["--export-paper", "pdf"]);
+    for _ in 0..=MAX_NOTEBOOK_INK_LINES {
+        over_budget.extend(args(&good));
+    }
+    assert!(
+        execute_notebook(&over_budget).is_err(),
+        "no hidden truncation"
+    );
+    fs::remove_file(target).expect("remove test-owned output");
+}

@@ -393,3 +393,38 @@ fn invalid_date_grammar_calendar_and_unplaced_text_refuse() {
     notebook.date_text.clear();
     assert!(notebook.validate().is_ok());
 }
+
+#[test]
+fn notebook_explicit_ink_projects_without_becoming_saved_metadata() {
+    let notebook = NotebookProfile {
+        printed_sheet: true,
+        ..NotebookProfile::default()
+    };
+    let ink = [NotebookInkLine {
+        page: 2,
+        start_um: (25_400, 25_400),
+        end_um: (35_400, 35_400),
+        width_um: 500,
+        rgb: [10, 20, 30],
+    }];
+    assert_ne!(
+        notebook.paper_layer_pdf_with_ink(2, &ink).expect("native ink PDF"),
+        notebook.paper_layer_pdf(2).expect("paper PDF"),
+    );
+    assert_ne!(
+        notebook.paper_layer_png_page_with_ink(72, 2, &ink)
+            .expect("native ink PNG"),
+        notebook.paper_layer_png_page(72, 2).expect("blank PNG"),
+    );
+    assert_eq!(
+        notebook.paper_layer_png_page_with_ink(72, 1, &ink)
+            .expect("other selected page is unchanged"),
+        notebook.paper_layer_png_page(72, 1).expect("blank first page"),
+    );
+    assert_eq!(
+        NotebookProfile::from_json(
+            notebook.canonical_json().expect("v1 metadata").as_bytes(),
+        ).expect("v1 still round trips"),
+        notebook,
+    );
+}

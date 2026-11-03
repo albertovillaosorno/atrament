@@ -940,3 +940,88 @@ fn nested_notebook_paper_layer_export_uses_one_rust_renderer() {
         assert!(paper_profile_png_layer(grid.as_bytes(), dpi, false).is_err());
     }
 }
+
+#[test]
+fn manual_diagonal_pen_ink_is_vector_pdf_and_visible_transparent_png() {
+    let paper = default_paper_profile_json();
+    let ink = [NotebookInkLine {
+        page: 2,
+        start_um: (25_400, 25_400),
+        end_um: (50_800, 50_800),
+        width_um: 700,
+        rgb: [0xde, 0x11, 0x44],
+    }];
+    let baseline = paper_profile_pdf_pages(paper.as_bytes(), 2, false)
+        .expect("two blank PDF sheets");
+    let pdf = paper_profile_pdf_pages_with_ink(
+        paper.as_bytes(), 2, false, None, false, 0, None, &ink,
+    ).expect("manual line projects as native PDF ink");
+    assert_ne!(pdf, baseline);
+    let text = String::from_utf8_lossy(&pdf);
+    assert!(text.contains("/Count 2"));
+    assert_eq!(text.matches(" m\n").count(), 1,
+        "only page 2 includes one explicit diagonal path");
+    assert!(text.contains("0.871 0.067 0.267 RG"));
+    let png = paper_profile_png_page_with_ink(
+        paper.as_bytes(), 72, false, None, false, 2, 0, None, &ink,
+    ).expect("same line projects to PNG RGBA pixels");
+    let (width, _height, raw) = stored_png_pixels(&png);
+    let pixel = |x: usize, y: usize| -> &[u8] {
+        let index = y * (width * 4 + 1) + 1 + x * 4;
+        raw.get(index..index + 4).expect("physical sample within raster")
+    };
+    assert_eq!(pixel(100, 100), &[0xde, 0x11, 0x44, 255]);
+    assert_eq!(pixel(100, 120), &[0, 0, 0, 0],
+        "no rectangular bounding box or opaque backdrop");
+    assert_eq!(
+        paper_profile_png_page_with_ink(
+            paper.as_bytes(), 72, false, None, false, 1, 0, None, &ink,
+        ).expect("first selected page has no ink"),
+        paper_profile_png_layer(paper.as_bytes(), 72, false)
+            .expect("legacy transparent first page"),
+    );
+}
+
+#[test]
+fn manual_ink_refuses_overflow_and_missing_printable_clearance() {
+    let paper = default_paper_profile_json();
+    let good = NotebookInkLine {
+        page: 1,
+        start_um: (21_000, 23_000),
+        end_um: (26_000, 27_000),
+        width_um: 200,
+        rgb: [10, 20, 30],
+    };
+    let invalid = [
+        NotebookInkLine { page: 0, ..good },
+        NotebookInkLine { page: 33, ..good },
+        NotebookInkLine { start_um: good.end_um, ..good },
+        NotebookInkLine { width_um: 0, ..good },
+        NotebookInkLine { width_um: 1_501, ..good },
+        NotebookInkLine { start_um: (0, 23_000), ..good },
+        NotebookInkLine { end_um: (210_000, 27_000), ..good },
+        NotebookInkLine { end_um: (26_000, 297_000), ..good },
+    ];
+    for bad in invalid {
+        assert!(paper_profile_pdf_pages_with_ink(
+            paper.as_bytes(), 1, false, None, false, 0, None, &[bad],
+        ).is_err(), "invalid PDF ink {bad:?}");
+        assert!(paper_profile_png_page_with_ink(
+            paper.as_bytes(), 72, false, None, false, 1, 0, None, &[bad],
+        ).is_err(), "invalid PNG ink {bad:?}");
+    }
+    let off_page = [NotebookInkLine { page: 2, ..good }];
+    assert!(paper_profile_pdf_pages_with_ink(
+        paper.as_bytes(), 1, false, None, false, 0, None, &off_page,
+    ).is_err(), "PDF cannot drop unrequested page ink");
+    assert!(paper_profile_png_page_with_ink(
+        paper.as_bytes(), 72, false, None, false, 1, 0, None, &off_page,
+    ).is_ok(), "PNG may select one of multiple valid notebook pages");
+    let oversized = vec![good; MAX_NOTEBOOK_INK_LINES + 1];
+    assert!(paper_profile_pdf_pages_with_ink(
+        paper.as_bytes(), 1, false, None, false, 0, None, &oversized,
+    ).is_err());
+    assert!(paper_profile_png_page_with_ink(
+        paper.as_bytes(), 72, false, None, false, 1, 0, None, &oversized,
+    ).is_err());
+}

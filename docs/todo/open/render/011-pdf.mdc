@@ -51,6 +51,30 @@ shapes and fallbacks, embedded image overlays, and a single saved notebook
 containing all content. The output remains a genuine paper layer, not full
 notebook content or complete acceptance of P5-011.
 
+## Caller-authored pen-segment overlay (partial) — 2026-11-03
+
+Rust now accepts up to 512 explicit, user-authored physical straight pen
+segments with one-based page identity, printable-region endpoint and
+stroke-width clearance, RGB ink, and a refusal for invalid page/geometry.
+The same native path serialization emits real page-specific vector PDF ink,
+and a bounded transparent RGBA rasterizer emits diagonals at the selected
+DPI without turning the entire segment bounding box opaque.
+
+A two-page
+A4 CLI smoke export (`atrament-profiles notebook --export-paper pdf --pages 2
+--ink-line 2 25400 25400 50800 50800 700 '#DE1144'`) passed `pdfinfo`;
+selected PNG page 2 has 596 × 842 RGBA pixels at 72 DPI. Test assertions
+inspect the decoded PNG pixel channels, PDF page count/path/color, and
+explicit refusal of oversize, invalid and off-sheet lines before an existing
+file can change. No separate Python runtime or renderer was used.
+
+**Scope:** These are manual caller-selected strokes, not rendered glyphs,
+statistically synthesized handwriting or stored notebook content. Notebook
+v1 JSON and authenticated localhost profile editor do not persist or expose
+these segments. Image overlays, owned glyph shapes/fallbacks, and a saved
+two-page content notebook remain unimplemented; this does **not** complete
+the P5-011 acceptance criteria.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

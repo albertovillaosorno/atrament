@@ -391,6 +391,36 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --output notebook-page-10.png
 ```
 
+
+The same Rust-only CLI can draw **explicit caller-owned pen segments** over
+paper, printed dates, and page numbers. A separate `--ink-line` is repeated
+for each straight segment, with `PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM
+'#RRGGBB'` (one-based page number, physical micrometres, ink color). For
+example, the following draws red diagonal ink *only on page 2* of a two-page
+A4 PDF, then emits its transparent RGBA page-2 PNG:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --printed-sheet true --export-paper pdf --pages 2 \
+  --ink-line 2 25400 25400 50800 50800 700 '#DE1144' \
+  --output notebook-ink.pdf
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --printed-sheet true --export-paper png --png-page 2 --dpi 72 \
+  --ink-line 2 25400 25400 50800 50800 700 '#DE1144' \
+  --output notebook-ink-page-2.png
+```
+
+The compositor refuses zero-length strokes, nonprintable endpoints, line
+width outside 80–1500 µm, unrequested PDF page numbers, and more than 512
+segments. Selected PNG pages render only their page's ink; invalid off-page
+geometry still refuses.
+
+These are **manually specified segments**, not
+Unicode glyphs, calibrated handwriting, fonts, or image overlays.
+`atrament.notebook.v1` still saves page metadata alone; `--ink-line` marks
+are not stored in that profile or editable in the localhost web UI yet.
+The full notebook-content rendering task therefore remains open.
+
 PDF allows 1–32 physical pages; transparent RGBA PNG renders one page at
 72–300 DPI with physical resolution metadata. For `printed_sheet: true`,
 existing ruling is suppressed to avoid duplicating marks on stationery.
