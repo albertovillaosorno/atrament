@@ -161,7 +161,9 @@ revision contract; no such command is admitted here.
 **Proposed measured line-break rule:** scan complete measured whitespace-
 separated tokens in semantic order. Retain the next token and intervening
 measured space when their combined width fits exactly; otherwise break before
-the next token. Treat a quoted phrase or punctuation within a token as its
+the next token.
+
+Treat a quoted phrase or punctuation within a token as its
 original grapheme sequence; no invented hyphen or reordered punctuation.
 For a token wider than a fresh line, refuse as `UnbreakableToken` until a
 separately admitted grapheme-boundary emergency policy and its metrics exist.

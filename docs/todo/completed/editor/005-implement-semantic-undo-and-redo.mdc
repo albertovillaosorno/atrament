@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P3-005"
 title: "Implement semantic undo and redo"
-status: open
+status: completed
 priority: P3
 lane: dual-editor
 dependencies: ["ATR-P2-001"]
@@ -27,6 +27,9 @@ migrated_from: TODO.md
 # Implement semantic undo and redo
 
 ## Scope and existing evidence
+
+Historical status below describes implementation still unavailable after
+this finite theoretical acceptance.
 
 Record accepted command batches rather than DOM or canvas snapshots and preserve
 stable semantic identities plus deterministic recomputation across history.
@@ -94,3 +97,62 @@ blocked until an admitted adapter/application boundary supplies it.
 The task remains open for transaction provenance, dependency-expanded derived
 impact, bounded history resource policy, retry/lost-receipt recovery,
 cancellation, and browser/CLI/MCP parity.
+
+## Finite two-batch history and provenance contract
+
+**Inputs:** a current accepted semantic revision, a fully validated command
+batch with trusted caller-entry origin, and explicit application-level `Undo`
+or `Redo` requests bound to the exact current revision. **Outputs:** a new
+accepted revision with stable restored semantic IDs, a bounded traversal
+receipt, or a typed nonmutating refusal. Undo and Redo are not embedded
+inside a semantic edit batch or copied from an LLM response.
+
+**Retention policy for this first-release design:** preserve at most two
+accepted mutation steps behind the current state in process memory, plus the
+matching forward branch during Undo. When a third new edit commits, evict the
+oldest unreachable Undo step and its associated derived snapshot.
+
+A new edit
+after Undo deletes the forward branch; a boundary traversal reports `Boundary`
+without allocating a new revision. Session termination releases all history,
+without claiming physical byte erasure. This finite eviction policy is
+**proposed**, not implemented by the current unbounded history service.
+
+**Origin rule:** a trusted entry adapter stamps `Human`, `ClipboardModel`,
+`CLI`, or `MCP` on each accepted mutation after authentication/authorization.
+A command payload cannot choose or change its own audit origin. Undo/Redo
+receipts record the triggering trusted entry path and a reference to the
+original mutation rather than misleadingly attributing its author to the
+current operator. No provenance is inferred from response text.
+
+**Worked example:** accepted `r1` contains span `s1` (`A`) and figure `f1`.
+Batch `b1` (trusted `Human`) edits `s1` to `B`, accepting `r2`; batch `b2`
+(trusted `CLI`) changes a valid figure layer, accepting `r3`.
+
+`Undo(r3)`
+restores the layer at `r4`; `Undo(r4)` restores text `A` at `r5`. `Redo(r5)`
+restores `B` at `r6`, then `Redo(r6)` restores the layer at `r7`. IDs `s1` and
+`f1` remain stable; all derived layout/diagnostics touched by restored values
+must be invalidated for the fresh revision.
+
+**Refusal example:** `Undo(r3)` after `r7` is `StaleBase`, not a second Undo.
+`Redo(r7)` returns `Boundary`; a submitted batch claiming its own `Human`
+origin without a trusted entry stamp is rejected or stamped from the actual
+adapter. If the oldest step was evicted, Undo refuses at that boundary rather
+than loading hidden disk history. Failed or no-op edits cannot clear Redo.
+
+**Assumptions and limits:** in-memory exact-base Undo/Redo, atomic direct-edit
+history, new revision allocation and empty/stale refusals already exist.
+Two-step eviction, trusted origin stamping, cancellation scheduling, retry
+receipts, dependency-complete derived recomputation, and transport parity
+remain unavailable. This design closes finite semantics, not production
+retention or authenticated audit logging.
+
+## Acceptance decision
+
+- **Basis:** practical for existing in-process history traversal; theoretical
+  for bounded retention and origin semantics, 2026-11-02.
+- **Delivered:** two-batch reversible example, proposed two-step eviction,
+  trust-bound origin, boundary/stale refusals and fresh-revision invariants.
+- **Not implemented by this acceptance:** retention eviction, audit provenance,
+  retry recovery, cancellation, or browser/CLI/MCP history parity.

@@ -20,29 +20,6 @@ labels belong here.
 
 ## P3 — The dual human and LLM editor
 
-### TODO - Implement semantic undo and redo
-
-Record accepted command batches rather than DOM or canvas snapshots and
-preserve stable semantic identities plus deterministic recomputation across
-history. Expose undo and redo as application-history commands, not semantic
-operations embedded in a new batch.
-
-[docs/todo/open/editor/005-implement-semantic-undo-and-redo.mdc](docs/todo/open/editor/005-implement-semantic-undo-and-redo.mdc)
-
-### TODO - Implement rich clipboard intake
-
-Accept text, structured table fragments, formulas, PNG, JPEG, and WebP while
-reporting exactly which source structure or metadata cannot be retained.
-
-[docs/todo/open/editor/006-implement-rich-clipboard-intake.mdc](docs/todo/open/editor/006-implement-rich-clipboard-intake.mdc)
-
-### TODO - Implement image placement and layering
-
-Expose source identity, crop, scale, opacity, z-order, below-text, inline,
-above-text, and clipped-region placement without overwriting the original.
-
-[docs/todo/open/editor/007-implement-image-placement-and-layering.mdc](docs/todo/open/editor/007-implement-image-placement-and-layering.mdc)
-
 ### TODO - Keep the Copy prompt control permanently available
 
 Generate one complete, versioned request from current task and constraints,

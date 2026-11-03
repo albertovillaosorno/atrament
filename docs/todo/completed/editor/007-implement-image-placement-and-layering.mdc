@@ -1,0 +1,100 @@
+---
+record_type: task
+id: "ATR-P3-007"
+title: "Implement image placement and layering"
+status: completed
+priority: P3
+lane: dual-editor
+dependencies: ["ATR-P3-003"]
+dependencies_specified: true
+dependency_rationale: >-
+  Image placement requires the human page editor.
+acceptance_criteria:
+  - >-
+      Expose source identity, crop, scale, opacity, z-order, below-text,
+      inline, above-text, and clipped-region placement without overwriting
+      the original.
+  - >-
+      Finite v1 completion: Define editable source-preserving placement in
+      below-text, inline, above-text, and clipped layers, with crop,
+      opacity, and order for one image.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement image placement and layering
+
+## Scope and existing evidence
+
+Historical status below describes implementation still unavailable after
+this finite theoretical acceptance.
+
+Expose source identity, crop, scale, opacity, z-order, below-text, inline,
+above-text, and clipped-region placement without overwriting the original.
+
+Current executable command evidence covers source identity on an existing
+semantic figure. `AssetReference` can attach, replace, or remove a reference to
+an asset already admitted in the same accepted revision, including nested
+figures and atomic Undo. The value cannot carry raw bytes, base64, filesystem
+paths, or remote URLs, so it does not implement media ingestion.
+
+A transport-neutral placement intent now keeps that original source identity
+separate from caller-owned crop, position, size, transform, opacity, z-order,
+resolution policy, color handling, and placement constraints. Below-text,
+inline, above-text, and clipped-region modes are explicit. Coordinate units,
+transform/crop evaluation, opacity ranges, semantic figure integration, derived
+line-art, decoding, rendering, and command transport remain open.
+
+## Finite source-preserving image placement contract
+
+**Inputs:** one already admitted immutable asset identity, its intrinsic pixel
+size, one stable figure identity, accepted page revision/geometry, and caller-
+authorized placement intent (mode, crop, size, position, opacity, z-order).
+**Outputs:** a new typed placement constraint referencing the same original
+asset, a preview proposal, or a refusal. No placement command may overwrite
+original pixels, download a new URL or grant file/device authority.
+
+**Modes:** `BelowText` permits painting behind the text layer; `Inline`
+reserves measured flow space and may repaginate later content; `AboveText`
+permits a foreground overlap subject to collision diagnostics; and
+`ClippedRegion` restricts drawing to one explicitly measured page region.
+All four modes retain exact source asset identity. Switching modes invalidates
+the appropriate layout/diagnostic projections but does not change the asset.
+
+**Worked example:** asset `photo-1` has intrinsic size `1200 x 800` pixels,
+figure `f2` at revision `r4` references it. A typed edit sets a crop from
+`(100,50)` through `(1100,750)` in source pixels, paper position `(25,40)` mm,
+rendered size `50 x 35` mm, opacity `0.75`, and z-order `2`. The same saved
+crop/size can be proposed in each of the four modes while keeping
+`source_identity=photo-1`; the preview records any flow or collision changes.
+A later crop adjustment must be reversible without changing original bytes.
+
+**Geometry/admission rule:** crop coordinates are finite integer pixels with
+nonempty dimensions wholly inside the asset. Position and size are physical
+page units; size must be positive and any constrained placement must fit the
+selected writable region or return a typed blocking diagnostic. Opacity
+belongs to the closed range `0..1` and layer ordering is stable within each
+explicit placement mode. Rendering must use only the admitted source and
+never derive a replacement through a hidden font/image provider.
+
+**Refusal example:** a crop ending at source x=`1300`, opacity `1.5`, missing
+`photo-1`, stale `r4`, unsupported WebP decode, or physical output requesting
+color photography must refuse with exact cause and retain the old placement.
+There is no silent downsampling, automatic line-art conversion, or hidden
+crop to make an incompatible live plan appear possible.
+
+**Assumptions and limits:** semantic asset references and all four placement
+intent variants are existing isolated domain primitives. Coordinate binding,
+asset decoding, crop/transform evaluation, actual interactive editing,
+rendering, line-art policy, and output-capability integration are unfinished.
+This finite contract does not imply the preview currently supports the modes.
+
+## Acceptance decision
+
+- **Basis:** practical for source references and typed mode vocabulary;
+  theoretical for crop/placement rendering and revision coordination,
+  2026-11-02.
+- **Delivered:** immutable source invariant, four modes, physical/source
+  units, one worked placement and invalid-crop/capability refusals.
+- **Not implemented by this acceptance:** real editable placements, image
+  ingestion, opacity rendering, transform evaluation, or live-plan output.
