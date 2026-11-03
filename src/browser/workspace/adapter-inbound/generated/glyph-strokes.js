@@ -1178,6 +1178,80 @@ export function composeAccentedGlyph(strokes, source, target, color, pos = { dx:
     return [...base.map((stroke) => ({ ...stroke, grapheme: target })),
         ...accent];
 }
+function seededUnit(seed) {
+    let state = seed >>> 0 || 0x6D2B79F5;
+    return () => {
+        state ^= state << 13;
+        state ^= state >>> 17;
+        state ^= state << 5;
+        return (state >>> 0) / 0xFFFFFFFF * 2 - 1;
+    };
+}
+function occurrenceSeed(seed, occurrence) {
+    return (seed ^ Math.imul(occurrence + 1, 0x9E3779B9)) >>> 0;
+}
+function checkVariation(seed, occurrence, variation) {
+    if (!Number.isSafeInteger(seed) || seed < 0 || seed > 0xFFFFFFFF
+        || !Number.isSafeInteger(occurrence) || occurrence < 0
+        || occurrence > 10000) {
+        throw new Error("Variation seed or occurrence outside bounds");
+    }
+    for (const [key, max] of [
+        ["width", 20], ["height", 20], ["thickness", 20],
+        ["slant", 12], ["spacing", 500], ["regularity", 150],
+    ]) {
+        const value = variation[key];
+        if (!Number.isSafeInteger(value) || value < 0 || value > max) {
+            throw new Error(`Variation ${key} outside 0..${max}`);
+        }
+    }
+}
+export function varyGlyphStrokes(source, grapheme, seed, occurrence, variation) {
+    checkVariation(seed, occurrence, variation);
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Preview requires one exact Unicode glyph");
+    }
+    const authored = source.filter((item) => item.grapheme === grapheme)
+        .map(validateStroke);
+    if (authored.length > 128) {
+        throw new Error("Preview is limited to 128 selected strokes");
+    }
+    if (authored.length === 0) {
+        throw new Error("Selected glyph has no authored ink");
+    }
+    const random = seededUnit(occurrenceSeed(seed, occurrence));
+    const sx = 1 + random() * variation.width / 100;
+    const sy = 1 + random() * variation.height / 100;
+    const ink = 1 + random() * variation.thickness / 100;
+    const shear = Math.tan(random() * variation.slant * Math.PI / 180);
+    // Vertex noise depends on physical coordinates, not the input stroke
+    // order: moving a pen stroke in the edit list must not change its shape.
+    const point = (x, y) => {
+        const vertexRandom = seededUnit(occurrenceSeed(seed, occurrence)
+            ^ Math.imul(x, 0x85EBCA6B) ^ Math.imul(y, 0xC2B2AE35));
+        return {
+            x: Math.round(1750 + (x - 1750) * sx
+                + (4500 - y) * shear
+                + vertexRandom() * variation.regularity),
+            y: Math.round(2250 + (y - 2250) * sy
+                + vertexRandom() * variation.regularity),
+        };
+    };
+    return authored.map((stroke) => {
+        const a = point(stroke.x1, stroke.y1);
+        const b = point(stroke.x2, stroke.y2);
+        const width = Math.round(stroke.width * ink);
+        for (const { x, y } of [a, b]) {
+            if (x - width / 2 < 0 || x + width / 2 > 3500
+                || y - width / 2 < 0 || y + width / 2 > 4500) {
+                throw new Error("Varied ink and pen must fit inside glyph cell");
+            }
+        }
+        return validateStroke({
+            ...stroke, x1: a.x, y1: a.y, x2: b.x, y2: b.y, width,
+        });
+    });
+}
 function required(id) {
     const node = document.getElementById(id);
     if (node === null)
@@ -1231,6 +1305,14 @@ export function createGlyphStrokeEditor() {
     const save = required("glyph-save");
     const preview = required("glyph-preview");
     const status = required("glyph-status");
+    const variationPreview = required("glyph-variation-preview");
+    const variationStatus = required("glyph-variation-status");
+    const variationSeed = required("glyph-variation-seed");
+    const variationControls = {};
+    for (const key of ["width", "height", "thickness", "slant", "spacing",
+        "regularity"]) {
+        variationControls[key] = required(`glyph-variation-${key}`);
+    }
     const numeric = {};
     const ranges = {};
     for (const axis of AXES) {
@@ -1243,7 +1325,8 @@ export function createGlyphStrokeEditor() {
         seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
         seedTextMarks,
         centerX, centerY, radius,
-        accentShift, accentLift,
+        accentShift, accentLift, variationSeed,
+        ...Object.values(variationControls),
         selected, update,
         remove, reverse, earlier, later, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
@@ -1531,6 +1614,66 @@ export function createGlyphStrokeEditor() {
             ideal.setAttribute("aria-label", "Invalid geometric settings");
         }
     };
+    const renderVariation = () => {
+        const authored = strokes.filter((item) => item.grapheme === character.value);
+        if (!active || authored.length === 0) {
+            variationPreview.replaceChildren();
+            variationStatus.textContent = active
+                ? "Author this exact glyph to compare repeated ink"
+                : "Requires a compatible backend session";
+            return;
+        }
+        try {
+            const seed = boundedInteger(variationSeed.value, 0xFFFFFFFF, "variation seed");
+            const settings = {};
+            for (const key of ["width", "height", "thickness", "slant",
+                "spacing", "regularity"]) {
+                const raw = variationControls[key].value;
+                if (!/^[0-9]+$/.test(raw)) {
+                    throw new Error(`Variation ${key} requires whole units`);
+                }
+                settings[key] = Number(raw);
+            }
+            checkVariation(seed, 0, settings);
+            if (authored.length > 128) {
+                throw new Error("Preview is limited to 128 selected strokes");
+            }
+            const lines = [];
+            for (let row = 0; row < 2; row += 1) {
+                for (let copy = 0; copy < 3; copy += 1) {
+                    const sequence = row === 0 ? authored
+                        : varyGlyphStrokes(authored, character.value, seed, copy, settings);
+                    const tracking = row === 0 ? 0 : Math.round(seededUnit(occurrenceSeed(seed, copy + 3))()
+                        * settings.spacing);
+                    for (const ink of sequence) {
+                        const line = document.createElementNS(SVG_NS, "line");
+                        const xOffset = 200 + copy * 4550 + tracking;
+                        const yOffset = 200 + row * 4800;
+                        line.setAttribute("x1", String(ink.x1 + xOffset));
+                        line.setAttribute("y1", String(ink.y1 + yOffset));
+                        line.setAttribute("x2", String(ink.x2 + xOffset));
+                        line.setAttribute("y2", String(ink.y2 + yOffset));
+                        line.setAttribute("stroke-width", String(ink.width));
+                        line.setAttribute("stroke", ink.color);
+                        line.setAttribute("stroke-linecap", "round");
+                        line.setAttribute("data-variation-row", row === 0 ? "ideal" : "seeded");
+                        lines.push(line);
+                    }
+                }
+            }
+            variationPreview.replaceChildren(...lines);
+            variationPreview.setAttribute("aria-label", `Top: three ideal ${character.value} glyphs; bottom: `
+                + `three seed ${seed} varied glyphs`);
+            variationStatus.textContent =
+                `Three ideal and three seeded varied ${character.value} `
+                    + "copies. Authored library unchanged; preview only.";
+        }
+        catch (error) {
+            variationPreview.replaceChildren();
+            variationPreview.setAttribute("aria-label", "Variation refused");
+            variationStatus.textContent = String(error);
+        }
+    };
     const render = () => {
         renderIdeal();
         const shown = strokes.flatMap((stroke, index) => {
@@ -1609,6 +1752,7 @@ export function createGlyphStrokeEditor() {
         preview.replaceChildren(...lines);
         const label = `${shown.length} strokes for selected glyph`;
         preview.setAttribute("aria-label", label);
+        renderVariation();
     };
     const choose = (index) => {
         const stroke = strokes[index];
@@ -1635,6 +1779,13 @@ export function createGlyphStrokeEditor() {
     ]) {
         control.addEventListener("input", renderIdeal);
         control.addEventListener("change", renderIdeal);
+    }
+    const variationInputs = [
+        variationSeed, ...Object.values(variationControls),
+    ];
+    for (const control of variationInputs) {
+        control.addEventListener("input", renderVariation);
+        control.addEventListener("change", renderVariation);
     }
     character.addEventListener("input", () => {
         drawing = null;

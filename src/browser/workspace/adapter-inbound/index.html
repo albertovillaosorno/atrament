@@ -876,6 +876,50 @@
               Download stroke TSV
             </button>
           </div>
+          <fieldset class="glyph-variation-settings">
+            <legend>Seeded handwriting comparison (preview only)</legend>
+            <p class="field-help">The top row repeats the ideal selected
+              glyph three times. The lower row varies the same authored
+              strokes by one seeded, correlated glyph-level transform per
+              copy. Shared pen endpoints remain joined. Neither the draft
+              nor the downloaded TSV is changed.</p>
+            <div class="handwriting-controls">
+              <label>Variation seed (0–4294967295)
+                <input id="glyph-variation-seed" type="number" min="0"
+                  max="4294967295" step="1" value="42" disabled>
+              </label>
+              <label>Width spread (0–20%)
+                <input id="glyph-variation-width" type="number" min="0"
+                  max="20" step="1" value="6" disabled>
+              </label>
+              <label>Height spread (0–20%)
+                <input id="glyph-variation-height" type="number" min="0"
+                  max="20" step="1" value="6" disabled>
+              </label>
+              <label>Thickness spread (0–20%)
+                <input id="glyph-variation-thickness" type="number"
+                  min="0" max="20" step="1" value="8" disabled>
+              </label>
+              <label>Slant spread (0–12 degrees)
+                <input id="glyph-variation-slant" type="number" min="0"
+                  max="12" step="1" value="4" disabled>
+              </label>
+              <label>Spacing spread (0–500 µm)
+                <input id="glyph-variation-spacing" type="number" min="0"
+                  max="500" step="10" value="160" disabled>
+              </label>
+              <label>Line regularity spread (0–150 µm)
+                <input id="glyph-variation-regularity" type="number"
+                  min="0" max="150" step="5" value="20" disabled>
+              </label>
+            </div>
+            <svg id="glyph-variation-preview"
+              class="glyph-stroke-preview glyph-stroke-variation-preview"
+              viewBox="0 0 14000 10000" role="img"
+              aria-label="Variation requires an authored glyph"></svg>
+            <p id="glyph-variation-status" class="field-help" role="status"
+              aria-live="polite">Requires a compatible backend session.</p>
+          </fieldset>
           <p id="glyph-status" class="action-status" role="status"
             aria-live="polite">Requires a compatible backend session.</p>
         </section>

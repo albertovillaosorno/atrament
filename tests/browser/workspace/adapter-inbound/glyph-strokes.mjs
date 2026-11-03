@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
-    geometricStarter, composeAccentedGlyph } =
+    geometricStarter, composeAccentedGlyph, varyGlyphStrokes } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -62,6 +62,71 @@ test("untrusted glyph TSV and edited numeric fields fail closed", () => {
     assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(expanded)), expanded);
 });
 
+const variation = {
+    width: 8, height: 8, thickness: 10,
+    slant: 7, spacing: 200, regularity: 40,
+};
+
+test("seeded variation replays and preserves joins", () => {
+    const source = [
+        { ...stroke("á"), x1: 900, y1: 1200, x2: 1700, y2: 2400 },
+        { ...stroke("á"), x1: 1700, y1: 2400, x2: 2400, y2: 3100 },
+        { ...stroke("á"), x1: 1300, y1: 700, x2: 1600, y2: 400 },
+        stroke("ñ"),
+    ];
+    const before = structuredClone(source);
+    const repeat = varyGlyphStrokes(source, "á", 42, 0, variation);
+    assert.deepEqual(repeat,
+        varyGlyphStrokes(source, "á", 42, 0, variation));
+    assert.notDeepEqual(repeat,
+        varyGlyphStrokes(source, "á", 42, 1, variation));
+    assert.deepEqual([repeat[0].x2, repeat[0].y2],
+        [repeat[1].x1, repeat[1].y1],
+        "authored shared nodes must remain connected after irregularity");
+    assert.deepEqual(repeat.map((item) => item.color),
+        source.slice(0, 3).map((item) => item.color));
+    assert.deepEqual(repeat.map((item) => item.grapheme), ["á", "á", "á"]);
+    assert.deepEqual(varyGlyphStrokes(source, "á", 0, 0, {
+        width: 0, height: 0, thickness: 0, slant: 0,
+        spacing: 0, regularity: 0,
+    }), before.slice(0, 3), "zero amplitudes leave geometric ideal intact");
+    const reversed = varyGlyphStrokes([...source].reverse(), "á", 42,
+        0, variation);
+    assert.deepEqual(reversed, [...repeat].reverse(),
+        "reordering pen strokes must not change seeded geometry");
+    assert.deepEqual(source, before, "variation never changes authored ink");
+});
+
+test("seeded variation refuses invalid bounds without changing ink", () => {
+    const source = [
+        { ...stroke("ó"), x1: 900, y1: 1200, x2: 2400, y2: 3100 },
+    ];
+    const before = structuredClone(source);
+    for (const seed of [-1, 0.4, Number.NaN, 4294967296]) {
+        assert.throws(() => varyGlyphStrokes(source, "ó", seed, 0,
+            variation));
+    }
+    for (const occurrence of [-1, 1.5, 10001]) {
+        assert.throws(() => varyGlyphStrokes(source, "ó", 1,
+            occurrence, variation));
+    }
+    for (const [key, invalid] of [
+        ["width", 21], ["height", 21], ["thickness", 21],
+        ["slant", 13], ["regularity", 151], ["spacing", 501],
+        ["width", 1.2], ["slant", -1],
+    ]) {
+        assert.throws(() => varyGlyphStrokes(source, "ó", 42, 0,
+            { ...variation, [key]: invalid }), `invalid ${key}`);
+    }
+    assert.throws(() => varyGlyphStrokes(source, "o", 42, 0, variation));
+    assert.throws(() => varyGlyphStrokes(Array(129).fill(source[0]), "ó",
+        42, 0, variation));
+    assert.throws(() => varyGlyphStrokes([{
+        ...stroke("ó"), x1: 0, y1: 0, x2: 3500, y2: 4500,
+    }], "ó", 42, 0, variation), /fit inside glyph cell/);
+    assert.deepEqual(source, before);
+});
+
 class FakeElement {
     value = "";
     disabled = true;
@@ -111,6 +176,10 @@ function mountEditor() {
         "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
         "glyph-earlier", "glyph-later",
+        "glyph-variation-preview", "glyph-variation-status",
+        "glyph-variation-seed", ...["width", "height", "thickness",
+            "slant", "spacing", "regularity"].map((key) =>
+            `glyph-variation-${key}`),
         "glyph-save", "glyph-preview",
         "glyph-status", ...["x1", "y1", "x2", "y2", "width"]
             .flatMap((axis) => [`glyph-${axis}`, `glyph-${axis}-range`])];
@@ -124,6 +193,12 @@ function mountEditor() {
     get("circle-radius").value = "1100";
     get("accent-shift").value = "0";
     get("accent-lift").value = "0";
+    for (const [key, value] of Object.entries({
+        seed: 42, width: 6, height: 6, thickness: 8, slant: 4,
+        spacing: 160, regularity: 20,
+    })) {
+        get(`variation-${key}`).value = String(value);
+    }
     for (const [axis, value] of Object.entries({
         x1: 100, y1: 200, x2: 3000, y2: 4200, width: 250,
     })) {
@@ -167,6 +242,77 @@ function mountEditor() {
         },
     };
 }
+
+test("two-row accented comparison keeps authored TSV", async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads, links } = ui;
+        assert.equal(get("variation-seed").disabled, true);
+        assert.equal(get("variation-preview").children.length, 0);
+        editor.start();
+        get("character").value = "ó";
+        get("character").dispatch("input");
+        get("form").value = "ó";
+        get("circle-radius").value = "800";
+        get("construct").dispatch("click");
+        const original = get("preview").children.map((item) =>
+            [...item.attributes]);
+        const first = get("variation-preview").children;
+        assert.equal(original.length, 49);
+        assert.equal(first.length, 49 * 6);
+        assert.deepEqual(first.map((node) =>
+            node.attributes.get("data-variation-row")).slice(0, 3),
+            ["ideal", "ideal", "ideal"]);
+        assert.equal(first.at(-1).attributes.get("data-variation-row"),
+            "seeded");
+        const snapshot = first.map((node) => [...node.attributes]);
+        get("variation-seed").dispatch("input");
+        assert.deepEqual(get("variation-preview").children.map((node) =>
+            [...node.attributes]), snapshot, "seeded replay is identical");
+        get("save").dispatch("click");
+        const native = await downloads[0].text();
+        get("variation-seed").value = "123";
+        get("variation-seed").dispatch("input");
+        const different = get("variation-preview").children.map(
+            (node) => [...node.attributes]);
+        assert.notDeepEqual(different, snapshot);
+        assert.deepEqual(different.slice(0, 49 * 3),
+            snapshot.slice(0, 49 * 3), "ideal row remains unchanged");
+        get("variation-spacing").value = "500";
+        get("variation-spacing").dispatch("input");
+        const spaced = get("variation-preview").children.map(
+            (node) => [...node.attributes]);
+        assert.deepEqual(spaced.slice(0, 49 * 3),
+            snapshot.slice(0, 49 * 3));
+        assert.notDeepEqual(spaced.slice(49 * 3),
+            different.slice(49 * 3), "spacing varies only the lower row");
+        get("variation-width").value = "";
+        get("variation-width").dispatch("input");
+        assert.equal(get("variation-preview").children.length, 0);
+        assert.match(get("variation-status").textContent, /whole units/);
+        get("variation-width").value = "6";
+        get("variation-spacing").value = "160";
+        get("variation-seed").value = "4294967296";
+        get("variation-seed").dispatch("input");
+        assert.equal(get("variation-preview").children.length, 0);
+        assert.match(get("variation-status").textContent,
+            /outside native bounds/);
+        assert.deepEqual(get("preview").children.map((item) =>
+            [...item.attributes]), original);
+        get("variation-seed").value = "42";
+        get("variation-seed").dispatch("input");
+        assert.equal(get("variation-preview").children.length, 49 * 6);
+        get("save").dispatch("click");
+        assert.equal(links.length, 2);
+        assert.equal(await downloads[1].text(), native,
+            "preview-only variation cannot alter native TSV");
+        editor.reset();
+        assert.equal(get("variation-preview").children.length, 0);
+        assert.equal(get("variation-seed").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
 
 test("explicit SVG glyph download stays session-gated", async () => {
     const ui = mountEditor();

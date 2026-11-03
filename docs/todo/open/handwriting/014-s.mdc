@@ -112,6 +112,34 @@ accent action can append tilde/diaeresis to these samples. Neither
 composition nor export retains live joins or a parametric curve primitive;
 seeded correlated handwriting variation remains unfinished.
 
+## Seeded ideal-versus-varied browser ink comparison (partial) — 2026-11-03
+
+The authenticated glyph editor now provides a six-copy SVG comparison of
+one exact user-authored Unicode grapheme, including authored accents. The
+first row has three ideal repetitions; the second independently varies each
+repetition using a caller-specified uint32 seed. Six bounded spread controls
+apply glyph-correlated width, height, thickness and slant, plus per-occurrence
+horizontal spacing and endpoint regularity. Shared stroke endpoints derive
+jitter from their physical coordinates and seed, so they remain connected
+and unaffected by stroke reordering. Invalid amplitudes, seed, zero-length
+strokes, clipped pen width/geometry and more than 128 selected strokes
+refuse the varied preview instead of changing any authored ink.
+
+Three additional focused regressions cover exact NFC `á` geometry, pen-order
+invariance, replay and distinct occurrence seeds, a real browser two-row
+accented `ó` preview, spacing-only changes and invalid input refusal.
+The TSV downloaded before and after changing the preview seed is byte-for-byte
+identical; session end clears the preview. All **75 focused glyph tests**
+and the TypeScript check/build pass. An existing real-Firefox/Rust localhost
+journey now verifies that authored `ó` produces a 294-line six-copy preview,
+seed changes alter only the lower row, and invalid width spread refuses
+without deleting the 49 original glyph strokes. This is not a native page
+or PDF/PNG
+handwriting variation renderer: the seeded samples stay inside the local
+SVG comparison, the exported v1 glyph templates remain ideal, and there is
+no joined cursive or persisted correlation across lines or words. The task
+remains open for the full finite two-line native output acceptance.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

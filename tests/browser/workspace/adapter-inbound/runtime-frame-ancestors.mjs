@@ -3598,6 +3598,54 @@ test(
             await waitStatus("notebook-status",
                 "Edit metadata, then save JSON.");
 
+            const variationState = await browserScript(`JSON.stringify((() => {
+                const field = (id, value) => {
+                    const input = document.getElementById(id);
+                    input.value = value;
+                    input.dispatchEvent(new Event("input", { bubbles: true }));
+                };
+                const svg = document.getElementById("glyph-variation-preview");
+                const ink = () => [...svg.querySelectorAll("line")].map(
+                    (line) => ["x1", "y1", "x2", "y2", "stroke-width"]
+                        .map((axis) => line.getAttribute(axis)).join(","),
+                );
+                const initiallyDisabled = document.getElementById(
+                    "glyph-variation-seed"
+                ).disabled;
+                field("glyph-character", "ó");
+                field("glyph-form", "ó");
+                field("glyph-circle-radius", "800");
+                document.getElementById("glyph-construct").click();
+                const initial = ink();
+                field("glyph-variation-seed", "123");
+                const resampled = ink();
+                field("glyph-variation-width", "21");
+                const refused = svg.querySelectorAll("line").length;
+                const warning = document.getElementById(
+                    "glyph-variation-status"
+                ).textContent;
+                return {
+                    initiallyDisabled,
+                    initialCount: initial.length,
+                    idealUnchanged: initial.slice(0, 147).join(";")
+                        === resampled.slice(0, 147).join(";"),
+                    variedChanged: initial.slice(147).join(";")
+                        !== resampled.slice(147).join(";"),
+                    refused,
+                    warning,
+                    authoredCount: document.getElementById(
+                        "glyph-preview"
+                    ).querySelectorAll("line").length
+                };
+            })())`);
+            assert.equal(variationState.initiallyDisabled, false);
+            assert.equal(variationState.initialCount, 294);
+            assert.equal(variationState.idealUnchanged, true);
+            assert.equal(variationState.variedChanged, true);
+            assert.equal(variationState.refused, 0);
+            assert.match(variationState.warning, /outside 0\.\.20/);
+            assert.equal(variationState.authoredCount, 49);
+
             // Exercise both a numeric input and its slider, plus an exact
             // Spanish grapheme override. The browser never owns admission.
             await browserScript(`JSON.stringify((() => {

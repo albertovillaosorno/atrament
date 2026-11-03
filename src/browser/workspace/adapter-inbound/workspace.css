@@ -983,6 +983,20 @@ button:focus-visible {
   touch-action: none;
 }
 
+/* Comparison shows three ideal copies above three seeded variations. */
+.glyph-stroke-variation-preview {
+  width: min(100%, 560px);
+  aspect-ratio: 7 / 5;
+  touch-action: auto;
+}
+
+.glyph-variation-settings {
+  border: 1px solid #c7bfb1;
+  border-radius: 8px;
+  margin-block: 1rem;
+  min-width: 0;
+}
+
 /* Selected outline is visually marked, but TSV ink stays unchanged. */
 .glyph-stroke-preview line[data-selected="true"] {
   filter: drop-shadow(0 0 90px #b45309);

@@ -872,15 +872,37 @@ there is no automatic saving or new server-side file endpoint. The Rust CLI
 still validates the file on `glyphs --profile` or `notebook --glyph-file`.
 Invalid/oversized files and Unicode controls refuse.
 
-Session end drops the unsaved draft. Outside its small explicit geometric
-starter set, the browser does not generate a font, joined cursive,
-all baseline outlines, or a writing style.
+The browser additionally offers **Seeded handwriting comparison** for any
+exact glyph with authored strokes, including `ó`, `ñ`, and decomposed forms.
+The top SVG row shows three identical ideal copies; the lower row uses the
+same glyph three times with a reproducible 32-bit integer seed. Width,
+height, pen thickness, slant, horizontal spacing and endpoint regularity
+have independently bounded spread controls. Within each occurrence, scale,
+slant and pen size vary together; shared pen endpoints stay connected even
+when individual strokes are reordered. A changed seed changes the lower
+row without changing the ideal row. A clipped, collapsed, invalid or overly
+complex (over 128-stroke) sample refuses visibly instead of clipping ink.
+A real Firefox/Rust localhost test checks accented `ó` replay and refusal.
+
+This is **SVG preview only**. The versioned stroke TSV remains the unvaried
+source, and `Download stroke TSV` is byte-identical across preview seeds.
+There is no automatic multi-line variation in native notebook PDF/PNG yet,
+no persisted setting in the Rust handwriting profile, and no joined cursive
+or learned writing style. The preview's spread knobs are separate from
+Rust's currently mean-only profile transforms described below.
+
+Session end drops the unsaved draft. The browser generates explicit
+print-starter strokes for the frozen 114-character bilingual text inventory
+plus a small math set, but not a calibrated font, full Unicode coverage,
+joined cursive, or analytic native curve outlines.
 
 The saved glyph shape library is separate from `atrament.notebook.v1`;
 placed text is still export-only, with browser-authored geometry imported
 by CLI rather than directly composed in the browser. The 114-character
-Spanish/English inventory still needs actual user-calibrated outlines and
-missing-symbol authoring before P1-012 can close.
+Spanish/English inventory has starter ink for every exact key, but the
+finite fixed multilingual educational-page acceptance, curated authentic
+handwriting and missing-symbol fallback still need runtime validation
+before P1-012 can close.
 
 The optional `--handwriting-profile ink.json` reads the existing saved
 `atrament.handwriting.statistics.v1` file through the same strict Rust codec.
