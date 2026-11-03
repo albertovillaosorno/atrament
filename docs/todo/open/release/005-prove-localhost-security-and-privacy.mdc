@@ -2718,3 +2718,15 @@ and forced browser death) also pass. This narrows test-owned browser helper
 cleanup; it does not prove production browser processes are contained,
 remove session credentials from launcher argv or Firefox history, or close
 the larger P1/P8 destruction and temporary-media obligations.
+
+The committed process-group fixture cleanup (3bd21a74) was validated in
+nine finite, non-overlapping real Firefox 158.0 batches. All 43 declared
+Linux Firefox browser-integration cases passed, including tab closing,
+explicit End, crash/profile inspection, hostile resource restrictions, and
+private session data lifetimes. All 66 local Firefox/BiDi harness cases and
+190 separate browser-workspace cases also passed; Rust workspace integration
+and frontend TypeScript checks were green. Jig still reports ten pre-existing
+package-materialization and version-catalog findings, plus an unevaluated
+repository-graph rule. This sweep is evidence about the current fixtures,
+not a guarantee of cleanup after external runner termination or production
+opener/browser credential erasure. P1/P8 remain open.
