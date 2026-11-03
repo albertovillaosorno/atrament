@@ -482,6 +482,12 @@ function closeTcpFixtureServer(server, timeoutMs = 5_000) {
     if (!server.listening) return Promise.resolve();
     return new Promise((resolve, reject) => {
         let settled = false;
+        let closeReturned = false;
+        let closeReported = false;
+        let closeFailed = false;
+        const fixedError = () => new Error(
+            "disposable TCP fixture close failed",
+        );
         const finish = (error = null) => {
             if (settled) return;
             settled = true;
@@ -493,11 +499,19 @@ function closeTcpFixtureServer(server, timeoutMs = 5_000) {
             "timed out closing disposable TCP fixture server",
         )), timeoutMs);
         try {
-            server.close((error) => finish(error ? new Error(
-                "disposable TCP fixture close failed",
-            ) : null));
+            server.close((error) => {
+                closeReported = true;
+                closeFailed = Boolean(error);
+                // A synchronous callback may be followed by a throw from
+                // close(). Do not announce success until the call returns.
+                if (closeReturned) {
+                    finish(closeFailed ? fixedError() : null);
+                }
+            });
+            closeReturned = true;
+            if (closeReported) finish(closeFailed ? fixedError() : null);
         } catch {
-            finish(new Error("disposable TCP fixture close failed"));
+            finish(fixedError());
         }
     });
 }
@@ -524,6 +538,23 @@ test("TCP fixture close failure and timeout remain bounded and private",
                     return true;
                 });
         }
+        // Even a synchronous success callback must not override a later
+        // synchronous close throw from the same untrusted fixture owner.
+        const successThenThrow = {
+            listening: true,
+            close: (done) => {
+                done(null);
+                throw new Error(`post-callback close failed: ${marker}`);
+            },
+        };
+        await assert.rejects(closeTcpFixtureServer(successThenThrow, 50),
+            (error) => {
+                assert.equal(error.message.includes(marker), false);
+                assert.equal("cause" in error, false);
+                assert.equal(error.message,
+                    "disposable TCP fixture close failed");
+                return true;
+            });
         const success = {
             listening: true,
             close: (done) => done(null),

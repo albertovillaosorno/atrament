@@ -2695,3 +2695,10 @@ The 43 live cases were run in seven non-overlapping, finite groups, and all
 integration tests, production Clippy, frontend type-check, and frontend build
 passed during the same continuation. This does not eliminate opener argv or
 Firefox browser-history credential retention; P8 remains open.
+
+A further red-first raw-TCP fixture check exposed a false-success path when a
+synchronous `close()` callback reported success immediately before `close()`
+threw an exception. The shutdown helper now waits for the call to return before
+accepting synchronous callback success, while asynchronous completion retains
+the same finite deadline and fixed private-data-safe diagnostic. This is
+fixture-harness integrity only, not a change to production session destruction.
