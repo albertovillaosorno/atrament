@@ -71,6 +71,21 @@ fn printing_requires_exact_file_and_named_queue() {
     let request = parse_args(&valid).expect("valid options").expect("print");
     assert_eq!(request.pdf, PathBuf::from("notebook.pdf"));
     assert_eq!(request.printer, "Local_Printer-2");
+    assert!(!request.dry_run);
+    let dry_args = [
+        "--pdf",
+        "notebook.pdf",
+        "--printer",
+        "Local_Printer-2",
+        "--dry-run",
+    ]
+    .map(str::to_owned);
+    assert!(
+        parse_args(&dry_args)
+            .expect("dry run parsed")
+            .expect("request")
+            .dry_run
+    );
     assert_eq!(parse_args(&["--help".into()]).expect("help"), None);
 
     let refused = [
@@ -107,6 +122,14 @@ fn printing_requires_exact_file_and_named_queue() {
             "q",
         ],
         vec!["--help", "--pdf", "notebook.pdf"],
+        vec![
+            "--pdf",
+            "file.pdf",
+            "--printer",
+            "queue",
+            "--dry-run",
+            "--dry-run",
+        ],
     ];
     for flags in refused {
         let args = flags.iter().map(ToString::to_string).collect::<Vec<_>>();
@@ -173,7 +196,19 @@ fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
 
     let selected = selected_pdf(&pdf).expect("complete input PDF");
     assert!(!copied.exists(), "reading PDF never silently prints");
-    submit_with(&script, "Queue_1", &selected)
+    let dry_request = PrintRequest {
+        pdf: pdf.clone(),
+        printer: "Queue_1".into(),
+        dry_run: true,
+    };
+    submit_selected(&dry_request, &script)
+        .expect("bounded PDF checked without spooling");
+    assert!(!copied.exists(), "dry-run never invokes lp");
+    let print_request = PrintRequest {
+        dry_run: false,
+        ..dry_request
+    };
+    submit_selected(&print_request, &script)
         .expect("fake local CUPS acceptance");
     assert_eq!(fs::read(&copied).expect("spooled bytes"), bytes);
     assert_eq!(

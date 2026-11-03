@@ -29,14 +29,23 @@ and explicitly authored ink in the resulting PDF/PNG.
    count. Use `--printed-sheet true` only if the physical sheet already has
    notebook ruling.
 2. Inspect the PDF in a viewer and select a local queue with `lpstat -p`.
-3. Only when physical printing is intended, invoke:
+3. Validate without printing first:
+
+```sh
+cargo run --offline -q -p atrament_notebook_paper_cli \
+  --bin atrament-print -- --pdf notebook.pdf --printer Local_Queue \
+  --dry-run
+```
+
+4. Only when physical printing is intended, invoke:
 
 ```sh
 cargo run --offline -q -p atrament_notebook_paper_cli \
   --bin atrament-print -- --pdf notebook.pdf --printer Local_Queue
 ```
 
-The queue is mandatory; no default printer is selected. The binary invokes
+The queue is mandatory; no default printer is selected. `--dry-run`
+checks the selected PDF without launching a CUPS process. The binary invokes
 CUPS with fixed arguments equivalent to `lp -d Local_Queue -`, piping the
 already-read PDF bytes into standard input. It does not invoke a shell,
 re-render the PDF, or select a copy count.

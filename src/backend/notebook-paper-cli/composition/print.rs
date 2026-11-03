@@ -50,12 +50,17 @@ use atrament_profile_selected_file_open::open_selected_profile_file;
 #[cfg(all(test, unix))]
 use nix as _;
 
-const USAGE: &str = "Usage: atrament-print --pdf FILE --printer QUEUE\n\
-    Submits one existing PDF to an explicitly named local CUPS printer.\n\
-    Exporting a PDF or PNG never sends a print job.";
+const USAGE: &str = concat!(
+    "Usage: atrament-print --pdf FILE --printer QUEUE",
+    " [--dry-run]\n",
+    "Submits one existing PDF to an explicitly named local CUPS printer.\n",
+    "Exporting a PDF or PNG never sends a print job.\n",
+    "--dry-run validates the selected PDF without contacting CUPS.",
+);
 
 #[derive(Debug, Eq, PartialEq)]
 struct PrintRequest {
+    dry_run: bool,
     pdf: PathBuf,
     printer: String,
 }
@@ -77,8 +82,16 @@ fn parse_args(args: &[String]) -> Result<Option<PrintRequest>, String> {
     }
     let mut pdf = None;
     let mut printer = None;
+    let mut dry_run = false;
     let mut items = args.iter();
     while let Some(flag) = items.next() {
+        if flag == "--dry-run" {
+            if dry_run {
+                return Err("duplicate --dry-run flag".into());
+            }
+            dry_run = true;
+            continue;
+        }
         let value = items
             .next()
             .ok_or_else(|| format!("{flag} requires a value; use --help"))?;
@@ -93,6 +106,7 @@ fn parse_args(args: &[String]) -> Result<Option<PrintRequest>, String> {
         }
     }
     Ok(Some(PrintRequest {
+        dry_run,
         pdf: pdf.ok_or("--pdf requires an existing PDF file")?,
         printer: printer.ok_or("--printer requires an explicit CUPS queue")?,
     }))
@@ -146,10 +160,19 @@ fn submit_with(
     Ok(())
 }
 
-fn submit(request: &PrintRequest) -> Result<(), String> {
+fn submit_selected(
+    request: &PrintRequest,
+    executable: &Path,
+) -> Result<(), String> {
     let bytes = selected_pdf(&request.pdf)?;
-    submit_with(Path::new("/usr/bin/lp"), &request.printer, &bytes)?;
+    if !request.dry_run {
+        submit_with(executable, &request.printer, &bytes)?;
+    }
     Ok(())
+}
+
+fn submit(request: &PrintRequest) -> Result<(), String> {
+    submit_selected(request, Path::new("/usr/bin/lp"))
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -158,11 +181,19 @@ fn main() -> Result<(), Box<dyn Error>> {
         None => writeln!(io::stdout().lock(), "{USAGE}")?,
         Some(request) => {
             submit(&request)?;
-            writeln!(
-                io::stdout().lock(),
-                "CUPS accepted a job for printer {}",
-                request.printer
-            )?;
+            if request.dry_run {
+                writeln!(
+                    io::stdout().lock(),
+                    "PDF validated for {}; no job submitted",
+                    request.printer
+                )?;
+            } else {
+                writeln!(
+                    io::stdout().lock(),
+                    "CUPS accepted a job for printer {}",
+                    request.printer
+                )?;
+            }
         }
     }
     Ok(())
