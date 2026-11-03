@@ -14,6 +14,10 @@ acceptance_criteria:
       Convert images to transparent single-color paths with levels,
       threshold, cleanup, detail, minimum feature, and preview controls
       suitable for hand color.
+  - >-
+      Finite v1 completion: Process or theoretically specify one
+      raster-to-transparent-line-art example with two detail settings and a
+      rejection for unsuitable source data.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

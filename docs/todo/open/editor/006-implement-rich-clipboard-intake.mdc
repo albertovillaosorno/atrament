@@ -14,6 +14,10 @@ acceptance_criteria:
       Accept text, structured table fragments, formulas, PNG, JPEG, and WebP
       while reporting exactly which source structure or metadata cannot be
       retained.
+  - >-
+      Finite v1 completion: Intake one text, table, formula, PNG, JPEG, and
+      WebP specimen with a declared loss report for unsupported metadata;
+      arbitrary rich HTML fidelity is excluded.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

@@ -14,6 +14,10 @@ acceptance_criteria:
       Parse and preserve TeX-compatible inline, displayed, aligned, matrix,
       unit, and derivation content while exposing unsupported constructs
       without rewriting.
+  - >-
+      Finite v1 completion: Preserve one inline, display, alignment, matrix,
+      unit, and derivation example as editable structure, with lossless
+      unsupported-source fallback; unlimited TeX coverage is excluded.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

@@ -13,6 +13,10 @@ acceptance_criteria:
   - >-
       Selecting source, a diagnostic, a page object, or a table cell must
       focus the same stable semantic identity in the other surface.
+  - >-
+      Finite v1 completion: Round-trip one source span, one page object, and
+      one diagnostic through shared stable selection identities between both
+      editors.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

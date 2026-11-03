@@ -14,6 +14,10 @@ acceptance_criteria:
       Generate one complete, versioned request from current task and
       constraints, copy it with one action, and confirm the exact prompt
       identity copied.
+  - >-
+      Finite v1 completion: Produce one complete version-stamped prompt from
+      the currently accepted task and constraints and return the exact
+      copied identity; no embedded LLM integration is required.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

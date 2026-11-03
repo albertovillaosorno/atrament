@@ -14,6 +14,11 @@ acceptance_criteria:
       Represent notebooks, pages, flows, blocks, spans, formulas, tables,
       figures, styles, assets, constraints, output profiles, and provenance
       with stable IDs.
+  - >-
+      Finite v1 completion: Admit a versioned notebook with one example of
+      each currently declared first-release block family, stable object
+      identities, and explicit unresolved nodes; defer speculative future
+      block kinds.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

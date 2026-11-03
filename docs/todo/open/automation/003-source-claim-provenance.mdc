@@ -17,6 +17,10 @@ acceptance_criteria:
       transaction provenance recording whether an accepted mutation entered
       through direct human editing, clipboard-assisted model response, CLI,
       or MCP.
+  - >-
+      Finite v1 completion: Preserve one supplied source identity, one
+      derived claim, and one unresolved claim through semantic editing and
+      export annotations; external retrieval is optional.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

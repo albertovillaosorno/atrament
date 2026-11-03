@@ -14,6 +14,10 @@ acceptance_criteria:
       Turn reviewed transcript spans into sections, definitions, examples,
       and formulas while retaining time ranges, confidence, speakers, and
       unresolved text.
+  - >-
+      Finite v1 completion: Structure one bounded transcript into timed
+      statements, speakers when known, and unresolved intervals without
+      replacing unknown speech by invented content.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

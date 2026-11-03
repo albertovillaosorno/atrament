@@ -14,6 +14,10 @@ acceptance_criteria:
       Support titles, explanations, derivations, tables, equations,
       diagrams, citations, examples, and conclusions without inventing
       missing task facts.
+  - >-
+      Finite v1 completion: Convert one assignment source into ordered
+      headings, tasks, citations, and typed unresolved facts without
+      inventing missing information.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

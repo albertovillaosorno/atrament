@@ -14,6 +14,10 @@ acceptance_criteria:
       Include the complete backend-owned return format, allowed styles,
       output mode, source rules, ambiguity behavior, and exact return
       envelope in one copy action.
+  - >-
+      Finite v1 completion: Freeze one self-contained prompt with a
+      versioned response schema, one accepted notebook example, and one
+      explicit refusal example; provider-specific prompts are excluded.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

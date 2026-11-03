@@ -14,6 +14,10 @@ acceptance_criteria:
       Reduce pen-up travel and drying conflicts while preserving stroke
       order where joins, ink behavior, semantics, or the handwriting profile
       require it.
+  - >-
+      Finite v1 completion: Specify one bounded path-order optimization pass
+      preserving stroke geometry and semantic grouping, with deterministic
+      tie-breaking and a safe no-op fallback.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

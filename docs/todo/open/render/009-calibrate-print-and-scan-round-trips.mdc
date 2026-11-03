@@ -14,6 +14,10 @@ acceptance_criteria:
       Measure physical scale, clipping, margins, grid registration, color
       shifts, photo placement, line weight, and scanner distortion on
       representative devices.
+  - >-
+      Finite v1 completion: Define one A4 print-and-scan round-trip protocol
+      and a finite comparison rubric; when printer/scanner access is
+      unavailable, accept the theoretical protocol only.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

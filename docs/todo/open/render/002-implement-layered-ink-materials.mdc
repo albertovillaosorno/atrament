@@ -14,6 +14,10 @@ acceptance_criteria:
       Compose base deposition, edges, starvation, pooling, paper
       interaction, color, and highlight layers without altering vector
       authority.
+  - >-
+      Finite v1 completion: Specify layered ink, pressure proxy, and overlap
+      order for one stroke stack with deterministic compositing; wet-ink
+      physics is out of scope.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

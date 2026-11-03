@@ -14,6 +14,10 @@ acceptance_criteria:
       Emit ordered pen-up and pen-down paths, speed, acceleration, optional
       pressure, safe bounds, pauses, checkpoints, semantic origin, and
       estimated duration.
+  - >-
+      Finite v1 completion: Produce one device-neutral single-pen path
+      sequence with physical units, lifts, ordering, and safe boundaries for
+      a representative page; no hardware command is issued.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

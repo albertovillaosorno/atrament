@@ -15,6 +15,10 @@ acceptance_criteria:
       invalidation so a small command does not regenerate unrelated notebook
       content, while every derived layout, handwriting, diagnostic, preview,
       export, or motion result that can change is recomputed.
+  - >-
+      Finite v1 completion: For one semantic edit, name the directly changed
+      region, one downstream invalidation, and one unaffected region; a
+      declared graph contract suffices before producers exist.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

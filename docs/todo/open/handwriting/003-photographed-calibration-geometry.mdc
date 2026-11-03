@@ -14,6 +14,11 @@ acceptance_criteria:
       Detect reference marks, perspective, lens distortion, scale, grid,
       baseline, and capture quality before treating any observed stroke as
       evidence.
+  - >-
+      Finite v1 completion: Specify reference-mark detection, perspective
+      correction, physical scale, and capture-quality refusal for one
+      photographed calibration sheet; unsupported camera distortions are
+      named.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

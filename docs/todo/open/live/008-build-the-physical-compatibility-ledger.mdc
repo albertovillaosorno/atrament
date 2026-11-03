@@ -14,6 +14,10 @@ acceptance_criteria:
       Record exact model, firmware, adapter tier, transport, paper, pen,
       usable area, settings, evidence, known limitations, and last
       acceptance date.
+  - >-
+      Finite v1 completion: Record one device-model/firmware/transport
+      combination with limitations and dated evidence status; if no device
+      is available, publish a clearly unverified example only.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

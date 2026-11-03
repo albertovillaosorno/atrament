@@ -14,6 +14,10 @@ acceptance_criteria:
       Edit task instructions and notebook source with structured completion,
       formatting, object navigation, diagnostics, and a safe raw-response
       inspection boundary.
+  - >-
+      Finite v1 completion: Provide task/source editing, raw model-response
+      inspection, object navigation, and diagnostics on one bounded notebook
+      example without executing pasted content.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

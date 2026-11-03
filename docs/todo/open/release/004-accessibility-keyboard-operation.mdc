@@ -14,6 +14,11 @@ acceptance_criteria:
       Make both editors, page navigation, diagnostics, drag alternatives,
       prompt copy, import, export, and hardware arming usable without a
       pointer.
+  - >-
+      Finite v1 completion: Specify a keyboard-only route through every
+      currently implemented primary action and one narrow-viewport
+      navigation pattern; missing future actions do not enter this
+      acceptance gate.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

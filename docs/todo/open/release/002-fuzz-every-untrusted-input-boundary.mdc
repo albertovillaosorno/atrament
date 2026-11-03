@@ -12,6 +12,11 @@ acceptance_criteria:
       Cover notebook bundles, `.atrament` profiles, clipboard HTML, images,
       TeX, model responses, media metadata, CLI, MCP, and hardware status
       messages.
+  - >-
+      Finite v1 completion: Enumerate the currently implemented untrusted
+      input families and define one bounded input corpus and refusal
+      expectation per family; theoretical threat cases may substitute when
+      fuzz execution is unavailable.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

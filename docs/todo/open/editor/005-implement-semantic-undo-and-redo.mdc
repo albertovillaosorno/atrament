@@ -16,6 +16,10 @@ acceptance_criteria:
       recomputation across history. Expose undo and redo as
       application-history commands, not semantic operations embedded in a
       new batch.
+  - >-
+      Finite v1 completion: Specify acceptance, undo, redo, and stale-base
+      refusal for a two-batch history, with a declared finite retention
+      policy and trusted origin metadata; unbounded history is excluded.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

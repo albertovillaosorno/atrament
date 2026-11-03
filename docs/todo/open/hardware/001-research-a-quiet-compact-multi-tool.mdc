@@ -14,6 +14,10 @@ acceptance_criteria:
       Evaluate pen carousels, independent tool heads, registration,
       vibration, noise, desk footprint, serviceability, and safe
       color-change recovery.
+  - >-
+      Finite v1 completion: Compare three plausible compact multi-tool
+      mechanisms against noise, size, cost, serviceability, and safety in
+      one decision matrix; no prototype required.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

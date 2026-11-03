@@ -14,6 +14,11 @@ acceptance_criteria:
       Choose canonical encoding, manifest, checksums, optional assets,
       version rules, unknown-field behavior, migration, and a human-readable
       inspection command.
+  - >-
+      Finite v1 completion: Freeze one versioned portable profile manifest,
+      required sections, checksum rule, unknown-field policy, migration
+      refusal, and readable inspection result; unadmitted versions fail
+      closed.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

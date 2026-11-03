@@ -27,8 +27,10 @@ Each open record defines the following fields:
   task's acceptance behavior.
 - `dependency_rationale`: when `dependencies_specified` is `true`, records
   why the listed capabilities must be ready before accepting this task.
-- `acceptance_criteria`: the original task objective, kept as a typed first
-  requirement; expand it with verifiable conditions before closing the task.
+- `acceptance_criteria`: the original task objective is retained as the first
+  scope statement. The second, `Finite v1 completion`, is the governing
+  deliverable and stop condition. It limits the first statement when the
+  historical wording is unbounded.
 - `evidence_status`: `not_independently_verified` for migrated historical
   statements; update only after checking the cited code, fixtures, visual, or
   physical evidence.
@@ -42,10 +44,51 @@ The `Scope and existing evidence` section preserves the task's original
 requirements, progress evidence, and limitations. It does **not** mean those
 statements were reverified during the migration.
 
+## Finite acceptance and honest evidence
+
+The first release accepts a finite deliverable, not an endless claim of
+completeness across all future formats, browsers, machines, or hardware. Each
+open record has a narrower `Finite v1 completion` criterion. One documented
+representative example per named capability is sufficient when the criterion
+does not explicitly demand more. Future variants are separate work, not an
+implicit reason to reopen a bounded task. P9 remains optional.
+
+Use one of two explicit acceptance bases:
+
+- **Practical:** the named artifact, code, or integration for the finite scope
+  exists. Tests, benchmarks, or independent reproduction are useful evidence,
+  but are not mandatory to accept the bounded deliverable. Do not label
+  unperformed checks as passing.
+- **Theoretical:** when practical execution, measurements, devices, external
+  integrations, or proof cannot reasonably be supplied, a complete written
+  contract is sufficient for acceptance of that finite design deliverable.
+  It identifies inputs and outputs, relevant invariants, one worked example,
+  one refusal/failure path, assumptions, and unresolved risks. No physical
+  experiment, cross-browser claim, certification, or independent verification
+  is required to accept the design as theoretical.
+
+Practical and theoretical acceptance are **not interchangeable claims**. A
+theoretical task can be complete as a design while the corresponding feature
+remains explicitly unavailable or unverified. In particular, theoretical
+security, privacy, cleanup, or physical-device acceptance never establishes
+that secret bytes were erased, an installer works, or a machine is safe to
+operate. Do not issue physical commands or claim a production release is safe
+solely because those documents were accepted.
+
+Dependencies record intended implementation sequencing. An unfinished
+prerequisite does not prevent **theoretical acceptance** of a separate bounded
+contract. Its dependency and resulting integration limitation must stay
+visible; it cannot silently be treated as implemented. Unknown prerequisites
+may remain explicitly unknown when no concrete integration is admitted.
+
 ## Closing a task
 
-Verify the task's complete acceptance criteria and dependencies. Preserve its
-identity and evidence, mark it `completed`, move the file to `completed/`, and
-remove its entry from `TODO.md`. Existing links in technical documentation
-should point to the moved record. A task does not close merely because a
-contract or a mockup exists.
+Check that the specific finite deliverable is present in the record. The
+owner may accept it as practical or theoretical without a separate proof or
+test run. Record the basis, produced artifact, unresolved assumptions and
+risks, and any unavailable integrations under `Acceptance decision`; retain
+the honest `evidence_status` rather than inventing verification. Preserve
+the task identity and historical evidence, set `status: completed`, move the
+record to `completed/`, and remove it from `TODO.md`. Update internal links.
+Do not automatically close a task merely because this policy exists: its
+particular bounded deliverable must actually be written or supplied.

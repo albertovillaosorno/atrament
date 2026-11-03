@@ -19,6 +19,10 @@ acceptance_criteria:
       than application authority. Show the semantic diff and diagnostics
       before interactive acceptance rather than parsing commands in
       TypeScript.
+  - >-
+      Finite v1 completion: Define one copy/paste command round trip with a
+      matching-base success, stale-base refusal, and user confirmation; no
+      chat-provider automation required.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

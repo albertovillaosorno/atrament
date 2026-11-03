@@ -14,6 +14,10 @@ acceptance_criteria:
       Derive centerlines, contours, entry and exit conditions, pen lifts,
       ligatures, diacritics, contextual forms, and confidence with sample
       provenance.
+  - >-
+      Finite v1 completion: Derive or describe one provenance-linked stroke
+      sample for each admitted core role, with entry/exit, lift, diacritic,
+      and confidence fields; do not promise universal handwriting capture.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

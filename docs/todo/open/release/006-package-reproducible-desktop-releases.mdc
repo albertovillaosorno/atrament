@@ -14,6 +14,11 @@ acceptance_criteria:
       Ship the Rust backend and TypeScript frontend as one verifiable
       installation with checksums, licenses, offline startup, diagnostics,
       and clean uninstall.
+  - >-
+      Finite v1 completion: Define one desktop platform installation recipe,
+      offline-startup expectation, digest/license inventory, and uninstall
+      behavior; unbuilt installers may close only as a packaging
+      specification.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

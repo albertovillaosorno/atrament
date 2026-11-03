@@ -14,6 +14,11 @@ acceptance_criteria:
       Place titles, figures, callouts, and freeform regions with anchors,
       alignment, minimum size, collision policy, and explicit infeasibility
       diagnostics.
+  - >-
+      Finite v1 completion: Define typed anchor, alignment, minimum-size,
+      overlap, and infeasibility outcomes for one page with a fixed title
+      and figure; a deterministic solver contract suffices when no renderer
+      exists.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

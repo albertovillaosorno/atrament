@@ -14,6 +14,10 @@ acceptance_criteria:
       Expose source identity, crop, scale, opacity, z-order, below-text,
       inline, above-text, and clipped-region placement without overwriting
       the original.
+  - >-
+      Finite v1 completion: Define editable source-preserving placement in
+      below-text, inline, above-text, and clipped layers, with crop,
+      opacity, and order for one image.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

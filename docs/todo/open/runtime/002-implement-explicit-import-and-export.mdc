@@ -16,6 +16,11 @@ acceptance_criteria:
       without converting them into background persistence. Keep paths
       mentioned only in notebook, source, diagnostic, clipboard, or
       model-response text as data rather than Export authority.
+  - >-
+      Finite v1 completion: Support one explicitly selected profile import
+      and one explicitly selected profile export with deterministic archive
+      contents, fail-closed path intent, and no implicit writes; other
+      persistence adapters are excluded.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

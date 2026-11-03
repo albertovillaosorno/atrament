@@ -14,6 +14,10 @@ acceptance_criteria:
       Add colors, highlighters, automatic tool changes, cleaning,
       verification, and resume rules without changing the accepted
       single-pen plan contract.
+  - >-
+      Finite v1 completion: Define one optional multi-tool capability
+      profile covering tool selection, color, collision, and recovery
+      refusals; single-pen v1 stays independent.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

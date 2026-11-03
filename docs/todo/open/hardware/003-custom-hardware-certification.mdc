@@ -14,6 +14,11 @@ acceptance_criteria:
       Treat the device as a separate product with its own electronics,
       firmware, enclosure, safety, calibration, endurance, and manufacturing
       evidence.
+  - >-
+      Finite v1 completion: Publish one finite custom-device engineering and
+      certification plan with electronics, firmware, enclosure, calibration,
+      endurance, and safety gates; theory-only acceptance never authorizes
+      physical operation.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

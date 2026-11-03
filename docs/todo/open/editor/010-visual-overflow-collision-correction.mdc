@@ -14,6 +14,10 @@ acceptance_criteria:
       Draw page-edge, collision, and unsupported-mode diagnostics on preview
       and link each overlay to the owning source object and correction
       actions.
+  - >-
+      Finite v1 completion: Associate one overflow, one collision, and one
+      unsupported-mode overlay with the owning semantic object and an
+      actionable correction; full drawing-tool coverage is excluded.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

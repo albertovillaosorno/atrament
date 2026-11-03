@@ -14,6 +14,10 @@ acceptance_criteria:
       Normalize Unicode, edit by grapheme, apply language-aware punctuation
       and wrapping, and preserve curly quotes, guillemets, accents, and en
       or em dashes.
+  - >-
+      Finite v1 completion: Specify grapheme-safe edits and line-break
+      decisions for a bounded English and Spanish corpus containing accents,
+      quotes, guillemets, dashes, and punctuation.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

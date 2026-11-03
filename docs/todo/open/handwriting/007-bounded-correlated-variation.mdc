@@ -14,6 +14,10 @@ acceptance_criteria:
       Support observed or authorized minimum, maximum, distribution, and
       correlation for size, slant, roundness, flattening, spacing, drift,
       speed, and pressure.
+  - >-
+      Finite v1 completion: Define one bounded seeded variation model with
+      correlation across repeated glyphs and lines, including clamp and
+      refusal behavior; no subjective realism threshold is mandatory.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

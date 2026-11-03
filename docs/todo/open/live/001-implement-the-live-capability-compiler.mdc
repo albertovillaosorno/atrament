@@ -14,6 +14,10 @@ acceptance_criteria:
       Reject or explicitly convert every color, highlight, photograph,
       shadow, paper note, raster-only effect, or multi-tool action before
       motion planning.
+  - >-
+      Finite v1 completion: Compile one supported live capability profile
+      into Convert, Reject, or Future per operation, with a finite
+      diagnostic ledger; unknown hardware remains unsupported.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

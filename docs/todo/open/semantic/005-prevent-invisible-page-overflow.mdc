@@ -14,6 +14,10 @@ acceptance_criteria:
       Block export while fixed content crosses the writable region and
       identify the object, violated edge, amount, and valid move, crop,
       resize, or reflow choices.
+  - >-
+      Finite v1 completion: Give one explicit diagnostic for each
+      writable-page edge crossed by fixed content, with an owning identity
+      and one allowed correction each; never silently crop during export.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

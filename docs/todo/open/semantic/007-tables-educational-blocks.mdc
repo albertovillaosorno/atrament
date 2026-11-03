@@ -13,6 +13,10 @@ acceptance_criteria:
   - >-
       Support merged cells, headers, alignment, wrapping, ruler-like
       borders, boxes, dividers, arrows, labels, and page references.
+  - >-
+      Finite v1 completion: Represent one merged-header table, one ruled
+      box, one divider, one arrow, one label, and one page reference with
+      stable edit identities; advanced table layout is deferred.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

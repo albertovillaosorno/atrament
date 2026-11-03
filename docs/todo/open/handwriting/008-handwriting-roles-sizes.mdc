@@ -14,6 +14,10 @@ acceptance_criteria:
       Allow one profile to expose body, title, subtitle, label, caption,
       formula, margin, and annotation roles without pretending they are
       unrelated writers.
+  - >-
+      Finite v1 completion: Expose body, title, label, and annotation roles
+      at two declared sizes with stable metrics and a fallback for an
+      unavailable role.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

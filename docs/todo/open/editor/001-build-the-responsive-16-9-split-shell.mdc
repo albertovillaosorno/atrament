@@ -14,6 +14,10 @@ acceptance_criteria:
       Show both editors concurrently with adjustable division, stable
       selection, keyboard navigation, zoom, page list, diagnostics, and no
       hidden main surface.
+  - >-
+      Finite v1 completion: Deliver a desktop split view and a compact
+      stacked fallback with a controllable separator, keyboard focus, and
+      visible diagnostics; only these two layouts are first-release targets.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

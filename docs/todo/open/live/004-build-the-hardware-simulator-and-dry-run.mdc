@@ -13,6 +13,10 @@ acceptance_criteria:
   - >-
       Visualize pen-up travel, pen-down paths, limits, time, pauses, and
       checkpoints without connecting to a physical machine.
+  - >-
+      Finite v1 completion: Simulate one single-page plan, including pen-up
+      and pen-down events and one out-of-bounds refusal; physical execution
+      is not required.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

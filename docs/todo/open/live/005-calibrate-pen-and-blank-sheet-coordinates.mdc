@@ -14,6 +14,10 @@ acceptance_criteria:
       Measure usable area, origin, axis orientation, scale, skew, pen-up
       height, contact height, speed, acceleration, page clamping, and
       boundary clearance.
+  - >-
+      Finite v1 completion: Define a one-device blank-sheet origin and
+      pen-offset calibration sequence with uncertainty bounds; without a
+      device, accept the theoretical calibration recipe.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

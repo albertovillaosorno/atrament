@@ -14,6 +14,10 @@ acceptance_criteria:
       Render loose note fills, folds, stacking, and soft shadows as
       digital-only objects with readable contrast and explicit live
       incompatibility.
+  - >-
+      Finite v1 completion: Define one digital paper background, one shadow
+      treatment, and an off switch without altering semantic ink or vector
+      export geometry.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

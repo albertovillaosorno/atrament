@@ -12,6 +12,10 @@ acceptance_criteria:
       Document calibration, composition, one-shot LLM use, PDF, live safety,
       supported hardware, profile internals, schemas, adapters, validation,
       and troubleshooting.
+  - >-
+      Finite v1 completion: Provide an operator quick-start,
+      failure/recovery table, and developer interface index for the features
+      presently shipped; unimplemented adapters are explicitly labeled.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

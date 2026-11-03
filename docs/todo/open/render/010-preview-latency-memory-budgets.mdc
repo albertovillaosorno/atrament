@@ -14,6 +14,10 @@ acceptance_criteria:
       Benchmark long pages, many images, dense equations, zoom, rapid edits,
       and final export on ordinary integrated-graphics computers with no
       compute GPU.
+  - >-
+      Finite v1 completion: Select and document one representative CPU, page
+      size, rendering profile, latency budget, and memory budget; acceptance
+      covers that bounded configuration, not arbitrary machines.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

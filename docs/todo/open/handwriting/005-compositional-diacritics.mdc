@@ -13,6 +13,10 @@ acceptance_criteria:
   - >-
       Reuse accents only when profile evidence admits the composition and
       preserve placement, scale, collision, and language-specific forms.
+  - >-
+      Finite v1 completion: Admit one supported base-plus-accent composition
+      and refuse one unsupported pair using declared profile evidence and
+      collision checks.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

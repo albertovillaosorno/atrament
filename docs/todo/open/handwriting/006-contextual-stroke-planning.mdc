@@ -14,6 +14,11 @@ acceptance_criteria:
       Select, connect, deform, space, and lift strokes from neighboring
       graphemes, word position, line geometry, semantic role, and calibrated
       writing style.
+  - >-
+      Finite v1 completion: Produce a deterministic contextual plan for one
+      mixed-letter line with joining, spacing, and pen-lift decisions
+      derived from the selected profile; unsupported contexts remain
+      explicit.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

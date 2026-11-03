@@ -14,6 +14,10 @@ acceptance_criteria:
       Parse the complete response into a candidate notebook, show all
       differences and errors, and change the accepted session only after
       explicit acceptance.
+  - >-
+      Finite v1 completion: Parse one complete model response, display one
+      accepted/rejected diff, and commit only on explicit acceptance while
+      leaving the prior revision intact on refusal.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

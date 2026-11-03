@@ -14,6 +14,10 @@ acceptance_criteria:
       Use documented SVG or CLI control behind a managed process boundary
       and prove preview, plot, pause, resume, cancellation, and failure
       diagnostics.
+  - >-
+      Finite v1 completion: Specify one documented CLI transport for one
+      named supported model, with plot, pause, resume, cancel, and
+      failed-command states; hardware certification is separate.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

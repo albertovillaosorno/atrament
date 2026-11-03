@@ -13,6 +13,10 @@ acceptance_criteria:
   - >-
       Create, inspect, validate, transform, render, export, and plan
       hardware without requiring a browser or changing domain behavior.
+  - >-
+      Finite v1 completion: Expose the currently admitted application
+      command subset in a documented CLI input/output contract with one
+      success and one failure; future commands are excluded.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

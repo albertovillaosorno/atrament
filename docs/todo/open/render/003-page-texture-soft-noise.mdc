@@ -14,6 +14,10 @@ acceptance_criteria:
       Apply seeded low-frequency texture at declared physical scale and
       prove it does not move geometry, obscure small writing, or create
       repeated tiles.
+  - >-
+      Finite v1 completion: Define bounded seeded paper texture and two
+      noise amplitudes with a noise-off mode; physically measured paper
+      variation is optional.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

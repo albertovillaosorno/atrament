@@ -14,6 +14,10 @@ acceptance_criteria:
       Validate the whole batch against one accepted snapshot, reject stale
       or invalid commands without partial mutation, and make retry behavior
       idempotent enough for CLI and MCP automation.
+  - >-
+      Finite v1 completion: Apply one two-operation batch atomically, reject
+      one stale or malformed batch without mutation, and specify normalized
+      retry identity; transport parity may remain theoretical.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

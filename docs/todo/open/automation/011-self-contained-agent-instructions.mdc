@@ -17,6 +17,10 @@ acceptance_criteria:
       context from writable scope, forbid agent-allocated accepted IDs and
       embedded adapter effects, and use an admitted unresolved response when
       the requested edit cannot be represented.
+  - >-
+      Finite v1 completion: Package one self-contained agent-instruction
+      document with command scope, limits, explicit export authority, and
+      one bounded example conversation.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

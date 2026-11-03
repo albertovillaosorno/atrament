@@ -14,6 +14,11 @@ acceptance_criteria:
       Measure geometry, rhythm, joins, spacing, punctuation, and perceptual
       fidelity against samples excluded from extraction and publish known
       failure modes.
+  - >-
+      Finite v1 completion: Define a held-out one-page comparison protocol
+      with a finite rubric for legibility, collisions, and personal style;
+      absent physical samples permit theory-only acceptance without a
+      similarity claim.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

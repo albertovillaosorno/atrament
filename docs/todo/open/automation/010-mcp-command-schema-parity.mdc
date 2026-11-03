@@ -15,6 +15,11 @@ acceptance_criteria:
       render, export, and plan capabilities for agents and prove normalized
       receipts match CLI and interactive application. Keep physical `arm`
       and `start` behind their separate device-safety boundary.
+  - >-
+      Finite v1 completion: Project that same admitted command subset into
+      one documented MCP schema with explicit caller authority and refusal
+      behavior; unavailable transports may close as a theory-only schema,
+      not as deployed MCP.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

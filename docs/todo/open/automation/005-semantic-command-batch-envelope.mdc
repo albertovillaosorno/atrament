@@ -15,6 +15,10 @@ acceptance_criteria:
       readable context, writable targets or insertion anchors,
       preconditions, retry identity, and normalized application receipt
       without exposing storage paths as document semantics.
+  - >-
+      Finite v1 completion: Freeze one versioned semantic edit envelope with
+      a base revision, ordered operations, stable target identity, and typed
+      rejection; unknown operations fail closed.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

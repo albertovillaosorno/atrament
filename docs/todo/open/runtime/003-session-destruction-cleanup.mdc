@@ -14,6 +14,12 @@ acceptance_criteria:
       Close, refresh, cancel, crash, and restart fixtures must show that
       ephemeral state and media intermediates disappear while explicit
       exports remain intact.
+  - >-
+      Finite v1 completion: Define End, refresh, cancellation, crash, and
+      restart outcomes for the current runtime, including one
+      temporary-media lifecycle; where actual media files do not exist,
+      accept a cleanup state machine and residual-risk inventory rather than
+      claiming filesystem erasure.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

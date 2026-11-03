@@ -14,6 +14,10 @@ acceptance_criteria:
       Map admitted motion capabilities to each command language without
       claiming direct-device support for untested transports, firmware, or
       model behavior.
+  - >-
+      Finite v1 completion: Define one supported single-pen HP-GL and GP-GL
+      subset, with one example file and explicit refusal for unsupported
+      commands.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

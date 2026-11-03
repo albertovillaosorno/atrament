@@ -14,6 +14,12 @@ acceptance_criteria:
       Test loopback binding, session token, hostile local pages, file-path
       confinement, temporary cleanup, no telemetry, no autosave, and no
       undeclared network access.
+  - >-
+      Finite v1 completion: Define the current localhost token, origin,
+      path, hostile-page, and session-cleanup threat boundary, with one risk
+      ledger for opener arguments and browser history. If cross-browser or
+      host-level erasure cannot be demonstrated, accept only a theoretical
+      security assessment, never an assertion that credentials are erased.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

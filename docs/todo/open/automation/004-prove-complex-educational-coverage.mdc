@@ -13,6 +13,11 @@ acceptance_criteria:
   - >-
       Exercise bilingual mathematics, physics, chemistry, biology, history,
       and language assignments with dense but readable page organization.
+  - >-
+      Finite v1 completion: Define a fixed English-and-Spanish educational
+      fixture including prose, mathematics, table, citation, and figure,
+      plus a finite coverage ledger; open-ended subject coverage is
+      excluded.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

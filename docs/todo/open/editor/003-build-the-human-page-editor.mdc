@@ -14,6 +14,10 @@ acceptance_criteria:
       Support selection, text correction, drag, resize, crop, align, group,
       layer, duplicate, delete, and style changes through typed semantic
       commands.
+  - >-
+      Finite v1 completion: Provide a typed selection and one finite command
+      path each for edit, move, resize, crop, align, order, duplicate, and
+      delete on the admitted object kinds; no arbitrary canvas editing.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

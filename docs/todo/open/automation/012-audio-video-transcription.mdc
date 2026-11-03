@@ -14,6 +14,11 @@ acceptance_criteria:
       Normalize supported media to bounded temporary audio, invoke the
       admitted WhisperX adapter, preserve word timing and confidence, and
       always clean up.
+  - >-
+      Finite v1 completion: Specify optional local intake for one short
+      audio and one short video clip, including size/duration limits,
+      uncertainty, and intermediate cleanup; accept a design-only adapter
+      when decoders are unavailable.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

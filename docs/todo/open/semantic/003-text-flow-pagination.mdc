@@ -14,6 +14,11 @@ acceptance_criteria:
       Wrap paragraphs, lists, quotations, and citations from actual
       handwriting metrics and move complete semantic fragments to following
       pages predictably.
+  - >-
+      Finite v1 completion: Describe and handle measured paragraph, list,
+      quotation, and citation fragments across a two-page example with
+      explicit break and overflow outcomes; handwriting metrics may remain a
+      declared input.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

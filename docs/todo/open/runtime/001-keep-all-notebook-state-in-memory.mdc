@@ -14,6 +14,11 @@ acceptance_criteria:
       Hold documents, assets, undo history, previews, and derived plans only
       for the active session with no database, autosave, hidden recovery
       file, or cloud copy.
+  - >-
+      Finite v1 completion: Keep task, source, candidate, accepted notebook,
+      assets, and history in one process-local session owner; specify the
+      empty state on replacement and shutdown. No OS-wide memory-erasure
+      guarantee.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

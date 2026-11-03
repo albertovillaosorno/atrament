@@ -13,6 +13,11 @@ acceptance_criteria:
   - >-
       Preserve nominal spacing and square cells while allowing bounded ruler
       error, rounded joins, layer order, and profile-specific appearance.
+  - >-
+      Finite v1 completion: Specify one page-profile grid/rule generator
+      with bounded spacing, deterministic seed, and an explicit calibrated
+      variation contract; if samples are unavailable, accept the
+      parameterized theoretical model.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

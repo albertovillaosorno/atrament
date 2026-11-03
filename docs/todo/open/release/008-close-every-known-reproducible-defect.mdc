@@ -12,6 +12,11 @@ acceptance_criteria:
       Declare the first release complete only when P1 through P8 are closed,
       Jig is clean, physical evidence is current, and no known product work
       remains.
+  - >-
+      Finite v1 completion: Freeze one dated first-release decision ledger
+      with known defects, impact, disposition, and deferred work; acceptance
+      of the ledger does not assert that unresolved risks are fixed or
+      release-safe.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---

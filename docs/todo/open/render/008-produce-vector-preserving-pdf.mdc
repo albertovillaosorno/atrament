@@ -14,6 +14,11 @@ acceptance_criteria:
       Embed bounded texture and image resources, preserve physical page
       boxes and color, retain searchable semantics when compatible, and emit
       a render manifest.
+  - >-
+      Finite v1 completion: Produce or completely specify one
+      vector-preserving PDF page containing text, equation, table, and line
+      art, with explicit font and raster exceptions; printer certification
+      is separate.
 evidence_status: not_independently_verified
 migrated_from: TODO.md
 ---
