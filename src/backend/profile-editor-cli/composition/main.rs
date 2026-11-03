@@ -73,6 +73,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     | paper [atrament-paper options] \
     | glyphs [--profile strokes.tsv] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
+    [--remove-glyph GRAPHEME] [--audit-text UTF8_TEXT] \
     [--output strokes.tsv [--replace]] \
     | handwriting [--profile ink.json] [--seed U64] \
     [--set-global DIM MIN MAX MEAN MEDIAN DEVIATION] \
@@ -664,6 +665,7 @@ fn read_glyph_input(path: &str) -> Result<Vec<u8>, String> {
 fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let mut glyphs = GlyphOverlay::default();
     let mut output = None;
+    let mut audit_text = None;
     let mut replace = false;
     let mut iter = args.iter();
     while let Some(option) = iter.next() {
@@ -675,6 +677,31 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
             }
             "--glyph-stroke" => glyphs.parse(option, &mut iter)?,
+            "--remove-glyph" => {
+                let grapheme = iter.next()
+                    .ok_or("--remove-glyph requires an exact grapheme")?;
+                glyphs.remove_glyph(grapheme)?;
+            }
+            "--audit-text" => {
+                if audit_text.is_some() {
+                    return Err("--audit-text may appear only once".into());
+                }
+                let selected = iter.next()
+                    .ok_or("--audit-text requires UTF-8 text")?;
+                if selected.is_empty()
+                    || selected.len() > MAX_INVENTORY_TEXT_BYTES
+                    || selected.chars().all(char::is_whitespace)
+                    || selected.chars().any(|ch| {
+                        ch.is_control() && !ch.is_whitespace()
+                    }) {
+                    return Err(concat!(
+                        "glyph audit needs 1..4096 UTF-8 bytes of ",
+                        "visible text without control characters",
+                    ).into());
+                }
+                audit_text = Some(selected);
+            }
+
             "--output" => {
                 output = Some(parse_selected_output(
                     &mut iter, output.is_some(),
@@ -692,7 +719,14 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     if replace && output.is_none() {
         return Err("--replace requires --output".into());
     }
+    if let Some(text) = audit_text {
+        if output.is_some() || replace {
+            return Err("--audit-text is stdout-only; omit --output".into());
+        }
+        return glyphs.audit_text(text).map(Some);
+    }
     let bytes = glyphs.encode_file()?;
+
     if let Some(path) = output {
         let disposition = if replace {
             ProfileFileCommitDisposition::ReplaceExisting

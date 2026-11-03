@@ -1960,3 +1960,144 @@ fn glyph_library_rejects_missing_shapes_and_over_budget_strokes() {
     assert!(error.contains("256 strokes"), "{error}");
     fs::remove_file(source).expect("remove source");
 }
+
+#[test]
+fn glyph_library_audit_separates_nfc_nfd_math_and_missing_punctuation() {
+    let text = "ñ n\u{303} «¡∞!» ñ";
+    let report = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+        "250", "#000000",
+        "--glyph-stroke", "∞", "0", "0", "3500", "4500",
+        "250", "#000000",
+        "--audit-text", text,
+    ])).expect("shape audit accepted").expect("stdout-only audit");
+    let report = String::from_utf8(report).expect("readable audit");
+    assert!(report.contains("Distinct visible graphemes: 7"), "{report}");
+    assert!(report.contains("Missing authored glyphs: 5"), "{report}");
+    assert!(report.contains("[U+00F1]: 1 authored strokes"), "{report}");
+    assert!(report.contains(
+        "[U+006E U+0303]: missing authored strokes"
+    ), "{report}");
+    assert!(report.contains("[U+221E]: 1 authored strokes"), "{report}");
+    assert!(report.contains("[U+00AB]: missing authored strokes"), "{report}");
+    assert!(report.contains("[U+00A1]: missing authored strokes"), "{report}");
+    assert!(report.contains("[U+0021]: missing authored strokes"), "{report}");
+    assert!(!report.contains("[U+0020]"), "whitespace is not ink");
+
+    let empty = execute_glyph_library(&args(&[
+        "--audit-text", "¿Qué tal?",
+    ])).expect("no glyphs still auditable").expect("report");
+    assert!(String::from_utf8_lossy(&empty)
+        .contains("Missing authored glyphs: 8"));
+}
+
+#[test]
+fn glyph_library_removal_and_reauthoring_updates_pdf_and_png() {
+    let library = test_path().with_extension("tsv");
+    let path = library.to_str().expect("test library");
+    let first = args(&[
+        "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+        "300", "#123456",
+        "--glyph-stroke", "ñ", "0", "4500", "3500", "0",
+        "300", "#123456",
+        "--glyph-stroke", "n\u{303}", "0", "0", "3500", "4500",
+        "300", "#123456",
+        "--output", path,
+    ]);
+    assert!(execute_glyph_library(&first)
+        .expect("write original library").is_none());
+    let before = fs::read(&library).expect("read saved strokes");
+    let replaced = execute_glyph_library(&args(&[
+        "--profile", path,
+        "--remove-glyph", "ñ",
+        "--glyph-stroke", "ñ", "300", "100", "2800", "3700",
+        "500", "#123456",
+    ])).expect("replace glyph contours").expect("new library");
+    assert_eq!(replaced.iter().filter(|&&byte| byte == b'\n').count(), 3);
+    assert!(String::from_utf8_lossy(&replaced)
+        .contains("ñ\t300\t100\t2800\t3700\t500\t#123456"));
+    assert!(!String::from_utf8_lossy(&replaced)
+        .contains("ñ\t0\t4500"));
+    assert_eq!(fs::read(&library).expect("not implicitly saved"), before);
+    let updated = args(&[
+        "--profile", path,
+        "--remove-glyph", "ñ",
+        "--glyph-stroke", "ñ", "300", "100", "2800", "3700",
+        "500", "#123456", "--output", path, "--replace",
+    ]);
+    assert!(execute_glyph_library(&updated)
+        .expect("explicitly replace library").is_none());
+    assert_eq!(fs::read(&library).expect("updated library"), replaced);
+
+    for format in ["pdf", "png"] {
+        let mut selected = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", path,
+            "--place-text", "1", "25000", "30000", "ñn\u{303}",
+        ]);
+        let mut explicit = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", "ñ", "300", "100", "2800", "3700",
+            "500", "#123456",
+            "--glyph-stroke", "n\u{303}", "0", "0", "3500", "4500",
+            "300", "#123456",
+            "--place-text", "1", "25000", "30000", "ñn\u{303}",
+        ]);
+        if format == "png" {
+            selected.extend(args(&["--dpi", "72"]));
+            explicit.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(
+            execute_notebook(&selected).expect("updated library exports")
+                .expect("native bytes"),
+            execute_notebook(&explicit).expect("inline new contours")
+                .expect("native bytes"),
+            "updated {format} must use only replacement glyph geometry",
+        );
+    }
+    fs::remove_file(library).expect("remove owned library");
+}
+
+#[test]
+fn glyph_audit_and_removal_refuse_bad_flags_without_writing_files() {
+    let library = test_path().with_extension("tsv");
+    let path = library.to_str().expect("source path");
+    let initial = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+        "300", "#123456",
+    ])).expect("valid template").expect("saved bytes");
+    fs::write(&library, &initial).expect("test source");
+    let target = test_path().with_extension("tsv");
+    let output = target.to_str().expect("output path");
+    fs::write(&target, b"existing library bytes").expect("sentinel");
+    for input in [
+        args(&["--profile", path, "--remove-glyph", "n\u{303}"]),
+        args(&["--profile", path, "--remove-glyph", "z"]),
+        args(&["--profile", path, "--remove-glyph"]),
+        args(&["--profile", path, "--remove-glyph", "ñ"]),
+        args(&["--profile", path, "--audit-text", "\n"]),
+        args(&["--profile", path, "--audit-text", "A\u{0007}"]),
+        args(&["--profile", path, "--audit-text", "a",
+            "--audit-text", "b"]),
+        args(&["--profile", path, "--audit-text", "a",
+            "--output", output, "--replace"]),
+        args(&["--profile", path, "--audit-text", &"ñ".repeat(4097)]),
+    ] {
+        let mut candidate = input;
+        if !candidate.contains(&"--output".to_owned()) {
+            candidate.extend(args(&["--output", output, "--replace"]));
+        }
+        assert!(execute_glyph_library(&candidate).is_err(),
+            "mutating or unsupported audit must refuse");
+        assert_eq!(fs::read(&target).expect("unchanged sentinel"),
+            b"existing library bytes");
+        assert_eq!(fs::read(&library).expect("unchanged source"), initial);
+    }
+    let audit = execute_glyph_library(&args(&[
+        "--profile", path, "--audit-text", "ñ",
+    ])).expect("audit stdout").expect("read-only report");
+    assert!(String::from_utf8_lossy(&audit)
+        .contains("Missing authored glyphs: 0"));
+    fs::remove_file(library).expect("remove library");
+    fs::remove_file(target).expect("remove target");
+}

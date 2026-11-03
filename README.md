@@ -454,9 +454,20 @@ cargo run -q -p atrament_profile_editor_cli -- notebook \
   --place-text 2 25400 30000 'ñ ∞ ñ' --output glyphs.pdf
 ```
 
-`glyphs --profile my-glyphs.tsv` prints the canonical library to stdout;
-additional `--glyph-stroke` arguments append to the loaded library and an
-explicit `--output ... --replace` saves the revision. The versioned format
+`glyphs --profile my-glyphs.tsv` prints the canonical library to stdout.
+Additional `--glyph-stroke` flags append segments; to redraw one letter,
+use `--remove-glyph 'ñ'` before adding its new strokes. An explicit
+`--output ... --replace` saves the revision. To discover missing shapes for
+an exact Unicode string, run a read-only glyph audit:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyphs.tsv --audit-text '¡Señor! «Sí» ñ ∞'
+```
+
+The audit lists each distinct visible grapheme, its Unicode code points, and
+its actual authored stroke count or missing status; it does not confuse the
+statistical/text baseline with renderable ink. The versioned format
 starts with `atrament.glyph-strokes.v1`, followed by one **tab-separated**
 `GRAPHEME X1 Y1 X2 Y2 WIDTH_UM #RRGGBB` record per line (UTF-8, LF).
 It supports 256 strokes and up to 64 KiB, checks exact grapheme identity

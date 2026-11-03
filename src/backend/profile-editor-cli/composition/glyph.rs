@@ -98,6 +98,50 @@ impl GlyphMetrics {
 }
 
 impl GlyphOverlay {
+    /// Inspect the actual authored-shape inventory for one bounded text run.
+    /// An English/Spanish statistics baseline alone never implies ink.
+    pub(super) fn audit_text(&self, text: &str)
+        -> Result<Vec<u8>, String> {
+        let boundaries = UnicodeGraphemeSegmentation;
+        let mut seen = Vec::new();
+        let mut missing = 0usize;
+        let mut details = String::new();
+        for index in 0..boundaries.grapheme_count(text) {
+            let grapheme = segment_at(boundaries, text, index)?;
+            if grapheme.chars().all(char::is_whitespace)
+                || seen.contains(&grapheme) {
+                continue;
+            }
+            seen.push(grapheme);
+            let strokes = self.strokes.iter()
+                .filter(|stroke| stroke.grapheme == grapheme).count();
+            if strokes == 0 {
+                missing = missing.saturating_add(1);
+            }
+            let codepoints = grapheme.chars()
+                .map(|ch| format!("U+{:04X}", u32::from(ch)))
+                .collect::<Vec<_>>().join(" ");
+            let _written = writeln!(
+                details, "\"{}\" [{codepoints}]: {}",
+                grapheme.escape_debug(),
+                if strokes == 0 {
+                    String::from("missing authored strokes")
+                } else {
+                    format!("{strokes} authored strokes")
+                },
+            );
+        }
+        Ok(format!(
+            concat!(
+                "Exact authored glyph audit (not a font or sampler)\n",
+                "Distinct visible graphemes: {}\n",
+                "Missing authored glyphs: {}\n",
+                "{}",
+            ),
+            seen.len(), missing, details,
+        ).into_bytes())
+    }
+
     /// Canonical portable glyph geometry, not placed text or sampled ink.
     pub(super) fn encode_file(&self) -> Result<Vec<u8>, String> {
         if self.strokes.is_empty() {
@@ -347,6 +391,18 @@ impl GlyphOverlay {
                 });
             }
             _ => return Err(format!("unknown glyph export option: {flag}")),
+        }
+        Ok(())
+    }
+
+    /// Remove every exact template segment for one grapheme in the library.
+    /// A missing exact match is a refusal, not a normalization or fallback.
+    pub(super) fn remove_glyph(&mut self, grapheme: &str)
+        -> Result<(), String> {
+        let before = self.strokes.len();
+        self.strokes.retain(|stroke| stroke.grapheme != grapheme);
+        if self.strokes.len() == before {
+            return Err("no authored strokes for exact glyph".into());
         }
         Ok(())
     }
