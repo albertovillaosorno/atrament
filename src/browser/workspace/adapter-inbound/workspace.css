@@ -969,3 +969,15 @@ button:focus-visible {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+/* Author-controlled stroke preview uses physical native template dimensions. */
+.glyph-stroke-preview {
+  display: block;
+  width: min(100%, 280px);
+  height: auto;
+  aspect-ratio: 7 / 9;
+  margin-inline: auto;
+  border: 1px solid #c7bfb1;
+  border-radius: 8px;
+  background: #fffefb;
+}

@@ -36,6 +36,7 @@ import * as sessionDraft from "./session-draft.js";
 import * as sessionHandshake from "./session-handshake.js";
 import { createPaperProfileEditor, createNotebookProfileEditor } from "./paper-profile.js";
 import { createHandwritingProfileEditor } from "./handwriting-profile.js";
+import { createGlyphStrokeEditor } from "./glyph-strokes.js";
 import { sessionSecretFromFragment } from "./session-fragment.js";
 function fragmentFreeLocalUrl() {
     return `${window.location.pathname}${window.location.search}`;
@@ -183,6 +184,7 @@ const notebookEditor = createNotebookProfileEditor({
         return paperEditor.adoptJson(json);
     },
 });
+const glyphEditor = createGlyphStrokeEditor();
 const handwritingEditor = createHandwritingProfileEditor({
     currentSecret: () => sessionSecret,
     sessionSignal: sessionRequests.signal,
@@ -403,6 +405,7 @@ function clearSessionText() {
     paperEditor.reset();
     notebookEditor.reset();
     handwritingEditor.reset();
+    glyphEditor.reset();
     hideSessionRetry();
     taskInput.defaultValue = "";
     taskInput.value = "";
@@ -700,6 +703,7 @@ async function hydrateSessionDraft(secret) {
     void paperEditor.start(secret);
     void notebookEditor.start(secret);
     void handwritingEditor.start(secret);
+    glyphEditor.start();
 }
 async function syncDraftField(field, input, secret) {
     if (syncingDraftFields.has(field)) {

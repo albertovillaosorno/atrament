@@ -505,11 +505,27 @@ normalization. Choose visually acceptable substitutions deliberately;
 
 This is a **caller-controlled glyph-fallback path**, not a font, automatic
 letter-shape generator, semantic text layout, or statistical handwriting.
+The localhost browser now offers an **Authored glyph strokes** section after
+session admission. Choose an exact grapheme, pen color, start/end micrometre
+coordinates, and stroke thickness with numeric fields or matching ranges.
+Click **Add stroke** to inspect the actual segments in the SVG preview.
+
+**Remove last glyph stroke** changes only the selected exact grapheme.
+
+**Load stroke TSV** reads an explicit existing glyph file into an in-memory
+draft. **Download stroke TSV** saves the canonical native-compatible file;
+there is no automatic saving or new server-side file endpoint. The Rust CLI
+still validates the file on `glyphs --profile` or `notebook --glyph-file`.
+Invalid/oversized files and Unicode controls refuse.
+
+Session end drops the unsaved draft, and the browser does not synthesize
+glyphs or a writing style.
+
 The saved glyph shape library is separate from `atrament.notebook.v1`;
-placed text is still export-only and the browser does not yet edit these
-shapes. The 114-character Spanish/English inventory still needs actual
-user-calibrated outlines and missing-symbol authoring before P4-012 or
-P5-011 can close.
+placed text is still export-only, with browser-authored geometry imported
+by CLI rather than directly composed in the browser. The 114-character
+Spanish/English inventory still needs actual user-calibrated outlines and
+missing-symbol authoring before P1-012 can close.
 
 The optional `--handwriting-profile ink.json` reads the existing saved
 `atrament.handwriting.statistics.v1` file through the same strict Rust codec.

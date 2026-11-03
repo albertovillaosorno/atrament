@@ -2997,6 +2997,7 @@ function createStaticWorkspaceServer(requests, serveScripts = false) {
         "session-handshake.js",
         "paper-profile.js",
         "handwriting-profile.js",
+        "glyph-strokes.js",
     ]);
     return http.createServer((request, response) => {
         const pathname = new URL(
@@ -3058,6 +3059,7 @@ function createSessionFixtureServer(
         "session-handshake.js",
         "paper-profile.js",
         "handwriting-profile.js",
+        "glyph-strokes.js",
     ]);
     return http.createServer((request, response) => {
         const pathname = new URL(
@@ -4106,6 +4108,7 @@ test(
             assert.deepEqual([...requests].sort(), [
                 "/",
                 "/generated/handwriting-profile.js",
+                "/generated/glyph-strokes.js",
                 "/generated/main.js",
                 "/generated/paper-profile.js",
                 "/generated/session-diagnostic.js",
@@ -9329,6 +9332,7 @@ test(
                 "GET /api/notebook/profile",
                 "GET /api/paper/profile",
                 "GET /generated/handwriting-profile.js",
+                "GET /generated/glyph-strokes.js",
                 "GET /generated/main.js",
                 "GET /generated/paper-profile.js",
                 "GET /generated/session-diagnostic.js",

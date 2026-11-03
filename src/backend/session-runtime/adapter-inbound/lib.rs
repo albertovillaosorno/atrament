@@ -138,6 +138,9 @@ const PAPER_PROFILE_JAVASCRIPT: &[u8] = include_bytes!(
 // browser resource allowlist, not a dynamic build-time input.
 // jig-ignore-next-line JIG-TEXT-005: literal asset is pinned by security tests.
 const HANDWRITING_PROFILE_JAVASCRIPT: &[u8] = include_bytes!("../../../browser/workspace/adapter-inbound/generated/handwriting-profile.js");
+const GLYPH_STROKES_JAVASCRIPT: &[u8] = include_bytes!(
+    "../../../browser/workspace/adapter-inbound/generated/glyph-strokes.js"
+);
 const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/session-draft.js"
 );
@@ -1832,7 +1835,13 @@ fn public_get_response(target: &str) -> Option<Vec<u8>> {
             JAVASCRIPT_CONTENT_TYPE,
             HANDWRITING_PROFILE_JAVASCRIPT,
         )),
+        "/generated/glyph-strokes.js" => Some(response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            GLYPH_STROKES_JAVASCRIPT,
+        )),
         "/generated/session-draft.js" => Some(response(
+
             "200 OK",
             JAVASCRIPT_CONTENT_TYPE,
             SESSION_DRAFT_JAVASCRIPT,

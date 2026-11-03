@@ -506,6 +506,81 @@
             aria-live="polite">Requires a compatible backend session.</p>
         </section>
 
+        <section class="handwriting-config" aria-labelledby="glyph-title">
+          <div class="section-row compact">
+            <div>
+              <h3 class="field-label" id="glyph-title">
+                Authored glyph strokes
+              </h3>
+              <p class="field-help">Draw exact Unicode glyph templates as
+                physical line segments. Edit coordinates with ranges and see
+                the shape below. No automatic font or handwriting synthesis.
+                The downloaded TSV is validated by the Rust CLI on import.</p>
+            </div>
+            <span class="panel-badge">Local draft only</span>
+          </div>
+          <div class="handwriting-controls">
+            <label>Exact grapheme (ñ, ñ, «, ∞)
+              <input id="glyph-character" type="text" value="ñ" maxlength="64"
+                spellcheck="false" autocomplete="off" disabled>
+            </label>
+            <label>Pen color
+              <input id="glyph-color" type="color" value="#243647" disabled>
+            </label>
+          </div>
+          <div class="handwriting-controls">
+            <label>Start X (0–3500 µm)
+              <input id="glyph-x1" type="number" min="0" max="3500"
+                value="250" step="50" disabled>
+              <input id="glyph-x1-range" type="range" min="0" max="3500"
+                value="250" step="50" disabled>
+            </label>
+            <label>Start Y (0–4500 µm)
+              <input id="glyph-y1" type="number" min="0" max="4500"
+                value="250" step="50" disabled>
+              <input id="glyph-y1-range" type="range" min="0" max="4500"
+                value="250" step="50" disabled>
+            </label>
+            <label>End X (0–3500 µm)
+              <input id="glyph-x2" type="number" min="0" max="3500"
+                value="3250" step="50" disabled>
+              <input id="glyph-x2-range" type="range" min="0" max="3500"
+                value="3250" step="50" disabled>
+            </label>
+            <label>End Y (0–4500 µm)
+              <input id="glyph-y2" type="number" min="0" max="4500"
+                value="4250" step="50" disabled>
+              <input id="glyph-y2-range" type="range" min="0" max="4500"
+                value="4250" step="50" disabled>
+            </label>
+            <label>Stroke thickness (80–1500 µm)
+              <input id="glyph-width" type="number" min="80" max="1500"
+                value="250" step="10" disabled>
+              <input id="glyph-width-range" type="range" min="80"
+                max="1500" value="250" step="10" disabled>
+            </label>
+          </div>
+          <svg id="glyph-preview" class="glyph-stroke-preview"
+            viewBox="0 0 3500 4500" role="img"
+            aria-label="Authored glyph stroke preview"></svg>
+          <div class="paper-actions">
+            <button id="glyph-add" type="button" disabled>Add stroke</button>
+            <button id="glyph-remove" type="button" disabled>
+              Remove last glyph stroke
+            </button>
+            <label class="paper-upload-label" for="glyph-load">
+              Load stroke TSV
+              <input id="glyph-load" type="file" accept=".tsv,text/plain"
+                aria-label="Load authored glyph stroke TSV" disabled>
+            </label>
+            <button id="glyph-save" type="button" disabled>
+              Download stroke TSV
+            </button>
+          </div>
+          <p id="glyph-status" class="action-status" role="status"
+            aria-live="polite">Requires a compatible backend session.</p>
+        </section>
+
         <section class="prompt-block" aria-labelledby="prompt-title">
           <div class="section-row">
             <div>

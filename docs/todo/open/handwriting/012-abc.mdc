@@ -107,6 +107,25 @@ Fallbacks are per export, not serialized in the stroke library or exposed
 in the browser; their presence does not imply the 114 baseline glyphs
 have real outlines. This task remains open.
 
+## Local browser geometry editor (partial) — 2026-11-03
+
+After an admitted localhost session, the browser now has an exact Unicode
+per-glyph stroke editor. Author line segments using native-bounded numeric
+fields and sliders, inspect an SVG stroke preview, load a bounded LF UTF-8
+versioned TSV, and explicitly download the Rust CLI-compatible TSV. Session
+reset clears the in-memory draft, and input refusal does not replace it.
+
+The browser performs bounded input checks, but the Rust CLI remains the file
+and PDF/PNG admission authority. Separate browser tests prove exact NFC/NFD
+and math Unicode roundtrips, bad-file refusal, preview/download gestures,
+and stale asynchronous import rejection. The Rust session runtime serves the
+new JavaScript from its explicit allowlist and tests the served bytes.
+
+Not yet implemented: drawing by mouse/touch, editing arbitrary existing
+segments without remove/re-add, automatically generating the entire required
+114-glyph baseline, browser-native notebook ink composition, and learned
+writer calibration. This task remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

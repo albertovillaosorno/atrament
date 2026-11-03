@@ -1963,6 +1963,10 @@ const HANDWRITING_PROFILE_JAVASCRIPT: &[u8] = include_bytes!(concat!(
     "../../../../src/browser/workspace/adapter-inbound/",
     "generated/handwriting-profile.js"
 ));
+const GLYPH_STROKES_JAVASCRIPT: &[u8] = include_bytes!(concat!(
+    "../../../../src/browser/workspace/adapter-inbound/",
+    "generated/glyph-strokes.js"
+));
 const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(concat!(
     "../../../../src/browser/workspace/adapter-inbound/",
     "generated/session-draft.js"
@@ -2153,6 +2157,11 @@ fn serves_embedded_frontend_resources_without_caching() {
             "/generated/handwriting-profile.js",
             "text/javascript; charset=utf-8",
             HANDWRITING_PROFILE_JAVASCRIPT,
+        ),
+        (
+            "/generated/glyph-strokes.js",
+            "text/javascript; charset=utf-8",
+            GLYPH_STROKES_JAVASCRIPT,
         ),
         (
             "/generated/session-draft.js",
