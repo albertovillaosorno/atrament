@@ -47,13 +47,15 @@ use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 use super::{
-    export_integer, GlyphOverlay, GlyphStroke, TextRun, MAX_GLYPH_LIBRARY_BYTES,
+    export_integer, GlyphFallback, GlyphOverlay, GlyphStroke, TextRun,
+    MAX_GLYPH_LIBRARY_BYTES,
 };
 
 const ADVANCE_UM: u32 = 4_000;
 const MAX_STROKES: usize = 256;
 const MAX_RUNS: usize = 16;
 const MAX_RUN_GRAPHEMES: usize = 96;
+const MAX_FALLBACKS: usize = 64;
 const GLYPH_LIBRARY_HEADER: &str = "atrament.glyph-strokes.v1";
 
 // Authored local coordinates are only scaled when a separate saved
@@ -188,8 +190,11 @@ impl GlyphOverlay {
                         .ok_or("space advance overflow")?;
                     continue;
                 }
+                let authored = self.fallbacks.iter()
+                    .find(|entry| entry.missing == grapheme)
+                    .map_or(grapheme, |entry| entry.authored.as_str());
                 let matches = self.strokes.iter()
-                    .filter(|shape| shape.grapheme == grapheme)
+                    .filter(|shape| shape.grapheme == authored)
                     .collect::<Vec<_>>();
                 if matches.is_empty() {
                     if !missing.contains(&grapheme) {
@@ -262,6 +267,7 @@ impl GlyphOverlay {
 
     pub(super) const fn has_any(&self) -> bool {
         !self.runs.is_empty() || !self.strokes.is_empty()
+            || !self.fallbacks.is_empty()
     }
 
     /// Load a reusable exact-Unicode library with tab-separated columns.
@@ -321,11 +327,7 @@ impl GlyphOverlay {
                 let grapheme = iter.next()
                     .ok_or("--glyph-stroke requires one grapheme")?;
                 let boundaries = UnicodeGraphemeSegmentation;
-                if grapheme.is_empty() || grapheme.len() > 64
-                    || grapheme.chars().any(char::is_control)
-                    || boundaries.grapheme_count(grapheme) != 1
-                    || grapheme == " "
-                {
+                if !is_exact_visible_grapheme(grapheme, boundaries) {
                     return Err(
                         "glyph shape requires one exact visible grapheme".into()
                     );
@@ -390,8 +392,42 @@ impl GlyphOverlay {
                     text: text.clone(),
                 });
             }
+            "--fallback-glyph" => self.parse_fallback(iter)?,
             _ => return Err(format!("unknown glyph export option: {flag}")),
+
         }
+        Ok(())
+    }
+
+    fn parse_fallback(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        if self.fallbacks.len() == MAX_FALLBACKS {
+            return Err("more than 64 glyph fallbacks refused".into());
+        }
+        let missing = iter.next().ok_or(
+            "--fallback-glyph requires MISSING AUTHORED"
+        )?;
+        let authored = iter.next().ok_or(
+            "--fallback-glyph requires MISSING AUTHORED"
+        )?;
+        let boundaries = UnicodeGraphemeSegmentation;
+        if !is_exact_visible_grapheme(missing, boundaries)
+            || !is_exact_visible_grapheme(authored, boundaries)
+            || missing == authored
+        {
+            return Err(
+                "fallback requires two distinct exact visible graphemes".into()
+            );
+        }
+        if self.fallbacks.iter()
+            .any(|entry| entry.missing == *missing)
+        {
+            return Err("duplicate exact glyph fallback".into());
+        }
+        self.fallbacks.push(GlyphFallback {
+            authored: authored.clone(), missing: missing.clone(),
+        });
         Ok(())
     }
 
@@ -414,8 +450,46 @@ impl GlyphOverlay {
                 "all visible graphemes need an authored shape",
             ).into());
         }
+        if !self.fallbacks.is_empty() && self.runs.is_empty() {
+            return Err(concat!(
+                "--fallback-glyph requires authored glyphs ",
+                "and placed text",
+            ).into());
+        }
+        for fallback in &self.fallbacks {
+            if self.strokes.iter()
+                .any(|stroke| stroke.grapheme == fallback.missing)
+            {
+                return Err(concat!(
+                    "fallback source already has authored strokes; ",
+                    "remove or use the exact source shape",
+                ).into());
+            }
+            if self.fallbacks.iter()
+                .any(|entry| entry.missing == fallback.authored)
+            {
+                return Err("chained glyph fallbacks refused".into());
+            }
+            if !self.strokes.iter()
+                .any(|stroke| stroke.grapheme == fallback.authored)
+            {
+                return Err(format!(
+                    "fallback target has no authored strokes: \"{}\"",
+                    fallback.authored.escape_debug(),
+                ));
+            }
+        }
         Ok(())
     }
+}
+
+fn is_exact_visible_grapheme(
+    grapheme: &str, boundaries: UnicodeGraphemeSegmentation,
+) -> bool {
+    !grapheme.is_empty() && grapheme.len() <= 64
+        && !grapheme.chars().any(char::is_control)
+        && grapheme != " "
+        && boundaries.grapheme_count(grapheme) == 1
 }
 
 fn glyph_point(

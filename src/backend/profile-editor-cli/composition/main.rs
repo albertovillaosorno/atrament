@@ -101,6 +101,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--ink-line PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM '#RRGGBB'] \
     [--glyph-file strokes.tsv] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
+    [--fallback-glyph MISSING AUTHORED] \
     [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
     [--output FILE [--replace]]\n\
@@ -110,6 +111,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     explicit, unsaved physical pen segments. --glyph-stroke supplies exact \
     author-drawn segments in a 4 x 5 mm cell and --place-text repeats them; \
     missing shapes refuse; --glyph-file loads a reusable library. \
+    --fallback-glyph borrows a caller-selected existing authored shape \
+    for one missing exact grapheme; no implicit or chained mappings. \
     --handwriting-profile applies selected mean \
     dimensions to authored shapes, never statistical sampling or a font. \
     No synthesized glyphs or images are rendered.";
@@ -124,6 +127,12 @@ struct GlyphStroke {
 }
 
 #[derive(Clone, Debug)]
+struct GlyphFallback {
+    authored: String,
+    missing: String,
+}
+
+#[derive(Clone, Debug)]
 struct TextRun {
     origin_um: (u32, u32),
     page: usize,
@@ -132,6 +141,7 @@ struct TextRun {
 
 #[derive(Debug, Default)]
 struct GlyphOverlay {
+    fallbacks: Vec<GlyphFallback>,
     loaded_file: bool,
     runs: Vec<TextRun>,
     strokes: Vec<GlyphStroke>,
@@ -930,7 +940,7 @@ fn parse_notebook_export_option(
             export.png_page = Some(usize::try_from(page)
                 .map_err(|error| format!("PNG page refused: {error}"))?);
         }
-        "--glyph-stroke" | "--place-text" => {
+        "--glyph-stroke" | "--place-text" | "--fallback-glyph" => {
             glyphs.parse(option, iter)?;
         }
         "--glyph-file" => {
@@ -1067,7 +1077,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             }
             "--export-paper" | "--pages" | "--dpi" | "--png-page"
             | "--ink-line" | "--glyph-stroke" | "--glyph-file"
-            | "--place-text" => {
+            | "--place-text" | "--fallback-glyph" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
                     &mut glyphs,

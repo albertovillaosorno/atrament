@@ -2142,3 +2142,169 @@ fn glyph_baseline_audit_refuses_duplicate_or_mutating_selection() {
             "auditing must stay read-only and unambiguous");
     }
 }
+
+#[test]
+fn explicit_unicode_fallback_exports_exact_selected_shapes_pdf_and_png() {
+    let saved = test_path().with_extension("tsv");
+    let name = saved.to_str().expect("library path");
+    let saved_bytes = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "0", "0", "3500", "4500",
+        "280", "#1A2B3C",
+        "--glyph-stroke", "n\u{303}", "0", "4500", "3500", "0",
+        "280", "#1A2B3C",
+    ])).expect("authored shape").expect("library bytes");
+    fs::write(&saved, &saved_bytes).expect("test-owned library");
+
+    for format in ["pdf", "png"] {
+        let mut with_fallbacks = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", name,
+            "--fallback-glyph", "ñ", "n\u{303}",
+            "--fallback-glyph", "∞", "n\u{303}",
+            "--place-text", "2", "25000", "30000", "ñ n\u{303} ∞",
+        ]);
+        let mut manual_substitution = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", name,
+            "--place-text", "2", "25000", "30000",
+            "n\u{303} n\u{303} n\u{303}",
+        ]);
+        if format == "pdf" {
+            with_fallbacks.extend(args(&["--pages", "2"]));
+            manual_substitution.extend(args(&["--pages", "2"]));
+        } else {
+            with_fallbacks.extend(args(&[
+                "--png-page", "2", "--dpi", "72",
+            ]));
+            manual_substitution.extend(args(&[
+                "--png-page", "2", "--dpi", "72",
+            ]));
+        }
+        let fallback_output = execute_notebook(&with_fallbacks)
+            .expect("explicit Unicode fallback accepted")
+            .expect("native rendered bytes");
+        let substituted_output = execute_notebook(&manual_substitution)
+            .expect("explicit substitution accepted")
+            .expect("native rendered bytes");
+        assert_eq!(fallback_output, substituted_output,
+            "{format} must render exactly the selected authored geometry");
+        if format == "pdf" {
+            assert!(fallback_output.starts_with(b"%PDF-"));
+        } else {
+            assert!(fallback_output.starts_with(b"\x89PNG\r\n\x1a\n"));
+        }
+    }
+    assert_eq!(fs::read(&saved).expect("library unchanged"), saved_bytes);
+    fs::remove_file(saved).expect("remove test-owned library");
+}
+
+#[test]
+fn fallback_requires_valid_explicit_unambiguous_authored_target() {
+    let template = args(&[
+        "--export-paper", "pdf", "--printed-sheet", "true",
+        "--glyph-stroke", "n\u{303}", "0", "0", "3500", "4500",
+        "280", "#123456",
+        "--place-text", "1", "25000", "30000", "ñ",
+    ]);
+    let missing = execute_notebook(&template)
+        .expect_err("NFC may not borrow NFD shape implicitly");
+    assert!(missing.contains("missing authored glyph shapes"), "{missing}");
+    assert!(missing.contains("U+00F1"), "{missing}");
+
+    for (extra, message) in [
+        (args(&["--fallback-glyph", "ñ", "∞"]),
+            "fallback target has no authored strokes"),
+        (args(&["--fallback-glyph", "ñ", "ñ"]),
+            "two distinct exact visible graphemes"),
+        (args(&["--fallback-glyph", "ab", "n\u{303}"]),
+            "two distinct exact visible graphemes"),
+        (args(&["--fallback-glyph", "\n", "n\u{303}"]),
+            "two distinct exact visible graphemes"),
+        (args(&["--fallback-glyph", "ñ", "n\u{303}",
+            "--fallback-glyph", "ñ", "n\u{303}"]),
+            "duplicate exact glyph fallback"),
+        (args(&["--fallback-glyph", "ñ", "∞",
+            "--fallback-glyph", "∞", "n\u{303}"]),
+            "chained glyph fallbacks refused"),
+        (args(&["--fallback-glyph", "ñ"]),
+            "requires MISSING AUTHORED"),
+    ] {
+        let mut command = template.clone();
+        command.extend(extra);
+        let error = execute_notebook(&command)
+            .expect_err("ambiguous or unbacked fallback refused");
+        assert!(error.contains(message), "{error}");
+    }
+
+    let mut already_authored = template.clone();
+    already_authored.extend(args(&[
+        "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+        "280", "#123456", "--fallback-glyph", "ñ", "n\u{303}",
+    ]));
+    let error = execute_notebook(&already_authored)
+        .expect_err("cannot override existing exact authored geometry");
+    assert!(error.contains("source already has authored strokes"));
+
+    let mut extra_only = args(&[
+        "--export-paper", "pdf",
+        "--glyph-stroke", "n\u{303}", "0", "0", "3500", "4500",
+        "280", "#123456", "--fallback-glyph", "ñ", "n\u{303}",
+    ]);
+    let error = execute_notebook(&extra_only)
+        .expect_err("unused fallback without placed text refused");
+    assert!(error.contains("--place-text require one another"));
+    extra_only.extend(args(&["--place-text", "1", "25000", "30000", "ñ"]));
+    assert!(execute_notebook(&extra_only).is_ok());
+}
+
+#[test]
+fn fallback_rejection_preserves_existing_selected_output() {
+    let destination = test_path().with_extension("pdf");
+    fs::write(&destination, b"previous valid output")
+        .expect("test-owned sentinel");
+    let path = destination.to_str().expect("path");
+    let error = execute_notebook(&args(&[
+        "--export-paper", "pdf", "--glyph-stroke", "a",
+        "0", "0", "3500", "4500", "250", "#123456",
+        "--place-text", "1", "25000", "30000", "«ñ»",
+        "--fallback-glyph", "«", "a",
+        "--fallback-glyph", "»", "a",
+        "--output", path, "--replace",
+    ])).expect_err("unmapped missing ñ refused");
+    assert!(error.contains("U+00F1"), "{error}");
+    assert!(!error.contains("U+00AB"), "mapped guillemet not missing");
+    assert!(!error.contains("U+00BB"), "mapped guillemet not missing");
+    assert_eq!(fs::read(&destination).expect("existing file"),
+        b"previous valid output");
+    fs::remove_file(destination).expect("remove test-owned output");
+}
+
+#[test]
+fn fallback_uses_requested_graphemes_statistical_override() {
+    let profile = test_path();
+    let file = profile.to_str().expect("profile path");
+    assert!(execute_handwriting(&args(&[
+        "--set-glyph", "ñ", "width", "2800", "2800", "2800", "2800", "0",
+        "--set-glyph", "ñ", "slant", "12000", "12000", "12000",
+        "12000", "0",
+        "--output", file,
+    ])).expect("test-owned statistics file").is_none());
+    let borrowed = execute_notebook(&args(&[
+        "--export-paper", "png", "--dpi", "72",
+        "--printed-sheet", "true", "--handwriting-profile", file,
+        "--glyph-stroke", "n\u{303}", "0", "0", "3500", "4500",
+        "300", "#1A2B3C", "--fallback-glyph", "ñ", "n\u{303}",
+        "--place-text", "1", "25000", "30000", "ñ",
+    ])).expect("authored substitute under requested statistics")
+        .expect("PNG bytes");
+    let original = execute_notebook(&args(&[
+        "--export-paper", "png", "--dpi", "72",
+        "--printed-sheet", "true", "--handwriting-profile", file,
+        "--glyph-stroke", "ñ", "0", "0", "3500", "4500",
+        "300", "#1A2B3C", "--place-text", "1", "25000", "30000", "ñ",
+    ])).expect("same original-specific statistics")
+        .expect("PNG bytes");
+    assert_eq!(borrowed, original,
+        "shape substitute must retain original glyph mean width and slant");
+    fs::remove_file(profile).expect("remove test-owned profile");
+}

@@ -241,6 +241,7 @@ rendering. **Preview seeded number in Rust** uses the current (including
 unsaved) controls, an exact grapheme, the selected native dimension, and a
 zero-based occurrence. Authenticated `POST /api/handwriting/preview` checks
 the whole profile and returns a repeatable integer for identical inputs.
+
 This is not calibrated ink or glyph shape data, and the preview saves no file.
 
 The localhost editor preserves all unsigned 64-bit seeds and occurrence
@@ -429,9 +430,10 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --place-text 2 25400 30000 'ñ ∞ ñ' --output glyphs.pdf
 ```
 
-Graphemes must have authored strokes; missing ones refuse with every exact
-UTF-8 grapheme and Unicode code-point sequence, not an invisible fallback.
-Composed `ñ` and decomposed `ñ` are distinct. The same flags can export
+Graphemes need authored strokes. Without an explicitly selected fallback,
+missing ones refuse with every exact UTF-8 grapheme and Unicode code-point
+sequence, rather than disappearing. Composed `ñ` and decomposed `ñ` are
+distinct. The same flags can export
 transparent PNG using `--export-paper png --png-page 2 --dpi 72`; page 1
 remains unmarked by page-2 ink.
 
@@ -480,7 +482,28 @@ without normalizing NFC/NFD, and refuses malformed, missing, oversized or
 unprintable input before PDF/PNG output replacement. The file is an
 **authored shape library**, not a sampled writer model; no Python is used.
 
-This is a useful **explicit glyph-fallback path**, not a font, automatic
+For a missing exact grapheme, the notebook CLI can borrow an existing
+caller-authored shape **only** with `--fallback-glyph MISSING AUTHORED`.
+For example, after saving the `ñ` template above:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --printed-sheet true --export-paper pdf \
+  --glyph-file my-glyphs.tsv --fallback-glyph 'ñ' 'ñ' \
+  --place-text 1 25400 30000 'ñ ñ' --output fallback.pdf
+```
+
+Up to 64 run-local mappings are allowed. The source must lack its own
+strokes and the target must already have them; duplicates, chains, invalid
+graphemes or an unauthored target refuse. The output reuses the actual
+selected shape, not a synthesized glyph. With `--handwriting-profile`,
+the *requested source* grapheme's statistics scale that borrowed shape.
+
+Mappings are neither stored in `my-glyphs.tsv` nor inferred from Unicode
+normalization. Choose visually acceptable substitutions deliberately;
+`glyphs --audit-text` still reports the library's original stroke coverage.
+
+This is a **caller-controlled glyph-fallback path**, not a font, automatic
 letter-shape generator, semantic text layout, or statistical handwriting.
 The saved glyph shape library is separate from `atrament.notebook.v1`;
 placed text is still export-only and the browser does not yet edit these

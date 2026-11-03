@@ -89,6 +89,24 @@ No automatically selected glyphs, calibrated forms, statistical ink or
 persisted glyph templates exist. This partial caller-drawn fallback does
 not establish full P4-012 coverage; this task remains open.
 
+## Explicit caller-selected fallback (partial) — 2026-11-03
+
+The native notebook PDF/PNG CLI now accepts repeated
+`--fallback-glyph MISSING AUTHORED` for at most 64 exact Unicode
+single-grapheme mappings. Only a genuinely missing source can borrow a
+present caller-authored target; duplicates, chains and missing targets
+refuse. A composed `ñ` can explicitly borrow decomposed `ñ` stroke
+segments without pretending the two Unicode graphemes are identical.
+The rendering stage retains the original grapheme's statistical means
+for scaling and slant, and preserves the actual authored segment colors.
+
+Four focused regressions compare direct-substitution PDF/PNG byte output,
+verify the original statistical override, reject missing or ambiguous
+mappings, and preserve an existing selected PDF after a refused export.
+Fallbacks are per export, not serialized in the stroke library or exposed
+in the browser; their presence does not imply the 114 baseline glyphs
+have real outlines. This task remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
