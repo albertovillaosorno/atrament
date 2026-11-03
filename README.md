@@ -410,13 +410,49 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --output notebook-ink-page-2.png
 ```
 
+A bounded **caller-drawn glyph overlay** is also available through the same
+Rust CLI. A `--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'`
+entry declares one segment of an exact Unicode grapheme, relative to its
+4 × 5 mm cell (X: 0–3500 µm, Y: 0–4500 µm). Repeat it for the same
+character to form a real multistroke outline. `--place-text PAGE X_UM
+Y_UM TEXT` places those exact shapes with a fixed 4-mm horizontal advance,
+including spaces. For example, these *illustrative diagonals* render on
+page 2, without claiming they resemble anyone's handwriting:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --printed-sheet true --export-paper pdf --pages 2 \
+  --glyph-stroke 'ñ' 100 100 3300 4400 350 '#1C3344' \
+  --glyph-stroke '∞' 200 3500 3000 100 350 '#1C3344' \
+  --place-text 2 25400 30000 'ñ ∞ ñ' --output glyphs.pdf
+```
+
+Graphemes must have authored strokes; missing ones refuse with every exact
+UTF-8 grapheme and Unicode code-point sequence, not an invisible fallback.
+Composed `ñ` and decomposed `ñ` are distinct. The same flags can export
+transparent PNG using `--export-paper png --png-page 2 --dpi 72`; page 1
+remains unmarked by page-2 ink.
+
+There are at most 256 authored template
+segments, 16 text runs of up to 96 graphemes each, and 512 final pen
+segments combined with `--ink-line`. Physical placement and ink width are
+checked by the existing PDF/PNG compositor before the selected output changes.
+
+This is a useful **explicit glyph-fallback path**, not a font, automatic
+letter-shape generator, semantic text layout, or statistical handwriting.
+The glyph templates and placed text are CLI-only and are not persisted in
+`atrament.notebook.v1` or editable in the browser yet. The 114-character
+Spanish/English inventory still needs actual user-calibrated outlines and
+missing-symbol authoring before P4-012 or P5-011 can close.
+
 The compositor refuses zero-length strokes, nonprintable endpoints, line
 width outside 80–1500 µm, unrequested PDF page numbers, and more than 512
 segments. Selected PNG pages render only their page's ink; invalid off-page
 geometry still refuses.
 
-These are **manually specified segments**, not
-Unicode glyphs, calibrated handwriting, fonts, or image overlays.
+The `--ink-line` arguments are **manually specified physical segments**, not
+Unicode glyphs or calibrated handwriting; the separate caller-drawn glyph
+option below associates exact Unicode graphemes with authored segments.
 `atrament.notebook.v1` still saves page metadata alone; `--ink-line` marks
 are not stored in that profile or editable in the localhost web UI yet.
 The full notebook-content rendering task therefore remains open.

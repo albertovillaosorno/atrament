@@ -75,6 +75,20 @@ these segments. Image overlays, owned glyph shapes/fallbacks, and a saved
 two-page content notebook remain unimplemented; this does **not** complete
 the P5-011 acceptance criteria.
 
+## Exact authored glyph ink overlay (partial) — 2026-11-03
+
+A bounded UTF-8 text run can now select caller-drawn per-grapheme pen
+segments on numbered pages with `--glyph-stroke` and `--place-text`.
+The emitted vector PDF and selected-page transparent PNG share the existing
+Rust ink path and refuse missing glyph shapes, oversized text/ink, invalid
+page geometry or output replacement before writing. A new regression proves
+that page-2 glyph ink equals individually specified page-2 pen segments in
+both formats and is not silently copied to page 1.
+
+There is no saved notebook body-text schema, visual glyph editor, complete
+font/stroke set or image layer; these arguments are export-only. This is
+not a completed P5-011 end-to-end notebook renderer.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

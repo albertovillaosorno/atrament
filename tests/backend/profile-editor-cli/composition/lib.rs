@@ -1310,3 +1310,189 @@ fn notebook_cli_ink_refusals_leave_preexisting_output_unchanged() {
     );
     fs::remove_file(target).expect("remove test-owned output");
 }
+
+#[test]
+fn exact_authored_unicode_glyphs_match_page_specific_manual_strokes() {
+    // Each shape is user authored, not a font or statistical substitution.
+    // The NFD grapheme occupies one 4-mm cell even though it has two scalars.
+    let shape_args = args(&[
+        "--glyph-stroke", "ñ", "0", "0", "2500", "3500", "350",
+        "#DE1144",
+        "--glyph-stroke", "n\u{303}", "250", "3500", "2700", "250",
+        "350", "#22AA33",
+        "--glyph-stroke", "∞", "250", "3500", "2700", "250",
+        "350", "#3344AA",
+        "--place-text", "2", "25000", "30000", "ñ n\u{303} ∞ ñ",
+    ]);
+    let mut glyph_pdf = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--pages", "2",
+    ]);
+    glyph_pdf.extend(shape_args.clone());
+    let text_pdf = execute_notebook(&glyph_pdf)
+        .expect("exact custom glyph shapes accepted").expect("PDF bytes");
+    assert!(text_pdf.starts_with(b"%PDF-1.4"));
+    let pdf_text = String::from_utf8_lossy(&text_pdf);
+    let streams = pdf_text
+        .split("\nstream\n").skip(1)
+        .map(|entry| entry.split("\nendstream").next().unwrap_or(""))
+        .collect::<Vec<_>>();
+    assert_eq!(streams.len(), 2);
+    assert!(!streams[0].contains(" m\n"), "no page 1 ink");
+    assert_eq!(streams[1].matches(" m\n").count(), 4);
+    assert!(streams[1].contains("0.871 0.067 0.267 RG"));
+    assert!(streams[1].contains("0.133 0.667 0.200 RG"));
+
+    // Identical bytes from the existing handwritten-line Rust compositor.
+    let manual = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--pages", "2",
+        "--ink-line", "2", "25000", "30000", "27500", "33500",
+        "350", "#DE1144",
+        "--ink-line", "2", "33250", "33500", "35700", "30250",
+        "350", "#22AA33",
+        "--ink-line", "2", "41250", "33500", "43700", "30250",
+        "350", "#3344AA",
+        "--ink-line", "2", "49000", "30000", "51500", "33500",
+        "350", "#DE1144",
+    ]);
+    assert_eq!(
+        text_pdf,
+        execute_notebook(&manual).expect("manual counterpart")
+            .expect("manual PDF"),
+    );
+
+    let mut glyph_png = args(&[
+        "--printed-sheet", "true", "--export-paper", "png",
+        "--dpi", "72", "--png-page", "2",
+    ]);
+    glyph_png.extend(shape_args);
+    let page_two = execute_notebook(&glyph_png)
+        .expect("glyph PNG page 2").expect("PNG bytes");
+    assert!(page_two.starts_with(b"\x89PNG\r\n\x1a\n"));
+    let mut page_one_args = glyph_png.clone();
+    let page_position = page_one_args.iter()
+        .position(|item| item == "--png-page").expect("page flag");
+    page_one_args[page_position + 1] = "1".into();
+    let page_one = execute_notebook(&page_one_args)
+        .expect("blank PNG page 1").expect("PNG bytes");
+    assert_ne!(page_two, page_one);
+    // Rebuild the manual PNG counterpart without shifting flag positions.
+    let manual_png = args(&[
+        "--printed-sheet", "true", "--export-paper", "png",
+        "--dpi", "72", "--png-page", "2",
+        "--ink-line", "2", "25000", "30000", "27500", "33500",
+        "350", "#DE1144",
+        "--ink-line", "2", "33250", "33500", "35700", "30250",
+        "350", "#22AA33",
+        "--ink-line", "2", "41250", "33500", "43700", "30250",
+        "350", "#3344AA",
+        "--ink-line", "2", "49000", "30000", "51500", "33500",
+        "350", "#DE1144",
+    ]);
+    assert_eq!(page_two, execute_notebook(&manual_png)
+        .expect("manual glyph PNG").expect("PNG bytes"));
+}
+
+#[test]
+fn exact_unicode_missing_shapes_report_all_and_preserve_output() {
+    let target = test_path();
+    let filename = target.to_str().expect("target name");
+    fs::write(&target, b"preserved").expect("test-owned sentinel");
+    let selected = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "ñ", "0", "0", "3000", "4000", "200",
+        "#000000",
+        "--place-text", "1", "25000", "30000",
+        "ñ n\u{303} ∞ « ¿ n\u{303}",
+        "--output", filename, "--replace",
+    ]);
+    let error = execute_notebook(&selected).expect_err("missing shapes refuse");
+    assert!(error.starts_with("missing authored glyph shapes:"), "{error}");
+    for codepoints in [
+        "U+006E U+0303", "U+221E", "U+00AB", "U+00BF",
+    ] {
+        assert!(error.contains(codepoints), "{error}");
+    }
+    assert!(!error.contains("U+00F1"), "NFC is exactly covered");
+    assert_eq!(error.matches("U+006E U+0303").count(), 1);
+    assert_eq!(fs::read(&target).expect("unchanged target"), b"preserved");
+
+    for invalid in [
+        args(&["--glyph-stroke", "ab", "0", "0", "1", "1",
+            "200", "#000000", "--place-text", "1", "25000",
+            "30000", "ab"]),
+        args(&["--glyph-stroke", "ñ", "0", "0", "0", "0",
+            "200", "#000000", "--place-text", "1", "25000",
+            "30000", "ñ"]),
+        args(&["--glyph-stroke", "ñ", "0", "0", "10", "10",
+            "200", "#QQ0000", "--place-text", "1", "25000",
+            "30000", "ñ"]),
+        args(&["--glyph-stroke", "ñ", "0", "0", "10", "10",
+            "200", "#000000"]),
+        args(&["--place-text", "1", "25000", "30000", "ñ"]),
+        args(&["--place-text", "1", "25000", "30000", "ñ\n"]),
+        args(&["--place-text", "1", "25000", "30000", "   "]),
+    ] {
+        let mut attempt = args(&["--export-paper", "pdf"]);
+        attempt.extend(invalid);
+        attempt.extend(args(&["--output", filename, "--replace"]));
+        assert!(execute_notebook(&attempt).is_err(), "{attempt:?}");
+        assert_eq!(fs::read(&target).expect("still unchanged"), b"preserved");
+    }
+    fs::remove_file(target).expect("remove test-owned output");
+}
+
+#[test]
+fn glyph_overlay_budgets_and_nonselected_page_clearance_refuse() {
+    let sentinel = test_path();
+    let name = sentinel.to_str().expect("owned file name");
+    fs::write(&sentinel, b"original").expect("owned sentinel");
+
+    let mut excessive = args(&[
+        "--export-paper", "pdf", "--printed-sheet", "true",
+    ]);
+    for _ in 0..6 {
+        excessive.extend(args(&[
+            "--glyph-stroke", "ñ", "0", "0", "3000", "3000",
+            "250", "#123456",
+        ]));
+    }
+    excessive.extend(args(&[
+        "--place-text", "1", "25000", "30000", &"ñ".repeat(96),
+        "--output", name, "--replace",
+    ]));
+    let error = execute_notebook(&excessive).expect_err("more than 512");
+    assert!(error.contains("512"), "{error}");
+    assert_eq!(fs::read(&sentinel).expect("not overwritten"), b"original");
+
+    // Physical clearance is checked for every supplied page, even when the
+    // selected PNG sheet omits that page's ink.
+    let bad_position = args(&[
+        "--printed-sheet", "true", "--export-paper", "png",
+        "--dpi", "72", "--png-page", "1",
+        "--glyph-stroke", "ñ", "0", "0", "3000", "3000",
+        "350", "#123456",
+        "--place-text", "2", "199000", "30000", "ñ",
+        "--output", name, "--replace",
+    ]);
+    let error = execute_notebook(&bad_position)
+        .expect_err("nonselected page still validates");
+    assert!(error.contains("printable endpoints"), "{error}");
+    assert_eq!(fs::read(&sentinel).expect("still original"), b"original");
+
+    for invalid in [
+        args(&["--export-paper", "pdf", "--place-text", "1", "25000",
+            "30000", "ñ", "--glyph-stroke", "ñ", "0", "0", "3000",
+            "3000", "350", "#123456", "--inspect"]),
+        args(&["--export-paper", "pdf", "--glyph-stroke", "ñ", "0",
+            "0", "3000", "3000", "350", "#123456",
+            "--place-text", "1", "25000", "30000", "ñ\n∞"]),
+    ] {
+        let mut attempt = invalid;
+        attempt.extend(args(&["--output", name, "--replace"]));
+        assert!(execute_notebook(&attempt).is_err(), "{attempt:?}");
+        assert_eq!(fs::read(&sentinel).expect("unchanged"), b"original");
+    }
+    fs::remove_file(sentinel).expect("remove owned sentinel");
+}

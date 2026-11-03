@@ -33,6 +33,8 @@
 
 //! Single local CLI boundary for admitted paper and handwriting profiles.
 
+mod glyph;
+
 use std::env;
 use std::error::Error;
 use std::fmt::Write as _;
@@ -92,12 +94,37 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
     [--ink-line PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM '#RRGGBB'] \
+    [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
+    [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
     [--output FILE [--replace]]\n\
     Paper-layer export uses nested Rust paper settings and skips ruling \
     on preprinted sheets. The optional date prints in its selected box \
     or line; rounded borders render. Repeated --ink-line (max 512) draws \
-    explicit, unsaved physical pen segments; no automatic glyphs, handwriting \
-    statistics or images are rendered.";
+    explicit, unsaved physical pen segments. --glyph-stroke supplies exact \
+    author-drawn segments in a 4 x 5 mm cell and --place-text repeats them; \
+    missing shapes refuse. No synthesized glyphs or images are rendered.";
+
+#[derive(Clone, Debug)]
+struct GlyphStroke {
+    end_um: (u32, u32),
+    grapheme: String,
+    rgb: [u8; 3],
+    start_um: (u32, u32),
+    width_um: u32,
+}
+
+#[derive(Clone, Debug)]
+struct TextRun {
+    origin_um: (u32, u32),
+    page: usize,
+    text: String,
+}
+
+#[derive(Debug, Default)]
+struct GlyphOverlay {
+    runs: Vec<TextRun>,
+    strokes: Vec<GlyphStroke>,
+}
 
 #[derive(Debug)]
 struct HandwritingRequest {
@@ -113,6 +140,7 @@ struct HandwritingRequest {
 struct NotebookRequest {
     dpi: u32,
     export_paper: Option<NotebookPaperFormat>,
+    glyphs: GlyphOverlay,
     ink: Vec<NotebookInkLine>,
     inspect: bool,
     output: Option<String>,
@@ -713,6 +741,7 @@ fn parse_notebook_export_option(
     iter: &mut Iter<'_, String>,
     export: &mut NotebookExportOptions,
     ink: &mut Vec<NotebookInkLine>,
+    glyphs: &mut GlyphOverlay,
 ) -> Result<(), String> {
     match option {
         "--export-paper" => {
@@ -753,6 +782,9 @@ fn parse_notebook_export_option(
             export.png_page = Some(usize::try_from(page)
                 .map_err(|error| format!("PNG page refused: {error}"))?);
         }
+        "--glyph-stroke" | "--place-text" => {
+            glyphs.parse(option, iter)?;
+        }
         "--ink-line" => {
             if ink.len() == MAX_NOTEBOOK_INK_LINES {
                 return Err("ink exceeds 512 explicit line segments".into());
@@ -770,6 +802,7 @@ fn validate_notebook_export_flags(
     inspect: bool,
     export: &NotebookExportOptions,
     ink: &[NotebookInkLine],
+    glyphs: &GlyphOverlay,
 ) -> Result<(), String> {
     if replace && output.is_none() {
         return Err("--replace requires --output".into());
@@ -790,9 +823,13 @@ fn validate_notebook_export_flags(
     {
         return Err("--dpi and --png-page require --export-paper png".into());
     }
-    if !ink.is_empty() && export.format.is_none() {
-        return Err("--ink-line requires --export-paper pdf or png".into());
+    if (glyphs.has_any() || !ink.is_empty()) && export.format.is_none() {
+        return Err(concat!(
+            "ink and glyph overlays need ",
+            "--export-paper pdf or png",
+        ).into());
     }
+    glyphs.validate_pairing()?;
     Ok(())
 }
 
@@ -803,6 +840,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut replace = false;
     let mut export = NotebookExportOptions::default();
     let mut ink = Vec::new();
+    let mut glyphs = GlyphOverlay::default();
     let mut loaded = false;
     let mut edited = false;
     let mut iter = args.iter();
@@ -847,9 +885,10 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 inspect = true;
             }
             "--export-paper" | "--pages" | "--dpi" | "--png-page"
-            | "--ink-line" => {
+            | "--ink-line" | "--glyph-stroke" | "--place-text" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
+                    &mut glyphs,
                 )?;
             }
             "--output" => {
@@ -872,10 +911,11 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         }
     }
     validate_notebook_export_flags(
-        replace, output.as_deref(), inspect, &export, &ink,
+        replace, output.as_deref(), inspect, &export, &ink, &glyphs,
     )?;
     profile.validate()?;
     Ok(NotebookRequest {
+        glyphs,
         dpi: export.dpi.unwrap_or(150),
         export_paper: export.format,
         ink,
@@ -912,16 +952,17 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             .into_bytes(),
         ));
     }
+    let ink = request.glyphs.expand(&request.ink)?;
     let (bytes, maximum_bytes) = match request.export_paper {
         Some(NotebookPaperFormat::Pdf) => (
             request.profile.paper_layer_pdf_with_ink(
-                request.pages, &request.ink,
+                request.pages, &ink,
             )?,
             MAX_PAPER_OUTPUT_BYTES,
         ),
         Some(NotebookPaperFormat::Png) => (
             request.profile.paper_layer_png_page_with_ink(
-                request.dpi, request.png_page, &request.ink,
+                request.dpi, request.png_page, &ink,
             )?,
             MAX_PAPER_OUTPUT_BYTES,
         ),

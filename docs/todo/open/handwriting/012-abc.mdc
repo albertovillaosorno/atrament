@@ -58,6 +58,23 @@ coverage, automatic handwriting, or a completed font/shape engine.
 localhost` in
 `tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs`.
 
+## CLI exact-glyph ink fallback (partial) — 2026-11-03
+
+The Rust `atrament-profiles notebook` CLI now has a bounded caller-owned
+shape path: repeated `--glyph-stroke` segments for one exact grapheme,
+followed by `--place-text` to render those shapes on a selected PDF/PNG
+page. The same native compositor handles pen widths, colors, printable
+bounds and page isolation. Every nonspace grapheme must have at least one
+explicit authored stroke; all missing exact graphemes and their U+ scalar
+sequences are reported before file replacement. A focused test covers
+composed `ñ`, decomposed `ñ` and custom mathematical `∞`, and verifies
+byte-identical PDF/PNG ink against explicit `--ink-line` strokes.
+
+The built-in 114-entry inventory is still **not a set of actual outlines**.
+No automatically selected glyphs, calibrated forms, statistical ink or
+persisted glyph templates exist. This partial caller-drawn fallback does
+not establish full P4-012 coverage; this task remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
