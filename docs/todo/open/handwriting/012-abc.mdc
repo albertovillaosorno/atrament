@@ -325,6 +325,22 @@ byte-for-byte through Rust and produced a one-page PDF and a transparent
 72-DPI RGBA PNG of `ltlt`. This adds only two manually selected templates;
 full handwriting inventory, native curves and cursive joining remain open.
 
+## Exact straight v/w zigzag starters (partial) — 2026-11-03
+
+The localhost geometric starter picker now adds lowercase `v` as two
+connected straight segments and lowercase `w` as four connected segments
+with symmetric left/right extrema. The SVG guide and native TSV use the
+same exact integer vertices. Only the existing local SVG path is used;
+its unrelated rounded-stem elements are explicitly hidden.
+
+Two browser regressions verify exact endpoint coordinates, guide path,
+stroke ordering, UTF-8 TSV roundtrip, and atomic refusal of clipped
+shapes. The browser security allowlist pins the two updated stem visibility
+writes without introducing any network/resource attribute permissions.
+The six-segment `vw` library roundtripped byte-for-byte through Rust and
+exported real one-page PDF and transparent 72-DPI RGBA PNG for `vwvw`.
+This is not whole-alphabet coverage or automatic handwritten cursive.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

@@ -1056,6 +1056,82 @@ test("h/m SVG guides and TSV replacement remain session-safe", async () => {
     }
 });
 
+test("v and w share exact zigzag coordinates and ordered lines", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const v = geometricStarter("v", ...args);
+    const w = geometricStarter("w", ...args);
+    const vertices = {
+        v: [[450, 1350], [1550, 3550], [2650, 1350]],
+        w: [[450, 1350], [1000, 3550], [1550, 2450],
+            [2100, 3550], [2650, 1350]],
+    };
+    for (const [glyph, lines] of [["v", v], ["w", w]]) {
+        const corners = vertices[glyph];
+        assert.equal(lines.length, corners.length - 1);
+        for (let index = 0; index < lines.length; index += 1) {
+            assert.deepEqual([lines[index].x1, lines[index].y1],
+                corners[index]);
+            assert.deepEqual([lines[index].x2, lines[index].y2],
+                corners[index + 1]);
+        }
+    }
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary([...v, ...w])),
+        [...v, ...w]);
+    assert.throws(() => geometricStarter("w", ...args,
+        undefined, "two-storey"), /Two-storey/);
+    assert.throws(() => geometricStarter("v", 1550, 1100, 1100,
+        250, "#123456"), /Shape and pen/);
+});
+
+test("v/w exact SVG lines and native TSV remain session-safe", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        for (const [glyph, d, count] of [
+            ["v", "M 450 1350 L 1550 3550 L 2650 1350", 2],
+            ["w", "M 450 1350 L 1000 3550 L 1550 2450"
+                + " L 2100 3550 L 2650 1350", 4],
+        ]) {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            get("form").value = glyph;
+            get("form").dispatch("change");
+            assert.equal(get("ideal-rounded").attributes.get("d"), d);
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "visible");
+            for (const stem of ["ideal-rounded-left", "ideal-rounded-right"]) {
+                assert.equal(get(stem).attributes.get("visibility"), "hidden");
+            }
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, count);
+        }
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, [
+            ...geometricStarter("v", 1550, 2450, 1100, 250,
+                "#243647"),
+            ...geometricStarter("w", 1550, 2450, 1100, 250,
+                "#243647"),
+        ]);
+        get("character").value = "w";
+        get("character").dispatch("input");
+        get("form").value = "w";
+        get("form").dispatch("change");
+        get("circle-y").value = "1100";
+        get("circle-y").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Shape and pen/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "refused zigzag must preserve prior authored ink");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("l and t preserve exact straight ink and bounded ascenders", () => {
     const args = [1550, 2450, 1100, 250, "#123456"];
     const l = geometricStarter("l", ...args);

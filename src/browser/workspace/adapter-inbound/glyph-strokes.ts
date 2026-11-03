@@ -249,6 +249,25 @@ function roundedStory(
 // exports 64 rounded chords and three independently ordered pen lines.
 // Straight forms retain exact SVG/TSV line segments, not rounded chords.
 // The t crossbar reuses the e guide's existing bounded bar coordinates.
+// Both V-shaped forms use exact integer line endpoints in SVG and TSV.
+// Stroke ordering follows the left-to-right connected polyline.
+function zigzag(cx: number, cy: number, radius: number, g: "v" | "w") {
+    const left = cx - radius;
+    const right = cx + radius;
+    const high = cy - radius;
+    const low = cy + radius;
+    return g === "v" ? [
+        { x: left, y: high }, { x: cx, y: low },
+        { x: right, y: high },
+    ] : [
+        { x: left, y: high },
+        { x: cx - Math.round(radius / 2), y: low },
+        { x: cx, y: cy },
+        { x: cx + Math.round(radius / 2), y: low },
+        { x: right, y: high },
+    ];
+}
+
 function tallStem(cx: number, cy: number, radius: number, g: "l" | "t") {
     return {
         from: { x: cx, y: g === "l"
@@ -307,7 +326,8 @@ export function geometricStarter(
     kind: "single" | "two-storey" = "single",
 ): Stroke[] {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
-        "n", "u", "h", "m", "l", "t", "c", "e", "i", "í"].includes(g)) {
+        "n", "u", "h", "m", "l", "t", "v", "w",
+        "c", "e", "i", "í"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -374,6 +394,17 @@ export function geometricStarter(
         }
         output.push(line(bow.lastStem.from, bow.lastStem.to));
         return output;
+    }
+    if (g === "v" || g === "w") {
+        const vertices = zigzag(cx, cy, radius, g);
+        return vertices.slice(1).map((end, index) => {
+            const first = vertices[index];
+            if (first === undefined) throw new Error("Missing zigzag point");
+            return validateStroke({
+                grapheme: g, x1: first.x, y1: first.y,
+                x2: end.x, y2: end.y, width: pen, color,
+            });
+        });
     }
     if (g === "l" || g === "t") {
         const stem = tallStem(cx, cy, radius, g);
@@ -730,8 +761,16 @@ export function createGlyphStrokeEditor(): {
                 ...doubledCommands,
                 `M ${cx} ${cy} L ${cx} ${cy + r}`,
             ].join(" ");
-            const roundedD = chosen.grapheme === "m" ? doubledD
-                : [roundedStart, roundedFirst, roundedSecond].join(" ");
+            const isZigzag = ["v", "w"].includes(chosen.grapheme);
+            const vertices = zigzag(cx, cy, r,
+                chosen.grapheme === "w" ? "w" : "v");
+            const zigzagD = [
+                `M ${vertices[0]?.x} ${vertices[0]?.y}`,
+                ...vertices.slice(1).map((p) => `L ${p.x} ${p.y}`),
+            ].join(" ");
+            const roundedD = isZigzag ? zigzagD
+                : chosen.grapheme === "m" ? doubledD
+                    : [roundedStart, roundedFirst, roundedSecond].join(" ");
             roundedPath.setAttribute("d", roundedD);
             roundedPath.setAttribute("stroke-width", numeric.width.value);
             roundedPath.setAttribute("stroke", color.value);
@@ -749,11 +788,13 @@ export function createGlyphStrokeEditor(): {
                 element.setAttribute("stroke", color.value);
             }
             const roundedVisible = active
-                && ["n", "u", "h", "m"].includes(chosen.grapheme);
+                && ["n", "u", "h", "m", "v", "w"].includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
+            const roundedStemState = roundedVisible && !isZigzag
+                ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
-            roundedLeft.setAttribute("visibility", roundedState);
-            roundedRight.setAttribute("visibility", roundedState);
+            roundedLeft.setAttribute("visibility", roundedStemState);
+            roundedRight.setAttribute("visibility", roundedStemState);
             const openStart = openCirclePoint(cx, cy, r, 0);
             const openEnd = openCirclePoint(cx, cy, r,
                 OPEN_ARC_SEGMENTS);
