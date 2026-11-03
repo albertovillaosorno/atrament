@@ -57,6 +57,9 @@ const LOOPBACK_RUNTIME = path.join(
 const PAPER_CLI = path.join(
     BACKEND_ROOT, "notebook-paper-cli", "application", "lib.rs",
 );
+const PROFILE_EDITOR_CLI = path.join(
+    BACKEND_ROOT, "profile-editor-cli", "composition", "main.rs",
+);
 
 const BROWSER_LAUNCH = path.join(
     BACKEND_ROOT,
@@ -493,8 +496,8 @@ function unreviewedAmbientProcessInputReads(source, sourcePath) {
             || !/\benv\s*::\s*args_os\s*\(\s*\)\s*\.\s*skip\s*\(\s*1\s*\)/u
                 .test(source);
     }
-    // The native paper CLI reads its own argv once, never ambient secrets.
-    if (sourcePath === PAPER_CLI) {
+    // Both native CLI entrypoints read only their own argv once.
+    if (sourcePath === PAPER_CLI || sourcePath === PROFILE_EDITOR_CLI) {
         return reads.length !== 0 || argumentsRead.length !== 1
             || argumentsRead[0][1] !== "args"
             || !/\benv\s*::\s*args\s*\(\s*\)\s*\.\s*skip\s*\(\s*1\s*\)/u.test(source);
@@ -1032,6 +1035,7 @@ test("ambient filesystem reads stay in reviewed profile adapters", async () => {
     }
     assert.deepEqual(readingFiles.sort(), [
         "notebook-paper-cli/application/lib.rs",
+        "profile-editor-cli/composition/main.rs",
         "profile-export-target-check/composition/lib.rs",
         "profile-export-session/composition/lib.rs",
         "profile-file-commit/adapter-outbound/lib.rs",
@@ -1518,7 +1522,6 @@ test("backend borrowed stream reads stay in reviewed adapters",
         }
     }
     assert.deepEqual(readers.sort(), [
-        PAPER_CLI,
         FILESYSTEM_COMMIT,
         path.join(BACKEND_ROOT, "profile-file-reader", "adapter-outbound",
             "lib.rs"),
@@ -1584,6 +1587,7 @@ test("std::io stream writing stays in reviewed output adapters", async () => {
     }
     assert.deepEqual(writers.sort(), [
         PAPER_CLI,
+        PROFILE_EDITOR_CLI,
         FILESYSTEM_COMMIT,
         path.join(BACKEND_ROOT, "runtime-bootstrap", "composition", "main.rs"),
         LOOPBACK_RUNTIME,
@@ -2282,9 +2286,9 @@ test("backend Rust sources cannot redirect compilation out of inventory",
             redirectFiles.push(sourcePath);
         }
     }
-    // Only this exact test module path is admitted from the shared paper
-    // implementation. It is compiled only when cfg(test) is enabled.
-    assert.deepEqual(redirectFiles, [PAPER_CLI],
+    // Both audited native CLIs explicitly bind test modules under cfg(test).
+    // No other backend Rust source may redirect compilation.
+    assert.deepEqual(redirectFiles, [PAPER_CLI, PROFILE_EDITOR_CLI],
         "extra included Rust code needs source-level privacy review");
 });
 
@@ -2485,6 +2489,12 @@ function unreviewedStandardStreamAuthority(source, sourcePath) {
     if (sourcePath === PAPER_CLI) {
         return stderr !== 0 || stdin !== 0 || stdout !== 2
             || !source.includes('writeln!(io::stdout().lock(), "{USAGE}")');
+    }
+    if (sourcePath === PROFILE_EDITOR_CLI) {
+        // Four explicit CLI-only help and serialized-output write sites.
+        return stderr !== 0 || stdin !== 0 || stdout !== 4
+            || !source.includes('writeln!(io::stdout().lock(), "{USAGE}")')
+            || !source.includes("io::stdout().lock().write_all(&bytes)");
     }
     const expectedStdout = sourcePath === path.join(BACKEND_ROOT,
         "runtime-bootstrap", "composition", "main.rs") ? 2 : 0;
@@ -2761,6 +2771,32 @@ test("backend registry dependencies remain explicitly reviewed", () => {
             requirement: "=0.31.3",
             source: "registry+https://github.com/rust-lang/crates.io-index",
             target: 'cfg(target_os = "linux")',
+        },
+        {
+            // Test-only POSIX FIFO creation exercises nonblocking CLI refusal.
+            defaultFeatures: false,
+            features: ["fs"],
+            kind: "dev",
+            name: "nix",
+            optional: false,
+            owner: "atrament_notebook_paper_cli",
+            rename: null,
+            requirement: "=0.31.3",
+            source: "registry+https://github.com/rust-lang/crates.io-index",
+            target: 'cfg(unix)',
+        },
+        {
+            // Test-only POSIX FIFO creation exercises nonblocking CLI refusal.
+            defaultFeatures: false,
+            features: ["fs"],
+            kind: "dev",
+            name: "nix",
+            optional: false,
+            owner: "atrament_profile_editor_cli",
+            rename: null,
+            requirement: "=0.31.3",
+            source: "registry+https://github.com/rust-lang/crates.io-index",
+            target: 'cfg(unix)',
         },
         {
             defaultFeatures: true,

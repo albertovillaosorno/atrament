@@ -43,7 +43,9 @@ use atrament_physical_page_profile as _;
 use atrament_profile_file_commit as _;
 use atrament_profile_file_reader as _;
 #[cfg(all(test, unix))]
-use nix as _;
+use nix::sys::stat::Mode;
+#[cfg(all(test, unix))]
+const _: Mode = Mode::empty();
 use atrament_profile_json_syntax as _;
 
 
