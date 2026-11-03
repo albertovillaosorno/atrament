@@ -246,3 +246,61 @@ fn paper_profile_file_read_is_bounded_and_refuses_corrupt_disk_data() {
     fs::remove_file(&path).expect("test fixture is removed");
     assert!(read_profile(filename).is_err());
 }
+
+#[test]
+fn standard_paper_presets_keep_exact_dimensions_and_pdf_page_boxes() {
+    let presets = [
+        ("A3", 297_000, 420_000),
+        ("a4", 210_000, 297_000),
+        ("a5", 148_000, 210_000),
+        ("b5", 176_000, 250_000),
+        ("letter", 215_900, 279_400),
+        ("legal", 215_900, 355_600),
+    ];
+    for (name, width, height) in presets {
+        let args = ["--paper-size".to_owned(), name.to_owned()];
+        let request = parse_options(&args)
+            .expect("known paper size")
+            .expect("not help");
+        assert_eq!(request.options.width_um, width);
+        assert_eq!(request.options.height_um, height);
+        let pdf = render(request.options).expect("physical paper PDF");
+        assert!(pdf.starts_with(b"%PDF-1.4"));
+        assert!(
+            decode_profile(encode_profile(request.options).as_bytes()).is_ok()
+        );
+    }
+}
+
+#[test]
+fn landscape_preset_and_manual_dimensions_are_consistent() {
+    let args = ["--paper-size", "a4", "--landscape"].map(str::to_owned);
+    let request = parse_options(&args)
+        .expect("landscape A4")
+        .expect("not help");
+    assert_eq!(request.options.width_um, 297_000);
+    assert_eq!(request.options.height_um, 210_000);
+    let bytes = render(request.options).expect("landscape paper PDF");
+    let pdf = String::from_utf8_lossy(&bytes);
+    assert!(pdf.contains("/MediaBox [0 0 841.890 595.276]"));
+}
+
+#[test]
+fn paper_preset_overrides_are_ordered_and_invalid_choices_fail() {
+    for args in [
+        vec!["--paper-size", "not-a-size"],
+        vec!["--width-mm", "200", "--paper-size", "a4"],
+        vec!["--paper-size", "a4", "--paper-size", "letter"],
+        vec!["--landscape", "--landscape"],
+        vec!["--landscape", "--paper-size", "a4"],
+    ] {
+        let inputs = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        assert!(parse_options(&inputs).is_err(), "{inputs:?}");
+    }
+    let args = ["--paper-size", "a5", "--width-mm", "150"].map(str::to_owned);
+    let request = parse_options(&args)
+        .expect("explicit width can override preset")
+        .expect("not help");
+    assert_eq!(request.options.width_um, 150_000);
+    assert_eq!(request.options.height_um, 210_000);
+}

@@ -65,8 +65,12 @@ cargo run -q -p atrament_notebook_paper_cli -- \
 ```
 
 The default is an A4 5-mm square grid; `--style ruled`, `--style dot`, and
-`--style blank` select other paper. All measurements are millimeters and the
-PDF uses physical point dimensions, not screenshot pixels. Invalid options
+`--style blank` select other paper. `--paper-size a3|a4|a5|b5|letter|legal`
+selects standard physical dimensions, and `--landscape` rotates the sheet.
+Set a paper-size preset before any manual `--width-mm` or `--height-mm`
+overrides; the saved JSON retains the resulting exact dimensions. All
+measurements are millimeters and the PDF uses physical point dimensions,
+not screenshot pixels. Invalid options
 fail before the CLI writes PDF bytes. This is a **paper-only** CLI: it does not
 load/save notebook or handwriting profiles, draw handwriting, embed images,
 or provide localhost sliders yet. Those are still open Rust integration tasks.

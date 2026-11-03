@@ -37,6 +37,7 @@ use std::env;
 use std::error::Error;
 use std::fs::File;
 use std::io::{self, Read as _, Write as _};
+use std::mem::swap;
 use std::str::from_utf8;
 
 use atrament_paper_mark_geometry::{
@@ -70,8 +71,8 @@ const DEFAULT_COLOR: PdfRgb = PdfRgb {
 };
 
 const USAGE: &str = "Usage: atrament-paper [--profile paper.json] \
-    [--style blank|ruled|grid|dot] \
-    [--width-mm N] [--height-mm N] [--spacing-mm N] \
+    [--style blank|ruled|grid|dot] [--paper-size a3|a4|a5|b5|letter|legal] \
+    [--landscape] [--width-mm N] [--height-mm N] [--spacing-mm N] \
     [--margin-top-mm N] [--margin-bottom-mm N] \
     [--margin-left-mm N] [--margin-right-mm N] \
     [--line-color '#RRGGBB'] [--emit-profile] > output-file";
@@ -167,6 +168,18 @@ fn line_color(value: &str) -> Result<PdfRgb, String> {
         green: hex_byte(value.get(3..5))?,
         blue: hex_byte(value.get(5..7))?,
     })
+}
+
+fn paper_size(value: &str) -> Result<(u32, u32), String> {
+    match value.to_ascii_lowercase().as_str() {
+        "a3" => Ok((297_000, 420_000)),
+        "a4" => Ok((210_000, 297_000)),
+        "a5" => Ok((148_000, 210_000)),
+        "b5" => Ok((176_000, 250_000)),
+        "letter" => Ok((215_900, 279_400)),
+        "legal" => Ok((215_900, 355_600)),
+        _ => Err("paper size must be a3, a4, a5, b5, letter or legal".into()),
+    }
 }
 
 fn paper_style(value: &str) -> Result<Style, String> {
@@ -303,6 +316,9 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
     let mut emit_profile = false;
     let mut seen_edit = false;
     let mut seen_profile = false;
+    let mut seen_size_override = false;
+    let mut seen_preset = false;
+    let mut seen_landscape = false;
     let mut items = args.iter();
     while let Some(name) = items.next() {
         if name == "--help" {
@@ -310,6 +326,16 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
         }
         if name == "--emit-profile" {
             emit_profile = true;
+            continue;
+        }
+        if name == "--landscape" {
+            if seen_landscape {
+                return Err("--landscape may appear only once".into());
+            }
+            swap(&mut opts.width_um, &mut opts.height_um);
+            seen_landscape = true;
+            seen_size_override = true;
+            seen_edit = true;
             continue;
         }
         let value = items.next().ok_or_else(|| {
@@ -326,8 +352,24 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
         seen_edit = true;
         match name.as_str() {
             "--style" => opts.style = paper_style(value)?,
-            "--width-mm" => opts.width_um = millimetres(value)?,
-            "--height-mm" => opts.height_um = millimetres(value)?,
+            "--paper-size" => {
+                if seen_size_override || seen_preset {
+                    return Err(
+                        "paper size must precede size overrides and occur once"
+                            .into(),
+                    );
+                }
+                (opts.width_um, opts.height_um) = paper_size(value)?;
+                seen_preset = true;
+            }
+            "--width-mm" => {
+                opts.width_um = millimetres(value)?;
+                seen_size_override = true;
+            }
+            "--height-mm" => {
+                opts.height_um = millimetres(value)?;
+                seen_size_override = true;
+            }
             "--spacing-mm" => opts.spacing_um = millimetres(value)?,
             "--margin-top-mm" => opts.margin_top_um = millimetres(value)?,
             "--margin-bottom-mm" => {
@@ -480,7 +522,11 @@ fn mark_geometry(opts: Options) -> Result<PaperMarkGeometry, String> {
         binding_edge: BindingEdge::Left,
         border_shape: BorderShape::None,
         corner_roundness: Length::ZERO,
-        orientation: Orientation::Portrait,
+        orientation: if opts.width_um > opts.height_um {
+            Orientation::Landscape
+        } else {
+            Orientation::Portrait
+        },
         outer_margin: Length::ZERO,
         paper_mark_appearance: PaperMarkAppearance {
             join: PaperMarkJoin::Sharp,
@@ -489,9 +535,16 @@ fn mark_geometry(opts: Options) -> Result<PaperMarkGeometry, String> {
         paper_mark_layer: PaperMarkLayer::BelowInk,
         paper_pattern: pattern,
         printable_region: region,
-        sheet: SheetSize {
-            width: length(opts.width_um),
-            height: length(opts.height_um),
+        sheet: if opts.width_um > opts.height_um {
+            SheetSize {
+                width: length(opts.height_um),
+                height: length(opts.width_um),
+            }
+        } else {
+            SheetSize {
+                width: length(opts.width_um),
+                height: length(opts.height_um),
+            }
         },
         top_clearance: Length::ZERO,
         writing_inset: Length::ZERO,
