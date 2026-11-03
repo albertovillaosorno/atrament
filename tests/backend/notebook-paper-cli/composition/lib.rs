@@ -741,6 +741,85 @@ fn selected_png_commit_refuses_unsafe_replace_and_preserves_existing() {
 }
 
 #[test]
+fn date_placeholder_is_physical_and_uses_shared_pdf_png_mark_geometry() {
+    let paper = default_paper_profile_json();
+    let base = paper_profile_pdf_pages(paper.as_bytes(), 2, false)
+        .expect("unmarked paper");
+    let left_line = paper_profile_pdf_pages_with_date(
+        paper.as_bytes(), 2, false, Some(PaperDatePlaceholder::LeftLine),
+    ).expect("left date line");
+    let right_line = paper_profile_pdf_pages_with_date(
+        paper.as_bytes(), 2, false, Some(PaperDatePlaceholder::RightLine),
+    ).expect("right date line");
+    let left_box = paper_profile_pdf_pages_with_date(
+        paper.as_bytes(), 2, false, Some(PaperDatePlaceholder::LeftBox),
+    ).expect("left date box");
+    assert!(String::from_utf8_lossy(&base).contains("/Count 2"));
+    assert_eq!(String::from_utf8_lossy(&left_line).matches(" m\n").count(), 2);
+    assert_eq!(String::from_utf8_lossy(&left_box).matches(" m\n").count(), 8);
+    assert_ne!(left_line, right_line, "side changes physical position");
+    assert_ne!(left_line, left_box, "box has three more strokes");
+
+    let transparent = paper_profile_png_layer(paper.as_bytes(), 72, false)
+        .expect("unmarked PNG");
+    let line = paper_profile_png_layer_with_date(
+        paper.as_bytes(), 72, false, Some(PaperDatePlaceholder::LeftLine),
+    ).expect("line PNG");
+    let box_png = paper_profile_png_layer_with_date(
+        paper.as_bytes(), 72, false, Some(PaperDatePlaceholder::LeftBox),
+    ).expect("box PNG");
+    let right_png = paper_profile_png_layer_with_date(
+        paper.as_bytes(), 72, false, Some(PaperDatePlaceholder::RightLine),
+    ).expect("right PNG");
+    assert_ne!(transparent, line);
+    assert_ne!(line, box_png);
+    assert_ne!(line, right_png);
+    let (width, height, raw) = stored_png_pixels(&line);
+    assert_eq!((width, height), (596, 842));
+    let alpha = |pixels: &[u8], x: usize, y: usize| -> u8 {
+        let stride = width.checked_mul(4)
+            .and_then(|length| length.checked_add(1))
+            .expect("bounded scanline width");
+        let index = y.checked_mul(stride)
+            .and_then(|offset| x.checked_mul(4)
+                .and_then(|column| offset.checked_add(column)))
+            .and_then(|offset| offset.checked_add(4))
+            .expect("sample lies within the PNG raster");
+        *pixels.get(index).expect("pixel alpha channel")
+    };
+    // A4 left inset 20 mm; the date line is 15 mm from the top edge.
+    assert_eq!(alpha(&raw, 71, 42), 255);
+    assert_eq!(alpha(&raw, 480, 42), 0);
+    let (_, _, box_raw) = stored_png_pixels(&box_png);
+    assert_eq!(alpha(&box_raw, 71, 19), 255, "top side of the box");
+    assert_eq!(alpha(&raw, 71, 19), 0, "line leaves top clear");
+    let (_, _, right_raw) = stored_png_pixels(&right_png);
+    assert_eq!(alpha(&right_raw, 480, 42), 255);
+}
+
+#[test]
+fn date_placeholder_refuses_without_enough_unruled_margin() {
+    let paper = default_paper_profile_json();
+    let insufficient_top = paper.replace(
+        "\"margin_top_um\": 22000", "\"margin_top_um\": 9000",
+    );
+    let insufficient_width = paper.replace(
+        "\"margin_left_um\": 20000", "\"margin_left_um\": 180000",
+    );
+    for invalid in [&insufficient_top, &insufficient_width] {
+        assert!(paper_profile_pdf_pages_with_date(
+            invalid.as_bytes(), 1, false,
+            Some(PaperDatePlaceholder::RightBox),
+        ).is_err());
+        assert!(paper_profile_png_layer_with_date(
+            invalid.as_bytes(), 72, false,
+            Some(PaperDatePlaceholder::LeftLine),
+        ).is_err());
+        assert!(paper_profile_pdf_pages(invalid.as_bytes(), 1, false).is_ok());
+    }
+}
+
+#[test]
 fn nested_notebook_paper_layer_export_uses_one_rust_renderer() {
     let grid = default_paper_profile_json();
     let blank = grid.replace("\"style\": \"grid\"", "\"style\": \"blank\"");

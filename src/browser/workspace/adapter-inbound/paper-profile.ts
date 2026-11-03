@@ -904,8 +904,8 @@ export function createNotebookProfileEditor(
                 if (active(secret, observed)) {
                     display(result.profile);
                     download(blob, `atrament-notebook-paper.${format}`);
-                    status.textContent = "Notebook paper layer downloaded "
-                        + "· metadata and ink not rendered.";
+                    status.textContent = "Notebook paper and date placeholder "
+                        + "downloaded · no actual date text, borders or ink.";
                 }
             });
         });

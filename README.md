@@ -289,8 +289,13 @@ suppressed to avoid printing duplicate ruling on existing stationery.
 
 No profile file is changed by rendering. Output is explicit and existing paths
 require `--replace`; invalid options refuse before changing output bytes.
-This is **not** a complete notebook export: dates, rounded borders, page
-numbers, handwriting, and image overlays are still not rendered.
+
+When a notebook selects a date placeholder (`line` or `box` at the top left
+or top right), the same Rust PDF/PNG renderer draws the empty 36 × 8 mm
+placeholder in the top margin. It requires at least 10 mm of top clearance
+and 36 mm of usable width; invalid placements refuse profile validation.
+This is **not** a complete notebook export: actual date text, rounded
+borders, page numbers, handwriting and image overlays are not rendered.
 
 The localhost Rust runtime also exposes authenticated
 `GET /api/notebook/profile` (default profile) and
@@ -307,15 +312,18 @@ validator and paper serializer as the CLI. The web editor supplies these
 headers from its PDF-page and PNG-DPI controls and downloads the resulting
 paper layer.
 
-Preprinted-sheet suppression applies to both. No notebook metadata or
-handwriting is drawn in these outputs.
+Preprinted-sheet suppression applies to ruling in both formats; an explicitly
+selected date placeholder remains visible. No date text, border, page
+number, handwriting or image content is drawn in these outputs.
 
 The localhost web editor now also offers **Notebook page profile** controls
 for date placeholder style and placement, border radius, page numbers and
-preprinted-sheet intent. **Use current paper** incorporates unsaved sheet
-settings before Rust validation. **Edit notebook paper** sends the
-notebook's embedded sheet into the visual paper editor through Rust
-validation; **Use current paper** copies edited settings back only when
+preprinted-sheet intent. PDF/PNG exports draw the empty date placeholder
+only when selected and physically admissible. **Use current paper** includes
+unsaved sheet settings before Rust validation.
+
+**Edit notebook paper** sends the notebook's embedded sheet into the visual
+paper editor through Rust validation; **Use current paper** copies edited settings back only when
 requested. Load and Save JSON use explicitly selected files; no browser
 state is silently persisted or unsupported metadata drawn.
 

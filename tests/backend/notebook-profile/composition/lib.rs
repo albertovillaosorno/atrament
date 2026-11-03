@@ -155,3 +155,42 @@ fn notebook_paper_layer_honors_preprinted_and_bounds() {
     assert!(preprinted.paper_layer_pdf(1).is_err());
     assert!(preprinted.paper_layer_png(72).is_err());
 }
+
+#[test]
+fn notebook_dates_render_but_not_as_actual_text_or_page_numbers() {
+    let mut notebook = NotebookProfile {
+        printed_sheet: true,
+        ..NotebookProfile::default()
+    };
+    let bare_pdf = notebook.paper_layer_pdf(2).expect("bare pages");
+    let bare_png = notebook.paper_layer_png(72).expect("bare overlay");
+    notebook.date_style = DateStyle::Line;
+    notebook.date_placement = DatePlacement::TopLeft;
+    let left_line_pdf = notebook.paper_layer_pdf(2).expect("date line PDF");
+    let left_line_png = notebook.paper_layer_png(72).expect("date line PNG");
+    assert_ne!(bare_pdf, left_line_pdf);
+    assert_ne!(bare_png, left_line_png);
+    assert_eq!(
+        String::from_utf8_lossy(&left_line_pdf).matches(" m\n").count(), 2,
+        "one date line per physical page and no printed grid",
+    );
+    notebook.date_placement = DatePlacement::TopRight;
+    assert_ne!(left_line_png, notebook.paper_layer_png(72).expect("right"));
+    notebook.date_style = DateStyle::Box;
+    assert_eq!(
+        String::from_utf8_lossy(&notebook.paper_layer_pdf(2)
+            .expect("box PDF")).matches(" m\n").count(), 8,
+    );
+    let without_numbering = notebook.paper_layer_pdf(2).expect("no number");
+    notebook.page_numbers = true;
+    assert_eq!(
+        without_numbering,
+        notebook.paper_layer_pdf(2).expect("page-number flag not rendered"),
+    );
+    notebook.paper_json = notebook.paper_json.replace(
+        "\"margin_top_um\": 22000", "\"margin_top_um\": 9000",
+    );
+    assert!(notebook.validate().is_err(), "refuse date overlap at admission");
+    assert!(notebook.paper_layer_pdf(2).is_err());
+    assert!(notebook.paper_layer_png(72).is_err());
+}

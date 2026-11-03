@@ -157,7 +157,7 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.deepEqual(downloads, ["atrament-notebook.json",
             "atrament-notebook-paper.pdf", "atrament-notebook-paper.png"]);
         assert.match(elements.get("notebook-status").textContent,
-            /metadata and ink not rendered/);
+            /no actual date text, borders or ink/);
         const beforeInvalid = requests.length;
         elements.get("notebook-pdf-pages").value = "33";
         elements.get("notebook-export-pdf").dispatch("click");

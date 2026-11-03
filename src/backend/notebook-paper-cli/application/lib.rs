@@ -78,6 +78,8 @@ const MAX_OUTPUT_BYTES: usize = 24_000_000;
 /// Maximum bytes for a physical paper PDF or PNG export.
 pub const MAX_PAPER_OUTPUT_BYTES: usize = MAX_OUTPUT_BYTES;
 const PAPER_PROFILE_SCHEMA: &str = "atrament.paper.v1";
+const DATE_WIDTH_UM: u64 = 36_000;
+const DATE_HEIGHT_UM: u64 = 8_000;
 const DEFAULT_COLOR: PdfRgb = PdfRgb {
     red: 197,
     green: 212,
@@ -118,6 +120,19 @@ struct Options {
 enum OutputFormat {
     Pdf,
     Png,
+}
+
+/// A top-margin writing placeholder on a notebook page (not actual date text).
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PaperDatePlaceholder {
+    /// An outlined date rectangle at the left of the top margin.
+    LeftBox,
+    /// One writable line at the left of the top margin.
+    LeftLine,
+    /// An outlined date rectangle at the right of the top margin.
+    RightBox,
+    /// One writable line at the right of the top margin.
+    RightLine,
 }
 
 #[derive(Clone, Debug)]
@@ -830,6 +845,58 @@ fn paper_paths(opts: Options) -> Result<Vec<PdfVectorPath>, String> {
     Ok(paths)
 }
 
+fn append_date_placeholder(
+    paths: &mut Vec<PdfVectorPath>,
+    opts: Options,
+    placeholder: PaperDatePlaceholder,
+) -> Result<(), String> {
+    let printable_width = opts.width_um
+        .checked_sub(opts.margin_left_um)
+        .and_then(|remaining| remaining.checked_sub(opts.margin_right_um))
+        .ok_or("date placeholder requires valid horizontal margins")?;
+    if opts.margin_top_um < 10_000
+        || u64::from(printable_width) < DATE_WIDTH_UM
+    {
+        return Err(
+            "date placeholder needs 10 mm top margin and 36 mm printable width"
+                .into(),
+        );
+    }
+    let right = matches!(
+        placeholder,
+        PaperDatePlaceholder::RightLine | PaperDatePlaceholder::RightBox
+    );
+    let boxed = matches!(
+        placeholder,
+        PaperDatePlaceholder::LeftBox | PaperDatePlaceholder::RightBox
+    );
+    let x = if right {
+        u64::from(opts.width_um)
+            .checked_sub(u64::from(opts.margin_right_um))
+            .and_then(|remaining| remaining.checked_sub(DATE_WIDTH_UM))
+            .ok_or("date placeholder exceeds right printable inset")?
+    } else {
+        u64::from(opts.margin_left_um)
+    };
+    let y = u64::from(
+        opts.margin_top_um.checked_sub(8_000)
+            .ok_or("date placeholder exceeds top margin")?,
+    ).div_ceil(2);
+    let end_x = x.checked_add(DATE_WIDTH_UM)
+        .ok_or("date placeholder width overflow")?;
+    let end_y = y.checked_add(DATE_HEIGHT_UM)
+        .ok_or("date placeholder height overflow")?;
+    // Every segment is axis aligned, so the shared transparent PNG rasterizer
+    // can draw the exact same physical mark as the vector PDF exporter.
+    paths.push(stroke(x, end_y, end_x, end_y, opts.color)?);
+    if boxed {
+        paths.push(stroke(x, y, end_x, y, opts.color)?);
+        paths.push(stroke(x, y, x, end_y, opts.color)?);
+        paths.push(stroke(end_x, y, end_x, end_y, opts.color)?);
+    }
+    Ok(())
+}
+
 fn render_png(opts: Options, dpi: u32) -> Result<Vec<u8>, String> {
     let paths = paper_paths(opts)?;
     png::render_paper_png(opts.width_um, opts.height_um, dpi, &paths)
@@ -908,15 +975,46 @@ pub fn paper_profile_pdf_pages(
     pages: usize,
     include_marks: bool,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_pdf_pages_with_date(profile, pages, include_marks, None)
+}
+
+/// Validate whether a date line or box fits the existing top margin.
+///
+/// # Errors
+/// Refuses invalid paper or less than 10 mm of top margin or 36 mm of width.
+pub fn validate_paper_date_clearance(profile: &[u8]) -> Result<(), String> {
+    let options = decode_profile(profile)?;
+    append_date_placeholder(
+        &mut Vec::new(), options, PaperDatePlaceholder::LeftLine,
+    )
+}
+
+/// Render paper and an optional notebook date placeholder on each PDF page.
+///
+/// The date is an empty line or box in the top margin; no date text, page
+/// numbers, rounded borders, images, or handwriting are rendered. A too-small
+/// top margin or printable width refuses rather than overlapping the ruling.
+///
+/// # Errors
+/// Refuses invalid profiles, missing date clearance or output limits.
+pub fn paper_profile_pdf_pages_with_date(
+    profile: &[u8],
+    pages: usize,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+) -> Result<Vec<u8>, String> {
     let options = decode_profile(profile)?;
     if !(1..=MAX_PAGES).contains(&pages) {
         return Err("paper PDF needs 1 to 32 pages".into());
     }
-    let paths = if include_marks {
+    let mut paths = if include_marks {
         paper_paths(options)?
     } else {
         Vec::new()
     };
+    if let Some(placeholder) = date {
+        append_date_placeholder(&mut paths, options, placeholder)?;
+    }
     serialize_paths(options, paths, pages)
 }
 
@@ -944,12 +1042,28 @@ pub fn paper_profile_png_layer(
     dpi: u32,
     include_marks: bool,
 ) -> Result<Vec<u8>, String> {
+    paper_profile_png_layer_with_date(profile, dpi, include_marks, None)
+}
+
+/// Rasterize paper and an optional top-margin date line/box as RGBA PNG.
+///
+/// # Errors
+/// Refuses invalid profiles, missing date clearance or raster/output limits.
+pub fn paper_profile_png_layer_with_date(
+    profile: &[u8],
+    dpi: u32,
+    include_marks: bool,
+    date: Option<PaperDatePlaceholder>,
+) -> Result<Vec<u8>, String> {
     let options = decode_profile(profile)?;
-    let paths = if include_marks {
+    let mut paths = if include_marks {
         paper_paths(options)?
     } else {
         Vec::new()
     };
+    if let Some(placeholder) = date {
+        append_date_placeholder(&mut paths, options, placeholder)?;
+    }
     png::render_paper_png(options.width_um, options.height_um, dpi, &paths)
 }
 
