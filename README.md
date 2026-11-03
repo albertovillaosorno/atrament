@@ -512,7 +512,18 @@ cargo run -q -p atrament_profile_editor_cli -- notebook \
 
 The default 26-letter draft has 739 sampled strokes. Rust accepted an
 exact readback and exported both PDF and transparent 72-DPI PNG for `hola`.
-This action does not seed uppercase, Spanish accents, punctuation or the
+
+For Spanish vowels and `ñ`, click **Fill missing Spanish accents (unsaved)**
+after authoring the lowercase bases. This explicitly composes the seven
+precomposed NFC forms `á é í ó ú ñ ü` without replacing existing target ink.
+A missing base or ambiguous handwritten `i` refuses the entire batch; only
+a clearly separated dot in `i` is removed from the copied accented form.
+The seven accented letters plus lowercase a–z have 986 sampled strokes by
+default. Rust audited all seven targets with no missing glyphs, reopened the
+TSV byte-for-byte, and rendered `niño` to PDF and transparent 72-DPI PNG.
+NFD accents remain separate Unicode keys and need independent composition.
+
+These actions do not seed uppercase, punctuation or the
 complete 114-entry inventory. It does not connect semantic Markdown text
 to notebook flow, and the native renderer still caps output at 512 physical
 ink strokes per export. The shapes are editable geometric starters, not

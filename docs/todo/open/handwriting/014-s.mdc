@@ -85,6 +85,25 @@ each and zero missing**, then exported real one-page PDF and transparent
 an attached analytic accent or automatic font substitution; cursive and
 seeded correlated handwriting remain open.
 
+## Fill-missing Spanish lowercase accents (partial) — 2026-11-03
+
+After the caller explicitly authors the lowercase bases, the localhost
+editor can fill only missing NFC `á é í ó ú ñ ü` with one admitted-session
+click. Existing custom accented ink is never replaced. The complete batch
+is checked before changing the in-memory draft, and still requires an
+explicit TSV download. A missing source, ambiguous dotted `i`, clipped
+accent or out-of-cap library refuses all pending changes. NFD targets
+remain independent, not normalized into the generated NFC keys.
+
+Two browser regressions cover the session gate, seven ordered target
+strokes from existing bases, idempotence, custom NFC and NFD preservation,
+and atomic refusal. The combined lowercase-plus-accent draft has **986
+sampled native strokes**; Rust read it byte-for-byte, audited all seven
+NFC accents with **zero missing shapes**, and rendered `niño` as a real
+one-page PDF and transparent 72-DPI RGBA PNG. This is controlled manual
+starter composition, not automatic full bilingual coverage or joined
+cursive ink. Seeded correlated variation remains open.
+
 ## Reusable curved n/u sources (partial) — 2026-11-03
 
 Two explicitly selected rounded-letter starters now supply mathematical

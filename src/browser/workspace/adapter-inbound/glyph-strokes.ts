@@ -813,6 +813,7 @@ export function createGlyphStrokeEditor(): {
     const form = required<HTMLSelectElement>("glyph-form");
     const construct = required<HTMLButtonElement>("glyph-construct");
     const seedLowercase = required<HTMLButtonElement>("glyph-seed-lowercase");
+    const seedSpanish = required<HTMLButtonElement>("glyph-seed-spanish");
     const centerX = required<HTMLInputElement>("glyph-circle-x");
     const centerY = required<HTMLInputElement>("glyph-circle-y");
     const radius = required<HTMLInputElement>("glyph-circle-radius");
@@ -846,7 +847,8 @@ export function createGlyphStrokeEditor(): {
         ranges[axis] = required<HTMLInputElement>(`glyph-${axis}-range`);
     }
     const controls = [character, color, source, add, copyFrom, copy, compose,
-        form, construct, seedLowercase, centerX, centerY, radius,
+        form, construct, seedLowercase, seedSpanish,
+        centerX, centerY, radius,
         accentShift, accentLift,
         selected, update,
         remove, reverse, earlier, later, save,
@@ -1382,6 +1384,45 @@ export function createGlyphStrokeEditor(): {
             selectedIndex = null;
             render();
             message(`Filled ${missing.length} missing lowercase templates (`
+                + `${added.length} sampled strokes); unsaved draft`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    seedSpanish.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before accents");
+            }
+            const targets: [string, string][] = [
+                ["a", "á"], ["e", "é"], ["i", "í"], ["o", "ó"],
+                ["u", "ú"], ["n", "ñ"], ["u", "ü"],
+            ];
+            const authored = new Set(strokes.map((stroke) => stroke.grapheme));
+            const missing = targets.filter(([, target]) =>
+                !authored.has(target));
+            if (missing.length === 0) {
+                message("All seven Spanish lowercase accents are authored");
+                return;
+            }
+            const withoutBases = missing.flatMap(([base]) =>
+                authored.has(base) ? [] : [base]);
+            if (withoutBases.length > 0) {
+                throw new Error("Author lowercase base glyphs first: "
+                    + [...new Set(withoutBases)].join(", "));
+            }
+            const shift = Number(accentShift.value);
+            const lift = Number(accentLift.value);
+            const added = missing.flatMap(([base, target]) =>
+                composeAccentedGlyph(strokes, base, target, color.value,
+                    { dx: shift, lift }));
+            const next = [...strokes, ...added];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${missing.length} missing Spanish accents (`
                 + `${added.length} sampled strokes); unsaved draft`);
         } catch (error) {
             message(String(error));

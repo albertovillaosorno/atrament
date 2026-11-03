@@ -96,6 +96,7 @@ function mountEditor() {
         "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-compose",
         "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
+        "glyph-seed-spanish",
         "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
@@ -1408,6 +1409,86 @@ test("fill-missing atomically refuses over-cap glyph libraries", async () => {
         assert.equal(saved.length, 4090);
         assert.deepEqual(saved[0], existing[0]);
         assert.deepEqual(saved.at(-1), existing.at(-1));
+    } finally {
+        ui.restore();
+    }
+});
+
+test("Spanish accent batch fills missing NFC forms", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        assert.equal(get("seed-spanish").disabled, true);
+        editor.start();
+        get("seed-spanish").dispatch("click");
+        assert.match(get("status").textContent, /base glyphs first/);
+        get("seed-lowercase").dispatch("click");
+        get("seed-spanish").dispatch("click");
+        assert.match(get("status").textContent, /Filled 7 missing/);
+        assert.equal(downloads.length, 0, "generation remains unsaved");
+        get("character").value = "í";
+        get("character").dispatch("input");
+        assert.equal(get("preview").children.length, 2);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        const base = [..."abcdefghijklmnopqrstuvwxyz"].flatMap((g) =>
+            geometricStarter(g, 1550, 2450, 1100, 250, "#243647"));
+        const pairs = [["a", "á"], ["e", "é"], ["i", "í"],
+            ["o", "ó"], ["u", "ú"], ["n", "ñ"], ["u", "ü"]];
+        const accented = pairs.flatMap(([source, target]) =>
+            composeAccentedGlyph(base, source, target, "#243647"));
+        assert.deepEqual(saved, [...base, ...accented]);
+        get("color").value = "#998877";
+        get("seed-spanish").dispatch("click");
+        assert.match(get("status").textContent, /All seven Spanish/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "repeat click never replaces authored accents");
+        editor.reset();
+        assert.equal(get("seed-spanish").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("Spanish accent batch refuses ambiguous i", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const base = ["a", "e", "i", "o", "u", "n"].map((glyph) =>
+            ({ ...stroke(glyph), x1: 900, y1: 1900,
+                x2: 2350, y2: 3300 }));
+        base.push(stroke("á"), stroke("e\u0301"));
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(base));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-spanish").dispatch("click");
+        assert.match(get("status").textContent, /clear upper dot/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            base, "one ambiguous dot refuses every pending accent");
+        const cleanI = geometricStarter("i", 1550, 2450, 1100,
+            250, "#123456");
+        const fixed = [...base.filter((stroke) => stroke.grapheme !== "i"),
+            ...cleanI];
+        const fresh = new TextEncoder().encode(encodeGlyphLibrary(fixed));
+        get("load").files = [{
+            size: fresh.length, arrayBuffer: async () => fresh.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-spanish").dispatch("click");
+        assert.match(get("status").textContent, /Filled 6 missing/);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved.slice(0, fixed.length), fixed,
+            "preserve existing á and decomposed é plus all bases");
+        assert.equal(saved.filter((line) => line.grapheme === "á").length,
+            1, "custom NFC á was not overwritten");
+        assert.equal(saved.filter((line) => line.grapheme === "e\u0301")
+            .length, 1, "decomposed source key remains separate");
     } finally {
         ui.restore();
     }
