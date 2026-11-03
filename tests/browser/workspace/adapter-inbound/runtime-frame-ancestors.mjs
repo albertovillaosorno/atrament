@@ -3702,6 +3702,21 @@ test(
             });
             assert.equal(cliBuild.status, 0, "profile CLI builds offline");
             const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            // Inventory checks exact graphemes without falsely claiming
+            // visible strokes or rendering fallback for math symbols.
+            const inventory = spawnSync(cli, [
+                "handwriting", "--profile", handwritingFile,
+                "--inventory-text", "¿Qué? ¡Pingüino! «ñ» n\u0303 ∞",
+            ], { encoding: "utf8", stdio: "pipe" });
+            assert.equal(inventory.status, 0);
+            assert.ok(inventory.stdout.includes(
+                "\"ñ\": text-baseline / statistical-override"));
+            assert.ok(inventory.stdout.includes(
+                "\"n\u0303\": text-baseline / global-statistics"));
+            assert.ok(inventory.stdout.includes(
+                "\"∞\": outside-text-baseline / global-statistics"));
+            assert.ok(inventory.stdout.includes(
+                "membership does not imply renderability"));
             const pdfFile = path.join(root, "browser-saved-paper.pdf");
             const pngFile = path.join(root, "browser-saved-page-2.png");
             for (const [format, output, argumentsAfterFormat] of [

@@ -37,6 +37,26 @@ records. This record is **open executable integration work**. It must not be
 closed merely because a prior design was accepted or a different
 implementation was proposed.
 
+## Executable inventory-only progress — 2026-11-03
+
+A real Firefox session saves a Rust handwriting profile with an exact `ñ`
+override. The separate Rust CLI reopens that browser-saved file and audits
+`¿Qué? ¡Pingüino! «ñ» ñ ∞` by exact grapheme, preserving the distinction
+between composed `ñ`, decomposed `n` plus combining tilde, and an external
+math symbol. The test verifies that `ñ` reports a statistical override,
+decomposed `ñ` inherits global statistics, and `∞` is explicitly outside
+the frozen English/Spanish **text** inventory.
+
+The CLI clearly states that inventory membership **does not imply
+renderability**. No real stroke geometry or user-selected visible fallback
+is supplied for `∞` or any other grapheme, so the task remains open until
+the fixed multilingual page can render or present exact missing shapes with
+an honest, user-owned fallback. This evidence does not imply full Unicode
+coverage, automatic handwriting, or a completed font/shape engine.
+
+**Test:** `Firefox edits, saves and reopens both profiles through Rust
+localhost` in `tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs`.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
