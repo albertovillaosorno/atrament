@@ -75,6 +75,7 @@ members = [
     "src/backend/mcp-semantic-command-admission-projection",
     "src/backend/mcp-semantic-command-result-projection",
     "src/backend/notebook-paper-cli",
+    "src/backend/notebook-profile",
     "src/backend/pdf-composition-plan",
     "src/backend/pdf-vector-serializer",
     "src/backend/physical-compatibility-ledger",
@@ -177,6 +178,7 @@ atrament_motion_plan_dry_run = { path = "src/backend/motion-plan-dry-run" }
 atrament_one_shot_formatting_prompt = { path = "src/backend/one-shot-formatting-prompt" }
 atrament_output_capability_matrix = { path = "src/backend/output-capability-matrix" }
 atrament_notebook_paper_cli = { path = "src/backend/notebook-paper-cli" }
+atrament_notebook_profile = { path = "src/backend/notebook-profile" }
 atrament_pdf_composition_plan = { path = "src/backend/pdf-composition-plan" }
 atrament_pdf_vector_serializer = { path = "src/backend/pdf-vector-serializer" }
 atrament_physical_page_profile = { path = "src/backend/physical-page-profile" }

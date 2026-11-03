@@ -49,13 +49,18 @@ use atrament_handwriting_statistics_json::{
     MAXIMUM_STATISTICS_JSON_BYTES, decode_statistics_json,
     encode_statistics_json,
 };
+use atrament_notebook_paper_cli::canonical_paper_profile_json;
+use atrament_notebook_profile::{
+    DatePlacement, DateStyle, MAX_NOTEBOOK_JSON_BYTES, NotebookProfile,
+};
 use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };
 use atrament_profile_file_reader::read_bounded_profile_file;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
-const USAGE: &str = "Usage: atrament-profiles paper [atrament-paper options] \
+const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
+    | paper [atrament-paper options] \
     | handwriting [--profile ink.json] [--seed U64] \
     [--set-global DIM MIN MAX MEAN MEDIAN DEVIATION] \
     [--set-glyph GRAPHEME DIM MIN MAX MEAN MEDIAN DEVIATION] \
@@ -65,6 +70,16 @@ const USAGE: &str = "Usage: atrament-profiles paper [atrament-paper options] \
     Handwriting units: micrometres, millidegrees, or parts per thousand.\n\
     Run paper --help for page sizes, styles, margins and PDF options.";
 
+const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
+    [--profile notebook.json] [--paper-profile paper.json] \
+    [--date-style none|line|box] \
+    [--date-placement none|top-left|top-right] \
+    [--border-radius-um INTEGER] [--page-numbers true|false] \
+    [--printed-sheet true|false] [--inspect] \
+    [--output FILE [--replace]]\n\
+    Notebook metadata is validated and saved; dates, borders and printed-page \
+    flags do not yet render. Paper uses the existing Rust paper profile.";
+
 #[derive(Debug)]
 struct HandwritingRequest {
     inspect: bool,
@@ -73,13 +88,22 @@ struct HandwritingRequest {
     replace: bool,
 }
 
+#[derive(Debug)]
+struct NotebookRequest {
+    inspect: bool,
+    output: Option<String>,
+    profile: NotebookProfile,
+    replace: bool,
+}
+
 fn read_handwriting_profile(
     path: &str,
 ) -> Result<HandwritingStatisticsProfile, String> {
     // Avoid a blocking FIFO open for ordinary explicit CLI path selection.
     // This is preflight, not a substitute for opened-handle verification.
-    let source = metadata(path)
-        .map_err(|error| format!("cannot inspect handwriting profile: {error}"))?;
+    let source = metadata(path).map_err(|error| {
+        format!("cannot inspect handwriting profile: {error}")
+    })?;
     if !source.is_file() {
         return Err("handwriting file refused: NotRegularFile".into());
     }
@@ -136,7 +160,9 @@ fn remove_glyph_option(
     };
     profile
         .without_glyph_override(
-            grapheme, dimension, &UnicodeGraphemeSegmentation,
+            grapheme,
+            dimension,
+            &UnicodeGraphemeSegmentation,
         )
         .map_err(|error| format!("statistics refused: {error:?}"))
 }
@@ -326,6 +352,188 @@ fn execute_handwriting(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     Ok(Some(canonical))
 }
 
+fn read_notebook_input(path: &str, limit: usize) -> Result<Vec<u8>, String> {
+    let source = metadata(path)
+        .map_err(|error| format!("cannot inspect notebook input: {error}"))?;
+    if !source.is_file() {
+        return Err("notebook input refused: NotRegularFile".into());
+    }
+    let file = File::open(path)
+        .map_err(|error| format!("cannot open notebook input: {error}"))?;
+    let bytes = read_bounded_profile_file(file, limit)
+        .map_err(|error| format!("notebook input refused: {error:?}"))?;
+    Ok(bytes.bytes().to_vec())
+}
+
+fn apply_notebook_edit(
+    profile: &mut NotebookProfile,
+    option: &str,
+    value: &str,
+) -> Result<(), String> {
+    match option {
+        "--date-style" => profile.date_style = DateStyle::parse(value)?,
+        "--date-placement" => {
+            profile.date_placement = DatePlacement::parse(value)?;
+        }
+        "--border-radius-um" => {
+            if value.is_empty()
+                || !value.bytes().all(|byte| byte.is_ascii_digit())
+            {
+                return Err(
+                    "border radius requires unsigned integer micrometres"
+                        .into(),
+                );
+            }
+            profile.border_radius_um = value
+                .parse::<u32>()
+                .map_err(|error| format!("invalid border radius: {error}"))?;
+        }
+        "--page-numbers" | "--printed-sheet" => {
+            let enabled = match value {
+                "true" => true,
+                "false" => false,
+                _ => return Err(format!("{option} requires true or false")),
+            };
+            if option == "--page-numbers" {
+                profile.page_numbers = enabled;
+            } else {
+                profile.printed_sheet = enabled;
+            }
+        }
+        _ => return Err(format!("unsupported notebook edit: {option}")),
+    }
+    Ok(())
+}
+
+fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
+    let mut profile = NotebookProfile::default();
+    let mut inspect = false;
+    let mut output = None;
+    let mut replace = false;
+    let mut loaded = false;
+    let mut edited = false;
+    let mut iter = args.iter();
+    while let Some(option) = iter.next() {
+        match option.as_str() {
+            "--profile" => {
+                if loaded || edited {
+                    return Err(
+                        "--profile must appear once, before edits".into()
+                    );
+                }
+                let path = iter.next().ok_or("--profile requires a file")?;
+                profile = NotebookProfile::from_json(&read_notebook_input(
+                    path,
+                    MAX_NOTEBOOK_JSON_BYTES,
+                )?)?;
+                loaded = true;
+            }
+            "--paper-profile" => {
+                let path =
+                    iter.next().ok_or("--paper-profile requires a file")?;
+                let paper = read_notebook_input(
+                    path,
+                    atrament_notebook_paper_cli::MAX_PROFILE_BYTES,
+                )?;
+                profile.paper_json = canonical_paper_profile_json(&paper)?;
+                edited = true;
+            }
+            "--date-style" | "--date-placement" | "--border-radius-um"
+            | "--page-numbers" | "--printed-sheet" => {
+                let value = iter
+                    .next()
+                    .ok_or_else(|| format!("{option} requires a value"))?;
+                apply_notebook_edit(&mut profile, option, value)?;
+                edited = true;
+            }
+            "--inspect" => {
+                if inspect {
+                    return Err("--inspect may appear only once".into());
+                }
+                inspect = true;
+            }
+            "--output" => {
+                let path = iter.next().ok_or("--output requires a filename")?;
+                if output.is_some() || path.is_empty() || path.starts_with('-')
+                {
+                    return Err(
+                        "--output requires one explicit filename".into()
+                    );
+                }
+                output = Some(path.clone());
+            }
+            "--replace" => {
+                if replace {
+                    return Err("--replace may appear only once".into());
+                }
+                replace = true;
+            }
+            _ => return Err(format!("unknown notebook option: {option}")),
+        }
+    }
+    if replace && output.is_none() {
+        return Err("--replace requires --output".into());
+    }
+    if inspect && output.is_some() {
+        return Err("--inspect is stdout only; omit --output".into());
+    }
+    profile.validate()?;
+    Ok(NotebookRequest {
+        inspect,
+        output,
+        profile,
+        replace,
+    })
+}
+
+fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
+    let request = parse_notebook_options(args)?;
+    let canonical = request.profile.canonical_json()?;
+    if request.inspect {
+        return Ok(Some(
+            format!(
+                concat!(
+                    "Version: atrament.notebook.v1\n",
+                    "Date: {} / {}\n",
+                    "Border radius: {} um\n",
+                    "Page numbers: {}\n",
+                    "Printed sheet: {}\n"
+                ),
+                request.profile.date_style.key(),
+                request.profile.date_placement.key(),
+                request.profile.border_radius_um,
+                request.profile.page_numbers,
+                request.profile.printed_sheet,
+            )
+            .into_bytes(),
+        ));
+    }
+    let Some(output) = request.output else {
+        return Ok(Some(canonical.into_bytes()));
+    };
+    let disposition = if request.replace {
+        ProfileFileCommitDisposition::ReplaceExisting
+    } else {
+        ProfileFileCommitDisposition::PreserveExisting
+    };
+    let _evidence = commit_profile_file(
+        Path::new(&output),
+        canonical.as_bytes(),
+        MAX_NOTEBOOK_JSON_BYTES,
+        disposition,
+    )
+    .map_err(|error| {
+        if error.may_have_committed() {
+            format!(
+                "output durability unknown; inspect before retry: {error:?}"
+            )
+        } else {
+            format!("output not saved: {error:?}")
+        }
+    })?;
+    Ok(None)
+}
+
 fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     let Some((mode, rest)) = args.split_first() else {
         writeln!(io::stdout().lock(), "{USAGE}")?;
@@ -333,6 +541,14 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     };
     match mode.as_str() {
         "paper" => atrament_notebook_paper_cli::run_cli_args(rest)?,
+        "notebook" if rest.iter().any(|arg| arg == "--help") => {
+            writeln!(io::stdout().lock(), "{NOTEBOOK_USAGE}")?;
+        }
+        "notebook" => {
+            if let Some(bytes) = execute_notebook(rest)? {
+                io::stdout().lock().write_all(&bytes)?;
+            }
+        }
         "handwriting" if rest.iter().any(|arg| arg == "--help") => {
             writeln!(io::stdout().lock(), "{USAGE}")?;
         }

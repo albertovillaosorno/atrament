@@ -219,6 +219,41 @@ editor now accepts bounded global and per-grapheme changes. Notebook
 content profiles, actual handwriting rendering, and server-side Open/Save
 web controls remain open implementation tasks.
 
+### Native notebook page metadata profile (first Rust slice)
+
+The `atrament-profiles notebook` subcommand creates a **versioned
+`atrament.notebook.v1` profile** containing the existing Rust-validated
+`atrament.paper.v1` sheet plus date placeholder style and location, border
+radius in micrometres, page-number intent, and a printed-sheet flag. It is a
+starting page-profile envelope, **not** yet notebook content or rendered dates.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  paper --style ruled --spacing-mm 7 --margin-top-mm 25 \
+  --emit-profile --output my-paper.json
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --paper-profile my-paper.json --date-style box \
+  --date-placement top-right --border-radius-um 3000 \
+  --page-numbers true --printed-sheet false --output notebook.json
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --profile notebook.json --page-numbers false \
+  --output notebook.json --replace
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --profile notebook.json --inspect
+```
+
+Notebook input is bounded at 8 KiB. The nested paper and notebook fields
+are validated by Rust. Unknown or duplicate fields, invalid dates,
+impossible paper geometry or oversized borders refuse. `--profile`
+must precede edits.
+
+`--output` refuses existing files unless `--replace` is explicit, and never
+overwrites symlinks. Invalid inputs cannot change the output.
+
+The paper-only PDF command continues to draw sheet marks. Dates, border
+rounding, page numbers, printed-sheet handling, handwriting, and PNG remain
+unrendered in this slice.
+
 ## The workspace
 
 The following is the intended notebook workflow, not a claim that the

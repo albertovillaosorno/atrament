@@ -250,14 +250,38 @@ fn glyph_removal_fixture() -> PathBuf {
     let source = test_path();
     let target = source.to_str().expect("input filename");
     let initial = args(&[
-        "--set-glyph", "\u{f1}", "height",
-        "2500", "3500", "3000", "3000", "100",
-        "--set-glyph", "\u{f1}", "slant", "-1000", "1000", "0", "0", "100",
-        "--set-glyph", "n\u{303}", "height",
-        "2500", "3500", "3000", "3000", "100",
-        "--output", target,
+        "--set-glyph",
+        "\u{f1}",
+        "height",
+        "2500",
+        "3500",
+        "3000",
+        "3000",
+        "100",
+        "--set-glyph",
+        "\u{f1}",
+        "slant",
+        "-1000",
+        "1000",
+        "0",
+        "0",
+        "100",
+        "--set-glyph",
+        "n\u{303}",
+        "height",
+        "2500",
+        "3500",
+        "3000",
+        "3000",
+        "100",
+        "--output",
+        target,
     ]);
-    assert!(execute_handwriting(&initial).expect("initial save").is_none());
+    assert!(
+        execute_handwriting(&initial)
+            .expect("initial save")
+            .is_none()
+    );
     source
 }
 
@@ -277,22 +301,34 @@ fn remove_glyph_cli_round_trip_preserves_exact_nfd_key() {
     let input_name = source.to_str().expect("input filename");
     let output_name = output.to_str().expect("output filename");
     let removal = args(&[
-        "--profile", input_name, "--remove-glyph-dimension",
-        "\u{f1}", "height", "--output", output_name,
+        "--profile",
+        input_name,
+        "--remove-glyph-dimension",
+        "\u{f1}",
+        "height",
+        "--output",
+        output_name,
     ]);
-    assert!(execute_handwriting(&removal).expect("updated save").is_none());
+    assert!(
+        execute_handwriting(&removal)
+            .expect("updated save")
+            .is_none()
+    );
     let decoded = decode_statistics_json(
         &fs::read(&output).expect("saved JSON"),
         &UnicodeGraphemeSegmentation,
-    ).expect("same native codec");
+    )
+    .expect("same native codec");
     assert_eq!(decoded.glyphs.len(), 2);
     assert_eq!(
         decoded.statistics_for("\u{f1}", Dimension::Height),
         decoded.statistics_for("z", Dimension::Height),
     );
     assert_eq!(
-        decoded.statistics_for("\u{f1}", Dimension::Slant)
-            .expect("slant override").standard_deviation,
+        decoded
+            .statistics_for("\u{f1}", Dimension::Slant)
+            .expect("slant override")
+            .standard_deviation,
         100,
     );
     assert_ne!(
@@ -300,8 +336,13 @@ fn remove_glyph_cli_round_trip_preserves_exact_nfd_key() {
         decoded.statistics_for("\u{f1}", Dimension::Height),
     );
     let full = execute_handwriting(&args(&[
-        "--profile", input_name, "--remove-glyph", "\u{f1}",
-    ])).expect("whole glyph removal").expect("stdout JSON");
+        "--profile",
+        input_name,
+        "--remove-glyph",
+        "\u{f1}",
+    ]))
+    .expect("whole glyph removal")
+    .expect("stdout JSON");
     let no_glyph = decode_statistics_json(&full, &UnicodeGraphemeSegmentation)
         .expect("whole glyph accepted");
     assert_eq!(no_glyph.glyphs.len(), 1);
@@ -323,12 +364,18 @@ fn invalid_glyph_removal_preserves_existing_target_bytes() {
     for bad in [
         args(&["--profile", input_name, "--remove-glyph", "a"]),
         args(&[
-            "--profile", input_name, "--remove-glyph-dimension",
-            "\u{f1}", "width",
+            "--profile",
+            input_name,
+            "--remove-glyph-dimension",
+            "\u{f1}",
+            "width",
         ]),
         args(&[
-            "--profile", input_name, "--remove-glyph-dimension",
-            "\u{f1}", "unknown",
+            "--profile",
+            input_name,
+            "--remove-glyph-dimension",
+            "\u{f1}",
+            "unknown",
         ]),
         args(&["--remove-glyph", "\u{f1}", "--profile", input_name]),
         args(&["--profile", input_name, "--remove-glyph"]),
@@ -356,4 +403,167 @@ fn handwriting_profile_named_pipe_refuses_without_blocking() {
         .expect_err("nonregular profile path must refuse before open");
     assert!(error.contains("NotRegularFile"));
     fs::remove_file(&path).expect("remove test-owned pipe");
+}
+
+#[test]
+fn notebook_cli_round_trips_selected_file_and_modified_copy() {
+    let source = test_path();
+    let copy = test_path();
+    let source_name = source.to_str().expect("source filename");
+    let copy_name = copy.to_str().expect("copy filename");
+    let initial = args(&[
+        "--date-style",
+        "box",
+        "--date-placement",
+        "top-right",
+        "--border-radius-um",
+        "4500",
+        "--page-numbers",
+        "true",
+        "--printed-sheet",
+        "true",
+        "--output",
+        source_name,
+    ]);
+    assert!(
+        execute_notebook(&initial)
+            .expect("saved notebook")
+            .is_none()
+    );
+    let saved = fs::read(&source).expect("canonical JSON saved");
+    let reopen = execute_notebook(&args(&["--profile", source_name]))
+        .expect("native load")
+        .expect("stdout profile");
+    assert_eq!(saved, reopen);
+    let parsed = NotebookProfile::from_json(&reopen).expect("valid notebook");
+    assert_eq!(parsed.date_style, DateStyle::Box);
+    assert_eq!(parsed.date_placement, DatePlacement::TopRight);
+    assert_eq!(parsed.border_radius_um, 4_500);
+    assert!(parsed.page_numbers);
+    assert!(parsed.printed_sheet);
+    let edit = args(&[
+        "--profile",
+        source_name,
+        "--page-numbers",
+        "false",
+        "--output",
+        copy_name,
+    ]);
+    assert!(execute_notebook(&edit).expect("copy saved").is_none());
+    let edited = NotebookProfile::from_json(&fs::read(&copy).expect("copy"))
+        .expect("valid modified copy");
+    assert!(!edited.page_numbers);
+    assert!(edited.printed_sheet);
+    assert_eq!(fs::read(&source).expect("source kept"), saved);
+    fs::remove_file(source).expect("owned source removed");
+    fs::remove_file(copy).expect("owned copy removed");
+}
+
+#[test]
+fn notebook_cli_imports_canonical_rust_paper_without_divergent_schema() {
+    let source = test_path();
+    let name = source.to_str().expect("paper filename");
+    let canonical_paper =
+        atrament_notebook_paper_cli::default_paper_profile_json()
+            .replace("\"style\": \"grid\"", "\"style\": \"ruled\"");
+    fs::write(&source, &canonical_paper).expect("paper fixture");
+    let nested = execute_notebook(&args(&[
+        "--paper-profile",
+        name,
+        "--date-style",
+        "line",
+        "--date-placement",
+        "top-left",
+        "--inspect",
+    ]))
+    .expect("inspect accepted")
+    .expect("stdout inspection");
+    assert!(String::from_utf8_lossy(&nested).contains("Date: line / top-left"));
+    let profile = execute_notebook(&args(&["--paper-profile", name]))
+        .expect("paper accepted")
+        .expect("stdout JSON");
+    assert_eq!(
+        NotebookProfile::from_json(&profile)
+            .expect("notebook codec")
+            .paper_json,
+        canonical_paper,
+    );
+    fs::remove_file(source).expect("owned fixture removed");
+}
+
+#[test]
+fn notebook_cli_refusals_preserve_output_and_source() {
+    let source = test_path();
+    let output = test_path();
+    let source_name = source.to_str().expect("source filename");
+    let output_name = output.to_str().expect("output filename");
+    let baseline = execute_notebook(&args(&[]))
+        .expect("default")
+        .expect("JSON");
+    fs::write(&source, baseline).expect("valid source");
+    fs::write(&output, b"preserved").expect("sentinel output");
+    for invalid in [
+        args(&["--profile", source_name, "--date-style", "box"]),
+        args(&["--profile", source_name, "--border-radius-um", "999999"]),
+        args(&["--profile", source_name, "--page-numbers", "sometimes"]),
+        args(&["--profile", source_name, "--date-placement", "bottom"]),
+        args(&["--date-style", "box", "--profile", source_name]),
+        args(&["--border-radius-um", "-1"]),
+        args(&["--paper-profile", source_name]),
+        args(&["--unknown"]),
+    ] {
+        let mut attempt = invalid;
+        attempt.extend(args(&["--output", output_name, "--replace"]));
+        assert!(execute_notebook(&attempt).is_err(), "{attempt:?}");
+        assert_eq!(fs::read(&output).expect("unmodified output"), b"preserved");
+    }
+    assert_eq!(
+        NotebookProfile::from_json(&fs::read(&source).expect("source intact"))
+            .expect("source still decodes"),
+        NotebookProfile::default(),
+    );
+    assert!(
+        execute_notebook(&args(&[
+            "--profile",
+            source_name,
+            "--output",
+            output_name,
+        ]))
+        .is_err()
+    );
+    assert!(
+        execute_notebook(&args(&[
+            "--profile",
+            source_name,
+            "--output",
+            output_name,
+            "--replace",
+        ]))
+        .expect("explicitly replaced")
+        .is_none()
+    );
+    assert_eq!(
+        fs::read(&output).expect("replacement"),
+        fs::read(&source).expect("source")
+    );
+    fs::remove_file(source).expect("owned source removed");
+    fs::remove_file(output).expect("owned output removed");
+}
+
+#[cfg(unix)]
+#[test]
+fn notebook_profile_named_pipe_refuses_before_open() {
+    use nix::sys::stat::Mode;
+    use nix::unistd::mkfifo;
+
+    let path = test_path().with_extension("fifo");
+    mkfifo(&path, Mode::S_IRUSR | Mode::S_IWUSR).expect("owned FIFO");
+    let name = path.to_str().expect("FIFO filename");
+    let refusal = execute_notebook(&args(&["--profile", name]));
+    assert!(
+        refusal
+            .expect_err("FIFO refused")
+            .contains("NotRegularFile")
+    );
+    fs::remove_file(path).expect("owned FIFO removed");
 }

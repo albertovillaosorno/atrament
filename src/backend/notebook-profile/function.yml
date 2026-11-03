@@ -1,0 +1,9 @@
+identity:
+  id: function:notebook-profile
+  name: notebook-profile
+  path: src/backend/notebook-profile
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: composition
