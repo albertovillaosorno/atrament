@@ -419,3 +419,34 @@ test("copy creates an independent exact-glyph shape", async () => {
         ui.restore();
     }
 });
+
+test("copy replaces target strokes without touching neighbors", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const original = [
+            stroke("ñ"),
+            { ...stroke("n\u{303}"), x1: 500, color: "#334455" },
+            stroke("∞"),
+            { ...stroke("n\u{303}"), x1: 700, color: "#556677" },
+        ];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(original));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("character").value = "n\u{303}";
+        get("character").dispatch("input");
+        get("copy-from").value = "ñ";
+        get("copy").dispatch("click");
+        assert.equal(get("preview").children.length, 1);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()), [
+            original[0], original[2],
+            { ...original[0], grapheme: "n\u{303}" },
+        ]);
+    } finally {
+        ui.restore();
+    }
+});
