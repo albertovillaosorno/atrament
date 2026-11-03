@@ -15,6 +15,19 @@ semantic, layout is compiled against a physical page, handwriting comes from a
 calibrated personal profile, and every visual adjustment remains an explicit
 constraint.
 
+## Current implementation and release status (November 2, 2026)
+
+Atrament currently has a localhost browser workspace, authenticated draft
+transport, and local `.atrament` profile verification/repack commands.
+Notebook-to-PDF delivery, desktop installers, and physical plotting are not
+available as end-to-end user features.
+
+All 77 task records have finite practical or theoretical acceptance decisions.
+Those decisions do not mean every proposed feature was implemented or tested.
+For limitations and release blockers, see [TODO.md](TODO.md), which references
+the dated P8-008 decision ledger. Production status remains **NO-GO** while
+known security and missing output/package functionality remain unresolved.
+
 ## The workspace
 
 The primary interface is a 16:9 split workspace with both editors visible:
