@@ -4603,3 +4603,39 @@ fn longer_unknown_control_word_is_not_accepted_as_supported_prefix() {
     assert_eq!(analyzed.unsupported[0].name, r"\fraction");
     assert_eq!(reconstructed(&analyzed), r"\fraction{x}");
 }
+
+#[test]
+fn finite_first_release_math_sources_are_lossless() {
+    let examples = [
+        ("inline", FormulaMode::Inline, r"x^2 + y^2 = z^2"),
+        ("display", FormulaMode::Display, r"\frac{a}{b} = 2"),
+        ("alignment", FormulaMode::Aligned, r"a &= b \\ c &= d"),
+        (
+            "matrix",
+            FormulaMode::Display,
+            r"A=\begin{pmatrix}1 & 2 \\ 3 & 4\end{pmatrix}",
+        ),
+        ("unit", FormulaMode::Inline, r"v=5\mathrm{m/s}"),
+        (
+            "derivation",
+            FormulaMode::Aligned,
+            r"F &= ma \\ a &= \frac{F}{m}",
+        ),
+    ];
+    for (family, mode, source) in examples {
+        let analyzed = analyze(source, mode).unwrap_or_else(|error| panic!("{family}: {error:?}"));
+        assert_analysis_invariants(&analyzed, source, mode);
+        assert!(analyzed.is_supported(), "{family}: unexpected unsupported");
+        assert_eq!(reconstructed(&analyzed), source, "{family}: source changed");
+    }
+
+    let unsupported_source = r"\unknownfunction{x}";
+    let unsupported = analyze(unsupported_source, FormulaMode::Display)
+        .expect("balanced unsupported formula remains inspectable");
+    assert_analysis_invariants(&unsupported, unsupported_source, FormulaMode::Display);
+    assert!(!unsupported.is_supported());
+    assert_eq!(unsupported.unsupported.len(), 1);
+    assert_eq!(unsupported.unsupported[0].name, r"\unknownfunction");
+    assert_eq!(reconstructed(&unsupported), unsupported_source);
+    assert!(analyze(r"\frac{x}", FormulaMode::Display).is_err());
+}

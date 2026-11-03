@@ -20,14 +20,6 @@ labels belong here.
 
 ## P2 — Semantic notebook and physical layout
 
-### TODO - Implement mathematics as editable structure
-
-Parse and preserve TeX-compatible inline, displayed, aligned, matrix, unit,
-and derivation content while exposing unsupported constructs without
-rewriting.
-
-[docs/todo/open/semantic/006-editable-mathematics.mdc](docs/todo/open/semantic/006-editable-mathematics.mdc)
-
 ### TODO - Implement tables and ruled educational blocks
 
 Support merged cells, headers, alignment, wrapping, ruler-like borders,
