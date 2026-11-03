@@ -568,6 +568,22 @@ Together with the earlier 52 forms, this yields **58 exact glyphs and
 shapes and exported one-page PDF and transparent 72-DPI RGBA PNG.
 This does not include equation parsing or mathematical layout.
 
+For class exercises, page labels and dates, use the separate **Fill missing
+digits 0–9 (unsaved)** gesture or select each numeral in the geometric
+starter picker. Zero is an exact SVG ellipse, distinct from circular `o`;
+eight has two separate ellipses, and the other numerals use analytic
+quadratic arcs and/or exact straight strokes. Only integer-micrometre
+sampled segments persist to Rust. Previously authored digit shapes are
+never replaced by batch fill, and invalid or oversized batches leave the
+unsaved library unchanged. Default digits add **412 sampled segments**.
+Together with lowercase, NFC/NFD accents, punctuation, quotations and
+basic arithmetic, the opt-in library has **68 exact graphemes and 1,866
+strokes**. The Rust CLI separately audited all ten digits with zero
+missing shapes and exported `0123456789` into a physical A4 PDF and a
+transparent 72-DPI 596×842 RGBA PNG. Ten digit glyphs on a page consume
+412 of the native 512 final-stroke budget; repeated long numeric runs
+can exceed that limit and refuse.
+
 These actions do not seed uppercase or the
 complete 114-entry inventory. It does not connect semantic Markdown text
 to notebook flow, and the native renderer still caps output at 512 physical

@@ -388,6 +388,78 @@ function mathParts(cx, cy, radius, glyph) {
         { from: point(0, 0.58), to: point(0, 0.7) },
     ];
 }
+function digitGeometry(cx, cy, radius, glyph) {
+    const p = (x, y) => ({
+        x: cx + Math.round(radius * x),
+        y: cy + Math.round(radius * y),
+    });
+    const line = (x1, y1, x2, y2) => ({ from: p(x1, y1), to: p(x2, y2) });
+    const arc = (x1, y1, hx, hy, x2, y2) => ({
+        from: p(x1, y1), control: p(hx, hy), to: p(x2, y2),
+    });
+    const ellipse = (y, rx, ry) => ({
+        cx, cy: cy + Math.round(y * radius),
+        rx: Math.round(rx * radius), ry: Math.round(ry * radius),
+    });
+    switch (glyph) {
+        case "0": return { ellipses: [ellipse(0, 0.7, 1)], parts: [] };
+        case "1": return { ellipses: [], parts: [
+                line(-0.4, -0.6, 0, -1), line(0, -1, 0, 1),
+                line(-0.48, 1, 0.48, 1),
+            ] };
+        case "2": return { ellipses: [], parts: [
+                arc(-0.7, -0.55, -0.7, -1, 0, -1),
+                arc(0, -1, 0.9, -1, 0.7, -0.13),
+                line(0.7, -0.13, -0.7, 1), line(-0.7, 1, 0.7, 1),
+            ] };
+        case "3": return { ellipses: [], parts: [
+                arc(-0.6, -0.85, 0.9, -1, 0.7, -0.38),
+                arc(0.7, -0.38, 0.7, 0, 0, 0),
+                arc(0, 0, 0.85, 0.02, 0.7, 0.42),
+                arc(0.7, 0.42, 0.85, 1, -0.6, 0.85),
+            ] };
+        case "4": return { ellipses: [], parts: [
+                line(0.4, -1, -0.75, 0.22),
+                line(-0.75, 0.22, 0.75, 0.22), line(0.4, -1, 0.4, 1),
+            ] };
+        case "5": return { ellipses: [], parts: [
+                line(0.7, -1, -0.7, -1), line(-0.7, -1, -0.7, -0.12),
+                arc(-0.7, -0.12, 0.8, -0.3, 0.7, 0.4),
+                arc(0.7, 0.4, 0.7, 1, -0.7, 0.86),
+            ] };
+        case "6": return {
+            ellipses: [ellipse(0.37, 0.7, 0.62)],
+            parts: [arc(0.5, -1, -0.7, -1, -0.7, 0.37)],
+        };
+        case "7": return { ellipses: [], parts: [
+                line(-0.7, -1, 0.7, -1), line(0.7, -1, -0.25, 1),
+            ] };
+        case "8": return {
+            ellipses: [ellipse(-0.5, 0.57, 0.5),
+                ellipse(0.5, 0.7, 0.5)], parts: [],
+        };
+        case "9": return {
+            ellipses: [ellipse(-0.37, 0.7, 0.62)],
+            parts: [arc(0.7, -0.37, 0.7, 0.8, -0.4, 1)],
+        };
+    }
+}
+function ellipsePoint(ellipse, step) {
+    const radians = 2 * Math.PI * step / CIRCLE_SEGMENTS;
+    return {
+        x: ellipse.cx + Math.round(ellipse.rx * Math.cos(radians)),
+        y: ellipse.cy + Math.round(ellipse.ry * Math.sin(radians)),
+    };
+}
+function digitGuide(geometry) {
+    const loops = geometry.ellipses.map((ellipse) => {
+        const { cx, cy, rx, ry } = ellipse;
+        return `M ${cx + rx} ${cy} A ${rx} ${ry} 0 1 1 ${cx - rx} ${cy}`
+            + ` A ${rx} ${ry} 0 1 1 ${cx + rx} ${cy}`;
+    });
+    return [...loops, punctuationGuide(geometry.parts)].filter(Boolean)
+        .join(" ");
+}
 function punctuationGuide(parts) {
     const commands = [];
     let pen = null;
@@ -499,7 +571,8 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s",
         ".", ",", "!", "¡", "?", "¿",
         "«", "»", "‘", "’", "“", "”",
-        "+", "-", "−", "=", "×", "÷"].includes(g)) {
+        "+", "-", "−", "=", "×", "÷",
+        ..."0123456789"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -522,6 +595,25 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         || cx + radius + halfPen > 3500
         || cy + radius + halfPen > 4500) {
         throw new Error("Shape and pen thickness must fit inside glyph cell");
+    }
+    if (/^[0-9]$/.test(g)) {
+        const geometry = digitGeometry(cx, cy, radius, g);
+        const line = (from, to) => {
+            for (const point of [from, to]) {
+                if (point.x - halfPen < 0 || point.x + halfPen > 3500
+                    || point.y - halfPen < 0
+                    || point.y + halfPen > 4500) {
+                    throw new Error("Numeral ink must fit inside glyph cell");
+                }
+            }
+            return validateStroke({ grapheme: g,
+                x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+                width: pen, color });
+        };
+        const ellipses = geometry.ellipses.flatMap((ellipse) => Array.from({ length: CIRCLE_SEGMENTS }, (_, step) => line(ellipsePoint(ellipse, step), ellipsePoint(ellipse, step + 1))));
+        const parts = geometry.parts.flatMap(({ from, control, to }) => control === undefined ? [line(from, to)]
+            : Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1))));
+        return [...ellipses, ...parts];
     }
     if (["+", "-", "−", "=", "×", "÷"].includes(g)) {
         if (g === "÷" && radius * 0.58 < pen + 100) {
@@ -919,6 +1011,7 @@ export function createGlyphStrokeEditor() {
     const seedPunctuation = required("glyph-seed-punctuation");
     const seedQuotes = required("glyph-seed-quotes");
     const seedMath = required("glyph-seed-math");
+    const seedDigits = required("glyph-seed-digits");
     const centerX = required("glyph-circle-x");
     const centerY = required("glyph-circle-y");
     const radius = required("glyph-circle-radius");
@@ -953,7 +1046,7 @@ export function createGlyphStrokeEditor() {
     }
     const controls = [character, color, source, add, copyFrom, copy, compose,
         form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
-        seedPunctuation, seedQuotes, seedMath,
+        seedPunctuation, seedQuotes, seedMath, seedDigits,
         centerX, centerY, radius,
         accentShift, accentLift,
         selected, update,
@@ -1096,15 +1189,18 @@ export function createGlyphStrokeEditor() {
             const isMath = ["+", "-", "−", "=", "×", "÷"]
                 .includes(chosen.grapheme);
             const mathD = isMath ? punctuationGuide(mathParts(cx, cy, r, chosen.grapheme)) : "";
-            const roundedD = isMath ? mathD
-                : isQuote ? quoteD
-                    : isPunctuation ? punctuationD
-                        : isStraight ? straightD
-                            : chosen.grapheme === "s" ? sD
-                                : chosen.grapheme === "j" ? jD
-                                    : chosen.grapheme === "g" ? gD
-                                        : chosen.grapheme === "m" ? doubledD
-                                            : [roundedStart, roundedFirst, roundedSecond].join(" ");
+            const isDigit = /^[0-9]$/.test(chosen.grapheme);
+            const digitD = isDigit ? digitGuide(digitGeometry(cx, cy, r, chosen.grapheme)) : "";
+            const roundedD = isDigit ? digitD
+                : isMath ? mathD
+                    : isQuote ? quoteD
+                        : isPunctuation ? punctuationD
+                            : isStraight ? straightD
+                                : chosen.grapheme === "s" ? sD
+                                    : chosen.grapheme === "j" ? jD
+                                        : chosen.grapheme === "g" ? gD
+                                            : chosen.grapheme === "m" ? doubledD
+                                                : [roundedStart, roundedFirst, roundedSecond].join(" ");
             roundedPath.setAttribute("d", roundedD);
             roundedPath.setAttribute("stroke-width", numeric.width.value);
             roundedPath.setAttribute("stroke", color.value);
@@ -1126,11 +1222,12 @@ export function createGlyphStrokeEditor() {
                     "v", "w", "k", "x", "y", "z",
                     ".", ",", "!", "¡", "?", "¿",
                     "«", "»", "‘", "’", "“", "”",
-                    "+", "-", "−", "=", "×", "÷"]
+                    "+", "-", "−", "=", "×", "÷",
+                    ..."0123456789"]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
-                && !isPunctuation && !isQuote && !isMath
+                && !isPunctuation && !isQuote && !isMath && !isDigit
                 && !["j", "g", "s"].includes(chosen.grapheme)
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
@@ -1610,6 +1707,32 @@ export function createGlyphStrokeEditor() {
             render();
             message(`Filled ${missing.length} missing math glyphs (`
                 + `${added.length} exact strokes); unsaved draft`);
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    seedDigits.addEventListener("click", () => {
+        if (!active)
+            return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before seeding");
+            }
+            const authored = new Set(strokes.map((stroke) => stroke.grapheme));
+            const missing = [..."0123456789"].filter((g) => !authored.has(g));
+            if (missing.length === 0) {
+                message("All ten numeral glyphs already have authored ink");
+                return;
+            }
+            const added = missing.flatMap((g) => geometricStarter(g, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value));
+            const next = [...strokes, ...added];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${missing.length} missing numeral glyphs (`
+                + `${added.length} sampled strokes); unsaved draft`);
         }
         catch (error) {
             message(String(error));

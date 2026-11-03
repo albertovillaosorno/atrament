@@ -534,6 +534,33 @@ and emitted a real one-page PDF plus 72-DPI 596×842 transparent RGBA PNG.
 No equation typesetting, variable spacing, full mathematics inventory or
 native continuous curves has been implemented.
 
+## Explicit geometric numeral starters (partial) — 2026-11-03
+
+The admitted browser editor now offers exact, individually selected
+`0`–`9` shapes and an unsaved **Fill missing digits** action. The zero
+is a true SVG ellipse with a narrower horizontal radius than circular `o`;
+eight is a pair of independent exact SVG ellipses. Other digits use
+bounded quadratic SVG curves or exact straight pen movements. The native
+v1 TSV retains only their sampled integer-micrometre pen segments,
+without storing ellipse/arc primitives or separate shape variants.
+
+Three new browser regressions cover the ten explicit shapes, exact zero/o
+distinction, full loop closure and separate eight loops, analytic SVG
+paths versus sampled TSV, session gating, custom-ink preservation,
+repeat-click idempotence, invalid-fit refusal and atomic stroke-cap
+refusal. The updated combined library test verifies **68 exact glyphs
+and 1,866 segments** across seven deliberate fills. The geometry and
+pen boundary grid now passes **8,208 combinations**; all 65 focused
+glyph tests and TypeScript build/check passed.
+
+An independent native Rust CLI roundtripped the 412-segment numeral TSV,
+reported **zero missing authored glyphs** for `0123456789`, and wrote
+an A4 one-page PDF and transparent 72-DPI 596×842 RGBA PNG. This is
+only caller-owned explicit geometry: no uppercase inventory, saved
+analytic curves, joined cursive, learned handwriting or complete
+semantic notebook pipeline is implied. The full P1-012 executable
+acceptance remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

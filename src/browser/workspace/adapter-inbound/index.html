@@ -561,6 +561,16 @@
                 <option value="’">Right curly single quote ’</option>
                 <option value="“">Left curly double quote “</option>
                 <option value="”">Right curly double quote ”</option>
+                <option value="0">Numeral 0 (exact ellipse)</option>
+                <option value="1">Numeral 1 (stem and foot)</option>
+                <option value="2">Numeral 2 (curved arch)</option>
+                <option value="3">Numeral 3 (double bend)</option>
+                <option value="4">Numeral 4 (angular)</option>
+                <option value="5">Numeral 5 (bowl and bar)</option>
+                <option value="6">Numeral 6 (lower loop)</option>
+                <option value="7">Numeral 7 (diagonal)</option>
+                <option value="8">Numeral 8 (two ellipses)</option>
+                <option value="9">Numeral 9 (upper loop)</option>
                 <option value="+">Math plus +</option>
                 <option value="-">ASCII hyphen-minus -</option>
                 <option value="−">Unicode math minus −</option>
@@ -641,6 +651,9 @@
             <button id="glyph-seed-math" type="button" disabled>
               Fill missing basic math operators (unsaved)
             </button>
+            <button id="glyph-seed-digits" type="button" disabled>
+              Fill missing digits 0–9 (unsaved)
+            </button>
           </div>
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the highest story, positioned from geometry
@@ -667,6 +680,10 @@
             minus −, =, × and ÷ from exact straight pen paths. Division
             dots must remain separated by a visible gap. All forms keep
             independent Unicode keys and existing author ink.
+            Numeral 0 is an exact SVG ellipse (distinct from circular o),
+            8 uses two ellipses, and 1–7/9 combine ordered lines, arcs or
+            loops. The separate digit fill preserves authored shapes and
+            only updates the local unsaved draft.
             Every fill remains unsaved.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>
