@@ -2916,3 +2916,30 @@ fn marker_and_seeded_handwriting_share_two_measured_pdf_png_pages() {
     assert_eq!(png, execute_notebook(&command).expect("PNG replay")
         .expect("PNG bytes"));
 }
+
+#[test]
+fn marker_headings_refuse_bounded_ink_overflow_atomically() {
+    // A normal underline uses 110 heading/glyph pairs (220 strokes),
+    // while the four-band marker requires 550 physical strokes and
+    // must refuse the existing 512-line native compositor bound.
+    let target = test_path();
+    let filename = target.to_str().expect("test-owned PDF path");
+    let markdown = "# a\n".repeat(110);
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "1200", "2400", "3200",
+        "250", "#123456", "--flow-markdown", &markdown,
+    ]);
+    assert!(execute_notebook(&command).expect("original underline fits")
+        .expect("native PDF bytes").starts_with(b"%PDF-1.4"));
+    fs::write(&target, b"keep-previous-notebook")
+        .expect("save owned sentinel");
+    command.extend(args(&[
+        "--heading-style", "marker", "--output", filename, "--replace",
+    ]));
+    let error = execute_notebook(&command).expect_err("marker ink budget");
+    assert!(error.contains("512 total pen strokes"), "{error}");
+    assert_eq!(fs::read(&target).expect("unchanged saved file"),
+        b"keep-previous-notebook");
+    fs::remove_file(target).expect("remove test-owned sentinel");
+}

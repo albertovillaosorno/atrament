@@ -120,8 +120,11 @@ both PDF/PNG page-2 replay. The independent native CLI produced a genuine
 two-page A4 PDF and 596×842 transparent RGBA page-2 PNG; direct pixel
 inspection of an additional one-page PNG found 208 exact selected marker
 pixels and 25 original authored-ink pixels against transparent background.
-Custom heading flags require Markdown flow, and all decorative segments
-count against the unchanged 512-stroke budget and printable bounds.
+A separate bound regression admits 110 one-stroke default-underlined
+headings but refuses the same 110 headings with a four-stroke marker before
+replacing an existing file: 550 candidate strokes exceed the unchanged
+512-stroke compositor budget. Custom heading flags require Markdown flow,
+and all decorative segments count against printable bounds.
 
 This is an **export-only** presentation choice, not a saved notebook style,
 translucent marker simulation or browser text composition; neither images
