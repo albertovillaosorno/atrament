@@ -2333,7 +2333,7 @@ function unreviewedBuildTimeInputs(source, sourcePath) {
             "index.html", "workspace.css", "generated/main.js",
             "generated/session-diagnostic.js", "generated/session-draft.js",
             "generated/session-fragment.js", "generated/session-handshake.js",
-            "generated/paper-profile.js",
+            "generated/paper-profile.js", "generated/handwriting-profile.js",
         ].map((asset) =>
             `include_bytes!("${assetRoot}${asset}")`
         );
@@ -2351,7 +2351,7 @@ test("backend build-time embed inventory refuses undeclared inputs", () => {
         "index.html", "workspace.css", "generated/main.js",
         "generated/session-diagnostic.js", "generated/session-draft.js",
         "generated/session-fragment.js", "generated/session-handshake.js",
-        "generated/paper-profile.js",
+        "generated/paper-profile.js", "generated/handwriting-profile.js",
     ];
     const assetRoot = "../../../browser/workspace/adapter-inbound/";
     const approvedAssets = assets.map((asset) =>

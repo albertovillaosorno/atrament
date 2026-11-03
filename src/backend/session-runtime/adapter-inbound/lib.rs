@@ -128,6 +128,10 @@ const SESSION_DIAGNOSTIC_JAVASCRIPT: &[u8] = include_bytes!(
 const PAPER_PROFILE_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/paper-profile.js"
 );
+// Keep this audited absolute module path as a single literal for the
+// browser resource allowlist, not a dynamic build-time input.
+// jig-ignore-next-line JIG-TEXT-005: literal asset is pinned by security tests.
+const HANDWRITING_PROFILE_JAVASCRIPT: &[u8] = include_bytes!("../../../browser/workspace/adapter-inbound/generated/handwriting-profile.js");
 const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/session-draft.js"
 );
@@ -1371,6 +1375,11 @@ fn public_get_response(target: &str) -> Option<Vec<u8>> {
             "200 OK",
             JAVASCRIPT_CONTENT_TYPE,
             PAPER_PROFILE_JAVASCRIPT,
+        )),
+        "/generated/handwriting-profile.js" => Some(response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            HANDWRITING_PROFILE_JAVASCRIPT,
         )),
         "/generated/session-draft.js" => Some(response(
             "200 OK",

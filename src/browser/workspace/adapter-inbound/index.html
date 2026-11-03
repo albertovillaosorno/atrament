@@ -243,6 +243,106 @@
             aria-live="polite">Requires a compatible backend session.</p>
         </section>
 
+        <section class="handwriting-config" aria-labelledby="handwriting-title">
+          <div class="section-row compact">
+            <div>
+              <h3 class="field-label" id="handwriting-title">
+                Statistical handwriting profile
+              </h3>
+              <p class="field-help">
+                Rust-owned bounds, global and exact Unicode glyph overrides.
+                Every dimension has a minimum, maximum, mean, median, and
+                deviation. No handwritten stroke rendering or calibration yet.
+              </p>
+            </div>
+            <span class="panel-badge">Statistics only</span>
+          </div>
+          <div class="handwriting-controls">
+            <label>Scope
+              <select id="handwriting-scope" disabled>
+                <option value="global">Global handwriting</option>
+                <option value="glyph">Exact grapheme override</option>
+              </select>
+            </label>
+            <label>Dimension and native unit
+              <select id="handwriting-dimension" disabled></select>
+            </label>
+            <label>Saved grapheme overrides
+              <select id="handwriting-glyph" disabled></select>
+            </label>
+            <label>New exact grapheme (ñ, á, ¿, «, ...)
+              <input id="handwriting-new-glyph" type="text"
+                maxlength="64" autocomplete="off" spellcheck="false"
+                aria-label="Exact new grapheme" disabled>
+            </label>
+          </div>
+          <div class="paper-actions">
+            <button id="handwriting-add-glyph" type="button" disabled>
+              Add glyph
+            </button>
+            <button id="handwriting-remove-glyph" type="button" disabled>
+              Remove glyph
+            </button>
+            <button id="handwriting-add-override" type="button" disabled>
+              Override dimension
+            </button>
+            <button id="handwriting-remove-override" type="button" disabled>
+              Inherit global
+            </button>
+          </div>
+          <div class="handwriting-controls">
+            <label>Minimum (native unit)
+              <input id="handwriting-minimum" type="number" step="1" disabled>
+              <input id="handwriting-minimum-range" type="range" step="1"
+                aria-label="Minimum statistics slider" disabled>
+            </label>
+            <label>Maximum (native unit)
+              <input id="handwriting-maximum" type="number" step="1" disabled>
+              <input id="handwriting-maximum-range" type="range" step="1"
+                aria-label="Maximum statistics slider" disabled>
+            </label>
+            <label>Mean (native unit)
+              <input id="handwriting-mean" type="number" step="1" disabled>
+              <input id="handwriting-mean-range" type="range" step="1"
+                aria-label="Mean statistics slider" disabled>
+            </label>
+            <label>Median (native unit)
+              <input id="handwriting-median" type="number" step="1" disabled>
+              <input id="handwriting-median-range" type="range" step="1"
+                aria-label="Median statistics slider" disabled>
+            </label>
+            <label>Standard deviation (native unit)
+              <input id="handwriting-standard_deviation" type="number"
+                min="0" step="1" disabled>
+              <input id="handwriting-standard_deviation-range" type="range"
+                min="0" step="1" aria-label="Deviation statistics slider"
+                disabled>
+            </label>
+            <label>Deterministic seed (safe unsigned integer)
+              <input id="handwriting-seed" type="number" min="0"
+                max="9007199254740991" step="1" disabled>
+            </label>
+          </div>
+          <p id="handwriting-preview" class="field-help" aria-live="polite">
+            No handwriting session loaded.
+          </p>
+          <div class="paper-actions">
+            <label class="paper-upload-label" for="handwriting-load">
+              Load JSON
+              <input id="handwriting-load" type="file"
+                accept=".json,application/json"
+                aria-label="Load native handwriting profile JSON" disabled>
+            </label>
+            <button id="handwriting-reset" type="button" disabled>
+              Default
+            </button>
+            <button id="handwriting-save" type="button"
+              class="primary-button" disabled>Save JSON</button>
+          </div>
+          <p id="handwriting-status" class="action-status" role="status"
+            aria-live="polite">Requires a compatible backend session.</p>
+        </section>
+
         <section class="prompt-block" aria-labelledby="prompt-title">
           <div class="section-row">
             <div>

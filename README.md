@@ -35,7 +35,7 @@ first real notebook-to-PDF journey.
 For the staged, unfinished work see [TODO.md](TODO.md) and the
 [Rust-first local roadmap](docs/technical/rust-cli-localhost-priority.md).
 
-## Current implementation and release status (November 2, 2026)
+## Current implementation and release status (November 3, 2026)
 
 Atrament already has a Rust localhost server and browser workspace,
 authenticated draft transport, physical-page and handwriting domain contracts,
@@ -76,8 +76,9 @@ not screenshot pixels. Invalid options fail before the CLI writes PDF bytes.
 
 This is a **paper-only** CLI: it does not load/save notebook or handwriting
 profiles, draw handwriting, embed images, or provide handwriting controls.
-The localhost page now has an initial paper-only editor with numeric inputs
-and sliders; notebook-profile and handwriting editors remain open tasks.
+The localhost page includes a paper-only editor with numeric inputs and
+sliders, plus a separate Rust-validated handwriting statistics editor.
+Neither editor is a complete notebook profile or handwriting renderer.
 
 A printable collection of identical paper sheets is possible with `--pages`
 (1–32). This is an output-only choice, not a field in the paper profile:
@@ -124,8 +125,8 @@ variable names, physical units, and domain bounds. All three require the
 current session credential; POST additionally requires the exact Origin.
 These endpoints do not save server-side files or render written glyphs.
 
-The localhost workspace presents a **paper-only** editor after a successful
-session handshake. It offers A3/A4/A5/B5/Letter/Legal presets,
+The localhost workspace presents a **paper profile** editor after a
+successful session handshake. It offers A3/A4/A5/B5/Letter/Legal presets,
 blank/ruled/grid/dot patterns, physical dimensions, editable spacing and
 four margins (numeric fields and synchronized sliders), and line color.
 
@@ -133,7 +134,22 @@ Choose **Load JSON** to validate a selected paper-only profile through Rust,
 **Save JSON** to download the Rust-canonicalized profile, or **Export PDF** to
 download the Rust-rendered paper sheet. The browser does not generate PDFs or
 persist the profile in browser storage; downloads are explicit user actions.
-The editor is not yet a visual handwriting renderer or a full notebook editor.
+
+A separate **handwriting statistics** section loads the Rust dimension
+catalog and versioned JSON profile only after session admission. It allows
+editing all ten native dimensions with numeric fields and sliders for minimum,
+maximum, mean, median, and deviation, plus seed, and exact per-grapheme
+overrides such as `ñ` and decomposed accents.
+
+**Load JSON** validates with
+Rust, **Save JSON** downloads canonical Rust-validated statistics, and
+**Default** restores the uncalibrated native seed-zero profile. Bounds and
+units come from Rust; this is a numeric statistics preview, not actual ink
+rendering.
+
+Large `u64` seeds outside JavaScript safe integer precision
+must be edited using the Rust CLI. There is no server-side file persistence
+or complete notebook profile editor yet.
 
 For a reusable paper-only profile, the same CLI can emit versioned JSON,
 read it again, and apply further explicit edits:
@@ -187,9 +203,10 @@ canonical JSON. `--output` refuses to overwrite an existing file unless
 `--replace` is explicit; existing symlinks cannot be overwritten.
 
 For example, `--set-global height 2500 3500 4500 3000 200` is invalid and
-refuses before any output file change. The Rust localhost handwriting editor,
-notebook content profiles, actual handwriting rendering, and file Open/Save
-web controls are still open implementation tasks.
+refuses before any output file change. The initial localhost statistics
+editor now accepts bounded global and per-grapheme changes. Notebook
+content profiles, actual handwriting rendering, and server-side Open/Save
+web controls remain open implementation tasks.
 
 ## The workspace
 

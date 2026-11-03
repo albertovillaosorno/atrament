@@ -54,6 +54,7 @@ const MAIN_MODULE = new URL(
 // Privacy review covers both authored TypeScript and generated JavaScript.
 // Standalone Node tests can run before the TypeScript is rebuilt.
 const REVIEWED_MODULES = [
+    "handwriting-profile.js",
     "main.js",
     "paper-profile.js",
     "session-diagnostic.js",
@@ -61,6 +62,11 @@ const REVIEWED_MODULES = [
     "session-fragment.js",
     "session-handshake.js",
 ];
+const isHandwritingModule = (filename) =>
+    filename === "handwriting-profile.ts"
+    || filename === "handwriting-profile.js";
+const isProfileModule = (filename) => isHandwritingModule(filename)
+    || filename === "paper-profile.ts" || filename === "paper-profile.js";
 const REVIEWED_TYPESCRIPT = REVIEWED_MODULES.map((filename) =>
     filename.replace(/\.js$/u, ".ts"));
 
@@ -116,6 +122,14 @@ function usesUnreviewedMarkupRequests(source) {
         return true;
     }
     remaining = remaining.replace(paperPicker, "");
+    // A second explicitly selected JSON input is checked through Rust.
+    const handwritingPicker = `<input id="handwriting-load" type="file"
+                accept=".json,application/json"
+                aria-label="Load native handwriting profile JSON" disabled>`;
+    if (remaining.split(handwritingPicker).length - 1 !== 1) {
+        return true;
+    }
+    remaining = remaining.replace(handwritingPicker, "");
     return [
         /<\s*(?:a|link|script|base|form|iframe|frame|portal|img)\b/iu,
         /<\s*(?:source|picture|video|audio|track|embed|object)\b/iu,
@@ -282,8 +296,7 @@ test("browser source and generated modules reject undeclared transport",
     async () => {
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
-        const paper = filename === "paper-profile.ts"
-            || filename === "paper-profile.js";
+        const paper = isProfileModule(filename);
         const fetchCalls = source.match(/\bfetch\s*\(/gu) ?? [];
         assert.equal(fetchCalls.length, main ? 4 : paper ? 1 : 0,
             `${filename} must retain only four reviewed fetch sites`);
@@ -344,6 +357,8 @@ function hasUnreviewedExecutableCode(source, filename) {
             'import { sessionSecretFromFragment } from ' +
                 '"./session-fragment.js";',
             'import { createPaperProfileEditor } from "./paper-profile.js";',
+            'import { createHandwritingProfileEditor } from ' +
+                '"./handwriting-profile.js";',
         ],
         "session-draft": [
             'import { decodeBoundedUtf8Response } from ' +
@@ -370,7 +385,8 @@ function hasUnreviewedExecutableCode(source, filename) {
         "window.setTimeout(() => {",
     ]) {
         if (remaining.split(site).length - 1 !==
-            ((moduleName === "main" || (moduleName === "paper-profile"
+            ((moduleName === "main" || ((moduleName === "paper-profile"
+                || moduleName === "handwriting-profile")
                 && site === "window.setTimeout(() => {")) ? 1 : 0)) {
             return true;
         }
@@ -462,12 +478,12 @@ test("browser first-class global aliases require explicit review", async () => {
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(hasUnreviewedBrowserGlobalAuthority(source, main,
-            filename === "paper-profile.ts" || filename === "paper-profile.js"),
+            isProfileModule(filename)),
             false, `${filename} gained unreviewed browser global authority`);
         for (const candidate of candidates) {
             assert.equal(hasUnreviewedBrowserGlobalAuthority(
                 `${source}\n${candidate}`, main,
-                filename === "paper-profile.ts" || filename === "paper-profile.js"), true,
+                isProfileModule(filename)), true,
             `${filename}: ${candidate} bypassed the global-object review`);
         }
     }
@@ -476,7 +492,8 @@ test("browser first-class global aliases require explicit review", async () => {
 // A DOM node can recover the full Document through ownerDocument, and a
 // frame can expose another document even without an explicit global window.
 // These references need the same first-class capability review as window.
-function hasUnreviewedDocumentAuthority(source, main, typed, paper = false) {
+function hasUnreviewedDocumentAuthority(source, main, typed, paper = false,
+    handwriting = false) {
     const allowed = [
         [typed ? "document.querySelector<T>(selector)"
             : "document.querySelector(selector)", 1],
@@ -493,7 +510,7 @@ function hasUnreviewedDocumentAuthority(source, main, typed, paper = false) {
         }
         remaining = remaining.replaceAll(site, "");
     }
-    // Exact documented paper editor control and one Blob download anchor.
+    // Both admitted editors use one known lookup and one Blob anchor.
     for (const site of [
         "document.getElementById(id)",
         'document.createElement("a")',
@@ -503,6 +520,11 @@ function hasUnreviewedDocumentAuthority(source, main, typed, paper = false) {
         }
         remaining = remaining.replace(site, "");
     }
+    const optionSite = 'document.createElement("option")';
+    if (remaining.split(optionSite).length - 1 !== (handwriting ? 2 : 0)) {
+        return true;
+    }
+    remaining = remaining.replaceAll(optionSite, "");
     return new RegExp(
         String.raw`\b(?:document|Document|ownerDocument|` +
             String.raw`contentDocument|contentWindow|getRootNode)\b`, "u",
@@ -531,12 +553,12 @@ test("browser first-class Document authority requires explicit review",
         const main = filename === "main.ts" || filename === "main.js";
         const typed = filename.endsWith(".ts");
         assert.equal(hasUnreviewedDocumentAuthority(source, main, typed,
-            filename === "paper-profile.ts" || filename === "paper-profile.js"),
+            isProfileModule(filename), isHandwritingModule(filename)),
             false, `${filename} gained unreviewed Document authority`);
         for (const candidate of probes) {
             assert.equal(hasUnreviewedDocumentAuthority(
                 `${source}\n${candidate}`, main, typed,
-                filename === "paper-profile.ts" || filename === "paper-profile.js"), true,
+                isProfileModule(filename), isHandwritingModule(filename)), true,
             `${filename}: ${candidate} bypassed Document review`);
         }
     }
@@ -916,14 +938,17 @@ test("browser filesystem authority inventory rejects unreviewed access", () => {
 // Ordinary HTML file inputs, drag-and-drop FileList, and FileReader are
 // distinct paths from the File System Access pickers reviewed above.
 // Requiring review does not imply the user selected any local file.
-function hasUnreviewedBrowserFileIntake(source, paper = false, typed = false) {
+function hasUnreviewedBrowserFileIntake(source, paper = false,
+    typed = false, handwriting = false) {
     let reviewed = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
-    // Counts restrict file input to one selected JSON and one Blob download.
+    // Each native editor admits only one user-selected JSON and one download.
     for (const [site, count] of [
-        ["URL.createObjectURL(blob)", 1],
         ["upload.files?.item(0)", 1],
-        ['new Blob([result.json], { type: "application/json" })', 1],
-        ["blob: Blob", typed ? 1 : 0],
+        ["URL.createObjectURL(blob)", handwriting ? 0 : 1],
+        ['new Blob([result.json], { type: "application/json" })',
+            handwriting ? 0 : 1],
+        ["blob: Blob", typed && !handwriting ? 1 : 0],
+        ["URL.createObjectURL(new Blob([json], {", handwriting ? 1 : 0],
     ]) {
         if (reviewed.split(site).length - 1 !== (paper ? count : 0)) {
             return true;
@@ -958,8 +983,8 @@ test("browser ordinary file input and drag-file reads require review",
     }
     for (const { filename, source } of await browserModuleSources()) {
         assert.equal(hasUnreviewedBrowserFileIntake(source,
-            filename === "paper-profile.ts" || filename === "paper-profile.js",
-            filename.endsWith(".ts")), false,
+            isProfileModule(filename), filename.endsWith(".ts"),
+            isHandwritingModule(filename)), false,
             `${filename} gained an unreviewed local-file read`);
         for (const candidate of [
             "void FileReader;",
@@ -978,8 +1003,8 @@ test("browser ordinary file input and drag-file reads require review",
         ]) {
             assert.equal(hasUnreviewedBrowserFileIntake(
                 `${source}\n${candidate}`,
-                filename === "paper-profile.ts" || filename === "paper-profile.js",
-                filename.endsWith(".ts")), true,
+                isProfileModule(filename), filename.endsWith(".ts"),
+                isHandwritingModule(filename)), true,
             `${filename}: ${candidate} escaped ordinary-file review`);
         }
     }
@@ -1644,12 +1669,12 @@ test("browser source and emitted modules reject unreviewed navigation",
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(usesUnreviewedBrowserNavigation(source, main,
-            filename === "paper-profile.ts" || filename === "paper-profile.js"), false,
+            isProfileModule(filename)), false,
             `${filename} gained an unreviewed navigation or form request`);
         for (const candidate of CAPTURED_NAVIGATION_PROBES) {
             assert.equal(usesUnreviewedBrowserNavigation(
                 `${source}\n${candidate}`, main,
-                filename === "paper-profile.ts" || filename === "paper-profile.js"), true,
+                isProfileModule(filename)), true,
             `${filename}: ${candidate} escaped navigation review`);
         }
     }
@@ -1659,7 +1684,8 @@ test("browser source and emitted modules reject unreviewed navigation",
 // requests without appearing in the static HTML/CSS or four fetch sites.
 // Keep current accessibility attributes and numeric layout properties
 // explicitly reviewed; new DOM sinks require a source-owner decision.
-function hasUnreviewedDynamicResourceAuthority(source, main, paper = false) {
+function hasUnreviewedDynamicResourceAuthority(source, main, paper = false,
+    handwriting = false) {
     let remaining = source;
     for (const [site, count] of [
         ["function setAttributeIfChanged(", 1],
@@ -1686,7 +1712,7 @@ function hasUnreviewedDynamicResourceAuthority(source, main, paper = false) {
         }
         remaining = remaining.replaceAll(site, "");
     }
-    // The download anchor is the only admitted paper-generated element.
+    // Both explicit profile downloads have exactly one Blob anchor.
     for (const site of [
         'document.createElement("a")',
         "link.href = url",
@@ -1696,6 +1722,11 @@ function hasUnreviewedDynamicResourceAuthority(source, main, paper = false) {
         }
         remaining = remaining.replace(site, "");
     }
+    const optionSite = 'document.createElement("option")';
+    if (remaining.split(optionSite).length - 1 !== (handwriting ? 2 : 0)) {
+        return true;
+    }
+    remaining = remaining.replaceAll(optionSite, "");
     return [
         new RegExp(
             String.raw`\b(?:createElement|createElementNS|` +
@@ -1722,7 +1753,7 @@ test("browser dynamic markup and CSSOM request sinks require review",
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(hasUnreviewedDynamicResourceAuthority(source, main,
-            filename === "paper-profile.ts" || filename === "paper-profile.js"),
+            isProfileModule(filename), isHandwritingModule(filename)),
             false, `${filename} gained an unreviewed DOM/CSSOM sink`);
         for (const candidate of [
             'document.createElement("img")',
@@ -1742,7 +1773,7 @@ test("browser dynamic markup and CSSOM request sinks require review",
         ]) {
             assert.equal(hasUnreviewedDynamicResourceAuthority(
                 `${source}\n${candidate}`, main,
-                filename === "paper-profile.ts" || filename === "paper-profile.js"), true,
+                isProfileModule(filename), isHandwritingModule(filename)), true,
             `${filename}: ${candidate} escaped dynamic-resource review`);
         }
     }

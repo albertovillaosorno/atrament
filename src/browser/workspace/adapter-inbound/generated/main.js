@@ -35,6 +35,7 @@ import { parseBoundedJsonResponse } from "./session-diagnostic.js";
 import * as sessionDraft from "./session-draft.js";
 import * as sessionHandshake from "./session-handshake.js";
 import { createPaperProfileEditor } from "./paper-profile.js";
+import { createHandwritingProfileEditor } from "./handwriting-profile.js";
 import { sessionSecretFromFragment } from "./session-fragment.js";
 function fragmentFreeLocalUrl() {
     return `${window.location.pathname}${window.location.search}`;
@@ -161,6 +162,11 @@ const sessionStatus = requireElement("#session-status");
 const retrySession = requireElement("#retry-session");
 const endSession = requireElement("#end-session");
 const paperEditor = createPaperProfileEditor({
+    currentSecret: () => sessionSecret,
+    sessionSignal: sessionRequests.signal,
+    unauthorized: invalidateUnauthorizedSession,
+});
+const handwritingEditor = createHandwritingProfileEditor({
     currentSecret: () => sessionSecret,
     sessionSignal: sessionRequests.signal,
     unauthorized: invalidateUnauthorizedSession,
@@ -378,6 +384,7 @@ function hideSessionRetry() {
 }
 function clearSessionText() {
     paperEditor.reset();
+    handwritingEditor.reset();
     hideSessionRetry();
     taskInput.defaultValue = "";
     taskInput.value = "";
@@ -673,6 +680,7 @@ async function hydrateSessionDraft(secret) {
     enableCompatibleEditing();
     setTextIfChanged(sessionStatus, "Session ready");
     void paperEditor.start(secret);
+    void handwritingEditor.start(secret);
 }
 async function syncDraftField(field, input, secret) {
     if (syncingDraftFields.has(field)) {

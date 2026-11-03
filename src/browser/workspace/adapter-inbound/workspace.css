@@ -887,3 +887,53 @@ button:focus-visible {
   margin: 0;
   accent-color: #45413a;
 }
+
+/* Handwriting fields are bounded by the native Rust dimensions catalog. */
+.handwriting-config {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #d5cec1;
+  border-radius: 12px;
+  background: #f4f0e8;
+}
+
+.handwriting-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.handwriting-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  color: #4c473f;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.handwriting-controls input,
+.handwriting-controls select {
+  width: 100%;
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid #cbc5b8;
+  border-radius: 8px;
+  background: #fffdfa;
+  color: #28251f;
+  font: inherit;
+}
+
+.handwriting-controls input[type="range"] {
+  padding: 0;
+  margin: 0;
+  accent-color: #45413a;
+}
+
+@media (max-width: 540px) {
+  .handwriting-controls {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
