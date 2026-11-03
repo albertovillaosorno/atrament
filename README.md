@@ -71,6 +71,22 @@ fail before the CLI writes PDF bytes. This is a **paper-only** CLI: it does not
 load/save notebook or handwriting profiles, draw handwriting, embed images,
 or provide localhost sliders yet. Those are still open Rust integration tasks.
 
+For a reusable paper-only profile, the same CLI can emit versioned JSON,
+read it again, and apply further explicit edits:
+
+```sh
+cargo run -q -p atrament_notebook_paper_cli -- \
+  --style ruled --spacing-mm 7 --emit-profile > paper-profile.json
+cargo run -q -p atrament_notebook_paper_cli -- \
+  --profile paper-profile.json --margin-top-mm 18 > ruled.pdf
+```
+
+`--profile` must precede edit flags. The `atrament.paper.v1` profile uses
+integer micrometers, has a 4-KiB input ceiling, rejects duplicate or unknown
+fields, and is validated against the actual PDF path before acceptance.
+The shell chooses the output file and handles any overwrite; this is not a
+localhost Open/Save UI or a general notebook/handwriting profile schema.
+
 ## The workspace
 
 The following is the intended notebook workflow, not a claim that the

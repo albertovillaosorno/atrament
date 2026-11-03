@@ -101,7 +101,8 @@ fn letter_size_and_exact_fractional_millimeters_round_trip() {
     ];
     let opts = parse_options(&args)
         .expect("valid options")
-        .expect("not help");
+        .expect("not help")
+        .options;
     assert_eq!(opts.width_um, 215_900);
     assert_eq!(opts.spacing_um, 4_500);
     let data = render(opts).expect("valid Letter page");
@@ -126,9 +127,122 @@ fn invalid_options_are_refused_before_pdf_bytes_exist() {
     for items in invalid {
         let args = items.into_iter().map(str::to_owned).collect::<Vec<_>>();
         match parse_options(&args) {
-            Ok(Some(options)) => assert!(render(options).is_err(), "{args:?}"),
+            Ok(Some(options)) => {
+                assert!(render(options.options).is_err(), "{args:?}");
+            }
             Err(_error) => {}
             Ok(None) => panic!("invalid options must not show help: {args:?}"),
         }
     }
+}
+
+#[test]
+fn versioned_paper_json_round_trips_without_altering_pdf() {
+    for style in [Style::Blank, Style::Ruled, Style::Grid, Style::Dot] {
+        let options = Options {
+            color: PdfRgb {
+                blue: 0xF3,
+                green: 0x22,
+                red: 0x10,
+            },
+            height_um: 279_400,
+            spacing_um: 4_500,
+            style,
+            width_um: 215_900,
+            ..Options::default()
+        };
+        let json = encode_profile(options);
+        let restored = decode_profile(json.as_bytes())
+            .expect("canonical paper-only JSON must reopen");
+        assert_eq!(encode_profile(restored), json);
+        assert_eq!(render(restored), render(options));
+    }
+}
+
+#[test]
+fn json_unicode_escapes_are_admitted_by_shared_syntax_evidence() {
+    let canonical = encode_profile(Options::default());
+    let escaped = canonical
+        .replace("\"style\"", "\"st\\u0079le\"")
+        .replace("\"grid\"", "\"gri\\u0064\"");
+    let options = decode_profile(escaped.as_bytes())
+        .expect("escaped recognized fields and values decode");
+    assert_eq!(style_name(options.style), "grid");
+}
+
+#[test]
+fn paper_profile_rejects_duplicates_unknown_fields_and_malformed_values() {
+    let canonical = encode_profile(Options::default());
+    let invalid = [
+        canonical.replace("\"schema\"", "\"unknown\""),
+        canonical.replace("atrament.paper.v1", "atrament.paper.v2"),
+        canonical.replace("\"style\": \"grid\"", "\"style\": 5"),
+        canonical.replace("\"width_um\": 210000", "\"width_um\": -4"),
+        canonical.replace("\"width_um\": 210000", "\"width_um\": 1.5"),
+        canonical.replace("\"width_um\": 210000", "\"width_um\": 5"),
+        canonical
+            .replace("\"line_color\": \"#C5D4E7\"", "\"line_color\": \"blue\""),
+        canonical.replace("\"width_um\"", "\"height_um\""),
+        canonical.replace("\"width_um\"", "\"widthx_um\""),
+        format!("{canonical}{{}}"),
+        "a".repeat(MAX_PROFILE_BYTES + 1),
+    ];
+    for candidate in invalid {
+        assert!(
+            decode_profile(candidate.as_bytes()).is_err(),
+            "invalid candidate was admitted: {candidate}"
+        );
+    }
+    let duplicate = canonical.replace(
+        "\"width_um\": 210000,",
+        "\"width_um\": 210000, \"width_um\": 210000,",
+    );
+    assert!(decode_profile(duplicate.as_bytes()).is_err());
+    let escaped_duplicate = canonical.replace(
+        "\"width_um\": 210000,",
+        "\"width_um\": 210000, \"wid\\u0074h_um\": 210000,",
+    );
+    assert!(decode_profile(escaped_duplicate.as_bytes()).is_err());
+    let excessive_dots = canonical
+        .replace("\"style\": \"grid\"", "\"style\": \"dot\"")
+        .replace("\"spacing_um\": 5000", "\"spacing_um\": 1000");
+    assert!(decode_profile(excessive_dots.as_bytes()).is_err());
+}
+
+#[test]
+fn paper_profile_must_be_loaded_before_edit_flags() {
+    let args = ["--width-mm", "210", "--profile", "not-a-real-file.json"]
+        .map(str::to_owned);
+    let result = parse_options(&args);
+    assert!(result.is_err());
+    assert!(
+        result
+            .err()
+            .is_some_and(|error| error.contains("before edits"))
+    );
+}
+
+#[test]
+fn paper_profile_file_read_is_bounded_and_refuses_corrupt_disk_data() {
+    use std::fs;
+    use std::process;
+
+    let path = env::temp_dir().join(format!(
+        "atrament-paper-profile-read-{}.json",
+        process::id(),
+    ));
+    let filename = path.to_str().expect("temporary path is UTF-8");
+    let reference = encode_profile(Options::default());
+    fs::write(&path, &reference).expect("temporary profile fixture is written");
+    let loaded =
+        read_profile(filename).expect("typed paper profile is accepted");
+    assert_eq!(encode_profile(loaded), reference);
+    fs::write(&path, vec![b'a'; MAX_PROFILE_BYTES + 1])
+        .expect("oversized test payload is written");
+    assert!(read_profile(filename).is_err());
+    fs::write(&path, b"{\"schema\":\"broken\"}")
+        .expect("incomplete schema fixture is written");
+    assert!(read_profile(filename).is_err());
+    fs::remove_file(&path).expect("test fixture is removed");
+    assert!(read_profile(filename).is_err());
 }

@@ -10,6 +10,7 @@ atrament_paper_mark_geometry = { path = "../paper-mark-geometry" }
 atrament_pdf_composition_plan = { workspace = true }
 atrament_pdf_vector_serializer = { workspace = true }
 atrament_physical_page_profile = { workspace = true }
+atrament_profile_json_syntax = { workspace = true }
 
 [[bin]]
 name = "atrament-paper"

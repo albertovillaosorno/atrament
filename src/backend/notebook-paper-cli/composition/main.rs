@@ -13,9 +13,9 @@
 // - Must-Not:
 //   - Claim notebook text rendering, image embedding, or profile-file loading.
 // - Allows:
-//   - Inputs: Explicit sheet, margins, mark style/spacing and RGB color.
-//   - Outputs: One printable PDF on standard output or typed refusal.
-//   - Side effects: Standard output writes only.
+//   - Inputs: Explicit page options and bounded versioned paper-only JSON.
+//   - Outputs: PDF or versioned paper-only JSON on stdout, or refusal.
+//   - Side effects: Optional caller-selected profile read and stdout write.
 // - Split-When:
 //   - Production notebook export integrates real user content and file effects.
 // - Merge-When:
@@ -31,11 +31,13 @@
 //   - A4 grid, 5 mm spacing, 22/16/20/14 mm margins, blue-grey marks.
 //
 
-//! Thin CLI for native physical paper PDFs; no notebook content yet.
+//! Thin CLI for printable paper PDF and validated paper-only JSON profiles.
 
 use std::env;
 use std::error::Error;
-use std::io::{self, Write as _};
+use std::fs::File;
+use std::io::{self, Read as _, Write as _};
+use std::str::from_utf8;
 
 use atrament_paper_mark_geometry::{
     PaperMarkGeometry, Span, compile_profile_marks,
@@ -53,19 +55,26 @@ use atrament_physical_page_profile::{
     PaperMarkAppearance, PaperMarkJoin, PaperMarkLayer, PaperPattern, Rect,
     SheetSize,
 };
+use atrament_profile_json_syntax::{
+    ProfileJsonSyntaxLimits, ValidatedProfileJsonObject,
+    validate_profile_json_object,
+};
 
 const MAX_MARKS: u64 = 10_000;
+const MAX_PROFILE_BYTES: usize = 4_096;
+const PAPER_PROFILE_SCHEMA: &str = "atrament.paper.v1";
 const DEFAULT_COLOR: PdfRgb = PdfRgb {
     red: 197,
     green: 212,
     blue: 231,
 };
 
-const USAGE: &str = "Usage: atrament-paper [--style blank|ruled|grid|dot] \
+const USAGE: &str = "Usage: atrament-paper [--profile paper.json] \
+    [--style blank|ruled|grid|dot] \
     [--width-mm N] [--height-mm N] [--spacing-mm N] \
     [--margin-top-mm N] [--margin-bottom-mm N] \
     [--margin-left-mm N] [--margin-right-mm N] \
-    [--line-color '#RRGGBB'] > sheet.pdf";
+    [--line-color '#RRGGBB'] [--emit-profile] > output-file";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Style {
@@ -86,6 +95,12 @@ struct Options {
     spacing_um: u32,
     style: Style,
     width_um: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct CliRequest {
+    emit_profile: bool,
+    options: Options,
 }
 
 impl Default for Options {
@@ -154,30 +169,163 @@ fn line_color(value: &str) -> Result<PdfRgb, String> {
     })
 }
 
-fn parse_options(args: &[String]) -> Result<Option<Options>, String> {
+fn paper_style(value: &str) -> Result<Style, String> {
+    match value {
+        "blank" => Ok(Style::Blank),
+        "ruled" => Ok(Style::Ruled),
+        "grid" => Ok(Style::Grid),
+        "dot" => Ok(Style::Dot),
+        _ => Err("style must be blank, ruled, grid or dot".into()),
+    }
+}
+
+const fn style_name(style: Style) -> &'static str {
+    match style {
+        Style::Blank => "blank",
+        Style::Ruled => "ruled",
+        Style::Grid => "grid",
+        Style::Dot => "dot",
+    }
+}
+
+fn profile_text(
+    root: ValidatedProfileJsonObject<'_>,
+    name: &str,
+) -> Result<String, String> {
+    let value = root
+        .root_member_value(name)
+        .ok_or_else(|| format!("missing paper profile field: {name}"))?;
+    let mut buffer = [0u8; 80];
+    let count = value
+        .copy_string_utf8(&mut buffer)
+        .map_err(|error| format!("invalid {name}: {error:?}"))?;
+    let decoded = buffer.get(..count).ok_or("profile string overflow")?;
+    from_utf8(decoded)
+        .map(str::to_owned)
+        .map_err(|error| format!("invalid {name} UTF-8: {error}"))
+}
+
+fn profile_number(
+    root: ValidatedProfileJsonObject<'_>,
+    name: &str,
+) -> Result<u32, String> {
+    let value = root
+        .root_member_value(name)
+        .ok_or_else(|| format!("missing paper profile field: {name}"))?;
+    let number = value
+        .unsigned_integer()
+        .ok_or_else(|| format!("{name} requires integer micrometers"))?;
+    u32::try_from(number)
+        .map_err(|error| format!("{name} exceeds physical range: {error}"))
+}
+
+fn decode_profile(bytes: &[u8]) -> Result<Options, String> {
+    let root = validate_profile_json_object(
+        bytes,
+        ProfileJsonSyntaxLimits {
+            maximum_bytes: MAX_PROFILE_BYTES,
+            maximum_nesting: 2,
+            maximum_object_members: 16,
+            maximum_values: 32,
+        },
+    )
+    .map_err(|error| format!("invalid paper profile JSON: {error:?}"))?;
+    if root.root_fields().count() != 10 {
+        return Err(
+            "paper profile must contain exactly ten known fields".into()
+        );
+    }
+    if profile_text(root, "schema")? != PAPER_PROFILE_SCHEMA {
+        return Err("unsupported paper profile schema version".into());
+    }
+    let options = Options {
+        color: line_color(&profile_text(root, "line_color")?)?,
+        height_um: profile_number(root, "height_um")?,
+        margin_bottom_um: profile_number(root, "margin_bottom_um")?,
+        margin_left_um: profile_number(root, "margin_left_um")?,
+        margin_right_um: profile_number(root, "margin_right_um")?,
+        margin_top_um: profile_number(root, "margin_top_um")?,
+        spacing_um: profile_number(root, "spacing_um")?,
+        style: paper_style(&profile_text(root, "style")?)?,
+        width_um: profile_number(root, "width_um")?,
+    };
+    // Accept only a profile that the current Rust PDF path can really render.
+    let _bytes = render(options)?;
+    Ok(options)
+}
+
+fn encode_profile(options: Options) -> String {
+    format!(
+        concat!(
+            "{{\n",
+            "  \"schema\": \"atrament.paper.v1\",\n",
+            "  \"style\": \"{style}\",\n",
+            "  \"width_um\": {width},\n",
+            "  \"height_um\": {height},\n",
+            "  \"spacing_um\": {spacing},\n",
+            "  \"margin_top_um\": {top},\n",
+            "  \"margin_bottom_um\": {bottom},\n",
+            "  \"margin_left_um\": {left},\n",
+            "  \"margin_right_um\": {right},\n",
+            "  \"line_color\": \"#{red:02X}{green:02X}{blue:02X}\"\n",
+            "}}\n"
+        ),
+        style = style_name(options.style),
+        width = options.width_um,
+        height = options.height_um,
+        spacing = options.spacing_um,
+        top = options.margin_top_um,
+        bottom = options.margin_bottom_um,
+        left = options.margin_left_um,
+        right = options.margin_right_um,
+        red = options.color.red,
+        green = options.color.green,
+        blue = options.color.blue,
+    )
+}
+
+fn read_profile(path: &str) -> Result<Options, String> {
+    let file = File::open(path)
+        .map_err(|error| format!("cannot open paper profile: {error}"))?;
+    let mut bytes = Vec::new();
+    let _read = file
+        .take(4_097)
+        .read_to_end(&mut bytes)
+        .map_err(|error| format!("cannot read paper profile: {error}"))?;
+    if bytes.len() > MAX_PROFILE_BYTES {
+        return Err("paper profile exceeds 4096-byte limit".into());
+    }
+    decode_profile(&bytes)
+}
+
+fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
     let mut opts = Options::default();
+    let mut emit_profile = false;
+    let mut seen_edit = false;
+    let mut seen_profile = false;
     let mut items = args.iter();
     while let Some(name) = items.next() {
         if name == "--help" {
             return Ok(None);
         }
+        if name == "--emit-profile" {
+            emit_profile = true;
+            continue;
+        }
         let value = items.next().ok_or_else(|| {
             format!("missing value for {name}; use --help for arguments")
         })?;
-        match name.as_str() {
-            "--style" => {
-                opts.style = match value.as_str() {
-                    "blank" => Style::Blank,
-                    "ruled" => Style::Ruled,
-                    "grid" => Style::Grid,
-                    "dot" => Style::Dot,
-                    _ => {
-                        return Err(
-                            "style must be blank, ruled, grid or dot".into()
-                        );
-                    }
-                };
+        if name == "--profile" {
+            if seen_edit || seen_profile {
+                return Err("--profile must appear once, before edits".into());
             }
+            opts = read_profile(value)?;
+            seen_profile = true;
+            continue;
+        }
+        seen_edit = true;
+        match name.as_str() {
+            "--style" => opts.style = paper_style(value)?,
             "--width-mm" => opts.width_um = millimetres(value)?,
             "--height-mm" => opts.height_um = millimetres(value)?,
             "--spacing-mm" => opts.spacing_um = millimetres(value)?,
@@ -193,7 +341,10 @@ fn parse_options(args: &[String]) -> Result<Option<Options>, String> {
             _ => return Err(format!("unsupported option {name}; use --help")),
         }
     }
-    Ok(Some(opts))
+    Ok(Some(CliRequest {
+        emit_profile,
+        options: opts,
+    }))
 }
 
 fn position(value: u64) -> Result<i32, String> {
@@ -470,12 +621,17 @@ fn serialize_paths(
 /// Invalid parameters or output errors abort before reporting success.
 fn main() -> Result<(), Box<dyn Error>> {
     let args: Vec<_> = env::args().skip(1).collect();
-    let Some(opts) = parse_options(&args)? else {
+    let Some(request) = parse_options(&args)? else {
         writeln!(io::stderr().lock(), "{USAGE}")?;
         return Ok(());
     };
-    let bytes = render(opts)?;
-    io::stdout().lock().write_all(&bytes)?;
+    let bytes = render(request.options)?;
+    if request.emit_profile {
+        let json = encode_profile(request.options);
+        io::stdout().lock().write_all(json.as_bytes())?;
+    } else {
+        io::stdout().lock().write_all(&bytes)?;
+    }
     Ok(())
 }
 
