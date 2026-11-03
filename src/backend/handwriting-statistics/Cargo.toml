@@ -12,11 +12,11 @@ atrament_unicode_grapheme_boundary_port = { workspace = true }
 atrament_unicode_grapheme_segmentation = { workspace = true }
 
 [lib]
-path = "domain/lib.rs"
+path = "application/lib.rs"
 
 [lints]
 workspace = true
 
 [[test]]
 name = "handwriting_statistics_domain"
-path = "../../../tests/backend/handwriting-statistics/domain/lib.rs"
+path = "../../../tests/backend/handwriting-statistics/application/lib.rs"

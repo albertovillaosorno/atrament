@@ -6,4 +6,4 @@ classification:
   repository: atrament
   domain: backend
 architecture:
-  kind: domain
+  kind: application

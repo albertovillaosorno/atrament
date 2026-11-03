@@ -37,9 +37,15 @@
 //! profile-validation layer, not a handwriting renderer or sampler. NFC and NFD
 //! spellings remain separate exact keys, as required by the language inventory.
 
+#![cfg_attr(
+    test,
+    expect(
+        unused_crate_dependencies,
+        reason = "Integration fixtures use the Unicode adapter"
+    )
+)]
+
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
-#[cfg(test)]
-use atrament_unicode_grapheme_segmentation as _;
 
 /// Version of this manual statistical profile, separate from `.atrament` ZIP.
 pub const STATISTICS_PROFILE_VERSION: &str =

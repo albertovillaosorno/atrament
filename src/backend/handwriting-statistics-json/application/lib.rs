@@ -33,6 +33,14 @@
 
 //! Bounded Rust-only JSON codec for manually authored handwriting statistics.
 
+#![cfg_attr(
+    test,
+    expect(
+        unused_crate_dependencies,
+        reason = "Integration fixtures use the Unicode adapter"
+    )
+)]
+
 use std::fmt::Write as _;
 use std::str::from_utf8;
 
@@ -47,8 +55,6 @@ use atrament_profile_json_syntax::{
     validate_profile_json_object,
 };
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
-#[cfg(test)]
-use atrament_unicode_grapheme_segmentation as _;
 
 /// Maximum bytes in an independently editable handwriting JSON file.
 pub const MAXIMUM_STATISTICS_JSON_BYTES: usize = 1_048_576;
