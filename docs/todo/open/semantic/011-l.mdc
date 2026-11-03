@@ -68,7 +68,8 @@ ink mark and indentation. Heading styling is CLI-only and does not create
 semantic block styles or persistent title identities.
 
 Ordinary source lines are independently wrapped at word or grapheme
-boundaries; blank lines add paragraph spacing. Long headings refuse their single-line fixed region.
+boundaries; blank lines add paragraph spacing. Long headings refuse
+their single-line fixed region.
 This does **not** implement inline Markdown styling, combined soft-wrapped
 paragraphs, full ordered-list formatting or custom marker letterforms.
 
