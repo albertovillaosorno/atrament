@@ -1,0 +1,115 @@
+---
+record_type: task
+id: "ATR-P5-010"
+title: "Meet CPU preview latency and memory budgets"
+status: completed
+priority: P5
+lane: cpu-rendering
+dependencies: ["ATR-P5-004"]
+dependencies_specified: true
+dependency_rationale: >-
+  Latency targets measure the fast and final CPU profiles.
+acceptance_criteria:
+  - >-
+      Benchmark long pages, many images, dense equations, zoom, rapid edits,
+      and final export on ordinary integrated-graphics computers with no
+      compute GPU.
+  - >-
+      Finite v1 completion: Select and document one representative CPU, page
+      size, rendering profile, latency budget, and memory budget; acceptance
+      covers that bounded configuration, not arbitrary machines.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Meet CPU preview latency and memory budgets
+
+## Scope and existing evidence
+
+Historical report primitives are not measurements. Finite acceptance below
+permits theory-only evidence without claiming a measured performance result.
+
+Benchmark long pages, many images, dense equations, zoom, rapid edits, and final
+export on ordinary integrated-graphics computers with no compute GPU.
+
+Current executable evidence now records transport-neutral CPU benchmark
+observations for those six workload scenarios. Each observation is explicitly
+Preview or Final, retains caller-owned latency and peak-memory measurements, and
+names a caller-owned machine/configuration classified as having no discrete GPU.
+A completeness validator requires evidence for all six scenarios and requires
+both Preview and Final quality to be represented without demanding a Cartesian
+scenario-by-quality matrix. Successful admission now seals the exact caller
+observation sequence for later budget policy without interpreting its values.
+
+A leave-one-scenario-out matrix proves each workload is independently required
+before quality-role completeness can pass. The 64-case complete-scenario quality
+oracle is complemented by an exhaustive 256-state corpus crossing every
+scenario-presence mask with absent, Preview-only, Final-only, or both quality
+roles. It pins scenario omissions before quality-role omissions through direct
+and sealed admission. Numeric budgets, units, representative machine tiers,
+benchmark execution, render scheduling, and pass/fail policy remain open.
+
+## Finite CPU-only performance envelope and workload matrix
+
+**Inputs:** an explicitly recorded benchmark machine configuration,
+accepted ten-page A4 notebook fixture, deterministic Preview/Final profile,
+six representative workload scenarios and measured process latency/peak
+resident memory. **Outputs:** an inspectable performance report with each
+scenario/quality and a bounded pass/fail verdict, or `TheoryOnly` when the
+renderer or machine measurements are unavailable. No GPU compute is required.
+
+**One bounded target machine:** x86-64 quad-core CPU, 16 GiB system RAM,
+integrated graphics only, no GPU compute path, local SSD and a declared
+browser/OS/render-engine version. The accepted `Preview` resolution is 96
+DPI; `Final` is 300 DPI as in P5-004. Use one deterministic seed, fixed
+page bounds, 256 x 256 CPU tiles, 256 MiB per-page working allocation cap
+and at most 512 MiB peak resident memory for the renderer process. These
+values are a proposed reference configuration, not benchmark measurements.
+
+**Six finite workloads and proposed targets:**
+
+| Workload | Reproducible fixture | Budget |
+| --- | --- | --- |
+| Long pages | 10 A4 pages, 20 text blocks each | Preview p95 250 ms |
+| Many images | 8 images, 2048 x 2048 pixels | Preview p95 500 ms |
+| Dense equations | 40 equations on 1 page | Preview p95 350 ms |
+| Zoom | 60%, 100%, 160% on page 1 | Preview p95 250 ms |
+| Rapid edits | 10 sequential text edits | Preview p95 300 ms |
+| Final export | Same 10-page document | Final at most 60 s |
+
+**Measurement rule:** collect at least 20 repeated completed Preview events
+per Preview scenario after one declared warm-up and one complete Final Export
+for the ten-page fixture. Record monotonic elapsed time, p95 where defined,
+peak RSS, output identity, measured cache state, CPU model, OS and run count.
+Quality modes share vectors/seeds/materials/physical geometry. The benchmark
+is only valid if generated results are complete and the renderer neither
+changes content nor invokes a compute GPU to meet the budgets.
+
+**Worked example:** an illustrative 10-page fixture yields a measured p95 of
+210 ms in the long-page Preview scenario, 470 ms for the image-heavy page,
+and 48 s for Final Export at 420 MiB renderer RSS. These three hypothetical
+figures satisfy their proposed numerical targets, but the other scenarios
+are unmeasured; the overall result is `Incomplete`, not `Passed`. If the
+renderer is unavailable, report all six designs as `TheoryOnly` and do not
+claim interactive speed.
+
+**Refusal example:** process RSS reaches 600 MiB, Preview silently lowers
+DPI, PDF pages are missing, a GPU acceleration path is used, or one scenario
+is absent. The result does not pass; it records exact failing configuration,
+quality mode, workload and accepted page identity. No unbounded retry loop
+or hidden cache eviction is acceptable as a substitute for measurement.
+
+**Assumptions and limits:** current domains can store all six workload
+families, Preview/Final roles, machine descriptors and observed latency/RSS
+without inventing numbers. They do not perform rasterization, benchmarks,
+measurement, profile cost enforcement or resource scheduling. This finite
+proposal sets one realistic target without claiming hardware performance.
+
+## Acceptance decision
+
+- **Basis:** practical for benchmark evidence structure; theoretical for
+  budgets, actual CPU rendering and measurement, 2026-11-02.
+- **Delivered:** fixed integrated-graphics CPU target, six workload fixtures,
+  latency/memory bounds, incomplete-case example and failure handling.
+- **Not implemented by this acceptance:** benchmark harness, tested p95,
+  enforced memory cap, renderer latency or Final PDF timing.

@@ -18,23 +18,6 @@ remain in typed records under `docs/todo/open/`. Completed work belongs under
 then one direct Markdown link to the complete typed record. No per-item field
 labels belong here.
 
-## P5 — Deterministic CPU rendering and digital output
-
-### TODO - Calibrate print and scan round trips
-
-Measure physical scale, clipping, margins, grid registration, color shifts,
-photo placement, line weight, and scanner distortion on representative
-devices.
-
-[docs/todo/open/render/009-calibrate-print-and-scan-round-trips.mdc](docs/todo/open/render/009-calibrate-print-and-scan-round-trips.mdc)
-
-### TODO - Meet CPU preview latency and memory budgets
-
-Benchmark long pages, many images, dense equations, zoom, rapid edits, and
-final export on ordinary integrated-graphics computers with no compute GPU.
-
-[docs/todo/open/render/010-preview-latency-memory-budgets.mdc](docs/todo/open/render/010-preview-latency-memory-budgets.mdc)
-
 ## P6 — LLM, CLI, MCP, and media intake
 
 ### TODO - Freeze the one-shot formatting prompt

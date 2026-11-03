@@ -1,0 +1,115 @@
+---
+record_type: task
+id: "ATR-P5-009"
+title: "Calibrate print and scan round trips"
+status: completed
+priority: P5
+lane: cpu-rendering
+dependencies: ["ATR-P5-008"]
+dependencies_specified: true
+dependency_rationale: >-
+  Print and scan round trips require a PDF export artifact.
+acceptance_criteria:
+  - >-
+      Measure physical scale, clipping, margins, grid registration, color
+      shifts, photo placement, line weight, and scanner distortion on
+      representative devices.
+  - >-
+      Finite v1 completion: Define one A4 print-and-scan round-trip protocol
+      and a finite comparison rubric; when printer/scanner access is
+      unavailable, accept the theoretical protocol only.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Calibrate print and scan round trips
+
+## Scope and existing evidence
+
+Historical report primitives are not measurements. Finite acceptance below
+permits theory-only evidence without claiming a measured performance result.
+
+Measure physical scale, clipping, margins, grid registration, color shifts,
+photo placement, line weight, and scanner distortion on representative devices.
+
+Current executable evidence now names all eight physical round-trip measurement
+families explicitly and keeps each caller-owned observation tied to its source,
+unit, value, and rendered/exported output identity. The four ADR verification
+families remain physical scale, clipping, grid registration, and photo
+placement; P5 additionally retains margins, color shift, line weight, and
+scanner distortion.
+
+Structural admission now requires at least one observation for every family and
+returns constructor-sealed evidence borrowing the exact complete set. Repeated
+measurements remain valid. An exhaustive 256-mask oracle requires the direct and
+sealed paths to report the first missing family in canonical requirement order
+without interpreting any observation as calibration success.
+
+Representative-device selection, concrete units, tolerances, statistical
+analysis, correction transforms, calibration fitting, and pass/fail policy
+remain open.
+
+## Finite one-sheet print/scan calibration and quality rubric
+
+**Inputs:** one fully rendered and authorized A4 PDF artifact and manifest,
+a declared printer/driver/paper configuration, a scanner/camera with stable
+settings, and one raw captured physical output. **Outputs:** eight
+source-linked measurement families plus a measured correction/refusal
+report, or `TheoryOnly` when no physical hardware evidence is available.
+No software-only vector plan may be called a successful printer calibration.
+
+**A4 target chart:** print one `210 x 297 mm` page at actual size with four
+registration crosses 15 mm from each corner, a horizontal 100 mm reference
+ruler, a 2 x 2 line grid, 0.2/0.4 mm stroke gauges, RGB/gray swatches, one
+50 x 40 mm placed photo region, and labeled 20 mm margins. Record actual
+printer scaling, tray/page orientation, ink/paper and scan resolution before
+measuring. Device-specific settings must stay attached to every observation.
+
+**Eight measurement dimensions:**
+
+| Family | One recorded observation | Proposed review bound |
+| --- | --- | --- |
+| Physical scale | Measured 100 mm ruler | 99..101 mm |
+| Clipping | Missing boundary/chart marks | Zero omitted marks |
+| Margins | Minimum marked inset | Within 1 mm of target |
+| Grid registration | Largest corner residual | At most 1 mm |
+| Color shift | Swatch versus reference | Declared calibrated comparison |
+| Photo placement | Center displacement | At most 1 mm |
+| Line weight | Measured 0.4 mm gauge | Within 0.1 mm |
+| Scanner distortion | Residual after alignment | At most 1 mm |
+
+**Capture/report rule:** retain eight observed source/capture IDs, units,
+method and uncorrected measurements, then compare against declared
+reference geometry. Estimate one explicit correction transform only from
+held-out reference marks, not from handwriting shapes being graded. A
+missing color calibration target yields `UnmeasuredColor`, not a fabricated
+color tolerance. Corrections may be proposed to a new output profile but
+must not mutate the source notebook or original scanner capture.
+
+**Worked example:** a hypothetical print of the 100 mm ruler measures 100.6
+mm; the largest registration error is 0.7 mm and line weight measures 0.45
+mm. Those three *illustrative* observations fall inside their provisional
+bounds; the other five remain unmeasured and therefore the report is
+`Incomplete`, not `Calibrated`. With no printer/scanner, all eight families
+are specified theoretically and the acceptance is `TheoryOnly`.
+
+**Refusal example:** a report has no clipping observation, actual-size print
+was silently fit to paper, scans are distorted beyond the declared model,
+or source output revision differs from the measurement manifest. Retain
+reported failures and request a new capture; never fix layout by silently
+changing page scale or claiming a device passed without measured evidence.
+
+**Assumptions and limits:** existing data types require all eight physical
+measurement families with owner/source/units, but cannot measure or grade a
+printer. Device selection, scanner alignment, color science, tolerance
+calibration and profile correction are unimplemented. Theoretical protocol
+acceptance does not certify any physical print or scanner.
+
+## Acceptance decision
+
+- **Basis:** practical for eight-axis evidence completeness; theoretical
+  for hardware capture and correction, 2026-11-02.
+- **Delivered:** one A4 target sheet, eight finite measurements, proposed
+  bounds, example incomplete report and hardware-absent `TheoryOnly` state.
+- **Not implemented by this acceptance:** print/scan execution,
+  device calibration, measured tolerances or verified output fidelity.
