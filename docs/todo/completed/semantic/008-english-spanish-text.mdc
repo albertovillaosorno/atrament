@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P2-008"
 title: "Implement English and Spanish text behavior"
-status: open
+status: completed
 priority: P2
 lane: semantic-layout
 dependencies: ["ATR-P2-001"]
@@ -25,6 +25,10 @@ migrated_from: TODO.md
 # Implement English and Spanish text behavior
 
 ## Scope and existing evidence
+
+Historical notes below retain their implementation status. This finite
+acceptance includes a theoretical bounded line-break policy only; it does
+not claim that bilingual shaping or normalization has been implemented.
 
 Normalize Unicode, edit by grapheme, apply language-aware punctuation and
 wrapping, and preserve curly quotes, guillemets, accents, and en or em dashes.
@@ -128,3 +132,70 @@ all preserve the same accepted revision and leave history unchanged.
 Normalization policy, punctuation generation, language-aware wrapping, cursor
 direction/step-size/clamping, selection-extension/visual-affinity policy, and
 browser, CLI, or MCP grapheme-range transport remain open.
+
+## Finite bilingual grapheme and line-break contract
+
+**Inputs:** exact authored English or Spanish UTF-8 text, an exact accepted
+revision and inline span ID for edits, pinned extended-grapheme boundaries,
+a declared locale (`en` or `es`), and caller-supplied measured token extents
+plus a positive available line width. **Outputs:** either a typed no-effect
+refusal for an invalid edit, a new accepted text revision preserving all
+unmodified source bytes, or a read-only ordered line-break plan that never
+silently changes text, punctuation, accent spelling, or semantic ownership.
+
+**Existing grapheme edit rule:** the pinned Unicode segmenter selects whole
+extended grapheme clusters, not arbitrary bytes or Unicode scalar values.
+A zero-length insertion uses one exact boundary; a range replacement uses
+two ordered boundaries and preserves untouched UTF-8 slices. An invalid,
+stale, reversed, impossible or missing provider boundary is a typed refusal
+with the prior accepted state unchanged. Undo restores the authored bytes.
+
+**Normalization and punctuation policy:** preserve NFC and NFD source
+spellings exactly rather than silently choosing a canonical form. For this
+finite version, locale affects line-break review only; it must not generate
+`¿`, `¡`, curly quotes, guillemets, en dashes, or em dashes. Such characters
+are authored content and must survive acceptance, edits, and Undo verbatim.
+A future opt-in normalization command would need its own compatibility and
+revision contract; no such command is admitted here.
+
+**Proposed measured line-break rule:** scan complete measured whitespace-
+separated tokens in semantic order. Retain the next token and intervening
+measured space when their combined width fits exactly; otherwise break before
+the next token. Treat a quoted phrase or punctuation within a token as its
+original grapheme sequence; no invented hyphen or reordered punctuation.
+For a token wider than a fresh line, refuse as `UnbreakableToken` until a
+separately admitted grapheme-boundary emergency policy and its metrics exist.
+The line plan is derived only and never rewrites the underlying source.
+
+**Bounded corpus with illustrative measured extents (not glyph evidence):**
+all examples have a 24 mm line-width limit; intervening spaces measure 2 mm.
+
+- English: `“Hello” — café.` has measured token widths `18, 4, 14` mm.
+  Line 1 views `“Hello” —` (24 mm), line 2 views `café.` (14 mm). The
+  curly quotes, em dash and `é` remain exact authored characters.
+- Spanish: `«¡Hola, niño!» — ¿Sí?` has token widths `16, 14, 4, 9` mm.
+  Line 1 views `«¡Hola,`, line 2 views `niño!» —` (20 mm), and line 3
+  views `¿Sí?`. The guillemets and inverted punctuation are not generated
+  or removed, and the `ñ` stays within its owning grapheme.
+- Bilingual accent/dash: `«Sí» – mañana café` has token widths
+  `10, 4, 16, 12` mm. Line 1 views `«Sí» –` (16 mm), line 2 views
+  `mañana` (16 mm), line 3 views `café` (12 mm). The final accent is
+  decomposed `e` plus U+0301 and remains one grapheme for editing.
+
+**Refusal and risks:** invalid UTF-8 boundaries, stale revision, measured
+width overflow, no available line width, or a single token wider than a fresh
+line cannot be silently truncated. Actual locale-aware line wrapping,
+quote/guillemet spacing conventions, hyphenation, page metrics, visual cursor
+affinity, browser/CLI/MCP range transport, and normalization are not built
+by this specification. The illustrative widths do not certify any profile.
+
+## Acceptance decision
+
+- **Basis:** practical for existing pinned grapheme edit/selection, theoretical
+  for the finite bilingual measured line-break policy, 2026-11-02.
+- **Delivered:** editable whole-grapheme invariants, exact Unicode source
+  policy, three examples containing accents, quotes, guillemets, dashes,
+  language punctuation, bounded break outcomes, and fail-closed refusals.
+- **Not implemented by this acceptance:** automatic locale punctuation,
+  normalization, real measured bilingual line breaking, hyphenation, visual
+  cursor layout, or browser/CLI/MCP edit transport.

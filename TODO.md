@@ -20,14 +20,6 @@ labels belong here.
 
 ## P2 — Semantic notebook and physical layout
 
-### TODO - Implement English and Spanish text behavior
-
-Normalize Unicode, edit by grapheme, apply language-aware punctuation and
-wrapping, and preserve curly quotes, guillemets, accents, and en or em
-dashes.
-
-[docs/todo/open/semantic/008-english-spanish-text.mdc](docs/todo/open/semantic/008-english-spanish-text.mdc)
-
 ### TODO - Make missing glyph coverage impossible to miss
 
 Report every unsupported grapheme by profile and offer only a visible
