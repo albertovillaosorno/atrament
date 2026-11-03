@@ -561,6 +561,32 @@
                 <option value="’">Right curly single quote ’</option>
                 <option value="“">Left curly double quote “</option>
                 <option value="”">Right curly double quote ”</option>
+                <option value="A">Uppercase A</option>
+                <option value="B">Uppercase B</option>
+                <option value="C">Uppercase C</option>
+                <option value="D">Uppercase D</option>
+                <option value="E">Uppercase E</option>
+                <option value="F">Uppercase F</option>
+                <option value="G">Uppercase G</option>
+                <option value="H">Uppercase H</option>
+                <option value="I">Uppercase I</option>
+                <option value="J">Uppercase J</option>
+                <option value="K">Uppercase K</option>
+                <option value="L">Uppercase L</option>
+                <option value="M">Uppercase M</option>
+                <option value="N">Uppercase N</option>
+                <option value="O">Uppercase O</option>
+                <option value="P">Uppercase P</option>
+                <option value="Q">Uppercase Q</option>
+                <option value="R">Uppercase R</option>
+                <option value="S">Uppercase S</option>
+                <option value="T">Uppercase T</option>
+                <option value="U">Uppercase U</option>
+                <option value="V">Uppercase V</option>
+                <option value="W">Uppercase W</option>
+                <option value="X">Uppercase X</option>
+                <option value="Y">Uppercase Y</option>
+                <option value="Z">Uppercase Z</option>
                 <option value="0">Numeral 0 (exact ellipse)</option>
                 <option value="1">Numeral 1 (stem and foot)</option>
                 <option value="2">Numeral 2 (curved arch)</option>
@@ -654,6 +680,9 @@
             <button id="glyph-seed-digits" type="button" disabled>
               Fill missing digits 0–9 (unsaved)
             </button>
+            <button id="glyph-seed-capitals" type="button" disabled>
+              Fill missing uppercase A–Z (unsaved)
+            </button>
           </div>
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the highest story, positioned from geometry
@@ -683,7 +712,11 @@
             Numeral 0 is an exact SVG ellipse (distinct from circular o),
             8 uses two ellipses, and 1–7/9 combine ordered lines, arcs or
             loops. The separate digit fill preserves authored shapes and
-            only updates the local unsaved draft.
+            only updates the local unsaved draft. The uppercase A–Z fill
+            similarly preserves authored capitals. O and Q reuse the
+            exact o circle guide, C and G use a circular open arc,
+            and S and other curved capitals use analytic quadratics.
+            Only exact straight strokes and sampled curve chords export.
             Every fill remains unsaved.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>

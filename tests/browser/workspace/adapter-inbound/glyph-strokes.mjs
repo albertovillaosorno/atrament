@@ -98,7 +98,7 @@ function mountEditor() {
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
         "glyph-seed-spanish", "glyph-seed-spanish-nfd",
         "glyph-seed-punctuation", "glyph-seed-quotes",
-        "glyph-seed-math", "glyph-seed-digits",
+        "glyph-seed-math", "glyph-seed-digits", "glyph-seed-capitals",
         "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
@@ -2078,22 +2078,145 @@ test("digit fill preserves custom ink and refuses over-cap", async () => {
     }
 });
 
-test("seven explicit fill gestures author 68 independent glyphs", async () => {
+test("uppercase A-Z have distinct sampled geometry and exact circles", () => {
+    const counts = [3, 65, 36, 33, 4, 3, 38, 3, 3, 34, 3, 2, 4,
+        3, 48, 33, 49, 34, 64, 2, 34, 2, 4, 2, 3, 3];
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const alphabet = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].map((g, index) => {
+        const lines = geometricStarter(g, ...args);
+        assert.equal(lines.length, counts[index], g);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(lines)), lines);
+        return lines;
+    });
+    const upperO = alphabet[14];
+    const lowerO = geometricStarter("o", ...args);
+    assert.deepEqual(upperO.map(({ x1, y1, x2, y2 }) =>
+        [x1, y1, x2, y2]), lowerO.map(({ x1, y1, x2, y2 }) =>
+        [x1, y1, x2, y2]), "uppercase O shares exact o circle");
+    assert.deepEqual(alphabet[16].slice(0, 48).map((line) =>
+        [line.x1, line.y1, line.x2, line.y2]),
+        upperO.map((line) => [line.x1, line.y1, line.x2, line.y2]),
+        "Q retains the same unmodified circle before its pen-lift tail");
+    assert.deepEqual(alphabet[2].map(({ x1, y1, x2, y2 }) =>
+        [x1, y1, x2, y2]), geometricStarter("c", ...args).map(
+        ({ x1, y1, x2, y2 }) => [x1, y1, x2, y2]));
+    assert.deepEqual(alphabet[6].slice(0, 36).map((line) =>
+        [line.x1, line.y1, line.x2, line.y2]),
+        alphabet[2].map((line) =>
+            [line.x1, line.y1, line.x2, line.y2]));
+    assert.deepEqual(alphabet[18].map(({ x1, y1, x2, y2 }) =>
+        [x1, y1, x2, y2]), geometricStarter("s", ...args).map(
+        ({ x1, y1, x2, y2 }) => [x1, y1, x2, y2]));
+    assert.deepEqual(alphabet[0].map((line) =>
+        [line.x1, line.y1, line.x2, line.y2]), [
+        [725, 3550, 1550, 1350], [1550, 1350, 2375, 3550],
+        [1121, 2505, 1979, 2505],
+    ]);
+    assert.throws(() => geometricStarter("A", 1550, 1050, 1100,
+        250, "#243647"), /fit inside glyph cell/);
+});
+
+test("uppercase SVG guides show circles, open arcs and curves", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("form").value = "O";
+        get("character").value = "O";
+        get("form").dispatch("input");
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-rounded-left").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        get("form").value = "G";
+        get("character").value = "G";
+        get("form").dispatch("input");
+        assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+            "visible");
+        assert.match(get("ideal-rounded").attributes.get("d"),
+            /M 1660 2835 L 2375 2835/);
+        get("construct").dispatch("click");
+        get("form").value = "B";
+        get("character").value = "B";
+        get("form").dispatch("input");
+        assert.match(get("ideal-rounded").attributes.get("d"), /Q /);
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, ["O", "G", "B"].flatMap((g) =>
+            geometricStarter(g, 1550, 2450, 1100, 250, "#243647")));
+        get("circle-x").value = "200";
+        get("circle-x").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /fit inside glyph cell/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "clipped capital must not overwrite authored ink");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("uppercase fill preserves ink and refuses over-cap", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        assert.equal(get("seed-capitals").disabled, true);
+        editor.start();
+        const originals = [stroke("Q"), stroke("∞")];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(originals));
+        get("load").files = [{ size: bytes.length,
+            arrayBuffer: async () => bytes.buffer }];
+        await get("load").dispatch("change");
+        get("seed-capitals").dispatch("click");
+        assert.match(get("status").textContent, /Filled 25 missing uppercase/);
+        assert.equal(downloads.length, 0);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, [...originals,
+            ...[..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].filter((g) => g !== "Q")
+                .flatMap((g) => geometricStarter(g, 1550, 2450,
+                    1100, 250, "#243647"))]);
+        get("seed-capitals").dispatch("click");
+        assert.match(get("status").textContent, /All 26 uppercase glyphs/);
+        const full = Array.from({ length: 4000 }, () => stroke("∞"));
+        const big = new TextEncoder().encode(encodeGlyphLibrary(full));
+        get("load").files = [{ size: big.length,
+            arrayBuffer: async () => big.buffer }];
+        await get("load").dispatch("change");
+        get("seed-capitals").dispatch("click");
+        assert.match(get("status").textContent, /Save requires 1..4096/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            full, "over-cap fill must be atomic");
+        editor.reset();
+        assert.equal(get("seed-capitals").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("eight explicit fills author 94 independent glyphs", async () => {
     const ui = mountEditor();
     try {
         const { editor, get, downloads } = ui;
         editor.start();
         for (const action of ["seed-lowercase", "seed-spanish",
             "seed-spanish-nfd", "seed-punctuation", "seed-quotes",
-            "seed-math", "seed-digits"]) {
+            "seed-math", "seed-digits", "seed-capitals"]) {
             get(action).dispatch("click");
             assert.match(get("status").textContent, /Filled/);
         }
         assert.equal(downloads.length, 0);
         get("save").dispatch("click");
         const all = parseGlyphLibrary(await downloads.at(-1).text());
-        assert.equal(all.length, 1866);
-        assert.equal(new Set(all.map((line) => line.grapheme)).size, 68);
+        assert.equal(all.length, 2378);
+        assert.equal(new Set(all.map((line) => line.grapheme)).size, 94);
         const differentMinuses = ["-", "−"].map((glyph) =>
             all.filter((line) => line.grapheme === glyph));
         assert.equal(differentMinuses[0].length, 1);
@@ -2103,6 +2226,7 @@ test("seven explicit fill gestures author 68 independent glyphs", async () => {
         editor.reset();
         assert.equal(get("seed-math").disabled, true);
         assert.equal(get("seed-digits").disabled, true);
+        assert.equal(get("seed-capitals").disabled, true);
     } finally {
         ui.restore();
     }
@@ -2113,7 +2237,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "g", "n", "u", "h", "m", "r", "s", "l", "t", "f", "v", "w",
         ".", ",", "!", "¡", "?", "¿", "«", "»", "‘", "’", "“", "”",
         "+", "-", "−", "=", "×", "÷",
-        ..."0123456789",
+        ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         "k", "x", "y", "z", "c", "e", "i", "í", "j"];
     let accepted = 0;
     let checked = 0;
@@ -2152,7 +2276,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 8208);
+    assert.equal(checked, 11952);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

@@ -584,9 +584,23 @@ transparent 72-DPI 596×842 RGBA PNG. Ten digit glyphs on a page consume
 412 of the native 512 final-stroke budget; repeated long numeric runs
 can exceed that limit and refuse.
 
-These actions do not seed uppercase or the
-complete 114-entry inventory. It does not connect semantic Markdown text
-to notebook flow, and the native renderer still caps output at 512 physical
+The **Fill missing uppercase A–Z (unsaved)** action adds a separately
+selectable print-capital geometric draft without changing authored glyphs.
+`O` and `Q` reuse the mathematically exact circle of lowercase `o` in
+SVG; `C` and `G` reuse its open circular arc. Curved capitals have analytic
+quadratic guides, while straight capitals use exact ordered pen segments.
+The 26 capitals add **512 sampled segments**, giving **94 exact glyphs
+and 2,378 strokes** after all eight opt-in actions. The Rust CLI audited
+`ABCDEFGHIJKLMNOPQRSTUVWXYZ` with zero missing shapes, read the TSV
+back byte-identically and exported a genuine one-page A4 PDF plus a
+transparent 72-DPI PNG. Note that the uppercase alphabet *alone*
+uses all 512 permitted final ink strokes on one page; longer text must
+be split or use a smaller authored stroke vocabulary.
+
+The draft still lacks uppercase accented targets, general italic/cursive
+connections and the complete 114-entry text inventory. Semantic Markdown
+is not yet connected to the browser glyph editor. The native renderer
+still caps output at 512 physical
 ink strokes per export. The shapes are editable geometric starters, not
 personal handwriting or retained analytic PDF curves.
 

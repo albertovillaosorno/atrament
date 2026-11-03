@@ -561,6 +561,33 @@ analytic curves, joined cursive, learned handwriting or complete
 semantic notebook pipeline is implied. The full P1-012 executable
 acceptance remains open.
 
+## Exact geometric uppercase A–Z starters (partial) — 2026-11-03
+
+A separate, admitted-session **Fill missing uppercase A–Z** action now
+constructs all 26 capital print starters without overwriting any prior
+custom uppercase ink. Each form can also be selected individually and
+replaced through the explicit geometric-starter control. `O`/`Q` share the
+mathematically exact lowercase-o circle guide, `C`/`G` reuse its open
+circular arc, `S` reuses four joined quadratic bends, and the remaining
+capitals combine their own exact lines and/or sampled quadratic curves.
+Native v1 TSV does not store the analytic guide primitives.
+
+Three browser regressions verify all 26 ordered shapes, circle/arc
+reuse, exact Q tail and uppercase stroke counts, SVG selection,
+session-gated actions, custom-stroke preservation, atomic invalid-fit
+and 4,096-segment refusal. The full eight-action batch now gives **94
+Unicode glyphs and 2,378 sampled strokes**; the parameter/pen boundary
+grid covers **11,952 combinations**, with 68 focused glyph tests passing.
+TypeScript check and build passed.
+
+The Rust `atrament-profiles` CLI accepted and byte-identically read back
+all **512 capital strokes** with a zero-missing `A`–`Z` audit, and
+rendered that exact alphabet to a genuine A4 PDF and a transparent
+72-DPI 596×842 PNG. This uses the 512 final pen-stroke ceiling for
+one export; more content may refuse. Uppercase diacritic ink, analytic
+PDF curves, font variants, joined cursive and full bilingual text-page
+acceptance remain unfinished.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

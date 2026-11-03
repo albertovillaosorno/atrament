@@ -460,6 +460,83 @@ function digitGuide(geometry) {
     return [...loops, punctuationGuide(geometry.parts)].filter(Boolean)
         .join(" ");
 }
+function capitalParts(cx, cy, radius, glyph) {
+    const point = (x, y) => ({
+        x: cx + Math.round(radius * x),
+        y: cy + Math.round(radius * y),
+    });
+    const line = (x1, y1, x2, y2) => ({ from: point(x1, y1), to: point(x2, y2) });
+    const curve = (x1, y1, hx, hy, x2, y2) => ({
+        from: point(x1, y1), control: point(hx, hy),
+        to: point(x2, y2),
+    });
+    const stem = () => line(-0.75, -1, -0.75, 1);
+    const bowl = () => [
+        curve(-0.75, -1, 0.75, -1, 0.75, -0.5),
+        curve(0.75, -0.5, 0.75, 0, -0.75, 0),
+    ];
+    switch (glyph) {
+        case "A": return [line(-0.75, 1, 0, -1),
+            line(0, -1, 0.75, 1), line(-0.39, 0.05, 0.39, 0.05)];
+        case "B": return [stem(), ...bowl(),
+            curve(-0.75, 0, 0.75, 0, 0.75, 0.5),
+            curve(0.75, 0.5, 0.75, 1, -0.75, 1)];
+        case "C": return [];
+        case "D": return [stem(),
+            curve(-0.75, -1, 0.8, -1, 0.8, 0),
+            curve(0.8, 0, 0.8, 1, -0.75, 1)];
+        case "E": return [stem(), line(-0.75, -1, 0.75, -1),
+            line(-0.75, 0, 0.45, 0), line(-0.75, 1, 0.75, 1)];
+        case "F": return [stem(), line(-0.75, -1, 0.75, -1),
+            line(-0.75, 0, 0.45, 0)];
+        case "G": return [line(0.1, 0.35, 0.75, 0.35),
+            line(0.75, 0.35, 0.75, 0.65)];
+        case "H": return [stem(), line(0.75, -1, 0.75, 1),
+            line(-0.75, 0, 0.75, 0)];
+        case "I": return [line(-0.55, -1, 0.55, -1),
+            line(0, -1, 0, 1), line(-0.55, 1, 0.55, 1)];
+        case "J": return [line(-0.2, -1, 0.7, -1),
+            line(0.7, -1, 0.7, 0.5),
+            curve(0.7, 0.5, 0.4, 1, -0.25, 1),
+            curve(-0.25, 1, -0.75, 1, -0.75, 0.55)];
+        case "K": return [stem(), line(0.75, -1, -0.75, 0),
+            line(-0.35, -0.27, 0.75, 1)];
+        case "L": return [stem(), line(-0.75, 1, 0.75, 1)];
+        case "M": return [stem(), line(-0.75, -1, 0, 0.2),
+            line(0, 0.2, 0.75, -1), line(0.75, -1, 0.75, 1)];
+        case "N": return [stem(), line(-0.75, -1, 0.75, 1),
+            line(0.75, 1, 0.75, -1)];
+        case "O": return [];
+        case "P": return [stem(), ...bowl()];
+        case "Q": return [line(0.3, 0.4, 1, 1)];
+        case "R": return [stem(), ...bowl(),
+            line(-0.2, 0, 0.75, 1)];
+        case "S": return [];
+        case "T": return [line(-0.8, -1, 0.8, -1), line(0, -1, 0, 1)];
+        case "U": return [line(-0.75, -1, -0.75, 0.35),
+            curve(-0.75, 0.35, -0.75, 1, 0, 1),
+            curve(0, 1, 0.75, 1, 0.75, 0.35),
+            line(0.75, 0.35, 0.75, -1)];
+        case "V": return [line(-0.75, -1, 0, 1),
+            line(0, 1, 0.75, -1)];
+        case "W": return [line(-0.85, -1, -0.45, 1),
+            line(-0.45, 1, 0, 0), line(0, 0, 0.45, 1),
+            line(0.45, 1, 0.85, -1)];
+        case "X": return [line(-0.75, -1, 0.75, 1),
+            line(0.75, -1, -0.75, 1)];
+        case "Y": return [line(-0.75, -1, 0, 0),
+            line(0.75, -1, 0, 0), line(0, 0, 0, 1)];
+        case "Z": return [line(-0.75, -1, 0.75, -1),
+            line(0.75, -1, -0.75, 1), line(-0.75, 1, 0.75, 1)];
+    }
+}
+function capitalGuide(cx, cy, radius, glyph) {
+    if (glyph === "S") {
+        return smoothS(cx, cy, radius).map(([from, control, to], index) => `${index === 0 ? `M ${from.x} ${from.y} ` : ""}`
+            + `Q ${control.x} ${control.y} ${to.x} ${to.y}`).join(" ");
+    }
+    return punctuationGuide(capitalParts(cx, cy, radius, glyph));
+}
 function punctuationGuide(parts) {
     const commands = [];
     let pen = null;
@@ -572,7 +649,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         ".", ",", "!", "¡", "?", "¿",
         "«", "»", "‘", "’", "“", "”",
         "+", "-", "−", "=", "×", "÷",
-        ..."0123456789"].includes(g)) {
+        ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -595,6 +672,57 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         || cx + radius + halfPen > 3500
         || cy + radius + halfPen > 4500) {
         throw new Error("Shape and pen thickness must fit inside glyph cell");
+    }
+    if (/^[A-Z]$/.test(g)) {
+        const line = (from, to) => {
+            for (const point of [from, to]) {
+                if (point.x - halfPen < 0 || point.x + halfPen > 3500
+                    || point.y - halfPen < 0
+                    || point.y + halfPen > 4500) {
+                    throw new Error("Capital ink must fit inside glyph cell");
+                }
+            }
+            return validateStroke({ grapheme: g,
+                x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+                width: pen, color });
+        };
+        const parts = capitalParts(cx, cy, radius, g);
+        const output = [];
+        if (g === "O" || g === "Q") {
+            const circle = (step) => {
+                const a = 2 * Math.PI * step / CIRCLE_SEGMENTS;
+                return { x: Math.round(cx + radius * Math.cos(a)),
+                    y: Math.round(cy + radius * Math.sin(a)) };
+            };
+            for (let step = 0; step < CIRCLE_SEGMENTS; step += 1) {
+                output.push(line(circle(step), circle(step + 1)));
+            }
+        }
+        else if (g === "C" || g === "G") {
+            for (let step = 0; step < OPEN_ARC_SEGMENTS; step += 1) {
+                const first = openCirclePoint(cx, cy, radius, step);
+                const last = openCirclePoint(cx, cy, radius, step + 1);
+                output.push(line({ x: Math.round(first.x),
+                    y: Math.round(first.y) }, { x: Math.round(last.x),
+                    y: Math.round(last.y) }));
+            }
+        }
+        else if (g === "S") {
+            for (const [from, control, to] of smoothS(cx, cy, radius)) {
+                for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
+                    output.push(line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1)));
+                }
+            }
+        }
+        for (const { from, control, to } of parts) {
+            if (control === undefined)
+                output.push(line(from, to));
+            else
+                for (let step = 0; step < ARCH_SEGMENTS; step += 1) {
+                    output.push(line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1)));
+                }
+        }
+        return output;
     }
     if (/^[0-9]$/.test(g)) {
         const geometry = digitGeometry(cx, cy, radius, g);
@@ -1012,6 +1140,7 @@ export function createGlyphStrokeEditor() {
     const seedQuotes = required("glyph-seed-quotes");
     const seedMath = required("glyph-seed-math");
     const seedDigits = required("glyph-seed-digits");
+    const seedCapitals = required("glyph-seed-capitals");
     const centerX = required("glyph-circle-x");
     const centerY = required("glyph-circle-y");
     const radius = required("glyph-circle-radius");
@@ -1046,7 +1175,7 @@ export function createGlyphStrokeEditor() {
     }
     const controls = [character, color, source, add, copyFrom, copy, compose,
         form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
-        seedPunctuation, seedQuotes, seedMath, seedDigits,
+        seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
         centerX, centerY, radius,
         accentShift, accentLift,
         selected, update,
@@ -1104,7 +1233,7 @@ export function createGlyphStrokeEditor() {
             const shown = active ? "visible" : "hidden";
             const chosen = selectedForm();
             const circleVisible = ["o", "a", "ó", "á", "b", "d",
-                "p", "q", "g"].includes(chosen.grapheme);
+                "p", "q", "g", "O", "Q"].includes(chosen.grapheme);
             const circleState = circleVisible ? shown : "hidden";
             idealCircle.setAttribute("visibility", circleState);
             const stemGlyph = ["a", "á", "b", "d", "p", "q"]
@@ -1191,16 +1320,19 @@ export function createGlyphStrokeEditor() {
             const mathD = isMath ? punctuationGuide(mathParts(cx, cy, r, chosen.grapheme)) : "";
             const isDigit = /^[0-9]$/.test(chosen.grapheme);
             const digitD = isDigit ? digitGuide(digitGeometry(cx, cy, r, chosen.grapheme)) : "";
-            const roundedD = isDigit ? digitD
-                : isMath ? mathD
-                    : isQuote ? quoteD
-                        : isPunctuation ? punctuationD
-                            : isStraight ? straightD
-                                : chosen.grapheme === "s" ? sD
-                                    : chosen.grapheme === "j" ? jD
-                                        : chosen.grapheme === "g" ? gD
-                                            : chosen.grapheme === "m" ? doubledD
-                                                : [roundedStart, roundedFirst, roundedSecond].join(" ");
+            const isCapital = /^[A-Z]$/.test(chosen.grapheme);
+            const capitalD = isCapital ? capitalGuide(cx, cy, r, chosen.grapheme) : "";
+            const roundedD = isCapital ? capitalD
+                : isDigit ? digitD
+                    : isMath ? mathD
+                        : isQuote ? quoteD
+                            : isPunctuation ? punctuationD
+                                : isStraight ? straightD
+                                    : chosen.grapheme === "s" ? sD
+                                        : chosen.grapheme === "j" ? jD
+                                            : chosen.grapheme === "g" ? gD
+                                                : chosen.grapheme === "m" ? doubledD
+                                                    : [roundedStart, roundedFirst, roundedSecond].join(" ");
             roundedPath.setAttribute("d", roundedD);
             roundedPath.setAttribute("stroke-width", numeric.width.value);
             roundedPath.setAttribute("stroke", color.value);
@@ -1223,11 +1355,12 @@ export function createGlyphStrokeEditor() {
                     ".", ",", "!", "¡", "?", "¿",
                     "«", "»", "‘", "’", "“", "”",
                     "+", "-", "−", "=", "×", "÷",
-                    ..."0123456789"]
+                    ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
                 && !isPunctuation && !isQuote && !isMath && !isDigit
+                && !isCapital
                 && !["j", "g", "s"].includes(chosen.grapheme)
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
@@ -1244,7 +1377,7 @@ export function createGlyphStrokeEditor() {
             openPath.setAttribute("d", openD);
             openPath.setAttribute("stroke-width", numeric.width.value);
             openPath.setAttribute("stroke", color.value);
-            const openVisible = active && ["c", "e"]
+            const openVisible = active && ["c", "e", "C", "G"]
                 .includes(chosen.grapheme);
             const openState = openVisible ? "visible" : "hidden";
             openPath.setAttribute("visibility", openState);
@@ -1732,6 +1865,33 @@ export function createGlyphStrokeEditor() {
             selectedIndex = null;
             render();
             message(`Filled ${missing.length} missing numeral glyphs (`
+                + `${added.length} sampled strokes); unsaved draft`);
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    seedCapitals.addEventListener("click", () => {
+        if (!active)
+            return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before seeding");
+            }
+            const authored = new Set(strokes.map((stroke) => stroke.grapheme));
+            const missing = [..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
+                .filter((g) => !authored.has(g));
+            if (missing.length === 0) {
+                message("All 26 uppercase glyphs already have authored ink");
+                return;
+            }
+            const added = missing.flatMap((g) => geometricStarter(g, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value));
+            const next = [...strokes, ...added];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${missing.length} missing uppercase glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         }
         catch (error) {
