@@ -92,11 +92,25 @@ pub enum PdfPathCommand {
     MoveTo(PdfPoint),
 }
 
-/// A vector paint with no implicit style fallback.
+/// Explicit winding interpretation of closed vector contours.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum PdfFillRule {
+    /// Even-odd parity preserves holes without winding-orientation inference.
+    EvenOdd,
+    /// Nonzero winding preserves the supplied contour orientations.
+    NonZero,
+}
+
+/// A vector paint with no implicit style or fill-rule fallback.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PdfPathPaint {
-    /// Solid filled, fully closed path.
-    Fill(PdfRgb),
+    /// Filled, fully closed subpaths with caller-selected winding semantics.
+    Fill {
+        /// Exact solid fill color.
+        color: PdfRgb,
+        /// Rule for combining nested contours and holes.
+        rule: PdfFillRule,
+    },
     /// Solid stroke with positive width in micrometers.
     Stroke {
         /// Exact stroke ink color.
@@ -210,14 +224,18 @@ fn apply_path_paint(
     stream: &mut String,
     paint: PdfPathPaint,
     maximum_stream_bytes: usize,
-) -> Result<(bool, u32), PdfVectorError> {
-    let (fill, stroke_margin_um) = match paint {
-        PdfPathPaint::Fill(color) => {
+) -> Result<(&'static str, u32), PdfVectorError> {
+    let (operator, stroke_margin_um) = match paint {
+        PdfPathPaint::Fill { color, rule } => {
             push_formatted(
                 stream,
                 format_args!("{} rg\n", color_channels(color)),
             )?;
-            (true, 0)
+            let operator = match rule {
+                PdfFillRule::EvenOdd => "f*\n",
+                PdfFillRule::NonZero => "f\n",
+            };
+            (operator, 0)
         },
         PdfPathPaint::Stroke { color, width_um } => {
             if width_um == 0 || width_um > MAX_PAGE_SIZE_UM {
@@ -231,13 +249,13 @@ fn apply_path_paint(
                     page_points(width_um)
                 ),
             )?;
-            (false, width_um.div_ceil(2))
+            ("S\n", width_um.div_ceil(2))
         },
     };
     if stream.len() > maximum_stream_bytes {
         return Err(PdfVectorError::ResourceLimit);
     }
-    Ok((fill, stroke_margin_um))
+    Ok((operator, stroke_margin_um))
 }
 
 fn render_path(
@@ -249,8 +267,9 @@ fn render_path(
     if path.commands.is_empty() {
         return Err(PdfVectorError::InvalidPath);
     }
-    let (fill, stroke_margin_um) =
+    let (operator, stroke_margin_um) =
         apply_path_paint(stream, path.paint, maximum_stream_bytes)?;
+    let fill = matches!(path.paint, PdfPathPaint::Fill { .. });
     let mut active = false;
     let mut drawn = false;
     let mut saw_segment = false;
@@ -331,11 +350,7 @@ fn render_path(
     if !saw_segment || (active && !drawn) || (fill && active) {
         return Err(PdfVectorError::InvalidPath);
     }
-    stream.push_str(if fill {
-        "f\n"
-    } else {
-        "S\n"
-    });
+    stream.push_str(operator);
     Ok(())
 }
 

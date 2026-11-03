@@ -39,9 +39,9 @@ use atrament_pdf_composition_plan::{
     SearchableSemanticText,
 };
 use atrament_pdf_vector_serializer::{
-    PdfPathCommand, PdfPathPaint, PdfPoint, PdfRgb, PdfVectorColorIntent,
-    PdfVectorComposition, PdfVectorError, PdfVectorLimits, PdfVectorPageBox,
-    PdfVectorPath, serialize_vector_pdf,
+    PdfFillRule, PdfPathCommand, PdfPathPaint, PdfPoint, PdfRgb,
+    PdfVectorColorIntent, PdfVectorComposition, PdfVectorError,
+    PdfVectorLimits, PdfVectorPageBox, PdfVectorPath, serialize_vector_pdf,
 };
 
 const fn limits() -> PdfVectorLimits {
@@ -87,11 +87,14 @@ fn fill() -> PdfVectorPath {
             PdfPathCommand::LineTo(point(125_000, 120_000)),
             PdfPathCommand::Close,
         ],
-        paint: PdfPathPaint::Fill(PdfRgb {
-            red: 210,
-            green: 10,
-            blue: 50,
-        }),
+        paint: PdfPathPaint::Fill {
+            color: PdfRgb {
+                red: 210,
+                green: 10,
+                blue: 50,
+            },
+            rule: PdfFillRule::NonZero,
+        },
     }
 }
 
@@ -414,5 +417,74 @@ fn exact_byte_budget_accepts_and_one_byte_short_refuses() {
         serialize_vector_pdf(&clipped_stroke, limits()),
         Err(PdfVectorError::InvalidPath),
         "out-of-bounds cubic control point must refuse",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "valid synthetic compound contours are a test invariant"
+)]
+#[test]
+fn compound_contours_preserve_explicit_even_odd_or_nonzero_fill_rule() {
+    // Both nested squares use the same winding direction. An even-odd fill
+    // punches a hole, while nonzero fill covers the nested region.
+    let contours = vec![
+        PdfPathCommand::MoveTo(point(20_000, 20_000)),
+        PdfPathCommand::LineTo(point(100_000, 20_000)),
+        PdfPathCommand::LineTo(point(100_000, 100_000)),
+        PdfPathCommand::LineTo(point(20_000, 100_000)),
+        PdfPathCommand::Close,
+        PdfPathCommand::MoveTo(point(40_000, 40_000)),
+        PdfPathCommand::LineTo(point(80_000, 40_000)),
+        PdfPathCommand::LineTo(point(80_000, 80_000)),
+        PdfPathCommand::LineTo(point(40_000, 80_000)),
+        PdfPathCommand::Close,
+    ];
+    let color = PdfRgb {
+        red: 190,
+        green: 50,
+        blue: 80,
+    };
+    let mut vector_path = PdfVectorPath {
+        commands: contours,
+        paint: PdfPathPaint::Fill {
+            color,
+            rule: PdfFillRule::EvenOdd,
+        },
+    };
+    let mut composition = document();
+    composition.pages = vec![page(vec![vector_path.clone()])];
+    let parity_bytes = serialize_vector_pdf(&composition, limits())
+        .expect("even-odd compound fill must serialize");
+    let parity = pdf_string(&parity_bytes);
+    assert_eq!(
+        parity.matches("h\n").count(),
+        2,
+        "both caller-provided contours must be preserved",
+    );
+    assert!(
+        parity.contains("h\nf*\n"),
+        "even-odd rule must emit the PDF parity fill operator",
+    );
+    vector_path.paint = PdfPathPaint::Fill {
+        color,
+        rule: PdfFillRule::NonZero,
+    };
+    composition.pages = vec![page(vec![vector_path])];
+    let winding_bytes = serialize_vector_pdf(&composition, limits())
+        .expect("nonzero compound fill must serialize");
+    let winding = pdf_string(&winding_bytes);
+    assert_eq!(
+        winding.matches("h\n").count(),
+        2,
+        "nonzero fill keeps both caller contours",
+    );
+    assert!(
+        winding.contains("h\nf\n"),
+        "nonzero rule must emit the PDF winding fill operator",
+    );
+    assert_ne!(
+        parity_bytes, winding_bytes,
+        "different caller fill rules must produce distinct output",
     );
 }

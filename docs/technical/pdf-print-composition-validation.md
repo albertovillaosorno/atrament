@@ -87,7 +87,8 @@ future resource and PDF adapters.
 PDF 1.4 serializer for caller-resolved geometry (not a notebook converter).
 It consumes concrete `PdfCompositionPlan` page authority with positive
 physical sizes in micrometers, one explicit `DeviceRGB` color intent, and
-ordered stroke/fill vector paths. Its output is deterministic in-memory bytes
+ordered stroke/fill vector paths with an explicit nonzero or even-odd fill
+rule for compound contours. Its output is deterministic in-memory bytes
 with real page boxes, cubic paths, PDF object offsets, and a checked ASCII
 render-manifest identity in the Info dictionary.
 
@@ -108,6 +109,12 @@ A local smoke fixture fed real output bytes to Poppler `pdfinfo` and
 The fixture is a synthetic vector path, not a source notebook or visual
 fidelity measurement. PDF conformance beyond the supported subset and other
 PDF readers remain unverified.
+
+A second Poppler smoke generated two identical-orientation nested rectangles
+with the explicit even-odd and nonzero fill rules. At 72 DPI, the hole center
+was white for even-odd and colored for nonzero, while the surrounding ink and
+page background remained consistent. This verifies the vector-rule difference
+with an independent renderer, not handwriting or print fidelity.
 
 ### Render manifests retain reproducibility inputs
 
@@ -215,8 +222,8 @@ Current checked-in regression evidence includes:
   states;
 - `tests/backend/pdf-vector-serializer/application/lib.rs`, which pins
   reproducible two-page vector PDF bytes, object/xref offsets, physical A4
-  dimensions, material paints, explicit resource refusal, malformed geometry,
-  clipping and byte-budget boundaries;
+  dimensions, material paints and fill-rule selection, explicit resource
+  refusal, malformed geometry, clipping and byte-budget boundaries;
 - `tests/backend/render-manifest/domain/lib.rs`, which pins source, asset,
   model, seed, quality, and version input retention across all 2,880 compact
   asset/model ordering states;
