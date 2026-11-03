@@ -142,8 +142,9 @@ impl HeadingDecoration {
                 let byte = |start: usize| -> Result<u8, String> {
                     let digits = selected.get(start..start.saturating_add(2))
                         .ok_or("heading color must be #RRGGBB")?;
-                    u8::from_str_radix(digits, 16)
-                        .map_err(|_error| "heading color must be #RRGGBB".into())
+                    u8::from_str_radix(digits, 16).map_err(|_error| {
+                        "heading color must be #RRGGBB".into()
+                    })
                 };
                 self.color = Some([byte(1)?, byte(3)?, byte(5)?]);
             }
@@ -155,9 +156,11 @@ impl HeadingDecoration {
                     "marker" => HeadingStyle::Marker,
                     "none" => HeadingStyle::None,
                     "underline" => HeadingStyle::Underline,
-                    _ => return Err(
-                        "heading style must be marker, underline or none".into(),
-                    ),
+                    _ => {
+                        let message =
+                            "heading style must be marker, underline or none";
+                        return Err(message.into());
+                    }
                 });
             }
             _ => return Err("unknown heading setting".into()),
