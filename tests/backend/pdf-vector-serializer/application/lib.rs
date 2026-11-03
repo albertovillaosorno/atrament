@@ -457,6 +457,41 @@ fn final_pdf_overhead_refuses_before_later_invalid_page() {
 
 #[expect(
     clippy::expect_used,
+    reason = "the exact PDF page ceiling must emit a valid page tree"
+)]
+#[test]
+fn maximum_page_count_keeps_every_page_and_xref_entry() {
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(Vec::new()); 1024],
+        render_manifest_identity: "maximum-page-count.v1",
+    };
+    let high_limits = PdfVectorLimits {
+        maximum_pages: 1025,
+        maximum_pdf_bytes: 1_000_000,
+        ..limits()
+    };
+    let bytes = serialize_vector_pdf(&composition, high_limits)
+        .expect("exactly 1024 blank pages fit the serializer safety ceiling");
+    assert_xref_integrity(&bytes);
+    let text = pdf_string(&bytes);
+    assert!(text.contains("/Count 1024"), "page tree counts all pages");
+    assert!(text.contains("/Size 2052"), "xref includes all page objects");
+    assert_eq!(
+        text.matches("/Type /Page /Parent 2 0 R").count(),
+        1024,
+        "every admitted page must have one exact ordered PDF object",
+    );
+    composition.pages.push(page(Vec::new()));
+    assert_eq!(
+        serialize_vector_pdf(&composition, high_limits),
+        Err(PdfVectorError::ResourceLimit),
+        "the hard 1024-page ceiling overrides a higher caller page limit",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
     reason = "the accepted large stream must have inspectable PDF framing"
 )]
 #[test]
