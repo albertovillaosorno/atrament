@@ -6,12 +6,14 @@ optional localhost web UI for editing notebook and handwriting profiles.
 The first deliverable is personal: load/edit/save profiles and generate real
 printable PDF and transparent PNG notebook pages.
 
-**Do not delete the difficult work.** All 77 earlier P1–P9 tasks remain in
-[`docs/todo/completed/`](docs/todo/completed/) as bounded theoretical or
-partially implemented academic deliverables. Completion of those artifacts
-never proves the corresponding feature runs. Hardware, multi-platform
-installers, cloud, MCP, advanced semantic/LLM editing, and physical plotters
-are retained for later, not needed to complete the first local workflow.
+**Theoretical acceptance is sufficient for a completed design.** All 77
+earlier P1–P9 task records stay in
+[`docs/todo/completed/`](docs/todo/completed/) with their complex content,
+worked examples and explicit limits intact. Completion of an academic design
+does not claim the corresponding feature already runs. Hardware,
+multi-platform installers, cloud, MCP, advanced semantic/LLM editing, and
+physical plotters remain available for later without blocking local output.
+See [audit](docs/technical/completed-todo-acceptance-audit-2026-11-03.md).
 
 Four of nine **new executable integration tasks** remain open. The Rust
 notebook and handwriting CLI file round-trip, authenticated localhost file

@@ -115,3 +115,6 @@ contracts:
   - id: atrament.technical.first-release-documentation-coverage
     status: verified
     path: first-release-documentation-coverage.md
+  - id: atrament.technical.completed-todo-acceptance-audit-2026-11-03
+    status: verified
+    path: completed-todo-acceptance-audit-2026-11-03.md

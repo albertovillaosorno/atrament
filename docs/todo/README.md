@@ -75,10 +75,16 @@ Use one of two explicit acceptance bases:
   experiment, cross-browser claim, certification, or independent verification
   is required to accept the design as theoretical.
 
-Practical and theoretical acceptance are **not interchangeable claims**. A
-theoretical task can be complete as a design while the corresponding feature
-remains explicitly unavailable or unverified. In particular, theoretical
-security, privacy, cleanup, or physical-device acceptance never establishes
+Practical and theoretical acceptance are **not interchangeable claims**.
+**A complete theoretical deliverable is sufficient for academic task closure.**
+
+No practical implementation or independent test is additionally required to
+close that design artifact. A theoretical task can be complete as a design
+while the corresponding feature remains explicitly unavailable or
+unverified.
+
+In particular, theoretical security, privacy, cleanup, or
+physical-device acceptance never establishes
 that secret bytes were erased, an installer works, or a machine is safe to
 operate. Do not issue physical commands or claim a production release is safe
 solely because those documents were accepted.
@@ -121,3 +127,13 @@ A theoretical artifact can close its own design scope, but cannot close a
 task requiring a demonstrably working application.
 Consult [the Rust-first roadmap](../technical/rust-cli-localhost-priority.md)
 for the exact priority order and glyph coverage targets.
+
+## Completed-design integrity review — 2026-11-03
+
+The archive audit at
+`docs/technical/completed-todo-acceptance-audit-2026-11-03.md` found
+substantive finite theoretical work in all 77 original completed tasks.
+They remain completed. The four active Rust-first executable tasks do not
+replace, revoke, or erase their advanced design scope. If new evidence reveals
+an actual missing theoretical deliverable, document the exact deficiency;
+do not blanket-reopen every record lacking code or physical validation.
