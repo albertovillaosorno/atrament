@@ -567,3 +567,112 @@ fn notebook_profile_named_pipe_refuses_before_open() {
     );
     fs::remove_file(path).expect("owned FIFO removed");
 }
+
+#[test]
+fn saved_notebook_exports_printable_paper_pdf_and_transparent_png() {
+    let notebook = test_path();
+    let pdf_output = test_path().with_extension("pdf");
+    let png_output = test_path().with_extension("png");
+    let source = notebook.to_str().expect("notebook path");
+    let pdf = pdf_output.to_str().expect("pdf path");
+    let png = png_output.to_str().expect("png path");
+    assert!(execute_notebook(&args(&[
+        "--printed-sheet", "false", "--output", source,
+    ])).expect("save accepted notebook").is_none());
+    let stored = fs::read(&notebook).expect("notebook source saved");
+    let profile = NotebookProfile::from_json(&stored)
+        .expect("profile reopened");
+    assert!(execute_notebook(&args(&[
+        "--profile", source, "--export-paper", "pdf", "--pages", "3",
+        "--output", pdf,
+    ])).expect("three-page paper PDF saved").is_none());
+    let pdf_bytes = fs::read(&pdf_output).expect("PDF persisted");
+    assert_eq!(
+        pdf_bytes,
+        paper_profile_pdf_pages(profile.paper_json.as_bytes(), 3, true)
+            .expect("same Rust paper output"),
+    );
+    assert!(String::from_utf8_lossy(&pdf_bytes).contains("/Count 3"));
+    assert!(execute_notebook(&args(&[
+        "--profile", source, "--export-paper", "png", "--dpi", "72",
+        "--output", png,
+    ])).expect("transparent PNG saved").is_none());
+    assert_eq!(
+        fs::read(&png_output).expect("PNG persisted"),
+        paper_profile_png_layer(profile.paper_json.as_bytes(), 72, true)
+            .expect("same Rust PNG output"),
+    );
+    assert_eq!(fs::read(&notebook).expect("source immutable"), stored);
+    fs::remove_file(notebook).expect("owned notebook removed");
+    fs::remove_file(pdf_output).expect("owned PDF removed");
+    fs::remove_file(png_output).expect("owned PNG removed");
+}
+
+#[test]
+fn notebook_printed_sheet_suppresses_marks_without_editing_profile() {
+    let original = execute_notebook(&args(&["--printed-sheet", "true"]))
+        .expect("default notebook")
+        .expect("canonical profile");
+    let profile = NotebookProfile::from_json(&original)
+        .expect("profile parsed");
+    let pdf = execute_notebook(&args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf", "--pages", "2",
+    ]))
+    .expect("unmarked PDF")
+    .expect("PDF bytes");
+    assert_eq!(
+        pdf,
+        paper_profile_pdf_pages(profile.paper_json.as_bytes(), 2, false)
+            .expect("same unmarked PDF"),
+    );
+    let png = execute_notebook(&args(&[
+        "--printed-sheet", "true", "--export-paper", "png", "--dpi", "72",
+    ]))
+    .expect("unmarked PNG")
+    .expect("PNG bytes");
+    assert_eq!(
+        png,
+        paper_profile_png_layer(profile.paper_json.as_bytes(), 72, false)
+            .expect("same unmarked PNG"),
+    );
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+}
+
+#[test]
+fn invalid_notebook_export_flags_refuse_without_file_changes() {
+    let output = test_path();
+    let filename = output.to_str().expect("output path");
+    fs::write(&output, b"preserved").expect("output sentinel");
+    for invalid in [
+        args(&["--export-paper", "gif"]),
+        args(&["--export-paper", "png", "--pages", "2"]),
+        args(&["--export-paper", "pdf", "--dpi", "72"]),
+        args(&["--pages", "2"]),
+        args(&["--dpi", "150"]),
+        args(&["--export-paper", "pdf", "--pages", "0"]),
+        args(&["--export-paper", "pdf", "--pages", "33"]),
+        args(&["--export-paper", "pdf", "--pages", "-1"]),
+        args(&["--export-paper", "pdf", "--pages", "2", "--pages", "2"]),
+        args(&["--export-paper", "png", "--dpi", "71"]),
+        args(&["--export-paper", "png", "--dpi", "301"]),
+        args(&["--export-paper", "png", "--dpi", "x"]),
+        args(&["--export-paper", "png", "--dpi", "72", "--dpi", "72"]),
+        args(&["--export-paper", "pdf", "--export-paper", "png"]),
+        args(&["--inspect", "--export-paper", "pdf"]),
+        args(&["--date-style", "box", "--export-paper", "pdf"]),
+    ] {
+        let mut attempt = invalid;
+        attempt.extend(args(&["--output", filename, "--replace"]));
+        assert!(execute_notebook(&attempt).is_err(), "{attempt:?}");
+        assert_eq!(
+            fs::read(&output).expect("sentinel persisted"),
+            b"preserved",
+        );
+    }
+    let refusal = execute_notebook(&args(&[
+        "--export-paper", "pdf", "--output", filename,
+    ]));
+    assert!(refusal.is_err(), "explicit --replace is required");
+    assert_eq!(fs::read(&output).expect("still unmodified"), b"preserved");
+    fs::remove_file(output).expect("owned sentinel removed");
+}

@@ -270,9 +270,27 @@ must precede edits.
 `--output` refuses existing files unless `--replace` is explicit, and never
 overwrites symlinks. Invalid inputs cannot change the output.
 
-The paper-only PDF command continues to draw sheet marks. Dates, border
-rounding, page numbers, printed-sheet handling, handwriting, and PNG remain
-unrendered in this slice.
+A saved notebook profile can also export its **paper layer** through the
+shared Rust PDF or PNG renderer, without a separate paper JSON file:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --profile notebook.json --export-paper pdf --pages 3 \
+  --output notebook-paper.pdf
+cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --profile notebook.json --export-paper png --dpi 150 \
+  --output notebook-paper.png
+```
+
+PDF allows 1–32 physical pages; transparent RGBA PNG renders one page at
+72–300 DPI with physical resolution metadata. For `printed_sheet: true`,
+the exported PDF and PNG are **unmarked** overlays: notebook paper marks are
+suppressed to avoid printing duplicate ruling on existing stationery.
+
+No profile file is changed by rendering. Output is explicit and existing paths
+require `--replace`; invalid options refuse before changing output bytes.
+This is **not** a complete notebook export: dates, rounded borders, page
+numbers, handwriting, and image overlays are still not rendered.
 
 The localhost Rust runtime also exposes authenticated
 `GET /api/notebook/profile` (default profile) and

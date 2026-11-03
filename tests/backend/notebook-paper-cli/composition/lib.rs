@@ -739,3 +739,51 @@ fn selected_png_commit_refuses_unsafe_replace_and_preserves_existing() {
     assert_eq!(fs::read(&output).expect("original preserved"), initial);
     fs::remove_dir_all(directory).expect("remove test-owned directory");
 }
+
+#[test]
+fn nested_notebook_paper_layer_export_uses_one_rust_renderer() {
+    let grid = default_paper_profile_json();
+    let blank = grid.replace("\"style\": \"grid\"", "\"style\": \"blank\"");
+    let marked = paper_profile_pdf_pages(grid.as_bytes(), 3, true)
+        .expect("three physical paper pages");
+    let unmarked = paper_profile_pdf_pages(grid.as_bytes(), 3, false)
+        .expect("three preprinted pages");
+    let blank_pdf = paper_profile_pdf_pages(blank.as_bytes(), 3, true)
+        .expect("unmarked physical pages");
+    assert!(String::from_utf8_lossy(&marked).contains("/Count 3"));
+    assert_eq!(unmarked, blank_pdf, "preprinted pages skip ruling");
+    assert_ne!(marked, unmarked, "plain sheets still print grid marks");
+    assert_eq!(
+        paper_profile_pdf(grid.as_bytes()).expect("existing PDF API"),
+        paper_profile_pdf_pages(grid.as_bytes(), 1, true)
+            .expect("one-page PDF API"),
+    );
+    for count in [0, 33, usize::MAX] {
+        assert!(
+            paper_profile_pdf_pages(grid.as_bytes(), count, false).is_err()
+        );
+    }
+
+    let transparent = paper_profile_png_layer(grid.as_bytes(), 72, false)
+        .expect("preprinted transparent PNG");
+    assert_eq!(
+        transparent,
+        paper_profile_png(blank.as_bytes(), 72)
+            .expect("blank transparent PNG"),
+    );
+    let (width, height, raw) = stored_png_pixels(&transparent);
+    assert_eq!((width, height), (596, 842));
+    for row in raw.chunks_exact(width * 4 + 1).take(height) {
+        for pixel in row.get(1..).expect("filter byte").as_chunks::<4>().0 {
+            assert_eq!(pixel[3], 0, "preprinted PNG has no paper ink");
+        }
+    }
+    assert_ne!(
+        paper_profile_png_layer(grid.as_bytes(), 72, true)
+            .expect("marked PNG"),
+        transparent,
+    );
+    for dpi in [0, 71, 301] {
+        assert!(paper_profile_png_layer(grid.as_bytes(), dpi, false).is_err());
+    }
+}

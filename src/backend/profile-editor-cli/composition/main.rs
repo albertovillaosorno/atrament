@@ -49,7 +49,10 @@ use atrament_handwriting_statistics_json::{
     MAXIMUM_STATISTICS_JSON_BYTES, decode_statistics_json,
     encode_statistics_json,
 };
-use atrament_notebook_paper_cli::canonical_paper_profile_json;
+use atrament_notebook_paper_cli::{
+    MAX_PAPER_OUTPUT_BYTES, canonical_paper_profile_json,
+    paper_profile_pdf_pages, paper_profile_png_layer,
+};
 use atrament_notebook_profile::{
     DatePlacement, DateStyle, MAX_NOTEBOOK_JSON_BYTES, NotebookProfile,
 };
@@ -76,9 +79,10 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--date-placement none|top-left|top-right] \
     [--border-radius-um INTEGER] [--page-numbers true|false] \
     [--printed-sheet true|false] [--inspect] \
-    [--output FILE [--replace]]\n\
-    Notebook metadata is validated and saved; dates, borders and printed-page \
-    flags do not yet render. Paper uses the existing Rust paper profile.";
+    [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
+    [--dpi 72..300 (PNG only)] [--output FILE [--replace]]\n\
+    Paper-layer export uses the nested Rust paper settings and skips marks \
+    on preprinted sheets. Dates, borders, page numbers and ink do not render.";
 
 #[derive(Debug)]
 struct HandwritingRequest {
@@ -90,10 +94,26 @@ struct HandwritingRequest {
 
 #[derive(Debug)]
 struct NotebookRequest {
+    dpi: u32,
+    export_paper: Option<NotebookPaperFormat>,
     inspect: bool,
     output: Option<String>,
+    pages: usize,
     profile: NotebookProfile,
     replace: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum NotebookPaperFormat {
+    Pdf,
+    Png,
+}
+
+#[derive(Default)]
+struct NotebookExportOptions {
+    dpi: Option<u32>,
+    format: Option<NotebookPaperFormat>,
+    pages: Option<usize>,
 }
 
 fn read_handwriting_profile(
@@ -405,11 +425,69 @@ fn apply_notebook_edit(
     Ok(())
 }
 
+fn export_integer(
+    text: Option<&str>,
+    option: &str,
+    minimum: u32,
+    maximum: u32,
+) -> Result<u32, String> {
+    let value = text.ok_or_else(|| format!("{option} requires a value"))?;
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(format!("{option} requires {minimum}..{maximum}"));
+    }
+    let number = value.parse::<u32>()
+        .map_err(|error| format!("{option} integer refused: {error}"))?;
+    if !(minimum..=maximum).contains(&number) {
+        return Err(format!("{option} requires {minimum}..{maximum}"));
+    }
+    Ok(number)
+}
+
+fn parse_notebook_export_option(
+    option: &str,
+    iter: &mut Iter<'_, String>,
+    export: &mut NotebookExportOptions,
+) -> Result<(), String> {
+    match option {
+        "--export-paper" => {
+            if export.format.is_some() {
+                return Err("--export-paper may appear only once".into());
+            }
+            export.format = Some(match iter.next().map(String::as_str) {
+                Some("pdf") => NotebookPaperFormat::Pdf,
+                Some("png") => NotebookPaperFormat::Png,
+                _ => return Err("--export-paper requires pdf or png".into()),
+            });
+        }
+        "--pages" => {
+            if export.pages.is_some() {
+                return Err("--pages may appear only once".into());
+            }
+            let count = export_integer(
+                iter.next().map(String::as_str), "--pages", 1, 32,
+            )?;
+            export.pages = Some(usize::try_from(count)
+                .map_err(|error| format!("page count refused: {error}"))?);
+        }
+        "--dpi" => {
+            if export.dpi.is_some() {
+                return Err("--dpi may appear only once".into());
+            }
+            export.dpi = Some(export_integer(
+                iter.next().map(String::as_str), "--dpi", 72, 300,
+            )?);
+        }
+        _ => return Err(format!("unknown notebook export option: {option}")),
+    }
+    Ok(())
+}
+
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut profile = NotebookProfile::default();
     let mut inspect = false;
     let mut output = None;
     let mut replace = false;
+    let mut export = NotebookExportOptions::default();
     let mut loaded = false;
     let mut edited = false;
     let mut iter = args.iter();
@@ -452,6 +530,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 }
                 inspect = true;
             }
+            "--export-paper" | "--pages" | "--dpi" => {
+                parse_notebook_export_option(option, &mut iter, &mut export)?;
+            }
             "--output" => {
                 let path = iter.next().ok_or("--output requires a filename")?;
                 if output.is_some() || path.is_empty() || path.starts_with('-')
@@ -477,10 +558,24 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     if inspect && output.is_some() {
         return Err("--inspect is stdout only; omit --output".into());
     }
+    if inspect && export.format.is_some() {
+        return Err("--inspect cannot export paper".into());
+    }
+    if export.pages.is_some()
+        && export.format != Some(NotebookPaperFormat::Pdf)
+    {
+        return Err("--pages requires --export-paper pdf".into());
+    }
+    if export.dpi.is_some() && export.format != Some(NotebookPaperFormat::Png) {
+        return Err("--dpi requires --export-paper png".into());
+    }
     profile.validate()?;
     Ok(NotebookRequest {
+        dpi: export.dpi.unwrap_or(150),
+        export_paper: export.format,
         inspect,
         output,
+        pages: export.pages.unwrap_or(1),
         profile,
         replace,
     })
@@ -508,8 +603,27 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             .into_bytes(),
         ));
     }
+    let (bytes, maximum_bytes) = match request.export_paper {
+        Some(NotebookPaperFormat::Pdf) => (
+            paper_profile_pdf_pages(
+                request.profile.paper_json.as_bytes(),
+                request.pages,
+                !request.profile.printed_sheet,
+            )?,
+            MAX_PAPER_OUTPUT_BYTES,
+        ),
+        Some(NotebookPaperFormat::Png) => (
+            paper_profile_png_layer(
+                request.profile.paper_json.as_bytes(),
+                request.dpi,
+                !request.profile.printed_sheet,
+            )?,
+            MAX_PAPER_OUTPUT_BYTES,
+        ),
+        None => (canonical.into_bytes(), MAX_NOTEBOOK_JSON_BYTES),
+    };
     let Some(output) = request.output else {
-        return Ok(Some(canonical.into_bytes()));
+        return Ok(Some(bytes));
     };
     let disposition = if request.replace {
         ProfileFileCommitDisposition::ReplaceExisting
@@ -518,8 +632,8 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     };
     let _evidence = commit_profile_file(
         Path::new(&output),
-        canonical.as_bytes(),
-        MAX_NOTEBOOK_JSON_BYTES,
+        &bytes,
+        maximum_bytes,
         disposition,
     )
     .map_err(|error| {

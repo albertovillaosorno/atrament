@@ -75,6 +75,8 @@ pub const MAX_PROFILE_BYTES: usize = 4_096;
 const MAX_PAGES: usize = 32;
 const DEFAULT_PNG_DPI: u32 = 150;
 const MAX_OUTPUT_BYTES: usize = 24_000_000;
+/// Maximum bytes for a physical paper PDF or PNG export.
+pub const MAX_PAPER_OUTPUT_BYTES: usize = MAX_OUTPUT_BYTES;
 const PAPER_PROFILE_SCHEMA: &str = "atrament.paper.v1";
 const DEFAULT_COLOR: PdfRgb = PdfRgb {
     red: 197,
@@ -860,7 +862,7 @@ fn serialize_paths(
             maximum_commands_per_page: 50_000,
             maximum_pages: MAX_PAGES,
             maximum_paths_per_page: 10_000,
-            maximum_pdf_bytes: MAX_OUTPUT_BYTES,
+            maximum_pdf_bytes: MAX_PAPER_OUTPUT_BYTES,
         },
     )
     .map_err(|err| format!("PDF encoding refused: {err:?}"))
@@ -890,8 +892,32 @@ pub fn canonical_paper_profile_json(profile: &[u8]) -> Result<String, String> {
 ///
 /// Refuses invalid JSON, version, paper geometry, or PDF budgets.
 pub fn paper_profile_pdf(profile: &[u8]) -> Result<Vec<u8>, String> {
+    paper_profile_pdf_pages(profile, 1, true)
+}
+
+/// Render 1–32 paper-only pages from a bounded profile.
+///
+/// Set `include_marks` to false for a sheet with existing printed ruling:
+/// the resulting physical PDF pages contain no new paper marks. Notebook
+/// metadata, date boxes, page numbers and handwriting are not rendered.
+///
+/// # Errors
+/// Refuses invalid profiles, geometry, page counts or PDF budgets.
+pub fn paper_profile_pdf_pages(
+    profile: &[u8],
+    pages: usize,
+    include_marks: bool,
+) -> Result<Vec<u8>, String> {
     let options = decode_profile(profile)?;
-    render(options)
+    if !(1..=MAX_PAGES).contains(&pages) {
+        return Err("paper PDF needs 1 to 32 pages".into());
+    }
+    let paths = if include_marks {
+        paper_paths(options)?
+    } else {
+        Vec::new()
+    };
+    serialize_paths(options, paths, pages)
 }
 
 /// Render one versioned paper-only profile as a transparent RGBA PNG.
@@ -903,8 +929,28 @@ pub fn paper_profile_pdf(profile: &[u8]) -> Result<Vec<u8>, String> {
 ///
 /// Refuses invalid profiles, geometry, DPI or raster/output budgets.
 pub fn paper_profile_png(profile: &[u8], dpi: u32) -> Result<Vec<u8>, String> {
+    paper_profile_png_layer(profile, dpi, true)
+}
+
+/// Render a physical transparent RGBA paper layer at 72–300 DPI.
+///
+/// For a preprinted sheet, set `include_marks` to false to obtain a fully
+/// transparent, correctly sized page without duplicating existing ruling.
+///
+/// # Errors
+/// Refuses invalid profiles, geometry, DPI or raster/output budgets.
+pub fn paper_profile_png_layer(
+    profile: &[u8],
+    dpi: u32,
+    include_marks: bool,
+) -> Result<Vec<u8>, String> {
     let options = decode_profile(profile)?;
-    render_png(options, dpi)
+    let paths = if include_marks {
+        paper_paths(options)?
+    } else {
+        Vec::new()
+    };
+    png::render_paper_png(options.width_um, options.height_um, dpi, &paths)
 }
 
 fn execute(request: CliRequest) -> Result<Option<Vec<u8>>, String> {
@@ -929,7 +975,7 @@ fn execute(request: CliRequest) -> Result<Option<Vec<u8>>, String> {
     let _evidence = commit_profile_file(
         Path::new(&output),
         &bytes,
-        MAX_OUTPUT_BYTES,
+        MAX_PAPER_OUTPUT_BYTES,
         disposition,
     )
         .map_err(|error| {
