@@ -100,6 +100,7 @@ function mountEditor() {
         "glyph-seed-upper-spanish", "glyph-seed-upper-spanish-nfd",
         "glyph-seed-punctuation", "glyph-seed-quotes",
         "glyph-seed-math", "glyph-seed-digits", "glyph-seed-capitals",
+        "glyph-seed-text-marks",
         "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
@@ -2288,7 +2289,73 @@ test("uppercase accent batches refuse clipped marks and over-cap", async () => {
     }
 });
 
-test("ten explicit fills author 108 exact glyphs", async () => {
+test("eleven text punctuation shapes remain distinct and bounded", () => {
+    const forms = [";", ":", "\"", "'", "…", "–", "—",
+        "(", ")", "[", "]"];
+    const counts = [2, 2, 2, 1, 3, 1, 1, 32, 32, 3, 3];
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [index, glyph] of forms.entries()) {
+        const lines = geometricStarter(glyph, ...args);
+        assert.equal(lines.length, counts[index], glyph);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(lines)), lines);
+    }
+    assert.deepEqual(geometricStarter("–", ...args)[0].grapheme, "–");
+    assert.notDeepEqual(geometricStarter("–", ...args),
+        geometricStarter("—", ...args));
+    assert.notDeepEqual(geometricStarter("'", ...args),
+        geometricStarter("’", ...args));
+    assert.throws(() => geometricStarter(":", 1550, 2450, 200,
+        250, "#243647"), /pen-clearance/);
+    assert.throws(() => geometricStarter("(", 150, 2450, 1100,
+        250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+});
+
+test("text marks fill keeps custom ink and rejects over-cap", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        assert.equal(get("seed-text-marks").disabled, true);
+        editor.start();
+        const initial = [stroke(";"), stroke("∞")];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(initial));
+        get("load").files = [{ size: bytes.length,
+            arrayBuffer: async () => bytes.buffer }];
+        await get("load").dispatch("change");
+        get("form").value = "(";
+        get("character").value = "(";
+        get("form").dispatch("input");
+        assert.match(get("ideal-rounded").attributes.get("d"), /Q /);
+        get("seed-text-marks").dispatch("click");
+        assert.match(get("status").textContent,
+            /Filled 10 missing text punctuation/);
+        assert.equal(downloads.length, 0);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        const missing = [":", "\"", "'", "…", "–", "—",
+            "(", ")", "[", "]"];
+        assert.deepEqual(saved, [...initial, ...missing.flatMap((glyph) =>
+            geometricStarter(glyph, 1550, 2450, 1100, 250, "#243647"))]);
+        get("seed-text-marks").dispatch("click");
+        assert.match(get("status").textContent,
+            /All eleven text punctuation/);
+        const full = Array.from({ length: 4050 }, () => stroke("∞"));
+        const raw = new TextEncoder().encode(encodeGlyphLibrary(full));
+        get("load").files = [{ size: raw.length,
+            arrayBuffer: async () => raw.buffer }];
+        await get("load").dispatch("change");
+        get("seed-text-marks").dispatch("click");
+        assert.match(get("status").textContent, /Save requires 1..4096/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            full);
+        editor.reset();
+        assert.equal(get("seed-text-marks").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("eleven explicit fills author 119 exact glyphs", async () => {
     const ui = mountEditor();
     try {
         const { editor, get, downloads } = ui;
@@ -2296,15 +2363,16 @@ test("ten explicit fills author 108 exact glyphs", async () => {
         for (const action of ["seed-lowercase", "seed-spanish",
             "seed-spanish-nfd", "seed-punctuation", "seed-quotes",
             "seed-math", "seed-digits", "seed-capitals",
-            "seed-upper-spanish", "seed-upper-spanish-nfd"]) {
+            "seed-upper-spanish", "seed-upper-spanish-nfd",
+            "seed-text-marks"]) {
             get(action).dispatch("click");
             assert.match(get("status").textContent, /Filled/);
         }
         assert.equal(downloads.length, 0);
         get("save").dispatch("click");
         const all = parseGlyphLibrary(await downloads.at(-1).text());
-        assert.equal(all.length, 2656);
-        assert.equal(new Set(all.map((line) => line.grapheme)).size, 108);
+        assert.equal(all.length, 2738);
+        assert.equal(new Set(all.map((line) => line.grapheme)).size, 119);
         const differentMinuses = ["-", "−"].map((glyph) =>
             all.filter((line) => line.grapheme === glyph));
         assert.equal(differentMinuses[0].length, 1);
@@ -2317,6 +2385,7 @@ test("ten explicit fills author 108 exact glyphs", async () => {
         assert.equal(get("seed-capitals").disabled, true);
         assert.equal(get("seed-upper-spanish").disabled, true);
         assert.equal(get("seed-upper-spanish-nfd").disabled, true);
+        assert.equal(get("seed-text-marks").disabled, true);
     } finally {
         ui.restore();
     }
@@ -2328,6 +2397,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         ".", ",", "!", "¡", "?", "¿", "«", "»", "‘", "’", "“", "”",
         "+", "-", "−", "=", "×", "÷",
         ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",
         "k", "x", "y", "z", "c", "e", "i", "í", "j"];
     let accepted = 0;
     let checked = 0;
@@ -2366,7 +2436,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 11952);
+    assert.equal(checked, 13536);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

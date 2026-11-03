@@ -587,6 +587,17 @@
                 <option value="X">Uppercase X</option>
                 <option value="Y">Uppercase Y</option>
                 <option value="Z">Uppercase Z</option>
+                <option value=";">Semicolon ;</option>
+                <option value=":">Colon :</option>
+                <option value="&quot;">ASCII double quote &quot;</option>
+                <option value="'">ASCII apostrophe '</option>
+                <option value="…">Ellipsis …</option>
+                <option value="–">En dash –</option>
+                <option value="—">Em dash —</option>
+                <option value="(">Open parenthesis (</option>
+                <option value=")">Close parenthesis )</option>
+                <option value="[">Open square bracket [</option>
+                <option value="]">Close square bracket ]</option>
                 <option value="0">Numeral 0 (exact ellipse)</option>
                 <option value="1">Numeral 1 (stem and foot)</option>
                 <option value="2">Numeral 2 (curved arch)</option>
@@ -689,6 +700,9 @@
             <button id="glyph-seed-upper-spanish-nfd" type="button" disabled>
               Fill missing decomposed uppercase accents (unsaved)
             </button>
+            <button id="glyph-seed-text-marks" type="button" disabled>
+              Fill missing text punctuation (11 forms, unsaved)
+            </button>
           </div>
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the highest story, positioned from geometry
@@ -726,6 +740,9 @@
             After the uppercase bases, add missing Spanish Á É Í Ó Ú Ñ Ü
             in NFC or NFD separately; the same explicit accent composer
             preserves source colors and exact Unicode target identity.
+            The text-punctuation fill independently adds ; : ASCII
+            quotes, … – —, parentheses and square brackets, so the fixed
+            114-grapheme Spanish/English baseline has manual starter ink.
             Every fill remains unsaved.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>

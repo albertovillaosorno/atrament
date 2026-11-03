@@ -636,6 +636,48 @@ function capitalGuide(
     return punctuationGuide(capitalParts(cx, cy, radius, glyph));
 }
 
+// Complete the finite native Spanish/English text inventory without
+// substituting typographic quotes for independent ASCII quote keys.
+type TextMark = ";" | ":" | "\"" | "'" | "…" | "–" | "—"
+    | "(" | ")" | "[" | "]";
+const TEXT_MARKS = [";", ":", "\"", "'", "…", "–", "—",
+    "(", ")", "[", "]"] as const;
+
+function textMarkParts(
+    cx: number, cy: number, r: number, glyph: TextMark,
+): MarkPiece[] {
+    const p = (x: number, y: number): Point => ({
+        x: cx + Math.round(x * r), y: cy + Math.round(y * r),
+    });
+    const line = (x: number, y: number, xx: number, yy: number)
+        : MarkPiece => ({ from: p(x, y), to: p(xx, yy) });
+    const dot = (x: number, y: number) => line(x, y, x, y + 0.12);
+    if (glyph === ":") return [dot(0, -0.6), dot(0, 0.6)];
+    if (glyph === ";") return [dot(0, -0.6),
+        line(0.13, 0.6, -0.18, 0.98)];
+    if (glyph === "'") return [line(0.04, -0.95, -0.07, -0.55)];
+    if (glyph === "\"") return [line(-0.35, -0.95, -0.46, -0.55),
+        line(0.35, -0.95, 0.24, -0.55)];
+    if (glyph === "…") return [-0.7, 0, 0.7].map((x) => dot(x, 0.78));
+    if (glyph === "–" || glyph === "—") {
+        const half = glyph === "—" ? 0.9 : 0.65;
+        return [line(-half, 0, half, 0)];
+    }
+    if (glyph === "[") return [line(0.3, -0.9, -0.5, -0.9),
+        line(-0.5, -0.9, -0.5, 0.9), line(-0.5, 0.9, 0.3, 0.9)];
+    if (glyph === "]") return [line(-0.3, -0.9, 0.5, -0.9),
+        line(0.5, -0.9, 0.5, 0.9), line(0.5, 0.9, -0.3, 0.9)];
+    const flip = glyph === ")" ? -1 : 1;
+    return [
+        { from: p(flip * -0.2, -0.95),
+            control: p(flip * -0.75, -0.5),
+            to: p(flip * -0.75, 0) },
+        { from: p(flip * -0.75, 0),
+            control: p(flip * -0.75, 0.5),
+            to: p(flip * -0.2, 0.95) },
+    ];
+}
+
 function punctuationGuide(parts: MarkPiece[]): string {
     const commands: string[] = [];
     let pen: Point | null = null;
@@ -764,7 +806,8 @@ export function geometricStarter(
         ".", ",", "!", "¡", "?", "¿",
         "«", "»", "‘", "’", "“", "”",
         "+", "-", "−", "=", "×", "÷",
-        ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"].includes(g)) {
+        ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        ...TEXT_MARKS].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     if (kind !== "single" && kind !== "two-storey"
@@ -788,6 +831,29 @@ export function geometricStarter(
         || cx + radius + halfPen > 3500
         || cy + radius + halfPen > 4500) {
         throw new Error("Shape and pen thickness must fit inside glyph cell");
+    }
+    if ((TEXT_MARKS as readonly string[]).includes(g)) {
+        if ([";", ":", "…"].includes(g) && radius * 0.5 < pen + 80) {
+            throw new Error("Text punctuation needs dot pen-clearance");
+        }
+        const line = (from: Point, to: Point): Stroke => {
+            for (const point of [from, to]) {
+                if (point.x - halfPen < 0 || point.x + halfPen > 3500
+                    || point.y - halfPen < 0
+                    || point.y + halfPen > 4500) {
+                    throw new Error("Text punctuation ink clips glyph cell");
+                }
+            }
+            return validateStroke({ grapheme: g,
+                x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+                width: pen, color });
+        };
+        return textMarkParts(cx, cy, radius, g as TextMark).flatMap(
+            ({ from, control, to }) => control === undefined
+                ? [line(from, to)]
+                : Array.from({ length: ARCH_SEGMENTS }, (_, step) =>
+                    line(quadratic(from, control, to, step),
+                        quadratic(from, control, to, step + 1))));
     }
     if (/^[A-Z]$/.test(g)) {
         const line = (from: Point, to: Point): Stroke => {
@@ -1293,6 +1359,8 @@ export function createGlyphStrokeEditor(): {
     const seedDigits = required<HTMLButtonElement>("glyph-seed-digits");
     const seedCapitals =
         required<HTMLButtonElement>("glyph-seed-capitals");
+    const seedTextMarks =
+        required<HTMLButtonElement>("glyph-seed-text-marks");
     const centerX = required<HTMLInputElement>("glyph-circle-x");
     const centerY = required<HTMLInputElement>("glyph-circle-y");
     const radius = required<HTMLInputElement>("glyph-circle-radius");
@@ -1329,6 +1397,7 @@ export function createGlyphStrokeEditor(): {
         form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
         seedUpperSpanish, seedUpperSpanishNfd,
         seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
+        seedTextMarks,
         centerX, centerY, radius,
         accentShift, accentLift,
         selected, update,
@@ -1493,7 +1562,12 @@ export function createGlyphStrokeEditor(): {
             const isCapital = /^[A-Z]$/.test(chosen.grapheme);
             const capitalD = isCapital ? capitalGuide(cx, cy, r,
                 chosen.grapheme as CapitalGlyph) : "";
-            const roundedD = isCapital ? capitalD
+            const isTextMark = (TEXT_MARKS as readonly string[])
+                .includes(chosen.grapheme);
+            const markD = isTextMark ? punctuationGuide(textMarkParts(
+                cx, cy, r, chosen.grapheme as TextMark)) : "";
+            const roundedD = isTextMark ? markD
+                : isCapital ? capitalD
                 : isDigit ? digitD
                 : isMath ? mathD
                 : isQuote ? quoteD
@@ -1526,12 +1600,13 @@ export function createGlyphStrokeEditor(): {
                     ".", ",", "!", "¡", "?", "¿",
                     "«", "»", "‘", "’", "“", "”",
                     "+", "-", "−", "=", "×", "÷",
-                    ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ"]
+                    ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+                    ...TEXT_MARKS]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
                 && !isPunctuation && !isQuote && !isMath && !isDigit
-                && !isCapital
+                && !isCapital && !isTextMark
                 && !["j", "g", "s"].includes(chosen.grapheme)
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
@@ -2051,6 +2126,33 @@ export function createGlyphStrokeEditor(): {
             render();
             message(`Filled ${missing.length} missing uppercase glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    seedTextMarks.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before seeding");
+            }
+            const authored = new Set(strokes.map((stroke) => stroke.grapheme));
+            const missing = TEXT_MARKS.filter((g) => !authored.has(g));
+            if (missing.length === 0) {
+                message("All eleven text punctuation glyphs are authored");
+                return;
+            }
+            const added = missing.flatMap((g) => geometricStarter(g,
+                Number(centerX.value), Number(centerY.value),
+                Number(radius.value), Number(numeric.width.value),
+                color.value));
+            const next = [...strokes, ...added];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${missing.length} missing text punctuation `
+                + `glyphs (${added.length} sampled strokes); unsaved draft`);
         } catch (error) {
             message(String(error));
         }

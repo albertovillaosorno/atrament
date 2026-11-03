@@ -614,6 +614,37 @@ Persistent diacritic anchors, vector-authoritative analytic curves,
 joined cursive, full bilingual inventory and one saved notebook containing
 rendered text remain unavailable; the executable P1 task remains open.
 
+## Bounded text baseline punctuation completion (partial) — 2026-11-03
+
+A native audit of the combined 108 exact starter glyphs against the frozen
+114-grapheme English/Spanish text inventory identified eleven precise
+missing keys: `; : " ' … – — ( ) [ ]`. The authenticated browser editor now
+offers each as an independently selectable geometric starter and an
+optional **Fill missing text punctuation** action. Brackets, dashes and
+marks retain exact straight SVG/TSV strokes; parentheses use two SVG
+quadratics sampled to sixteen chords apiece. ASCII and typographic quotes
+remain distinct Unicode keys. The button fills only absent shapes, refuses
+out-of-cell or over-cap drafts before any mutation, and never downloads
+a library without an explicit user gesture.
+
+Two focused regressions cover eleven stroke counts, exact dash and quote
+identity, native TSV roundtrip, SVG guide, idempotence, custom ink
+preservation, atomic cap refusal and session gating. The combined eleven
+explicit fill actions now produce **119 exact Unicode glyphs across 2,738
+sampled strokes**, including all **114 frozen text baseline shapes** plus
+five additional mathematical signs (ASCII `-` is also in the baseline).
+All **72 focused glyph tests** and **13,536 geometric boundary samples**
+pass, as do TypeScript build and checking. Rust read the combined library
+back byte-for-byte and reported **114 baseline graphemes, zero missing**.
+It also emitted one-page real A4 PDF and transparent 72-DPI 596×842 PNG
+for the eleven newly constructed punctuation shapes.
+
+This is a finite *starter-ink inventory audit*, not the task's full
+acceptance. Analytic primitives do not persist in native TSV/PDF, the
+saved notebook does not contain a handwriting editor's authored library,
+full user-controlled cursive joining is unavailable, and the fixed
+multilingual educational page with fallback remains to be verified.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

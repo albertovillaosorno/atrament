@@ -610,9 +610,23 @@ read their TSV byte-identically, and rendered one-page A4 PDF and a
 transparent 72-DPI RGBA PNG. Neither accented batch downloads a file
 without an explicit save gesture.
 
-The draft still lacks general italic/cursive connections and the complete
-114-entry text inventory. Semantic Markdown is not yet connected to the
-browser glyph editor. The native renderer
+One final optional **Fill missing text punctuation (11 forms, unsaved)**
+action adds `; : " ' … – — ( ) [ ]` without replacing existing strokes.
+Parentheses use two quadratic SVG arcs (sampled as native pen chords),
+while brackets, dashes, quotes and small marks use exact straight strokes.
+The action validates ink bounds and native library caps atomically. Together,
+all eleven opt-in fills create **119 exact Unicode glyphs and 2,738 stroke
+segments**. The 119 include all **114 frozen English/Spanish text baseline
+graphemes** plus five additional distinct basic mathematics signs; ASCII
+hyphen-minus is already in the text baseline. Rust independently audited
+the combined library with **zero missing baseline glyphs**, read the TSV
+back byte-identically, and produced real A4 PDF and transparent 72-DPI
+PNG for the eleven text punctuation forms.
+
+Full baseline starter coverage does not imply native analytic curves,
+calibrated handwriting, italic/cursive connections or Unicode-wide font
+support. Semantic Markdown is not yet connected to the browser glyph
+editor. The native renderer
 still caps output at 512 physical
 ink strokes per export. The shapes are editable geometric starters, not
 personal handwriting or retained analytic PDF curves.
