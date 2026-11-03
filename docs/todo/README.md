@@ -114,8 +114,10 @@ notebook application has been removed rather than retained as a prototype.
 
 Hardware, external model accounts, MCP, and native desktop installers remain
 optional advanced work; their earlier finite theoretical records stay
-archived. **Nine new open executable tasks** track the missing Rust and
-localhost integrations. A theoretical artifact can close its own design
-scope, but cannot close a task requiring a demonstrably working application.
+archived. **Eight of nine executable tasks remain open**, tracking
+localhost and rendering work after the Rust CLI file round-trip passed.
+
+A theoretical artifact can close its own design scope, but cannot close a
+task requiring a demonstrably working application.
 Consult [the Rust-first roadmap](../technical/rust-cli-localhost-priority.md)
 for the exact priority order and glyph coverage targets.

@@ -1,0 +1,59 @@
+---
+record_type: task
+id: "ATR-P1-005"
+title: "Rust profile schema and CLI roundtrip"
+status: completed
+priority: P1
+lane: runtime
+dependencies: []
+dependencies_specified: true
+dependency_rationale: >-
+  The new Rust CLI entry point supplies the first authoritative profile
+  boundary.
+acceptance_criteria:
+  - >-
+      Create canonical Rust-only load, inspect, validate, and save commands for
+      one notebook and one handwriting profile. No Python is involved.
+  - >-
+      Finite executable completion: One valid notebook and handwriting file
+      round-trip unchanged; one malformed input refuses without overwriting the
+      source. Preserve source paths and explicit overwrite.
+evidence_status: not_independently_verified
+migrated_from: rust-cli-localhost-priority.md
+---
+
+# Rust profile schema and CLI roundtrip
+
+## Scope and existing evidence
+
+Create canonical Rust-only load, inspect, validate, and save commands for one
+notebook and one handwriting profile. No Python is involved.
+
+The historical theoretical design remains separate from executable scope.
+This record is complete only for the native Rust CLI round-trip checked
+on November 3, 2026.
+
+## Acceptance decision
+
+Completed — practical native CLI acceptance on November 3, 2026.
+
+The `atrament-profiles notebook` and `handwriting` modes perform native Rust
+file creation, canonical load/inspect, editing and save to explicit paths.
+An executable smoke check created a boxed-date notebook, reopened the file
+byte-for-byte, and saved a modified copy without changing its source.
+The same check created a handwriting statistics file with an exact NFD
+diacritic override, reopened identical JSON, and saved an edited-seed
+copy while preserving its source.
+
+For both profile types, opening malformed JSON with explicit `--replace`
+refused before changing the selected existing output sentinel file.
+The Rust harness also exercises invalid statistics, source preservation,
+file type refusal and symlink protection in
+`tests/backend/profile-editor-cli/composition/lib.rs`.
+The 23 focused CLI tests, strict CLI Clippy, and
+`cargo test --offline --workspace` all passed in this session.
+
+This bounded completion does not cover localhost server-side file saving,
+handwriting outlines, PDF ink or images, or a full browser editing journey.
+Those remain separately open executable tasks.
+Historical academic evidence was not independently re-audited.

@@ -13,19 +13,13 @@ never proves the corresponding feature runs. Hardware, multi-platform
 installers, cloud, MCP, advanced semantic/LLM editing, and physical plotters
 are retained for later, not needed to complete the first local workflow.
 
-Nine **new executable integration tasks** are open. They do not reuse any
-completed task identity. They have finite acceptance and explicit dependency
-chains. See the
+Eight of nine **new executable integration tasks** remain open. The
+Rust notebook and handwriting CLI file round-trip is complete; other tasks
+retain their original identities, finite scope and dependencies. See the
 [Rust-first roadmap](docs/technical/rust-cli-localhost-priority.md) and
 [task policy](docs/todo/README.md). Keep the index unfinished-only.
 
 ## P1 — Rust profiles and local runtime
-
-### TODO - Rust profile schema and CLI roundtrip
-
-Load and save both profile families through the Rust binary.
-
-[docs/todo/open/runtime/005-cli.mdc](docs/todo/open/runtime/005-cli.mdc)
 
 ### TODO - Authenticated localhost profile file operations
 

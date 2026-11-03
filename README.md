@@ -45,8 +45,8 @@ its notebook/handwriting visual controls and native PDF pipeline are not yet
 connected end to end. The available CLI commands are documented below.
 
 The earlier 77 tasks were accepted as bounded academic/design artifacts, not
-as proof of a finished product. **Nine new implementation TODOs remain open**
-for Rust profile editing, localhost sliders, Spanish/English glyph coverage,
+as proof of a finished product. **Eight of nine executable TODOs remain**
+for localhost editing, Spanish/English glyph coverage,
 and real Rust PDF/PNG output. The previous NO-GO decision still applies to
 production claims, and physical hardware is not required for local use.
 
