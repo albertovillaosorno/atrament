@@ -299,6 +299,17 @@ These endpoints are in-memory only; POST does not persist a file or set
 session-wide defaults. They require the existing session bearer credential
 and same-origin admission, like the paper profile endpoint.
 
+The authenticated localhost runtime also accepts notebook JSON at
+`POST /api/notebook/paper/pdf` (with one `X-Atrament-Pdf-Pages: 1..32`
+header) and `POST /api/notebook/paper/png` (with one
+`X-Atrament-Png-Dpi: 72..300` header). Both use the same Rust notebook
+validator and paper serializer as the CLI. The web editor supplies these
+headers from its PDF-page and PNG-DPI controls and downloads the resulting
+paper layer.
+
+Preprinted-sheet suppression applies to both. No notebook metadata or
+handwriting is drawn in these outputs.
+
 The localhost web editor now also offers **Notebook page profile** controls
 for date placeholder style and placement, border radius, page numbers and
 preprinted-sheet intent. **Use current paper** incorporates unsaved sheet

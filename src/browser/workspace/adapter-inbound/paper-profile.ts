@@ -575,9 +575,13 @@ export function createNotebookProfileEditor(
     const usePaper = required<HTMLButtonElement>("notebook-use-paper");
     const defaults = required<HTMLButtonElement>("notebook-default");
     const save = required<HTMLButtonElement>("notebook-save");
+    const exportPdf = required<HTMLButtonElement>("notebook-export-pdf");
+    const exportPng = required<HTMLButtonElement>("notebook-export-png");
+    const pdfPages = required<HTMLInputElement>("notebook-pdf-pages");
+    const pngDpi = required<HTMLInputElement>("notebook-png-dpi");
     const status = required<HTMLElement>("notebook-status");
     const controls = [style, placement, radius, slider, numbers, printed,
-        load, usePaper, defaults, save];
+        load, usePaper, defaults, save, exportPdf, exportPng, pdfPages, pngDpi];
     let admitted: NotebookProfile | null = null;
     let generation = 0;
     let busy = false;
@@ -665,6 +669,65 @@ export function createNotebookProfileEditor(
             page_numbers: numbers.checked,
             printed_sheet: printed.checked,
         };
+    }
+
+    function download(blob: Blob, filename: string): void {
+        if (downloadUrl !== null) URL.revokeObjectURL(downloadUrl);
+        const url = URL.createObjectURL(blob);
+        downloadUrl = url;
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = filename;
+        link.rel = "noopener";
+        link.click();
+        window.setTimeout(() => {
+            if (downloadUrl === url) {
+                URL.revokeObjectURL(url);
+                downloadUrl = null;
+            }
+        }, 60_000);
+    }
+
+    async function exportLayer(
+        secret: string,
+        format: "pdf" | "png",
+        amount: number,
+        notebook: string,
+    ): Promise<Response> {
+        return fetch(`./api/notebook/paper/${format}`, {
+            method: "POST",
+            headers: {
+                Authorization: `Bearer ${secret}`,
+                "Content-Type": "application/json",
+                ...(format === "pdf" ? {
+                    "X-Atrament-Pdf-Pages": String(amount),
+                } : {
+                    "X-Atrament-Png-Dpi": String(amount),
+                }),
+            },
+            body: notebook,
+            credentials: "omit",
+            cache: "no-store",
+            mode: "same-origin",
+            redirect: "error",
+            referrerPolicy: "origin",
+            signal: AbortSignal.any([
+                context.sessionSignal,
+                AbortSignal.timeout(30_000),
+            ]),
+        });
+    }
+
+    function validExportNumber(
+        input: HTMLInputElement, minimum: number, maximum: number,
+    ): number {
+        const number = Number(input.value);
+        if (input.value === "" || !input.validity.valid
+            || !Number.isSafeInteger(number)
+            || number < minimum || number > maximum) {
+            throw new Error("Invalid notebook paper export settings");
+        }
+        return number;
     }
 
     async function action(
@@ -777,25 +840,47 @@ export function createNotebookProfileEditor(
             const result = await canonical(secret, JSON.stringify(proposal()));
             if (!active(secret, observed)) return;
             display(result.profile);
-            if (downloadUrl !== null) URL.revokeObjectURL(downloadUrl);
-            const url = URL.createObjectURL(new Blob([result.json], {
+            download(new Blob([result.json], {
                 type: "application/json",
-            }));
-            downloadUrl = url;
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = "atrament-notebook.json";
-            link.rel = "noopener";
-            link.click();
-            window.setTimeout(() => {
-                if (downloadUrl === url) {
-                    URL.revokeObjectURL(url);
-                    downloadUrl = null;
-                }
-            }, 60_000);
+            }), "atrament-notebook.json");
             status.textContent = "Validated notebook JSON downloaded.";
         });
     });
+    for (const [button, format, input, minimum, maximum] of [
+        [exportPdf, "pdf", pdfPages, 1, 32],
+        [exportPng, "png", pngDpi, 72, 300],
+    ] as const) {
+        button.addEventListener("click", (): void => {
+            void action(async (secret, observed) => {
+                const amount = validExportNumber(input, minimum, maximum);
+                const proposed = JSON.stringify(proposal());
+                const result = await canonical(secret, proposed);
+                if (!active(secret, observed)) return;
+                const body = result.json;
+                const reply = await exportLayer(
+                    secret, format, amount, body,
+                );
+                if (!active(secret, observed)) return;
+                if (reply.status === 401) {
+                    context.unauthorized();
+                    return;
+                }
+                const mime = format === "pdf"
+                    ? "application/pdf" : "image/png";
+                if (!reply.ok
+                    || reply.headers.get("content-type") !== mime) {
+                    throw new Error("Rust notebook paper export refused");
+                }
+                const blob = await reply.blob();
+                if (active(secret, observed)) {
+                    display(result.profile);
+                    download(blob, `atrament-notebook-paper.${format}`);
+                    status.textContent = "Notebook paper layer downloaded "
+                        + "· metadata and ink not rendered.";
+                }
+            });
+        });
+    }
     sync();
     return { start, reset };
 }

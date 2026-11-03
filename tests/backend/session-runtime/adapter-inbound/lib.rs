@@ -112,6 +112,22 @@ impl runtime::NotebookProfileGateway for TestNotebookGateway {
     fn max_input_bytes(&self) -> usize {
         MAX_NOTEBOOK_JSON_BYTES
     }
+
+    fn paper_pdf(
+        &self, input: &[u8], pages: usize,
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        NotebookProfile::from_json(input)
+            .and_then(|profile| profile.paper_layer_pdf(pages))
+            .map_err(|_error| runtime::NotebookProfileError)
+    }
+
+    fn paper_png(
+        &self, input: &[u8], dpi: u32,
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        NotebookProfile::from_json(input)
+            .and_then(|profile| profile.paper_layer_png(dpi))
+            .map_err(|_error| runtime::NotebookProfileError)
+    }
 }
 
 static NOTEBOOK_GATEWAY: TestNotebookGateway = TestNotebookGateway;
@@ -5602,4 +5618,124 @@ fn paper_png_route_rejects_auth_origin_media_and_ambiguous_dpi() {
         assert!(status_line(&response).starts_with("HTTP/1.1 4"));
         assert!(!paper_http_body(&response).starts_with(b"\x89PNG"));
     }
+}
+
+fn notebook_paper_request(
+    format: &str,
+    setting_header: &str,
+    secret: Option<&str>,
+    origin: Option<&str>,
+    media_type: Option<&str>,
+    body: &[u8],
+) -> Vec<u8> {
+    let mut request = paper_endpoint_request(
+        "POST", &format!("/api/notebook/paper/{format}"),
+        secret, origin, media_type, body,
+    );
+    let header_end = request.windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .expect("fixture framing");
+    let tail = request.split_off(header_end);
+    request.extend_from_slice(b"\r\n");
+    request.extend_from_slice(setting_header.as_bytes());
+    request.extend_from_slice(tail.get(2..).expect("CRLF framing"));
+    request
+}
+
+#[test]
+fn notebook_paper_routes_render_rust_approved_pdf_png_and_preprint() {
+    let notebook = NotebookProfile::default()
+        .canonical_json().expect("default notebook");
+    let pdf = route_runtime(&notebook_paper_request(
+        "pdf", "X-Atrament-Pdf-Pages: 2\r\n", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"),
+        notebook.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&pdf), "HTTP/1.1 200 OK");
+    assert!(pdf.windows(b"Content-Type: application/pdf".len())
+        .any(|part| part == b"Content-Type: application/pdf"));
+    assert!(String::from_utf8_lossy(paper_http_body(&pdf))
+        .contains("/Count 2"));
+    let png = route_runtime(&notebook_paper_request(
+        "png", "X-Atrament-Png-Dpi: 72\r\n", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"),
+        notebook.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&png), "HTTP/1.1 200 OK");
+    assert!(paper_http_body(&png).starts_with(b"\x89PNG\r\n\x1a\n"));
+
+    let preprinted = notebook.replace(
+        "\"printed_sheet\": false", "\"printed_sheet\": true",
+    );
+    let response = route_runtime(&notebook_paper_request(
+        "png", "X-Atrament-Png-Dpi: 72\r\n", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"),
+        preprinted.as_bytes(),
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&response), "HTTP/1.1 200 OK");
+    assert_ne!(paper_http_body(&response), paper_http_body(&png));
+    let decoded = NotebookProfile::from_json(preprinted.as_bytes())
+        .expect("notebook accepted");
+    assert_eq!(
+        paper_http_body(&response),
+        decoded.paper_layer_png(72).expect("same Rust authority"),
+    );
+}
+
+#[test]
+fn notebook_paper_routes_refuse_unauthorized_headers_and_bad_profiles() {
+    let profile = NotebookProfile::default()
+        .canonical_json().expect("default JSON");
+    for (format, header, secret, origin, media, body, expected) in [
+        ("pdf", "X-Atrament-Pdf-Pages: 2\r\n", None,
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            profile.as_bytes(), "HTTP/1.1 401 Unauthorized"),
+        ("png", "X-Atrament-Png-Dpi: 72\r\n", Some(EXPECTED_SECRET),
+            None, Some("application/json"),
+            profile.as_bytes(), "HTTP/1.1 401 Unauthorized"),
+        ("pdf", "X-Atrament-Pdf-Pages: 2\r\n", Some(EXPECTED_SECRET),
+            Some("http://evil.example"), Some("application/json"),
+            profile.as_bytes(), "HTTP/1.1 401 Unauthorized"),
+        ("pdf", "X-Atrament-Pdf-Pages: 2\r\n", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("text/plain"),
+            profile.as_bytes(), "HTTP/1.1 400 Bad Request"),
+        ("pdf", "", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            profile.as_bytes(), "HTTP/1.1 400 Bad Request"),
+        ("pdf", "X-Atrament-Pdf-Pages: 0\r\n", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            profile.as_bytes(), "HTTP/1.1 400 Bad Request"),
+        ("pdf", "X-Atrament-Pdf-Pages: 33\r\n", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            profile.as_bytes(), "HTTP/1.1 400 Bad Request"),
+        ("pdf", "X-Atrament-Pdf-Pages: 2\r\nX-Atrament-Pdf-Pages: 1\r\n",
+            Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+            Some("application/json"), profile.as_bytes(),
+            "HTTP/1.1 400 Bad Request"),
+        ("png", "X-Atrament-Png-Dpi: 301\r\n", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            profile.as_bytes(), "HTTP/1.1 400 Bad Request"),
+        ("png", "X-Atrament-Png-Dpi: 72\r\n", Some(EXPECTED_SECRET),
+            Some(EXPECTED_ORIGIN), Some("application/json"),
+            b"{}", "HTTP/1.1 400 Bad Request"),
+    ] {
+        let request = notebook_paper_request(
+            format, header, secret, origin, media, body,
+        );
+        let actual = route_runtime(&request, EXPECTED_HOST);
+        assert_eq!(status_line(&actual), expected);
+        assert!(!paper_http_body(&actual).starts_with(b"%PDF"));
+        assert!(!paper_http_body(&actual).starts_with(b"\x89PNG"));
+    }
+    let oversized = vec![b'x'; MAX_NOTEBOOK_JSON_BYTES + 1];
+    let response = route_runtime(&notebook_paper_request(
+        "pdf", "X-Atrament-Pdf-Pages: 1\r\n", Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"), &oversized,
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&response), "HTTP/1.1 413 Content Too Large");
+    let wrong_method = route_runtime(&paper_endpoint_request(
+        "GET", "/api/notebook/paper/pdf", Some(EXPECTED_SECRET),
+        None, None, b"",
+    ), EXPECTED_HOST);
+    assert_eq!(status_line(&wrong_method), "HTTP/1.1 400 Bad Request");
 }

@@ -7,7 +7,9 @@ import { createNotebookProfileEditor } from "../../../../src/browser/workspace/a
 const ids = ["notebook-date-style", "notebook-date-placement",
     "notebook-radius", "notebook-radius-range", "notebook-page-numbers",
     "notebook-printed-sheet", "notebook-load", "notebook-use-paper",
-    "notebook-default", "notebook-save", "notebook-status"];
+    "notebook-default", "notebook-save", "notebook-status",
+    "notebook-export-pdf", "notebook-export-png",
+    "notebook-pdf-pages", "notebook-png-dpi"];
 const paper = {
     schema: "atrament.paper.v1", style: "grid", width_um: 210_000,
     height_um: 297_000, spacing_um: 5_000, margin_top_um: 22_000,
@@ -58,8 +60,24 @@ test("notebook form validates page metadata and downloads native JSON", async ()
     URL.revokeObjectURL = () => {};
     globalThis.fetch = async (url, init) => {
         requests.push({ url, init });
-        assert.equal(url, "./api/notebook/profile");
         assert.equal(init.headers.Authorization, `Bearer ${secret}`);
+        if (url.startsWith("./api/notebook/paper/")) {
+            assert.equal(init.method, "POST");
+            assert.equal(init.headers["Content-Type"], "application/json");
+            assert.equal(JSON.parse(init.body).printed_sheet, true);
+            const pdf = url.endsWith("/pdf");
+            assert.equal(
+                pdf ? init.headers["X-Atrament-Pdf-Pages"]
+                    : init.headers["X-Atrament-Png-Dpi"],
+                pdf ? "3" : "72",
+            );
+            return new Response(
+                pdf ? "%PDF-1.7" : "\x89PNG",
+                { headers: { "Content-Type":
+                    pdf ? "application/pdf" : "image/png" } },
+            );
+        }
+        assert.equal(url, "./api/notebook/profile");
         assert.equal(init.credentials, "omit");
         assert.equal(init.mode, "same-origin");
         assert.equal(init.cache, "no-store");
@@ -108,12 +126,36 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.deepEqual(downloads, ["atrament-notebook.json"]);
         assert.match(elements.get("notebook-status").textContent,
             /Validated notebook JSON downloaded/);
+        const beforeExport = requests.length;
+        elements.get("notebook-pdf-pages").value = "3";
+        elements.get("notebook-png-dpi").value = "72";
+        elements.get("notebook-export-pdf").dispatch("click");
+        await settle();
+        await settle();
+        assert.equal(requests.length, beforeExport + 2,
+            "PDF export canonicalizes notebook then calls native renderer");
+        assert.deepEqual(downloads, ["atrament-notebook.json",
+            "atrament-notebook-paper.pdf"]);
+        elements.get("notebook-export-png").dispatch("click");
+        await settle();
+        await settle();
+        assert.deepEqual(downloads, ["atrament-notebook.json",
+            "atrament-notebook-paper.pdf", "atrament-notebook-paper.png"]);
+        assert.match(elements.get("notebook-status").textContent,
+            /metadata and ink not rendered/);
+        const beforeInvalid = requests.length;
+        elements.get("notebook-pdf-pages").value = "33";
+        elements.get("notebook-export-pdf").dispatch("click");
+        await settle();
+        assert.equal(requests.length, beforeInvalid,
+            "invalid export count refused before network effect");
+        assert.equal(downloads.length, 3);
         const file = { size: 8193, text: async () => "{}" };
         elements.get("notebook-load").files = { item: () => file };
         elements.get("notebook-load").dispatch("change");
         assert.match(elements.get("notebook-status").textContent,
             /exceeds 8192 bytes/);
-        assert.deepEqual(downloads, ["atrament-notebook.json"]);
+        assert.equal(downloads.length, 3);
         const count = requests.length;
         elements.get("notebook-date-style").value = "none";
         elements.get("notebook-save").dispatch("click");

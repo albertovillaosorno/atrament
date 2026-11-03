@@ -60,6 +60,9 @@ const PAPER_CLI = path.join(
 const PROFILE_EDITOR_CLI = path.join(
     BACKEND_ROOT, "profile-editor-cli", "composition", "main.rs",
 );
+const NOTEBOOK_PROFILE = path.join(
+    BACKEND_ROOT, "notebook-profile", "composition", "lib.rs",
+);
 
 const BROWSER_LAUNCH = path.join(
     BACKEND_ROOT,
@@ -2286,9 +2289,10 @@ test("backend Rust sources cannot redirect compilation out of inventory",
             redirectFiles.push(sourcePath);
         }
     }
-    // Both audited native CLIs explicitly bind test modules under cfg(test).
-    // No other backend Rust source may redirect compilation.
-    assert.deepEqual(redirectFiles, [PAPER_CLI, PROFILE_EDITOR_CLI],
+    // Both audited native CLIs and the notebook codec bind test modules
+    // under cfg(test). No unreviewed backend Rust source may redirect them.
+    assert.deepEqual(
+        redirectFiles, [PAPER_CLI, NOTEBOOK_PROFILE, PROFILE_EDITOR_CLI],
         "extra included Rust code needs source-level privacy review");
 });
 
@@ -2491,9 +2495,13 @@ function unreviewedStandardStreamAuthority(source, sourcePath) {
             || !source.includes('writeln!(io::stdout().lock(), "{USAGE}")');
     }
     if (sourcePath === PROFILE_EDITOR_CLI) {
-        // Four explicit CLI-only help and serialized-output write sites.
-        return stderr !== 0 || stdin !== 0 || stdout !== 4
+        // Six explicit CLI-only help and serialized-output write sites:
+        // the notebook subcommand adds its own help and stdout output.
+        return stderr !== 0 || stdin !== 0 || stdout !== 6
             || !source.includes('writeln!(io::stdout().lock(), "{USAGE}")')
+            || !source.includes(
+                'writeln!(io::stdout().lock(), "{NOTEBOOK_USAGE}")'
+            )
             || !source.includes("io::stdout().lock().write_all(&bytes)");
     }
     const expectedStdout = sourcePath === path.join(BACKEND_ROOT,

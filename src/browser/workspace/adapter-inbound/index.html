@@ -260,7 +260,9 @@
               </h3>
               <p class="field-help">
                 Date, border and printed-page preferences. These metadata
-                settings are Rust-validated but not rendered into PDFs yet.
+                settings are Rust-validated; dates, borders and page
+                numbers are not drawn yet. PDF/PNG exports include only
+                the paper layer, omitting ruling for preprinted sheets.
                 Use current paper to include the sheet editor settings.
               </p>
             </div>
@@ -309,6 +311,18 @@
             </button>
             <button id="notebook-save" type="button"
               class="primary-button" disabled>Save JSON</button>
+            <label>PDF pages (1–32)
+              <input id="notebook-pdf-pages" type="number" min="1" max="32"
+                step="1" value="1" disabled>
+            </label>
+            <button id="notebook-export-pdf" type="button"
+              disabled>Export paper-layer PDF</button>
+            <label>PNG DPI (72–300)
+              <input id="notebook-png-dpi" type="number" min="72" max="300"
+                step="1" value="150" disabled>
+            </label>
+            <button id="notebook-export-png" type="button"
+              disabled>Export paper-layer PNG</button>
           </div>
           <p id="notebook-status" class="action-status" role="status"
             aria-live="polite">Requires a compatible backend session.</p>

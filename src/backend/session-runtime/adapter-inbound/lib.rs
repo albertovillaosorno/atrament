@@ -195,6 +195,22 @@ pub trait NotebookProfileGateway {
 
     /// Native codec JSON size limit.
     fn max_input_bytes(&self) -> usize;
+
+    /// Render only the notebook paper layer in a bounded physical PDF.
+    ///
+    /// # Errors
+    /// Refuses invalid notebook input, page count or rendering bounds.
+    fn paper_pdf(
+        &self, input: &[u8], pages: usize,
+    ) -> Result<Vec<u8>, NotebookProfileError>;
+
+    /// Render only the notebook paper layer as transparent RGBA PNG.
+    ///
+    /// # Errors
+    /// Refuses invalid notebook input, DPI or rendering bounds.
+    fn paper_png(
+        &self, input: &[u8], dpi: u32,
+    ) -> Result<Vec<u8>, NotebookProfileError>;
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -981,9 +997,62 @@ fn request_origin_is_admitted(request: &[u8], expected_origin: &str) -> bool {
     request_has_exact_origin(request, expected_origin)
 }
 
+fn route_notebook_export(
+    request: &[u8],
+    target: &str,
+    body: &[u8],
+    gateway: &dyn NotebookProfileGateway,
+) -> Vec<u8> {
+    let rendered = match target {
+        "/api/notebook/paper/pdf" => {
+            let Some(pages) = single_header_value(
+                request, "x-atrament-pdf-pages",
+            ).and_then(|value| value.parse::<usize>().ok())
+                .filter(|pages| (1..=32).contains(pages)) else {
+                    return json_response(
+                        "400 Bad Request",
+                        br#"{"error":"invalid_pdf_pages"}"#,
+                    );
+                };
+            gateway.paper_pdf(body, pages)
+        }
+        "/api/notebook/paper/png" => {
+            let Some(dpi) = single_header_value(
+                request, "x-atrament-png-dpi",
+            ).and_then(|value| value.parse::<u32>().ok())
+                .filter(|dpi| (72..=300).contains(dpi)) else {
+                    return json_response(
+                        "400 Bad Request",
+                        br#"{"error":"invalid_png_dpi"}"#,
+                    );
+                };
+            gateway.paper_png(body, dpi)
+        }
+        _ => return json_response(
+            "400 Bad Request", br#"{"error":"invalid_request"}"#,
+        ),
+    };
+    match rendered {
+        Ok(bytes) => response(
+            "200 OK",
+            if target == "/api/notebook/paper/pdf" {
+                PDF_CONTENT_TYPE
+            } else {
+                PNG_CONTENT_TYPE
+            },
+            &bytes,
+        ),
+        Err(_error) => json_response(
+            "400 Bad Request",
+            br#"{"error":"invalid_notebook_profile"}"#,
+        ),
+    }
+}
+
 fn route_notebook_profile(
     request: &[u8],
     method: &str,
+    target: &str,
     context: &RouteRequestContext<'_>,
 ) -> Vec<u8> {
     let origin_ok = if method == "GET" {
@@ -999,7 +1068,7 @@ fn route_notebook_profile(
             br#"{"error":"unauthenticated"}"#,
         );
     }
-    if method == "GET" {
+    if method == "GET" && target == "/api/notebook/profile" {
         return match context.notebook_gateway.default_json() {
             Ok(json) => json_response("200 OK", json.as_slice()),
             Err(_error) => json_response(
@@ -1035,6 +1104,11 @@ fn route_notebook_profile(
         return json_response(
             "413 Content Too Large",
             br#"{"error":"notebook_profile_too_large"}"#,
+        );
+    }
+    if target != "/api/notebook/profile" {
+        return route_notebook_export(
+            request, target, body, context.notebook_gateway,
         );
     }
     match context.notebook_gateway.canonical_json(body) {
@@ -1251,8 +1325,9 @@ fn route_profile_transport(
     context: &RouteRequestContext<'_>,
 ) -> Option<Vec<u8>> {
     match target {
-        "/api/notebook/profile" => {
-            Some(route_notebook_profile(request, method, context))
+        "/api/notebook/profile" | "/api/notebook/paper/pdf"
+        | "/api/notebook/paper/png" => {
+            Some(route_notebook_profile(request, method, target, context))
         }
         "/api/paper/profile" | "/api/paper/pdf" | "/api/paper/png" => {
             Some(route_paper_profile(request, method, target, context))

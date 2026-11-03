@@ -34,6 +34,7 @@
 
 use atrament_notebook_paper_cli::{
     canonical_paper_profile_json, default_paper_profile_json,
+    paper_profile_pdf_pages, paper_profile_png_layer,
 };
 use atrament_profile_json_syntax::{
     ProfileJsonSyntaxLimits, ValidatedProfileJsonObject,
@@ -208,6 +209,31 @@ impl NotebookProfile {
         };
         profile.validate()?;
         Ok(profile)
+    }
+
+    /// Export physical PDF paper layers from a valid notebook profile.
+    ///
+    /// Dates, borders, page numbers, images and handwriting are not drawn.
+    /// Preprinted stationery produces unmarked physical pages.
+    ///
+    /// # Errors
+    /// Refuses invalid metadata, geometry, page count or output limits.
+    pub fn paper_layer_pdf(&self, pages: usize) -> Result<Vec<u8>, String> {
+        self.validate()?;
+        paper_profile_pdf_pages(
+            self.paper_json.as_bytes(), pages, !self.printed_sheet,
+        )
+    }
+
+    /// Export a transparent RGBA paper layer at a bounded physical DPI.
+    ///
+    /// # Errors
+    /// Refuses invalid metadata, paper geometry, DPI or raster budgets.
+    pub fn paper_layer_png(&self, dpi: u32) -> Result<Vec<u8>, String> {
+        self.validate()?;
+        paper_profile_png_layer(
+            self.paper_json.as_bytes(), dpi, !self.printed_sheet,
+        )
     }
 
     /// Check all fields, including border bounds against the printable area.

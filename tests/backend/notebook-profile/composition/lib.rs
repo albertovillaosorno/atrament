@@ -134,3 +134,24 @@ fn duplicate_fields_oversized_input_and_invalid_paper_refuse() {
         NotebookProfile::from_json(invalid_nested_paper.as_bytes()).is_err()
     );
 }
+
+#[test]
+fn notebook_paper_layer_honors_preprinted_and_bounds() {
+    let marked = NotebookProfile::default();
+    let mut preprinted = marked.clone();
+    preprinted.printed_sheet = true;
+    assert_ne!(
+        marked.paper_layer_pdf(2).expect("marked sheet"),
+        preprinted.paper_layer_pdf(2).expect("preprinted sheet"),
+    );
+    assert_ne!(
+        marked.paper_layer_png(72).expect("marked layer"),
+        preprinted.paper_layer_png(72).expect("transparent layer"),
+    );
+    assert!(preprinted.paper_layer_pdf(0).is_err());
+    assert!(preprinted.paper_layer_pdf(33).is_err());
+    assert!(preprinted.paper_layer_png(71).is_err());
+    preprinted.date_style = DateStyle::Box;
+    assert!(preprinted.paper_layer_pdf(1).is_err());
+    assert!(preprinted.paper_layer_png(72).is_err());
+}

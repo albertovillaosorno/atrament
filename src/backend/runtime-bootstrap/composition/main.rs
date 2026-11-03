@@ -146,6 +146,22 @@ impl NotebookProfileGateway for NotebookGateway {
     fn max_input_bytes(&self) -> usize {
         MAX_NOTEBOOK_JSON_BYTES
     }
+
+    fn paper_pdf(
+        &self, input: &[u8], pages: usize,
+    ) -> Result<Vec<u8>, NotebookProfileError> {
+        NotebookProfile::from_json(input)
+            .and_then(|profile| profile.paper_layer_pdf(pages))
+            .map_err(|_error| NotebookProfileError)
+    }
+
+    fn paper_png(
+        &self, input: &[u8], dpi: u32,
+    ) -> Result<Vec<u8>, NotebookProfileError> {
+        NotebookProfile::from_json(input)
+            .and_then(|profile| profile.paper_layer_png(dpi))
+            .map_err(|_error| NotebookProfileError)
+    }
 }
 
 /// Private, path-free canonicality refusal after complete source verification.
