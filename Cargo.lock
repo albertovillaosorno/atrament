@@ -580,12 +580,14 @@ version = "0.1.0"
 name = "atrament_profile_editor_cli"
 version = "0.1.0"
 dependencies = [
+ "atrament_english_spanish_grapheme_inventory",
  "atrament_handwriting_statistics",
  "atrament_handwriting_statistics_json",
  "atrament_notebook_paper_cli",
  "atrament_notebook_profile",
  "atrament_profile_file_commit",
  "atrament_profile_file_reader",
+ "atrament_unicode_grapheme_boundary_port",
  "atrament_unicode_grapheme_segmentation",
  "nix",
 ]

@@ -9,12 +9,12 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - One Rust CLI entrypoint for canonical paper and handwriting profiles.
+//   - Rust CLI editing and inventory inspection of handwriting profiles.
 // - Must-Not:
-//   - Independently validate profile statistics, sample glyphs, or render ink.
+//   - Independently validate statistics, sample glyphs, or render ink.
 // - Allows:
 //   - Inputs: Explicit CLI arguments and bounded caller-selected JSON files.
-//   - Outputs: Rust-admitted JSON, inspection text, or explicit refusal.
+//   - Outputs: Admitted JSON, exact text-inventory audit, or refusal.
 //   - Side effects: Explicit atomic output file commit, or stdout write.
 // - Split-When:
 //   - Interactive profile mutation becomes an application service.
@@ -41,6 +41,7 @@ use std::io::{self, Write as _};
 use std::path::Path;
 use std::slice::Iter;
 
+use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_handwriting_statistics::{
     Dimension, DimensionStatistics, HandwritingStatisticsProfile,
     ScalarStatistics, Unit,
@@ -59,7 +60,10 @@ use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };
 use atrament_profile_file_reader::read_bounded_profile_file;
+use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+const MAX_INVENTORY_TEXT_BYTES: usize = 4096;
 
 const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     | paper [atrament-paper options] \
@@ -67,9 +71,11 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--set-global DIM MIN MAX MEAN MEDIAN DEVIATION] \
     [--set-glyph GRAPHEME DIM MIN MAX MEAN MEDIAN DEVIATION] \
     [--remove-glyph GRAPHEME] [--remove-glyph-dimension GRAPHEME DIM] \
-    [--inspect] [--output FILE [--replace]]\n\
+    [--inspect | --inventory-text TEXT] [--output FILE [--replace]]\n\
     Paper is the existing Rust physical-page profile (not a full notebook).\n\
     Handwriting units: micrometres, millidegrees, or parts per thousand.\n\
+    --inventory-text checks exact text-baseline membership and overrides,\n\
+    not glyph outlines, available ink shapes, or renderability.\n\
     Run paper --help for page sizes, styles, margins and PDF options.";
 
 const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
@@ -83,12 +89,13 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--output FILE [--replace]]\n\
     Paper-layer export uses nested Rust paper settings and skips ruling \
     on preprinted sheets. The selected empty date line or box is drawn; \
-    date text, borders and ink do not render. Page numbers use a \
-    small printed bitmap in the bottom margin.";
+    rounded borders render, but date text and handwriting do not. \
+    Page numbers use a small bitmap in the bottom margin.";
 
 #[derive(Debug)]
 struct HandwritingRequest {
     inspect: bool,
+    inventory_text: Option<String>,
     output: Option<String>,
     profile: HandwritingStatisticsProfile,
     replace: bool,
@@ -191,6 +198,50 @@ fn remove_glyph_option(
         .map_err(|error| format!("statistics refused: {error:?}"))
 }
 
+fn parse_inventory_text(
+    arguments: &mut Iter<'_, String>,
+    previous: Option<&str>,
+) -> Result<String, String> {
+    if previous.is_some() {
+        return Err("--inventory-text may appear only once".into());
+    }
+    let text = arguments.next().ok_or("--inventory-text requires text")?;
+    if text.is_empty() || text.len() > MAX_INVENTORY_TEXT_BYTES
+        || text.chars().any(|ch| ch.is_control() && !ch.is_whitespace())
+    {
+        return Err(
+            concat!(
+                "inventory text must be 1..4096 bytes ",
+                "without control characters",
+            ).into()
+        );
+    }
+    Ok(text.clone())
+}
+
+fn validate_handwriting_flags(
+    inspect: bool,
+    inventory_text: Option<&str>,
+    output: Option<&str>,
+    replace: bool,
+) -> Result<(), String> {
+    if replace && output.is_none() {
+        return Err("--replace requires --output".into());
+    }
+    if inspect && output.is_some() {
+        return Err("--inspect is stdout only; omit --output".into());
+    }
+    if inventory_text.is_some() && (inspect || output.is_some()) {
+        return Err(
+            concat!(
+                "--inventory-text is stdout only and cannot combine ",
+                "with --inspect or --output",
+            ).into()
+        );
+    }
+    Ok(())
+}
+
 fn parse_handwriting_options(
     args: &[String],
 ) -> Result<HandwritingRequest, String> {
@@ -198,7 +249,7 @@ fn parse_handwriting_options(
     let mut profile = HandwritingStatisticsProfile::baseline(0);
     let mut seen_profile = false;
     let mut seen_edit = false;
-    let mut inspect = false;
+    let (mut inspect, mut inventory_text) = (false, None);
     let mut output = None;
     let mut replace = false;
     let mut iter = args.iter();
@@ -253,6 +304,12 @@ fn parse_handwriting_options(
                 }
                 inspect = true;
             }
+            "--inventory-text" => {
+                let selected = parse_inventory_text(
+                    &mut iter, inventory_text.as_deref(),
+                )?;
+                inventory_text = Some(selected);
+            }
             "--output" => {
                 let selected =
                     iter.next().ok_or("--output requires a filename")?;
@@ -275,17 +332,15 @@ fn parse_handwriting_options(
             _ => return Err(format!("unknown handwriting option: {name}")),
         }
     }
-    if replace && output.is_none() {
-        return Err("--replace requires --output".into());
-    }
-    if inspect && output.is_some() {
-        return Err("--inspect is stdout only; omit --output".into());
-    }
+    validate_handwriting_flags(
+        inspect, inventory_text.as_deref(), output.as_deref(), replace,
+    )?;
     profile
         .validate(&boundaries)
         .map_err(|error| format!("invalid handwriting profile: {error:?}"))?;
     Ok(HandwritingRequest {
         inspect,
+        inventory_text,
         output,
         profile,
         replace,
@@ -342,6 +397,78 @@ fn inspect_handwriting(profile: &HandwritingStatisticsProfile) -> Vec<u8> {
     result.into_bytes()
 }
 
+fn inventory_handwriting(
+    profile: &HandwritingStatisticsProfile,
+    text: &str,
+) -> Result<Vec<u8>, String> {
+    let boundaries = UnicodeGraphemeSegmentation;
+    let count = boundaries.grapheme_count(text);
+    let mut distinct = Vec::new();
+    let mut descriptions = String::new();
+    let mut outside_baseline = 0usize;
+    for index in 0..count {
+        let start = boundaries
+            .byte_offset(text, index)
+            .ok_or("inventory start boundary unavailable")?;
+        let next = index.checked_add(1)
+            .ok_or("inventory index overflow")?;
+        let end = boundaries
+            .byte_offset(text, next)
+            .ok_or("inventory end boundary unavailable")?;
+        let grapheme = text
+            .get(start..end)
+            .ok_or("inventory boundary not aligned to UTF-8")?;
+        if grapheme.chars().all(char::is_whitespace)
+            || distinct.contains(&grapheme)
+        {
+            continue;
+        }
+        distinct.push(grapheme);
+        let listed = REQUIRED_TEXT_GRAPHEMES
+            .iter()
+            .any(|item| item.grapheme == grapheme);
+        if !listed {
+            outside_baseline = outside_baseline.saturating_add(1);
+        }
+        let overridden = profile
+            .glyphs
+            .iter()
+            .any(|glyph| glyph.grapheme == grapheme);
+        let codepoints = grapheme.chars()
+            .map(|ch| format!("U+{:04X}", u32::from(ch)))
+            .collect::<Vec<_>>().join(" ");
+        let _written = writeln!(
+            descriptions,
+            "\"{}\": {} / {} [{codepoints}]",
+            grapheme.escape_debug(),
+            if listed {
+                "text-baseline"
+            } else {
+                "outside-text-baseline"
+            },
+            if overridden {
+                "statistical-override"
+            } else {
+                "global-statistics"
+            },
+        );
+    }
+    Ok(format!(
+        concat!(
+            "Exact text-inventory audit (not a renderer)\n",
+            "Distinct visible graphemes: {}\n",
+            "Outside English/Spanish text baseline: {}\n",
+            "{}",
+            "No glyph shapes or visible fallbacks are supplied by this ",
+            "statistics profile; membership does not imply renderability.\n",
+        ),
+        distinct.len(),
+        outside_baseline,
+        descriptions,
+    )
+    .into_bytes())
+}
+
 fn execute_handwriting(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let request = parse_handwriting_options(args)?;
     let boundaries = UnicodeGraphemeSegmentation;
@@ -349,6 +476,9 @@ fn execute_handwriting(args: &[String]) -> Result<Option<Vec<u8>>, String> {
         .map_err(|error| format!("statistics encoding refused: {error:?}"))?;
     if request.inspect {
         return Ok(Some(inspect_handwriting(&request.profile)));
+    }
+    if let Some(text) = request.inventory_text.as_deref() {
+        return inventory_handwriting(&request.profile, text).map(Some);
     }
     if let Some(output) = request.output {
         let disposition = if request.replace {

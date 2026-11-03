@@ -823,3 +823,75 @@ fn invalid_notebook_export_flags_refuse_without_file_changes() {
     assert_eq!(fs::read(&output).expect("still unmodified"), b"preserved");
     fs::remove_file(output).expect("owned sentinel removed");
 }
+
+#[test]
+fn inventory_cli_reports_full_bilingual_text_baseline_without_render_claim() {
+    let sample = REQUIRED_TEXT_GRAPHEMES
+        .iter()
+        .map(|item| item.grapheme)
+        .collect::<Vec<_>>()
+        .join(" ");
+    let report = String::from_utf8(
+        execute_handwriting(&args(&["--inventory-text", &sample]))
+            .expect("baseline corpus audit accepted")
+            .expect("audit prints to stdout"),
+    )
+    .expect("human-readable exact grapheme report");
+    assert!(report.contains("Distinct visible graphemes: 114"));
+    assert!(report.contains("Outside English/Spanish text baseline: 0"));
+    assert!(report.contains("[U+006E U+0303]"));
+    assert!(report.contains("\"\u{f1}\": text-baseline / global-statistics"));
+    assert!(report.contains("\"n\u{303}\": text-baseline / global-statistics"));
+    assert!(report.contains("\"\u{ab}\": text-baseline / global-statistics"));
+    assert!(report.contains("\"\u{bf}\": text-baseline / global-statistics"));
+    assert!(report.contains("membership does not imply renderability"));
+}
+
+#[test]
+fn inventory_cli_preserves_nfc_nfd_and_reports_external_symbols() {
+    let report = String::from_utf8(
+        execute_handwriting(&args(&[
+            "--set-glyph", "n\u{303}", "width",
+            "1800", "2600", "2200", "2200", "200",
+            "--inventory-text", concat!(
+                "\u{f1} n\u{303} \u{f1} \u{bf}\u{a1} ",
+                "\u{ab}\u{bb} \u{201c}Q\u{201d} + = \u{221e} \u{1f408}",
+            ),
+        ]))
+        .expect("text audit accepted")
+        .expect("audit text produced"),
+    )
+    .expect("audit is UTF-8");
+    assert!(report.contains("\"\u{f1}\": text-baseline / global-statistics"));
+    let nfd_pattern = "\"n\u{303}\": text-baseline / statistical-override";
+    assert!(report.contains(nfd_pattern));
+    let math_pattern = "\"\u{221e}\": outside-text-baseline";
+    assert!(report.contains(math_pattern));
+    let emoji_pattern = "\"\u{1f408}\": outside-text-baseline";
+    assert!(report.contains(emoji_pattern));
+    assert!(report.contains("Outside English/Spanish text baseline: 4"));
+    assert!(report.contains("Distinct visible graphemes: 13"));
+}
+
+#[test]
+fn inventory_cli_refuses_unsafe_or_conflicting_requests_without_file_effects() {
+    let target = test_path();
+    fs::write(&target, b"unchanged").expect("write owned sentinel");
+    let filename = target.to_str().expect("UTF-8 path");
+    for invalid in [
+        args(&["--inventory-text"]),
+        args(&["--inventory-text", ""]),
+        args(&["--inventory-text", "\u{1b}[31m"]),
+        args(&["--inventory-text", "a", "--inventory-text", "b"]),
+        args(&["--inventory-text", "\u{f1}", "--inspect"]),
+        args(&[
+            "--inventory-text", "\u{f1}", "--output",
+            filename, "--replace",
+        ]),
+        args(&["--inventory-text", &"a".repeat(MAX_INVENTORY_TEXT_BYTES + 1)]),
+    ] {
+        assert!(execute_handwriting(&invalid).is_err(), "{invalid:?}");
+        assert_eq!(fs::read(&target).expect("sentinel survives"), b"unchanged");
+    }
+    fs::remove_file(target).expect("remove owned sentinel");
+}

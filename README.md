@@ -210,6 +210,9 @@ cargo run -q -p atrament_profile_editor_cli -- \
 cargo run -q -p atrament_profile_editor_cli -- \
   handwriting --profile handwriting.json --inspect
 cargo run -q -p atrament_profile_editor_cli -- \
+  handwriting --profile handwriting.json \
+  --inventory-text '¡Hola, señor! ¿Qué tal? «Sí» ñ ∞'
+cargo run -q -p atrament_profile_editor_cli -- \
   paper --style ruled --emit-profile --output paper.json
 cargo run -q -p atrament_profile_editor_cli -- \
   paper --profile paper.json --spacing-mm 6 --output sheet.pdf
@@ -225,6 +228,16 @@ are supported.
 `--remove-glyph-dimension GRAPHEME DIM` restores that dimension to its
 global value, and removing the last override deletes the empty glyph.
 Missing glyphs or dimensions refuse before saving.
+
+The Rust CLI `--inventory-text` audit checks each distinct Unicode extended
+grapheme against the existing 114-entry English/Spanish **text** inventory,
+reports whether a matching exact statistical override exists, and lists
+unlisted graphemes explicitly. NFC `ñ` and NFD `ñ` remain separate;
+mathematical symbols such as `∞` are reported outside this *text*
+inventory because mathematical coverage is a separate authority. The audit
+allows 1–4096 UTF-8 bytes, refuses control characters and output-file flags,
+and writes only to stdout. **Inventory membership does not provide glyph
+outlines, fallback consent, or rendered handwriting.**
 
 The default profile is **not calibrated handwriting**; its seed is recorded,
 but no stochastic stroke generator is connected yet.
@@ -341,10 +354,11 @@ No date text, handwriting or image content is drawn in these outputs.
 
 The localhost web editor now also offers **Notebook page profile** controls
 for date placeholder style and placement, border radius, page numbers and
-preprinted-sheet intent. PDF/PNG exports draw selected date placeholders
+preprinted-sheet intent. PDF/PNG exports draw selected date placeholders,
 page numbers and rounded borders only when physically admissible.
-**Use current paper** includes
-unsaved sheet settings before Rust validation. **Preview selected page**
+
+**Use current paper** includes unsaved sheet settings before Rust validation.
+**Preview selected page**
 validates the current notebook proposal with Rust and shows the requested
 PNG paper layer inline, including rounded borders, without downloading it.
 Changing page or notebook settings hides stale previews; ending the session
