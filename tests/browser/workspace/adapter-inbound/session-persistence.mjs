@@ -141,6 +141,14 @@ function usesUnreviewedMarkupRequests(source) {
         return true;
     }
     remaining = remaining.replace(notebookPicker, "");
+    // The preview image has no initial URL or remote source. Only the
+    // authenticated Rust PNG blob can populate this pre-existing element.
+    const notebookPreview = `<img id="notebook-preview-image" alt=""
+              aria-label="Rendered notebook page preview">`;
+    if (remaining.split(notebookPreview).length - 1 !== 1) {
+        return true;
+    }
+    remaining = remaining.replace(notebookPreview, "");
     return [
         /<\s*(?:a|link|script|base|form|iframe|frame|portal|img)\b/iu,
         /<\s*(?:source|picture|video|audio|track|embed|object)\b/iu,
@@ -970,7 +978,9 @@ function hasUnreviewedBrowserFileIntake(source, paper = false,
     // open an unselected file. Each download has one reviewed Blob URL/anchor.
     for (const [site, count] of [
         ["upload.files?.item(0)", paper ? 1 : 0],
-        ["URL.createObjectURL(blob)", handwriting ? 0 : Number(paper)],
+        // Paper's notebook preview gets one extra reviewed Rust PNG Blob URL.
+        ["URL.createObjectURL(blob)",
+            handwriting ? 0 : paper === 2 ? 3 : Number(paper)],
         ['new Blob([result.json], { type: "application/json" })',
             paper === 2 ? 1 : 0],
         ["blob: Blob", typed && !handwriting ? Number(paper) : 0],
@@ -1756,6 +1766,19 @@ function hasUnreviewedDynamicResourceAuthority(source, main, paper = false,
         return true;
     }
     remaining = remaining.replaceAll(optionSite, "");
+    // One reviewed resource sink displays only a Blob URL created from the
+    // authenticated local Rust PNG response. Dynamic URLs remain prohibited.
+    const notebookImageSink = "previewImage.src = previewUrl";
+    if (remaining.split(notebookImageSink).length - 1
+        !== Number(paper === 2)) {
+        return true;
+    }
+    remaining = remaining.replaceAll(notebookImageSink, "");
+    if (paper === 2
+        && remaining.split("previewUrl = URL.createObjectURL(blob)")
+            .length - 1 !== 1) {
+        return true;
+    }
     return [
         new RegExp(
             String.raw`\b(?:createElement|createElementNS|` +

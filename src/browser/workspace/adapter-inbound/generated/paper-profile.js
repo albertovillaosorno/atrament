@@ -486,17 +486,29 @@ export function createNotebookProfileEditor(context) {
     const save = required("notebook-save");
     const exportPdf = required("notebook-export-pdf");
     const exportPng = required("notebook-export-png");
+    const previewButton = required("notebook-preview");
+    const previewFrame = required("notebook-preview-frame");
+    const previewImage = required("notebook-preview-image");
     const pdfPages = required("notebook-pdf-pages");
     const pngDpi = required("notebook-png-dpi");
     const pngPage = required("notebook-png-page");
     const status = required("notebook-status");
     const controls = [style, placement, radius, slider, numbers, printed,
         load, usePaper, editPaper, defaults, save,
-        exportPdf, exportPng, pdfPages, pngDpi, pngPage];
+        exportPdf, exportPng, previewButton, pdfPages, pngDpi, pngPage];
     let admitted = null;
     let generation = 0;
     let busy = false;
     let downloadUrl = null;
+    let previewUrl = null;
+    function clearPreview() {
+        previewFrame.hidden = true;
+        previewImage.removeAttribute("src");
+        if (previewUrl !== null) {
+            URL.revokeObjectURL(previewUrl);
+            previewUrl = null;
+        }
+    }
     function active(secret, generationAtStart) {
         return generation === generationAtStart
             && context.currentSecret() === secret
@@ -509,6 +521,7 @@ export function createNotebookProfileEditor(context) {
         }
     }
     function display(profile) {
+        clearPreview();
         admitted = profile;
         style.value = profile.date_style;
         placement.value = profile.date_placement;
@@ -650,6 +663,7 @@ export function createNotebookProfileEditor(context) {
     async function start(secret) {
         generation += 1;
         const observed = generation;
+        clearPreview();
         admitted = null;
         busy = true;
         sync();
@@ -675,6 +689,7 @@ export function createNotebookProfileEditor(context) {
     }
     function reset() {
         generation += 1;
+        clearPreview();
         admitted = null;
         busy = false;
         load.value = "";
@@ -687,10 +702,16 @@ export function createNotebookProfileEditor(context) {
     }
     radius.addEventListener("input", () => {
         slider.value = radius.value;
+        clearPreview();
     });
     slider.addEventListener("input", () => {
         radius.value = slider.value;
+        clearPreview();
     });
+    for (const control of [style, placement, numbers, printed,
+        pngDpi, pngPage]) {
+        control.addEventListener("input", clearPreview);
+    }
     editPaper.addEventListener("click", () => {
         void action(async (secret, observed) => {
             const paper = JSON.stringify(proposal().paper);
@@ -755,6 +776,35 @@ export function createNotebookProfileEditor(context) {
                 type: "application/json",
             }), "atrament-notebook.json");
             status.textContent = "Validated notebook JSON downloaded.";
+        });
+    });
+    previewButton.addEventListener("click", () => {
+        void action(async (secret, observed) => {
+            const dpi = validExportNumber(pngDpi, 72, 300);
+            const page = validExportNumber(pngPage, 1, 32);
+            const result = await canonical(secret, JSON.stringify(proposal()));
+            if (!active(secret, observed))
+                return;
+            const reply = await post(secret, "png", dpi, result.json, page);
+            if (!active(secret, observed))
+                return;
+            if (reply.status === 401) {
+                context.unauthorized();
+                return;
+            }
+            if (!reply.ok
+                || reply.headers.get("content-type") !== "image/png") {
+                throw new Error("Rust notebook PNG preview refused");
+            }
+            const blob = await reply.blob();
+            if (active(secret, observed)) {
+                display(result.profile);
+                previewUrl = URL.createObjectURL(blob);
+                previewImage.alt = `Rendered notebook paper, page ${page}`;
+                previewImage.src = previewUrl;
+                previewFrame.hidden = false;
+                status.textContent = `Rendered PNG preview for page ${page}.`;
+            }
         });
     });
     for (const [button, format, input, minimum, maximum] of [

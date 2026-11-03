@@ -344,7 +344,11 @@ for date placeholder style and placement, border radius, page numbers and
 preprinted-sheet intent. PDF/PNG exports draw selected date placeholders
 page numbers and rounded borders only when physically admissible.
 **Use current paper** includes
-unsaved sheet settings before Rust validation.
+unsaved sheet settings before Rust validation. **Preview selected page**
+validates the current notebook proposal with Rust and shows the requested
+PNG paper layer inline, including rounded borders, without downloading it.
+Changing page or notebook settings hides stale previews; ending the session
+revokes its image URL.
 
 **Edit notebook paper** sends the notebook's embedded sheet into the visual
 paper editor through Rust validation; **Use current paper** copies edited

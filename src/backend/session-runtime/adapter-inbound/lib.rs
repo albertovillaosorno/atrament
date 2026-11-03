@@ -88,7 +88,7 @@ const RESPONSE_TRAILERS: &str = concat!(
     "Content-Security-Policy: frame-ancestors 'none'; ",
     "default-src 'self'; base-uri 'none'; connect-src 'self'; ",
     "font-src 'none'; form-action 'none'; frame-src 'none'; ",
-    "img-src 'self' data:; manifest-src 'none'; media-src 'none'; ",
+    "img-src 'self' data: blob:; manifest-src 'none'; media-src 'none'; ",
     "object-src 'none'; script-src 'self'; style-src 'self'; ",
     "worker-src 'none'\r\n",
     // Browser authority not needed for text editing or the explicit Copy

@@ -9,7 +9,8 @@ const ids = ["notebook-date-style", "notebook-date-placement",
     "notebook-printed-sheet", "notebook-load", "notebook-use-paper",
     "notebook-edit-paper",
     "notebook-default", "notebook-save", "notebook-status",
-    "notebook-export-pdf", "notebook-export-png",
+    "notebook-export-pdf", "notebook-export-png", "notebook-preview",
+    "notebook-preview-frame", "notebook-preview-image",
     "notebook-pdf-pages", "notebook-png-dpi", "notebook-png-page"];
 const paper = {
     schema: "atrament.paper.v1", style: "grid", width_um: 210_000,
@@ -28,10 +29,14 @@ class Control {
     checked = false;
     disabled = true;
     textContent = "";
+    src = "";
+    alt = "";
+    hidden = false;
     validity = { valid: true };
     files = null;
     callbacks = new Map();
     addEventListener(type, callback) { this.callbacks.set(type, callback); }
+    removeAttribute(name) { if (name === "src") this.src = ""; }
     dispatch(type) { this.callbacks.get(type)?.(); }
 }
 
@@ -47,6 +52,7 @@ test("notebook form validates page metadata and downloads native JSON", async ()
     };
     const elements = new Map(ids.map((id) => [id, new Control()]));
     const downloads = [];
+    const revoked = [];
     const requests = [];
     const adoptedPapers = [];
     let secret = "session-local";
@@ -59,7 +65,7 @@ test("notebook form validates page metadata and downloads native JSON", async ()
     };
     globalThis.window = { setTimeout: () => 0 };
     URL.createObjectURL = () => "blob:notebook-local";
-    URL.revokeObjectURL = () => {};
+    URL.revokeObjectURL = (url) => { revoked.push(url); };
     globalThis.fetch = async (url, init) => {
         requests.push({ url, init });
         assert.equal(init.headers.Authorization, `Bearer ${secret}`);
@@ -166,12 +172,38 @@ test("notebook form validates page metadata and downloads native JSON", async ()
             /PNG sheet 10/);
         assert.match(elements.get("notebook-status").textContent,
             /no date text, handwriting or images/);
+        const beforePreview = requests.length;
+        const previewFrame = elements.get("notebook-preview-frame");
+        const previewImage = elements.get("notebook-preview-image");
+        assert.equal(previewFrame.hidden, true);
+        elements.get("notebook-preview").dispatch("click");
+        await settle();
+        await settle();
+        assert.equal(requests.length, beforePreview + 2,
+            "preview requests canonical metadata and native Rust PNG");
+        assert.equal(previewFrame.hidden, false);
+        assert.equal(previewImage.src, "blob:notebook-local");
+        assert.equal(previewImage.alt, "Rendered notebook paper, page 10");
+        assert.deepEqual(downloads, ["atrament-notebook.json",
+            "atrament-notebook-paper.pdf", "atrament-notebook-page-10.png"],
+            "preview does not download a file");
+        elements.get("notebook-radius-range").value = "4";
+        elements.get("notebook-radius-range").dispatch("input");
+        assert.equal(previewFrame.hidden, true,
+            "changing radius invalidates the native image preview");
+        assert.equal(previewImage.src, "");
+        assert.ok(revoked.includes("blob:notebook-local"));
         const beforeBadPng = requests.length;
         elements.get("notebook-png-page").value = "33";
         elements.get("notebook-export-png").dispatch("click");
         await settle();
         assert.equal(requests.length, beforeBadPng,
             "invalid selected PNG page refused before network use");
+        elements.get("notebook-preview").dispatch("click");
+        await settle();
+        assert.equal(requests.length, beforeBadPng,
+            "invalid preview page refused without transport");
+        assert.equal(previewFrame.hidden, true);
         assert.match(elements.get("notebook-status").textContent,
             /nothing saved/);
         const beforeInvalid = requests.length;
@@ -197,6 +229,8 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         secret = null;
         editor.reset();
         assert.equal(elements.get("notebook-save").disabled, true);
+        assert.equal(elements.get("notebook-preview").disabled, true);
+        assert.equal(previewFrame.hidden, true);
     } finally {
         controller.abort();
         globalThis.document = saved.document;
