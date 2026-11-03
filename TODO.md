@@ -20,28 +20,6 @@ labels belong here.
 
 ## P4 — Personal handwriting profiles and synthesis
 
-### TODO - Extract the personal stroke vocabulary
-
-Derive centerlines, contours, entry and exit conditions, pen lifts,
-ligatures, diacritics, contextual forms, and confidence with sample
-provenance.
-
-[docs/todo/open/handwriting/004-personal-stroke-vocabulary.mdc](docs/todo/open/handwriting/004-personal-stroke-vocabulary.mdc)
-
-### TODO - Implement compositional diacritics safely
-
-Reuse accents only when profile evidence admits the composition and preserve
-placement, scale, collision, and language-specific forms.
-
-[docs/todo/open/handwriting/005-compositional-diacritics.mdc](docs/todo/open/handwriting/005-compositional-diacritics.mdc)
-
-### TODO - Implement continuous contextual stroke planning
-
-Select, connect, deform, space, and lift strokes from neighboring graphemes,
-word position, line geometry, semantic role, and calibrated writing style.
-
-[docs/todo/open/handwriting/006-contextual-stroke-planning.mdc](docs/todo/open/handwriting/006-contextual-stroke-planning.mdc)
-
 ### TODO - Implement bounded correlated variation
 
 Support observed or authorized minimum, maximum, distribution, and

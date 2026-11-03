@@ -1,0 +1,96 @@
+---
+record_type: task
+id: "ATR-P4-004"
+title: "Extract the personal stroke vocabulary"
+status: completed
+priority: P4
+lane: handwriting
+dependencies: ["ATR-P4-002", "ATR-P4-003"]
+dependencies_specified: true
+dependency_rationale: >-
+  Stroke extraction depends on corrected calibration samples.
+acceptance_criteria:
+  - >-
+      Derive centerlines, contours, entry and exit conditions, pen lifts,
+      ligatures, diacritics, contextual forms, and confidence with sample
+      provenance.
+  - >-
+      Finite v1 completion: Derive or describe one provenance-linked stroke
+      sample for each admitted core role, with entry/exit, lift, diacritic,
+      and confidence fields; do not promise universal handwriting capture.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Extract the personal stroke vocabulary
+
+## Scope and existing evidence
+
+Historical notes below identify existing domain primitives but do not prove
+that the proposed finite synthesis contract is executable.
+
+Derive centerlines, contours, entry and exit conditions, pen lifts, ligatures,
+diacritics, contextual forms, and confidence with sample provenance.
+
+Current executable evidence now freezes the transport-neutral vocabulary entry
+produced by later extraction. Each entry retains caller-owned centerline and
+contour evidence, entry/exit conditions, pen-lift evidence, ligature, diacritic,
+and contextual-form evidence, plus confidence and sample provenance. Extraction,
+geometry/units, form inference, confidence calculation, profile-section schema,
+and candidate generation remain open.
+
+## Finite provenance-linked core stroke vocabulary contract
+
+**Inputs:** one explicitly accepted, corrected calibration capture, stable
+profile ID `student-A`, source sample IDs and typed observed stroke evidence.
+**Outputs:** one finite proposed vocabulary per declared role: centerline,
+contour bounds, entry/exit tangents, pen contacts/lifts, diacritic attachments,
+contextual variants, confidence status and original evidence links. Proposed
+vocabulary records are not automatically accepted glyph coverage.
+
+**Core role sample ledger (theoretical):**
+
+| Role / sample | Centerline and contour | Context / lift / mark |
+| --- | --- | --- |
+| Body `a`, `c01-A` | Points and contour | Standalone; one lift |
+| Join `an`, `c02-A` | Paths and transition | Tangent; no lift at join |
+| Title `B`, `c08-A` | Tall contour | Title; two lifts |
+| Label `F`, `c09-A` | Compact contour | Label; one lift |
+| Mark `ñ`, `c03-A` | Base plus tilde path | Anchor; mark lift |
+
+**Provenance rule:** each derived centerline and contour retains the exact
+capture and corrected region, physical unit in mm, calibration transform
+revision and observed/inferred confidence. A pen lift is a categorical
+contact transition rather than an invented stroke connecting two samples.
+Entry and exit tangents belong to each contextual form, so the joined `a`
+cannot silently replace isolated `a`. Derived accents are allowed only after
+the profile's declared applicable rule admits that composition.
+
+**Worked example:** `student-A` has corrected sample `c02-A` with an observed
+joining exit from `a` to `n`; a proposed `a` form records its start and end
+points, contour, `JoinedBeforeN` context, `PenDown` exit, provenance key
+`capture-12/region-c02/revision-3` and confidence `Observed`. The isolated
+`a` from `c01-A` is a separate contextual form and remains available for
+word ends. Neither record claims synthesized ink exists until a planner
+selects a compatible, non-colliding path.
+
+**Refusal example:** sample `c08-A` has no corrected physical scale, or its
+centerline lacks an exit contact state. It remains `UnresolvedVocabulary`
+with the exact missing field instead of fabricating a usable title glyph.
+An unknown source region, held-out sample masquerading as training, stale
+transform, or unmeasured diacritic anchor similarly refuses extraction.
+
+**Assumptions and limits:** typed vocabulary data structures already retain
+these fields, but the algorithm for photo-to-stroke centerlines, contour
+segmentation, tangents, join inference, confidence and real glyph selection
+is not implemented. The five example records are theoretical evidence forms,
+not digitized personal handwriting or universal language coverage.
+
+## Acceptance decision
+
+- **Basis:** practical for the typed vocabulary record and provenance fields;
+  theoretical for actual stroke derivation and suitability, 2026-11-02.
+- **Delivered:** five role/context records, source and confidence invariant,
+  one joined-form example and incomplete-extraction refusal.
+- **Not implemented by this acceptance:** raster extraction, profile writer
+  training, automatic glyph selection, calibration quality or rendering.

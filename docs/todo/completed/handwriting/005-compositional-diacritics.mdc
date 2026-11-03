@@ -1,0 +1,112 @@
+---
+record_type: task
+id: "ATR-P4-005"
+title: "Implement compositional diacritics safely"
+status: completed
+priority: P4
+lane: handwriting
+dependencies: ["ATR-P4-004"]
+dependencies_specified: true
+dependency_rationale: >-
+  Diacritic composition needs an extracted stroke vocabulary.
+acceptance_criteria:
+  - >-
+      Reuse accents only when profile evidence admits the composition and
+      preserve placement, scale, collision, and language-specific forms.
+  - >-
+      Finite v1 completion: Admit one supported base-plus-accent composition
+      and refuse one unsupported pair using declared profile evidence and
+      collision checks.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Implement compositional diacritics safely
+
+## Scope and existing evidence
+
+Historical notes below identify existing domain primitives but do not prove
+that the proposed finite synthesis contract is executable.
+
+Reuse accents only when profile evidence admits the composition and preserve
+placement, scale, collision, and language-specific forms.
+
+Current executable evidence now admits one compositional diacritic intent only
+when the exact handwriting profile classifies its externally matched rule as
+`Compositional`. The admitted value retains the exact admitting profile
+identity and profile-declared rule together with caller-owned placement, scale,
+collision evidence, and language-specific form.
+
+That admitted output is constructor-owned and read-only, so callers cannot
+fabricate a successful profile/rule admission. Exact-covered graphemes and
+missing or undeclared composition rules reject
+instead of silently switching to accent reuse. Unicode decomposition, rule
+applicability, placement/scale geometry, collision evaluation, language-form
+selection, stroke planning, rendering, and fallback remain open.
+
+Exact coverage remains the first classification even when the supplied
+compositional rule is also undeclared.
+
+A separate English/Spanish composition boundary now performs the frozen
+language-rule lookup before generic profile admission. All 14 decomposed
+bilingual requirements reach their exact Acute, Diaeresis, or Tilde rule when
+the profile declares it; all other 100 textual requirements and deterministic
+near misses reject before generic composition instead of gaining inferred
+Unicode decomposition. A 56-state profile-admission matrix crosses every one of
+the 14 decomposed spellings with exact coverage present/absent and its required
+rule declared/absent. Exact profile coverage still wins after a language rule
+matches, and a matched rule still requires declaration by the selected profile.
+
+Unicode normalization, placement/scale geometry, collision evaluation,
+language-form selection, stroke planning, rendering, and fallback remain open.
+
+## Finite selected-profile diacritic composition contract
+
+**Inputs:** one already-segmented Unicode grapheme, exact selected profile,
+one matched language rule, base and accent stroke samples, scale/anchor policy,
+and measured collision evidence. **Outputs:** an admitted base-plus-accent
+composition tied to its exact profile/rule and semantic owner, or an explicit
+refusal. Exact grapheme coverage takes precedence over compositional reuse.
+
+**Allowed finite scope:** for Spanish decomposed forms recognized by the
+language-owned acute/diaeresis/tilde matcher, permit composition only when the
+selected profile declares that exact matched rule. The proposed geometry must
+preserve the base's role-specific physical cap height and its declared accent
+scale, with a measurable top clearance inside the current line bounds.
+A sample that fits only by escaping the writable page remains unsupported.
+
+**Supported example:** profile `student-A` declares compositional `Acute`
+and base `a`, not exact decomposed `a` plus U+0301. The matched-language
+rule names `Acute`; base height is an illustrative 3.0 mm and acute anchor
+is `(1.4,-0.5)` mm relative to the base origin. A measured 0.3 mm gap from
+neighboring contours and a page-fit check admit the proposed `a` plus U+0301
+as a *composition intent*. It retains original Unicode bytes, base/mark
+sample IDs, declared rule, explicit pen lift and selected profile ID.
+
+**Unsupported example:** decomposed `q` plus U+0303 has no match in the
+frozen Spanish composition vocabulary. Even a profile declaring `Tilde`
+may not infer that the rule applies to this grapheme; return
+`NoAdmittedLanguageRule`. An otherwise supported `a` plus U+0301 whose
+accent overlaps the next line fails `AccentCollision`, retaining the
+unmodified source and a visible missing-coverage diagnostic.
+
+**Refusal rules:** unknown base, absent or undeclared rule, ambiguous anchor,
+missing measurement, forbidden size/line collision, or a stale profile revision
+must stop before selecting/rendering the mark. Exact-profile coverage wins
+when both exact and compositional evidence exist. A declared visible fallback
+requires separate user acceptance and cannot be inferred from a font.
+
+**Assumptions and limits:** the repository already has profile-rule checks,
+14 exact decomposed Spanish matches and constructor-owned composition intents.
+Collision evaluation, real anchor geometry, stroke rendering, profile section
+loading and fallback UI remain unfinished. The 0.3 mm gap is a theoretical
+admission threshold, not evidence of a measured real handwriting sample.
+
+## Acceptance decision
+
+- **Basis:** practical for rule/coverage admission; theoretical for physical
+  anchor, collision, scale and rendering, 2026-11-02.
+- **Delivered:** one admitted and one unsupported pair, declared-rule
+  precedence, one measured-collision refusal and explicit profile scope.
+- **Not implemented by this acceptance:** accent placement solver,
+  collision checking, actual profile stroke capture or composed ink output.
