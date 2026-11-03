@@ -1,0 +1,53 @@
+---
+record_type: task
+id: "ATR-P3-013"
+title: "Complete structured source clipboard and candidate review"
+status: open
+priority: P3
+lane: editor
+implementation_tier: after-mvp
+dependencies: ["ATR-P3-011"]
+dependencies_specified: true
+dependency_rationale: >-
+  The admitted implementation uses ATR-P3-011 as its runtime capability
+  baseline.
+source_designs:
+  - "ATR-P3-002"
+  - "ATR-P3-006"
+  - "ATR-P3-008"
+  - "ATR-P3-009"
+acceptance_criteria:
+  - >-
+      Wire the structured LLM source editor, rich clipboard intake, Copy prompt
+      identity and transactional pasted-response review to Rust admission.
+  - >-
+      Finite executable completion: One self-contained copied prompt accepts a
+      valid versioned response into a reviewable draft, while a stale response
+      and lossy clipboard conversion refuse without changing accepted state.
+evidence_status: not_independently_verified
+migrated_from: accepted-theoretical-designs
+---
+
+# Complete structured source clipboard and candidate review
+
+## Scope and existing evidence
+
+Wire the structured LLM source editor, rich clipboard intake, Copy prompt
+identity and transactional pasted-response review to Rust admission.
+
+This is unfinished implementation work. The following original design
+records remain accepted theoretical deliverables and are not reopened:
+
+- ATR-P3-002 — archived editor design
+- ATR-P3-006 — archived editor design
+- ATR-P3-008 — archived editor design
+- ATR-P3-009 — archived editor design
+
+## Acceptance decision
+
+Open. The finite implementation described above is not established by
+the original theoretical design acceptance. This follow-up must be
+evaluated separately against its practical or theoretical scope.
+
+Priority: **after-mvp**. This task does not block the current
+local Rust CLI, localhost editor, and printable notebook MVP.

@@ -1,0 +1,50 @@
+---
+record_type: task
+id: "ATR-P6-017"
+title: "Optionally transcribe local audio/video with explicit uncertainty"
+status: open
+priority: P6
+lane: automation
+implementation_tier: optional
+dependencies: []
+dependencies_specified: true
+dependency_rationale: >-
+  This optional adapter can be developed independently of the initial local
+  notebook milestone.
+source_designs:
+  - "ATR-P6-012"
+  - "ATR-P6-013"
+acceptance_criteria:
+  - >-
+      Add an opt-in local media decoder, bounded temporary-file lifetime, timed
+      transcript roles and unresolved-word review before semantic insertion.
+  - >-
+      Finite executable completion: One short local recording produces
+      time-bounded text with uncertain spans labelled and an explicit reject
+      path for missing media/decoder; no transcript becomes trusted notebook
+      text automatically.
+evidence_status: not_independently_verified
+migrated_from: accepted-theoretical-designs
+---
+
+# Optionally transcribe local audio/video with explicit uncertainty
+
+## Scope and existing evidence
+
+Add an opt-in local media decoder, bounded temporary-file lifetime, timed
+transcript roles and unresolved-word review before semantic insertion.
+
+This is unfinished implementation work. The following original design
+records remain accepted theoretical deliverables and are not reopened:
+
+- ATR-P6-012 — archived automation design
+- ATR-P6-013 — archived automation design
+
+## Acceptance decision
+
+Open. The finite implementation described above is not established by
+the original theoretical design acceptance. This follow-up must be
+evaluated separately against its practical or theoretical scope.
+
+Priority: **optional**. This task does not block the current
+local Rust CLI, localhost editor, and printable notebook MVP.

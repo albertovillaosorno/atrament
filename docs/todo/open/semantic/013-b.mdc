@@ -1,0 +1,51 @@
+---
+record_type: task
+id: "ATR-P2-013"
+title: "Add calibrated page marks and bilingual text layout diagnostics"
+status: open
+priority: P2
+lane: semantic
+implementation_tier: after-mvp
+dependencies: ["ATR-P2-011","ATR-P4-012"]
+dependencies_specified: true
+dependency_rationale: >-
+  The admitted implementation uses ATR-P2-011, ATR-P4-012 as its runtime
+  capability baseline.
+source_designs:
+  - "ATR-P2-002"
+  - "ATR-P2-008"
+  - "ATR-P2-009"
+acceptance_criteria:
+  - >-
+      Implement seeded measured ruler marks, English/Spanish line breaking and
+      explicit missing-glyph warnings above the minimal bilingual inventory.
+  - >-
+      Finite executable completion: One ruled and one squared page show bounded
+      reproducible ruler variation and a Spanish quotation; unsupported glyphs
+      refuse or request a chosen fallback before output.
+evidence_status: not_independently_verified
+migrated_from: accepted-theoretical-designs
+---
+
+# Add calibrated page marks and bilingual text layout diagnostics
+
+## Scope and existing evidence
+
+Implement seeded measured ruler marks, English/Spanish line breaking and
+explicit missing-glyph warnings above the minimal bilingual inventory.
+
+This is unfinished implementation work. The following original design
+records remain accepted theoretical deliverables and are not reopened:
+
+- ATR-P2-002 — archived semantic design
+- ATR-P2-008 — archived semantic design
+- ATR-P2-009 — archived semantic design
+
+## Acceptance decision
+
+Open. The finite implementation described above is not established by
+the original theoretical design acceptance. This follow-up must be
+evaluated separately against its practical or theoretical scope.
+
+Priority: **after-mvp**. This task does not block the current
+local Rust CLI, localhost editor, and printable notebook MVP.

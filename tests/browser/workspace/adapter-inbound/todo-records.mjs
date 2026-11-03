@@ -246,3 +246,58 @@ test("README does not advertise the obsolete project pause", () => {
     const readme = readFileSync(resolve(root, "README.md"), "utf8");
     assert.ok(!/\bpaused\b/i.test(readme));
 });
+
+test("every accepted design has one implementation follow-up", () => {
+    const completedPaths = discoverRecords(completed, true);
+    const archived = new Map();
+    for (const path of completedPaths) {
+        const content = readFileSync(resolve(root, path), "utf8");
+        if (!/^migrated_from: TODO\.md$/m.test(content)) {
+            continue;
+        }
+        const id = /^id: "(ATR-P[1-9]-\d{3})"$/m.exec(content)?.[1];
+        assert.ok(id, `${path}: original design identity missing`);
+        archived.set(id, path);
+    }
+    assert.ok(archived.size > 0, "original design inventory missing");
+
+    const mapped = new Map();
+    const allPaths = [...discoverRecords(open, true), ...completedPaths];
+    for (const path of allPaths) {
+        const content = readFileSync(resolve(root, path), "utf8");
+        if (!/^migrated_from: accepted-theoretical-designs$/m.test(content)) {
+            continue;
+        }
+        assert.match(content, /^implementation_tier: (after-mvp|optional)$/m);
+        const sourceBlock = /^source_designs:\n((?:  - "ATR-P[1-9]-\d{3}"\n)+)/m
+            .exec(content)?.[1];
+        assert.ok(sourceBlock, `${path}: missing stable source design IDs`);
+        const sources = [...sourceBlock.matchAll(
+            /^  - "(ATR-P[1-9]-\d{3})"$/gm,
+        )].map((match) => match[1]);
+        assert.ok(sources.length > 0, `${path}: empty source designs`);
+        for (const id of sources) {
+            assert.ok(archived.has(id), `${path}: unknown design ${id}`);
+            assert.ok(!mapped.has(id),
+                `${id}: already mapped by ${mapped.get(id)}`);
+            mapped.set(id, path);
+        }
+    }
+    assert.deepEqual([...mapped.keys()].sort(), [...archived.keys()].sort(),
+        "all accepted designs must remain tracked for implementation");
+});
+
+test("the local MVP precedes deferred and optional TODOs", () => {
+    const priority = { now: 0, "after-mvp": 1, optional: 2 };
+    let last = 0;
+    for (const entry of entries) {
+        const content = readFileSync(resolve(root, entry.path), "utf8");
+        const tier = /^implementation_tier: ([a-z-]+)$/m.exec(content)?.[1]
+            ?? "now";
+        const current = priority[tier];
+        assert.ok(current !== undefined, `${entry.id}: invalid priority`);
+        assert.ok(current >= last,
+            `${entry.id}: a high-priority task follows a deferred task`);
+        last = current;
+    }
+});

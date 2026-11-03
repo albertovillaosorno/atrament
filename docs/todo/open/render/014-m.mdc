@@ -1,0 +1,54 @@
+---
+record_type: task
+id: "ATR-P5-014"
+title: "Add pen material texture paper effects and decorative themes"
+status: open
+priority: P5
+lane: render
+implementation_tier: after-mvp
+dependencies: ["ATR-P5-011"]
+dependencies_specified: true
+dependency_rationale: >-
+  The admitted implementation uses ATR-P5-011 as its runtime capability
+  baseline.
+source_designs:
+  - "ATR-P5-002"
+  - "ATR-P5-003"
+  - "ATR-P5-006"
+  - "ATR-P5-007"
+acceptance_criteria:
+  - >-
+      Implement bounded ink deposition, seeded paper texture, digital
+      note/shadow layers and contrast-aware decorative heading treatments in
+      Rust.
+  - >-
+      Finite executable completion: One reproducible page shows selectable pen
+      thickness, ink color, texture-off and texture-on states, and a decorative
+      heading; printed-sheet mode omits digital-only shadows.
+evidence_status: not_independently_verified
+migrated_from: accepted-theoretical-designs
+---
+
+# Add pen material texture paper effects and decorative themes
+
+## Scope and existing evidence
+
+Implement bounded ink deposition, seeded paper texture, digital note/shadow
+layers and contrast-aware decorative heading treatments in Rust.
+
+This is unfinished implementation work. The following original design
+records remain accepted theoretical deliverables and are not reopened:
+
+- ATR-P5-002 — archived render design
+- ATR-P5-003 — archived render design
+- ATR-P5-006 — archived render design
+- ATR-P5-007 — archived render design
+
+## Acceptance decision
+
+Open. The finite implementation described above is not established by
+the original theoretical design acceptance. This follow-up must be
+evaluated separately against its practical or theoretical scope.
+
+Priority: **after-mvp**. This task does not block the current
+local Rust CLI, localhost editor, and printable notebook MVP.

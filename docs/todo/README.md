@@ -119,12 +119,18 @@ and printable PDF/transparent PNG are required. The accidental Python
 notebook application has been removed rather than retained as a prototype.
 
 Hardware, external model accounts, MCP, and native desktop installers remain
-optional advanced work; their earlier finite theoretical records stay
-archived. **Six of nine executable tasks remain open**, tracking
-localhost and rendering work after the Rust CLI file round-trip passed.
+optional advanced work. Their accepted theoretical designs stay archived,
+while unfinished implementation appears in separate future TODO records.
 
-A theoretical artifact can close its own design scope, but cannot close a
-task requiring a demonstrably working application.
+**Priority as of November 3, 2026:** four local-output tasks are first,
+followed by 25 after-MVP or optional implementation tracks. Those 25 tracks
+map all 77 accepted original design IDs exactly once through
+`source_designs`. Completed theory is not erased or misrepresented as
+working software. Later task counts change when implementation work closes.
+
+A theoretical deliverable is sufficient to close its academic design task.
+An executable follow-up closes only when its promised working functionality
+exists; no second theoretical acceptance can silently finish the software.
 Consult [the Rust-first roadmap](../technical/rust-cli-localhost-priority.md)
 for the exact priority order and glyph coverage targets.
 
@@ -133,7 +139,21 @@ for the exact priority order and glyph coverage targets.
 The archive audit at
 `docs/technical/completed-todo-acceptance-audit-2026-11-03.md` found
 substantive finite theoretical work in all 77 original completed tasks.
-They remain completed. The four active Rust-first executable tasks do not
-replace, revoke, or erase their advanced design scope. If new evidence reveals
-an actual missing theoretical deliverable, document the exact deficiency;
-do not blanket-reopen every record lacking code or physical validation.
+They remain completed.
+
+All 77 also have an explicitly indexed future
+implementation path. This preserves the complex work while prioritizing
+the local Rust CLI and notebook/PDF UI.
+
+Reopen a historical design only if
+its theoretical deliverable itself is materially incomplete.
+
+## Future implementation tracking
+
+Every implementation follow-up sourced from an accepted historical design
+has `migrated_from: accepted-theoretical-designs`, a bounded practical
+criterion, an `implementation_tier` and a stable `source_designs` list.
+The TODO integrity suite requires every historical design to appear in
+exactly one such follow-up, whether that follow-up is open or completed.
+The first four user-facing goals appear before all deferred and optional
+work. The optional hardware queue is not an MVP dependency.

@@ -1,0 +1,51 @@
+---
+record_type: task
+id: "ATR-P7-011"
+title: "Implement optional device-neutral pen path and ordering"
+status: open
+priority: P7
+lane: live
+implementation_tier: optional
+dependencies: ["ATR-P5-013"]
+dependencies_specified: true
+dependency_rationale: >-
+  The admitted implementation uses ATR-P5-013 as its runtime capability
+  baseline.
+source_designs:
+  - "ATR-P7-001"
+  - "ATR-P7-002"
+  - "ATR-P7-003"
+acceptance_criteria:
+  - >-
+      Convert admitted single-pen geometry to a typed motion plan, retaining
+      pen lifts and identity while optionally reducing safe travel.
+  - >-
+      Finite executable completion: One two-word fixture produces bounded
+      pen-up/down commands and a reproducible order; unsupported color or page
+      clearance refuses before device I/O.
+evidence_status: not_independently_verified
+migrated_from: accepted-theoretical-designs
+---
+
+# Implement optional device-neutral pen path and ordering
+
+## Scope and existing evidence
+
+Convert admitted single-pen geometry to a typed motion plan, retaining pen
+lifts and identity while optionally reducing safe travel.
+
+This is unfinished implementation work. The following original design
+records remain accepted theoretical deliverables and are not reopened:
+
+- ATR-P7-001 — archived live design
+- ATR-P7-002 — archived live design
+- ATR-P7-003 — archived live design
+
+## Acceptance decision
+
+Open. The finite implementation described above is not established by
+the original theoretical design acceptance. This follow-up must be
+evaluated separately against its practical or theoretical scope.
+
+Priority: **optional**. This task does not block the current
+local Rust CLI, localhost editor, and printable notebook MVP.

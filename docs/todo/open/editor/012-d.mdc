@@ -1,0 +1,57 @@
+---
+record_type: task
+id: "ATR-P3-012"
+title: "Add advanced direct page editing selection and undo/redo"
+status: open
+priority: P3
+lane: editor
+implementation_tier: after-mvp
+dependencies: ["ATR-P3-011","ATR-P2-011"]
+dependencies_specified: true
+dependency_rationale: >-
+  The admitted implementation uses ATR-P3-011, ATR-P2-011 as its runtime
+  capability baseline.
+source_designs:
+  - "ATR-P3-001"
+  - "ATR-P3-003"
+  - "ATR-P3-004"
+  - "ATR-P3-005"
+  - "ATR-P3-010"
+acceptance_criteria:
+  - >-
+      Extend the localhost workspace with keyboard and pointer page edits,
+      cross-panel semantic selection, bounded undo/redo and visible collision
+      correction.
+  - >-
+      Finite executable completion: Move one labelled block, select it in both
+      panels, undo and redo the revision, and correct an overflowing object;
+      invalid edits leave source and preview unchanged.
+evidence_status: not_independently_verified
+migrated_from: accepted-theoretical-designs
+---
+
+# Add advanced direct page editing selection and undo/redo
+
+## Scope and existing evidence
+
+Extend the localhost workspace with keyboard and pointer page edits,
+cross-panel semantic selection, bounded undo/redo and visible collision
+correction.
+
+This is unfinished implementation work. The following original design
+records remain accepted theoretical deliverables and are not reopened:
+
+- ATR-P3-001 — archived editor design
+- ATR-P3-003 — archived editor design
+- ATR-P3-004 — archived editor design
+- ATR-P3-005 — archived editor design
+- ATR-P3-010 — archived editor design
+
+## Acceptance decision
+
+Open. The finite implementation described above is not established by
+the original theoretical design acceptance. This follow-up must be
+evaluated separately against its practical or theoretical scope.
+
+Priority: **after-mvp**. This task does not block the current
+local Rust CLI, localhost editor, and printable notebook MVP.

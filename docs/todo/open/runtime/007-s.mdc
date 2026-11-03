@@ -1,0 +1,49 @@
+---
+record_type: task
+id: "ATR-P1-007"
+title: "Extend session state and explicit notebook import/export"
+status: open
+priority: P1
+lane: runtime
+implementation_tier: after-mvp
+dependencies: ["ATR-P1-005"]
+dependencies_specified: true
+dependency_rationale: >-
+  The admitted implementation uses ATR-P1-005 as its runtime capability
+  baseline.
+source_designs:
+  - "ATR-P1-001"
+  - "ATR-P1-002"
+acceptance_criteria:
+  - >-
+      Connect verified native profile admission to session-owned notebook state
+      and caller-selected Import/Export, without implicit writes.
+  - >-
+      Finite executable completion: One accepted notebook imports into the
+      session and exports to an explicit destination; malformed or stale input
+      keeps the prior notebook and existing file unchanged.
+evidence_status: not_independently_verified
+migrated_from: accepted-theoretical-designs
+---
+
+# Extend session state and explicit notebook import/export
+
+## Scope and existing evidence
+
+Connect verified native profile admission to session-owned notebook state and
+caller-selected Import/Export, without implicit writes.
+
+This is unfinished implementation work. The following original design
+records remain accepted theoretical deliverables and are not reopened:
+
+- ATR-P1-001 — archived runtime design
+- ATR-P1-002 — archived runtime design
+
+## Acceptance decision
+
+Open. The finite implementation described above is not established by
+the original theoretical design acceptance. This follow-up must be
+evaluated separately against its practical or theoretical scope.
+
+Priority: **after-mvp**. This task does not block the current
+local Rust CLI, localhost editor, and printable notebook MVP.
