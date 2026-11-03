@@ -63,6 +63,7 @@ use atrament_profile_json_syntax::{
 
 const MAX_MARKS: u64 = 10_000;
 const MAX_PROFILE_BYTES: usize = 4_096;
+const MAX_PAGES: usize = 32;
 const PAPER_PROFILE_SCHEMA: &str = "atrament.paper.v1";
 const DEFAULT_COLOR: PdfRgb = PdfRgb {
     red: 197,
@@ -75,7 +76,8 @@ const USAGE: &str = "Usage: atrament-paper [--profile paper.json] \
     [--landscape|--portrait] [--width-mm N] [--height-mm N] [--spacing-mm N] \
     [--margin-top-mm N] [--margin-bottom-mm N] \
     [--margin-left-mm N] [--margin-right-mm N] \
-    [--line-color '#RRGGBB'] [--emit-profile] > output-file";
+    [--line-color '#RRGGBB'] [--pages 1..32] \
+    [--emit-profile] > output-file";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum Style {
@@ -102,6 +104,7 @@ struct Options {
 struct CliRequest {
     emit_profile: bool,
     options: Options,
+    pages: usize,
 }
 
 impl Default for Options {
@@ -311,6 +314,19 @@ fn read_profile(path: &str) -> Result<Options, String> {
     decode_profile(&bytes)
 }
 
+fn parse_page_count(value: &str) -> Result<usize, String> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("page count must be an integer from 1 to 32".into());
+    }
+    let count = value
+        .parse::<usize>()
+        .map_err(|error| format!("invalid page count: {error}"))?;
+    if !(1..=MAX_PAGES).contains(&count) {
+        return Err("page count must be an integer from 1 to 32".into());
+    }
+    Ok(count)
+}
+
 fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
     let mut opts = Options::default();
     let mut emit_profile = false;
@@ -319,6 +335,8 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
     let mut seen_size_override = false;
     let mut seen_preset = false;
     let mut seen_orientation = false;
+    let mut pages = 1;
+    let mut seen_pages = false;
     let mut items = args.iter();
     while let Some(name) = items.next() {
         if name == "--help" {
@@ -356,6 +374,13 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
         }
         seen_edit = true;
         match name.as_str() {
+            "--pages" => {
+                if seen_pages {
+                    return Err("--pages may appear only once".into());
+                }
+                pages = parse_page_count(value)?;
+                seen_pages = true;
+            }
             "--style" => opts.style = paper_style(value)?,
             "--paper-size" => {
                 if seen_size_override || seen_preset {
@@ -388,9 +413,13 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
             _ => return Err(format!("unsupported option {name}; use --help")),
         }
     }
+    if emit_profile && seen_pages {
+        return Err("--pages is only valid when exporting a PDF".into());
+    }
     Ok(Some(CliRequest {
         emit_profile,
         options: opts,
+        pages,
     }))
 }
 
@@ -560,6 +589,13 @@ fn mark_geometry(opts: Options) -> Result<PaperMarkGeometry, String> {
 }
 
 fn render(opts: Options) -> Result<Vec<u8>, String> {
+    render_pages(opts, 1)
+}
+
+fn render_pages(opts: Options, page_count: usize) -> Result<Vec<u8>, String> {
+    if !(1..=MAX_PAGES).contains(&page_count) {
+        return Err("paper PDF needs 1 to 32 pages".into());
+    }
     let geometry = mark_geometry(opts)?;
     let count = match geometry {
         PaperMarkGeometry::Blank => 0,
@@ -640,33 +676,37 @@ fn render(opts: Options) -> Result<Vec<u8>, String> {
             }
         }
     }
-    serialize_paths(opts, paths)
+    serialize_paths(opts, paths, page_count)
 }
 
 fn serialize_paths(
     opts: Options,
     paths: Vec<PdfVectorPath>,
+    page_count: usize,
 ) -> Result<Vec<u8>, String> {
     let doc = PdfCompositionPlan {
         assets: Vec::new(),
-        pages: vec![PdfPagePlan {
-            color_intent: PdfVectorColorIntent::DeviceRgb,
-            physical_page_box: PdfVectorPageBox {
-                width_um: opts.width_um,
-                height_um: opts.height_um,
-            },
-            searchable_text: SearchableSemanticText::OmittedAsIncompatible,
-            vector_authority: paths,
-        }],
+        pages: vec![
+            PdfPagePlan {
+                color_intent: PdfVectorColorIntent::DeviceRgb,
+                physical_page_box: PdfVectorPageBox {
+                    width_um: opts.width_um,
+                    height_um: opts.height_um,
+                },
+                searchable_text: SearchableSemanticText::OmittedAsIncompatible,
+                vector_authority: paths,
+            };
+            page_count
+        ],
         render_manifest_identity: "paper-profile.v1",
     };
     serialize_vector_pdf(
         &doc,
         PdfVectorLimits {
             maximum_commands_per_page: 50_000,
-            maximum_pages: 1,
+            maximum_pages: MAX_PAGES,
             maximum_paths_per_page: 10_000,
-            maximum_pdf_bytes: 8_000_000,
+            maximum_pdf_bytes: 24_000_000,
         },
     )
     .map_err(|err| format!("PDF encoding refused: {err:?}"))
@@ -683,7 +723,7 @@ fn main() -> Result<(), Box<dyn Error>> {
         writeln!(io::stderr().lock(), "{USAGE}")?;
         return Ok(());
     };
-    let bytes = render(request.options)?;
+    let bytes = render_pages(request.options, request.pages)?;
     if request.emit_profile {
         let json = encode_profile(request.options);
         io::stdout().lock().write_all(json.as_bytes())?;

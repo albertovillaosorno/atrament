@@ -339,3 +339,49 @@ fn loaded_landscape_profile_does_not_flip_again_and_can_return_to_portrait() {
     assert!(render(portrait.options).is_ok());
     fs::remove_file(path).expect("temporary orientation fixture removed");
 }
+
+#[test]
+fn multi_page_paper_pdf_preserves_count_order_and_dimensions() {
+    let args = ["--paper-size", "letter", "--pages", "3"].map(str::to_owned);
+    let request = parse_options(&args)
+        .expect("three-page paper export")
+        .expect("not help");
+    assert_eq!(request.pages, 3);
+    let bytes = render_pages(request.options, request.pages)
+        .expect("all three physical pages are rendered");
+    let pdf = String::from_utf8_lossy(&bytes);
+    assert!(pdf.contains("/Count 3"));
+    assert_eq!(pdf.matches("/MediaBox [0 0 612.000 792.000]").count(), 3);
+    assert_eq!(
+        bytes,
+        render_pages(request.options, request.pages)
+            .expect("repeated multi-page output is deterministic")
+    );
+}
+
+#[test]
+fn multi_page_rejects_zero_excess_duplicate_and_profile_only_pages() {
+    for args in [
+        vec!["--pages", "0"],
+        vec!["--pages", "33"],
+        vec!["--pages", "-1"],
+        vec!["--pages", "1.5"],
+        vec!["--pages", "abc"],
+        vec!["--pages", "2", "--pages", "3"],
+        vec!["--pages", "4", "--emit-profile"],
+    ] {
+        let inputs = args.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        assert!(parse_options(&inputs).is_err(), "{inputs:?}");
+    }
+    assert!(render_pages(Options::default(), 0).is_err());
+    assert!(render_pages(Options::default(), MAX_PAGES + 1).is_err());
+    let boundary = render_pages(
+        Options {
+            style: Style::Blank,
+            ..Options::default()
+        },
+        MAX_PAGES,
+    )
+    .expect("largest allowed sheet collection renders");
+    assert!(String::from_utf8_lossy(&boundary).contains("/Count 32"));
+}

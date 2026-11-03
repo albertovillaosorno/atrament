@@ -76,6 +76,17 @@ fail before the CLI writes PDF bytes. This is a **paper-only** CLI: it does not
 load/save notebook or handwriting profiles, draw handwriting, embed images,
 or provide localhost sliders yet. Those are still open Rust integration tasks.
 
+A printable collection of identical paper sheets is possible with `--pages`
+(1–32). This is an output-only choice, not a field in the paper profile:
+
+```sh
+cargo run -q -p atrament_notebook_paper_cli -- \
+  --paper-size a5 --style ruled --spacing-mm 7 --pages 12 > sheets.pdf
+```
+
+Pages contain the selected paper marks only; they do not yet include
+handwriting, dates, page numbers, or custom per-page content.
+
 For a reusable paper-only profile, the same CLI can emit versioned JSON,
 read it again, and apply further explicit edits:
 
