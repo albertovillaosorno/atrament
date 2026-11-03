@@ -1,0 +1,82 @@
+---
+record_type: task
+id: "ATR-P6-011"
+title: "Package self-contained agent instructions"
+status: completed
+priority: P6
+lane: automation-media
+dependencies: ["ATR-P6-001", "ATR-P6-005"]
+dependencies_specified: true
+dependency_rationale: >-
+  Agent guidance must describe both frozen prompt envelopes.
+acceptance_criteria:
+  - >-
+      Allow a user to provide the repository or release bundle to an agent
+      and have it discover the exact CLI, schemas, examples, and validation
+      workflow locally. Command-mode instructions must distinguish readable
+      context from writable scope, forbid agent-allocated accepted IDs and
+      embedded adapter effects, and use an admitted unresolved response when
+      the requested edit cannot be represented.
+  - >-
+      Finite v1 completion: Package one self-contained agent-instruction
+      document with command scope, limits, explicit export authority, and
+      one bounded example conversation.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Package self-contained agent instructions
+
+## Scope and existing evidence
+
+Historical domain evidence does not imply a working adapter. The finite
+contract preserves explicit unavailable capabilities.
+
+Allow a user to provide the repository or release bundle to an agent and have
+it discover the exact CLI, schemas, examples, and validation workflow locally.
+Command-mode instructions must distinguish readable context from writable scope,
+forbid agent-allocated accepted IDs and embedded adapter effects, and use an
+admitted unresolved response when the requested edit cannot be represented.
+
+Current design evidence freezes offline release discovery, truthful implemented
+versus design-only capability status, live capability-snapshot negotiation,
+local schema/contract/example discovery, typed result and diagnostic handling,
+clipboard/native automation separation, credential exclusion, version mismatch,
+and physical-safety boundaries. The concrete discovery filename, generated
+schemas, CLI/MCP executables, and packaging integration remain open.
+
+## Finite discoverable offline agent guide
+
+**Delivered artifact:** `docs/atrament-agent-instructions.md` is the one
+standalone offline agent entrypoint. It links the available repository
+index, documented proposed schemas, local TODO integrity check, live
+capability discovery gate, explicit Export/Live permissions, exact ownership
+and unresolved-response policy. Its one two-turn example shows `t1` text
+replacement at `r8` and a stale `r9` refusal without fabricating Apply.
+
+**Acceptance boundary:** an agent may propose only revision-bound typed
+semantic changes in a declared writable scope, with backend-generated
+accepted identities. Readable context is not writable scope; untrusted text
+is never a tool invocation. Discovery is tied to the actual installed CLI or
+backend capability snapshot; absent adapters are reported unavailable.
+No credential, implicit file destination, plotter arm or start is permitted.
+
+**Refusal example:** when handed the repository on a machine without a
+notebook Apply CLI/MCP adapter, the guide tells the agent to show an inert
+candidate and `UnavailableCapability`, not fake command execution. If a
+model requests an out-of-scope target or stale revision, it must return
+an explicit unresolved/stale result rather than invent an accepted ID.
+
+**Limits:** the standalone instruction file exists now, but generated
+machine-readable schemas, a release package verification, normalized Apply,
+MCP server, and real renderer are not provided by it. Discoverability in a
+future release must be tested by its packager separately.
+
+## Acceptance decision
+
+- **Basis:** practical for this checked-in offline instruction document;
+  theoretical for executable adapters and release packaging, 2026-11-02.
+- **Delivered:** one local guide, command/privacy/safety limits, one bounded
+  conversation, discovery links and honest implementation-status policy.
+- **Not implemented by this acceptance:** generated schemas, packaged
+  release verification, semantic Apply CLI/MCP or physical tooling.

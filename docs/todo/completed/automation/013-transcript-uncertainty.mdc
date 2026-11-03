@@ -1,0 +1,102 @@
+---
+record_type: task
+id: "ATR-P6-013"
+title: "Structure transcripts without hiding uncertainty"
+status: completed
+priority: P6
+lane: automation-media
+dependencies: ["ATR-P6-012"]
+dependencies_specified: true
+dependency_rationale: >-
+  Transcript structuring depends on transcript intake.
+acceptance_criteria:
+  - >-
+      Turn reviewed transcript spans into sections, definitions, examples,
+      and formulas while retaining time ranges, confidence, speakers, and
+      unresolved text.
+  - >-
+      Finite v1 completion: Structure one bounded transcript into timed
+      statements, speakers when known, and unresolved intervals without
+      replacing unknown speech by invented content.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Structure transcripts without hiding uncertainty
+
+## Scope and existing evidence
+
+Historical domain evidence does not imply a working adapter. The finite
+contract preserves explicit unavailable capabilities.
+
+Turn reviewed transcript spans into sections, definitions, examples, and
+formulas while retaining time ranges, confidence, speakers, and unresolved text.
+
+Current executable evidence now freezes an evidence-preserving reviewed-span
+boundary without choosing a structuring algorithm. Section, Definition, Example,
+Formula, and Unresolved roles remain caller-reviewed classifications linked to
+the complete source transcript. Review now rejects resolved-word slices or
+unresolved-fragment references borrowed from a different transcript instead of
+relabeling them under the supplied transcript provenance. Empty resolved-word
+slices also fail as unverifiable because they contain no addressable word
+evidence that can prove source membership.
+
+Resolved spans retain original word timing, confidence, speaker, and text
+evidence; explicit unresolved fragments retain their text, timing, and
+confidence and cannot be silently promoted to a confident role. A 10-state
+role/source oracle crosses all five reviewed roles with resolved-word and
+unresolved-fragment evidence: every role may retain resolved evidence, while
+only `Unresolved` may retain an unresolved fragment. Each admitted review span
+also retains an exact source address: a half-open range of resolved words or an
+unresolved-fragment index in the supplied transcript. Overlapping and repeated
+reviewed spans remain valid because source addressing does not choose
+segmentation.
+
+The validated structure is constructor-owned and exposes read-only transcript,
+span, and location views so callers cannot forge span/location alignment. Span
+segmentation, role selection, transcript correction, confidence policy, semantic
+notebook construction, and layout remain open.
+
+## Finite reviewed timed transcript organization contract
+
+**Inputs:** one immutable source-linked transcript with original timed words,
+optional speaker IDs, confidence evidence and unresolved fragments, plus one
+user-reviewed role assignment. **Outputs:** a read-only ordered structure
+candidate with `Section`, `Definition`, `Example`, `Formula`, or `Unresolved`
+roles linked to exact source ranges; no accepted notebook mutation.
+
+**Worked 20-second fragment:** words at `0..4 s`, speaker A, contain
+`Energy is work over time`; the reviewer labels the range a `Definition`.
+Words `5..9 s` contain `For example one joule per second` and become
+`Example`. A low-confidence fragment from `10..13 s` remains
+`Unresolved` with original time/confidence rather than invented equation
+symbols. Words `14..20 s` explain `P equals E divided by t`; a reviewer
+may propose `Formula` only while preserving the exact spoken words as
+source evidence and separately verifying symbol semantics.
+
+**Review rule:** retain source clip ID, exact half-open word ranges or
+unresolved-fragment index, speaker when established, original token text,
+time and confidence. Unknown speaker remains `UnknownSpeaker`; unknown
+speech remains unresolved. A corrected transcript is a new version with
+linked original evidence, not a silent replacement. Overlapping ranges
+are permitted only when their source addresses remain unambiguous.
+
+**Refusal example:** an unresolved audio interval is assigned a confident
+`Formula`, a timestamp is outside the media duration, a source range is
+missing, or a speaker is invented. Return typed invalid review without
+constructing notebook blocks. No summarizer may claim semantic correctness
+from word timing alone or discard the uncertainty to fit a page.
+
+**Assumptions and limits:** typed reviewed span roles, source addresses and
+constructor-sealed evidence exist. Real transcript correction, role
+classification, notebook construction, timing checks against decoded media
+and rendering remain unimplemented. This example is theoretical media text.
+
+## Acceptance decision
+
+- **Basis:** practical for role/address preservation; theoretical for
+  full reviewed media pipeline, 2026-11-02.
+- **Delivered:** one timed fragment with definition/example/formula and
+  unresolved interval, source/speaker retention and invalid-role refusal.
+- **Not implemented by this acceptance:** actual audio recognition,
+  semantic structuring algorithm, correction UI or rendered content.

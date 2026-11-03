@@ -2,7 +2,7 @@
 record_type: task
 id: "ATR-P6-012"
 title: "Implement optional audio and video transcription"
-status: open
+status: completed
 priority: P6
 lane: automation-media
 dependencies: []
@@ -26,6 +26,9 @@ migrated_from: TODO.md
 # Implement optional audio and video transcription
 
 ## Scope and existing evidence
+
+Historical domain evidence does not imply a working adapter. The finite
+contract preserves explicit unavailable capabilities.
 
 Normalize supported media to bounded temporary audio, invoke the admitted
 WhisperX adapter, preserve word timing and confidence, and always clean up.
@@ -63,3 +66,46 @@ change session cleanup transitions.
 Dropping the service leaves a fresh owner with no prior job authority. The
 service still chooses no path, creates or deletes no file, invokes no decoder or
 engine, and schedules no retry.
+
+## Finite optional local media intake and cleanup contract
+
+**Inputs:** one user-authorized local WAV audio clip of at most 30 seconds
+or one MP4 video clip at most 30 seconds/16 MiB, source identity, decoder
+capabilities and optional locally installed WhisperX. **Outputs:** an
+immutable source-linked word-timed transcript with speaker/confidence
+observations or `UnavailableAdapter`, plus a terminal cleanup receipt.
+No media gets uploaded, transcribed or decoded by a theoretical contract.
+
+**Audio example:** WAV `a1` contains a 12-second spoken explanation. Decode
+at declared 16 kHz mono PCM into a private job-scoped temporary waveform;
+WhisperX, only if installed and explicitly admitted, returns timed words
+with start/end seconds, speaker if known, reported confidence and unresolved
+spans. An MP4 `v1` of 18 seconds/8 MiB uses the same bounded temporary audio
+normalization, preserving original video source ID and timestamp offset.
+All results remain candidate evidence, never an accepted notebook edit.
+
+**Lifecycle:** use one opaque job ID and at most one waveform intermediate.
+After success, failure or cancellation, request cleanup; only recorded
+success settles a job after intermediate creation. If cleanup fails, retain
+`CleanupRequired` and an owned retry obligation; never report safe cleanup
+on attempted deletion alone. A process restart with no previous job authority
+must not claim it knows which old files were removed.
+
+**Refusal example:** a 31-second recording, unsupported codec, missing
+WhisperX, denied local media permission, ambiguous timestamp or decode
+failure returns exact non-transcript evidence. Stale cleanup callbacks
+cannot reopen a settled job; silence never turns unknown speech into text.
+
+**Assumptions and limits:** transport-neutral transcript evidence, terminal
+cleanup states and a process-local job lifecycle service exist, but no media
+path, decoder, WhisperX adapter, actual temporary-file deletion, retry
+scheduler or source persistence is wired. This is a design-only intake.
+
+## Acceptance decision
+
+- **Basis:** practical for job/cleanup state primitives; theoretical for
+  actual media decoding and transcription, 2026-11-02.
+- **Delivered:** one short WAV and one short MP4 case, duration/byte bounds,
+  word timing/confidence and cleanup failure/refusal states.
+- **Not implemented by this acceptance:** decoder, WhisperX execution,
+  secure temporary file lifecycle or real transcript output.

@@ -18,34 +18,6 @@ remain in typed records under `docs/todo/open/`. Completed work belongs under
 then one direct Markdown link to the complete typed record. No per-item field
 labels belong here.
 
-## P6 — LLM, CLI, MCP, and media intake
-
-### TODO - Package self-contained agent instructions
-
-Allow a user to provide the repository or release bundle to an agent and have
-it discover the exact CLI, schemas, examples, and validation workflow
-locally. Command-mode instructions must distinguish readable context from
-writable scope, forbid agent-allocated accepted IDs and embedded adapter
-effects, and use an admitted unresolved response when the requested edit
-cannot be represented.
-
-[docs/todo/open/automation/011-self-contained-agent-instructions.mdc](docs/todo/open/automation/011-self-contained-agent-instructions.mdc)
-
-### TODO - Implement optional audio and video transcription
-
-Normalize supported media to bounded temporary audio, invoke the admitted
-WhisperX adapter, preserve word timing and confidence, and always clean up.
-
-[docs/todo/open/automation/012-audio-video-transcription.mdc](docs/todo/open/automation/012-audio-video-transcription.mdc)
-
-### TODO - Structure transcripts without hiding uncertainty
-
-Turn reviewed transcript spans into sections, definitions, examples, and
-formulas while retaining time ranges, confidence, speakers, and unresolved
-text.
-
-[docs/todo/open/automation/013-transcript-uncertainty.mdc](docs/todo/open/automation/013-transcript-uncertainty.mdc)
-
 ## P7 — Honest single-pen live output
 
 ### TODO - Implement the live capability compiler
