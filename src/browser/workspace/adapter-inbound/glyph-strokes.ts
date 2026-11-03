@@ -794,6 +794,7 @@ export function createGlyphStrokeEditor(): {
     const compose = required<HTMLButtonElement>("glyph-compose");
     const form = required<HTMLSelectElement>("glyph-form");
     const construct = required<HTMLButtonElement>("glyph-construct");
+    const seedLowercase = required<HTMLButtonElement>("glyph-seed-lowercase");
     const centerX = required<HTMLInputElement>("glyph-circle-x");
     const centerY = required<HTMLInputElement>("glyph-circle-y");
     const radius = required<HTMLInputElement>("glyph-circle-radius");
@@ -827,7 +828,8 @@ export function createGlyphStrokeEditor(): {
         ranges[axis] = required<HTMLInputElement>(`glyph-${axis}-range`);
     }
     const controls = [character, color, source, add, copyFrom, copy, compose,
-        form, construct, centerX, centerY, radius, accentShift, accentLift,
+        form, construct, seedLowercase, centerX, centerY, radius,
+        accentShift, accentLift,
         selected, update,
         remove, reverse, earlier, later, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
@@ -1333,6 +1335,36 @@ export function createGlyphStrokeEditor(): {
             render();
             message("Constructed " + lines.length + " sampled segments for "
                 + target + "; curves are sampled into TSV");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    seedLowercase.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before seeding");
+            }
+            const authored = new Set(strokes.map((stroke) => stroke.grapheme));
+            const missing = [..."abcdefghijklmnopqrstuvwxyz"].filter(
+                (glyph) => !authored.has(glyph));
+            if (missing.length === 0) {
+                message("All 26 lowercase glyphs already have authored ink");
+                return;
+            }
+            const x = Number(centerX.value);
+            const y = Number(centerY.value);
+            const r = Number(radius.value);
+            const pen = Number(numeric.width.value);
+            const added = missing.flatMap((glyph) =>
+                geometricStarter(glyph, x, y, r, pen, color.value));
+            const next = [...strokes, ...added];
+            encodeGlyphLibrary(next);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${missing.length} missing lowercase templates (`
+                + `${added.length} sampled strokes); unsaved draft`);
         } catch (error) {
             message(String(error));
         }

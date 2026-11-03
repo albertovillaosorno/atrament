@@ -426,6 +426,27 @@ strokes; the native CLI exported one-page PDF and transparent 72-DPI PNG for
 `ss`. This does not mean all 114 admitted bilingual graphemes are authored,
 that the baseline glyphs seed themselves, or that native PDF preserves curves.
 
+## Explicit fill-missing lowercase draft (partial) — 2026-11-03
+
+One admitted-session browser action now fills only the **missing**
+`a`–`z` shapes from the current geometric center, radius, pen width and
+ink color. Previously authored glyphs, including custom `a`, accented
+letters or mathematical symbols, are kept byte-identical and in their
+original order. The full candidate is checked for stroke count and TSV
+size before replacing the in-memory draft; no file is downloaded until
+an explicit save gesture. Repeat clicks are no-ops when all 26 exist.
+
+Three browser regressions cover the session gate, the entire generated
+lowercase set, idempotence, custom-ink preservation, invalid-geometry
+atomic refusal, and the 4,096-stroke cap. The 739-stroke default
+alphabet roundtripped byte-for-byte through the native Rust glyph CLI,
+audited `abcdefghijklmnopqrstuvwxyz` with **zero missing authored
+shapes**, and rendered `hola` as one-page PDF and transparent 72-DPI PNG.
+This is not a complete bilingual baseline: uppercase, most accents,
+punctuation, native vector curves and automatic text layout remain open.
+The rendered ink remains deterministic geometric starting material,
+not handwriting inferred from a particular writer.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

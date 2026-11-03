@@ -95,7 +95,8 @@ function mountEditor() {
     const ids = ["glyph-character", "glyph-color", "glyph-load",
         "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-compose",
         "glyph-selected",
-        "glyph-form", "glyph-construct", "glyph-circle-x",
+        "glyph-form", "glyph-construct", "glyph-seed-lowercase",
+        "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
@@ -1220,6 +1221,100 @@ test("s SVG and authored TSV replacement stay separate", async () => {
         editor.reset();
         assert.equal(get("ideal-rounded").attributes.get("visibility"),
             "hidden");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("fill-missing gesture seeds a-z only after admitted session", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        assert.equal(get("seed-lowercase").disabled, true);
+        get("seed-lowercase").dispatch("click");
+        assert.equal(get("preview").children.length, 0);
+        editor.start();
+        assert.equal(get("seed-lowercase").disabled, false);
+        get("seed-lowercase").dispatch("click");
+        assert.match(get("status").textContent, /Filled 26 missing/);
+        assert.equal(downloads.length, 0, "no implicit TSV download");
+        get("character").value = "s";
+        get("character").dispatch("input");
+        assert.equal(get("preview").children.length, 64);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        const expected = [..."abcdefghijklmnopqrstuvwxyz"].flatMap((glyph) =>
+            geometricStarter(glyph, 1550, 2450, 1100, 250, "#243647"));
+        assert.deepEqual(saved, expected,
+            "one click authors every missing lowercase template in order");
+        assert.deepEqual([...new Set(saved.map((line) => line.grapheme))],
+            [..."abcdefghijklmnopqrstuvwxyz"]);
+        get("color").value = "#AA9988";
+        get("seed-lowercase").dispatch("click");
+        assert.match(get("status").textContent, /All 26 lowercase/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "repeated fill cannot replace an existing glyph");
+        editor.reset();
+        assert.equal(get("seed-lowercase").disabled, true);
+        assert.equal(get("preview").children.length, 0);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("fill-missing preserves custom ink and refuses bad geometry", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const originals = [stroke("a"), stroke("ñ"), stroke("∞")];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(originals));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("circle-radius").value = "1600";
+        get("seed-lowercase").dispatch("click");
+        assert.match(get("status").textContent, /Shape and pen/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            originals, "invalid settings refuse the entire batch");
+        get("circle-radius").value = "1100";
+        get("seed-lowercase").dispatch("click");
+        assert.match(get("status").textContent, /Filled 25 missing/);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved.slice(0, 3), originals);
+        assert.deepEqual(saved.slice(3),
+            [..."bcdefghijklmnopqrstuvwxyz"].flatMap((glyph) =>
+                geometricStarter(glyph, 1550, 2450, 1100,
+                    250, "#243647")));
+        assert.equal(saved.filter((line) => line.grapheme === "a").length,
+            1, "never overwrite manually authored a");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("fill-missing atomically refuses over-cap glyph libraries", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const existing = Array.from({ length: 4090 }, () => stroke("∞"));
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(existing));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-lowercase").dispatch("click");
+        assert.match(get("status").textContent, /Save requires 1..4096/);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.equal(saved.length, 4090);
+        assert.deepEqual(saved[0], existing[0]);
+        assert.deepEqual(saved.at(-1), existing.at(-1));
     } finally {
         ui.restore();
     }

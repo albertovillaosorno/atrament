@@ -495,6 +495,29 @@ segments, 16 text runs of up to 96 graphemes each, and 512 final pen
 segments combined with `--ink-line`. Physical placement and ink width are
 checked by the existing PDF/PNG compositor before the selected output changes.
 
+To start a complete **lowercase-only geometric draft** without drawing
+26 letters by hand, open the authenticated localhost glyph editor and click
+**Fill missing lowercase a–z (unsaved)**. It uses the selected center,
+radius, pen width and color; already-authored shapes remain unchanged.
+Review individual letters, then click **Download glyph TSV** explicitly.
+For a downloaded `my-glyph-strokes.tsv`, the native CLI can render a short
+word directly onto a selected paper page:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --printed-sheet true --export-paper pdf \
+  --glyph-file my-glyph-strokes.tsv \
+  --place-text 1 25400 30000 'hola' --output hola.pdf
+```
+
+The default 26-letter draft has 739 sampled strokes. Rust accepted an
+exact readback and exported both PDF and transparent 72-DPI PNG for `hola`.
+This action does not seed uppercase, Spanish accents, punctuation or the
+complete 114-entry inventory. It does not connect semantic Markdown text
+to notebook flow, and the native renderer still caps output at 512 physical
+ink strokes per export. The shapes are editable geometric starters, not
+personal handwriting or retained analytic PDF curves.
+
 The **Rust glyph-library CLI** can now save and reopen those exact authored
 strokes independently of numeric statistics and notebook page metadata:
 
