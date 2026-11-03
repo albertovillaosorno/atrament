@@ -441,9 +441,9 @@
                 min="0" step="1" aria-label="Deviation statistics slider"
                 disabled>
             </label>
-            <label>Deterministic seed (safe unsigned integer)
-              <input id="handwriting-seed" type="number" min="0"
-                max="9007199254740991" step="1" disabled>
+            <label>Deterministic seed (exact unsigned 64-bit integer)
+              <input id="handwriting-seed" type="text" inputmode="numeric"
+                pattern="[0-9]*" maxlength="20" disabled>
             </label>
           </div>
           <div class="handwriting-controls" aria-label="Native numerical example">
@@ -452,8 +452,9 @@
                 maxlength="64" autocomplete="off" spellcheck="false" disabled>
             </label>
             <label>Occurrence index (0 or higher)
-              <input id="handwriting-sample-occurrence" type="number"
-                value="0" min="0" max="9007199254740991" step="1" disabled>
+              <input id="handwriting-sample-occurrence" type="text"
+                inputmode="numeric" pattern="[0-9]*" maxlength="20"
+                value="0" disabled>
             </label>
           </div>
           <div class="paper-actions">

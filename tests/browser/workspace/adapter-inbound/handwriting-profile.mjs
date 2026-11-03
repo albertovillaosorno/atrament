@@ -354,29 +354,128 @@ test("handwriting download refuses invalidated sessions", async () => {
     }
 });
 
-test("handwriting editor rejects imprecise u64 seed", async () => {
+// Use raw JSON tokens: Response.json would round large u64 values in Node.
+const nativeProfileJson = (seed, profile = defaultProfile()) =>
+    JSON.stringify(profile).replace('"seed":0', '"seed":' + seed);
+const nativeResponse = (body) => new Response(body, {
+    headers: { "Content-Type": "application/json" },
+});
+
+test("handwriting editor round-trips full u64 seeds without JS rounding", async () => {
+    const maximum = "18446744073709551615";
     const b = mountBackend({
-        fetch(endpoint) {
+        fetch(endpoint, init) {
             if (endpoint === "./api/handwriting/dimensions") {
                 return Response.json(catalog);
             }
-            const json = JSON.stringify(defaultProfile()).replace(
-                '"seed":0', '"seed":18446744073709551615');
-            return new Response(json, {
-                headers: { "Content-Type": "application/json" },
-            });
+            if (init.method === "GET") {
+                return nativeResponse(nativeProfileJson(maximum));
+            }
+            if (endpoint === "./api/handwriting/preview") {
+                return Response.json({value: 3000});
+            }
+            return nativeResponse(init.body);
         },
     });
     try {
         await b.editor.start("private-session-credential");
-        assert.equal(b.elements.get("handwriting-save").disabled, true);
-        assert.match(b.elements.get("handwriting-status").textContent,
-            /seed too large/);
+        assert.equal(b.elements.get("handwriting-seed").value, maximum);
+        assert.equal(b.elements.get("handwriting-save").disabled, false);
+        b.elements.get("handwriting-save").dispatch("click");
+        await tick();
+        assert.equal(b.links.length, 1);
+        const saved = b.requests.at(-1).body;
+        assert.ok(saved.includes('"seed":' + maximum));
+        assert.ok(!saved.includes('"seed":"' + maximum + '"'));
+        edit(b.elements, "handwriting-sample-occurrence", maximum);
+        b.elements.get("handwriting-sample").dispatch("click");
+        await tick();
+        const sample = b.requests.at(-1);
+        assert.equal(sample.endpoint, "./api/handwriting/preview");
+        assert.ok(sample.body.includes('"seed":' + maximum));
+        assert.ok(sample.body.includes('"occurrence":' + maximum));
+        assert.match(b.elements.get("handwriting-sample-result").textContent,
+            /#18446744073709551615:/);
+        edit(b.elements, "handwriting-seed", "00017");
+        b.elements.get("handwriting-save").dispatch("click");
+        await tick();
+        assert.ok(b.requests.at(-1).body.includes('"seed":17,'));
+        assert.equal(b.elements.get("handwriting-seed").value, "17");
     } finally {
         b.restore();
     }
 });
 
+test("handwriting editor refuses out-of-range u64 and untrusted seed tokens", async () => {
+    const badSeeds = ["18446744073709551616", "-1", "1e3", "1.5", "", "a"];
+    for (const raw of badSeeds) {
+        const b = mountBackend();
+        try {
+            await b.editor.start("private-session-credential");
+            edit(b.elements, "handwriting-seed", raw);
+            const requestCount = b.requests.length;
+            b.elements.get("handwriting-save").dispatch("click");
+            await tick();
+            assert.equal(b.requests.length, requestCount, raw);
+            assert.equal(b.links.length, 0);
+            assert.match(b.elements.get("handwriting-status").textContent,
+                /no file saved/);
+        } finally { b.restore(); }
+    }
+    for (const badToken of ['18446744073709551616', '1e5', '"7"']) {
+        const b = mountBackend({
+            fetch(endpoint) {
+                if (endpoint === "./api/handwriting/dimensions") {
+                    return Response.json(catalog);
+                }
+                return nativeResponse(nativeProfileJson(badToken));
+            },
+        });
+        try {
+            await b.editor.start("private-session-credential");
+            assert.equal(b.elements.get("handwriting-save").disabled, true);
+        } finally { b.restore(); }
+    }
+});
+
+test("local handwriting file restores exact maximum u64 seed", async () => {
+    const maximum = "18446744073709551615";
+    const revision = "sha256:" + "a".repeat(64);
+    let stored = null;
+    const b = mountBackend({
+        fetch(endpoint, init) {
+            if (endpoint === "./api/handwriting/dimensions") {
+                return Response.json(catalog);
+            }
+            if (endpoint === "./api/handwriting/file") {
+                if (init.method === "POST") {
+                    stored = init.body;
+                    return Response.json({revision});
+                }
+                return nativeResponse('{"profile":' + stored
+                    + ',"revision":"' + revision + '"}');
+            }
+            if (init.method === "GET") {
+                return nativeResponse(nativeProfileJson(maximum));
+            }
+            return nativeResponse(init.body);
+        },
+    });
+    try {
+        await b.editor.start("private-session-credential");
+        b.elements.get("handwriting-local-save").dispatch("click");
+        await tick();
+        await tick();
+        assert.ok(stored.includes('"seed":' + maximum));
+        edit(b.elements, "handwriting-seed", "37");
+        b.elements.get("handwriting-local-load").dispatch("click");
+        await tick();
+        await tick();
+        assert.equal(b.elements.get("handwriting-seed").value, maximum);
+        assert.equal(b.elements.get("handwriting-status").textContent,
+            "Handwriting reopened from local Rust file.");
+    } finally { b.restore(); }
+});
 
 test("handwriting local file stores checked revisions and declines stale saves", async () => {
     let diskProfile = null;

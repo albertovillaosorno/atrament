@@ -46,7 +46,7 @@ type Parameter = { dimension: string } & Record<Field, number>;
 type Glyph = { grapheme: string; parameters: Parameter[] };
 type Profile = {
     version: "atrament.handwriting.statistics.v1";
-    seed: number;
+    seed: string;
     globals: Parameter[];
     glyphs: Glyph[];
 };
@@ -63,6 +63,39 @@ const FIELDS: readonly Field[] = [
 const MAX_JSON_BYTES = 1_048_576;
 const MAX_GLYPHS = 512;
 const MAX_CATALOG_BYTES = 4096;
+const U64_MAXIMUM = "18446744073709551615";
+
+// Never round Rust's u64 through a JavaScript Number. Canonicalize its
+// decimal spelling before injecting a numeric token into a JSON envelope.
+function unsigned64(value: string): string {
+    if (!/^[0-9]{1,20}$/.test(value)) {
+        throw new Error("Unsigned 64-bit value requires decimal digits");
+    }
+    const canonical = value.replace(/^0+(?=[0-9])/, "");
+    if (canonical.length > U64_MAXIMUM.length
+        || (canonical.length === U64_MAXIMUM.length
+            && canonical > U64_MAXIMUM)) {
+        throw new Error("Unsigned 64-bit value exceeds Rust limits");
+    }
+    return canonical;
+}
+
+// JSON.parse's source context preserves the original integral token even when
+// its Number value loses precision. Fail closed if a browser lacks the source
+// context, rather than change the authored Rust seed on load.
+function boundedProfileJson(text: string, maximum: number): unknown {
+    if (new TextEncoder().encode(text).length > maximum) {
+        throw new Error("Handwriting JSON exceeds its size limit");
+    }
+    return JSON.parse(text, (key: string, value: unknown,
+        context?: { source?: string }): unknown => {
+        if (key !== "seed") return value;
+        if (typeof value !== "number" || context?.source === undefined) {
+            throw new Error("Native unsigned seed requires lossless JSON");
+        }
+        return unsigned64(context.source);
+    }) as unknown;
+}
 
 function required<T extends Element>(id: string): T {
     const element = document.getElementById(id);
@@ -121,15 +154,15 @@ function parseCatalog(text: string): Dimension[] {
     return dimensions;
 }
 
-function parseProfile(text: string, dimensions: Dimension[]): Profile {
-    const root = record(boundedJson(text, MAX_JSON_BYTES));
+function parseProfileObject(value: unknown, dimensions: Dimension[]): Profile {
+    const root = record(value);
     if (!keysMatch(root, ["version", "seed", "globals", "glyphs"])
         || root.version !== "atrament.handwriting.statistics.v1"
-        // JS cannot round-trip larger u64 seeds without losing digits.
-        || !safeInteger(root.seed) || root.seed < 0
+        || typeof root.seed !== "string"
+        || unsigned64(root.seed) !== root.seed
         || !Array.isArray(root.globals)
         || !Array.isArray(root.glyphs) || root.glyphs.length > MAX_GLYPHS) {
-        throw new Error("Unsupported handwriting profile or seed precision");
+        throw new Error("Unsupported handwriting profile or seed");
     }
     const checkParameter = (raw: unknown): Parameter => {
         const item = record(raw);
@@ -183,6 +216,20 @@ function parseProfile(text: string, dimensions: Dimension[]): Profile {
         glyphs.push({ grapheme: item.grapheme, parameters });
     }
     return { version: root.version, seed: root.seed, globals, glyphs };
+}
+
+function parseProfile(text: string, dimensions: Dimension[]): Profile {
+    return parseProfileObject(boundedProfileJson(text, MAX_JSON_BYTES),
+        dimensions);
+}
+
+// Explicit field order keeps only the u64 seed as a raw numeric JSON token.
+// String fields and all bounded statistics are still escaped by JSON.stringify.
+function encodeProfile(profile: Profile): string {
+    return '{"version":' + JSON.stringify(profile.version)
+        + ',"seed":' + unsigned64(profile.seed)
+        + ',"globals":' + JSON.stringify(profile.globals)
+        + ',"glyphs":' + JSON.stringify(profile.glyphs) + '}';
 }
 
 export function createHandwritingProfileEditor(context: EditorContext): Editor {
@@ -420,7 +467,8 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
             ?.startsWith("application/json")) {
             throw new Error("Rust file operation refused");
         }
-        const value: unknown = await response.json();
+        const value = boundedProfileJson(await response.text(),
+            MAX_JSON_BYTES + 4096);
         if (typeof value !== "object" || value === null
             || !validRevision((value as {revision?: unknown}).revision)) {
             throw new Error("Invalid native file response");
@@ -452,10 +500,7 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
         if (profile === null) {
             throw new Error("Missing native handwriting profile");
         }
-        const seedValue = Number(seed.value);
-        if (!seed.value || !Number.isSafeInteger(seedValue) || seedValue < 0) {
-            throw new Error("Seed must be a nonnegative safe integer");
-        }
+        const seedValue = unsigned64(seed.value);
         const mapParameters = (parameters: Parameter[]): Parameter[] => (
             parameters.map((parameter) => {
                 const next = { ...parameter };
@@ -584,9 +629,8 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
                 + "and download JSON. No glyph rendering yet.";
         } catch {
             if (isCurrent(secret, observed)) {
-                status.textContent = "Handwriting profile unavailable "
-                    + "or seed too large "
-                    + "for the browser; use the Rust CLI.";
+                status.textContent = "Handwriting profile unavailable or "
+                    + "lossless JSON seed parsing unsupported in this browser.";
             }
         } finally {
             if (isCurrent(secret, observed)) {
@@ -722,18 +766,16 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
         void action(async (secret, observed) => {
             sampleResult.textContent = "No numeric sample requested.";
             const grapheme = sampleGlyph.value;
-            const occurrenceRaw = sampleOccurrence.value;
-            const occurrence = Number(occurrenceRaw);
-            if (!grapheme || new TextEncoder().encode(grapheme).length > 64
-                || !occurrenceRaw || !Number.isSafeInteger(occurrence)
-                || occurrence < 0) {
+            const occurrence = unsigned64(sampleOccurrence.value);
+            if (!grapheme || new TextEncoder().encode(grapheme).length > 64) {
                 throw new Error("Invalid numerical sample selection");
             }
             const dim = selectedDimension();
             if (dim === undefined) throw new Error("Missing native dimension");
-            const body = JSON.stringify({
-                profile: candidate(), grapheme, dimension: dim.key, occurrence,
-            });
+            const body = '{"profile":' + encodeProfile(candidate())
+                + ',"grapheme":' + JSON.stringify(grapheme)
+                + ',"dimension":' + JSON.stringify(dim.key)
+                + ',"occurrence":' + occurrence + '}';
             if (new TextEncoder().encode(body).length > MAX_JSON_BYTES + 512) {
                 throw new Error("Numerical sample proposal exceeds limit");
             }
@@ -761,7 +803,7 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
             if (!isCurrent(secret, observed)) return;
             const checked = await fetchJson(
                 secret, "/api/handwriting/profile",
-                JSON.stringify(result.profile),
+                encodeProfile(parseProfileObject(result.profile, dimensions)),
             );
             if (!isCurrent(secret, observed)) return;
             showProfile(parseProfile(checked, dimensions));
@@ -772,7 +814,7 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
     });
     localSave.addEventListener("click", (): void => {
         void action(async (secret, observed) => {
-            const proposal = JSON.stringify(candidate());
+            const proposal = encodeProfile(candidate());
             if (new TextEncoder().encode(proposal).length > MAX_JSON_BYTES) {
                 throw new Error("Statistics proposal exceeds 1 MiB");
             }
@@ -801,7 +843,7 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
     });
     save.addEventListener("click", (): void => {
         void action(async (secret, observed) => {
-            const proposal = JSON.stringify(candidate());
+            const proposal = encodeProfile(candidate());
             if (new TextEncoder().encode(proposal).length > MAX_JSON_BYTES) {
                 throw new Error("Statistics proposal exceeds 1 MiB");
             }

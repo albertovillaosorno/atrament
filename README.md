@@ -226,8 +226,11 @@ zero-based occurrence. Authenticated `POST /api/handwriting/preview` checks
 the whole profile and returns a repeatable integer for identical inputs.
 This is not calibrated ink or glyph shape data, and the preview saves no file.
 
-Large `u64` seeds outside JavaScript safe integer precision
-must be edited using the Rust CLI.
+The localhost editor preserves all unsigned 64-bit seeds and occurrence
+indices, including values above JavaScript safe integer precision, as exact
+decimal JSON tokens. It requires a modern browser with JSON parse source
+context; browsers without it refuse rather than round a saved seed.
+
 Server-side file persistence is available only by explicitly launching the
 Rust runtime with a selected directory as described below; full notebook
 content and handwriting rendering are not implemented yet.
