@@ -206,11 +206,34 @@ function waitForLine(stream, select, timeoutMs = 15_000, child = null) {
     });
 }
 
+// Linux Firefox runs in a dedicated process group. Its helpers can survive
+// the leader, including an abrupt browser crash; reap the owned group even if
+// the leader already emitted exit. Never signal an ordinary shared group.
+function signalOwnedFixtureGroup(child, signal) {
+    if (process.platform !== "linux" || child.fixtureProcessGroup !== true
+        || !Number.isSafeInteger(child.pid) || child.pid <= 1) {
+        return false;
+    }
+    try {
+        process.kill(-child.pid, signal);
+        return true;
+    } catch (error) {
+        if (error?.code === "ESRCH") return false;
+        // OS error messages may contain process-private details.
+        throw new Error(`disposable child ${signal} signal failed`);
+    }
+}
+
 // Cleanup remains bounded even if a child does not emit exit after SIGKILL.
 // Every path removes the test-owned process observers and both deadlines.
 function stopChild(child, gracefulMs = 2_000, forcedMs = 10_000) {
     if (child.exitCode !== null || child.signalCode !== null) {
-        return Promise.resolve();
+        try {
+            signalOwnedFixtureGroup(child, "SIGKILL");
+            return Promise.resolve();
+        } catch (error) {
+            return Promise.reject(error);
+        }
     }
     return new Promise((resolve, reject) => {
         let gracefulTimer;
@@ -231,14 +254,23 @@ function stopChild(child, gracefulMs = 2_000, forcedMs = 10_000) {
                 reject(error);
             }
         };
-        const onExit = () => finish();
+        const onExit = () => {
+            try {
+                // A leader exit is not proof that Firefox helpers exited.
+                signalOwnedFixtureGroup(child, "SIGKILL");
+                finish();
+            } catch (error) {
+                finish(error);
+            }
+        };
         // Child process errors may expose process arguments or private data.
         const onError = () => finish(new Error(
             "disposable child process failed",
         ));
         const signalChild = (signal) => {
             try {
-                if (!child.kill(signal)) {
+                if (!signalOwnedFixtureGroup(child, signal)
+                    && !child.kill(signal)) {
                     if (child.exitCode !== null || child.signalCode !== null) {
                         finish();
                     } else {
@@ -266,6 +298,63 @@ function stopChild(child, gracefulMs = 2_000, forcedMs = 10_000) {
         signalChild("SIGTERM");
     });
 }
+
+// A Firefox launcher is test-owned, but its browser helpers may outlive the
+// leader. A successful leader exit must not silently leave those helpers live.
+test("Linux disposable Firefox group reaps a surviving child after leader exit",
+    { skip: process.platform !== "linux", timeout: 5_000 },
+    async () => {
+        const helperCode = "setInterval(() => {}, 1000)";
+        const leaderCode = [
+            "const { spawn } = require('node:child_process');",
+            "const helper = spawn(process.execPath,",
+            `    ['-e', ${JSON.stringify(helperCode)}], { stdio: 'ignore' });`,
+            "process.stdout.write(String(helper.pid) + '\\n',",
+            "    () => process.exit(0));",
+        ].join("\n");
+        const leader = spawn(process.execPath, ["-e", leaderCode], {
+            detached: true,
+            stdio: ["ignore", "pipe", "ignore"],
+        });
+        leader.fixtureProcessGroup = true;
+        const exited = once(leader, "exit");
+        try {
+            const helperPid = Number(await waitForLine(
+                leader.stdout,
+                (line) => /^\d+$/u.test(line) ? line : null,
+                2_000,
+                leader,
+            ));
+            assert.ok(Number.isSafeInteger(helperPid) && helperPid > 0);
+            await exited;
+            await stopChild(leader, 30, 30);
+            const stopped = async () => {
+                const deadline = Date.now() + 1_000;
+                do {
+                    let running = false;
+                    try {
+                        const stat = fs.readFileSync(
+                            `/proc/${helperPid}/stat`, "utf8",
+                        );
+                        const state = stat[stat.lastIndexOf(") ") + 2];
+                        running = !["Z", "X", "x"].includes(state);
+                    } catch (error) {
+                        if (error.code !== "ENOENT") throw error;
+                    }
+                    if (!running) return true;
+                    await new Promise((resolve) => setTimeout(resolve, 25));
+                } while (Date.now() < deadline);
+                return false;
+            };
+            assert.equal(await stopped(), true,
+                "fixture cleanup must kill helpers after leader exit");
+        } finally {
+            // The red-first failure must not leave its owned group running.
+            try { process.kill(-leader.pid, "SIGKILL"); } catch {}
+            try { leader.kill("SIGKILL"); } catch {}
+        }
+    },
+);
 
 test("disposable child shutdown clears listeners on graceful exit",
     async () => {
@@ -2866,8 +2955,12 @@ async function startBidiFirefox(profile, children) {
             "0",
             "about:blank",
         ],
-        { stdio: ["ignore", "ignore", "pipe"] },
+        {
+            detached: process.platform === "linux",
+            stdio: ["ignore", "ignore", "pipe"],
+        },
     );
+    firefox.fixtureProcessGroup = process.platform === "linux";
     children.push(firefox);
     const remote = await waitForLine(firefox.stderr, (line) => {
         const prefix = "WebDriver BiDi listening on ";

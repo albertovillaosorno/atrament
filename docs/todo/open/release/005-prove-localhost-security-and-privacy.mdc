@@ -2702,3 +2702,19 @@ threw an exception. The shutdown helper now waits for the call to return before
 accepting synchronous callback success, while asynchronous completion retains
 the same finite deadline and fixed private-data-safe diagnostic. This is
 fixture-harness integrity only, not a change to production session destruction.
+
+A red-first Linux Firefox fixture teardown check reproduced a surviving
+child process after its test-owned group leader had already exited. The old
+cleanup helper returned immediately once the leader had an exit status, so
+the helper remained live. The harness now starts Firefox in a dedicated
+Linux process group and signals that owned group on normal teardown and
+after an already-observed leader exit. Unmarked child processes retain
+their previous direct-process cleanup behavior.
+
+The independent Node leader/child fixture reproduced the leak before the
+change and now verifies that its surviving child ceases execution. Existing
+bounded teardown tests and two real Firefox cases (scriptless workspace
+and forced browser death) also pass. This narrows test-owned browser helper
+cleanup; it does not prove production browser processes are contained,
+remove session credentials from launcher argv or Firefox history, or close
+the larger P1/P8 destruction and temporary-media obligations.
