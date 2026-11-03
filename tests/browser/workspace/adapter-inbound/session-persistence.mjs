@@ -53,7 +53,11 @@ const MAIN_MODULE = new URL(
 );
 // Privacy review covers both authored TypeScript and generated JavaScript.
 // Standalone Node tests can run before the TypeScript is rebuilt.
+// The glyph editor is an in-memory exact-stroke draft. Its only file read
+// is a user-chosen TSV; its Blob URL is created only on an explicit download
+// click and revoked on reset. It has no storage or network transport.
 const REVIEWED_MODULES = [
+    "glyph-strokes.js",
     "handwriting-profile.js",
     "main.js",
     "paper-profile.js",
@@ -62,6 +66,8 @@ const REVIEWED_MODULES = [
     "session-fragment.js",
     "session-handshake.js",
 ];
+const isGlyphModule = (filename) => filename === "glyph-strokes.ts"
+    || filename === "glyph-strokes.js";
 const isHandwritingModule = (filename) =>
     filename === "handwriting-profile.ts"
     || filename === "handwriting-profile.js";
@@ -141,6 +147,12 @@ function usesUnreviewedMarkupRequests(source) {
         return true;
     }
     remaining = remaining.replace(notebookPicker, "");
+    // The glyph editor admits one explicitly chosen local TSV.
+    const glyphPicker =
+        `<input id="glyph-load" type="file" accept=".tsv,text/plain"
+                aria-label="Load authored glyph stroke TSV" disabled>`;
+    if (remaining.split(glyphPicker).length - 1 !== 1) return true;
+    remaining = remaining.replace(glyphPicker, "");
     // The preview image has no initial URL or remote source. Only the
     // authenticated Rust PNG blob can populate this pre-existing element.
     const notebookPreview = `<img id="notebook-preview-image" alt=""
@@ -351,6 +363,13 @@ test("browser source and generated modules reject undeclared transport",
                 `${filename}: draft reads never send referrers`,
             );
         }
+        // Fixed SVG namespace is a DOM identifier, never a fetch target.
+        let reviewedSource = source;
+        if (isGlyphModule(filename)) {
+            const namespace = 'const SVG_NS = "http://www.w3.org/2000/svg";';
+            assert.equal(reviewedSource.split(namespace).length - 1, 1);
+            reviewedSource = reviewedSource.replace(namespace, "");
+        }
         for (const forbidden of [
             "http://",
             "https://",
@@ -361,7 +380,7 @@ test("browser source and generated modules reject undeclared transport",
             "WebTransport",
             "RTCPeerConnection",
         ]) {
-            assert.equal(source.includes(forbidden), false,
+            assert.equal(reviewedSource.includes(forbidden), false,
                 `${filename} uses undeclared transport ${forbidden}`);
         }
     }
@@ -375,6 +394,8 @@ function hasUnreviewedExecutableCode(source, filename) {
     // Review any new declaration or dynamic import before it can fetch code.
     const imports = {
         "main": [
+            'import { createGlyphStrokeEditor } from ' +
+                '"./glyph-strokes.js";',
             'import { parseBoundedJsonResponse } from ' +
                 '"./session-diagnostic.js";',
             'import * as sessionDraft from "./session-draft.js";',
@@ -414,7 +435,8 @@ function hasUnreviewedExecutableCode(source, filename) {
             (moduleName === "main" ? 1
                 : site === "window.setTimeout(() => {"
                     ? moduleName === "paper-profile" ? 2
-                        : moduleName === "handwriting-profile" ? 1 : 0
+                        : ["handwriting-profile", "glyph-strokes"].includes(
+                            moduleName) ? 1 : 0
                     : 0)) {
             return true;
         }
@@ -458,7 +480,9 @@ test("browser runtime code loading requires explicit review", async () => {
 // An alias to the entire global object can retrieve a browser capability
 // without spelling its name in a direct-property audit. Preserve only the
 // reviewed viewport, navigation cleanup, lifecycle and timer references.
-function hasUnreviewedBrowserGlobalAuthority(source, main, paper = false) {
+function hasUnreviewedBrowserGlobalAuthority(
+    source, main, paper = false, glyph = false,
+) {
     // These exact expressions are the complete reviewed window authority.
     // Removing them before scanning also catches aliases to the root object.
     const allowed = [
@@ -480,7 +504,8 @@ function hasUnreviewedBrowserGlobalAuthority(source, main, paper = false) {
     let remaining = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     for (const [site, count] of allowed) {
         const expected = main ? count
-            : paper && site === "window.setTimeout(() => {" ? paper : 0;
+            : (paper || glyph) && site === "window.setTimeout(() => {"
+                ? paper || 1 : 0;
         if (remaining.split(site).length - 1 !== expected) {
             return true;
         }
@@ -489,6 +514,17 @@ function hasUnreviewedBrowserGlobalAuthority(source, main, paper = false) {
     // Date-placement string literals contain "top" but are not global refs.
     remaining = remaining.replaceAll("\"top-left\"", "")
         .replaceAll("\"top-right\"", "");
+    if (glyph) {
+        const allowedTop = [
+            'const top = chosen.variant === "two-storey" ? 2 * r : r;',
+            "box.top",
+            "const accent = acuteAccent(cx, cy, r, pen, dx, lift, top);",
+        ];
+        for (const site of allowedTop) {
+            if (remaining.split(site).length - 1 !== 1) return true;
+            remaining = remaining.replace(site, "");
+        }
+    }
     return /\b(?:window|globalThis|self|top|parent|frames|opener)\b/u
         .test(remaining);
 }
@@ -512,12 +548,12 @@ test("browser first-class global aliases require explicit review", async () => {
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(hasUnreviewedBrowserGlobalAuthority(source, main,
-            profileModuleCount(filename)),
+            profileModuleCount(filename), isGlyphModule(filename)),
             false, `${filename} gained unreviewed browser global authority`);
         for (const candidate of candidates) {
             assert.equal(hasUnreviewedBrowserGlobalAuthority(
                 `${source}\n${candidate}`, main,
-                profileModuleCount(filename)), true,
+                profileModuleCount(filename), isGlyphModule(filename)), true,
             `${filename}: ${candidate} bypassed the global-object review`);
         }
     }
@@ -527,7 +563,7 @@ test("browser first-class global aliases require explicit review", async () => {
 // frame can expose another document even without an explicit global window.
 // These references need the same first-class capability review as window.
 function hasUnreviewedDocumentAuthority(source, main, typed, paper = false,
-    handwriting = false) {
+    handwriting = false, glyph = false) {
     const allowed = [
         [typed ? "document.querySelector<T>(selector)"
             : "document.querySelector(selector)", 1],
@@ -547,8 +583,9 @@ function hasUnreviewedDocumentAuthority(source, main, typed, paper = false,
     // One lookup helper is shared by both paper and notebook editors.
     // Each editor owns a separately reviewed Blob download anchor.
     for (const [site, count] of [
-        ["document.getElementById(id)", paper ? 1 : 0],
-        ['document.createElement("a")', Number(paper)],
+        ["document.getElementById(id)", paper || glyph ? 1 : 0],
+        ['document.createElement("a")', Number(paper) + Number(glyph)],
+        ['document.createElementNS(SVG_NS, "line")', glyph ? 2 : 0],
     ]) {
         if (remaining.split(site).length - 1 !== count) {
             return true;
@@ -556,7 +593,8 @@ function hasUnreviewedDocumentAuthority(source, main, typed, paper = false,
         remaining = remaining.replaceAll(site, "");
     }
     const optionSite = 'document.createElement("option")';
-    if (remaining.split(optionSite).length - 1 !== (handwriting ? 2 : 0)) {
+    if (remaining.split(optionSite).length - 1
+        !== (handwriting || glyph ? 2 : 0)) {
         return true;
     }
     remaining = remaining.replaceAll(optionSite, "");
@@ -589,12 +627,14 @@ test("browser first-class Document authority requires explicit review",
         const main = filename === "main.ts" || filename === "main.js";
         const typed = filename.endsWith(".ts");
         assert.equal(hasUnreviewedDocumentAuthority(source, main, typed,
-            profileModuleCount(filename), isHandwritingModule(filename)),
+            profileModuleCount(filename), isHandwritingModule(filename),
+            isGlyphModule(filename)),
             false, `${filename} gained unreviewed Document authority`);
         for (const candidate of probes) {
             assert.equal(hasUnreviewedDocumentAuthority(
                 `${source}\n${candidate}`, main, typed,
-                profileModuleCount(filename), isHandwritingModule(filename)), true,
+                profileModuleCount(filename), isHandwritingModule(filename),
+            isGlyphModule(filename)), true,
             `${filename}: ${candidate} bypassed Document review`);
         }
     }
@@ -975,7 +1015,7 @@ test("browser filesystem authority inventory rejects unreviewed access", () => {
 // distinct paths from the File System Access pickers reviewed above.
 // Requiring review does not imply the user selected any local file.
 function hasUnreviewedBrowserFileIntake(source, paper = false,
-    typed = false, handwriting = false) {
+    typed = false, handwriting = false, glyph = false) {
     let reviewed = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     // Paper and notebook JSON pickers are user-selected; neither editor can
     // open an unselected file. Each download has one reviewed Blob URL/anchor.
@@ -983,13 +1023,15 @@ function hasUnreviewedBrowserFileIntake(source, paper = false,
         ["upload.files?.item(0)", paper ? 1 : 0],
         // Paper's notebook preview gets one extra reviewed Rust PNG Blob URL.
         ["URL.createObjectURL(blob)",
-            handwriting ? 0 : paper === 2 ? 3 : Number(paper)],
+            glyph ? 1 : handwriting ? 0 : paper === 2 ? 3 : Number(paper)],
         ['new Blob([result.json], { type: "application/json" })',
             paper === 2 ? 1 : 0],
         ["blob: Blob", typed && !handwriting ? Number(paper) : 0],
         ["URL.createObjectURL(new Blob([json], {", handwriting ? 1 : 0],
         ["load.files?.item(0)", paper === 2 ? 1 : 0],
         ["new Blob([result.json], {", paper === 2 ? 1 : 0],
+        ["source.files?.[0]", glyph ? 1 : 0],
+        ["new Blob([bytes], { type: mediaType })", glyph ? 1 : 0],
     ]) {
         if (reviewed.split(site).length - 1 !== count) {
             return true;
@@ -1025,7 +1067,8 @@ test("browser ordinary file input and drag-file reads require review",
     for (const { filename, source } of await browserModuleSources()) {
         assert.equal(hasUnreviewedBrowserFileIntake(source,
             profileModuleCount(filename), filename.endsWith(".ts"),
-            isHandwritingModule(filename)), false,
+            isHandwritingModule(filename),
+            isGlyphModule(filename)), false,
             `${filename} gained an unreviewed local-file read`);
         for (const candidate of [
             "void FileReader;",
@@ -1046,7 +1089,8 @@ test("browser ordinary file input and drag-file reads require review",
             assert.equal(hasUnreviewedBrowserFileIntake(
                 `${source}\n${candidate}`,
                 profileModuleCount(filename), filename.endsWith(".ts"),
-                isHandwritingModule(filename)), true,
+                isHandwritingModule(filename),
+                    isGlyphModule(filename)), true,
             `${filename}: ${candidate} escaped ordinary-file review`);
         }
     }
@@ -1558,7 +1602,9 @@ test("browser source and emitted modules reject unreviewed host reads",
 // scrubbing and bfcache reload are approved in the main workspace module.
 // This guards obvious source drift, not dynamically aliased objects or the
 // browser's complete navigation and network execution paths.
-function usesUnreviewedBrowserNavigation(source, main, paper = false) {
+function usesUnreviewedBrowserNavigation(
+    source, main, paper = false, glyph = false,
+) {
     // The complete known location/history authority is in the main module.
     // Permit only these exact expressions: a captured method or computed
     // alias can otherwise navigate without a direct .assign() call.
@@ -1577,7 +1623,8 @@ function usesUnreviewedBrowserNavigation(source, main, paper = false) {
         remaining = remaining.replaceAll(site, "");
     }
     // One anchor click is confined to an explicit local Blob download.
-    if (remaining.split("link.click()").length - 1 !== Number(paper)) {
+    if (remaining.split("link.click()").length - 1
+        !== Number(paper) + Number(glyph)) {
         return true;
     }
     remaining = remaining.replaceAll("link.click()", "");
@@ -1711,12 +1758,12 @@ test("browser source and emitted modules reject unreviewed navigation",
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(usesUnreviewedBrowserNavigation(source, main,
-            profileModuleCount(filename)), false,
+            profileModuleCount(filename), isGlyphModule(filename)), false,
             `${filename} gained an unreviewed navigation or form request`);
         for (const candidate of CAPTURED_NAVIGATION_PROBES) {
             assert.equal(usesUnreviewedBrowserNavigation(
                 `${source}\n${candidate}`, main,
-                profileModuleCount(filename)), true,
+                profileModuleCount(filename), isGlyphModule(filename)), true,
             `${filename}: ${candidate} escaped navigation review`);
         }
     }
@@ -1726,9 +1773,74 @@ test("browser source and emitted modules reject unreviewed navigation",
 // requests without appearing in the static HTML/CSS or four fetch sites.
 // Keep current accessibility attributes and numeric layout properties
 // explicitly reviewed; new DOM sinks require a source-owner decision.
+// Every reviewed SVG mutation is confined to a local geometry or ARIA
+// attribute. This is a pinned list, not a generic setAttribute exemption:
+// new SVG attributes and request-capable sinks must be reviewed separately.
+const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
+    "idealCircle.setAttribute(\"cx\", String(cx));",
+    "idealCircle.setAttribute(\"cy\", String(cy));",
+    "idealCircle.setAttribute(\"r\", String(r));",
+    "idealCircle.setAttribute(\"stroke-width\", numeric.width.value);",
+    "idealCircle.setAttribute(\"stroke\", color.value);",
+    "idealCircle.setAttribute(\"visibility\", shown);",
+    "idealStem.setAttribute(\"x1\", String(cx + r));",
+    "idealStem.setAttribute(\"y1\", String(cy - r));",
+    "idealStem.setAttribute(\"x2\", String(cx + r));",
+    "idealStem.setAttribute(\"y2\", String(cy + r));",
+    "idealStem.setAttribute(\"stroke-width\", numeric.width.value);",
+    "idealStem.setAttribute(\"stroke\", color.value);",
+    "idealStem.setAttribute(\"visibility\", stemState);",
+    "idealArch.setAttribute(\"d\", archPath);",
+    "idealArch.setAttribute(\"stroke-width\", numeric.width.value);",
+    "idealArch.setAttribute(\"stroke\", color.value);",
+    "idealArch.setAttribute(\"visibility\", archState);",
+    "idealAccent.setAttribute(axis, String(accent[axis]));",
+    "idealAccent.setAttribute(\"stroke-width\", numeric.width.value);",
+    "idealAccent.setAttribute(\"stroke\", color.value);",
+    "idealAccent.setAttribute(\"visibility\", accentState);",
+    'ideal.setAttribute("aria-label", "Analytic geometric " + ' +
+        'form.value + " guide, not retained in line-segment TSV");',
+    "idealCircle.setAttribute(\"visibility\", \"hidden\");",
+    "idealStem.setAttribute(\"visibility\", \"hidden\");",
+    "idealArch.setAttribute(\"visibility\", \"hidden\");",
+    "idealAccent.setAttribute(\"visibility\", \"hidden\");",
+    "ideal.setAttribute(\"aria-label\", \"Invalid circle settings\");",
+    "line.setAttribute(axis, String(stroke[axis]));",
+    "line.setAttribute(\"stroke\", stroke.color);",
+    "line.setAttribute(\"stroke-width\", String(stroke.width));",
+    "line.setAttribute(\"stroke-linecap\", \"round\");",
+    "line.setAttribute(\"data-selected\", \"true\");",
+    "draft.setAttribute(\"x1\", String(first.x));",
+    "draft.setAttribute(\"y1\", String(first.y));",
+    "draft.setAttribute(\"x2\", String(second.x));",
+    "draft.setAttribute(\"y2\", String(second.y));",
+    "draft.setAttribute(\"stroke\", drawing.color);",
+    "draft.setAttribute(\"stroke-width\", String(drawing.width));",
+    "draft.setAttribute(\"stroke-linecap\", \"round\");",
+    "draft.setAttribute(\"stroke-dasharray\", \"150 100\");",
+    "draft.setAttribute(\"data-draft\", \"true\");",
+    "preview.setAttribute(\"aria-label\", label);",
+];
+
+function stripReviewedGlyphDrawing(source) {
+    let remaining = source.replace(/\s+/gu, " ");
+    for (const site of REVIEWED_GLYPH_SVG_ATTRIBUTES) {
+        if (remaining.split(site).length - 1 !== 1) return null;
+        remaining = remaining.replace(site, "");
+    }
+    const createLine = 'document.createElementNS(SVG_NS, "line")';
+    if (remaining.split(createLine).length - 1 !== 2) return null;
+    return remaining.replaceAll(createLine, "");
+}
+
 function hasUnreviewedDynamicResourceAuthority(source, main, paper = false,
-    handwriting = false) {
+    handwriting = false, glyph = false) {
     let remaining = source;
+    if (glyph) {
+        const reviewed = stripReviewedGlyphDrawing(remaining);
+        if (reviewed === null) return true;
+        remaining = reviewed;
+    }
     for (const [site, count] of [
         ["function setAttributeIfChanged(", 1],
         ["element.setAttribute(name, value)", 1],
@@ -1759,13 +1871,15 @@ function hasUnreviewedDynamicResourceAuthority(source, main, paper = false,
         'document.createElement("a")',
         "link.href = url",
     ]) {
-        if (remaining.split(site).length - 1 !== Number(paper)) {
+        if (remaining.split(site).length - 1
+            !== Number(paper) + Number(glyph)) {
             return true;
         }
         remaining = remaining.replaceAll(site, "");
     }
     const optionSite = 'document.createElement("option")';
-    if (remaining.split(optionSite).length - 1 !== (handwriting ? 2 : 0)) {
+    if (remaining.split(optionSite).length - 1
+        !== (handwriting || glyph ? 2 : 0)) {
         return true;
     }
     remaining = remaining.replaceAll(optionSite, "");
@@ -1808,7 +1922,8 @@ test("browser dynamic markup and CSSOM request sinks require review",
     for (const { filename, source } of await browserModuleSources()) {
         const main = filename === "main.ts" || filename === "main.js";
         assert.equal(hasUnreviewedDynamicResourceAuthority(source, main,
-            profileModuleCount(filename), isHandwritingModule(filename)),
+            profileModuleCount(filename), isHandwritingModule(filename),
+            isGlyphModule(filename)),
             false, `${filename} gained an unreviewed DOM/CSSOM sink`);
         for (const candidate of [
             'document.createElement("img")',
@@ -1828,7 +1943,8 @@ test("browser dynamic markup and CSSOM request sinks require review",
         ]) {
             assert.equal(hasUnreviewedDynamicResourceAuthority(
                 `${source}\n${candidate}`, main,
-                profileModuleCount(filename), isHandwritingModule(filename)), true,
+                profileModuleCount(filename), isHandwritingModule(filename),
+                    isGlyphModule(filename)), true,
             `${filename}: ${candidate} escaped dynamic-resource review`);
         }
     }
