@@ -97,7 +97,7 @@ function mountEditor() {
         "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
         "glyph-seed-spanish", "glyph-seed-spanish-nfd",
-        "glyph-seed-punctuation",
+        "glyph-seed-punctuation", "glyph-seed-quotes",
         "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-ideal-preview",
@@ -1710,10 +1710,154 @@ test("punctuation batch refuses invalid geometry and too much ink", async () => 
     }
 });
 
+test("curly quotes and guillemets preserve exact Unicode", () => {
+    const counts = { "«": 4, "»": 4, "‘": 16, "’": 16,
+        "“": 32, "”": 32 };
+    const samples = Object.entries(counts).map(([glyph, count]) => {
+        const lines = geometricStarter(glyph, 1550, 2450, 1100,
+            250, "#243647");
+        assert.equal(lines.length, count);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(lines)), lines);
+        return [glyph, lines];
+    });
+    const generated = Object.fromEntries(samples);
+    assert.deepEqual(generated["«"].map(({ x1, y1, x2, y2 }) =>
+        [x1, y1, x2, y2]), [
+        [1220, 1900, 780, 2450], [780, 2450, 1220, 3000],
+        [1935, 1900, 1495, 2450], [1495, 2450, 1935, 3000],
+    ]);
+    for (const [left, right] of [["«", "»"], ["‘", "’"],
+        ["“", "”"]]) {
+        assert.deepEqual(generated[right].map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]),
+        generated[left].map(({ x1, y1, x2, y2 }) =>
+            [3100 - x1, y1, 3100 - x2, y2]),
+        `${left}/${right} are exact integer mirrors`);
+    }
+    const opening = generated["“"];
+    assert.notDeepEqual([opening[15].x2, opening[15].y2],
+        [opening[16].x1, opening[16].y1],
+        "two quote curls retain an independent pen lift");
+});
+
+test("quotation SVG guides match separate native sampled ink", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("form").value = "«";
+        get("character").value = "«";
+        get("form").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 1220 1900 L 780 2450 L 1220 3000"
+            + " M 1935 1900 L 1495 2450 L 1935 3000");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-rounded-left").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 4);
+        get("form").value = "”";
+        get("character").value = "”";
+        get("form").dispatch("input");
+        assert.match(get("ideal-rounded").attributes.get("d"),
+            /^M .*Q .* M .*Q /);
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, ["«", "”"].flatMap((glyph) =>
+            geometricStarter(glyph, 1550, 2450, 1100,
+                250, "#243647")));
+        get("circle-x").value = "150";
+        get("circle-x").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /fit inside glyph cell/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "refused quote geometry cannot replace ink");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("quotation fill keeps custom ink and refuses over-cap", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        assert.equal(get("seed-quotes").disabled, true);
+        editor.start();
+        const originals = [stroke("‘"), stroke("ñ")];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(originals));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-quotes").dispatch("click");
+        assert.match(get("status").textContent, /Filled 5 missing quotation/);
+        assert.equal(downloads.length, 0, "no implicit file writing");
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, [...originals, ...["«", "»", "’", "“", "”"]
+            .flatMap((glyph) => geometricStarter(glyph, 1550, 2450,
+                1100, 250, "#243647"))]);
+        get("seed-quotes").dispatch("click");
+        assert.match(get("status").textContent, /All six quotation glyphs/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "repeat quote fill must preserve prior ink");
+        const full = Array.from({ length: 4050 }, () => stroke("∞"));
+        const big = new TextEncoder().encode(encodeGlyphLibrary(full));
+        get("load").files = [{
+            size: big.length, arrayBuffer: async () => big.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-quotes").dispatch("click");
+        assert.match(get("status").textContent, /Save requires 1..4096/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            full, "oversized quotation batches refuse atomically");
+        editor.reset();
+        assert.equal(get("seed-quotes").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("five fill gestures author 52 exact glyphs", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        for (const action of ["seed-lowercase", "seed-spanish",
+            "seed-spanish-nfd", "seed-punctuation", "seed-quotes"]) {
+            get(action).dispatch("click");
+            assert.match(get("status").textContent, /Filled/);
+        }
+        assert.equal(downloads.length, 0);
+        get("save").dispatch("click");
+        const all = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.equal(all.length, 1443);
+        const exact = [..."abcdefghijklmnopqrstuvwxyz",
+            ...["á", "é", "í", "ó", "ú", "ñ", "ü"],
+            ...["a\u0301", "e\u0301", "i\u0301", "o\u0301",
+                "u\u0301", "n\u0303", "u\u0308"],
+            ...[".", ",", "!", "¡", "?", "¿"],
+            ...["«", "»", "‘", "’", "“", "”"]];
+        assert.deepEqual([...new Set(all.map((line) => line.grapheme))],
+            exact, "no NFC/NFD collisions or missing Unicode forms");
+        editor.reset();
+        assert.equal(get("seed-quotes").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
 test("all geometric starters respect pen margins over a boundary grid", () => {
     const forms = ["o", "a", "ó", "á", "b", "d", "p", "q",
         "g", "n", "u", "h", "m", "r", "s", "l", "t", "f", "v", "w",
-        ".", ",", "!", "¡", "?", "¿",
+        ".", ",", "!", "¡", "?", "¿", "«", "»", "‘", "’", "“", "”",
         "k", "x", "y", "z", "c", "e", "i", "í", "j"];
     let accepted = 0;
     let checked = 0;
@@ -1752,7 +1896,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 5040);
+    assert.equal(checked, 5904);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

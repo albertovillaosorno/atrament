@@ -491,6 +491,28 @@ transparent RGBA PNG. Capital letters, guillemets, quotes, numerals and
 mathematics remain missing; no analytic native curves or joined cursive
 can yet be claimed.
 
+## Guillemets and curly quotation starters (partial) — 2026-11-03
+
+The browser now independently selects six exact Unicode quotation glyphs:
+`« » ‘ ’ “ ”`, or fills only missing forms through an explicitly
+session-gated unsaved action. Each guillemet is two ordered exact straight
+chevrons. A single curly quote has one analytic quadratic in its SVG
+construction guide, while a double quote has two independent strokes;
+only 16 or 32 sampled integer chords persist to the Rust v1 TSV.
+Closing forms mirror opening samples exactly along the center X axis.
+
+Four focused browser regressions prove exact Unicode identity, integer
+mirror geometry, separate pen gestures, SVG paths, custom-stroke
+preservation, no automatic file writes, idempotence, atomically refused
+clipped geometry, an integrated 52-glyph fill and oversized libraries.
+The geometry boundary grid now
+covers 5,904 cases. Default combined lowercase/accent/punctuation/quote
+library: **52 exact graphemes, 1,443 sampled ink strokes**. Rust audited
+`«¡hola!» “¿qué?” ‘sí’` with **zero missing glyphs** and exported
+`«¡hola!» “¿qué?”` to a genuine one-page PDF and transparent
+72-DPI 596×842 RGBA PNG. Native analytic-vector persistence, uppercase,
+math symbols, numerical characters and handwriting joins remain open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

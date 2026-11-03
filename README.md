@@ -545,6 +545,18 @@ phrase `¡hola! ¿qué? ,.` with zero missing forms and exported `¡hola! ¿qué
 to real PDF and transparent 72-DPI RGBA PNG. Question-mark curves remain
 sampled segments in the native stroke TSV, not analytic PDF primitives.
 
+For quoted notes, the editor also offers selectable **« » ‘ ’ “ ”**
+geometry and a separate **Fill missing quotation marks (unsaved)** action.
+Guillemets are two ordered straight chevrons; curly singles and doubles
+are respectively one or two independent quadratic strokes sampled to the
+Rust TSV. Opening/closing geometry is mirrored exactly after rounding each
+sampled integer coordinate. Existing custom quotation strokes remain
+untouched. The combined default lowercase/accents/punctuation/quotation
+library is **1,443 sampled strokes across 52 exact Unicode glyphs**.
+Rust audited `«¡hola!» “¿qué?” ‘sí’` without missing ink and exported
+`«¡hola!» “¿qué?”` to a real PDF and transparent 72-DPI RGBA PNG.
+The analytic SVG guides are still approximated by straight TSV chords.
+
 These actions do not seed uppercase or the
 complete 114-entry inventory. It does not connect semantic Markdown text
 to notebook flow, and the native renderer still caps output at 512 physical

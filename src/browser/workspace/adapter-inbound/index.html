@@ -555,6 +555,12 @@
                 <option value="¡">Inverted exclamation ¡</option>
                 <option value="?">Question ? (curved hook and dot)</option>
                 <option value="¿">Inverted question ¿</option>
+                <option value="«">Left guillemet « (two chevrons)</option>
+                <option value="»">Right guillemet » (two chevrons)</option>
+                <option value="‘">Left curly single quote ‘</option>
+                <option value="’">Right curly single quote ’</option>
+                <option value="“">Left curly double quote “</option>
+                <option value="”">Right curly double quote ”</option>
                 <option value="o">Circle o</option>
                 <option value="b">Ascender b (left stem)</option>
                 <option value="d">Ascender d (right stem)</option>
@@ -623,6 +629,9 @@
             <button id="glyph-seed-punctuation" type="button" disabled>
               Fill missing basic punctuation (unsaved)
             </button>
+            <button id="glyph-seed-quotes" type="button" disabled>
+              Fill missing quotation marks (unsaved)
+            </button>
           </div>
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the highest story, positioned from geometry
@@ -641,7 +650,11 @@
             ambiguous dotted i or clipped mark refuses the entire batch.
             Basic punctuation can be filled independently: . , ! ¡ ? ¿,
             including exact inverse exclamation and sampled question curves.
-            Every fill preserves existing ink and remains unsaved.</p>
+            A separate quotation fill adds only missing « » ‘ ’ “ ”
+            shapes. The angle brackets are exact chevrons; the upper curly
+            quotes use sampled quadratic strokes. These forms retain
+            independent Unicode identities and earlier authored ink.
+            Every fill remains unsaved.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>
           <svg id="glyph-ideal-preview" class="glyph-stroke-preview"
