@@ -1695,3 +1695,268 @@ fn out_of_page_slant_refuses_before_replacing_existing_pdf() {
     fs::remove_file(profile).expect("remove profile fixture");
     fs::remove_file(output).expect("remove output fixture");
 }
+
+#[test]
+fn saved_glyph_library_reopens_exact_unicode_shapes_for_pdf_and_png() {
+    let path = test_path().with_extension("tsv");
+    let filename = path.to_str().expect("glyph library filename");
+    let original = args(&[
+        "--glyph-stroke",
+        "ñ",
+        "0",
+        "0",
+        "2500",
+        "3500",
+        "350",
+        "#12ab34",
+        "--glyph-stroke",
+        "n\u{303}",
+        "250",
+        "3500",
+        "2700",
+        "250",
+        "250",
+        "#0000FF",
+        "--glyph-stroke",
+        "«",
+        "50",
+        "2000",
+        "1000",
+        "4000",
+        "250",
+        "#0000FF",
+        "--glyph-stroke",
+        "»",
+        "1000",
+        "2000",
+        "50",
+        "4000",
+        "250",
+        "#0000FF",
+        "--glyph-stroke",
+        "∞",
+        "500",
+        "400",
+        "2500",
+        "2800",
+        "300",
+        "#445566",
+    ]);
+    let mut write = original.clone();
+    write.extend(args(&["--output", filename]));
+    assert!(
+        execute_glyph_library(&write)
+            .expect("save named glyph library")
+            .is_none()
+    );
+    let bytes = fs::read(&path).expect("saved library");
+    let text = String::from_utf8(bytes.clone()).expect("UTF-8 library");
+    assert!(text.starts_with("atrament.glyph-strokes.v1\nñ\t"));
+    assert!(text.contains("n\u{303}\t250\t3500\t2700\t250\t250\t#0000FF"));
+    let reopened = execute_glyph_library(&args(&["--profile", filename]))
+        .expect("open saved glyph library")
+        .expect("library bytes");
+    assert_eq!(reopened, bytes, "canonical source must roundtrip exactly");
+
+    for format in ["pdf", "png"] {
+        let mut expected = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+        ]);
+        expected.extend(original.clone());
+        expected.extend(args(&[
+            "--place-text",
+            "2",
+            "25000",
+            "30000",
+            "ñ n\u{303} «∞»",
+        ]));
+        let mut from_file = args(&[
+            "--export-paper",
+            format,
+            "--printed-sheet",
+            "true",
+            "--glyph-file",
+            filename,
+            "--place-text",
+            "2",
+            "25000",
+            "30000",
+            "ñ n\u{303} «∞»",
+        ]);
+        if format == "pdf" {
+            expected.extend(args(&["--pages", "2"]));
+            from_file.extend(args(&["--pages", "2"]));
+        } else {
+            expected.extend(args(&["--png-page", "2", "--dpi", "72"]));
+            from_file.extend(args(&["--png-page", "2", "--dpi", "72"]));
+        }
+        assert_eq!(
+            execute_notebook(&from_file)
+                .expect("file-backed glyph ink")
+                .expect("native output"),
+            execute_notebook(&expected)
+                .expect("inline glyph ink")
+                .expect("native output"),
+            "file and inline glyph ink differ for {format}",
+        );
+    }
+    fs::remove_file(path).expect("remove test-owned library");
+}
+
+#[test]
+fn glyph_libraries_append_explicit_shapes_and_preserve_existing_output() {
+    let library = test_path().with_extension("tsv");
+    let name = library.to_str().expect("library path");
+    let first = args(&[
+        "--glyph-stroke",
+        "ñ",
+        "0",
+        "0",
+        "2500",
+        "3500",
+        "250",
+        "#123456",
+        "--output",
+        name,
+    ]);
+    assert!(
+        execute_glyph_library(&first)
+            .expect("save library")
+            .is_none()
+    );
+    let saved = fs::read(&library).expect("source bytes");
+    assert!(
+        execute_glyph_library(&first).is_err(),
+        "existing file requires explicit replacement"
+    );
+    assert_eq!(saved, fs::read(&library).expect("unchanged"));
+    let extended = execute_glyph_library(&args(&[
+        "--profile",
+        name,
+        "--glyph-stroke",
+        "¿",
+        "0",
+        "3500",
+        "2500",
+        "0",
+        "250",
+        "#abcDEF",
+    ]))
+    .expect("append authored glyph")
+    .expect("canonical bytes");
+    assert!(String::from_utf8_lossy(&extended)
+        .contains("¿\t0\t3500\t2500\t0\t250\t#ABCDEF\n"));
+    assert_eq!(saved, fs::read(&library).expect("read-only source"));
+    assert!(
+        execute_glyph_library(&args(&[
+            "--profile", name, "--profile", name,
+        ])).is_err(),
+        "duplicate library load must refuse"
+    );
+    assert!(
+        execute_glyph_library(&args(&[
+            "--glyph-stroke",
+            "ñ",
+            "0",
+            "0",
+            "1",
+            "1",
+            "250",
+            "#123456",
+            "--profile",
+            name,
+        ]))
+        .is_err(),
+        "late file cannot silently replace authored strokes"
+    );
+    fs::remove_file(library).expect("remove test-owned library");
+}
+
+#[test]
+fn malformed_or_unbounded_glyph_library_refuses_without_pdf_replacement() {
+    let library = test_path().with_extension("tsv");
+    let target = test_path().with_extension("pdf");
+    let name = library.to_str().expect("library name");
+    let output = target.to_str().expect("PDF name");
+    fs::write(&target, b"previous approved PDF").expect("sentinel");
+    for invalid in [
+        b"unsupported.version\n".to_vec(),
+        b"atrament.glyph-strokes.v1\r\n".to_vec(),
+        b"atrament.glyph-strokes.v1\n\xff".to_vec(),
+        [b"atrament.glyph-strokes.v1\n".as_slice(),
+         b"\xc3\xb1\t0\t0\t0\t0\t250\t#123456\n"].concat(),
+        [b"atrament.glyph-strokes.v1\n".as_slice(),
+         b"\xc3\xb1\t0\t0\t250\t350\t250\t#GGGGGG\n"].concat(),
+        b"atrament.glyph-strokes.v1\n\xc3\xb1\t0\t0\t250\t350\t250\n".to_vec(),
+        vec![b'x'; MAX_GLYPH_LIBRARY_BYTES + 1],
+    ] {
+        fs::write(&library, invalid).expect("write invalid test library");
+        let command = args(&[
+            "--export-paper",
+            "pdf",
+            "--glyph-file",
+            name,
+            "--place-text",
+            "1",
+            "25000",
+            "30000",
+            "ñ",
+            "--output",
+            output,
+            "--replace",
+        ]);
+        assert!(
+            execute_notebook(&command).is_err(),
+            "invalid glyph input must refuse before output"
+        );
+        assert_eq!(
+            fs::read(&target).expect("sentinel survives"),
+            b"previous approved PDF"
+        );
+    }
+    fs::remove_file(library).expect("remove invalid source");
+    fs::remove_file(target).expect("remove target");
+}
+
+#[test]
+fn glyph_library_rejects_missing_shapes_and_over_budget_strokes() {
+    let source = test_path().with_extension("tsv");
+    let name = source.to_str().expect("source");
+    let result = execute_glyph_library(&args(&[
+        "--glyph-stroke",
+        "ñ",
+        "0",
+        "0",
+        "3500",
+        "4500",
+        "250",
+        "#123456",
+    ]))
+    .expect("valid single glyph")
+    .expect("library bytes");
+    fs::write(&source, result).expect("test library");
+    let error = execute_notebook(&args(&[
+        "--export-paper",
+        "pdf",
+        "--glyph-file",
+        name,
+        "--place-text",
+        "1",
+        "25000",
+        "30000",
+        "ñ¡",
+    ]))
+    .expect_err("missing exclamation glyph must fail");
+    assert!(error.contains("missing authored glyph shapes"), "{error}");
+
+    let mut too_many = String::from("atrament.glyph-strokes.v1\n");
+    for _ in 0..257 {
+        too_many.push_str("ñ\t0\t0\t3500\t4500\t250\t#123456\n");
+    }
+    fs::write(&source, too_many).expect("test over-budget library");
+    let error =
+        execute_glyph_library(&args(&["--profile", name]))
+            .expect_err("too many authored segments");
+    assert!(error.contains("256 strokes"), "{error}");
+    fs::remove_file(source).expect("remove source");
+}

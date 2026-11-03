@@ -35,6 +35,7 @@
 
 use std::fmt::Write as _;
 use std::slice::Iter;
+use std::str::from_utf8;
 
 use atrament_handwriting_statistics::{
     Dimension, HandwritingStatisticsProfile,
@@ -45,12 +46,15 @@ use atrament_notebook_paper_cli::{
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
-use super::{export_integer, GlyphOverlay, GlyphStroke, TextRun};
+use super::{
+    export_integer, GlyphOverlay, GlyphStroke, TextRun, MAX_GLYPH_LIBRARY_BYTES,
+};
 
 const ADVANCE_UM: u32 = 4_000;
 const MAX_STROKES: usize = 256;
 const MAX_RUNS: usize = 16;
 const MAX_RUN_GRAPHEMES: usize = 96;
+const GLYPH_LIBRARY_HEADER: &str = "atrament.glyph-strokes.v1";
 
 // Authored local coordinates are only scaled when a separate saved
 // statistical profile is explicitly selected by the caller.
@@ -94,6 +98,35 @@ impl GlyphMetrics {
 }
 
 impl GlyphOverlay {
+    /// Canonical portable glyph geometry, not placed text or sampled ink.
+    pub(super) fn encode_file(&self) -> Result<Vec<u8>, String> {
+        if self.strokes.is_empty() {
+            return Err(
+                "glyph library needs at least one authored stroke".into()
+            );
+        }
+        let mut text = format!("{GLYPH_LIBRARY_HEADER}\n");
+        for stroke in &self.strokes {
+            let _written = writeln!(
+                text,
+                "{}\t{}\t{}\t{}\t{}\t{}\t#{:02X}{:02X}{:02X}",
+                stroke.grapheme,
+                stroke.start_um.0,
+                stroke.start_um.1,
+                stroke.end_um.0,
+                stroke.end_um.1,
+                stroke.width_um,
+                stroke.rgb[0],
+                stroke.rgb[1],
+                stroke.rgb[2],
+            );
+        }
+        if text.len() > MAX_GLYPH_LIBRARY_BYTES {
+            return Err("glyph library exceeds 65536 bytes".into());
+        }
+        Ok(text.into_bytes())
+    }
+
     pub(super) fn expand(
         &self, manual: &[NotebookInkLine],
         statistics: Option<&HandwritingStatisticsProfile>,
@@ -185,6 +218,52 @@ impl GlyphOverlay {
 
     pub(super) const fn has_any(&self) -> bool {
         !self.runs.is_empty() || !self.strokes.is_empty()
+    }
+
+    /// Load a reusable exact-Unicode library with tab-separated columns.
+    /// Grapheme identities are never implicitly normalized or substituted.
+    pub(super) fn load_file_bytes(
+        &mut self, bytes: &[u8],
+    ) -> Result<(), String> {
+        if self.loaded_file || self.has_any() {
+            return Err(concat!(
+                "--glyph-file or --profile must precede authored strokes ",
+                "and may appear only once",
+            )
+            .into());
+        }
+        if bytes.len() > MAX_GLYPH_LIBRARY_BYTES {
+            return Err("glyph library exceeds 65536 bytes".into());
+        }
+        let contents =
+            from_utf8(bytes).map_err(|_error| "glyph library must be UTF-8")?;
+        if !contents.ends_with('\n') || contents.contains('\r') {
+            return Err("glyph library requires LF-terminated lines".into());
+        }
+        let mut lines = contents.split_terminator('\n');
+        if lines.next() != Some(GLYPH_LIBRARY_HEADER) {
+            return Err("unsupported glyph library header".into());
+        }
+        for (index, line) in lines.enumerate() {
+            if self.strokes.len() == MAX_STROKES {
+                return Err("glyph library exceeds 256 strokes".into());
+            }
+            let fields: Vec<String> = line.split('\t')
+                .map(str::to_owned).collect();
+            if fields.len() != 7 {
+                return Err(format!(
+                    "glyph library line {} needs seven tab-separated fields",
+                    index.saturating_add(2),
+                ));
+            }
+            self.parse("--glyph-stroke", &mut fields.iter())
+                .map_err(|error| format!(
+                    "glyph library line {}: {error}",
+                    index.saturating_add(2),
+                ))?;
+        }
+        self.loaded_file = true;
+        Ok(())
     }
 
     pub(super) fn parse(

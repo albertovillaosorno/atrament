@@ -67,9 +67,13 @@ use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 const MAX_INVENTORY_TEXT_BYTES: usize = 4096;
+const MAX_GLYPH_LIBRARY_BYTES: usize = 65_536;
 
 const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     | paper [atrament-paper options] \
+    | glyphs [--profile strokes.tsv] \
+    [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
+    [--output strokes.tsv [--replace]] \
     | handwriting [--profile ink.json] [--seed U64] \
     [--set-global DIM MIN MAX MEAN MEDIAN DEVIATION] \
     [--set-glyph GRAPHEME DIM MIN MAX MEAN MEDIAN DEVIATION] \
@@ -94,6 +98,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
     [--ink-line PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM '#RRGGBB'] \
+    [--glyph-file strokes.tsv] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
@@ -103,7 +108,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     or line; rounded borders render. Repeated --ink-line (max 512) draws \
     explicit, unsaved physical pen segments. --glyph-stroke supplies exact \
     author-drawn segments in a 4 x 5 mm cell and --place-text repeats them; \
-    missing shapes refuse. --handwriting-profile applies selected mean \
+    missing shapes refuse; --glyph-file loads a reusable library. \
+    --handwriting-profile applies selected mean \
     dimensions to authored shapes, never statistical sampling or a font. \
     No synthesized glyphs or images are rendered.";
 
@@ -125,6 +131,7 @@ struct TextRun {
 
 #[derive(Debug, Default)]
 struct GlyphOverlay {
+    loaded_file: bool,
     runs: Vec<TextRun>,
     strokes: Vec<GlyphStroke>,
 }
@@ -640,6 +647,79 @@ fn read_notebook_input(path: &str, limit: usize) -> Result<Vec<u8>, String> {
     Ok(bytes.bytes().to_vec())
 }
 
+fn read_glyph_input(path: &str) -> Result<Vec<u8>, String> {
+    let source = metadata(path)
+        .map_err(|error| format!("cannot inspect glyph file: {error}"))?;
+    if !source.is_file() {
+        return Err("glyph file refused: NotRegularFile".into());
+    }
+    let file = File::open(path)
+        .map_err(|error| format!("cannot open glyph file: {error}"))?;
+    let bytes = read_bounded_profile_file(file, MAX_GLYPH_LIBRARY_BYTES)
+        .map_err(|error| format!("glyph file refused: {error:?}"))?;
+    Ok(bytes.bytes().to_vec())
+}
+
+/// An explicit reusable glyph shape file, distinct from numeric statistics.
+fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
+    let mut glyphs = GlyphOverlay::default();
+    let mut output = None;
+    let mut replace = false;
+    let mut iter = args.iter();
+    while let Some(option) = iter.next() {
+        match option.as_str() {
+            "--profile" => {
+                let selected = iter
+                    .next()
+                    .ok_or("--profile requires a glyph library path")?;
+                glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
+            }
+            "--glyph-stroke" => glyphs.parse(option, &mut iter)?,
+            "--output" => {
+                output = Some(parse_selected_output(
+                    &mut iter, output.is_some(),
+                )?);
+            }
+            "--replace" => {
+                if replace {
+                    return Err("--replace may appear only once".into());
+                }
+                replace = true;
+            }
+            _ => return Err(format!("unknown glyph library option: {option}")),
+        }
+    }
+    if replace && output.is_none() {
+        return Err("--replace requires --output".into());
+    }
+    let bytes = glyphs.encode_file()?;
+    if let Some(path) = output {
+        let disposition = if replace {
+            ProfileFileCommitDisposition::ReplaceExisting
+        } else {
+            ProfileFileCommitDisposition::PreserveExisting
+        };
+        let _evidence = commit_profile_file(
+            Path::new(&path),
+            &bytes,
+            MAX_GLYPH_LIBRARY_BYTES,
+            disposition,
+        )
+        .map_err(|error| {
+            if error.may_have_committed() {
+                format!(
+                    "{}: {error:?}",
+                    "glyph save durability unknown; inspect before retry",
+                )
+            } else {
+                format!("glyph library not saved: {error:?}")
+            }
+        })?;
+        return Ok(None);
+    }
+    Ok(Some(bytes))
+}
+
 fn apply_notebook_edit(
     profile: &mut NotebookProfile,
     option: &str,
@@ -789,6 +869,11 @@ fn parse_notebook_export_option(
         "--glyph-stroke" | "--place-text" => {
             glyphs.parse(option, iter)?;
         }
+        "--glyph-file" => {
+            let selected = iter.next()
+                .ok_or("--glyph-file requires a library path")?;
+            glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
+        }
         "--ink-line" => {
             if ink.len() == MAX_NOTEBOOK_INK_LINES {
                 return Err("ink exceeds 512 explicit line segments".into());
@@ -917,7 +1002,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?;
             }
             "--export-paper" | "--pages" | "--dpi" | "--png-page"
-            | "--ink-line" | "--glyph-stroke" | "--place-text" => {
+            | "--ink-line" | "--glyph-stroke" | "--glyph-file"
+            | "--place-text" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
                     &mut glyphs,
@@ -1037,6 +1123,14 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
     };
     match mode.as_str() {
         "paper" => atrament_notebook_paper_cli::run_cli_args(rest)?,
+        "glyphs" if rest.iter().any(|arg| arg == "--help") => {
+            writeln!(io::stdout().lock(), "{USAGE}")?;
+        }
+        "glyphs" => {
+            if let Some(bytes) = execute_glyph_library(rest)? {
+                io::stdout().lock().write_all(&bytes)?;
+            }
+        }
         "notebook" if rest.iter().any(|arg| arg == "--help") => {
             writeln!(io::stdout().lock(), "{NOTEBOOK_USAGE}")?;
         }

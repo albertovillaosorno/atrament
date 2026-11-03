@@ -61,11 +61,13 @@ the browser preview. These remain paper-layer exports, not drawn handwriting
 or full notebook content.
 
 The earlier 77 tasks were accepted as bounded academic/design artifacts, not
-as proof of a finished product. **Four of nine executable TODOs remain**
-for actual Spanish/English glyph coverage, rendered notebook content,
-explicit local printing and the complete personal end-to-end journey.
-The previous NO-GO decision still applies to production claims, and
-physical hardware is not required for local use.
+as proof of a finished product. **Four immediate executable TODOs remain**
+for Spanish/English glyph coverage, rendered notebook content, physical
+printing acceptance and the complete personal end-to-end journey. Another
+25 open follow-up implementation tracks preserve all deferred complexity
+without blocking the local CLI and localhost first delivery. The previous
+NO-GO decision still applies to production claims, and physical hardware
+is not required for local use.
 
 ### Localhost Open/Save for notebook and handwriting profiles (opt-in)
 
@@ -438,12 +440,37 @@ segments, 16 text runs of up to 96 graphemes each, and 512 final pen
 segments combined with `--ink-line`. Physical placement and ink width are
 checked by the existing PDF/PNG compositor before the selected output changes.
 
+The **Rust glyph-library CLI** can now save and reopen those exact authored
+strokes independently of numeric statistics and notebook page metadata:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --glyph-stroke 'ñ' 100 100 3300 4400 350 '#1C3344' \
+  --glyph-stroke '∞' 200 3500 3000 100 350 '#1C3344' \
+  --output my-glyphs.tsv
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --printed-sheet true --export-paper pdf --pages 2 \
+  --glyph-file my-glyphs.tsv \
+  --place-text 2 25400 30000 'ñ ∞ ñ' --output glyphs.pdf
+```
+
+`glyphs --profile my-glyphs.tsv` prints the canonical library to stdout;
+additional `--glyph-stroke` arguments append to the loaded library and an
+explicit `--output ... --replace` saves the revision. The versioned format
+starts with `atrament.glyph-strokes.v1`, followed by one **tab-separated**
+`GRAPHEME X1 Y1 X2 Y2 WIDTH_UM #RRGGBB` record per line (UTF-8, LF).
+It supports 256 strokes and up to 64 KiB, checks exact grapheme identity
+without normalizing NFC/NFD, and refuses malformed, missing, oversized or
+unprintable input before PDF/PNG output replacement. The file is an
+**authored shape library**, not a sampled writer model; no Python is used.
+
 This is a useful **explicit glyph-fallback path**, not a font, automatic
 letter-shape generator, semantic text layout, or statistical handwriting.
-The glyph templates and placed text are CLI-only and are not persisted in
-`atrament.notebook.v1` or editable in the browser yet. The 114-character
-Spanish/English inventory still needs actual user-calibrated outlines and
-missing-symbol authoring before P4-012 or P5-011 can close.
+The saved glyph shape library is separate from `atrament.notebook.v1`;
+placed text is still export-only and the browser does not yet edit these
+shapes. The 114-character Spanish/English inventory still needs actual
+user-calibrated outlines and missing-symbol authoring before P4-012 or
+P5-011 can close.
 
 The optional `--handwriting-profile ink.json` reads the existing saved
 `atrament.handwriting.statistics.v1` file through the same strict Rust codec.
