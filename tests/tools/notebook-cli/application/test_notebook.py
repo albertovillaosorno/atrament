@@ -107,6 +107,9 @@ class NotebookCliTests(unittest.TestCase):
         self.assertEqual(run.returncode, 0, run.stderr)
         with Image.open(target / "page-001.png") as first:
             self.assertEqual(first.mode, "RGBA")
+            self.assertIn("dpi", first.info)
+            for axis_dpi in first.info["dpi"]:
+                self.assertAlmostEqual(axis_dpi, 100, delta=0.1)
             self.assertEqual(first.getpixel((0, 0))[3], 0)
             left = notebook.point_mm(9, 100)
             top = notebook.point_mm(14, 100)

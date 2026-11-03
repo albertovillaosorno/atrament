@@ -854,9 +854,13 @@ def do_render(args):
                 doc, i, dpi, config_base, args.transparent, args.keep_rules
             )
             name = out / f"page-{i + 1:03d}.png"
+            # Keep physical scale when transparent sheets are composited or
+            # printed by an image editor that reads PNG resolution metadata.
             atomic_write(
                 name,
-                lambda f, im=image: im.save(f, "PNG", optimize=True),
+                lambda f, im=image: im.save(
+                    f, "PNG", optimize=True, dpi=(dpi, dpi)
+                ),
                 args.replace,
             )
             print(name)
