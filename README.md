@@ -124,6 +124,7 @@ The `handwriting` JSON object contains per-glyph statistics. For example:
   and `rotation_deg`. Example: `--rotation-deg-minimum=-4` or
   `--height-mm-maximum 4.5`. Inconsistent statistics are rejected before
   saving the configuration; per-character glyph overrides remain separate.
+  Explicit font selections are checked before writing a new profile.
 - In `gaussian` mode the mean and standard deviation drive the sampled value;
   minimum/maximum clamp it. The median is preserved as measured metadata.
   In `triangular` mode the median is the distribution's mode. Neither method

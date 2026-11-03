@@ -1112,6 +1112,9 @@ def do_set_handwriting(args):
         raise ValueError("set-handwriting requires at least one option")
     for key in HANDWRITING_STATS:
         stat_sample(profile[key], random.Random(0), key)
+    if args.font is not None:
+        # Reject a user-selected font that would fail on the first render.
+        Pen(profile, 72, Path(args.config).resolve().parent)
     rebase_notebook_assets(doc, args.config, args.out)
     write_json(args.out, doc, args.replace)
     print(args.out)

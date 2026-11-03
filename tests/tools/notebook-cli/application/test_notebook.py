@@ -132,6 +132,20 @@ class NotebookCliTests(unittest.TestCase):
                 self.assertEqual(run.returncode, 2, run.stderr)
                 self.assertFalse(target.exists())
 
+    def test_set_handwriting_checks_font_before_writing(self):
+        target = self.root / "broken-font.json"
+        run = self.run_cli(
+            "set-handwriting",
+            "--config",
+            str(self.config),
+            "--font",
+            "missing-font.ttf",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(run.returncode, 2, run.stderr)
+        self.assertFalse(target.exists())
+
     def test_set_handwriting_updates_ink_and_global_distributions(self):
         target = self.root / "custom-handwriting.json"
         run = self.run_cli(
