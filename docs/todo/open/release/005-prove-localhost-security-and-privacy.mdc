@@ -2669,3 +2669,17 @@ and build also passed. Jig retains ten pre-existing package-materialization
 and tool-version findings, not new release-security errors. These bounded
 checks do not remove credentials from opener argv or Firefox navigation
 history, establish cross-browser erasure, or close the P1/P8 tasks.
+
+A red-first Firefox fixture-shutdown regression found that synchronous
+`server.close()` and `closeAllConnections()` exceptions could publish private
+socket metadata into test failure output, despite existing callback redaction.
+The HTTP teardown helper now catches both, returns fixed error categories,
+and coordinates synchronous completion against connection abort with a bounded
+deadline.
+
+Four raw TCP fixture close paths also now use a separate deadline-bounded
+helper rather than forwarding or ignoring native close errors. The synthetic
+tests exercise callbacks, synchronous throws, timeout, and late completion;
+focused WebDriver disconnect and upgrade tests still pass. These changes
+contain test-owned diagnostics only, not the production credential-bearing
+opener argv or Firefox history; P8 remains open.

@@ -438,23 +438,107 @@ async function closeFixtureServer(server, timeoutMs = 5_000) {
     }
     // Node's closeAllConnections does not terminate upgraded WebSockets.
     // Keep teardown bounded and report ownership leaks to the test runner.
-    const closed = new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error(
+    await new Promise((resolve, reject) => {
+        let settled = false;
+        let closeReported = false;
+        let closeFailed = false;
+        let connectionsAborted = false;
+        const finish = (error = null) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            if (error === null) resolve();
+            else reject(error);
+        };
+        const fixedError = () => new Error(
+            "disposable HTTP fixture close failed",
+        );
+        const timer = setTimeout(() => finish(new Error(
             "timed out closing disposable HTTP fixture server",
         )), timeoutMs);
-        server.close((error) => {
-            clearTimeout(timer);
-            if (error) {
-                // Native error text can contain untrusted socket metadata.
-                reject(new Error("disposable HTTP fixture close failed"));
-            } else {
-                resolve();
-            }
-        });
+        try {
+            server.close((error) => {
+                // Native errors and synchronous throws can contain private
+                // socket metadata. Never publish them or their causes.
+                closeReported = true;
+                closeFailed = Boolean(error);
+                if (connectionsAborted) {
+                    finish(closeFailed ? fixedError() : null);
+                }
+            });
+            server.closeAllConnections();
+            connectionsAborted = true;
+            if (closeReported) finish(closeFailed ? fixedError() : null);
+        } catch {
+            finish(fixedError());
+        }
     });
-    server.closeAllConnections();
-    await closed;
 }
+
+// Unlike HTTP fixtures, raw TCP servers have no closeAllConnections API.
+// Callers must destroy owned peer sockets first, then close within a deadline
+// without printing native errors that may contain private request metadata.
+function closeTcpFixtureServer(server, timeoutMs = 5_000) {
+    if (!server.listening) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+        let settled = false;
+        const finish = (error = null) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            if (error === null) resolve();
+            else reject(error);
+        };
+        const timer = setTimeout(() => finish(new Error(
+            "timed out closing disposable TCP fixture server",
+        )), timeoutMs);
+        try {
+            server.close((error) => finish(error ? new Error(
+                "disposable TCP fixture close failed",
+            ) : null));
+        } catch {
+            finish(new Error("disposable TCP fixture close failed"));
+        }
+    });
+}
+
+test("TCP fixture close failure and timeout remain bounded and private",
+    async () => {
+        const marker = "private-TCP-fixture-close-marker-4196";
+        for (const cause of ["callback", "throw"]) {
+            const server = {
+                listening: true,
+                close: (done) => {
+                    if (cause === "throw") {
+                        throw new Error(`close threw ${marker}`);
+                    }
+                    done(new Error(`close reported ${marker}`));
+                },
+            };
+            await assert.rejects(closeTcpFixtureServer(server, 50),
+                (error) => {
+                    assert.equal(error.message.includes(marker), false);
+                    assert.equal("cause" in error, false);
+                    assert.equal(error.message,
+                        "disposable TCP fixture close failed");
+                    return true;
+                });
+        }
+        const success = {
+            listening: true,
+            close: (done) => done(null),
+        };
+        await closeTcpFixtureServer(success, 50);
+        let onLateClose;
+        const hanging = {
+            listening: true,
+            close: (done) => { onLateClose = done; },
+        };
+        await assert.rejects(closeTcpFixtureServer(hanging, 20),
+            /timed out closing disposable TCP fixture server/);
+        onLateClose(new Error(`late close reported ${marker}`));
+    },
+);
 
 test("fixture close errors never expose private socket diagnostics",
     async () => {
@@ -478,6 +562,40 @@ test("fixture close errors never expose private socket diagnostics",
         });
         assert.equal(closeCalls, 1);
         assert.equal(abortCalls, 1);
+    },
+);
+
+test("fixture close synchronous failures never expose private details",
+    async () => {
+        const marker = "private-sync-fixture-close-marker-8291";
+        for (const failedOperation of ["close", "closeAllConnections"]) {
+            const calls = [];
+            const server = {
+                listening: true,
+                close: (done) => {
+                    calls.push("close");
+                    if (failedOperation === "close") {
+                        throw new Error(`close failed: ${marker}`);
+                    }
+                    queueMicrotask(() => done());
+                },
+                closeAllConnections: () => {
+                    calls.push("abort");
+                    if (failedOperation === "closeAllConnections") {
+                        throw new Error(`abort failed: ${marker}`);
+                    }
+                },
+            };
+            await assert.rejects(closeFixtureServer(server, 50),
+                (error) => {
+                    assert.equal(error.message.includes(marker), false);
+                    assert.equal("cause" in error, false);
+                    assert.equal(error.message,
+                        "disposable HTTP fixture close failed");
+                    return true;
+                });
+            assert.ok(calls.includes("close"));
+        }
     },
 );
 
@@ -1573,13 +1691,7 @@ test("WebDriver upgrade headers use finite Firefox startup budget",
     } finally {
         globalThis.setTimeout = originalSetTimeout;
         bidi.close();
-        await new Promise((resolve, reject) => server.close((error) => {
-            if (error) {
-                reject(error);
-            } else {
-                resolve();
-            }
-        }));
+        await closeTcpFixtureServer(server);
     }
     assert.ok(deadlines.includes(FIREFOX_BIDI_READY_TIMEOUT_MS),
         "Firefox WebSocket upgrade must use a finite startup budget");
@@ -1765,7 +1877,7 @@ test(
             assert.equal(client.socket.destroyed, true);
         } finally {
             client.socket?.destroy();
-            await new Promise((resolve) => server.close(resolve));
+            await closeTcpFixtureServer(server);
         }
     },
 );
@@ -2367,7 +2479,7 @@ test("WebDriver peer disconnect rejects its pending command immediately",
             for (const peer of peers) {
                 peer.destroy();
             }
-            await new Promise((resolve) => server.close(resolve));
+            await closeTcpFixtureServer(server);
         }
     },
 );
@@ -2427,7 +2539,7 @@ test("WebDriver socket error events redact private peer exceptions",
             for (const peer of peers) {
                 peer.destroy();
             }
-            await new Promise((resolve) => server.close(resolve));
+            await closeTcpFixtureServer(server);
         }
     },
 );
