@@ -3,9 +3,8 @@ record_type: task
 id: "ATR-P9-004"
 title: "Optionally prototype and certify a compact multi-tool writer"
 status: open
-priority: P9
+priority: P4
 lane: hardware
-implementation_tier: optional
 dependencies: ["ATR-P7-012"]
 dependencies_specified: true
 dependency_rationale: >-
@@ -48,6 +47,3 @@ records remain accepted theoretical deliverables and are not reopened:
 Open. The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.
-
-Priority: **optional**. This task does not block the current
-local Rust CLI, localhost editor, and printable notebook MVP.

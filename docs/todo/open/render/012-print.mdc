@@ -3,7 +3,7 @@ record_type: task
 id: "ATR-P5-012"
 title: "Printed-page overlays and local printing"
 status: open
-priority: P5
+priority: P1
 lane: render
 dependencies: ["ATR-P5-011"]
 dependencies_specified: true

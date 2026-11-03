@@ -8,17 +8,17 @@ Each entry in `TODO.md` contains a `### TODO - ...` heading, a single synthesis
 paragraph, and one direct link whose visible label is the exact typed record
 path, for example:
 `[docs/todo/open/runtime/task.mdc](docs/todo/open/runtime/task.mdc)`.
-The first-release horizons are P1–P8; P9 is optional hardware research.
+Current priorities are P1–P4; historical task IDs remain unchanged.
 
 ## Typed frontmatter
 
 Each open record defines the following fields:
 
 - `record_type`: `task`.
-- `id`: permanent `ATR-Pn-NNN` identity; do not reuse after closing a task.
+- `id`: permanent `ATR-Pn-NNN` identity, independent of current priority.
 - `title`: human-readable task title matching the index.
 - `status`: `open` while unfinished; move closed work to `completed/`.
-- `priority`: the governing P1–P9 horizon.
+- `priority`: current P1–P4 rank, where P1 is highest.
 - `lane`: workstream within that horizon.
 - `dependencies`: typed references to prerequisite task identities.
 - `dependencies_specified`: `false` means prerequisites remain unknown;
@@ -40,8 +40,8 @@ The frontend regression suite checks that reviewed prerequisites reference
 existing tasks, do not duplicate edges, and form a cycle-free graph. It rejects
 unreviewed edges rather than silently treating them as authoritative.
 
-Task identity is permanent, not its position in `TODO.md`. Closing a task
-leaves gaps in the numbered open index; it never renumbers later records.
+Task identity is permanent, not its priority or position in `TODO.md`.
+Closing a task never renumbers remaining records.
 Reviewed dependencies may reference a completed task by its same identity.
 The integrity suite checks both open and completed records so those edges
 remain resolvable without treating theoretical completion as a live feature.
@@ -122,11 +122,9 @@ Hardware, external model accounts, MCP, and native desktop installers remain
 optional advanced work. Their accepted theoretical designs stay archived,
 while unfinished implementation appears in separate future TODO records.
 
-**Priority as of November 3, 2026:** four local-output tasks are first,
-followed by 25 after-MVP or optional implementation tracks. Those 25 tracks
-map all 77 accepted original design IDs exactly once through
-`source_designs`. Completed theory is not erased or misrepresented as
-working software. Later task counts change when implementation work closes.
+The open work is one list, ordered from P1 to P4. All 77 accepted original
+designs remain represented by linked implementation tasks. Completed theory
+is not erased or misrepresented as working software.
 
 A theoretical deliverable is sufficient to close its academic design task.
 An executable follow-up closes only when its promised working functionality
@@ -152,8 +150,7 @@ its theoretical deliverable itself is materially incomplete.
 
 Every implementation follow-up sourced from an accepted historical design
 has `migrated_from: accepted-theoretical-designs`, a bounded practical
-criterion, an `implementation_tier` and a stable `source_designs` list.
+criterion, a P1–P4 `priority` and a stable `source_designs` list.
 The TODO integrity suite requires every historical design to appear in
 exactly one such follow-up, whether that follow-up is open or completed.
-The first four user-facing goals appear before all deferred and optional
-work. The optional hardware queue is not an MVP dependency.
+The most urgent local notebook work is P1. Optional hardware is P4.

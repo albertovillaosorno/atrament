@@ -3,9 +3,8 @@ record_type: task
 id: "ATR-P4-014"
 title: "Implement joined strokes diacritics and correlated variation"
 status: open
-priority: P4
+priority: P1
 lane: handwriting
-implementation_tier: after-mvp
 dependencies: ["ATR-P4-012"]
 dependencies_specified: true
 dependency_rationale: >-
@@ -46,6 +45,3 @@ records remain accepted theoretical deliverables and are not reopened:
 Open. The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.
-
-Priority: **after-mvp**. This task does not block the current
-local Rust CLI, localhost editor, and printable notebook MVP.

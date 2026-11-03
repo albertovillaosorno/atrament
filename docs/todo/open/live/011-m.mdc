@@ -3,9 +3,8 @@ record_type: task
 id: "ATR-P7-011"
 title: "Implement optional device-neutral pen path and ordering"
 status: open
-priority: P7
+priority: P4
 lane: live
-implementation_tier: optional
 dependencies: ["ATR-P5-013"]
 dependencies_specified: true
 dependency_rationale: >-
@@ -46,6 +45,3 @@ records remain accepted theoretical deliverables and are not reopened:
 Open. The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.
-
-Priority: **optional**. This task does not block the current
-local Rust CLI, localhost editor, and printable notebook MVP.

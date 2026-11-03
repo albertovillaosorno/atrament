@@ -3,7 +3,7 @@ record_type: task
 id: "ATR-P5-011"
 title: "Rust notebook to PDF and transparent PNG"
 status: open
-priority: P5
+priority: P1
 lane: render
 dependencies: ["ATR-P2-010", "ATR-P4-012"]
 dependencies_specified: true

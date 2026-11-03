@@ -60,13 +60,11 @@ function indexEntries() {
     let horizon = null;
     let title = null;
     let paragraph = [];
-    let number = 0;
     for (const line of todo.split("\n")) {
-        const section = /^## (P\d+) — /.exec(line);
+        const section = /^## (P[1-4]) — /.exec(line);
         if (section) {
             assert.equal(title, null, "task missing its direct record link");
             horizon = section[1];
-            number = 0;
         }
         const heading = /^### TODO - (.+)$/.exec(line);
         if (heading) {
@@ -85,11 +83,12 @@ function indexEntries() {
                     `${title}: link label must be its exact record path`);
                 const basename = /\/(\d{3})-[^/]+\.mdc$/.exec(link[1]);
                 assert.ok(basename, `${title}: record filename lacks ID`);
-                const nextNumber = Number(basename[1]);
-                assert.ok(nextNumber > number,
-                    `${title}: IDs must remain ordered, even with gaps`);
-                number = nextNumber;
-                const id = `ATR-${horizon}-${basename[1]}`;
+                const content = readFileSync(resolve(root, link[1]), "utf8");
+                const id = /^id: "(ATR-P[1-9]-\d{3})"$/m
+                    .exec(content)?.[1];
+                assert.ok(id, `${title}: stable task identity missing`);
+                assert.equal(id.slice(-3), basename[1],
+                    `${title}: filename must keep original identity`);
                 entries.push({
                     horizon, title, summary, path: link[1], id,
                 });
@@ -268,7 +267,7 @@ test("every accepted design has one implementation follow-up", () => {
         if (!/^migrated_from: accepted-theoretical-designs$/m.test(content)) {
             continue;
         }
-        assert.match(content, /^implementation_tier: (after-mvp|optional)$/m);
+        assert.match(content, /^priority: P[1-4]$/m);
         const sourceBlock = /^source_designs:\n((?:  - "ATR-P[1-9]-\d{3}"\n)+)/m
             .exec(content)?.[1];
         assert.ok(sourceBlock, `${path}: missing stable source design IDs`);
@@ -287,17 +286,17 @@ test("every accepted design has one implementation follow-up", () => {
         "all accepted designs must remain tracked for implementation");
 });
 
-test("the local MVP precedes deferred and optional TODOs", () => {
-    const priority = { now: 0, "after-mvp": 1, optional: 2 };
-    let last = 0;
+test("one ordered P1-P4 list keeps stable task identities", () => {
+    const sections = [...todo.matchAll(/^## (P\d+) — /gm)]
+        .map((match) => match[1]);
+    assert.deepEqual(sections, ["P1", "P2", "P3", "P4"]);
+    assert.ok(entries.length > 0, "unfinished task list cannot be empty");
+    let previous = 1;
     for (const entry of entries) {
-        const content = readFileSync(resolve(root, entry.path), "utf8");
-        const tier = /^implementation_tier: ([a-z-]+)$/m.exec(content)?.[1]
-            ?? "now";
-        const current = priority[tier];
-        assert.ok(current !== undefined, `${entry.id}: invalid priority`);
-        assert.ok(current >= last,
-            `${entry.id}: a high-priority task follows a deferred task`);
-        last = current;
+        const rank = Number(entry.horizon.slice(1));
+        assert.ok(rank >= previous, "priority must not decrease");
+        previous = rank;
+        assert.match(entry.id, /^ATR-P[1-9]-\d{3}$/);
     }
+    assert.doesNotMatch(todo, /\b(?:NOW|MVP|after-mvp)\b/i);
 });

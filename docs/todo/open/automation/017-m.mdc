@@ -3,9 +3,8 @@ record_type: task
 id: "ATR-P6-017"
 title: "Optionally transcribe local audio/video with explicit uncertainty"
 status: open
-priority: P6
+priority: P4
 lane: automation
-implementation_tier: optional
 dependencies: []
 dependencies_specified: true
 dependency_rationale: >-
@@ -45,6 +44,3 @@ records remain accepted theoretical deliverables and are not reopened:
 Open. The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.
-
-Priority: **optional**. This task does not block the current
-local Rust CLI, localhost editor, and printable notebook MVP.

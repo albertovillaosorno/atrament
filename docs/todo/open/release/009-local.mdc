@@ -3,7 +3,7 @@ record_type: task
 id: "ATR-P8-009"
 title: "Personal Rust CLI and localhost end-to-end journey"
 status: open
-priority: P8
+priority: P1
 lane: release
 dependencies: ["ATR-P1-006", "ATR-P3-011", "ATR-P5-012"]
 dependencies_specified: true

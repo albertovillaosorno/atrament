@@ -5,7 +5,6 @@ title: "Add calibrated page marks and bilingual text layout diagnostics"
 status: open
 priority: P2
 lane: semantic
-implementation_tier: after-mvp
 dependencies: ["ATR-P2-011","ATR-P4-012"]
 dependencies_specified: true
 dependency_rationale: >-
@@ -46,6 +45,3 @@ records remain accepted theoretical deliverables and are not reopened:
 Open. The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.
-
-Priority: **after-mvp**. This task does not block the current
-local Rust CLI, localhost editor, and printable notebook MVP.
