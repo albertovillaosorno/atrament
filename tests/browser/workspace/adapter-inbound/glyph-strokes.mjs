@@ -43,7 +43,7 @@ test("untrusted glyph TSV and edited numeric fields fail closed", () => {
         `${header}ñ\t-1\t0\t1\t4\t80\t#123456\n`,
         `${header}ñ\tNaN\t0\t1\t4\t80\t#123456\n`,
         `${header}ñ\t0\t0\t1\t4\t80\t#123456\tbogus\n`,
-        `${header}ñ\t0\t0\t1\t4\t80\t#123456\n`.repeat(257),
+        `${header}ñ\t0\t0\t1\t4\t80\t#123456\n`.repeat(4097),
     ];
     for (const candidate of bad) {
         assert.throws(() => parseGlyphLibrary(candidate), undefined,
@@ -52,8 +52,13 @@ test("untrusted glyph TSV and edited numeric fields fail closed", () => {
     assert.throws(() => encodeGlyphLibrary([]));
     assert.throws(() => encodeGlyphLibrary([stroke("a\n")]));
     assert.throws(() => encodeGlyphLibrary([stroke("ab")]));
-    assert.throws(() => encodeGlyphLibrary(Array(257).fill(stroke())));
-    assert.throws(() => parseGlyphLibrary("ü".repeat(32769)));
+    assert.throws(() => encodeGlyphLibrary(Array(4097).fill(stroke())));
+    assert.throws(() => parseGlyphLibrary("ü".repeat(262145)));
+    const expanded = Array.from({ length: 600 }, (_, index) => ({
+        ...stroke(index % 2 === 0 ? "ñ" : "n\u{303}"),
+        x1: 100 + index,
+    }));
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(expanded)), expanded);
 });
 
 class FakeElement {
@@ -224,7 +229,7 @@ test("import refuses bad UTF-8 and stale file operations", async () => {
     }
 });
 
-test("choose and revise any imported stroke without altering neighbors", async () => {
+test("revise any imported stroke without altering neighbors", async () => {
     const ui = mountEditor();
     try {
         const { editor, get, downloads } = ui;
@@ -253,7 +258,8 @@ test("choose and revise any imported stroke without altering neighbors", async (
         get("color").value = "#112233";
         get("update").dispatch("click");
         assert.equal(get("preview").children[1].attributes.get("x1"), "1234");
-        assert.equal(get("preview").children[1].attributes.get("data-selected"), "true");
+        assert.equal(get("preview").children[1].attributes
+            .get("data-selected"), "true");
         get("x2").value = "1234";
         get("y2").value = "700";
         get("update").dispatch("click");
@@ -282,7 +288,7 @@ test("choose and revise any imported stroke without altering neighbors", async (
     }
 });
 
-test("pointer drawing commits only validated physical segments on release", async () => {
+test("pointer drawing validates segments on release", async () => {
     const ui = mountEditor();
     try {
         const { get, editor, downloads } = ui;

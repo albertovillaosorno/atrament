@@ -32,8 +32,8 @@
 //
 //! Temporary local authoring surface for real explicit glyph line segments.
 const HEADER = "atrament.glyph-strokes.v1";
-const MAX_BYTES = 65_536;
-const MAX_STROKES = 256;
+const MAX_BYTES = 524_288;
+const MAX_STROKES = 4096;
 const SVG_NS = "http://www.w3.org/2000/svg";
 const AXES = ["x1", "y1", "x2", "y2", "width"];
 function exactGrapheme(value) {
@@ -77,7 +77,7 @@ function validateStroke(stroke) {
 export function parseGlyphLibrary(text) {
     if (new TextEncoder().encode(text).length > MAX_BYTES
         || !text.endsWith("\n") || text.includes("\r")) {
-        throw new Error("Glyph TSV must be at most 65536 bytes, with LF lines");
+        throw new Error("Glyph TSV must be at most 524288 bytes, with LF lines");
     }
     const lines = text.slice(0, -1).split("\n");
     if (lines.shift() !== HEADER || lines.length < 1
@@ -106,7 +106,7 @@ export function parseGlyphLibrary(text) {
 }
 export function encodeGlyphLibrary(strokes) {
     if (strokes.length < 1 || strokes.length > MAX_STROKES) {
-        throw new Error("Save requires 1..256 authored glyph strokes");
+        throw new Error("Save requires 1..4096 authored glyph strokes");
     }
     const lines = strokes.map((item) => {
         const stroke = validateStroke(item);
@@ -115,7 +115,7 @@ export function encodeGlyphLibrary(strokes) {
     });
     const result = `${HEADER}\n${lines.join("\n")}\n`;
     if (new TextEncoder().encode(result).length > MAX_BYTES) {
-        throw new Error("Glyph TSV exceeds 65536 bytes");
+        throw new Error("Glyph TSV exceeds 524288 bytes");
     }
     return result;
 }
@@ -142,7 +142,8 @@ export function createGlyphStrokeEditor() {
         numeric[axis] = required(`glyph-${axis}`);
         ranges[axis] = required(`glyph-${axis}-range`);
     }
-    const controls = [character, color, source, add, selected, update, remove, save,
+    const controls = [character, color, source, add, selected, update,
+        remove, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
     let generation = 0;
@@ -153,7 +154,8 @@ export function createGlyphStrokeEditor() {
     const message = (text) => { status.textContent = text; };
     const render = () => {
         const shown = strokes.flatMap((stroke, index) => {
-            return stroke.grapheme === character.value ? [{ stroke, index }] : [];
+            return stroke.grapheme === character.value
+                ? [{ stroke, index }] : [];
         });
         if (!shown.some(({ index }) => index === selectedIndex)) {
             selectedIndex = null;
@@ -161,7 +163,8 @@ export function createGlyphStrokeEditor() {
         const options = shown.map(({ index }, position) => {
             const option = document.createElement("option");
             option.value = String(index);
-            option.textContent = "Stroke " + (position + 1) + " of " + shown.length;
+            option.textContent = "Stroke " + (position + 1)
+                + " of " + shown.length;
             return option;
         });
         const placeholder = document.createElement("option");
@@ -183,8 +186,10 @@ export function createGlyphStrokeEditor() {
             if (index === selectedIndex) {
                 line.setAttribute("data-selected", "true");
             }
-            line.addEventListener("click", () => { if (active)
-                choose(index); });
+            line.addEventListener("click", () => {
+                if (active)
+                    choose(index);
+            });
             line.addEventListener("pointerdown", (event) => {
                 event.stopPropagation();
                 if (active && event.button === 0)
@@ -345,7 +350,7 @@ export function createGlyphStrokeEditor() {
             return;
         try {
             if (strokes.length === MAX_STROKES) {
-                throw new Error("Native glyph limit is 256 line segments");
+                throw new Error("Native glyph limit is 4096 line segments");
             }
             const next = [...strokes, editable()];
             encodeGlyphLibrary(next);
@@ -371,7 +376,8 @@ export function createGlyphStrokeEditor() {
             encodeGlyphLibrary(next);
             strokes = next;
             render();
-            message("Updated selected stroke; " + strokes.length + " unsaved strokes");
+            message("Updated selected stroke; " + strokes.length
+                + " unsaved strokes");
         }
         catch (error) {
             message(String(error));
@@ -398,7 +404,7 @@ export function createGlyphStrokeEditor() {
         source.value = "";
         try {
             if (file.size > MAX_BYTES) {
-                throw new Error("Glyph file exceeds 64 KiB");
+                throw new Error("Glyph file exceeds 512 KiB");
             }
             const bytes = await file.arrayBuffer();
             if (!active || generation !== expected)

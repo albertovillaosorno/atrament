@@ -52,7 +52,7 @@ use super::{
 };
 
 const ADVANCE_UM: u32 = 4_000;
-const MAX_STROKES: usize = 256;
+const MAX_STROKES: usize = 4096;
 const MAX_RUNS: usize = 16;
 const MAX_RUN_GRAPHEMES: usize = 96;
 const MAX_FALLBACKS: usize = 64;
@@ -168,7 +168,7 @@ impl GlyphOverlay {
             );
         }
         if text.len() > MAX_GLYPH_LIBRARY_BYTES {
-            return Err("glyph library exceeds 65536 bytes".into());
+            return Err("glyph library exceeds 524288 bytes".into());
         }
         Ok(text.into_bytes())
     }
@@ -283,7 +283,7 @@ impl GlyphOverlay {
             .into());
         }
         if bytes.len() > MAX_GLYPH_LIBRARY_BYTES {
-            return Err("glyph library exceeds 65536 bytes".into());
+            return Err("glyph library exceeds 524288 bytes".into());
         }
         let contents =
             from_utf8(bytes).map_err(|_error| "glyph library must be UTF-8")?;
@@ -296,7 +296,7 @@ impl GlyphOverlay {
         }
         for (index, line) in lines.enumerate() {
             if self.strokes.len() == MAX_STROKES {
-                return Err("glyph library exceeds 256 strokes".into());
+                return Err("glyph library exceeds 4096 strokes".into());
             }
             let fields: Vec<String> = line.split('\t')
                 .map(str::to_owned).collect();
@@ -322,7 +322,7 @@ impl GlyphOverlay {
         match flag {
             "--glyph-stroke" => {
                 if self.strokes.len() == MAX_STROKES {
-                    return Err("more than 256 glyph strokes refused".into());
+                    return Err("more than 4096 glyph strokes refused".into());
                 }
                 let grapheme = iter.next()
                     .ok_or("--glyph-stroke requires one grapheme")?;

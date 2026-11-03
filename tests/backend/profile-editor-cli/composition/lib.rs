@@ -1949,15 +1949,25 @@ fn glyph_library_rejects_missing_shapes_and_over_budget_strokes() {
     .expect_err("missing exclamation glyph must fail");
     assert!(error.contains("missing authored glyph shapes"), "{error}");
 
+    let mut extended = String::from("atrament.glyph-strokes.v1\n");
+    for _ in 0..600 {
+        extended.push_str("ñ\t0\t0\t3500\t4500\t250\t#123456\n");
+    }
+    fs::write(&source, extended.as_bytes()).expect("test expanded library");
+    let loaded = execute_glyph_library(&args(&["--profile", name]))
+        .expect("expanded library accepted")
+        .expect("expanded bytes");
+    assert_eq!(loaded, extended.as_bytes());
+
     let mut too_many = String::from("atrament.glyph-strokes.v1\n");
-    for _ in 0..257 {
+    for _ in 0..4097 {
         too_many.push_str("ñ\t0\t0\t3500\t4500\t250\t#123456\n");
     }
     fs::write(&source, too_many).expect("test over-budget library");
     let error =
         execute_glyph_library(&args(&["--profile", name]))
             .expect_err("too many authored segments");
-    assert!(error.contains("256 strokes"), "{error}");
+    assert!(error.contains("4096 strokes"), "{error}");
     fs::remove_file(source).expect("remove source");
 }
 

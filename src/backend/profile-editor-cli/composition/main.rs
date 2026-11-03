@@ -67,7 +67,7 @@ use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 const MAX_INVENTORY_TEXT_BYTES: usize = 4096;
-const MAX_GLYPH_LIBRARY_BYTES: usize = 65_536;
+const MAX_GLYPH_LIBRARY_BYTES: usize = 524_288;
 
 const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     | paper [atrament-paper options] \
