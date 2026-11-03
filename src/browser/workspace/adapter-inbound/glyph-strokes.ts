@@ -326,9 +326,11 @@ function straightGuide(lines: StraightLine[]): string {
     return commands.join(" ");
 }
 
-function tallStem(cx: number, cy: number, radius: number, g: "l" | "t") {
+function tallStem(
+    cx: number, cy: number, radius: number, g: "l" | "t" | "f",
+) {
     return {
-        from: { x: cx, y: g === "l"
+        from: { x: cx, y: g === "l" || g === "f"
             ? cy - Math.round(radius * 1.5) : cy - radius },
         to: { x: cx, y: cy + radius },
     };
@@ -384,7 +386,7 @@ export function geometricStarter(
     kind: "single" | "two-storey" = "single",
 ): Stroke[] {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
-        "n", "u", "h", "m", "l", "t", "v", "w",
+        "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
         "k", "x", "y", "z", "c", "e", "i", "í"].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
@@ -410,7 +412,7 @@ export function geometricStarter(
         || cy + radius + halfPen > 4500) {
         throw new Error("Shape and pen thickness must fit inside glyph cell");
     }
-    if (["n", "u", "h", "m"].includes(g)) {
+    if (["n", "u", "h", "m", "r"].includes(g)) {
         const line = (first: Point, last: Point): Stroke => {
             return validateStroke({
                 grapheme: g, x1: first.x, y1: first.y,
@@ -435,7 +437,8 @@ export function geometricStarter(
             lines.push(line(parts.lastStem.from, parts.lastStem.to));
             return lines;
         }
-        const bow = roundedStory(cx, cy, radius, g as "n" | "u" | "h");
+        const bow = roundedStory(cx, cy, radius,
+            g === "r" ? "n" : g as "n" | "u" | "h");
         if (g === "h" && bow.firstStem.to.y < halfPen) {
             throw new Error("Ascender stem and pen must fit inside glyph cell");
         }
@@ -450,7 +453,9 @@ export function geometricStarter(
                 output.push(line(first, last));
             }
         }
-        output.push(line(bow.lastStem.from, bow.lastStem.to));
+        if (g !== "r") {
+            output.push(line(bow.lastStem.from, bow.lastStem.to));
+        }
         return output;
     }
     if (["v", "w", "k", "x", "y", "z"].includes(g)) {
@@ -468,7 +473,7 @@ export function geometricStarter(
             x2: to.x, y2: to.y, width: pen, color,
         }));
     }
-    if (g === "l" || g === "t") {
+    if (g === "l" || g === "t" || g === "f") {
         const stem = tallStem(cx, cy, radius, g);
         if (stem.from.y < halfPen) {
             throw new Error("Tall stem and pen must fit inside glyph cell");
@@ -477,7 +482,7 @@ export function geometricStarter(
             grapheme: g, x1: stem.from.x, y1: stem.from.y,
             x2: stem.to.x, y2: stem.to.y, width: pen, color,
         })];
-        if (g === "t") lines.push(validateStroke({
+        if (g === "t" || g === "f") lines.push(validateStroke({
             grapheme: g, x1: cx - radius, y1: cy,
             x2: cx + Math.round(radius * 0.55), y2: cy,
             width: pen, color,
@@ -848,14 +853,17 @@ export function createGlyphStrokeEditor(): {
                 element.setAttribute("stroke", color.value);
             }
             const roundedVisible = active
-                && ["n", "u", "h", "m", "v", "w", "k", "x", "y", "z"]
+                && ["n", "u", "h", "m", "r",
+                    "v", "w", "k", "x", "y", "z"]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
             roundedLeft.setAttribute("visibility", roundedStemState);
-            roundedRight.setAttribute("visibility", roundedStemState);
+            const roundedRightState = chosen.grapheme === "r"
+                ? "hidden" : roundedStemState;
+            roundedRight.setAttribute("visibility", roundedRightState);
             const openStart = openCirclePoint(cx, cy, r, 0);
             const openEnd = openCirclePoint(cx, cy, r,
                 OPEN_ARC_SEGMENTS);
@@ -876,15 +884,16 @@ export function createGlyphStrokeEditor(): {
             eBar.setAttribute("y2", String(cy));
             eBar.setAttribute("stroke-width", numeric.width.value);
             eBar.setAttribute("stroke", color.value);
-            const barState = active && ["e", "t"]
+            const barState = active && ["e", "t", "f"]
                 .includes(chosen.grapheme) ? "visible" : "hidden";
             eBar.setAttribute("visibility", barState);
             const pen = Number(numeric.width.value);
             const iParts = ["i", "í"].includes(chosen.grapheme)
                 ? dottedI(cx, cy, r, pen)
                 : dottedI(cx, cy, 1100, 250);
-            if (["l", "t"].includes(chosen.grapheme)) {
-                const tallKind = chosen.grapheme === "l" ? "l" : "t";
+            if (["l", "t", "f"].includes(chosen.grapheme)) {
+                const tallKind = chosen.grapheme === "l" ? "l"
+                    : chosen.grapheme === "f" ? "f" : "t";
                 iParts.stem = tallStem(cx, cy, r, tallKind);
             }
             for (const [iElement, part] of [
@@ -897,7 +906,7 @@ export function createGlyphStrokeEditor(): {
                 iElement.setAttribute("stroke-width", numeric.width.value);
                 iElement.setAttribute("stroke", color.value);
             }
-            const iState = active && ["i", "í", "l", "t"]
+            const iState = active && ["i", "í", "l", "t", "f"]
                 .includes(chosen.grapheme) ? "visible" : "hidden";
             const dotState = active && chosen.grapheme === "i"
                 ? "visible" : "hidden";

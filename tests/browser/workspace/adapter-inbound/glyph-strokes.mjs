@@ -1132,6 +1132,91 @@ test("v/w exact SVG lines and native TSV remain session-safe", async () => {
     }
 });
 
+test("f is taller and r has an n shoulder without right stem", () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const f = geometricStarter("f", ...args);
+    const r = geometricStarter("r", ...args);
+    const n = geometricStarter("n", ...args);
+    assert.deepEqual(f, [
+        { grapheme: "f", x1: 1550, y1: 800, x2: 1550,
+            y2: 3550, width: 250, color: "#123456" },
+        { grapheme: "f", x1: 450, y1: 2450, x2: 2155,
+            y2: 2450, width: 250, color: "#123456" },
+    ]);
+    assert.equal(r.length, 33);
+    assert.deepEqual(r, n.slice(0, -1).map((stroke) => ({
+        ...stroke, grapheme: "r",
+    })), "r has a true quadratic shoulder but no dangling n right stem");
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary([...f, ...r])),
+        [...f, ...r]);
+    assert.throws(() => geometricStarter("f", 1550, 1450, 1100,
+        250, "#123456"), /Tall stem and pen/);
+    assert.throws(() => geometricStarter("r", 1550, 1100, 1100,
+        250, "#123456"), /Shape and pen/);
+    assert.throws(() => geometricStarter("r", ...args,
+        undefined, "two-storey"), /Two-storey/);
+});
+
+test("f/r SVG previews match TSV and refuse clipped replacement", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("character").value = "f";
+        get("character").dispatch("input");
+        get("form").value = "f";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-i-stem").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-i-stem").attributes.get("y1"), "800");
+        assert.equal(get("ideal-e-bar").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 2);
+        get("character").value = "r";
+        get("character").dispatch("input");
+        get("form").value = "r";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-rounded").attributes.get("d"),
+            "M 450 2450 Q 450 1350 1550 1350 Q 2650 1350 2650 2450");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-rounded-left").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-rounded-right").attributes.get("visibility"),
+            "hidden");
+        assert.equal(get("ideal-i-stem").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.equal(get("preview").children.length, 33);
+        get("save").dispatch("click");
+        const saved = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(saved, [
+            ...geometricStarter("f", 1550, 2450, 1100, 250,
+                "#243647"),
+            ...geometricStarter("r", 1550, 2450, 1100, 250,
+                "#243647"),
+        ]);
+        get("character").value = "f";
+        get("character").dispatch("input");
+        get("form").value = "f";
+        get("form").dispatch("change");
+        get("circle-y").value = "1450";
+        get("circle-y").dispatch("input");
+        assert.equal(get("ideal-i-stem").attributes.get("visibility"),
+            "hidden");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /Tall stem and pen/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            saved, "refused f must not overwrite either glyph");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("k/x/y/z straight templates retain independent pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#123456"];
     const endpoints = {

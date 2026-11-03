@@ -360,6 +360,22 @@ one-page PDF plus a transparent 72-DPI RGBA PNG. The same local export
 route remains explicit and bounded. Full Spanish/English coverage and
 vector-authoritative native curves remain unfinished.
 
+## Exact stem/bar f and curved-shoulder r starters (partial) — 2026-11-03
+
+The localhost editor now adds lowercase `f` from a tall stem and horizontal
+crossbar (2 exact TSV segments) and `r` from `n`'s left vertical stroke
+and two ideal quadratic shoulder arcs, intentionally without a second
+right stem (33 TSV segments). The shoulder stays analytic in the local SVG
+and is sampled as 32 bounded line chords in Rust-compatible v1 TSV.
+
+Two focused browser tests verify endpoint equality, 32 ordered chords,
+SVG guide visibility, explicit TSV readback and atomic clipped-ascender
+refusal; the reviewed SVG attribute inventory remains pinned. The
+35-segment `fr` library passed byte-identical Rust CLI readback, zero
+missing exact-glyph audit and real one-page PDF plus transparent 72-DPI
+RGBA PNG export for `frfr`. Automatic cursive, the full Spanish/English
+inventory and native vector-curve persistence remain unfinished.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

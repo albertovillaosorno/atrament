@@ -577,7 +577,8 @@ curved pen stroke.
 
 For a geometric starting point, choose an explicitly supported glyph
 (`o`, `a`, `ó`, `á`, `b`, `d`, `p`, `q`, `n`, `u`, `h`, `m`,
-`l`, `t`, `v`, `w`, `k`, `x`, `y`, `z`, `c`, `e`, `i` or `í`) and its matching
+`l`, `t`, `f`, `r`, `v`, `w`, `k`, `x`, `y`, `z`, `c`, `e`,
+`i` or `í`) and its matching
 geometric starter. Adjust the center and radius in
 micrometres, then deliberately replace that letter's unsaved strokes.
 The `o`/`a` forms share a true analytic circle.
@@ -632,6 +633,13 @@ vertical stem with one straight e-style crossbar (2 ordered segments).
 Their SVG guides use the same exact line coordinates as the native TSV,
 without curve approximation. With an out-of-cell ascender, the editor
 refuses replacement rather than clipping or changing earlier glyphs.
+
+An `f` reuses the tall `l` stem and the exact `t` crossbar, preserving two
+separately ordered strokes. A lowercase `r` reuses `n`'s true quadratic
+shoulder and left stem but deliberately omits the `n` right stem: one
+straight stroke and 32 sampled chords (33 TSV segments). Its SVG keeps
+both ideal quadratic arcs. Both templates remain user-selectable and refuse
+clipped geometry without changing saved ink; this is still not cursive.
 
 The symmetric `v` uses two exact straight segments and `w` uses four
 connected straight segments, reusing one SVG guide with no additional

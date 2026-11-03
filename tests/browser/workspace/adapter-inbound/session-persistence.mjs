@@ -1808,7 +1808,7 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
     'roundedPath.setAttribute("visibility", roundedState);',
     // Zigzag guide reuses roundedPath; hide the unrelated n/u stem lines.
     'roundedLeft.setAttribute("visibility", roundedStemState);',
-    'roundedRight.setAttribute("visibility", roundedStemState);',
+    'roundedRight.setAttribute("visibility", roundedRightState);',
     'openPath.setAttribute("d", openD);',
     'openPath.setAttribute("stroke-width", numeric.width.value);',
     'openPath.setAttribute("stroke", color.value);',
