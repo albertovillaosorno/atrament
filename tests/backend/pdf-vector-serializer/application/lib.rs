@@ -488,3 +488,133 @@ fn compound_contours_preserve_explicit_even_odd_or_nonzero_fill_rule() {
         "different caller fill rules must produce distinct output",
     );
 }
+
+const fn matrix_expected_error(
+    resource_case: usize,
+    identity_case: usize,
+    preserved_text: bool,
+    box_case: usize,
+    path_case: usize,
+) -> Option<PdfVectorError> {
+    if resource_case != 0 {
+        Some(PdfVectorError::UnsupportedAssets)
+    } else if identity_case == 1 {
+        Some(PdfVectorError::InvalidManifestIdentity)
+    } else if preserved_text {
+        Some(PdfVectorError::UnsupportedSearchableText)
+    } else if box_case >= 2 {
+        Some(PdfVectorError::InvalidPageBox)
+    } else if path_case == 2 {
+        Some(PdfVectorError::InvalidPath)
+    } else {
+        None
+    }
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "a successful synthetic fixture must return inspectable PDF bytes"
+)]
+#[test]
+fn complete_compact_resource_text_box_path_and_identity_matrix() {
+    let mut checked = 0usize;
+    let mut accepted = 0usize;
+    for box_case in 0usize..4 {
+        for preserved_text in [false, true] {
+            for resource_case in 0usize..3 {
+                for path_case in 0usize..3 {
+                    for identity_case in 0usize..2 {
+                        let mut painted_path = if path_case == 0 {
+                            stroke()
+                        } else {
+                            fill()
+                        };
+                        if path_case == 2 {
+                            painted_path.commands =
+                                vec![PdfPathCommand::LineTo(point(
+                                    30_000, 50_000,
+                                ))];
+                        }
+                        let mut page_value = page(vec![painted_path]);
+                        page_value.physical_page_box = match box_case {
+                            0 => PdfVectorPageBox {
+                                width_um: 210_000,
+                                height_um: 297_000,
+                            },
+                            1 => PdfVectorPageBox {
+                                width_um: 215_900,
+                                height_um: 279_400,
+                            },
+                            2 => PdfVectorPageBox {
+                                width_um: 0,
+                                height_um: 297_000,
+                            },
+                            _ => PdfVectorPageBox {
+                                width_um: 2_000_001,
+                                height_um: 297_000,
+                            },
+                        };
+                        if preserved_text {
+                            page_value.searchable_text =
+                                SearchableSemanticText::Preserved(());
+                        }
+                        let mut composition = document();
+                        composition.pages = vec![page_value];
+                        if resource_case != 0 {
+                            composition.assets = vec![PdfAssetResource {
+                                asset_identity: "resource-1",
+                                disposition: if resource_case == 1 {
+                                    PdfAssetDisposition::Embedded
+                                } else {
+                                    PdfAssetDisposition::SafelyReferenced
+                                },
+                            }];
+                        }
+                        if identity_case == 1 {
+                            composition.render_manifest_identity =
+                                "invalid) /OpenAction (unsafe";
+                        }
+                        let expected_error = matrix_expected_error(
+                            resource_case,
+                            identity_case,
+                            preserved_text,
+                            box_case,
+                            path_case,
+                        );
+                        let result =
+                            serialize_vector_pdf(&composition, limits());
+                        if let Some(error) = expected_error {
+                            assert_eq!(
+                                result,
+                                Err(error),
+                                "invalid matrix state must refuse",
+                            );
+                        } else {
+                            let bytes =
+                                result.expect("complete fixture emits PDF");
+                            assert_xref_integrity(&bytes);
+                            assert_eq!(
+                                serialize_vector_pdf(&composition, limits()),
+                                Ok(bytes.clone()),
+                                "admitted combination must be deterministic",
+                            );
+                            let expected_box = if box_case == 1 {
+                                "/MediaBox [0 0 612.000 792.000]"
+                            } else {
+                                "/MediaBox [0 0 595.276 841.890]"
+                            };
+                            assert!(
+                                pdf_string(&bytes).contains(expected_box),
+                                "physical page box retained exactly",
+                            );
+                            accepted = accepted.saturating_add(1);
+                        }
+                        checked = checked.saturating_add(1);
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(checked, 144, "matrix must cover 144 combinations");
+    assert_eq!(accepted, 4, "only four combinations are admissible");
+}

@@ -223,7 +223,8 @@ Current checked-in regression evidence includes:
 - `tests/backend/pdf-vector-serializer/application/lib.rs`, which pins
   reproducible two-page vector PDF bytes, object/xref offsets, physical A4
   dimensions, material paints and fill-rule selection, explicit resource
-  refusal, malformed geometry, clipping and byte-budget boundaries;
+  refusal, malformed geometry, clipping and byte-budget boundaries, plus
+  the 144-state resource/text/physical-box/path/identity admission matrix;
 - `tests/backend/render-manifest/domain/lib.rs`, which pins source, asset,
   model, seed, quality, and version input retention across all 2,880 compact
   asset/model ordering states;
