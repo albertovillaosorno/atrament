@@ -275,7 +275,8 @@ shared Rust PDF or PNG renderer, without a separate paper JSON file:
 
 ```sh
 cargo run -q -p atrament_profile_editor_cli -- \
-  notebook --profile notebook.json --export-paper pdf --pages 3 \
+  notebook --profile notebook.json --date-style box \
+  --date-placement top-right --export-paper pdf --pages 3 \
   --output notebook-paper.pdf
 cargo run -q -p atrament_profile_editor_cli -- \
   notebook --profile notebook.json --export-paper png --dpi 150 \
@@ -323,9 +324,10 @@ only when selected and physically admissible. **Use current paper** includes
 unsaved sheet settings before Rust validation.
 
 **Edit notebook paper** sends the notebook's embedded sheet into the visual
-paper editor through Rust validation; **Use current paper** copies edited settings back only when
-requested. Load and Save JSON use explicitly selected files; no browser
-state is silently persisted or unsupported metadata drawn.
+paper editor through Rust validation; **Use current paper** copies edited
+settings back only when requested. Load and Save JSON use explicitly
+selected files; no browser state is silently persisted or unsupported
+metadata drawn.
 
 ## The workspace
 
