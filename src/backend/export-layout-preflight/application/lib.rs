@@ -34,6 +34,17 @@
 
 //! Read-only layout diagnostic gate for later explicit Export operations.
 
+// Integration-only fixture dependencies also participate in Clippy's library
+// test target; account for them without enlarging production dependencies.
+#[cfg(test)]
+use atrament_physical_page_profile as _;
+#[cfg(test)]
+use atrament_semantic_fixed_region_layout as _;
+#[cfg(test)]
+use atrament_semantic_notebook_port as _;
+#[cfg(test)]
+use atrament_semantic_notebook_session as _;
+
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, DiagnosticCode, DiagnosticSet, Operation,
     OperationContextKind,
