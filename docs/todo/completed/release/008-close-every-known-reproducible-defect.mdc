@@ -1,0 +1,88 @@
+---
+record_type: task
+id: "ATR-P8-008"
+title: "Close every known reproducible defect"
+status: completed
+priority: P8
+lane: release
+dependencies: []
+dependencies_specified: false
+acceptance_criteria:
+  - >-
+      Declare the first release complete only when P1 through P8 are closed,
+      Jig is clean, physical evidence is current, and no known product work
+      remains.
+  - >-
+      Finite v1 completion: Freeze one dated first-release decision ledger
+      with known defects, impact, disposition, and deferred work; acceptance
+      of the ledger does not assert that unresolved risks are fixed or
+      release-safe.
+evidence_status: not_independently_verified
+migrated_from: TODO.md
+---
+
+# Close every known reproducible defect
+
+## Scope and existing evidence
+
+Declare the first release complete only when P1 through P8 are closed, Jig is
+clean, physical evidence is current, and no known product work remains.
+
+## First-release decision ledger — 2026-11-02
+
+**Scope and decision:** freeze the currently *known* defect, missing-feature,
+security, packaging and quality-evidence positions under one dated release
+decision. This is a finite academic/design artifact, not a claim that every
+software defect was corrected. **Release result: `NO_GO` for real end users,
+production security, finished notebook PDF exports, or physical plotting.**
+A theoretical completed TODO never counts as a tested functional release.
+
+| Issue / missing evidence | Impact and severity | Disposition |
+| --- | --- | --- |
+| P1: session URL fragment exposed in browser opener argv | Credential disclosure to other same-user processes; known security defect | `UNRESOLVED / RELEASE BLOCKER`; redesign credential handoff and test process visibility before production |
+| Notebook-to-PDF path, layout/renderer and final PDF serializer absent | Primary notebook/PDF digital deliverable not actually generated | `DESIGN ONLY / RELEASE BLOCKER`; implement and demonstrate accepted PDF bytes |
+| No built cross-platform desktop archives, reproducibility evidence or signed distribution | No deployable Linux/Windows/macOS first-release package | `DESIGN ONLY / RELEASE BLOCKER`; produce actual target binaries and digests |
+| Full adversarial input/fuzz and renderer pixel-golden campaigns incomplete | Unbounded quality/security claims unsupported | `EVIDENCE MISSING / RELEASE BLOCKER`; run and triage bounded representative suites before launch |
+| Full frontend regression suite exceeded its 120-second command budget on a memory-pressured host | Complete suite pass not established on this run | `NOT VERIFIED`; rerun on suitable hardware, investigate any failures before launch |
+| Physical safety, calibration, vendor commands and recovery not device tested | Plotter could move unexpectedly or resume from unknown location | `UNAVAILABLE / PHYSICAL NO_GO`; no actual device connection or motor commands |
+| Legacy profile/notebook migration not defined | Historical data cannot be migrated as a supported contract | `REFUSE UNSUPPORTED`; retain original data; no invented migration |
+| P9 optional multi-color mechanism has no prototype/certification | Custom hardware not available | `DEFERRED OPTIONAL`, separate from single-pen and PDF goals |
+
+**Concrete known-defect source:** `src/backend/browser-launch/adapter-outbound/lib.rs`
+documents the argv credential leak near the public `launch()` entrypoint;
+`docs/technical/first-release-troubleshooting.md` marks the same unresolved
+P1 condition. The browser's in-memory fragment removal is insufficient to
+prove subprocess argv privacy. No mitigation was authored or tested as part
+of closing this record; do not lower its severity because the design ledger
+exists.
+
+**Priority and release gate:** notebook and **digital PDF** are the priority
+artifacts; no theoretical live-output plan replaces them. Multiplatform
+(Linux, Windows, macOS) remains the initial distribution intent. A future
+production GO decision requires an actual PDF artifact and inspectable
+semantic/provenance evidence, secure launcher credential handling, verified
+packaging, coherent end-to-end operator workflow, bounded regression results,
+and no remaining release-blocking defects. Physical hardware may remain
+unavailable for a digital-only release but must never advertise safe motion.
+
+**Worked decision:** suppose the TODO index contains no P1–P8 records because
+all finite design criteria were accepted. If the launcher still leaks its
+session credential in argv, evaluate the ledger's first row to `UNRESOLVED`;
+release remains `NO_GO` even with an otherwise complete design checklist.
+One false-positive structural test is not permission to override this row.
+
+**Deferred-work discipline:** opening a future implementation task for a
+PDF encoder, real installer, fuzz test campaign or hardware adapter does not
+reopen a complete theoretical specification. The new task's concrete
+implementation and verification must be separately reviewed before changing
+this frozen date's NO_GO. Preserve all old observations and owner choices.
+
+## Acceptance decision
+
+- **Basis:** theoretical finite release/defect decision ledger dated
+  2026-11-02; known P1 confirmed by checked-in source and guide text.
+- **Delivered:** one severity/disposition table, release/no-go conditions,
+  priority/order and concrete refusal despite completed theoretical TODOs.
+- **Unresolved:** known credential-argv exposure, absent PDF generator and
+  installers, incomplete broad validation, and unverified physical safety.
+- **Release authorization:** **not granted**; `NO_GO` remains the decision.

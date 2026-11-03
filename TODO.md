@@ -18,15 +18,6 @@ remain in typed records under `docs/todo/open/`. Completed work belongs under
 then one direct Markdown link to the complete typed record. No per-item field
 labels belong here.
 
-## P8 — First-release completion
-
-### TODO - Close every known reproducible defect
-
-Declare the first release complete only when P1 through P8 are closed, Jig is
-clean, physical evidence is current, and no known product work remains.
-
-[docs/todo/open/release/008-close-every-known-reproducible-defect.mdc](docs/todo/open/release/008-close-every-known-reproducible-defect.mdc)
-
 ## P9 — Optional compact multi-color writer
 
 ### TODO - Research a quiet compact multi-tool mechanism
