@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-statistics-json
+  name: handwriting-statistics-json
+  path: src/backend/handwriting-statistics-json
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: application

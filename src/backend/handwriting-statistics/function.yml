@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-statistics
+  name: handwriting-statistics
+  path: src/backend/handwriting-statistics
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

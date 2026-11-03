@@ -1,0 +1,24 @@
+[package]
+name = "atrament_handwriting_statistics_json"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license = "MIT"
+
+[dependencies]
+atrament_handwriting_statistics = { workspace = true }
+atrament_profile_json_syntax = { workspace = true }
+atrament_unicode_grapheme_boundary_port = { workspace = true }
+
+[dev-dependencies]
+atrament_unicode_grapheme_segmentation = { workspace = true }
+
+[lib]
+path = "application/lib.rs"
+
+[lints]
+workspace = true
+
+[[test]]
+name = "handwriting_statistics_json_application"
+path = "../../../tests/backend/handwriting-statistics-json/application/lib.rs"

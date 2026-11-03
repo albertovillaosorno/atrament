@@ -55,6 +55,8 @@ members = [
     "src/backend/handwriting-glyph-coverage",
     "src/backend/handwriting-profile-container",
     "src/backend/handwriting-role-profile",
+    "src/backend/handwriting-statistics",
+    "src/backend/handwriting-statistics-json",
     "src/backend/handwriting-stroke-plan",
     "src/backend/handwriting-stroke-vocabulary",
     "src/backend/handwriting-variation",
@@ -162,6 +164,8 @@ atrament_flow_pagination = { path = "src/backend/flow-pagination" }
 atrament_handwriting_diacritic_composition = { path = "src/backend/handwriting-diacritic-composition" }
 atrament_handwriting_glyph_coverage = { path = "src/backend/handwriting-glyph-coverage" }
 atrament_handwriting_profile_container = { path = "src/backend/handwriting-profile-container" }
+atrament_handwriting_statistics = { path = "src/backend/handwriting-statistics" }
+atrament_handwriting_statistics_json = { path = "src/backend/handwriting-statistics-json" }
 atrament_material_layer_plan = { path = "src/backend/material-layer-plan" }
 atrament_mathematics_source = { path = "src/backend/mathematics-source" }
 atrament_mcp_capability_effect = { path = "src/backend/mcp-capability-effect" }
