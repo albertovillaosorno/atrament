@@ -19,3 +19,6 @@ path = "composition/main.rs"
 
 [lints]
 workspace = true
+
+[target.'cfg(unix)'.dev-dependencies]
+nix = { workspace = true }

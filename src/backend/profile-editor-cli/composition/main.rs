@@ -36,7 +36,7 @@
 use std::env;
 use std::error::Error;
 use std::fmt::Write as _;
-use std::fs::File;
+use std::fs::{File, metadata};
 use std::io::{self, Write as _};
 use std::path::Path;
 use std::slice::Iter;
@@ -76,6 +76,13 @@ struct HandwritingRequest {
 fn read_handwriting_profile(
     path: &str,
 ) -> Result<HandwritingStatisticsProfile, String> {
+    // Avoid a blocking FIFO open for ordinary explicit CLI path selection.
+    // This is preflight, not a substitute for opened-handle verification.
+    let source = metadata(path)
+        .map_err(|error| format!("cannot inspect handwriting profile: {error}"))?;
+    if !source.is_file() {
+        return Err("handwriting file refused: NotRegularFile".into());
+    }
     let file = File::open(path)
         .map_err(|error| format!("cannot open handwriting profile: {error}"))?;
     let bytes = read_bounded_profile_file(file, MAXIMUM_STATISTICS_JSON_BYTES)

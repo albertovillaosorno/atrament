@@ -505,6 +505,7 @@ dependencies = [
  "atrament_profile_file_commit",
  "atrament_profile_file_reader",
  "atrament_profile_json_syntax",
+ "nix",
 ]
 
 [[package]]
@@ -577,6 +578,7 @@ dependencies = [
  "atrament_profile_file_commit",
  "atrament_profile_file_reader",
  "atrament_unicode_grapheme_segmentation",
+ "nix",
 ]
 
 [[package]]

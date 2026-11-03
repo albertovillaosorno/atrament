@@ -494,3 +494,23 @@ fn selected_pdf_refuses_invalid_edition_and_existing_symlink() {
     assert_eq!(fs::read(&output).expect("PDF preserved"), pdf);
     fs::remove_dir_all(&dir).expect("remove owned directory");
 }
+
+#[cfg(unix)]
+#[test]
+fn paper_profile_named_pipe_refuses_without_blocking() {
+    use nix::sys::stat::Mode;
+    use nix::unistd::mkfifo;
+    use std::fs;
+    use std::process;
+
+    let path = env::temp_dir().join(format!(
+        "atrament-paper-profile-fifo-{}", process::id(),
+    ));
+    mkfifo(&path, Mode::S_IRUSR | Mode::S_IWUSR)
+        .expect("create a test-owned named pipe");
+    let name = path.to_str().expect("UTF-8 pipe path");
+    let error = read_profile(name)
+        .expect_err("nonregular profile path must refuse before open");
+    assert!(error.contains("NotRegularFile"));
+    fs::remove_file(&path).expect("remove test-owned pipe");
+}

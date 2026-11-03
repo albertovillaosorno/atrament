@@ -36,7 +36,7 @@
 
 use std::env;
 use std::error::Error;
-use std::fs::File;
+use std::fs::{File, metadata};
 use std::io::{self, Write as _};
 use std::mem::swap;
 use std::path::Path;
@@ -311,6 +311,13 @@ fn encode_profile(options: Options) -> String {
 }
 
 fn read_profile(path: &str) -> Result<Options, String> {
+    // Preflight avoids blocking on a caller-named FIFO before File::open.
+    // The shared reader still checks the actual opened descriptor.
+    let source = metadata(path)
+        .map_err(|error| format!("cannot inspect paper profile: {error}"))?;
+    if !source.is_file() {
+        return Err("paper profile file refused: NotRegularFile".into());
+    }
     let file = File::open(path)
         .map_err(|error| format!("cannot open paper profile: {error}"))?;
     let bytes = read_bounded_profile_file(file, MAX_PROFILE_BYTES)

@@ -341,3 +341,19 @@ fn invalid_glyph_removal_preserves_existing_target_bytes() {
     fs::remove_file(source).expect("remove owned input");
     fs::remove_file(output).expect("remove owned output");
 }
+
+#[cfg(unix)]
+#[test]
+fn handwriting_profile_named_pipe_refuses_without_blocking() {
+    use nix::sys::stat::Mode;
+    use nix::unistd::mkfifo;
+
+    let path = test_path().with_extension("fifo");
+    mkfifo(&path, Mode::S_IRUSR | Mode::S_IWUSR)
+        .expect("create a test-owned named pipe");
+    let name = path.to_str().expect("UTF-8 pipe path");
+    let error = read_handwriting_profile(name)
+        .expect_err("nonregular profile path must refuse before open");
+    assert!(error.contains("NotRegularFile"));
+    fs::remove_file(&path).expect("remove test-owned pipe");
+}
