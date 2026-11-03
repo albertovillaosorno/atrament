@@ -1,0 +1,63 @@
+---
+record_type: task
+id: "ATR-P2-010"
+title: "Editable physical notebook page profiles"
+status: completed
+priority: P2
+lane: semantic
+dependencies: ["ATR-P1-005"]
+dependencies_specified: true
+dependency_rationale: >-
+  A canonical Rust profile must own all physical measurements.
+acceptance_criteria:
+  - >-
+      Connect configurable sheet size, paper pattern, spacing,
+      top/bottom/left/right margins, border rounding, dates, page numbers, and
+      printed-sheet flags to Rust profile values.
+  - >-
+      Finite executable completion: One sample notebook profile can be edited
+      for grid and ruled pages with independent margins and date placement;
+      impossible geometry refuses without silent clipping.
+evidence_status: not_independently_verified
+migrated_from: rust-cli-localhost-priority.md
+---
+
+# Editable physical notebook page profiles
+
+## Scope and existing evidence
+
+Connect configurable sheet size, paper pattern, spacing, top/bottom/left/right
+margins, border rounding, dates, page numbers, and printed-sheet flags to Rust
+profile values.
+
+The historical theoretical design remains separate from the executable
+implementation. This record was closed after native Rust geometry and CLI
+accepted/refused cases passed; it does not prove full notebook rendering.
+
+## Acceptance decision
+
+Completed — practical native Rust CLI acceptance on November 3, 2026.
+
+The canonical Rust paper profile owns sheet dimensions, grid/ruled pattern,
+spacing and independent top, bottom, left and right margins. The composite
+notebook profile adds left/right date line/box placement, page numbers,
+printed-sheet handling and rounded printable borders; exported PDF/PNG paper
+layers share the native Rust geometry. The existing localhost editor can
+edit the paper and notebook settings without a second rendering authority.
+
+Accepted example: the focused native CLI test saved and reopened grid and
+ruled notebooks with 5 mm and 7 mm spacing, differing four-edge margins,
+top-left line and top-right box dates, 3 mm rounded borders, page numbering
+and two-page PDF output. Each PDF exactly matched the same Rust paper-layer
+renderer; grid and ruled PDF bytes differed.
+
+Refused example: a paper profile with 204 mm left plus 14 mm right margins on
+a 210 mm sheet was rejected before an explicitly replaceable output sentinel
+was touched. Existing date-clearance, border and printed-sheet tests also
+remain in the CLI/notebook-profile harness.
+
+Verification: `cargo test --offline -p atrament_profile_editor_cli --bin
+atrament-profiles` passed 25 tests and strict all-test Clippy passed. This
+accepts only bounded physical page geometry, not handwriting stroke samples,
+actual date text, image overlays, printer drivers, or cross-platform support.
+Historical design evidence remains not independently re-audited.

@@ -492,6 +492,130 @@ fn notebook_cli_imports_canonical_rust_paper_without_divergent_schema() {
 }
 
 #[test]
+fn notebook_geometry_round_trips_distinct_grid_and_ruled_layouts() {
+    let grid = atrament_notebook_paper_cli::default_paper_profile_json();
+    let ruled = grid
+        .replace("\"style\": \"grid\"", "\"style\": \"ruled\"")
+        .replace("\"spacing_um\": 5000", "\"spacing_um\": 7000")
+        .replace("\"margin_top_um\": 22000", "\"margin_top_um\": 25000")
+        .replace("\"margin_bottom_um\": 16000", "\"margin_bottom_um\": 15000")
+        .replace("\"margin_left_um\": 20000", "\"margin_left_um\": 18000")
+        .replace("\"margin_right_um\": 14000", "\"margin_right_um\": 12000");
+    let paper_paths = [test_path(), test_path()];
+    let notebook_paths = [test_path(), test_path()];
+    let layouts = [(grid, "line", "top-left"), (ruled, "box", "top-right")];
+    let mut rendered = Vec::new();
+    for (index, (paper, style, placement)) in layouts.iter().enumerate() {
+        fs::write(paper_paths.get(index).expect("paper fixture"), paper)
+            .expect("owned paper fixture");
+        let paper_name = paper_paths
+            .get(index)
+            .expect("paper fixture")
+            .to_str()
+            .expect("paper path");
+        let notebook_name = notebook_paths
+            .get(index)
+            .expect("notebook fixture")
+            .to_str()
+            .expect("notebook path");
+        assert!(
+            execute_notebook(&args(&[
+                "--paper-profile",
+                paper_name,
+                "--date-style",
+                style,
+                "--date-placement",
+                placement,
+                "--border-radius-um",
+                "3000",
+                "--page-numbers",
+                "true",
+                "--printed-sheet",
+                "false",
+                "--output",
+                notebook_name,
+            ]))
+            .expect("save edited notebook geometry")
+            .is_none()
+        );
+        let notebook_path = notebook_paths
+            .get(index)
+            .expect("notebook fixture");
+        let stored = fs::read(notebook_path).expect("stored notebook");
+        assert_eq!(
+            execute_notebook(&args(&["--profile", notebook_name]))
+                .expect("reopen notebook")
+                .expect("canonical JSON"),
+            stored,
+        );
+        let loaded = NotebookProfile::from_json(&stored)
+            .expect("Rust geometry validation");
+        assert_eq!(&loaded.paper_json, paper);
+        assert_eq!(loaded.date_style.key(), *style);
+        assert_eq!(loaded.date_placement.key(), *placement);
+        assert_eq!(loaded.border_radius_um, 3_000);
+        assert!(loaded.page_numbers);
+        assert!(!loaded.printed_sheet);
+        let pdf = execute_notebook(&args(&[
+            "--profile",
+            notebook_name,
+            "--export-paper",
+            "pdf",
+            "--pages",
+            "2",
+        ]))
+        .expect("physical export")
+        .expect("PDF bytes");
+        assert_eq!(
+            pdf,
+            loaded.paper_layer_pdf(2).expect("shared Rust renderer")
+        );
+        assert!(String::from_utf8_lossy(&pdf).contains("/Count 2"));
+        rendered.push(pdf);
+    }
+    assert_ne!(
+        rendered.first().expect("grid PDF"),
+        rendered.get(1).expect("ruled PDF"),
+        "distinct grid and ruled marks"
+    );
+
+    for path in paper_paths.into_iter().chain(notebook_paths) {
+        fs::remove_file(path).expect("remove owned profile");
+    }
+}
+
+#[test]
+fn impossible_notebook_margins_refuse_without_replacing_output() {
+    let grid = atrament_notebook_paper_cli::default_paper_profile_json();
+    let impossible = test_path();
+    fs::write(
+        &impossible,
+        grid.replace("\"margin_left_um\": 20000", "\"margin_left_um\": 204000"),
+    )
+    .expect("invalid paper fixture");
+    let output = test_path();
+    fs::write(&output, b"preserved").expect("owned output sentinel");
+    assert!(
+        execute_notebook(&args(&[
+            "--paper-profile",
+            impossible.to_str().expect("paper path"),
+            "--date-style",
+            "box",
+            "--date-placement",
+            "top-right",
+            "--output",
+            output.to_str().expect("output path"),
+            "--replace",
+        ]))
+        .is_err(),
+        "impossible margins refuse before replacement"
+    );
+    assert_eq!(fs::read(&output).expect("sentinel survives"), b"preserved");
+    fs::remove_file(impossible).expect("remove invalid fixture");
+    fs::remove_file(output).expect("remove owned sentinel");
+}
+
+#[test]
 fn notebook_cli_refusals_preserve_output_and_source() {
     let source = test_path();
     let output = test_path();

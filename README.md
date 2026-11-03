@@ -43,10 +43,11 @@ and a local `.atrament` profile verifier, inspector, and canonical repacker.
 Run the Rust binary without arguments for the existing localhost workspace;
 its notebook metadata, paper, handwriting statistics controls and native
 PDF/PNG paper preview are connected. Local profile file read/write now has an
-explicit opt-in directory; full rendered handwriting is still unfinished. The available CLI commands are documented below.
+explicit opt-in directory; full rendered handwriting is still unfinished.
+The available CLI commands are documented below.
 
 The earlier 77 tasks were accepted as bounded academic/design artifacts, not
-as proof of a finished product. **Seven of nine executable TODOs remain**
+as proof of a finished product. **Six of nine executable TODOs remain**
 for localhost editing, Spanish/English glyph coverage,
 and real Rust PDF/PNG output. The previous NO-GO decision still applies to
 production claims, and physical hardware is not required for local use.
@@ -59,7 +60,8 @@ file writes are enabled in the default no-argument mode:
 
 ```sh
 mkdir -p ./my-atrament-profiles
-cargo run -q -p atrament_runtime_bootstrap -- --profiles-dir ./my-atrament-profiles
+cargo run -q -p atrament_runtime_bootstrap -- --profiles-dir \
+  ./my-atrament-profiles
 ```
 
 After the normal authenticated session opens in the browser, use **Notebook
@@ -90,6 +92,7 @@ Corresponding `POST` requests also require Origin, JSON body, and
 previously read SHA-256 revision to replace an observed regular file.
 Existing/new-name collisions and stale revisions return HTTP 409;
 invalid JSON, names, duplicates or unexpected paths refuse before commit.
+
 Without `--profiles-dir`, these file routes respond HTTP 503, while
 read-only validation and PDF/PNG rendering continue to work.
 
@@ -220,7 +223,8 @@ units come from Rust; this is a numeric statistics preview, not actual ink
 rendering.
 
 Large `u64` seeds outside JavaScript safe integer precision
-must be edited using the Rust CLI. Server-side file persistence is available only by explicitly launching the
+must be edited using the Rust CLI.
+Server-side file persistence is available only by explicitly launching the
 Rust runtime with a selected directory as described below; full notebook
 content and handwriting rendering are not implemented yet.
 

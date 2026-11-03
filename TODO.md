@@ -13,19 +13,13 @@ never proves the corresponding feature runs. Hardware, multi-platform
 installers, cloud, MCP, advanced semantic/LLM editing, and physical plotters
 are retained for later, not needed to complete the first local workflow.
 
-Seven of nine **new executable integration tasks** remain open. The
-Rust notebook and handwriting CLI file round-trip is complete; other tasks
-retain their original identities, finite scope and dependencies. See the
-[Rust-first roadmap](docs/technical/rust-cli-localhost-priority.md) and
+Six of nine **new executable integration tasks** remain open. The Rust
+notebook and handwriting CLI file round-trip, authenticated localhost file
+operations, and notebook geometry are complete. Remaining work retains
+its original task identity, finite scope and dependencies.
+
+See the [Rust-first roadmap](docs/technical/rust-cli-localhost-priority.md) and
 [task policy](docs/todo/README.md). Keep the index unfinished-only.
-
-## P2 — Notebook geometry
-
-### TODO - Editable physical notebook page profiles
-
-Edit grid, rules, sheet size, margins, date, border, and printed-page flags.
-
-[docs/todo/open/semantic/010-page.mdc](docs/todo/open/semantic/010-page.mdc)
 
 ## P3 — Localhost profile UI
 

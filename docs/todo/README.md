@@ -114,7 +114,7 @@ notebook application has been removed rather than retained as a prototype.
 
 Hardware, external model accounts, MCP, and native desktop installers remain
 optional advanced work; their earlier finite theoretical records stay
-archived. **Seven of nine executable tasks remain open**, tracking
+archived. **Six of nine executable tasks remain open**, tracking
 localhost and rendering work after the Rust CLI file round-trip passed.
 
 A theoretical artifact can close its own design scope, but cannot close a
