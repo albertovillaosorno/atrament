@@ -56,10 +56,16 @@ python3 cli/notebook.py set-handwriting --config grid-notebook.json \
   --ink '#173b73' --seed 41 --height-mm-mean 3.5 \
   --height-mm-median 3.45 --height-mm-stddev 0.27 \
   --out writing-notebook.json
-# Edit the JSON for content, photographs and custom per-glyph shapes.
-python3 cli/notebook.py render --config writing-notebook.json \
+# Write notes and create a second page without editing the JSON.
+python3 cli/notebook.py set-page --config writing-notebook.json \
+  --page 1 --date '02/11/2026' --line 'Lesson notes' \
+  --out page-one.json
+python3 cli/notebook.py set-page --config page-one.json \
+  --page 2 --create --line 'More notes' --out two-pages.json
+# Edit the JSON directly only for advanced custom per-glyph shapes.
+python3 cli/notebook.py render --config two-pages.json \
   --format pdf --dpi 300 --out homework.pdf
-python3 cli/notebook.py render --config writing-notebook.json \
+python3 cli/notebook.py render --config two-pages.json \
   --format png --dpi 300 --transparent --out transparent-pages/
 # Optional: explicitly send the generated PDF to the local printer.
 python3 cli/notebook.py print --pdf homework.pdf
@@ -156,15 +162,19 @@ to the notebook JSON.
 Edit `paper.style` (`blank`, `ruled`, `grid`, `dot`), `spacing_mm`, physical
 margins, `corner_radius_mm`, and date style (`none`, `plain`, `box`,
 `underline`). Each `pages[]` entry owns its `text` lines, `images`, `date`,
-optional `number`, and `printed` flag. `printed: true` omits the paper
+optional `number`, and `printed` flag. `set-page` accepts repeated `--line`
+(replace lines), repeated `--append-line` (append), or `--clear-text`, plus
+`--date`, `--number`, `--printed`/`--no-printed` and `--create` (append a page).
+
+`printed: true` omits the paper
 background and ruling; it still renders handwriting and overlays, so a
 preprinted page can receive the ink layer only. Date and page-number
 labels must fit their physical sheet and header/footer areas; out-of-bounds
 labels are refused rather than silently clipped.
 
 ```sh
-python3 cli/notebook.py mark-printed --config my-notebook.json \
-  --pages 1,3-4 --out already-printed.json
+python3 cli/notebook.py mark-printed --config two-pages.json \
+  --pages 1-2 --out already-printed.json
 python3 cli/notebook.py render --config already-printed.json \
   --format png --transparent --out overlays/
 ```

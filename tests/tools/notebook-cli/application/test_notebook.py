@@ -318,6 +318,97 @@ class NotebookCliTests(unittest.TestCase):
                 self.assertEqual(run.returncode, 2, run.stderr)
                 self.assertFalse(target.exists())
 
+    def test_set_page_adds_page_with_text_date_and_printed_state(self):
+        target = self.root / "third-page.json"
+        run = self.run_cli(
+            "set-page",
+            "--config",
+            str(self.config),
+            "--page",
+            "3",
+            "--create",
+            "--date",
+            "02/11/2026",
+            "--number",
+            "III",
+            "--line",
+            "New page!",
+            "--line",
+            "Another line.",
+            "--printed",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        doc = notebook.read_json(target)
+        self.assertEqual(len(doc["pages"]), 3)
+        self.assertEqual(doc["pages"][2]["date"], "02/11/2026")
+        self.assertEqual(doc["pages"][2]["number"], "III")
+        self.assertEqual(
+            doc["pages"][2]["text"], ["New page!", "Another line."]
+        )
+        self.assertTrue(doc["pages"][2]["printed"])
+        self.assertIsNotNone(
+            notebook.render_page(doc, 2, 100, self.root).getbbox()
+        )
+
+    def test_set_page_append_and_clear_text(self):
+        first = self.root / "appended.json"
+        second = self.root / "cleared.json"
+        appended = self.run_cli(
+            "set-page",
+            "--config",
+            str(self.config),
+            "--page",
+            "1",
+            "--append-line",
+            "Extra note",
+            "--out",
+            str(first),
+        )
+        self.assertEqual(appended.returncode, 0, appended.stderr)
+        self.assertEqual(
+            notebook.read_json(first)["pages"][0]["text"],
+            ["Hola, ñandú. ¿Sí?", "Extra note"],
+        )
+        cleared = self.run_cli(
+            "set-page",
+            "--config",
+            str(first),
+            "--page",
+            "1",
+            "--clear-text",
+            "--no-printed",
+            "--out",
+            str(second),
+        )
+        self.assertEqual(cleared.returncode, 0, cleared.stderr)
+        self.assertEqual(notebook.read_json(second)["pages"][0]["text"], [])
+        self.assertFalse(notebook.read_json(second)["pages"][0]["printed"])
+
+    def test_set_page_refuses_missing_pages_and_invalid_content(self):
+        invalid = (
+            ("--page", "3", "--date", "today"),
+            ("--page", "4", "--create"),
+            ("--page", "1", "--create"),
+            ("--page", "1", "--line", "a" * 300),
+            ("--page", "1", "--date", "date" * 20),
+            ("--page", "1"),
+        )
+        for args in invalid:
+            with self.subTest(args=args):
+                out = self.root / "invalid-page.json"
+                result = self.run_cli(
+                    "set-page",
+                    "--config",
+                    str(self.config),
+                    *args,
+                    "--out",
+                    str(out),
+                )
+                self.assertEqual(result.returncode, 2, result.stderr)
+                self.assertFalse(out.exists())
+
     def test_multi_page_pdf_is_a_real_print_size_pdf(self):
         target = self.root / "notes.pdf"
         run = self.run_cli(

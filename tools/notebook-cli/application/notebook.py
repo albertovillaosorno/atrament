@@ -1075,6 +1075,48 @@ def do_set_handwriting(args):
     print(args.out)
 
 
+def do_set_page(args):
+    source = Path(args.config).resolve()
+    doc = read_json(source)
+    validate_notebook(doc, 72)
+    pages = doc["pages"]
+    if args.create:
+        if args.page != len(pages) + 1 or len(pages) >= MAX_PAGES:
+            raise ValueError("--create must select the next available page")
+        pages.append({"date": "", "printed": False, "text": [], "images": []})
+    elif not 1 <= args.page <= len(pages):
+        raise ValueError("selected page does not exist")
+    changed = args.create
+    item = pages[args.page - 1]
+    for field, maximum in (("date", 60), ("number", 24)):
+        value = getattr(args, field)
+        if value is not None:
+            if len(value) > maximum or any(ch in value for ch in "\r\n\x00"):
+                raise ValueError(
+                    f"page {field} must be short, single-line text"
+                )
+            item[field] = value
+            changed = True
+    if args.printed is not None:
+        item["printed"] = args.printed
+        changed = True
+    if args.line is not None:
+        item["text"] = args.line
+        changed = True
+    if args.append_line is not None:
+        item.setdefault("text", []).extend(args.append_line)
+        changed = True
+    if args.clear_text:
+        item["text"] = []
+        changed = True
+    if not changed:
+        raise ValueError("set-page requires page content or state changes")
+    # Reject overflowing page text and header/footer labels before writing.
+    render_page(doc, args.page - 1, 72, source.parent)
+    write_json(args.out, doc, args.replace)
+    print(args.out)
+
+
 def do_add_image(args):
     source = Path(args.config).resolve()
     doc = read_json(source)
@@ -1299,6 +1341,24 @@ def main(argv=None):
     p.add_argument("--out", required=True)
     p.add_argument("--replace", action="store_true")
     p.set_defaults(run=do_set_handwriting)
+    p = cmds.add_parser(
+        "set-page", help="create a sheet or edit its date, text, and flags"
+    )
+    p.add_argument("--config", required=True)
+    p.add_argument("--page", type=int, required=True)
+    p.add_argument("--create", action="store_true")
+    p.add_argument("--date")
+    p.add_argument("--number")
+    p.add_argument(
+        "--printed", action=argparse.BooleanOptionalAction, default=None
+    )
+    page_text = p.add_mutually_exclusive_group()
+    page_text.add_argument("--line", action="append")
+    page_text.add_argument("--append-line", action="append")
+    page_text.add_argument("--clear-text", action="store_true")
+    p.add_argument("--out", required=True)
+    p.add_argument("--replace", action="store_true")
+    p.set_defaults(run=do_set_page)
     p = cmds.add_parser(
         "add-image", help="place or recolor a local picture on one page"
     )
