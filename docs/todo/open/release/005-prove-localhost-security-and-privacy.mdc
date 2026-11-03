@@ -2657,9 +2657,9 @@ that marker, while still requiring restart. This pins the outer CLI boundary
 independently of the launcher's own unit regression; the unresolved
 credential-bearing opener argv and Firefox history remain outside its scope.
 
-The 2026-11-02 bounded frontend regression sweep passed 298 distinct tests:
+The 2026-11-02 bounded frontend regression sweep passed 296 distinct tests:
 190 non-Firefox browser-workspace tests, 63 local Firefox automation-harness
-and synthetic client tests, and 45 live Firefox 158.0 integration cases on
+and synthetic client tests, and 43 live Firefox 158.0 integration cases on
 Linux. The real-browser checks cover host/origin network policy, malformed
 handshakes, private draft lifecycle, end-session races, and the contrast
 between seeded storage with and without `Clear-Site-Data: "storage"`.
@@ -2683,3 +2683,15 @@ tests exercise callbacks, synchronous throws, timeout, and late completion;
 focused WebDriver disconnect and upgrade tests still pass. These changes
 contain test-owned diagnostics only, not the production credential-bearing
 opener argv or Firefox history; P8 remains open.
+
+The post-fix bounded frontend sweep now passes 298 distinct declared cases:
+190 non-Firefox browser-workspace tests, 65 local Firefox harness and synthetic
+WebDriver cases, and 43 live Firefox 158.0 integration cases. The earlier
+sweep's 45-live-case count was a counting error; only 43 live cases were
+declared in that revision of the Firefox suite.
+
+The 43 live cases were run in seven non-overlapping, finite groups, and all
+65 local harness cases in three non-overlapping groups. Full Rust workspace
+integration tests, production Clippy, frontend type-check, and frontend build
+passed during the same continuation. This does not eliminate opener argv or
+Firefox browser-history credential retention; P8 remains open.
