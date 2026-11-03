@@ -218,6 +218,212 @@ class NotebookCliTests(unittest.TestCase):
                 self.assertEqual(run.returncode, 2, run.stderr)
                 self.assertFalse(target.exists())
 
+    def test_set_glyph_edits_one_normalized_character_and_renders_pdf(self):
+        target = self.root / "single-glyph.json"
+        run = self.run_cli(
+            "set-glyph",
+            "--config",
+            str(self.config),
+            "--glyph",
+            "n\u0303",
+            "--height-scale",
+            "1.12",
+            "--width-scale",
+            "1.07",
+            "--rotation-deg=-1.5",
+            "--baseline-shift-mm",
+            "0.2",
+            "--ink",
+            "#264e88",
+            "--replace-text",
+            "n",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        changed = notebook.read_json(target)
+        self.assertEqual(set(changed["handwriting"]["glyphs"]), {"ñ"})
+        glyph = changed["handwriting"]["glyphs"]["ñ"]
+        self.assertEqual(glyph["height_scale"], 1.12)
+        self.assertEqual(glyph["width_scale"], 1.07)
+        self.assertEqual(glyph["rotation_deg"], -1.5)
+        self.assertEqual(glyph["baseline_shift_mm"], 0.2)
+        self.assertEqual(glyph["ink"], "#264e88")
+        self.assertEqual(glyph["replace"], "n")
+        out = self.root / "single-glyph.pdf"
+        exported = self.run_cli(
+            "render",
+            "--config",
+            str(target),
+            "--dpi",
+            "100",
+            "--format",
+            "pdf",
+            "--out",
+            str(out),
+        )
+        self.assertEqual(exported.returncode, 0, exported.stderr)
+        self.assertTrue(out.read_bytes().startswith(b"%PDF-1.4"))
+
+    def test_set_glyph_supports_full_statistics_and_calibration_edits(self):
+        measured = self.root / "measured.json"
+        run = self.run_cli(
+            "calibrate",
+            "--config",
+            str(self.config),
+            "--glyph",
+            "ñ",
+            "--heights",
+            "3.1,3.3,3.5",
+            "--rotations",
+            "-1,0,1",
+            "--out",
+            str(measured),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        target = self.root / "statistics.json"
+        updated = self.run_cli(
+            "set-glyph",
+            "--config",
+            str(measured),
+            "--glyph",
+            "ñ",
+            "--height-mm-mean",
+            "3.4",
+            "--height-mm-median",
+            "3.4",
+            "--width-mm-minimum",
+            "2.0",
+            "--width-mm-mean",
+            "2.5",
+            "--width-mm-median",
+            "2.4",
+            "--width-mm-maximum",
+            "3.0",
+            "--width-mm-stddev",
+            "0.2",
+            "--rotation-deg-distribution",
+            "triangular",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(updated.returncode, 0, updated.stderr)
+        glyph = notebook.read_json(target)["handwriting"]["glyphs"]["ñ"]
+        self.assertEqual(glyph["height_mm"]["minimum"], 3.1)
+        self.assertEqual(glyph["height_mm"]["mean"], 3.4)
+        self.assertEqual(glyph["width_mm"]["stddev"], 0.2)
+        self.assertEqual(glyph["rotation_deg"]["distribution"], "triangular")
+        self.assertIsNotNone(
+            notebook.render_page(notebook.read_json(target), 0, 100, self.root)
+        )
+
+    def test_set_glyph_png_rebases_assets_and_can_clear_override(self):
+        image = self.root / "custom.png"
+        Image.new("RGBA", (12, 12), (40, 60, 80, 180)).save(image)
+        nested = self.root / "nested"
+        nested.mkdir()
+        target = nested / "custom-shape.json"
+        run = self.run_cli(
+            "set-glyph",
+            "--config",
+            str(self.config),
+            "--glyph",
+            "ñ",
+            "--image",
+            "custom.png",
+            "--ink",
+            "#335577",
+            "--height-scale",
+            "1.2",
+            "--out",
+            str(target),
+        )
+        self.assertEqual(run.returncode, 0, run.stderr)
+        changed = notebook.read_json(target)
+        self.assertEqual(
+            changed["handwriting"]["glyphs"]["ñ"]["image"], "../custom.png"
+        )
+        notebook.render_page(changed, 0, 100, target.parent)
+        text_shape = nested / "text-shape.json"
+        result = self.run_cli(
+            "set-glyph",
+            "--config",
+            str(target),
+            "--glyph",
+            "ñ",
+            "--replace-text",
+            "n",
+            "--out",
+            str(text_shape),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(
+            "image",
+            notebook.read_json(text_shape)["handwriting"]["glyphs"]["ñ"],
+        )
+        shape_cleared = nested / "shape-cleared.json"
+        result = self.run_cli(
+            "set-glyph",
+            "--config",
+            str(text_shape),
+            "--glyph",
+            "ñ",
+            "--clear-shape",
+            "--out",
+            str(shape_cleared),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            notebook.read_json(shape_cleared)["handwriting"]["glyphs"]["ñ"],
+            {"ink": "#335577", "height_scale": 1.2},
+        )
+        cleared = nested / "cleared.json"
+        result = self.run_cli(
+            "set-glyph",
+            "--config",
+            str(shape_cleared),
+            "--glyph",
+            "ñ",
+            "--clear",
+            "--out",
+            str(cleared),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(
+            notebook.read_json(cleared)["handwriting"]["glyphs"], {}
+        )
+
+    def test_set_glyph_refuses_unusable_overrides_without_output(self):
+        Image.new("RGB", (8, 8), "white").save(self.root / "rgb.png")
+        options = (
+            ("--glyph", "ab", "--ink", "#112233"),
+            ("--glyph", " ", "--ink", "#112233"),
+            ("--glyph", "ñ"),
+            ("--glyph", "ñ", "--height-scale", "6"),
+            ("--glyph", "ñ", "--rotation-deg", "60"),
+            ("--glyph", "ñ", "--height-mm-mean", "3.4"),
+            ("--glyph", "ñ", "--height-mm", "4", "--height-mm-mean", "3"),
+            ("--glyph", "ñ", "--clear-shape"),
+            ("--glyph", "ñ", "--width-mm", "100"),
+            ("--glyph", "ñ", "--replace-text", "abcde"),
+            ("--glyph", "ñ", "--image", "missing.png"),
+            ("--glyph", "ñ", "--image", "rgb.png"),
+            ("--glyph", "ñ", "--clear", "--ink", "#112233"),
+        )
+        for overrides in options:
+            with self.subTest(overrides=overrides):
+                target = self.root / "invalid-glyph.json"
+                run = self.run_cli(
+                    "set-glyph",
+                    "--config",
+                    str(self.config),
+                    *overrides,
+                    "--out",
+                    str(target),
+                )
+                self.assertEqual(run.returncode, 2, run.stderr)
+                self.assertFalse(target.exists())
+
     def test_add_image_with_position_saturation_tint_and_opacity(self):
         image_path = self.root / "photo.png"
         Image.new("RGBA", (8, 8), (200, 30, 50, 128)).save(image_path)

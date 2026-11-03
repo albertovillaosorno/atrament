@@ -62,8 +62,11 @@ python3 cli/notebook.py set-page --config writing-notebook.json \
   --out page-one.json
 python3 cli/notebook.py set-page --config page-one.json \
   --page 2 --create --line 'More notes' --out two-pages.json
-# Edit the JSON directly only for advanced custom per-glyph shapes.
-python3 cli/notebook.py render --config two-pages.json \
+# Adjust any letter independently without editing raw JSON.
+python3 cli/notebook.py set-glyph --config two-pages.json \
+  --glyph 'ñ' --height-scale 1.1 --rotation-deg=-1.5 \
+  --ink '#254e80' --out custom-letters.json
+python3 cli/notebook.py render --config custom-letters.json \
   --format pdf --dpi 300 --out homework.pdf
 python3 cli/notebook.py render --config two-pages.json \
   --format png --dpi 300 --transparent --out transparent-pages/
@@ -125,6 +128,32 @@ The `handwriting` JSON object contains per-glyph statistics. For example:
   `--height-mm-maximum 4.5`. Inconsistent statistics are rejected before
   saving the configuration; per-character glyph overrides remain separate.
   Explicit font selections are checked before writing a new profile.
+- Use `set-glyph --glyph 'ñ'` to tune a single Unicode character, with
+  `--ink`, `--height-scale`, `--height-mm`, `--width-mm`, `--width-scale`,
+  `--rotation-deg`, and `--baseline-shift-mm`. Each of the five geometric
+  properties accepts an exact value or `-minimum`, `-mean`, `-median`,
+  `-maximum`, `-stddev`, and `-distribution` options, just like the global
+  profile. New statistical ranges require all five numeric fields, while an
+  existing calibrated range may be edited one field at a time.
+- Existing per-letter measurements are preserved unless explicitly replaced.
+  Unicode accents are normalized, so `n` plus combining tilde selects `ñ`.
+  This is a manually editable approximation, not handwriting recognition.
+- `set-glyph --image my-letters/n-tilde.png` uses the PNG's transparency as
+  an ink silhouette, while `--replace-text n` substitutes the font outline.
+  Either shape option replaces the other. `--clear-shape` removes only the
+  silhouette/substitute; `--clear` removes the entire per-letter override.
+  Glyph image paths follow notebook JSON relocation; missing or non-alpha
+  images are refused before saving.
+
+```sh
+python3 cli/notebook.py set-glyph --config writing-notebook.json \
+  --glyph 'a' --height-mm-minimum 2.8 --height-mm-mean 3.4 \
+  --height-mm-median 3.35 --height-mm-maximum 4.0 \
+  --height-mm-stddev 0.22 --out tuned-a.json
+python3 cli/notebook.py set-glyph --config tuned-a.json \
+  --glyph 'ñ' --image my-letters/enye.png --out tuned-letter-images.json
+```
+
 - In `gaussian` mode the mean and standard deviation drive the sampled value;
   minimum/maximum clamp it. The median is preserved as measured metadata.
   In `triangular` mode the median is the distribution's mode. Neither method

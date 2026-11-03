@@ -139,6 +139,14 @@ HANDWRITING_NUMBERS = {
 }
 HANDWRITING_STATS = ("height_mm", "width_scale", "baseline_mm", "rotation_deg")
 STAT_FIELDS = ("minimum", "mean", "median", "maximum", "stddev")
+GLYPH_STATS = {
+    "height_mm": (0.1, 50),
+    "width_mm": (0.1, 50),
+    "width_scale": (0.2, 5),
+    "rotation_deg": (-45, 45),
+    "baseline_shift_mm": (-10, 10),
+}
+
 
 
 def require_number(value, name, low=None, high=None):
@@ -1120,6 +1128,136 @@ def do_set_handwriting(args):
     print(args.out)
 
 
+def do_set_glyph(args):
+    """Edit an individual character without overwriting its other measures."""
+    source = Path(args.config).resolve()
+    doc = read_json(source)
+    validate_notebook(doc, 72)
+    glyph = unicodedata.normalize("NFC", args.glyph)
+    if (
+        len(glyph) != 1
+        or glyph.isspace()
+        or unicodedata.category(glyph).startswith("C")
+    ):
+        raise ValueError("--glyph must be one visible character")
+    profile = doc["handwriting"]
+    glyphs = profile.setdefault("glyphs", {})
+    if not isinstance(glyphs, dict):
+        raise TypeError("handwriting.glyphs must be an object")
+    if args.clear:
+        if (
+            args.height_scale is not None
+            or args.ink is not None
+            or args.image is not None
+            or args.replace_text is not None
+            or args.clear_shape
+            or any(
+                getattr(args, key) is not None
+                for stat in GLYPH_STATS
+                for key in (
+                    stat,
+                    *(
+                        f"{stat}_{field}"
+                        for field in (*STAT_FIELDS, "distribution")
+                    ),
+                )
+            )
+        ):
+            raise ValueError("--clear cannot be combined with glyph edits")
+        if glyph not in glyphs:
+            raise ValueError(f"glyph {glyph!r} has no override to clear")
+        del glyphs[glyph]
+    else:
+        custom = glyphs.setdefault(glyph, {})
+        if not isinstance(custom, dict):
+            raise TypeError("glyph override must be an object")
+        changed = False
+        if args.ink is not None:
+            color(args.ink)
+            custom["ink"] = args.ink
+            changed = True
+        if args.height_scale is not None:
+            custom["height_scale"] = require_number(
+                args.height_scale, "glyph.height_scale", 0.2, 5
+            )
+            changed = True
+        for stat, (low, high) in GLYPH_STATS.items():
+            exact = getattr(args, stat)
+            changes = {
+                field: getattr(args, f"{stat}_{field}")
+                for field in (*STAT_FIELDS, "distribution")
+                if getattr(args, f"{stat}_{field}") is not None
+            }
+            if exact is not None and changes:
+                raise ValueError(
+                    f"--{stat.replace('_', '-')} conflicts with its statistics"
+                )
+            if exact is not None:
+                custom[stat] = require_number(exact, f"glyph.{stat}", low, high)
+                changed = True
+            elif changes:
+                existing = custom.get(stat)
+                if existing is None or not isinstance(existing, dict):
+                    if not all(field in changes for field in STAT_FIELDS):
+                        raise ValueError(
+                            f"new {stat} statistics require minimum, mean, "
+                            "median, maximum, and stddev"
+                        )
+                    existing = {}
+                    custom[stat] = existing
+                existing.update(changes)
+                # Reject incoherent bounds rather than silently clamping data.
+                stat_sample(existing, random.Random(0), f"glyph.{stat}")
+                changed = True
+        if args.image is not None:
+            path = Path(args.image)
+            if not path.is_absolute():
+                path = source.parent / path
+            path = path.resolve()
+            if (
+                path.suffix.lower() != ".png"
+                or not path.is_file()
+                or path.stat().st_size > 20_000_000
+            ):
+                raise ValueError(
+                    "glyph images must be local PNG files up to 20 MB"
+                )
+            with Image.open(path) as im:
+                if im.width * im.height > MAX_IMAGE_PIXELS:
+                    raise ValueError("glyph image exceeds pixel budget")
+                if im.format != "PNG" or "A" not in im.getbands():
+                    raise ValueError("glyph image must be a PNG with alpha")
+                if im.getchannel("A").getbbox() is None:
+                    raise ValueError("glyph PNG must contain visible pixels")
+            custom.pop("replace", None)
+            custom["image"] = os.path.relpath(path, source.parent)
+            changed = True
+        elif args.replace_text is not None:
+            replacement = unicodedata.normalize("NFC", args.replace_text)
+            if not 1 <= len(replacement) <= 4 or any(
+                unicodedata.category(ch).startswith("C") for ch in replacement
+            ):
+                raise ValueError(
+                    "glyph replacement must be 1–4 printable characters"
+                )
+            custom.pop("image", None)
+            custom["replace"] = replacement
+            changed = True
+        elif args.clear_shape:
+            if "image" not in custom and "replace" not in custom:
+                raise ValueError("glyph has no custom shape to clear")
+            custom.pop("image", None)
+            custom.pop("replace", None)
+            changed = True
+        if not changed:
+            raise ValueError("set-glyph requires at least one change")
+        # Render one deterministic sample to catch corrupt masks and geometry.
+        Pen(profile, 72, source.parent).glyph_image(glyph, random.Random(0))
+    rebase_notebook_assets(doc, source, args.out)
+    write_json(args.out, doc, args.replace)
+    print(args.out)
+
+
 def do_set_page(args):
     source = Path(args.config).resolve()
     doc = read_json(source)
@@ -1390,6 +1528,35 @@ def main(argv=None):
     p.add_argument("--out", required=True)
     p.add_argument("--replace", action="store_true")
     p.set_defaults(run=do_set_handwriting)
+    p = cmds.add_parser(
+        "set-glyph", help="edit one character's shape, ink, and statistics"
+    )
+    p.add_argument("--config", required=True)
+    p.add_argument("--glyph", required=True, help="one Unicode character")
+    p.add_argument("--ink")
+    p.add_argument("--height-scale", type=float)
+    for key in GLYPH_STATS:
+        p.add_argument(f"--{key.replace('_', '-')}", type=float)
+        for field in STAT_FIELDS:
+            p.add_argument(f"--{key.replace('_', '-')}-{field}", type=float)
+        p.add_argument(
+            f"--{key.replace('_', '-')}-distribution",
+            choices=("gaussian", "triangular"),
+        )
+    shape = p.add_mutually_exclusive_group()
+    shape.add_argument(
+        "--image", help="local transparent PNG letter silhouette"
+    )
+    shape.add_argument(
+        "--replace-text", help="font substitute of 1–4 characters"
+    )
+    shape.add_argument("--clear-shape", action="store_true")
+    p.add_argument(
+        "--clear", action="store_true", help="remove entire override"
+    )
+    p.add_argument("--out", required=True)
+    p.add_argument("--replace", action="store_true")
+    p.set_defaults(run=do_set_glyph)
     p = cmds.add_parser(
         "set-page", help="create a sheet or edit its date, text, and flags"
     )
