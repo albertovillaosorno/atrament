@@ -719,6 +719,15 @@ Together with the earlier 52 forms, this yields **58 exact glyphs and
 shapes and exported one-page PDF and transparent 72-DPI RGBA PNG.
 This does not include equation parsing or mathematical layout.
 
+The wider **Fill missing math** action independently includes 17 exact
+math symbols. Its partial-derivative `∂` is an explicit high-tail and bowl
+of four ideal SVG quadratic curves, sampled as 64 continuous directed pen
+chords in the Rust-compatible glyph TSV. The editor retains any existing
+custom `∂` ink, and choosing not to author it still triggers the native
+missing-glyph refusal. A two-row `∂∫` notebook has been exported as a
+vector PDF and transparent PNG; neither format embeds the original SVG
+curves or supplies general equation typesetting.
+
 For class exercises, page labels and dates, use the separate **Fill missing
 digits 0–9 (unsaved)** gesture or select each numeral in the geometric
 starter picker. Zero is an exact SVG ellipse, distinct from circular `o`;

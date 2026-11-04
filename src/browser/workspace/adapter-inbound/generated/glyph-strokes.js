@@ -568,7 +568,7 @@ function quoteMirror(cx, glyph, p) {
 // Math starters retain ideal SVG lines/quadratics; native v1 samples curves
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "=", "×", "÷",
-    "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "Δ", "≈"];
+    "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈"];
 function mathParts(cx, cy, radius, glyph) {
     const point = (x, y) => ({
         x: cx + Math.round(radius * x),
@@ -642,6 +642,15 @@ function mathParts(cx, cy, radius, glyph) {
             curve([0.75, -0.82], [0.4, -1], [0.12, -0.52]),
             curve([0.12, -0.52], [-0.12, -0.1], [-0.2, 0.5]),
             curve([-0.2, 0.5], [-0.4, 1], [-0.78, 0.78]),
+        ];
+    if (glyph === "∂")
+        return [
+            // A single directed pen path: high tail, round bowl and return
+            // to the shoulder. The native v1 library samples four curves.
+            curve([0.6, -0.85], [-0.45, -0.98], [-0.35, -0.2]),
+            curve([-0.35, -0.2], [-0.95, 0], [-0.7, 0.6]),
+            curve([-0.7, 0.6], [-0.15, 1.05], [0.45, 0.55]),
+            curve([0.45, 0.55], [1, -0.15], [-0.35, -0.2]),
         ];
     if (glyph === "≈")
         return [-0.45, 0.45].flatMap((row) => [

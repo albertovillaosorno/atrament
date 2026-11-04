@@ -108,6 +108,62 @@ test('ten math symbols roundtrip TSV and render two real ink rows', () => {
 });
 
 
+test('partial derivative ideal curves produce native PDF and transparent PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/math-derivative-'));
+        try {
+            const source = join(dir, 'calculus.tsv');
+            const output = join(dir, 'calculus.pdf');
+            const symbols = ['∂', '∫'];
+            const authored = symbols.flatMap((symbol) => geometricStarter(
+                symbol, 1550, 2450, 1100, 250, '#243647'));
+            assert.equal(authored.length, 112,
+                'four partial-derivative and three integral curve groups');
+            assert.deepEqual(candidatePenPaths(authored, '∂').map(
+                ({ first, last }) => [first, last]), [[1, 64]],
+            'partial derivative is a continuous directed ink path');
+            const canonical = Buffer.from(encodeGlyphLibrary(authored));
+            writeFileSync(source, canonical);
+            const reopened = cli('glyphs', ['--profile', source]);
+            assert.equal(reopened.status, 0, reopened.stderr.toString());
+            assert.deepEqual(reopened.stdout, canonical,
+                'native Rust reopens exact ∂ and ∫ glyphs unchanged');
+            const audit = cli('glyphs', ['--profile', source,
+                '--audit-text', '∂∫']);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 2/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', source, '--flow-text', '∂∫\n∂∫'];
+            const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+                '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const bytes = readFileSync(output);
+            assert.match(bytes.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((bytes.toString('latin1').match(/ m\n/g) ?? [])
+                .length, 224, 'two lines of 112 exact vector pen paths');
+            const png = cli('notebook', [...flags, '--export-paper', 'png',
+                '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const refused = cli('notebook', [
+                '--printed-sheet', 'true', '--glyph-file', source,
+                '--flow-text', '∂∫∑', '--export-paper', 'pdf',
+                '--output', output, '--replace']);
+            assert.notEqual(refused.status, 0,
+                'an unauthored summation is never synthesized');
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), bytes,
+                'a refused glyph leaves the previously accepted PDF intact');
+            assert.deepEqual(readFileSync(source), canonical,
+                'rendering cannot mutate browser-authored glyph strokes');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+
 test('closed infinity pen-loop entry and reversal match native exact edits',
     () => {
         const dir = mkdtempSync(join(root, '.temp/math-loop-'));

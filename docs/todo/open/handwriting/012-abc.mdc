@@ -1038,6 +1038,30 @@ without replacing an accepted PDF or mutating the authored TSV library.
 It demonstrates finite source-to-page composition, not equation typesetting
 or glyph-perfect analytic PDF paths; P1-012 is still open.
 
+## Explicit partial-derivative math starter (partial) — 2026-11-04
+
+The browser editor now offers the exact `∂` grapheme as a manually chosen
+calculus form and as an optional addition to **Fill missing math** (17
+separate keys total). Its ideal high tail and connected bowl use four SVG
+quadratics sampled into 64 directed, one-path, integer-micrometre TSV
+strokes; no analytic curve is serialized into the native Rust library.
+Existing authored `∂` ink is preserved rather than replaced by fill.
+
+Eleven independent fills now yield 130 exact glyphs and 3,002 strokes.
+Browser geometry tests validate the SVG's four curves and zero pen lifts,
+exact TSV roundtrip, clipped-cell refusal, unchanged custom ink,
+atomic batch capacity and a 15,120-case pen-clearance grid. A separate
+Rust CLI acceptance reopens explicitly selected `∂∫` TSV unchanged, audits
+two exact Unicode glyphs without missing ink and emits two physical
+handwriting rows (224 vector pen moves) in a real PDF and transparent
+72-DPI PNG. Missing `∑` refuses before replacing an accepted PDF; the
+original authored TSV stays unchanged. The earlier ten-symbol test still
+intentionally refuses unauthored `∂`, proving that a newly available
+starter is never a silent fallback.
+
+The additional math form does not solve symbolic mathematics layout,
+calibrated handwriting or the full Unicode inventory. P4-012 remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
