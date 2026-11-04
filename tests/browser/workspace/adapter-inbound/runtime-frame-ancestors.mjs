@@ -12128,6 +12128,7 @@ test(
                             !get("slant-undo").disabled;
                         change("ink-percent", 110);
                         const undoReady = !get("slant-undo").disabled;
+                        const undoLabel = get("slant-undo").textContent;
                         get("slant-undo").click();
                         const undoStatus = get("status").textContent;
                         const undoneWidth = guide.querySelector("line")
@@ -12139,6 +12140,7 @@ test(
                             !get("slant-redo").disabled;
                         change("ink-percent", 110);
                         const redoReady = !get("slant-redo").disabled;
+                        const redoLabel = get("slant-redo").textContent;
                         get("slant-redo").click();
                         const redoStatus = get("status").textContent;
                         get("save").click();
@@ -12151,15 +12153,16 @@ test(
                         get("save").click();
                         change("character", "ñ");
                         const missingDisabled = get("scale-ink").disabled;
+                        const genericLabel = get("slant-undo").textContent;
                         return JSON.stringify({
                             initiallyDisabled, enabled, guideCount,
                             guideWidth, guideStatus, invalidGuide,
                             invalidStatus,
                             refused, accepted, afterPreview,
-                            undoReady, undoAfterIdentity,
+                            undoReady, undoAfterIdentity, undoLabel,
                             undoStatus, undoneWidth,
-                            redoReady, redoAfterIdentity,
-                            redoStatus, clippedGuide,
+                            redoReady, redoAfterIdentity, redoLabel,
+                            redoStatus, clippedGuide, genericLabel,
                             clippedStatus, clipped, missingDisabled,
                             names, types: blobs.map((blob) => blob.type),
                             files: await Promise.all(blobs.map((blob) =>
@@ -12192,8 +12195,11 @@ test(
                 "read-only guide recomputes after a valid ink edit");
             assert.equal(result.undoReady, true);
             assert.equal(result.undoAfterIdentity, true);
+            assert.equal(result.undoLabel, "Undo last glyph pen thickness");
             assert.equal(result.redoReady, true);
             assert.equal(result.redoAfterIdentity, true);
+            assert.equal(result.redoLabel, "Redo last glyph pen thickness");
+            assert.equal(result.genericLabel, "Undo last glyph transform");
             assert.match(result.undoStatus,
                 /Undid last glyph pen thickness; unsaved/);
             assert.equal(result.undoneWidth, "276");

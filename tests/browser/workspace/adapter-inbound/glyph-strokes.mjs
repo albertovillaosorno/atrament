@@ -4977,6 +4977,7 @@ test("exact one-step transform undo restores slant height width and ink",
                     encodeGlyphLibrary(expected), label);
             };
             editor.start();
+            assert.equal(undo.textContent, "Undo last glyph transform");
             add(nfd, [500, 800, 850, 1200], 251);
             add("ó", [300, 1000, 500, 1500], 250);
             add(nfd, [850, 1200, 1100, 1700], 251);
@@ -4996,8 +4997,10 @@ test("exact one-step transform undo restores slant height width and ink",
             const slanted = italicizeGlyphStrokes(source, nfd, 12, 3550);
             get("slant-authored").dispatch("click");
             assert.equal(undo.disabled, false);
+            assert.equal(undo.textContent, "Undo last glyph slant");
             const tall = scaleGlyphHeight(slanted, nfd, 110, 2250);
             get("scale-height").dispatch("click");
+            assert.equal(undo.textContent, "Undo last glyph height");
             assert.equal(undo.disabled, false,
                 "a new transform replaces rather than clears recovery");
             await recoverBytes(undo, slanted,
@@ -5014,10 +5017,12 @@ test("exact one-step transform undo restores slant height width and ink",
                 "redo height restores revised bytes");
             const wider = scaleGlyphWidth(tall, nfd, 110, 1750);
             get("scale-width").dispatch("click");
+            assert.equal(undo.textContent, "Undo last glyph width");
             await recoverBytes(undo, tall, "undo width restores exact height");
             await recoverBytes(redo, wider, "redo width restores exact bytes");
             const thicker = scaleGlyphInk(wider, nfd, 110);
             get("scale-ink").dispatch("click");
+            assert.equal(undo.textContent, "Undo last glyph pen thickness");
             assert.equal(undo.disabled, false);
             assert.equal(redo.disabled, true);
             get("ink-percent").value = "100";
@@ -5035,10 +5040,12 @@ test("exact one-step transform undo restores slant height width and ink",
             await recoverBytes(undo, wider,
                 "undo thickness restores pre-rounded pen widths");
             assert.equal(redo.disabled, false);
+            assert.equal(redo.textContent, "Redo last glyph pen thickness");
             get("character").value = "ó";
             get("character").dispatch("input");
             assert.equal(redo.disabled, true,
                 "other exact glyph cannot invoke an earlier recovery");
+            assert.equal(redo.textContent, "Redo last glyph transform");
             get("character").value = nfd;
             get("character").dispatch("input");
             await recoverBytes(redo, thicker, "redo thickness exact bytes");

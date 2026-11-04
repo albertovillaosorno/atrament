@@ -2575,6 +2575,13 @@ export function createGlyphStrokeEditor(): {
                 transformHistory = null;
             }
         }
+        const lastKind = transformHistory?.grapheme === character.value
+            ? transformHistory.kind : null;
+        const transformLabel = lastKind === "ink"
+            ? "glyph pen thickness"
+            : lastKind === null ? "glyph transform" : `glyph ${lastKind}`;
+        undoTransform.textContent = `Undo last ${transformLabel}`;
+        redoTransform.textContent = `Redo last ${transformLabel}`;
         undoTransform.disabled = !active || drawing !== null
             || transformHistory?.side !== "after"
             || transformHistory.grapheme !== character.value;

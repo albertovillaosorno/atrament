@@ -1051,8 +1051,9 @@ glyph transform** after a successful non-identity slant, height, width or
 pen-thickness edit. One in-memory step holds exact previous and resulting
 TSV bytes; undo restores the previous coordinates and pen properties,
 including rounding losses, and redo reapplies the exact accepted change.
-No automatic download or Rust profile write occurs. Recovery is available
-only while the same exact Unicode grapheme is selected.
+No automatic download or Rust profile write occurs. Button text identifies
+the recoverable change, or reverts to a generic disabled label if no step
+is available for the selected exact Unicode grapheme.
 
 A later non-identity transform replaces the one-step history, whereas a
 100% resize or zero-degree slant preserves any valid earlier undo or redo.
