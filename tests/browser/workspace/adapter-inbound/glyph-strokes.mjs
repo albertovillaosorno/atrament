@@ -378,7 +378,7 @@ function mountEditor() {
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-italic-angle",
         "glyph-authored-angle", "glyph-authored-baseline",
-        "glyph-slant-authored",
+        "glyph-slant-authored", "glyph-slant-undo", "glyph-slant-redo",
         "glyph-ideal-preview", "glyph-ideal-geometry",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
@@ -4317,6 +4317,158 @@ test("authored italic UI refuses invalid edits without saving", async () => {
         editor.reset();
         assert.equal(get("slant-authored").disabled, true);
         assert.equal(get("authored-angle").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("last authored slant undo/redo restores exact Unicode without writes",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { get, editor, downloads } = ui;
+            const nfd = "a\u0301";
+            const undo = get("slant-undo");
+            const redo = get("slant-redo");
+            assert.equal(undo.disabled, true);
+            assert.equal(redo.disabled, true);
+            editor.start();
+            const append = (grapheme, coordinates) => {
+                get("character").value = grapheme;
+                get("character").dispatch("input");
+                for (const [key, value] of Object.entries({
+                    x1: coordinates[0], y1: coordinates[1],
+                    x2: coordinates[2], y2: coordinates[3], width: 250,
+                })) get(key).value = String(value);
+                get("add").dispatch("click");
+            };
+            append(nfd, [450, 1000, 850, 1600]);
+            append("á", [600, 1200, 900, 1550]);
+            append(nfd, [850, 1600, 1300, 2200]);
+            const original = [
+                { grapheme: nfd, x1: 450, y1: 1000,
+                    x2: 850, y2: 1600, width: 250, color: "#243647" },
+                { grapheme: "á", x1: 600, y1: 1200,
+                    x2: 900, y2: 1550, width: 250, color: "#243647" },
+                { grapheme: nfd, x1: 850, y1: 1600,
+                    x2: 1300, y2: 2200, width: 250, color: "#243647" },
+            ];
+            get("slant-authored").dispatch("click");
+            const italic = italicizeGlyphStrokes(original, nfd, 12, 3550);
+            assert.equal(undo.disabled, false);
+            assert.equal(redo.disabled, true);
+            assert.equal(downloads.length, 0,
+                "slant and undo history never download automatically");
+            get("character").value = "á";
+            get("character").dispatch("input");
+            assert.equal(undo.disabled, true,
+                "undo cannot replace a different selected glyph");
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            assert.equal(undo.disabled, false);
+            undo.dispatch("click");
+            assert.equal(undo.disabled, true);
+            assert.equal(redo.disabled, false);
+            assert.match(get("status").textContent,
+                /Undid last glyph slant; unsaved/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(),
+                encodeGlyphLibrary(original), "undo is byte-exact");
+            redo.dispatch("click");
+            assert.equal(redo.disabled, true);
+            assert.equal(undo.disabled, false);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(),
+                encodeGlyphLibrary(italic), "redo is byte-exact");
+            // A refused slant leaves valid undo/redo and accepted ink intact.
+            get("authored-angle").value = "21";
+            get("slant-authored").dispatch("click");
+            assert.match(get("status").textContent, /Italic angle/);
+            assert.equal(undo.disabled, false);
+            undo.dispatch("click");
+            // Mutating an unrelated exact Unicode row after undo must
+            // invalidate redo, never silently discard that new edit.
+            append("∞", [700, 200, 900, 500]);
+            assert.equal(redo.disabled, true);
+            redo.dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(),
+                encodeGlyphLibrary([...original, {
+                    grapheme: "∞", x1: 700, y1: 200,
+                    x2: 900, y2: 500, width: 250,
+                    color: "#243647",
+                }]));
+            get("authored-angle").value = "0";
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            get("slant-authored").dispatch("click");
+            assert.equal(undo.disabled, true,
+                "identity slant has no meaningful history");
+            editor.reset();
+            assert.equal(undo.disabled, true);
+            assert.equal(redo.disabled, true);
+            editor.start();
+            assert.equal(undo.disabled, true,
+                "a later session cannot recover previous ink");
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("slant history is one-level and clears on import or ink edits",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        editor.start();
+        get("character").value = "o";
+        get("character").dispatch("input");
+        for (const [key, value] of Object.entries({
+            x1: 450, y1: 1000, x2: 850, y2: 1600, width: 250,
+        })) get(key).value = String(value);
+        get("add").dispatch("click");
+        const original = [{
+            grapheme: "o", x1: 450, y1: 1000,
+            x2: 850, y2: 1600, width: 250, color: "#243647",
+        }];
+        const first = italicizeGlyphStrokes(original, "o", 12, 3550);
+        const second = italicizeGlyphStrokes(first, "o", 12, 3550);
+        get("slant-authored").dispatch("click");
+        get("slant-authored").dispatch("click");
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(first), "one undo reverses one slant only");
+        assert.equal(get("slant-undo").disabled, true);
+        get("slant-redo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(second), "redo reapplies latest transform");
+        // A successful load invalidates history even for identical bytes.
+        const bytes = encodeGlyphLibrary(second);
+        get("load").files = [{
+            size: bytes.length,
+            arrayBuffer: async () => new TextEncoder().encode(bytes).buffer,
+        }];
+        await get("load").dispatch("change");
+        assert.equal(get("slant-undo").disabled, true);
+        assert.equal(get("slant-redo").disabled, true);
+        // A different in-place mutation cannot be destroyed by stale undo.
+        get("authored-angle").value = "0";
+        get("slant-authored").dispatch("click");
+        assert.equal(get("slant-undo").disabled, true);
+        get("authored-angle").value = "12";
+        get("slant-authored").dispatch("click");
+        assert.equal(get("slant-undo").disabled, false);
+        get("selected").value = "0";
+        get("selected").dispatch("change");
+        get("remove").dispatch("click");
+        assert.equal(get("slant-undo").disabled, true);
+        assert.equal(get("slant-redo").disabled, true);
+        get("slant-undo").dispatch("click");
+        assert.equal(get("save").disabled, false);
+        assert.equal(get("status").textContent.startsWith("0 unsaved"),
+            true, "stale undo does not restore a removed stroke");
     } finally {
         ui.restore();
     }

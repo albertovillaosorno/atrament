@@ -11611,6 +11611,7 @@ test(
                     const enabled = !get("slant-authored").disabled;
                     get("slant-authored").click();
                     const accepted = get("status").textContent;
+                    const undoEnabled = !get("slant-undo").disabled;
                     const blobs = [];
                     const originalUrl = URL.createObjectURL;
                     const originalClick = HTMLAnchorElement.prototype.click;
@@ -11621,6 +11622,13 @@ test(
                         };
                         HTMLAnchorElement.prototype.click = function () {};
                         get("save").click();
+                        get("slant-undo").click();
+                        const undone = get("status").textContent;
+                        const redoEnabled = !get("slant-redo").disabled;
+                        get("save").click();
+                        get("slant-redo").click();
+                        const redone = get("status").textContent;
+                        get("save").click();
                         change("authored-angle", 21);
                         get("slant-authored").click();
                         const refused = get("status").textContent;
@@ -11629,6 +11637,7 @@ test(
                         const missing = get("slant-authored").disabled;
                         return JSON.stringify({
                             initiallyDisabled, enabled, accepted, refused,
+                            undoEnabled, undone, redoEnabled, redone,
                             missing, blobs: await Promise.all(blobs.map((b) =>
                                 b.text())),
                         });
@@ -11646,6 +11655,10 @@ test(
             assert.equal(actual.initiallyDisabled, true);
             assert.equal(actual.enabled, true);
             assert.equal(actual.missing, true);
+            assert.equal(actual.undoEnabled, true);
+            assert.equal(actual.redoEnabled, true);
+            assert.match(actual.undone, /Undid last glyph slant; unsaved/);
+            assert.match(actual.redone, /Redid last glyph slant; unsaved/);
             assert.match(actual.accepted, /Slanted all authored ñ ink/);
             assert.match(actual.refused, /Italic angle must be 0..20/);
             const nfd = "n\u0303";
@@ -11660,8 +11673,9 @@ test(
             const expected = encodeGlyphLibrary(
                 italicizeGlyphStrokes(source, nfd, 12, 3550),
             );
-            assert.deepEqual(actual.blobs, [expected, expected],
-                "invalid slant preserves the actual downloaded TSV");
+            assert.deepEqual(actual.blobs, [expected,
+                encodeGlyphLibrary(source), expected, expected],
+                "Firefox undo/redo restores exact accepted TSV bytes");
             assert.deepEqual(requests, baseline,
                 "authored italic transformation stays in the browser");
         } finally {

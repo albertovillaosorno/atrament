@@ -1539,6 +1539,8 @@ export function createGlyphStrokeEditor() {
     const authoredAngle = required("glyph-authored-angle");
     const authoredBaseline = required("glyph-authored-baseline");
     const slantAuthored = required("glyph-slant-authored");
+    const undoSlant = required("glyph-slant-undo");
+    const redoSlant = required("glyph-slant-redo");
     const idealGeometry = required("glyph-ideal-geometry");
     const ideal = required("glyph-ideal-preview");
     const idealCircle = required("glyph-ideal-circle");
@@ -1594,7 +1596,8 @@ export function createGlyphStrokeEditor() {
         seedTextMarks,
         centerX, centerY, radius,
         accentShift, accentLift, italicAngle,
-        authoredAngle, authoredBaseline, slantAuthored, variationSeed,
+        authoredAngle, authoredBaseline, slantAuthored,
+        undoSlant, redoSlant, variationSeed,
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
@@ -1608,6 +1611,10 @@ export function createGlyphStrokeEditor() {
     let selectedIndex = null;
     let drawing = null;
     let downloadUrl = null;
+    // At most one reversible explicit slant, held only in this session.
+    // Canonical byte snapshots prevent an older edit from overwriting any
+    // later authored change, including in-place stroke removal.
+    let slantHistory = null;
     const message = (text) => { status.textContent = text; };
     const download = (bytes, filename) => {
         const blob = new Blob([bytes], { type: "text/tab-separated-values" });
@@ -1993,6 +2000,19 @@ export function createGlyphStrokeEditor() {
         }
     };
     const render = () => {
+        if (slantHistory !== null) {
+            const expected = slantHistory[slantHistory.side];
+            if (strokes.length === 0
+                || encodeGlyphLibrary(strokes) !== expected) {
+                slantHistory = null;
+            }
+        }
+        undoSlant.disabled = !active || drawing !== null
+            || slantHistory?.side !== "after"
+            || slantHistory.grapheme !== character.value;
+        redoSlant.disabled = !active || drawing !== null
+            || slantHistory?.side !== "before"
+            || slantHistory.grapheme !== character.value;
         renderIdeal();
         const shown = strokes.flatMap((stroke, index) => {
             return stroke.grapheme === character.value
@@ -2353,8 +2373,13 @@ export function createGlyphStrokeEditor() {
             const angle = Number(authoredAngle.value);
             const pivot = Number(authoredBaseline.value);
             const target = character.value;
+            const before = encodeGlyphLibrary(strokes);
             const next = italicizeGlyphStrokes(strokes, target, angle, pivot);
+            const after = encodeGlyphLibrary(next);
             strokes = next;
+            slantHistory = before === after ? null : {
+                before, after, side: "after", grapheme: target,
+            };
             selectedIndex = null;
             render();
             message(`Slanted all authored ${character.value} ink; unsaved`);
@@ -2363,6 +2388,34 @@ export function createGlyphStrokeEditor() {
             message(String(error));
         }
     });
+    const restoreSlant = (side) => {
+        if (!active || drawing !== null || slantHistory === null)
+            return;
+        const history = slantHistory;
+        const requiredSide = side === "before" ? "after" : "before";
+        if (history.side !== requiredSide
+            || history.grapheme !== character.value)
+            return;
+        try {
+            if (encodeGlyphLibrary(strokes) !== history[requiredSide]) {
+                slantHistory = null;
+                throw new Error("Cannot restore slant after another ink edit");
+            }
+            strokes = parseGlyphLibrary(history[side]);
+            history.side = side;
+            selectedIndex = null;
+            render();
+            message(side === "before"
+                ? "Undid last glyph slant; unsaved"
+                : "Redid last glyph slant; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+            render();
+        }
+    };
+    undoSlant.addEventListener("click", () => restoreSlant("before"));
+    redoSlant.addEventListener("click", () => restoreSlant("after"));
     seedLowercase.addEventListener("click", () => {
         if (!active)
             return;
@@ -2890,6 +2943,7 @@ export function createGlyphStrokeEditor() {
             const text = decoder.decode(bytes);
             const checked = parseGlyphLibrary(text);
             strokes = checked;
+            slantHistory = null;
             drawing = null;
             selectedIndex = null;
             render();
@@ -2937,6 +2991,7 @@ export function createGlyphStrokeEditor() {
         generation += 1;
         active = false;
         strokes = [];
+        slantHistory = null;
         drawing = null;
         selectedIndex = null;
         for (const control of controls)

@@ -1045,6 +1045,19 @@ A clipped pen edge or invalid input refuses before writing an output file;
 0 degrees is a valid identity edit. Saving overwrites sampled coordinates,
 not a retained analytic or named italic variant.
 
+The browser editor also exposes **Undo last glyph slant** and **Redo last
+glyph slant** immediately after a successful nonzero authored-glyph shear.
+One in-memory step saves exact original and resulting TSV bytes; undo
+restores the original pen strokes and redo reapplies the accepted shear.
+Neither action downloads a file or changes a Rust profile. Only the exact
+selected Unicode grapheme that was slanted may invoke these controls.
+A subsequent authored ink edit, successful TSV import, or session reset
+invalidates the history, preventing stale undo from erasing later strokes.
+Applying another slant replaces the previous undo step. Download regular
+and italic TSV files separately for long-lived named variants or recovery.
+This is **one-level slant undo/redo**, not a general edit history or
+persistent reversible curve model.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each

@@ -781,6 +781,27 @@ This adds native parity to destructive sampled-stroke editing, not
 persistent curve authority, italic style metadata, an undo history,
 multiple named variants, or joined cursive.
 
+## Session-only one-step glyph slant recovery (partial) — 2026-11-04
+
+The authenticated browser glyph editor now exposes explicit undo/redo for
+one nonzero whole-authored-glyph slant. The editor holds both pre/post
+canonical TSV byte snapshots, so original geometry, interleaved Unicode
+records, pen order, pigment and width return exactly. A second accepted
+slant replaces the previous step; a zero-degree identity creates no undo.
+
+History is in memory only. Changing an unrelated or selected ink stroke,
+loading even a byte-identical TSV, or resetting the admitted session
+invalidates it. A stale snapshot may never silently replace a new edit.
+Undo/redo buttons remain disabled while drawing, outside the admitted
+session, when history is unavailable, or when a different exact Unicode
+glyph is selected. The actions never download files without the separate
+Save gesture. A real headless Firefox session verifies the recovered and
+reapplied UTF-8 TSV bytes and no additional backend requests. Two browser
+unit regressions cover exact NFC/NFD separation, failed slant refusal,
+multiple slants, unrelated edits, in-place deletion, import and reset.
+
+This is not general multi-step undo or named/persistent italic variants.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
