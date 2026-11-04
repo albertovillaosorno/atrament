@@ -192,6 +192,14 @@ object-number order and contain at least one record. Sparse gaps remain
 accepted, as verified by a positive disjoint-section fixture. This does
 not traverse incremental-update `/Prev` chains or parse all PDF objects.
 
+A tiny selected PDF may otherwise advertise a multi-billion-object `/Size`
+without supplying those xref records. The traditional-table gate now caps
+`/Size` at the 24 MB input budget divided by an 18-byte minimum record,
+rounded up (1,333,334 objects). This is a conservative local print resource
+policy, not a PDF-specification size limit: extremely sparse external PDFs
+above it require reviewed re-export. The inclusive ceiling and a forged
+9,999,999,999-object trailer have positive and fake-spool refusal tests.
+
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.

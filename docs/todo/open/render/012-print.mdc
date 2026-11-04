@@ -199,6 +199,14 @@ malformed subsection layouts refuse without CUPS side effects or source
 mutations, and real native output retains its exact bytes. No claim is
 made about incremental `/Prev` chains or full PDF reference validation.
 
+A 24-MB-bounded selected PDF could also advertise `/Size 9999999999` on a
+tiny terminal table; that formerly passed basic framing and would expose a
+PDF consumer to an unbounded object count. A red-before fake-CUPS
+regression now refuses sizes above the bounded record-equivalent ceiling
+(1,333,334). The exact ceiling remains admitted, along with ordinary
+native two-page output. This conservative resource policy may refuse
+unusually sparse external PDFs, and does not validate stream-based xrefs.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

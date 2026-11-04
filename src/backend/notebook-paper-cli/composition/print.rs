@@ -53,6 +53,11 @@ use atrament_profile_selected_file_open::open_selected_profile_file;
 #[cfg(all(test, unix))]
 use nix as _;
 
+// An external PDF can claim a sparse multi-billion-object table in a few
+// bytes. Bound downstream reader allocation exposure against the same
+// 24-MB file admission budget (minimum traditional record: 18 bytes).
+const MAX_SUPPORTED_XREF_OBJECTS: usize = MAX_PAPER_OUTPUT_BYTES.div_ceil(18);
+
 const USAGE: &str = concat!(
     "Usage: atrament-print --pdf FILE --printer QUEUE",
     " [--dry-run] [--expect-sha256 64_HEX]\n",
@@ -429,6 +434,7 @@ fn supported_xref_table_trailer(bytes: &[u8], minimum_size: usize) -> bool {
                         .and_then(|digits| digits.parse::<usize>().ok())
                         .is_none_or(|number| {
                             number == 0 || number < minimum_size
+                                || number > MAX_SUPPORTED_XREF_OBJECTS
                         })
                         || !bytes.get(at).is_some_and(|byte| {
                             byte.is_ascii_whitespace()

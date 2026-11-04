@@ -564,6 +564,50 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
     fs::remove_dir_all(&directory).expect("remove owned fixture directory");
 }
 
+#[test]
+fn xref_size_below_resource_ceiling_remains_admissible() {
+    let sparse = format!(
+        "%PDF-1.7\nxref\n0 1\n0000000000 65535 f \n\
+         trailer\n<< /Size {MAX_SUPPORTED_XREF_OBJECTS} >>\n\
+         startxref\n9\n%%EOF\n",
+    );
+    assert!(supported_pdf_cross_reference(sparse.as_bytes()),
+        "accepted resource ceiling is inclusive for sparse object IDs");
+}
+
+#[cfg(unix)]
+#[test]
+fn oversized_xref_trailer_size_refuses_before_cups() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("huge-size.pdf");
+    let spooled = directory.join("unexpected-spool.pdf");
+    let script = directory.join("fake-lp.sh");
+    fs::write(&script, format!(
+        "#!/bin/sh\nprintf contact > '{}'\n", spooled.display(),
+    )).expect("write fake spooler");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o700))
+        .expect("make fake spooler executable");
+    let malformed = concat!(
+        "%PDF-1.7\nxref\n0 1\n0000000000 65535 f \n",
+        "trailer\n<< /Size 9999999999 >>\n",
+        "startxref\n9\n%%EOF\n",
+    ).as_bytes();
+    assert!(!supported_pdf_cross_reference(malformed),
+        "gigantic advertised xref table must refuse on tiny input");
+    fs::write(&pdf, malformed).expect("save malformed PDF");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert!(submit_selected(&request, &script).is_err(),
+        "oversized xref cannot reach CUPS");
+    assert!(!spooled.exists(), "fake CUPS never contacted");
+    assert_eq!(fs::read(&pdf).expect("source intact"), malformed);
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
 #[cfg(unix)]
 #[test]
 fn overlapping_xref_subsections_refuse_before_cups() {
