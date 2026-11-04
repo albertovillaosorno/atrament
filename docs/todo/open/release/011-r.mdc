@@ -146,6 +146,28 @@ These remain candidate visuals, not owner-approved references. They do not
 close the required keyboard-only complete editor journey or the final
 visual-approval gate.
 
+## Native CLI black-box paper candidate parity — 2026-11-04
+
+The mirrored test `tests/backend/notebook-paper-cli/composition/`
+`paper-reference-goldens.mjs` invokes the real Rust `atrament-paper`
+binary for both A4 ruled and grid pages, in vector PDF and transparent
+72-DPI PNG. It compares all four newly exported files byte-for-byte with
+the checked-in viewable candidates and their independently pinned SHA-256
+digests, also inspecting physical PDF dimensions and PNG RGBA framing.
+
+Each valid saved output refuses implicit replacement, and an invalid paper
+style with explicit replacement authorization still refuses atomically.
+This checks the real process and selected output boundary rather than
+only calling the in-process renderer. No browser or physical printer runs.
+Run the black-box test from the repository root:
+
+```sh
+node --test \
+  tests/backend/notebook-paper-cli/composition/paper-reference-goldens.mjs
+```
+
+These candidates still require owner visual approval.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
