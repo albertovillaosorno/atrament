@@ -706,6 +706,44 @@ fn flush_paragraph(
     Ok(())
 }
 
+// Derive row height from visible authored text, not Markdown syntax. A
+// per-glyph height override for #, -, +, *, or > must not alter pitch
+// when that marker becomes a heading/list/quote ornament instead of ink.
+fn measured_pitch(
+    source: &FlowSource,
+    statistics: Option<&HandwritingStatisticsProfile>,
+) -> Result<u32, String> {
+    let boundaries = UnicodeGraphemeSegmentation;
+    let mut pitch = DEFAULT_PITCH_UM;
+    for raw in source.text.lines() {
+        let visible = if source.format == FlowFormat::Markdown {
+            markdown_line(raw).1
+        } else {
+            raw
+        };
+        for index in 0..boundaries.grapheme_count(visible) {
+            let grapheme = segment_at(boundaries, visible, index)?;
+            if grapheme.chars().all(char::is_whitespace) {
+                continue;
+            }
+            if let Some(stats) = statistics {
+                let height = stats
+                    .statistics_for(grapheme, Dimension::Height)
+                    .ok_or("flow glyph height statistics missing")?.mean;
+                let baseline = stats
+                    .statistics_for(grapheme, Dimension::BaselineOffset)
+                    .ok_or("flow baseline statistics missing")?.mean;
+                let needed = height.checked_add(baseline.abs())
+                    .and_then(|combined| combined.checked_add(4_000))
+                    .ok_or("flow row height overflow")?;
+                pitch = pitch.max(u32::try_from(needed)
+                    .map_err(|_error| "flow row height refused")?);
+            }
+        }
+    }
+    Ok(pitch)
+}
+
 /// Compile bounded visible text on the caller-selected native page profile.
 /// This does not create persistent notebook semantic state.
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
@@ -716,30 +754,7 @@ pub(super) fn layout_flow(
     decoration: HeadingDecoration,
 ) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
     let (left, top, right, bottom) = profile.printable_rect_um()?;
-    let boundaries = UnicodeGraphemeSegmentation;
-    let mut pitch = DEFAULT_PITCH_UM;
-    for index in 0..boundaries.grapheme_count(&source.text) {
-        let grapheme = segment_at(boundaries, &source.text, index)?;
-        if grapheme.chars().all(char::is_whitespace) {
-            continue;
-        }
-        if let Some(stats) = statistics {
-            let height = stats
-                .statistics_for(grapheme, Dimension::Height)
-                .ok_or("flow glyph height statistics missing")?
-                .mean;
-            let baseline = stats
-                .statistics_for(grapheme, Dimension::BaselineOffset)
-                .ok_or("flow baseline statistics missing")?
-                .mean;
-            let needed = height
-                .checked_add(baseline.abs())
-                .and_then(|combined| combined.checked_add(4_000))
-                .ok_or("flow row height overflow")?;
-            pitch = pitch.max(u32::try_from(needed)
-                .map_err(|_error| "flow row height refused")?);
-        }
-    }
+    let pitch = measured_pitch(source, statistics)?;
     let mut layout = Layout {
         heading: decoration,
         statistics,

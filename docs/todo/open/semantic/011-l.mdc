@@ -178,6 +178,15 @@ soft lines, different hard-break/ordinary ink, real two-page PDF and PNG,
 plain-text `>` glyph refusal and preservation of a selected existing PDF.
 This remains a CLI export-only subset, not persisted semantic quote blocks.
 
+The subsequent native flow measurement correction derives statistical row
+pitch from the parsed visible graphemes rather than the raw Markdown source:
+syntax-only heading, unordered-list and quote markers do not contribute
+their per-glyph height overrides, while plain-text literal markers and
+authored numbered-list labels still do. Two Rust regressions validate exact
+physical row positions and byte-identical PDF/PNG output using extreme
+syntactic marker height overrides. No parser or saved-notebook state change
+is claimed beyond this CLI pitch correction.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

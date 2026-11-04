@@ -2545,6 +2545,98 @@ fn markdown_quote_bars_follow_real_page_breaks_and_refuse_empty_blocks() {
 }
 
 #[test]
+fn markdown_syntax_markers_do_not_change_statistical_row_pitch() {
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "# a\n- a\n* a\n+ a\n> a\na",
+    ).expect("mixed visible Markdown blocks");
+    let stats = execute_handwriting(&args(&[
+        "--set-glyph", "#", "height", "20000", "20000", "20000",
+        "20000", "0",
+        "--set-glyph", "-", "height", "21000", "21000", "21000",
+        "21000", "0",
+        "--set-glyph", "*", "height", "22000", "22000", "22000",
+        "22000", "0",
+        "--set-glyph", "+", "height", "23000", "23000", "23000",
+        "23000", "0",
+        "--set-glyph", ">", "height", "24000", "24000", "24000",
+        "24000", "0",
+        "--set-glyph", "1", "height", "25000", "25000", "25000",
+        "25000", "0",
+    ])).expect("valid but tall syntax glyph controls").expect("profile bytes");
+    let model = decode_statistics_json(&stats, &UnicodeGraphemeSegmentation)
+        .expect("reopen valid metrics");
+    let (runs, ornaments, pages) = layout_flow(
+        &source, &NotebookProfile::default(), Some(&model),
+        HeadingDecoration::default(),
+    ).expect("only visible authored text sets row pitch");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.iter().map(|run| run.text.as_str())
+        .collect::<Vec<_>>(), ["a", "a", "a", "a", "a", "a"]);
+    assert_eq!(runs.iter().map(|run| run.origin_um.1)
+        .collect::<Vec<_>>(), [24_500, 33_500, 42_500,
+            51_500, 60_500, 69_500]);
+    assert_eq!(ornaments.len(), 5);
+
+    let literal = FlowSource::new(FlowFormat::Plain, ">\na")
+        .expect("literal > in plain text");
+    let (plain, _, _) = layout_flow(
+        &literal, &NotebookProfile::default(), Some(&model),
+        HeadingDecoration::default(),
+    ).expect("plain glyph metrics remain active");
+    assert_eq!(plain[1].origin_um.1 - plain[0].origin_um.1, 28_000,
+        "the same > remains an authored glyph in plain text");
+
+    let numbered = FlowSource::new(FlowFormat::Markdown, "1. a\n2. a")
+        .expect("numbered labels");
+    let (numbers, _, _) = layout_flow(
+        &numbered, &NotebookProfile::default(), Some(&model),
+        HeadingDecoration::default(),
+    ).expect("authored numeral label stays visible");
+    assert_eq!(numbers[1].origin_um.1 - numbers[0].origin_um.1, 29_000,
+        "an actually drawn number still changes measured row pitch");
+}
+
+#[test]
+fn markdown_syntax_height_overrides_leave_pdf_and_png_byte_identical() {
+    let base_bytes = execute_handwriting(&args(&["--seed", "19"]))
+        .expect("baseline statistics").expect("statistics JSON");
+    let syntax_bytes = execute_handwriting(&args(&[
+        "--seed", "19", "--set-glyph", "#", "height",
+        "20000", "20000", "20000", "20000", "0",
+        "--set-glyph", "-", "height", "21000", "21000",
+        "21000", "21000", "0",
+        "--set-glyph", ">", "height", "22000", "22000",
+        "22000", "22000", "0",
+    ])).expect("tall syntax overrides").expect("statistics JSON");
+    let baseline = test_path();
+    let syntax = test_path();
+    fs::write(&baseline, &base_bytes).expect("test baseline file");
+    fs::write(&syntax, &syntax_bytes).expect("test syntax file");
+    let baseline_path = baseline.to_str().expect("baseline filename");
+    let syntax_path = syntax.to_str().expect("syntax filename");
+    for format in ["pdf", "png"] {
+        let render = |profile: &str| {
+            let mut command = args(&[
+                "--export-paper", format, "--printed-sheet", "true",
+                "--glyph-stroke", "a", "0", "0", "3500", "4500",
+                "250", "#204060", "--flow-markdown", "# a\n- a\n> a",
+                "--handwriting-profile", profile,
+            ]);
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            execute_notebook(&command)
+                .expect("native Markdown export").expect("image bytes")
+        };
+        let standard = render(baseline_path);
+        assert_eq!(standard, render(syntax_path),
+            "unrendered marker statistics must not move ink");
+    }
+    fs::remove_file(baseline).expect("remove test baseline");
+    fs::remove_file(syntax).expect("remove test syntax profile");
+}
+
+#[test]
 fn markdown_soft_and_hard_breaks_change_measured_page_count() {
     let soft = FlowSource::new(FlowFormat::Markdown, &"a\n".repeat(40))
         .expect("soft-wrapped paragraph");

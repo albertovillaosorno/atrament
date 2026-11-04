@@ -477,6 +477,9 @@ Markdown are not yet supported. In Markdown, all three
 unordered bullet markers produce the same physical ink dash; the `+` marker
 does not require a separately authored `+` glyph. In plain text it remains
 literal and still needs an authored shape.
+Only visible handwriting glyphs contribute their selected statistical
+height/baseline to the physical row pitch; Markdown-only `#`, `-`, `*`, `+`
+and `>` markers do not, whereas authored numbered-list labels do.
 The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.
 The same 512 total exported pen-segment limit still applies.
 
