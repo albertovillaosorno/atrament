@@ -641,6 +641,21 @@ markers, unapproved glyphs and fenced literal content refuse without
 replacing an accepted export. The original thematic-rule tests now use an
 explicit blank line where the horizontal separator follows text.
 
+## ATX heading whitespace parity (partial) — 2026-11-04
+
+The Rust CLI now treats additional ASCII spaces following the mandatory
+ATX heading separator as Markdown syntax, not extra 4-mm ink indentation.
+This applies to all six heading levels, including horizontally pasted tabs
+expanded to their four-column stops before the parser runs. Authored body
+spaces and the existing up-to-three-space block indentation policy remain
+unchanged. A heading with no visible text still refuses before export.
+
+One native integration regression compares exact real PDF and transparent
+PNG bytes against canonical headings for all six levels, mixed indent,
+optional closing markers, NFC/NFD text and tab-expanded spacing. It also
+verifies three empty heading variants preserve an existing accepted export.
+This is still CLI-only Markdown structure, not editable semantic headings.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

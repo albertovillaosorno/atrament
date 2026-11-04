@@ -1125,8 +1125,11 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
             ("# ", HeadingLevel::Primary),
         ] {
             if let Some(body) = block.strip_prefix(prefix) {
+                // Any additional spaces after the required ATX separator
+                // are syntax, not physical left padding. Tabs were expanded
+                // to column stops before this bounded parser runs.
                 return (LineStyle::Heading(level),
-                    Cow::Borrowed(heading_body(body)));
+                    Cow::Borrowed(heading_body(body).trim_start_matches(' ')));
             }
         }
     }

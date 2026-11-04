@@ -508,9 +508,11 @@ heading keeps its first following visible row on the same physical page when
 there is room for both (including an optional 4-mm paragraph gap); an
 ending heading and a sheet too short for two rows remain valid. Long text
 wraps and paginates automatically (up to 32 physical pages).
-The Markdown subset supports single-line `#` through `######` headings,
-`-`/`*`/`+` bullets, single-level `> text` or `>text` blockquotes, and
-numbered items such as `1. text` or `2) text`
+The Markdown subset supports single-line `#` through `######` headings;
+spaces separating the ATX marker from the title (including expanded tabs)
+are syntax and do not indent the authored heading ink.
+It also supports `-`/`*`/`+` bullets, single-level `> text` or `>text`
+blockquotes, and numbered items such as `1. text` or `2) text`
 (with one to nine ASCII digits). Numbered items use your **authored** digit
 and `.` or `)` glyph ink; unlike unordered bullets, there is no automatic
 number shape. Standalone `---`, `***`, `___`, `- - -` and similar lines

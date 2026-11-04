@@ -630,6 +630,39 @@ test('closing ATX markers and up-to-three-space headings emit identical ink',
     });
 
 
+test('ATX heading separator spaces and pasted tabs are syntax not ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/atx-heading-spacing-'));
+        try {
+            const canonical = '# ó\n## a\n### o\u0301\n#### a'
+                + '\n##### ó\n###### a\nó';
+            const alternate = '  #   ó ##  \n  ##\ta\n ###     o\u0301   ###'
+                + '\n ####    a\n#####    ó #'
+                + '\n  ######\ta ###\nó';
+            for (const format of ['pdf', 'png']) {
+                const standard = render(dir, canonical, format);
+                assert.equal(standard.result.status, 0,
+                    standard.result.stderr);
+                const accepted = readFileSync(standard.output);
+                const spaced = render(dir, alternate, format);
+                assert.equal(spaced.result.status, 0,
+                    spaced.result.stderr);
+                assert.deepEqual(readFileSync(spaced.output), accepted,
+                    `${format} marker delimiter whitespace cannot shift ink`);
+                for (const invalid of ['#   ', '###\t', '######       ']) {
+                    const result = render(dir, invalid, format);
+                    assert.notEqual(result.result.status, 0, invalid);
+                    assert.match(result.result.stderr,
+                        /empty Markdown block refused/);
+                    assert.deepEqual(readFileSync(result.output), accepted,
+                        'empty heading must preserve previously exported ink');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('Setext heading underlines match ATX heading PDF and PNG exactly',
     () => {
         const dir = mkdtempSync(join(root, '.temp/setext-heading-'));
