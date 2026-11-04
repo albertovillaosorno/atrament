@@ -279,6 +279,11 @@ fn xref_table_entry<'bytes>(
     bytes: &'bytes [u8], at: &mut usize,
 ) -> Option<(&'bytes [u8], &'bytes [u8], &'bytes [u8])> {
     let start = pdf_trivia_end(bytes, *at);
+    // A record must begin on a new line, not share its subsection header.
+    if !bytes.get(*at..start)?.iter()
+        .any(|byte| matches!(byte, b'\r' | b'\n')) {
+        return None;
+    }
     let tail = bytes.get(start..)?;
     let end = tail.iter().position(|byte| matches!(byte, b'\r' | b'\n'))?;
     let line = tail.get(..end)?;

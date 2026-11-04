@@ -837,6 +837,7 @@ fn xref_subsection_count_is_unsigned_decimal_digits_only() {
 #[cfg(unix)]
 #[test]
 fn xref_table_entries_require_one_complete_record_line() {
+    use std::iter;
     use std::os::unix::fs::PermissionsExt as _;
 
     let directory = fixture_dir();
@@ -859,16 +860,20 @@ fn xref_table_entries_require_one_complete_record_line() {
         assert!(supported_pdf_cross_reference(&framed(valid)),
             "a complete record with one line ending remains eligible");
     }
-    for record in [
+    let header_and_entry_on_one_line =
+        b"%PDF-1.7\nxref\n0 1 0000000000 65535 f \n\
+          trailer\n<< /Size 1 >>\nstartxref\n9\n%%EOF\n".to_vec();
+    let invalid_entries = [
         "0000000000\n65535 f \n",
         "0000000000 65535\nf \n",
         "0000000000 65535 f trailer\n",
         "0000000000 65535 f ",
         "0000000000 65535 f extra\n",
-    ] {
-        let invalid = framed(record);
+    ];
+    for invalid in invalid_entries.into_iter().map(framed)
+        .chain(iter::once(header_and_entry_on_one_line)) {
         assert!(!supported_pdf_cross_reference(&invalid),
-            "xref record fields must remain on one line: {record:?}");
+            "xref record requires a separate complete table line");
         fs::write(&pdf, &invalid).expect("save malformed table");
         let request = PrintRequest {
             pdf: pdf.clone(), printer: "Queue_1".into(),

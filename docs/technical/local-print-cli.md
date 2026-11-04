@@ -123,8 +123,9 @@ as their first object indices already do. Signed tokens such as `+1` and
 otherwise convert them to valid record counts.
 
 Traditional table entries now require the offset, generation and `f`/`n`
-status to appear on one complete CR- or LF-terminated physical line with
-horizontal whitespace between them. The preflight no longer splices a record
+status to appear on one complete CR- or LF-terminated physical line, after
+the subsection header's line break, with horizontal whitespace between
+them. The preflight no longer splices a record
 from successive lines or ignores stray trailing words. This does not require
 one exact 20-byte PDF entry layout or parse earlier incremental sections.
 
@@ -261,8 +262,9 @@ The valid head-to-free-object chain and native pages remain admitted.
 Two additional fake-CUPS cases refuse signed traditional xref subsection
 counts and keep the source unchanged; an ordinary numeric count still passes.
 
-Five fake-spool refusals cover split-line offset/generation/status and
-trailing extra tokens. Valid LF and CRLF record lines remain admissible;
+Six fake-spool refusals cover split-line offset/generation/status, a count
+and record sharing one line, and trailing extra tokens. Valid LF and CRLF
+record lines remain admissible;
 source bytes are never changed during refused print admission.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
