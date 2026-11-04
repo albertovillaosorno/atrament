@@ -1225,6 +1225,16 @@ also verifies a clipped edit preserves the prior download and makes no
 additional authenticated backend request. This is practical partial
 acceptance only; it does not prove full inventory shape completeness.
 
+The six previously programmatic acute `a`/`o` NFD style variants are now
+individually selectable: italic and connected-pen for both letters, plus
+printed two-storey and two-storey italic for `a`. A focused editor test
+constructs each exact NFD target, saves and reloads independent TSV after
+every replacement, and refuses an oversized two-storey accent without
+changing earlier ink. Real Firefox additionally checks that all six menu
+values decode to the intended decomposed code points and their SVG italic,
+entry-tail and upper-story guides appear only for the selected variant.
+These remain manually chosen sampled variants, not automatic cursive joins.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

@@ -3727,6 +3727,61 @@ test("NFD geometric choices preview canonical shape but save exact ink",
     }
 });
 
+test("NFD acute a/o variants use exact menu form and editable TSV",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const nfdA = "a\u0301";
+        const nfdO = "o\u0301";
+        const samples = [
+            [nfdA + "-italic", nfdA, "italic", 1100],
+            [nfdA + "-cursive", nfdA, "cursive", 1100],
+            [nfdA + "-two", nfdA, "two-storey", 700],
+            [nfdA + "-two-italic", nfdA, "two-storey-italic", 700],
+            [nfdO + "-italic", nfdO, "italic", 1100],
+            [nfdO + "-cursive", nfdO, "cursive", 1100],
+        ];
+        let accumulated = [];
+        for (const [form, glyph, kind, radius] of samples) {
+            get("form").value = form;
+            get("character").value = glyph;
+            get("circle-radius").value = String(radius);
+            get("form").dispatch("input");
+            assert.equal(get("ideal-arch").attributes.get("visibility"),
+                kind.startsWith("two-storey") ? "visible" : "hidden");
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                kind === "cursive" ? "visible" : "hidden");
+            assert.equal(get("italic-angle").disabled,
+                !kind.endsWith("italic"));
+            get("construct").dispatch("click");
+            assert.match(get("status").textContent,
+                /Constructed \d+ sampled segments/);
+            accumulated = [...accumulated.filter((s) => s.grapheme !== glyph),
+                ...geometricStarter(glyph, 1550, 2450, radius,
+                    250, "#243647", undefined, kind)];
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accumulated, `${form} retains independent exact Unicode`);
+        }
+        const intact = accumulated;
+        get("form").value = nfdA + "-two";
+        get("character").value = nfdA;
+        get("circle-radius").value = "1100";
+        get("form").dispatch("input");
+        assert.equal(get("ideal-arch").attributes.get("visibility"),
+            "hidden", "clipped NFD two-storey guide cannot show old ink");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /fit inside glyph cell/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            intact, "clipped NFD variant leaves earlier drafts unchanged");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("uppercase NFC and NFD preserve authored ink", async () => {
     const ui = mountEditor();
     try {

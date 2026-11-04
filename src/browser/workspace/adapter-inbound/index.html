@@ -692,9 +692,16 @@
                 <option value="ü">Diaeresis ü (rounded bowl, two dots)</option>
                 <option value="ñ">Tilde ñ (rounded n and wave)</option>
                 <option value="a&#x0301;">NFD lowercase a + acute</option>
+                <option value="a&#x0301;-italic">NFD italic acute a</option>
+                <option value="a&#x0301;-cursive">NFD connected-pen a</option>
+                <option value="a&#x0301;-two">NFD two-storey a</option>
+                <option value="a&#x0301;-two-italic">NFD italic
+                  two-storey a</option>
                 <option value="e&#x0301;">NFD lowercase e + acute</option>
                 <option value="i&#x0301;">NFD lowercase i + acute</option>
                 <option value="o&#x0301;">NFD lowercase o + acute</option>
+                <option value="o&#x0301;-italic">NFD italic acute o</option>
+                <option value="o&#x0301;-cursive">NFD connected-pen o</option>
                 <option value="u&#x0301;">NFD lowercase u + acute</option>
                 <option value="n&#x0303;">NFD lowercase n + tilde</option>
                 <option value="u&#x0308;">NFD lowercase u + diaeresis</option>
@@ -778,7 +785,10 @@
           </div>
           <p class="field-help">The 14 NFD geometric choices keep the
             selected base-plus-combining-mark Unicode key in TSV, even
-            when their read-only SVG guide shares an NFC shape. These
+            when their read-only SVG guide shares an NFC shape. The NFD
+            acute a/o also allow explicit italic and connected-pen forms;
+            a offers a separate printed two-storey shape (reduce radius
+            to fit its top accent). These
             starters never overwrite an independently authored NFC glyph.
             A composed/decomposed text mismatch still requires its own
             exact shape; there is no automatic Unicode fallback.</p>

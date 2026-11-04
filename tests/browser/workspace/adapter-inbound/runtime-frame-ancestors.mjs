@@ -13427,6 +13427,31 @@ test(
                         guides.push({ ...guide,
                             status: get("status").textContent });
                     }
+                    const variants = [
+                        [nfd[0] + "-italic", 1100, "italic"],
+                        [nfd[0] + "-cursive", 1100, "cursive"],
+                        [nfd[0] + "-two", 700, "two-storey"],
+                        [nfd[0] + "-two-italic", 700,
+                            "two-storey-italic"],
+                        [nfd[3] + "-italic", 1100, "italic"],
+                        [nfd[3] + "-cursive", 1100, "cursive"],
+                    ];
+                    const styleGuides = [];
+                    for (const [form, radius, kind] of variants) {
+                        change("circle-radius", radius);
+                        change("form", form);
+                        change("character", form.split("-")[0]);
+                        styleGuides.push({
+                            form, kind, present: options.includes(form),
+                            selected: get("form").value,
+                            arch: get("ideal-arch")
+                                .getAttribute("visibility"),
+                            entry: get("ideal-entry")
+                                .getAttribute("visibility"),
+                            italicDisabled: get("italic-angle").disabled,
+                        });
+                    }
+                    change("circle-radius", 1100);
                     change("form", "Ñ");
                     change("character", "Ñ");
                     get("construct").click();
@@ -13453,7 +13478,7 @@ test(
                         const refused = get("status").textContent;
                         get("save").click();
                         return JSON.stringify({ nfd, guides, composed,
-                            hidden, refused, names,
+                            styleGuides, hidden, refused, names,
                             files: await Promise.all(blobs.map((blob) =>
                                 blob.text())) });
                     } finally {
@@ -13490,6 +13515,19 @@ test(
                 if (canonical === "é") {
                     assert.equal(guide.open, "visible");
                 }
+            }
+            assert.equal(actual.styleGuides.length, 6);
+            for (const guide of actual.styleGuides) {
+                assert.equal(guide.present, true,
+                    `${guide.form} is an actual HTML select option`);
+                assert.equal(guide.selected, guide.form);
+                assert.equal(guide.arch,
+                    guide.kind.startsWith("two-storey")
+                        ? "visible" : "hidden");
+                assert.equal(guide.entry,
+                    guide.kind === "cursive" ? "visible" : "hidden");
+                assert.equal(guide.italicDisabled,
+                    !guide.kind.endsWith("italic"));
             }
             assert.match(actual.composed, /Constructed \d+ sampled segments/);
             assert.equal(actual.hidden, "hidden");
