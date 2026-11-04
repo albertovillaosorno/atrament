@@ -499,7 +499,10 @@ independent NFC/NFD and math strokes, exact inverse byte recovery,
 explicit refusal for open/short loops, and preserving an existing
 output file on invalid native edits. An independent browser-to-Rust
 integration compares edited TSV and both physical PDF and transparent PNG
-output byte-for-byte with manually authored ink. An analytic native circle
+output byte-for-byte with manually authored ink. A real localhost Firefox
+session additionally selects a closed NFD loop entry, confirms the action
+is gated for first/isolated strokes, downloads the exact interleaved UTF-8
+TSV, and proves no additional backend requests. An analytic native circle
 and persistent pen-lift identity remain unfinished.
 
  The finite implementation described above is not established by

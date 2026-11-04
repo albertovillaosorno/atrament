@@ -2143,11 +2143,15 @@ export function createGlyphStrokeEditor(): {
             pathsStatus.textContent = "No authored pen paths for this glyph";
         } else {
             const details = paths.slice(0, 8).map((path, index) => {
+                const closed = path.first < path.last
+                    && path.start.x === path.end.x
+                    && path.start.y === path.end.y;
                 return `Path ${index + 1}: strokes `
                     + `${path.first}–${path.last}, `
                     + `(${path.start.x}, ${path.start.y}) → `
                     + `(${path.end.x}, ${path.end.y}), `
-                    + `${path.width} µm ${path.color}`;
+                    + `${path.width} µm ${path.color}`
+                    + (closed ? " [closed loop]" : "");
             });
             const more = paths.length > 8
                 ? `; ${paths.length - 8} more (inspect with Rust CLI)` : "";

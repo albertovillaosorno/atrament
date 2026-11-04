@@ -827,6 +827,9 @@ glyph, use `glyphs --profile my-glyphs.tsv --inspect-paths 'ñ'` instead.
 The report groups consecutive authored segments only when the directed end
 of one equals the start of the next and both have the same width and RGB.
 It lists stroke-number ranges, endpoints and candidate pen-lift boundaries.
+A multi-segment same-pen contour whose last endpoint meets its first is
+labeled `[closed loop]` in both native and browser inspectors. The label
+is derived, not persisted as a new v1 TSV path or analytic-circle field.
 
 Reordering or reversing a stroke may split the reported paths. Explicitly
 using `--join-strokes` can merge paths by inserting an authored bridge.

@@ -1256,16 +1256,22 @@ fn append_path_summary(
         .ok_or("missing last path segment")?;
     let count = end.saturating_sub(start);
     let unit = if count == 1 { "segment" } else { "segments" };
+    let closure = if count > 1 && first.start_um == last.end_um {
+        " [closed loop]"
+    } else {
+        ""
+    };
     let _written = writeln!(
         details,
         concat!(
             "Path {}: strokes {}..{} ({} {}) ",
-            "({}, {}) -> ({}, {}) width {} um color #{:02X}{:02X}{:02X}",
+            "({}, {}) -> ({}, {}) width {} um color #{:02X}{:02X}{:02X}{}",
         ),
         number, start.saturating_add(1), end, count, unit,
         first.start_um.0, first.start_um.1,
         last.end_um.0, last.end_um.1,
         first.width_um, first.rgb[0], first.rgb[1], first.rgb[2],
+        closure,
     );
     Ok(())
 }

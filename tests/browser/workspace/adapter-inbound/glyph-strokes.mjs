@@ -1041,6 +1041,7 @@ test("browser chooses closed-loop start using explicit UI", async () => {
             /1 candidate pen path, 0 apparent pen lifts/);
         assert.match(get("paths").textContent,
             /Path 1: strokes 1–4, \(1400, 1500\) → \(1400, 1500\)/);
+        assert.match(get("paths").textContent, /\[closed loop\]/);
         get("save").dispatch("click");
         assert.deepEqual(parseGlyphLibrary(await downloads[0].text()),
             [c, other, d, a, b]);

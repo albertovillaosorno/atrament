@@ -2336,6 +2336,10 @@ fn native_closed_path_start_rotation_preserves_exact_glyph_slots() {
     assert!(report.contains(
         "Path 1: strokes 1..4 (4 segments) (1400, 1500) -> (1400, 1500)"
     ), "{report}");
+    assert!(report.contains("width 250 um color #223344 [closed loop]"),
+        "{report}");
+    assert!(!report.contains("color #334455 [closed loop]"),
+        "an open accent must not be labeled as a closed pen loop");
     rotated.extend(args(&["--rotate-path", nfd, "1", "3"]));
     assert_eq!(execute_glyph_library(&rotated)
         .expect("inverse rotation").expect("TSV"), original);
