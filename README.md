@@ -454,8 +454,11 @@ The Markdown subset supports single-line `#`, `##`, `###` headings,
 `-`/`*` bullets, and numbered list items such as `1. text` or `2) text`
 (with one to nine ASCII digits). Numbered items use your **authored** digit
 and `.` or `)` glyph ink; unlike unordered bullets, there is no automatic
-number shape. Each list item has its own row and wrapped continuation.
-Inline styles, tables and full Markdown are not yet supported.
+number shape. Each list item starts on its own row; wrapped continuations
+align beneath the first item glyph after the *measured* numeral, separator
+and any authored spaces. A label too wide to leave room for its first item
+glyph refuses rather than creating an orphan numeral row. Inline styles,
+tables and full Markdown are not yet supported.
 The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.
 The same 512 total exported pen-segment limit still applies.
 

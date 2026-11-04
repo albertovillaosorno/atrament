@@ -241,7 +241,15 @@ impl Layout<'_> {
     fn layout_line(
         &mut self, content: &str, style: LineStyle,
     ) -> Result<(), String> {
-        let (start_x, cap) = self.line_measurements(style)?;
+        let (mut start_x, mut cap) = self.line_measurements(style)?;
+        let (hang, ordered_marker) = if matches!(style, LineStyle::Ordered) {
+            let (indent, marker) = measured_ordered_label(
+                content, cap, self.statistics,
+            )?;
+            (indent, Some(marker))
+        } else {
+            (0, None)
+        };
         let mut row = String::new();
         let mut width = 0u32;
         let mut count = 0usize;
@@ -275,8 +283,12 @@ impl Layout<'_> {
                         .checked_add(pending_spaces)
                         .and_then(|value| value.checked_add(word.len()))
                         .is_none_or(|value| value > 384))
+                // Keep the first item glyph attached to its authored label
+                // even when the first word itself needs grapheme wrapping.
+                && !(first && ordered_marker == Some(row.as_str()))
             {
                 self.write_row(take(&mut row), start_x, width, style, first)?;
+                start_continuation(first, &mut start_x, &mut cap, hang)?;
                 first = false;
                 width = 0;
                 count = 0;
@@ -308,6 +320,7 @@ impl Layout<'_> {
                     self.write_row(
                         take(&mut row), start_x, width, style, first,
                     )?;
+                    start_continuation(first, &mut start_x, &mut cap, hang)?;
                     first = false;
                     width = 0;
                     count = 0;
@@ -467,6 +480,49 @@ fn append_spaces(
     *width = width.checked_add(space_um).ok_or("flow space overflow")?;
     *count = count.checked_add(spaces).ok_or("flow line too long")?;
     Ok(())
+}
+
+fn start_continuation(
+    first: bool, start_x: &mut u32, cap: &mut u32, indent: u32,
+) -> Result<(), String> {
+    if first {
+        *cap = cap.checked_sub(indent)
+            .ok_or("ordered continuation region overflow")?;
+        *start_x = start_x.checked_add(indent)
+            .ok_or("ordered continuation position overflow")?;
+    }
+    Ok(())
+}
+
+// Keep the authored marker and at least the first body glyph together.
+// Continuations start after the actual measured numeral and separator spaces.
+fn measured_ordered_label<'text>(
+    content: &'text str,
+    cap: u32,
+    statistics: Option<&HandwritingStatisticsProfile>,
+) -> Result<(u32, &'text str), String> {
+    let (marker, after) = content.split_once(' ')
+        .ok_or("ordered list requires a numeral and text")?;
+    let spaces = after.bytes().take_while(|byte| *byte == b' ')
+        .count().checked_add(1)
+        .ok_or("ordered label spacing overflow")?;
+    let (_, marker_width) = measured_word(marker, statistics)?;
+    let indent = u32::try_from(spaces)
+        .map_err(|_error| "ordered label spacing overflow")?
+        .checked_mul(4_000)
+        .and_then(|space_width| marker_width.checked_add(space_width))
+        .ok_or("ordered label advance overflow")?;
+    let first_word = after.trim_start_matches(' ')
+        .split(' ').next().unwrap_or("");
+    let (glyphs, _) = measured_word(first_word, statistics)?;
+    let first_slot = glyphs.first()
+        .ok_or("ordered list requires visible item text")?.2;
+    if indent.checked_add(first_slot).is_none_or(|end| end > cap) {
+        return Err(
+            "ordered list label and first glyph exceed horizontal region".into()
+        );
+    }
+    Ok((indent, marker))
 }
 
 fn measured_word<'text>(

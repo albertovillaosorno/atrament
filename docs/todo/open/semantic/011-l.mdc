@@ -106,6 +106,15 @@ unsupported list syntax. Missing number glyphs and empty numbered items
 refuse before replacing an existing PDF. Numbering is not computed or
 persisted in a semantic document.
 
+A subsequent native hanging-indent correction measures each ordered item's
+exact authored numeral, delimiter and separator spaces before wrapping.
+Continuation rows start under the *item text*, not the numeric marker;
+long first words retain at least one glyph next to the numeral. Two added
+Rust CLI tests cover single/two-digit marker widths, extra authored spaces,
+actual first-body/continuation ink coordinates, real PDF/PNG exports and a
+valid narrow paper profile that refuses a label with no room for its first
+item glyph. This does not introduce nested list semantics.
+
 The authenticated browser's existing **Source material** textarea now has
 an explicit `atrament-source.md` download for later `--flow-markdown-file`
 use. JavaScript performs only a UTF-8 byte-bound transport guard (4,096

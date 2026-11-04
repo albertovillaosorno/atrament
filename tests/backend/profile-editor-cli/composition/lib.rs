@@ -2547,7 +2547,9 @@ fn ordered_markdown_wrap_does_not_repeat_number_on_continuation() {
     assert!(runs.len() > 1);
     assert!(runs[0].text.starts_with("1. "));
     assert!(runs.iter().skip(1).all(|run| !run.text.contains("1.")));
-    assert!(runs.iter().all(|run| run.origin_um.0 == runs[0].origin_um.0));
+    assert!(runs.iter().skip(1).all(|run| {
+        run.origin_um.0 == runs[0].origin_um.0 + 12_000
+    }), "continuations align under the first item glyph, not its number");
     assert!(marks.is_empty(), "ordered numeral is authored, not a bullet");
     let unrecognized = FlowSource::new(
         FlowFormat::Markdown, "1234567890. a",
@@ -2558,6 +2560,94 @@ fn ordered_markdown_wrap_does_not_repeat_number_on_continuation() {
     ).expect("unrecognized numbered marker is ordinary text");
     assert_eq!(runs[0].origin_um.0 + 6_000,
         28_500, "ordinary long number has no list indentation");
+}
+
+#[test]
+fn ordered_markdown_hanging_indent_tracks_label_and_item_spacing() {
+    let markdown = format!(
+        "1. {}\n12)   {}", "a".repeat(65), "a ".repeat(55),
+    );
+    let source = FlowSource::new(FlowFormat::Markdown, &markdown)
+        .expect("bounded numbered Markdown");
+    let (runs, ornaments, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("measured hanging-indent list");
+    assert_eq!(pages, 1);
+    assert!(ornaments.is_empty(), "numbered labels are authored glyphs");
+    let second_index = runs.iter().position(|run| run.text.starts_with("12)"))
+        .expect("second numbered item");
+    assert!(second_index >= 2, "first long word must wrap");
+    assert!(runs.len() > second_index + 1, "second item must wrap");
+    assert!(runs[0].text.starts_with("1. a"),
+        "the label must share its first row with an item glyph");
+    assert!(runs[second_index].text.starts_with("12)   a"),
+        "the wider marker must keep authored separator spaces");
+    for run in &runs[1..second_index] {
+        assert_eq!(run.origin_um.0, runs[0].origin_um.0 + 12_000,
+            "one digit, delimiter and space form the hanging indent");
+        assert!(!run.text.starts_with("1."), "no duplicated marker");
+    }
+    for run in &runs[second_index + 1..] {
+        assert_eq!(run.origin_um.0,
+            runs[second_index].origin_um.0 + 24_000,
+            "two digits, delimiter and three spaces form the indent");
+        assert!(!run.text.starts_with("12)"), "no duplicated marker");
+    }
+    // Compare actual physical ink, not only TextRun origins. The first
+    // body glyph sits after the label and matches the continuation column.
+    let mut glyphs = GlyphOverlay::default();
+    for grapheme in ["1", ".", "2", ")", "a"] {
+        glyphs.parse("--glyph-stroke", &mut args(&[
+            grapheme, "0", "0", "3500", "4500", "250", "#204060",
+        ]).iter()).expect("authored glyph");
+    }
+    let first_row_ink_count = runs[0].text.chars()
+        .filter(|ch| *ch != ' ').count();
+    glyphs.runs = runs;
+    let ink = glyphs.expand(&[], None).expect("native ink placement");
+    assert_eq!(ink[2].start_um.0, ink[first_row_ink_count].start_um.0,
+        "first item glyph and first continuation glyph align");
+    // The label is still drawn in both native physical output formats.
+    let mut cli = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--flow-markdown", &markdown,
+    ]);
+    for grapheme in ["1", ".", "2", ")", "a"] {
+        cli.extend(args(&[
+            "--glyph-stroke", grapheme, "0", "0", "3500", "4500",
+            "250", "#204060",
+        ]));
+    }
+    let pdf = execute_notebook(&cli).expect("native paginated PDF")
+        .expect("PDF bytes");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    cli[3] = "png".into();
+    cli.extend(args(&["--dpi", "72"]));
+    let png = execute_notebook(&cli).expect("same native PNG")
+        .expect("PNG bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+}
+
+#[test]
+fn oversized_ordered_marker_refuses_before_inventing_orphan_line() {
+    let mut paper = NotebookProfile::default();
+    paper.paper_json = paper.paper_json.replace(
+        "\"margin_right_um\": 14000", "\"margin_right_um\": 149000",
+    );
+    assert!(paper.printable_rect_um().is_ok(),
+        "narrow A4 printable region is still valid paper");
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "123456789. a").expect("source accepted");
+    let error = layout_flow(&source, &paper, None,
+        HeadingDecoration::default()).expect_err("label cannot fit");
+    assert!(error.contains("ordered list label and first glyph exceed"),
+        "{error}");
+    let normal = FlowSource::new(FlowFormat::Markdown, "1. a")
+        .expect("small ordered marker");
+    assert!(layout_flow(&normal, &paper, None,
+        HeadingDecoration::default()).is_ok(),
+        "short label still admits physical text");
 }
 
 #[test]
