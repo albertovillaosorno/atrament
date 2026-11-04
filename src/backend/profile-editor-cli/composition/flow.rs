@@ -1244,13 +1244,14 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
 }
 
 // A single trailing backslash is an explicit Markdown hard line break for
-// paragraphs/quotes. Pairs and longer runs remain literal authored glyphs:
-// this restricted parser does not attempt full CommonMark inline escaping.
+// paragraphs, quotes and list items. Pairs and longer runs remain literal
+// authored glyphs: this parser does not perform inline Markdown unescaping.
 // Two trailing spaces retain their existing hard-break semantics.
 fn markdown_paragraph_break<'text>(
     raw: &str, style: LineStyle, body: &'text str,
 ) -> (&'text str, bool) {
-    if !matches!(style, LineStyle::Body | LineStyle::Quote) {
+    if !matches!(style, LineStyle::Body | LineStyle::Quote
+        | LineStyle::Bullet | LineStyle::Ordered | LineStyle::Task(_)) {
         return (body, false);
     }
     if raw.ends_with('\\') && !body.ends_with("\\\\")
@@ -1592,8 +1593,7 @@ pub(super) fn layout_flow_with_region(
                     LineStyle::Bullet | LineStyle::Ordered | LineStyle::Task(_))
             {
                 queue_list_item(&mut layout, &mut paragraph,
-                    &mut paragraph_style, style, body,
-                    input_line.ends_with("  "))?;
+                    &mut paragraph_style, style, body, hard_break)?;
             } else {
                 layout.layout_line(body, style)?;
             }

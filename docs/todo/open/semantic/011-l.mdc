@@ -749,6 +749,19 @@ A real PDF/PNG regression first reproduced the wrong joined geometry and
 then checked physical byte parity for bullet, checked-task and numbered
 list forms. This is not a general nested-list line-break engine.
 
+## Backslash hard breaks in authored list items (partial) — 2026-11-04
+
+A single trailing Markdown backslash now ends a bullet, checked task or
+numbered list item before any two/three-space-indented following line.
+It is stripped as structural syntax just like an ordinary paragraph's
+backslash break. Paired trailing backslashes remain literal pen glyphs
+and refuse when those exact strokes were not authored.
+
+Native PDF/PNG regressions compare physical bytes to accepted two-space and
+Unicode hard breaks, prove a soft continuation is still distinct, and
+preserve an existing export on paired-backslash refusal. No general inline
+Markdown escaping, nested lists or saved semantic identities are claimed.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

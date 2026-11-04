@@ -1908,8 +1908,10 @@ test('hard line separators end a list before an indented ordinary row',
                         soft.result.stderr);
                     assert.notDeepEqual(readFileSync(soft.output),
                         separatedBytes, 'soft continuation stays a list item');
+                    const slash = String.fromCharCode(92);
                     for (const hard of [
                         `${marker}  \n  ó`, `${marker}\u2028  ó`,
+                        `${marker}${slash}\n  ó`,
                     ]) {
                         const actual = render(dir, hard, format, numberedInk);
                         assert.equal(actual.result.status, 0,
@@ -1918,6 +1920,33 @@ test('hard line separators end a list before an indented ordinary row',
                             separatedBytes,
                             'authored hard break must end the list item');
                     }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+
+test('literal paired list backslashes still require authored glyph ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-list-slashes-'));
+        try {
+            const slash = String.fromCharCode(92);
+            for (const format of ['pdf', 'png']) {
+                const accepted = render(dir, '- a\nó', format);
+                assert.equal(accepted.result.status, 0,
+                    accepted.result.stderr);
+                const before = readFileSync(accepted.output);
+                for (const marker of ['- a', '- [x] a', '1. a']) {
+                    const invalid = render(dir,
+                        `${marker}${slash}${slash}\n  ó`, format,
+                        numberedInk);
+                    assert.notEqual(invalid.result.status, 0);
+                    assert.match(invalid.result.stderr,
+                        /missing authored glyph shapes.*U\+005C/);
+                    assert.deepEqual(readFileSync(invalid.output), before,
+                        'literal paired slash refusal preserves export');
                 }
             }
         } finally {
