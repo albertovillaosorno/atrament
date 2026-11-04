@@ -1015,6 +1015,52 @@ fn inventory_cli_preserves_nfc_nfd_and_reports_external_symbols() {
 }
 
 #[test]
+fn inventory_cli_reports_exact_unicode_spaces_and_statistics_overrides() {
+    let sample = "a\u{a0}a\u{2009}a\u{202f}a a\ta\na";
+    let report = String::from_utf8(execute_handwriting(&args(&[
+        "--set-glyph", "\u{2009}", "width", "1600", "2600", "2200",
+        "2200", "200", "--inventory-text", sample,
+    ])).expect("Unicode space inventory admitted")
+        .expect("read-only report"))
+        .expect("report is UTF-8");
+    assert!(report.contains("Distinct visible graphemes: 4"),
+        "{report}");
+    assert!(report.contains("Outside English/Spanish text baseline: 3"),
+        "{report}");
+    for codepoint in ["U+00A0", "U+2009", "U+202F"] {
+        assert!(report.contains(&format!("[{codepoint}]")),
+            "the exact Unicode space must be listed: {report}");
+    }
+    assert!(report.contains(
+        "outside-text-baseline / statistical-override [U+2009]"
+    ), "{report}");
+    assert!(!report.contains("[U+0020]"), "ASCII space is implicit");
+    assert!(!report.contains("[U+0009]"), "tab is source structure");
+    assert!(!report.contains("[U+000A]"), "newline is source structure");
+
+    let single = String::from_utf8(execute_handwriting(&args(&[
+        "--inventory-text", "\u{a0}",
+    ])).expect("single authored space is auditable")
+        .expect("report"))
+        .expect("UTF-8 report");
+    assert!(single.contains("Distinct visible graphemes: 1"));
+    assert!(single.contains("Outside English/Spanish text baseline: 1"));
+    assert!(single.contains("[U+00A0]"));
+
+    // A full bounded source must not repeatedly rescan the original
+    // grapheme prefix; every repeated exact space is counted only once.
+    let long = "\u{2009}".repeat(1365);
+    assert_eq!(long.len(), 4095);
+    let large = String::from_utf8(execute_handwriting(&args(&[
+        "--inventory-text", &long,
+    ])).expect("bounded repeated spaces admitted")
+        .expect("report"))
+        .expect("UTF-8 report");
+    assert!(large.contains("Distinct visible graphemes: 1"));
+    assert!(large.contains("[U+2009]"));
+}
+
+#[test]
 fn inventory_cli_refuses_unsafe_or_conflicting_requests_without_file_effects() {
     let target = test_path();
     fs::write(&target, b"unchanged").expect("write owned sentinel");

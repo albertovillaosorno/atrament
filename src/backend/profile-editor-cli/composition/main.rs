@@ -49,7 +49,7 @@ use flow::{
     FlowFormat, FlowRegion, FlowSource, HeadingDecoration,
     layout_flow_with_region,
 };
-use glyph::GlyphVariation;
+use glyph::{GlyphVariation, first_grapheme};
 
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
 use atrament_handwriting_statistics::{
@@ -72,6 +72,7 @@ use atrament_profile_file_commit::{
 };
 use atrament_profile_file_reader::read_bounded_profile_file;
 use atrament_profile_selected_file_open::open_selected_profile_file;
+#[cfg(test)]
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
@@ -584,24 +585,18 @@ fn inventory_handwriting(
     profile: &HandwritingStatisticsProfile,
     text: &str,
 ) -> Result<Vec<u8>, String> {
-    let boundaries = UnicodeGraphemeSegmentation;
-    let count = boundaries.grapheme_count(text);
     let mut distinct = Vec::new();
     let mut descriptions = String::new();
     let mut outside_baseline = 0usize;
-    for index in 0..count {
-        let start = boundaries
-            .byte_offset(text, index)
-            .ok_or("inventory start boundary unavailable")?;
-        let next = index.checked_add(1)
-            .ok_or("inventory index overflow")?;
-        let end = boundaries
-            .byte_offset(text, next)
-            .ok_or("inventory end boundary unavailable")?;
-        let grapheme = text
-            .get(start..end)
-            .ok_or("inventory boundary not aligned to UTF-8")?;
-        if grapheme.chars().all(char::is_whitespace)
+    let mut remaining = text;
+    while !remaining.is_empty() {
+        // Walk each suffix once; numbered offsets rescan long source prefixes.
+        let (grapheme, rest) = first_grapheme(remaining)?;
+        remaining = rest;
+        // Only ASCII spaces are implicit in native handwriting ink.
+        // Other Unicode whitespace has exact glyph identity, unless it is
+        // a structural control-character source break.
+        if grapheme == " " || grapheme.chars().all(char::is_control)
             || distinct.contains(&grapheme)
         {
             continue;
