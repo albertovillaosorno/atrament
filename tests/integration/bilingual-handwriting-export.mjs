@@ -1558,3 +1558,40 @@ test('clockwise browser glyph rotation equals Rust TSV and PDF/PNG ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('whole-glyph rotation grid matches native signed-angle rounding', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-rotation-grid-'));
+    try {
+        const nfd = 'o\u0301';
+        const source = [];
+        for (let index = 0; index < 160; index += 1) {
+            const x1 = 1200 + (index * 73) % 1100;
+            const y1 = 1400 + (index * 97) % 1550;
+            source.push({
+                grapheme: index % 7 === 0 ? 'ó' : nfd,
+                x1, y1, x2: x1 + 60 + index % 80,
+                y2: y1 + 80 + index % 90,
+                width: 160 + index % 150,
+                color: index % 2 === 0 ? '#243647' : '#334455',
+            });
+        }
+        const sourcePath = join(dir, 'original.tsv');
+        const nativePath = join(dir, 'native.tsv');
+        const original = encodeGlyphLibrary(source);
+        writeFileSync(sourcePath, original);
+        for (const angle of [-20, -15, -10, -5, 0, 5, 10, 15, 20]) {
+            const expected = encodeGlyphLibrary(rotateGlyphStrokes(source,
+                nfd, angle, 1750, 2250));
+            const result = native('glyphs', '--profile', sourcePath,
+                '--rotate-glyph', nfd, String(angle), '1750', '2250',
+                '--output', nativePath, '--replace');
+            assert.equal(result.status, 0, result.stderr);
+            assert.equal(readFileSync(nativePath, 'utf8'), expected,
+                `angle ${angle} must match for all 160 interleaved paths`);
+        }
+        assert.equal(readFileSync(sourcePath, 'utf8'), original,
+            'native repeated roundings must not change source TSV');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
