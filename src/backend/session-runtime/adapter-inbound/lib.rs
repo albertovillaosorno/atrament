@@ -45,16 +45,6 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
 use std::time::{Duration, Instant};
 
-#[cfg(test)]
-use atrament_notebook_profile as _;
-#[cfg(test)]
-use atrament_unicode_grapheme_segmentation as _;
-#[cfg(test)]
-use atrament_session_draft as _;
-#[cfg(test)]
-#[cfg(test)]
-use atrament_session_handshake as _;
-
 use atrament_handwriting_statistics::{Dimension, Unit};
 use atrament_handwriting_statistics_json::MAXIMUM_STATISTICS_JSON_BYTES;
 
