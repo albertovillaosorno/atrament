@@ -13235,8 +13235,8 @@ test(
             assert.equal(response.result.type, "string");
             const actual = JSON.parse(response.result.value);
             assert.equal(actual.before, false);
-            assert.match(actual.filled, /Filled 17 missing math glyphs/);
-            assert.match(actual.complete, /All 17 math glyphs/);
+            assert.match(actual.filled, /Filled 18 missing math glyphs/);
+            assert.match(actual.complete, /All 18 math glyphs/);
             for (const [index, count, lifts] of [
                 [0, 0, 1], [1, 3, 1], [2, 4, 1], [3, 0, 1], [4, 4, 2],
             ]) {
@@ -13267,12 +13267,12 @@ test(
                 Array(2).fill("my-glyph-strokes.tsv"));
             assert.deepEqual(actual.media,
                 Array(2).fill("text/tab-separated-values"));
-            const symbols = ["+", "-", "−", "=", "×", "÷",
+            const symbols = ["+", "-", "−", "±", "=", "×", "÷",
                 "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈"];
             const ink = [...symbols, "$", "€"].flatMap((glyph) =>
                 geometricStarter(glyph, 1550, 2450, 1100,
                     250, "#243647"));
-            assert.equal(ink.length, 378);
+            assert.equal(ink.length, 381);
             const expected = encodeGlyphLibrary(ink);
             assert.deepEqual(actual.files, [expected, expected],
                 "real browser fill and refusal preserve exact pen order");

@@ -574,9 +574,9 @@ function quoteMirror(cx, glyph, p) {
 }
 // Math starters retain ideal SVG lines/quadratics; native v1 samples curves
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
-const MATH_GLYPHS = ["+", "-", "−", "=", "×", "÷",
+const MATH_GLYPHS = ["+", "-", "−", "±", "=", "×", "÷",
     "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈"];
-// Extra manually selected marks do not change the 17-glyph math fill.
+// Extra manually selected marks do not change the 18-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"];
@@ -605,6 +605,12 @@ function mathParts(cx, cy, radius, glyph) {
     const line = (x1, y1, x2, y2) => ({
         from: point(x1, y1), to: point(x2, y2),
     });
+    // ± retains two independently lifted horizontal marks. The upper
+    // plus has an intersecting stem; the lower minus never contacts it.
+    if (glyph === "±")
+        return [
+            horizontal(-0.32), line(0, -0.85, 0, 0.2), horizontal(0.75),
+        ];
     if (glyph === "≠")
         return [
             horizontal(-0.3), horizontal(0.3), line(-0.55, 0.75, 0.55, -0.75),

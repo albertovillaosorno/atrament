@@ -369,6 +369,54 @@ test('degree and percent manual rings render native PDF and RGBA PNG',
         }
     });
 
+test('explicit plus-minus ink survives native PDF/PNG and refuses ∓', () => {
+    const dir = mkdtempSync(join(root, '.temp/plus-minus-ink-'));
+    try {
+        const library = join(dir, 'plus-minus.tsv');
+        const output = join(dir, 'plus-minus.pdf');
+        const rows = geometricStarter('±', 1550, 2450, 1100,
+            250, '#243647');
+        assert.equal(rows.length, 3, 'two bars and one central stem');
+        assert.deepEqual(candidatePenPaths(rows, '±').map(
+            ({ first, last }) => [first, last]),
+        [[1, 1], [2, 2], [3, 3]], 'three independent pen lifts');
+        const canonical = Buffer.from(encodeGlyphLibrary(rows));
+        writeFileSync(library, canonical);
+        const reopen = cli('glyphs', ['--profile', library]);
+        assert.equal(reopen.status, 0, reopen.stderr.toString());
+        assert.deepEqual(reopen.stdout, canonical);
+        const audit = cli('glyphs', ['--profile', library,
+            '--audit-text', '±']);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        const flags = ['--printed-sheet', 'true',
+            '--glyph-file', library, '--flow-text', '±±\n±±'];
+        const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+            '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, 12, 'four glyph occurrences retain three strokes each');
+        const png = cli('notebook', [...flags, '--export-paper', 'png',
+            '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        const missing = cli('notebook', [
+            '--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', '±∓', '--export-paper', 'pdf',
+            '--output', output, '--replace']);
+        assert.notEqual(missing.status, 0);
+        assert.match(missing.stderr.toString(), /missing authored glyph/i);
+        assert.deepEqual(readFileSync(output), accepted,
+            'reverse minus-plus has no fallback or replacement side effect');
+        assert.deepEqual(readFileSync(library), canonical,
+            'Rust import and export never rewrite authored TSV bytes');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('ten math symbols roundtrip TSV and render two real ink rows', () => {
     const dir = mkdtempSync(join(root, '.temp/math-native-'));
     try {

@@ -1334,6 +1334,21 @@ identity and printable spacing characters retain their prior semantics.
 This is bounded profile admission parity, not generated glyph ink or a
 complete handwriting profile calibration pipeline.
 
+## Explicit plus-minus exact ink — 2026-11-04
+
+A manually selected `±` geometric starter now draws three directed pen
+segments: two distinct horizontal bars and a central upper stem. The new
+18-form **Fill missing math** operation includes this exact Unicode key
+without changing custom ink or synthesizing a reverse `∓` form.
+
+Red-before/green-after browser geometry and batch-fill regressions verify
+TSV encoding, endpoint order and independent pen lifts. A native CLI
+regression reopens the same TSV, audits glyph coverage and renders four
+plus-minus occurrences as real physical PDF vectors and transparent PNG.
+An unsupported `∓` refuses before replacing the previously accepted PDF.
+This partial implementation does not provide general mathematical typesetting
+or automatic handwriting generation.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
