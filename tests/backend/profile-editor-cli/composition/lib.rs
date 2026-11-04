@@ -1106,6 +1106,68 @@ fn inventory_cli_reports_exact_unicode_spaces_and_statistics_overrides() {
 }
 
 #[test]
+fn initial_source_bom_is_not_ink_in_unicode_coverage_reports() {
+    let sample = "\u{feff}\u{f1}\u{2028}n\u{303}";
+    for report in [
+        execute_glyph_library(&args(&["--audit-text", sample])),
+        execute_handwriting(&args(&["--inventory-text", sample])),
+    ] {
+        let text = String::from_utf8(report.expect("BOM source admitted")
+            .expect("read-only report"))
+            .expect("UTF-8 report");
+        assert!(text.contains("Distinct visible graphemes: 2"),
+            "{text}");
+        assert!(!text.contains("U+FEFF"), "leading BOM is not ink: {text}");
+        assert!(!text.contains("U+2028"), "separator is not ink: {text}");
+    }
+
+    // BOM is metadata only at byte zero. A later exact U+FEFF grapheme
+    // is not silently normalized away, even on a BOM-prefixed source.
+    for sample in ["n\u{feff}n", "\u{feff}\u{feff}n"] {
+        for report in [
+            execute_glyph_library(&args(&["--audit-text", sample])),
+            execute_handwriting(&args(&["--inventory-text", sample])),
+        ] {
+            let text = String::from_utf8(report.expect("source admitted")
+                .expect("read-only report"))
+                .expect("UTF-8 report");
+            assert!(text.contains("Distinct visible graphemes: 2"),
+                "{text}");
+            assert!(text.contains("U+FEFF"),
+                "interior Unicode identity retained: {text}");
+        }
+    }
+
+    for structural in ["\u{feff}", "\u{feff}\u{2028}",
+        "\u{feff} \u{2029}\t\r\n"] {
+        assert!(execute_glyph_library(&args(&[
+            "--audit-text", structural,
+        ])).is_err(), "BOM-only glyph audit: {structural:?}");
+        assert!(execute_handwriting(&args(&[
+            "--inventory-text", structural,
+        ])).is_err(), "BOM-only inventory: {structural:?}");
+    }
+
+    // The original UTF-8 byte budget includes even an ignored BOM.
+    let accepted = format!("\u{feff}{}", "a".repeat(4093));
+    let refused = format!("\u{feff}{}", "a".repeat(4094));
+    for flag in ["--audit-text", "--inventory-text"] {
+        let result = if flag == "--audit-text" {
+            execute_glyph_library(&args(&[flag, &accepted]))
+        } else {
+            execute_handwriting(&args(&[flag, &accepted]))
+        };
+        assert!(result.is_ok(), "admitted 4096 bytes: {flag}");
+        let result = if flag == "--audit-text" {
+            execute_glyph_library(&args(&[flag, &refused]))
+        } else {
+            execute_handwriting(&args(&[flag, &refused]))
+        };
+        assert!(result.is_err(), "refuse 4097 bytes: {flag}");
+    }
+}
+
+#[test]
 fn unicode_line_and_paragraph_separators_are_audit_structure() {
     // Native flow normalizes these Unicode separators into physical rows,
     // not missing or outside-baseline authored glyphs.

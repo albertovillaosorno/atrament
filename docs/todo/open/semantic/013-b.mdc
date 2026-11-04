@@ -121,6 +121,21 @@ The existing C0/C1, bare-CR and exact-Unicode admission rules remain in
 place. This repairs coverage diagnostics; it does not implement a complete
 semantic notebook, custom ruler sampling, or implicit glyph synthesis.
 
+## Initial UTF-8 BOM in native coverage audits (partial) — 2026-11-04
+
+The native read-only glyph and handwriting inventory reports now ignore
+exactly one initial U+FEFF as source-file metadata, matching the bounded
+Markdown/plain-text flow importer. Previously a BOM-prefixed bilingual
+source reported a nonexistent missing ink shape and outside-baseline glyph;
+BOM-only source was also incorrectly admitted as visible content.
+
+A red-before/green-after native regression proves that an initial BOM and
+Unicode line separator do not inflate two exact NFC/NFD text graphemes,
+while a later U+FEFF remains a distinct auditable identity. Structural-only
+sources refuse, and both commands still count the ignored BOM toward the
+original 4,096-byte input cap. This does not add a font, synthesize ink, or
+claim complete multilingual notebook acceptance.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

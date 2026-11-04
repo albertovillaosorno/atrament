@@ -50,8 +50,8 @@ use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 use super::{
-    export_integer, is_non_ink_audit_grapheme, GlyphFallback, GlyphOverlay,
-    GlyphStroke, TextRun, MAX_GLYPH_LIBRARY_BYTES,
+    export_integer, is_non_ink_audit_grapheme, strip_leading_source_bom,
+    GlyphFallback, GlyphOverlay, GlyphStroke, TextRun, MAX_GLYPH_LIBRARY_BYTES,
 };
 
 const ADVANCE_UM: u32 = 4_000;
@@ -275,7 +275,7 @@ impl GlyphOverlay {
         let mut seen = Vec::new();
         let mut missing = 0usize;
         let mut details = String::new();
-        let mut remaining = text;
+        let mut remaining = strip_leading_source_bom(text);
         while !remaining.is_empty() {
             let (grapheme, rest) = first_grapheme(remaining)?;
             remaining = rest;

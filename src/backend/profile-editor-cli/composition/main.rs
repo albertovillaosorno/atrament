@@ -347,6 +347,12 @@ fn remove_glyph_option(
         .map_err(|error| format!("statistics refused: {error:?}"))
 }
 
+// Match FlowSource: only one leading UTF-8 BOM is transport metadata.
+// The original source still determines the 4096-byte admission limit.
+fn strip_leading_source_bom(source: &str) -> &str {
+    source.strip_prefix('\u{feff}').unwrap_or(source)
+}
+
 // Only implicit ASCII space and source row boundaries are not ink.
 // Distinct Unicode spaces (NBSP, thin space, and others) remain auditable.
 const fn is_non_ink_audit_character(ch: char) -> bool {
@@ -367,10 +373,11 @@ fn parse_inventory_text(
         return Err("--inventory-text may appear only once".into());
     }
     let text = arguments.next().ok_or("--inventory-text requires text")?;
+    let admitted = strip_leading_source_bom(text);
     if text.is_empty() || text.len() > MAX_INVENTORY_TEXT_BYTES
         // Tabs, CRLF/LF and Unicode line/paragraph separators are
         // structure, not visible ink in a coverage report.
-        || !text.chars().any(|ch| !is_non_ink_audit_character(ch))
+        || !admitted.chars().any(|ch| !is_non_ink_audit_character(ch))
         || text.chars().any(|ch| {
             ch.is_control() && !matches!(ch, '\t' | '\r' | '\n')
         })
@@ -608,7 +615,7 @@ fn inventory_handwriting(
     let mut distinct = Vec::new();
     let mut descriptions = String::new();
     let mut outside_baseline = 0usize;
-    let mut remaining = text;
+    let mut remaining = strip_leading_source_bom(text);
     while !remaining.is_empty() {
         // Walk each suffix once; numbered offsets rescan long source prefixes.
         let (grapheme, rest) = first_grapheme(remaining)?;
@@ -761,11 +768,12 @@ fn read_glyph_input(path: &str) -> Result<Vec<u8>, String> {
 /// An explicit reusable glyph shape file, distinct from numeric statistics.
 /// Keep human-entered shape coverage audits bounded and explicit.
 fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
+    let admitted = strip_leading_source_bom(selected);
     if selected.is_empty()
         || selected.len() > MAX_INVENTORY_TEXT_BYTES
         // Keep Unicode line/paragraph separators non-ink like CRLF/LF;
         // other Unicode spaces can have exact authored pen strokes.
-        || !selected.chars().any(|ch| !is_non_ink_audit_character(ch))
+        || !admitted.chars().any(|ch| !is_non_ink_audit_character(ch))
         || selected.chars().any(|ch| {
             ch.is_control() && !matches!(ch, '\t' | '\r' | '\n')
         })
