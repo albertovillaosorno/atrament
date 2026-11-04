@@ -157,12 +157,12 @@ test('pasted Unicode paragraph separators become physical rows',
                 {
                     flag: '--flow-text',
                     pasted: 'ó\u2028a\u2029o\u0301',
-                    lines: 'ó\na\no\u0301',
+                    lines: 'ó\na\n\no\u0301',
                 },
                 {
                     flag: '--flow-markdown',
                     pasted: '# a\u2028- [x] ó\u2029o\u0301',
-                    lines: '# a\n- [x] ó\no\u0301',
+                    lines: '# a\n- [x] ó\n\no\u0301',
                 },
             ]) {
                 for (const format of ['pdf', 'png']) {
@@ -184,12 +184,36 @@ test('pasted Unicode paragraph separators become physical rows',
         }
     });
 
+test('paragraph separator produces a real measured gap in both modes',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-separators-'));
+        try {
+            for (const flag of ['--flow-text', '--flow-markdown']) {
+                for (const format of ['pdf', 'png']) {
+                    const joined = render(dir, 'a\u2028ó', format,
+                        [], flag);
+                    assert.equal(joined.result.status, 0,
+                        joined.result.stderr);
+                    const oneLineBreak = readFileSync(joined.output);
+                    const separated = render(dir, 'a\u2029ó', format,
+                        [], flag);
+                    assert.equal(separated.result.status, 0,
+                        separated.result.stderr);
+                    assert.notDeepEqual(readFileSync(separated.output),
+                        oneLineBreak, 'paragraph must add physical space');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('saved mixed Unicode separators keep physical PDF and PNG parity',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-separators-'));
         try {
             const source = 'ó\u2028a\r\no\u0301\u2029a';
-            const canonical = 'ó\na\no\u0301\na';
+            const canonical = 'ó\na\no\u0301\n\na';
             const path = join(dir, 'unicode-lines.txt');
             const saved = Buffer.from('\uFEFF' + source, 'utf8');
             writeFileSync(path, saved);
