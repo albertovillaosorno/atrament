@@ -61,6 +61,7 @@ test('authored Markdown exports physical PDF and PNG before print dry-run',
             const source = join(dir, 'notes.md');
             const pdfPath = join(dir, 'notes.pdf');
             const pngPath = join(dir, 'second-page.png');
+            const coverPath = join(dir, 'heading.png');
             const profile = join(dir, 'notebook.json');
             const library = join(dir, 'glyphs.tsv');
             const lines = Array.from({ length: 54 }, () => 'a  ');
@@ -83,6 +84,7 @@ test('authored Markdown exports physical PDF and PNG before print dry-run',
                 '--profile', profile, '--glyph-file', library,
                 '--heading-style', 'marker',
                 '--heading-color', '#F8DE91',
+                '--heading-marker-scale', '105',
                 '--flow-markdown-file', source,
             ];
             const pdfRun = notebook(...base, '--export-paper', 'pdf',
@@ -94,6 +96,14 @@ test('authored Markdown exports physical PDF and PNG before print dry-run',
                 'Markdown must paginate onto exactly two physical pages');
             assert.match(pdf.toString('latin1'), /0\.071 0\.204 0\.337 RG/,
                 'caller-authored ink survives vector PDF output');
+            assert.match(pdf.toString('latin1'), /0\.973 0\.871 0\.569 RG/,
+                'scaled marker bands are authored pastel vector ink');
+            const coverRun = notebook(...base, '--export-paper', 'png',
+                '--png-page', '1', '--dpi', '72', '--output', coverPath);
+            assert.equal(coverRun.status, 0, coverRun.stderr);
+            const cover = pngPixels(readFileSync(coverPath));
+            assert.ok(cover.includes(Buffer.from([248, 222, 145, 255])),
+                'page-one marker heading renders into transparent PNG');
             const pngRun = notebook(...base, '--export-paper', 'png',
                 '--png-page', '2', '--dpi', '72', '--output', pngPath);
             assert.equal(pngRun.status, 0, pngRun.stderr);
@@ -107,6 +117,13 @@ test('authored Markdown exports physical PDF and PNG before print dry-run',
             assert.match(dryRun.stdout, /no job submitted/);
             assert.deepEqual(readFileSync(pdfPath), pdf,
                 'print validation must not alter the selected PDF');
+            const overScale = [...base];
+            overScale[overScale.indexOf('105')] = '106';
+            const invalidMarker = notebook(...overScale,
+                '--export-paper', 'pdf', '--output', pdfPath, '--replace');
+            assert.notEqual(invalidMarker.status, 0,
+                'excessive marker width must refuse');
+            assert.deepEqual(readFileSync(pdfPath), pdf);
             const refusal = notebook(...base, '--export-paper', 'pdf',
                 '--pages', '1', '--output', pdfPath, '--replace');
             assert.notEqual(refusal.status, 0,

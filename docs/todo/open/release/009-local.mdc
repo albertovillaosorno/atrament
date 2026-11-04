@@ -74,7 +74,9 @@ A repeatable real-subprocess test (`pnpm run test:print-ready`) saves one
 notebook profile with a printed date, page numbers, rounded border and
 preprinted-paper mode, plus a separately authored exact glyph library.
 It reopens both artifacts in the same native Rust CLI and lays out Markdown
-with marker-style heading decoration and 54 explicit hard-line rows.
+with a pastel marker-style heading scaled to 105% width and 54 explicit
+hard-line rows. Both the PDF vector stream and first-page transparent PNG
+are inspected for the actual pastel marker ink.
 The renderer automatically paginates two physical PDF sheets and exports a
 transparent RGBA page-two PNG containing the same authored colored ink.
 
