@@ -79,6 +79,46 @@ fn real_pdf() -> Vec<u8> {
     real_pdf_with_marks(false)
 }
 
+// Minimal externally readable one-page PDF 1.5, with a real binary xref
+// stream containing free object zero and exact offsets for objects 1..4.
+// Unlike the framing-only probes below, pdfinfo independently reads this
+// construction as a one-page Letter PDF with no repair warnings.
+fn one_page_xref_stream_pdf(index: &str) -> Vec<u8> {
+    let mut bytes = b"%PDF-1.5\n%\xd0\xd4\xc5\xd8\n".to_vec();
+    let mut offsets = [0usize; 5];
+    for (object, body) in [
+        (1, "<< /Type /Catalog /Pages 2 0 R >>"),
+        (2, "<< /Type /Pages /Count 1 /Kids [3 0 R] >>"),
+        (3, "<< /Type /Page /Parent 2 0 R \
+             /MediaBox [0 0 612 792] >>"),
+    ] {
+        *offsets.get_mut(object)
+            .expect("known fixture object number") = bytes.len();
+        bytes.extend_from_slice(format!(
+            "{object} 0 obj\n{body}\nendobj\n"
+        ).as_bytes());
+    }
+    offsets[4] = bytes.len();
+    let mut rows = Vec::with_capacity(35);
+    for (object, offset) in offsets.iter().enumerate() {
+        rows.push(u8::from(object != 0));
+        rows.extend_from_slice(&u32::try_from(*offset)
+            .expect("tiny object offset fits u32").to_be_bytes());
+        rows.extend_from_slice(&(if object == 0 { 65_535u16 } else { 0 })
+            .to_be_bytes());
+    }
+    bytes.extend_from_slice(format!(
+        "4 0 obj\n<< /Type /XRef /Size 5 /W [1 4 2]{index} \
+         /Root 1 0 R /Length {} >>\nstream\n", rows.len(),
+    ).as_bytes());
+    bytes.extend_from_slice(&rows);
+    bytes.extend_from_slice(b"\nendstream\nendobj\n");
+    bytes.extend_from_slice(format!(
+        "startxref\n{}\n%%EOF\n", offsets[4],
+    ).as_bytes());
+    bytes
+}
+
 #[test]
 fn printing_requires_exact_file_and_named_queue() {
     let valid = ["--pdf", "notebook.pdf", "--printer", "Local_Printer-2"]
@@ -863,6 +903,56 @@ fn xref_stream_index_ranges_are_bounded_disjoint_pairs() {
         assert!(!spooled.exists(), "no fake spool contact");
         assert_eq!(fs::read(&pdf).expect("selected bytes unchanged"),
             candidate);
+    }
+    fs::remove_dir_all(&directory).expect("remove fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
+fn genuine_xref_stream_pdf_spools_exact_reviewed_bytes() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("one-page-stream.pdf");
+    let spooled = directory.join("spooled.pdf");
+    let script = directory.join("lp.sh");
+    fs::write(&script, format!(
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS script");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+
+    // /Index is optional (implicit [0 /Size]), or may provide an explicit
+    // nonoverlapping partition covering all five real indirect objects.
+    for index in [" /Index [0 5]", "", " /Index [0 2 2 3]"] {
+        let bytes = one_page_xref_stream_pdf(index);
+        fs::write(&pdf, &bytes).expect("write actual single-page PDF");
+        assert_eq!(selected_pdf(&pdf).expect("admit genuine PDF"), bytes);
+        let digest = sha256_profile_bytes(&bytes).bytes();
+        if index == " /Index [0 5]" {
+            assert_eq!(bytes.len(), 353, "independently parsed PDF size");
+            assert_eq!(sha256_hex(digest).expect("format digest"),
+                concat!(
+                    "50c8e019842de806caf6570923a244a1",
+                    "075fb6199d05f0e5de249420807e3d80",
+                ));
+        }
+        let dry_run = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: true, expected_sha256: Some(digest),
+        };
+        assert_eq!(submit_selected(&dry_run, &script)
+            .expect("validate genuine PDF without contact"), digest);
+        assert!(!spooled.exists(), "review must not spool");
+        let submit_request = PrintRequest {
+            dry_run: false, ..dry_run
+        };
+        assert_eq!(submit_selected(&submit_request, &script)
+            .expect("exact fake CUPS submission"), digest);
+        assert_eq!(fs::read(&spooled).expect("captured fake-CUPS bytes"),
+            bytes, "no source mutation or PDF rewriting");
+        assert_eq!(fs::read(&pdf).expect("original document"), bytes);
+        fs::remove_file(&spooled).expect("reset fake spool capture");
     }
     fs::remove_dir_all(&directory).expect("remove fixture directory");
 }

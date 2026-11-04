@@ -289,6 +289,12 @@ Sixteen additional fake-spool refusals cover malformed `/Index` ranges,
 including overlap, overflow and pairs outside declared `/Size`. Five
 framing positives preserve optional, bounded and commented forms.
 
+A genuine one-page PDF 1.5 cross-reference-stream positive fixture
+contains a real catalog/page tree and five binary xref records. `pdfinfo`
+reads the generated 353-byte document as one Letter page without repair.
+A fake-CUPS test confirms exact SHA-256 review and spool byte identity
+for explicit, implicit and partitioned `/Index` forms; no printer runs.
+
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.

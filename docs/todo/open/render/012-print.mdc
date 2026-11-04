@@ -293,6 +293,18 @@ including PDF comments, sparse gaps and nested decoys. Direct ranges must
 be increasing, disjoint and within `/Size` under the conservative local
 policy; the stream payload itself is still not decoded.
 
+A further positive regression constructs a genuine PDF 1.5 single-page
+Letter document with catalog, page tree, page and binary cross-reference
+stream objects. `pdfinfo` independently recognized its one physical page
+and version without repair diagnostics; the native `--dry-run` accepted
+its exact 353-byte snapshot without contacting any queue.
+
+The Rust fake-CUPS test additionally admits explicit, implicit and
+partitioned `/Index` forms with real 35-byte rows, and verifies the
+reviewed digest, unchanged source and byte-identical spool input for each
+variant. This confirms compatibility beyond synthetic framing fixtures;
+no physical printing or full PDF semantic validation is claimed.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.
