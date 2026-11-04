@@ -1787,6 +1787,28 @@ or rewriting caller ink. Authenticated Firefox covers the added selectable
 guides and exact full TSV download replayed into Rust PDF/PNG. These remain
 sampled, opt-in user-authored strokes, not automatic math typesetting.
 
+## Exact barred inclusive comparisons and diagonal arrows (partial)
+
+The optional editor offers four more independent Unicode geometries:
+not-less-or-equal `≰`, not-greater-or-equal `≱`, up-right `↗`, and
+down-right `↘`. The barred comparisons retain the complete `≤` or `≥`
+chevron and equality line, then lift to cross both with a slash. Each
+slanted arrow has its own diagonal shaft and connected, separately lifted
+arrowhead. None infers its key from the existing ordinary comparisons or
+horizontal/vertical arrows in the saved TSV.
+
+This brings the opt-in math fill to 75 distinct forms. All eleven baseline
+fills together stay within the native library bound at 188 glyphs and 4041
+strokes of 4096 allowed; a custom over-cap fill still refuses atomically.
+A red-before/green-after browser test fixes exact coordinates, joins, SVG
+guides, clipping, idempotent fill and Unicode identity.
+
+The independent Rust CLI reopens the authored TSV for physical PDF and
+transparent PNG. Missing comparisons or arrows refuse before replacing an
+accepted PDF. Live
+Firefox verifies the same selectable forms, full TSV download and Rust
+roundtrip. This is editable sample ink, not automatic Unicode typesetting.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
