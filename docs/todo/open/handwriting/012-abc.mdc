@@ -973,6 +973,22 @@ ink in browser and Rust. Reversing those operations restores the untouched
 source bytes; a forbidden first-segment rotation preserves the selected
 output file atomically. Curve controls remain SVG-only in this v1 model.
 
+## Complete mixed-language mathematics sample (partial) — 2026-11-04
+
+An additional acceptance test authors one combined 125-glyph browser
+library (2,819 ordered strokes) and saves a UTF-8, two-line sample with
+Spanish guillemets, ¡¿ punctuation, `qué`, NFC `mañana`, decomposed
+`man\u0303ana`, six new mathematical forms and an arithmetic expression.
+The native Rust audit reports zero missing glyphs; its real vector PDF
+contains exactly the sum of the selected graphemes' authored ink segments
+on one sheet, and its 72-DPI PNG has transparent paper corners. A missing
+unapproved mathematical `∑` refuses without replacing the accepted PDF or
+changing the original browser-authored TSV. All 19 cross-engine bilingual
+integration tests pass, including this new full-sentence sample.
+
+This establishes one finite admitted mixed-language/math page, not complete
+Unicode coverage or persistent analytic PDF curves. P4-012 remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

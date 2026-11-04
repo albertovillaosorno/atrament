@@ -1595,3 +1595,74 @@ test('whole-glyph rotation grid matches native signed-angle rounding', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('complete bilingual sample with new math uses exact Unicode ink', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-bilingual-math-'));
+    try {
+        const library = join(dir, 'combined.tsv');
+        const textFile = join(dir, 'sample.txt');
+        const pdfPath = join(dir, 'sample.pdf');
+        const pngPath = join(dir, 'sample.png');
+        const math = ['√', 'π', '∞', '≠', '≤', '≥'];
+        const strokes = [
+            ...bilingualStarter().strokes,
+            ...math.flatMap((glyph) => geometricStarter(glyph, ...starter)),
+        ];
+        assert.equal(strokes.length, 2819);
+        assert.equal(new Set(strokes.map((line) => line.grapheme)).size,
+            125, 'all authored exact Unicode identities are independent');
+        const source = Buffer.from(encodeGlyphLibrary(strokes));
+        writeFileSync(library, source);
+        const sample = '«¡Hola!» ¿qué? √π∞≠≤≥\nmañana man\u0303ana 2×3=6';
+        writeFileSync(textFile, `${sample}\n`);
+        const audit = native('glyphs', '--profile', library,
+            '--audit-text', sample);
+        assert.equal(audit.status, 0, audit.stderr);
+        assert.match(audit.stdout, /Missing authored glyphs: 0/);
+        for (const g of ['ñ', 'n\u0303', ...math]) {
+            assert.ok(strokes.some((stroke) => stroke.grapheme === g),
+                `explicitly authored exact Unicode glyph ${g}`);
+        }
+        const counts = new Map();
+        for (const stroke of strokes) {
+            counts.set(stroke.grapheme,
+                (counts.get(stroke.grapheme) ?? 0) + 1);
+        }
+        const segments = [...new Intl.Segmenter('es', {
+            granularity: 'grapheme',
+        }).segment(sample)].reduce((sum, part) =>
+            sum + (counts.get(part.segment) ?? 0), 0);
+        assert.ok(segments > 100, 'actual handwritten sample has dense ink');
+        const commands = [
+            'notebook', '--printed-sheet', 'true',
+            '--glyph-file', library, '--flow-text-file', textFile,
+            ...flowRegion,
+        ];
+        const pdf = native(...commands, '--export-paper', 'pdf',
+            '--output', pdfPath);
+        assert.equal(pdf.status, 0, pdf.stderr);
+        const written = readFileSync(pdfPath);
+        assert.ok(written.toString('latin1').startsWith('%PDF-1.4'));
+        assert.equal(written.toString('latin1').split(' m\n').length - 1,
+            segments, 'all expected Unicode strokes reach the paper');
+        assert.equal(written.toString('latin1').split('\nstream\n').length - 1,
+            1, 'the full bilingual mathematical sample fits one page');
+        const png = native(...commands, '--export-paper', 'png',
+            '--dpi', '72', '--output', pngPath);
+        assert.equal(png.status, 0, png.stderr);
+        pngHasTransparentCorner(readFileSync(pngPath));
+        const withMissing = native('notebook', '--printed-sheet',
+            'true', '--glyph-file', library, '--flow-text', '∑',
+            ...flowRegion, '--export-paper', 'pdf',
+            '--output', pdfPath, '--replace');
+        assert.notEqual(withMissing.status, 0,
+            'unwritten mathematical symbols are never silently replaced');
+        assert.match(withMissing.stderr, /glyph|missing/i);
+        assert.deepEqual(readFileSync(pdfPath), written,
+            'unapproved missing glyph preserves accepted bilingual PDF');
+        assert.deepEqual(readFileSync(library), source,
+            'native sample export never edits the 125-glyph source');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
