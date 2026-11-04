@@ -1658,6 +1658,25 @@ A live Firefox roundtrip checks the 48 exact keys and their Rust PDF/PNG
 replay without an implicit backend write. These are manual sampled pen
 paths, not native analytic PDF curves or semantic math parsing.
 
+## Explicit school-geometry ink (partial) — 2026-11-04
+
+Four more Unicode math keys have manually selected starter ink: `∥` for
+parallel lines, `⊥` for perpendicularity, `∼` for similarity, and `≅` for
+congruence. The parallel and perpendicular signs have two separately
+lifted linear pen segments. Similarity has one continuous two-quadratic
+wave sampled into 32 native TSV chords; congruence adds two independently
+lifted equality bars. The optional math fill now covers 52 exact keys.
+
+Browser tests confirm exact pen endpoints, path lifts, curve guides, TSV
+identities, strict clipping refusal and atomic optional fill. The native
+Rust CLI accepts real PDF and transparent PNG for all four glyphs, then
+refuses absent ordinary equals, approximately equals and top symbols
+without replacing previous output. Live Firefox-to-Rust TSV and PDF/PNG
+replay verifies the full expanded glyph menu without hidden backend writes.
+
+These are caller-authored sampled marks, not automatic handwriting joins,
+mathematics layout, native analytic PDF curves or Unicode-wide fallback.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

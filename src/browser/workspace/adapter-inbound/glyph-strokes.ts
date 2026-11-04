@@ -682,8 +682,8 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "∩", "∪", "∈", "∉", "∋", "∌", "⊂", "⊆", "⊃", "⊇",
     "⊄", "⊈", "⊅", "⊉", "∑", "∫",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
-    "∅", "∇", "≡", "≢"] as const;
-// Extra manual marks do not change the 48-glyph math fill.
+    "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅"] as const;
+// Extra manual marks do not change the 52-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -707,6 +707,16 @@ function mathParts(
     if (glyph === "-" || glyph === "−") return [horizontal(0)];
     if (glyph === "+") return [horizontal(0), vertical()];
     if (glyph === "=") return [horizontal(-0.3), horizontal(0.3)];
+    // Separate exact directed ink for parallel and perpendicular geometry.
+    // Neither substitutes for a Latin letter or ordinary equality glyph.
+    if (glyph === "∥") return [
+        { from: point(-0.36, -0.85), to: point(-0.36, 0.85) },
+        { from: point(0.36, -0.85), to: point(0.36, 0.85) },
+    ];
+    if (glyph === "⊥") return [
+        { from: point(0, -0.8), to: point(0, 0.7) },
+        horizontal(0.7),
+    ];
     // Identity and negated identity have three independent horizontal
     // strokes. Negation adds its own separately lifted diagonal ink;
     // neither key is inferred from an authored '=' or '≠'.
@@ -909,6 +919,18 @@ function mathParts(
     // The empty set uses four connected quadratic ellipse guides, each
     // sampled into sixteen native chords, and a separately lifted slash.
     // It is not an automatic replacement for Latin Ø or digit zero.
+    // Similarity and congruence each have one continuously authored
+    // two-quadratic tilde; congruence lifts for two independent bars.
+    // A saved '=' or approximate sign never supplies either shape.
+    if (glyph === "∼") return [
+        curve([-0.8, 0.2], [-0.4, -0.5], [0, 0]),
+        curve([0, 0], [0.4, 0.5], [0.8, -0.2]),
+    ];
+    if (glyph === "≅") return [
+        curve([-0.8, -0.45], [-0.4, -1.05], [0, -0.65]),
+        curve([0, -0.65], [0.4, -0.15], [0.8, -0.85]),
+        horizontal(0.1), horizontal(0.8),
+    ];
     if (glyph === "∅") return [
         curve([0, -0.8], [0.65, -0.8], [0.65, 0]),
         curve([0.65, 0], [0.65, 0.8], [0, 0.8]),

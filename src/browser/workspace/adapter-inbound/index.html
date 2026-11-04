@@ -690,6 +690,10 @@
                 <option value="≡">Identical ≡ (three bars)</option>
                 <option value="≢">Not identical ≢
                   (three bars and slash)</option>
+                <option value="∥">Parallel ∥ (two upright strokes)</option>
+                <option value="⊥">Perpendicular ⊥ (upright and foot)</option>
+                <option value="∼">Similar ∼ (one curved wave)</option>
+                <option value="≅">Congruent ≅ (wave and equality bars)</option>
                 <option value="°">Degree ° (one exact ring)</option>
                 <option value="%">Percent % (two rings and slash)</option>
                 <option value="$">Peso/dollar $ (S and vertical stem)</option>
@@ -807,7 +811,7 @@
               Fill missing quotation marks (unsaved)
             </button>
             <button id="glyph-seed-math" type="button" disabled>
-              Fill missing math symbols (48 forms, unsaved)
+              Fill missing math symbols (52 forms, unsaved)
             </button>
             <button id="glyph-seed-digits" type="button" disabled>
               Fill missing digits 0–9 (unsaved)
@@ -882,7 +886,8 @@
             Fill missing math adds +, ASCII -, Unicode −, ±, ∓, =, ×, ÷,
             √, π, ∞, ≠, &lt;, &gt;, ≤, ≥, ∧, ∨, ∩, ∪, ∈, ∉, ∋, ∌,
             ⊂, ⊆, ⊃, ⊇, ⊄, ⊈, ⊅, ⊉, ∑, ∫, ∂, Δ, ≈, →, ←,
-            ↔, ↑, ↓, ↕, ∝, ∅, ∇, ≡ and ≢. Each direction arrow has its own
+            ↔, ↑, ↓, ↕, ∝, ∅, ∇, ≡, ≢, ∥, ⊥, ∼ and ≅.
+            Each direction arrow has its own
             shaft and separately lifted arrowhead paths. AND and OR
             wedges are independent Unicode ink, never Latin-v aliases.
             Set intersection/union use their own smooth quadratic curves.
@@ -903,8 +908,10 @@
             smooth ellipse quadratics with a lifted slash, nabla closes an
             inverted triangular path, and ≡/≢ retain three independent
             bars with an optional fourth slash. Division dots stay
-            separated. All exact Unicode keys and existing ink remain
-            distinct.
+            separated. Parallel and perpendicular use distinct geometric
+            lines; similarity and congruence use smooth quadratic waves,
+            with separate equality bars for congruence. All exact Unicode
+            keys and existing ink remain distinct.
             Numeral 0 is an exact SVG ellipse (distinct from circular o),
             8 uses two ellipses, and 1–7/9 combine ordered lines, arcs or
             loops. The separate digit fill preserves authored shapes and
