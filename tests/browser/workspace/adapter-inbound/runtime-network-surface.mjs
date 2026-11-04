@@ -57,6 +57,10 @@ const LOOPBACK_RUNTIME = path.join(
 const PAPER_CLI = path.join(
     BACKEND_ROOT, "notebook-paper-cli", "application", "lib.rs",
 );
+// This separate opt-in CLI is the only non-browser process-launch authority.
+const PRINT_CLI = path.join(
+    BACKEND_ROOT, "notebook-paper-cli", "composition", "print.rs",
+);
 const PROFILE_EDITOR_CLI = path.join(
     BACKEND_ROOT, "profile-editor-cli", "composition", "main.rs",
 );
@@ -500,7 +504,8 @@ function unreviewedAmbientProcessInputReads(source, sourcePath) {
                 .test(source);
     }
     // Both native CLI entrypoints read only their own argv once.
-    if (sourcePath === PAPER_CLI || sourcePath === PROFILE_EDITOR_CLI) {
+    if (sourcePath === PAPER_CLI || sourcePath === PRINT_CLI
+        || sourcePath === PROFILE_EDITOR_CLI) {
         return reads.length !== 0 || argumentsRead.length !== 1
             || argumentsRead[0][1] !== "args"
             || !/\benv\s*::\s*args\s*\(\s*\)\s*\.\s*skip\s*\(\s*1\s*\)/u.test(source);
@@ -1365,7 +1370,44 @@ test("standard-library process detector covers equivalent imports", () => {
     }
 });
 
-test("backend process authority stays in browser launch", async () => {
+// A narrow print exception must not hide a second command, thread or shell.
+// Remove only its known fixed CUPS argv and stream-routing expressions, then
+// apply the original conservative process scanner to everything remaining.
+function unreviewedPrintSubprocessAuthority(source) {
+    let remaining = source;
+    for (const site of [
+        'use std::process::{Command, Stdio};',
+        'Command::new(executable)',
+        '.args(["-d", printer, "-"])',
+        '.stdin(Stdio::piped())',
+        '.stdout(Stdio::null())',
+        '.stderr(Stdio::null())',
+        '.spawn()',
+        'Path::new("/usr/bin/lp")',
+    ]) {
+        if (remaining.split(site).length - 1 !== 1) return true;
+        remaining = remaining.replace(site, "");
+    }
+    return usesStandardLibraryProcessAuthority(remaining);
+}
+
+test("opt-in CUPS process cannot grow an extra subprocess", async () => {
+    const print = await readFile(PRINT_CLI, "utf8");
+    assert.equal(unreviewedPrintSubprocessAuthority(print), false);
+    for (const extra of [
+        'Command::new("sh").spawn();',
+        'std::process::Command::new("curl").status();',
+        'command.spawn().unwrap();',
+        'std::thread::spawn(move || {});',
+        'use std::process::Command as OtherCommand;',
+    ]) {
+        assert.equal(unreviewedPrintSubprocessAuthority(`${print}\n${extra}`),
+            true, extra);
+    }
+});
+
+test("backend subprocesses stay within browser and opt-in print CLI",
+    async () => {
     const spawningFiles = [];
     for (const sourcePath of await rustSources(BACKEND_ROOT)) {
         const source = await readFile(sourcePath, "utf8");
@@ -1373,7 +1415,11 @@ test("backend process authority stays in browser launch", async () => {
             spawningFiles.push(sourcePath);
         }
     }
-    assert.deepEqual(spawningFiles, [BROWSER_LAUNCH]);
+    // Only a reviewed, fixed CUPS executable and named queue may be launched.
+    // This is a narrow process exception, not a general subprocess adapter.
+    const print = await readFile(PRINT_CLI, "utf8");
+    assert.equal(unreviewedPrintSubprocessAuthority(print), false);
+    assert.deepEqual(spawningFiles.sort(), [BROWSER_LAUNCH, PRINT_CLI].sort());
 });
 
 // A borrowed File or stream can be read without opening it in the current
@@ -1592,6 +1638,7 @@ test("std::io stream writing stays in reviewed output adapters", async () => {
     }
     assert.deepEqual(writers.sort(), [
         PAPER_CLI,
+        PRINT_CLI,
         PROFILE_EDITOR_CLI,
         FILESYSTEM_COMMIT,
         path.join(BACKEND_ROOT, "runtime-bootstrap", "composition", "main.rs"),
@@ -2078,7 +2125,15 @@ test("backend raw native authority requires explicit review", async () => {
     const nativeFiles = [];
     for (const sourcePath of await rustSources(BACKEND_ROOT)) {
         const source = await readFile(sourcePath, "utf8");
-        if (usesUnreviewedNativeAuthority(source)) {
+        let reviewed = source;
+        if (sourcePath === PRINT_CLI) {
+            // The CLI's nix dev-dependency is referenced only in its test
+            // build, not through any production raw native API.
+            const site = "#[cfg(all(test, unix))]\nuse nix as _;";
+            assert.equal(source.split(site).length - 1, 1);
+            reviewed = source.replace(site, "");
+        }
+        if (usesUnreviewedNativeAuthority(reviewed)) {
             nativeFiles.push(sourcePath);
         }
     }
@@ -2287,7 +2342,17 @@ test("backend Rust sources cannot redirect compilation out of inventory",
     const redirectFiles = [];
     for (const sourcePath of await rustSources(BACKEND_ROOT)) {
         const source = await readFile(sourcePath, "utf8");
-        if (redirectsBackendRustSource(source)) {
+        let reviewed = source;
+        if (sourcePath === PRINT_CLI) {
+            // One test-only path points to the explicitly inventoried Rust
+            // print fixture; other source redirections remain forbidden.
+            const site = '#[cfg(test)]\n' +
+                '#[path = "../../../../tests/backend/' +
+                'notebook-paper-cli/composition/print.rs"]\nmod tests;';
+            assert.equal(source.split(site).length - 1, 1);
+            reviewed = source.replace(site, "");
+        }
+        if (redirectsBackendRustSource(reviewed)) {
             redirectFiles.push(sourcePath);
         }
     }
@@ -2498,10 +2563,17 @@ function unreviewedStandardStreamAuthority(source, sourcePath) {
         return stderr !== 0 || stdin !== 0 || stdout !== 2
             || !source.includes('writeln!(io::stdout().lock(), "{USAGE}")');
     }
+    if (sourcePath === PRINT_CLI) {
+        // Help, reviewed digest and explicit CUPS acceptance: no stderr.
+        return stderr !== 0 || stdin !== 0 || stdout !== 3
+            || !source.includes('writeln!(io::stdout().lock(), "{USAGE}")')
+            || !source.includes('"PDF validated for {}; SHA-256 {}; '
+                + 'no job submitted"')
+            || !source.includes('"CUPS accepted a job for printer {}"');
+    }
     if (sourcePath === PROFILE_EDITOR_CLI) {
-        // Six explicit CLI-only help and serialized-output write sites:
-        // the notebook subcommand adds its own help and stdout output.
-        return stderr !== 0 || stdin !== 0 || stdout !== 6
+        // Eight explicit CLI-only help and serialized-output write sites.
+        return stderr !== 0 || stdin !== 0 || stdout !== 8
             || !source.includes('writeln!(io::stdout().lock(), "{USAGE}")')
             || !source.includes(
                 'writeln!(io::stdout().lock(), "{NOTEBOOK_USAGE}")'

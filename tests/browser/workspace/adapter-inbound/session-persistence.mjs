@@ -521,7 +521,7 @@ function hasUnreviewedBrowserGlobalAuthority(
         .replaceAll("\"top-right\"", "");
     if (glyph) {
         const allowedTop = [
-            'const top = chosen.variant === "two-storey" ? 2 * r : r;',
+            'const top = chosen.variant.startsWith("two-storey")',
             "box.top",
             "const accent = acuteAccent(cx, cy, r, pen, dx, lift, top);",
         ];
@@ -591,7 +591,7 @@ function hasUnreviewedDocumentAuthority(source, main, typed, paper = false,
         ["document.getElementById(id)", paper || glyph ? 1 : 0],
         ['document.createElement("a")',
             Number(main) + Number(paper) + Number(glyph)],
-        ['document.createElementNS(SVG_NS, "line")', glyph ? 2 : 0],
+        ['document.createElementNS(SVG_NS, "line")', glyph ? 9 : 0],
     ]) {
         if (remaining.split(site).length - 1 !== count) {
             return true;
@@ -1021,7 +1021,7 @@ test("browser filesystem authority inventory rejects unreviewed access", () => {
 // distinct paths from the File System Access pickers reviewed above.
 // Requiring review does not imply the user selected any local file.
 function hasUnreviewedBrowserFileIntake(source, paper = false,
-    typed = false, handwriting = false, glyph = false) {
+    typed = false, handwriting = false, glyph = false, main = false) {
     let reviewed = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
     // Paper and notebook JSON pickers are user-selected; neither editor can
     // open an unselected file. Each download has one reviewed Blob URL/anchor.
@@ -1029,7 +1029,8 @@ function hasUnreviewedBrowserFileIntake(source, paper = false,
         ["upload.files?.item(0)", paper ? 1 : 0],
         // Paper's notebook preview gets one extra reviewed Rust PNG Blob URL.
         ["URL.createObjectURL(blob)",
-            glyph ? 1 : handwriting ? 0 : paper === 2 ? 3 : Number(paper)],
+            main || glyph ? 1 : handwriting ? 0
+                : paper === 2 ? 3 : Number(paper)],
         ['new Blob([result.json], { type: "application/json" })',
             paper === 2 ? 1 : 0],
         ["blob: Blob", typed && !handwriting ? Number(paper) : 0],
@@ -1037,7 +1038,11 @@ function hasUnreviewedBrowserFileIntake(source, paper = false,
         ["load.files?.item(0)", paper === 2 ? 1 : 0],
         ["new Blob([result.json], {", paper === 2 ? 1 : 0],
         ["source.files?.[0]", glyph ? 1 : 0],
-        ["new Blob([bytes], { type: mediaType })", glyph ? 1 : 0],
+        ['new Blob([bytes], { type: "text/tab-separated-values" })',
+            glyph ? 1 : 0],
+        // Explicit source Markdown download after session-authority checks.
+        ['new Blob([candidate.text], {', main ? 1 : 0],
+        ['type: "text/markdown; charset=utf-8",', main ? 1 : 0],
     ]) {
         if (reviewed.split(site).length - 1 !== count) {
             return true;
@@ -1074,7 +1079,8 @@ test("browser ordinary file input and drag-file reads require review",
         assert.equal(hasUnreviewedBrowserFileIntake(source,
             profileModuleCount(filename), filename.endsWith(".ts"),
             isHandwritingModule(filename),
-            isGlyphModule(filename)), false,
+            isGlyphModule(filename),
+            filename === "main.ts" || filename === "main.js"), false,
             `${filename} gained an unreviewed local-file read`);
         for (const candidate of [
             "void FileReader;",
@@ -1096,7 +1102,8 @@ test("browser ordinary file input and drag-file reads require review",
                 `${source}\n${candidate}`,
                 profileModuleCount(filename), filename.endsWith(".ts"),
                 isHandwritingModule(filename),
-                    isGlyphModule(filename)), true,
+                    isGlyphModule(filename),
+                    filename === "main.ts" || filename === "main.js"), true,
             `${filename}: ${candidate} escaped ordinary-file review`);
         }
     }
@@ -1628,7 +1635,7 @@ function usesUnreviewedBrowserNavigation(
         }
         remaining = remaining.replaceAll(site, "");
     }
-    // One anchor click is confined to an explicit local Blob download.
+    // Blob download anchor clicks are pinned for main, paper, and glyph.
     if (remaining.split("link.click()").length - 1
         !== Number(main) + Number(paper) + Number(glyph)) {
         return true;
@@ -1681,6 +1688,21 @@ function usesUnreviewedBrowserNavigation(
             "u",
         ),
     ];
+    if (glyph) {
+        // Glyph undo/redo captures its own in-memory transformHistory value;
+        // these exact property reads do not reference the browser History.
+        for (const [site, count] of [
+            ['const history = transformHistory;', 1],
+            ['history.side', 2],
+            ['history.grapheme', 1],
+            ['history[requiredSide]', 1],
+            ['history[side]', 1],
+            ['history.kind', 2],
+        ]) {
+            if (remaining.split(site).length - 1 !== count) return true;
+            remaining = remaining.replaceAll(site, "");
+        }
+    }
     // Standalone location/history are ambient browser globals. Reject the
     // first-class references too, not only named mutations: destructuring,
     // optional chaining and bound methods can hide a later navigation.
@@ -1840,6 +1862,23 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
     "idealAccent.setAttribute(\"stroke-width\", numeric.width.value);",
     "idealAccent.setAttribute(\"stroke\", color.value);",
     "idealAccent.setAttribute(\"visibility\", accentState);",
+    // Bounded SVG geometry only: affine slant without external resource.
+    'idealGeometry.setAttribute("transform", isItalic ? '
+        + '`matrix(1 0 ${-slope} 1 ${slope * baseline} 0)` : "");',
+    'idealGeometry.setAttribute("transform", "");',
+    // Variation preview uses in-memory copied pen strokes only.
+    'line.setAttribute("x1", String(ink.x1 + xOffset));',
+    'line.setAttribute("y1", String(ink.y1 + yOffset));',
+    'line.setAttribute("x2", String(ink.x2 + xOffset));',
+    'line.setAttribute("y2", String(ink.y2 + yOffset));',
+    'line.setAttribute("stroke-width", String(ink.width));',
+    'line.setAttribute("stroke", ink.color);',
+    'line.setAttribute("data-variation-row", '
+        + 'row === 0 ? "ideal" : "seeded");',
+    'variationPreview.setAttribute("aria-label", '
+        + '`Top: three ideal ${character.value} glyphs; bottom: ` '
+        + '+ `three seed ${seed} varied glyphs`);',
+    'variationPreview.setAttribute("aria-label", "Variation refused");',
     'ideal.setAttribute("aria-label", guideLabel);',
     "idealCircle.setAttribute(\"visibility\", \"hidden\");",
     "idealStem.setAttribute(\"visibility\", \"hidden\");",
@@ -1854,6 +1893,9 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
     "idealAccent.setAttribute(\"visibility\", \"hidden\");",
     "ideal.setAttribute(\"aria-label\", \"Invalid geometric settings\");",
     "line.setAttribute(axis, String(stroke[axis]));",
+    'line.setAttribute(axis, String(item[axis]));',
+    'line.setAttribute("stroke", item.color);',
+    'line.setAttribute("stroke-width", String(item.width));',
     "line.setAttribute(\"stroke\", stroke.color);",
     "line.setAttribute(\"stroke-width\", String(stroke.width));",
     "line.setAttribute(\"stroke-linecap\", \"round\");",
@@ -1870,14 +1912,24 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
     "preview.setAttribute(\"aria-label\", label);",
 ];
 
+// The six stroke-transform previews repeat only fixed geometry attributes;
+// the last linecap site is shared by eight reviewed pen drawing paths.
+const REVIEWED_REPEAT_GLYPH_ATTRIBUTES = new Map([
+    ['line.setAttribute(axis, String(item[axis]));', 6],
+    ['line.setAttribute("stroke", item.color);', 6],
+    ['line.setAttribute("stroke-width", String(item.width));', 6],
+    ['line.setAttribute("stroke-linecap", "round");', 8],
+]);
+
 function stripReviewedGlyphDrawing(source) {
     let remaining = source.replace(/\s+/gu, " ");
     for (const site of REVIEWED_GLYPH_SVG_ATTRIBUTES) {
-        if (remaining.split(site).length - 1 !== 1) return null;
-        remaining = remaining.replace(site, "");
+        const count = REVIEWED_REPEAT_GLYPH_ATTRIBUTES.get(site) ?? 1;
+        if (remaining.split(site).length - 1 !== count) return null;
+        remaining = remaining.replaceAll(site, "");
     }
     const createLine = 'document.createElementNS(SVG_NS, "line")';
-    if (remaining.split(createLine).length - 1 !== 2) return null;
+    if (remaining.split(createLine).length - 1 !== 9) return null;
     return remaining.replaceAll(createLine, "");
 }
 
