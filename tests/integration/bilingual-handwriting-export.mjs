@@ -11,7 +11,7 @@ import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
-    reverseCandidatePath,
+    reverseCandidatePath, moveCandidatePath,
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -335,6 +335,73 @@ test('browser reversed path has native inspection and PDF/PNG parity', () => {
             assert.equal(manual.status, 0, manual.stderr);
             assert.deepEqual(readFileSync(actual), readFileSync(equivalent),
                 `${format} must preserve exact reversed pen order`);
+            if (format === 'png') {
+                pngHasTransparentCorner(readFileSync(actual));
+            } else {
+                assert.ok(readFileSync(actual).subarray(0, 8).toString()
+                    .startsWith('%PDF-1.4'));
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+
+test('moved complete browser paths preserve native PDF/PNG stroke order',
+    () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-move-path-'));
+    try {
+        const nfd = 'n\u0303';
+        const line = (grapheme, x1, y1, x2, y2, color) => ({
+            grapheme, x1, y1, x2, y2, width: 250, color,
+        });
+        const a = line(nfd, 500, 600, 1100, 1400, '#243647');
+        const b = line(nfd, 1100, 1400, 1800, 2100, '#243647');
+        const c = line(nfd, 1500, 2500, 2200, 3200, '#B03040');
+        const d = line(nfd, 2200, 3200, 2500, 3600, '#B03040');
+        const original = [a, line('ñ', 500, 500, 700, 700,
+            '#123456'), b, c, line('∞', 100, 100, 500, 900,
+            '#123456'), d];
+        const input = encodeGlyphLibrary(original);
+        const moved = moveCandidatePath(original, nfd, 2, 1);
+        const expected = [c, original[1], d, a, original[4], b];
+        assert.deepEqual(moved.strokes, expected);
+        assert.equal(moved.selectedIndex, 5);
+        assert.equal(encodeGlyphLibrary(original), input);
+        const target = join(dir, 'moved.tsv');
+        writeFileSync(target, encodeGlyphLibrary(moved.strokes));
+        const inspected = native('glyphs', '--profile', target,
+            '--inspect-paths', nfd);
+        assert.equal(inspected.status, 0, inspected.stderr);
+        assert.match(inspected.stdout,
+            /Strokes: 4\nPaths: 2\nPen lifts: 1/);
+        assert.ok(inspected.stdout.includes(
+            'Path 1: strokes 1..2 (2 segments) (1500, 2500) '
+            + '-> (2500, 3600) width 250 um color #B03040'));
+        assert.ok(inspected.stdout.includes(
+            'Path 2: strokes 3..4 (2 segments) (500, 600) '
+            + '-> (1800, 2100) width 250 um color #243647'));
+        for (const format of ['pdf', 'png']) {
+            const flags = ['--export-paper', format];
+            if (format === 'png') flags.push('--dpi', '72');
+            const actual = join(dir, `moved.${format}`);
+            const reference = join(dir, `reference.${format}`);
+            const run = (args, path) => native('notebook',
+                '--printed-sheet', 'true', ...args,
+                '--place-text', '1', '30000', '45000', nfd,
+                ...flags, '--output', path);
+            const manual = [c, d, a, b].flatMap((stroke) => [
+                '--glyph-stroke', nfd, String(stroke.x1), String(stroke.y1),
+                String(stroke.x2), String(stroke.y2),
+                String(stroke.width), stroke.color,
+            ]);
+            const output = run(['--glyph-file', target], actual);
+            const independent = run(manual, reference);
+            assert.equal(output.status, 0, output.stderr);
+            assert.equal(independent.status, 0, independent.stderr);
+            assert.deepEqual(readFileSync(actual), readFileSync(reference),
+                `${format} retains the browser's exact moved path order`);
             if (format === 'png') {
                 pngHasTransparentCorner(readFileSync(actual));
             } else {

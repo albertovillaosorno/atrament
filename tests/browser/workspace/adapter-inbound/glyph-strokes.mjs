@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, composeAccentedGlyph, varyGlyphStrokes,
-    candidatePenPaths, reverseCandidatePath } =
+    candidatePenPaths, reverseCandidatePath, moveCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -126,6 +126,55 @@ test("reversing one candidate path preserves exact Unicode TSV slots", () => {
     }
     assert.equal(encodeGlyphLibrary(original), before,
         "refused reversal cannot mutate the original in-memory draft");
+});
+
+test("move adjacent complete paths without breaking stroke continuity", () => {
+    const nfd = "n\u{303}";
+    const line = (grapheme, x1, y1, x2, y2) => ({
+        grapheme, x1, y1, x2, y2,
+        color: "#A1B2C3", width: 250,
+    });
+    const a = line(nfd, 100, 200, 400, 600);
+    const b = line(nfd, 400, 600, 700, 900);
+    const c = line(nfd, 1500, 1600, 1800, 1900);
+    const d = line(nfd, 800, 2500, 1000, 2700);
+    const e = line(nfd, 1000, 2700, 1200, 2900);
+    const other = line("ñ", 900, 300, 1000, 400);
+    const math = line("∞", 400, 1200, 500, 1300);
+    const original = [a, other, b, math, c, d, other, e];
+    const saved = encodeGlyphLibrary(original);
+    const later = moveCandidatePath(original, nfd, 2, 1);
+    assert.deepEqual(later, {
+        strokes: [c, other, a, math, b, d, other, e],
+        selectedIndex: 4,
+    });
+    assert.deepEqual(candidatePenPaths(later.strokes, nfd)
+        .map((path) => [path.first, path.last]),
+    [[1, 1], [2, 3], [4, 5]]);
+    const restored = moveCandidatePath(later.strokes, nfd,
+        later.selectedIndex, -1);
+    assert.equal(restored.selectedIndex, 2);
+    assert.equal(encodeGlyphLibrary(restored.strokes), saved);
+    const first = moveCandidatePath(original, nfd, 5, -1);
+    assert.deepEqual(first.strokes,
+        [a, other, b, math, d, e, other, c]);
+    assert.equal(first.selectedIndex, 4);
+    assert.deepEqual(candidatePenPaths(first.strokes, nfd)
+        .map((path) => [path.first, path.last]),
+    [[1, 2], [3, 4], [5, 5]]);
+    const returnToOriginal = moveCandidatePath(first.strokes, nfd,
+        first.selectedIndex, 1);
+    assert.equal(encodeGlyphLibrary(returnToOriginal.strokes), saved);
+    for (const [index, direction, glyph] of [
+        [0, -1, nfd], [7, 1, nfd], [1, 1, nfd],
+        [-1, 1, nfd], [0.5, 1, nfd], [0, 0, nfd],
+        [0, 2, nfd], [0, 1, "n"],
+    ]) {
+        assert.throws(() => moveCandidatePath(
+            original, glyph, index, direction));
+    }
+    assert.equal(encodeGlyphLibrary(original), saved,
+        "no path movement can mutate the caller's source");
 });
 
 test("untrusted glyph TSV and edited numeric fields fail closed", () => {
@@ -274,7 +323,7 @@ function mountEditor() {
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
         "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
-        "glyph-reverse-path",
+        "glyph-reverse-path", "glyph-path-earlier", "glyph-path-later",
         "glyph-earlier", "glyph-later", "glyph-join",
         "glyph-paths", "glyph-variation-preview", "glyph-variation-status",
         "glyph-variation-seed", "glyph-variation-sample",
@@ -904,6 +953,67 @@ test("browser reverses whole selected pen path and retains TSV rows",
             "a single isolated stroke is not a continuous path of two");
         editor.reset();
         assert.equal(get("reverse-path").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("browser moves entire paths using selected glyph slots", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const nfd = "n\u{303}";
+        const a = { ...stroke(nfd), x1: 100, y1: 200,
+            x2: 400, y2: 600 };
+        const b = { ...a, x1: 400, y1: 600, x2: 700, y2: 900 };
+        const c = { ...a, x1: 1500, y1: 1600,
+            x2: 1800, y2: 1900 };
+        const other = stroke("ñ");
+        const source = [a, other, b, c];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(source));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        assert.equal(get("path-earlier").disabled, true);
+        assert.equal(get("path-later").disabled, true);
+        get("selected").value = "2";
+        get("selected").dispatch("change");
+        assert.equal(get("path-earlier").disabled, true);
+        assert.equal(get("path-later").disabled, false);
+        get("path-later").dispatch("click");
+        assert.match(get("status").textContent,
+            /Reordered selected continuous pen path/);
+        assert.equal(get("selected").value, "3",
+            "selected segment follows whole-path movement");
+        assert.deepEqual(get("selected").children.slice(1)
+            .map((item) => item.textContent), [
+            "Stroke 1 of 3 (path 1)",
+            "Stroke 2 of 3 (path 2)",
+            "Stroke 3 of 3 (path 2)",
+        ]);
+        assert.match(get("paths").textContent,
+            /3 directed strokes, 2 candidate pen paths, 1 apparent pen lift/);
+        assert.equal(get("path-earlier").disabled, false);
+        assert.equal(get("path-later").disabled, true);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()),
+            [c, other, a, b]);
+        get("path-earlier").dispatch("click");
+        assert.equal(get("selected").value, "2");
+        get("save").dispatch("click");
+        assert.equal(await downloads[1].text(), encodeGlyphLibrary(source));
+        get("character").value = "ñ";
+        get("character").dispatch("input");
+        get("selected").value = "1";
+        get("selected").dispatch("change");
+        assert.equal(get("path-earlier").disabled, true);
+        assert.equal(get("path-later").disabled, true);
+        editor.reset();
+        assert.equal(get("path-later").disabled, true);
     } finally {
         ui.restore();
     }

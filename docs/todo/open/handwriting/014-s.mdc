@@ -379,6 +379,26 @@ This is a reversible sequence edit within existing v1 straight segments.
 It introduces no saved pen-down group, true circle primitive or continuous
 Bezier geometry; P1-014 is still unfinished.
 
+## Browser movement of intact candidate pen paths (partial) — 2026-11-03
+
+The same browser editor can now move a selected candidate pen path before
+or after its adjacent path within one exact Unicode glyph. It swaps the
+complete ordered path ranges, retaining every segment's authored direction,
+coordinates and pen width/color. Interleaved records from other glyphs
+stay in their original TSV positions; the selected physical stroke follows
+the swapped path. Unavailable earlier/later moves are disabled, and invalid
+moves refuse without changing the local draft.
+
+Two browser regressions verify multi-segment and single-stroke path swaps,
+exact NFD versus NFC/∞ separation, retained internal joins, selection
+tracking, controls, and reversal of the swap to byte-identical v1 TSV.
+A new browser-to-Rust regression also checks native path inspection and
+byte-identical PDF/PNG render output against independently specified
+segments in the moved order, with original interleaved glyphs unchanged.
+The native file format, statistical settings and export pipeline do not
+change. Paths remain a derived editor view, not persisted pen-down groups,
+curves or automatic cursive; this P1 task remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

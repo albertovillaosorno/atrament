@@ -186,6 +186,41 @@ export function reverseCandidatePath(strokes, grapheme, selectedIndex) {
             - slots.indexOf(selectedIndex)],
     };
 }
+// Reorder neighboring candidate paths, keeping every stroke within each
+// path in the same direction/order and every other glyph in the same TSV slot.
+export function moveCandidatePath(strokes, grapheme, selectedIndex, direction) {
+    if (!Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme
+        || (direction !== -1 && direction !== 1)) {
+        throw new Error("Path move requires a selected exact glyph stroke");
+    }
+    const indices = strokes.flatMap((stroke, index) => {
+        return stroke.grapheme === grapheme ? [index] : [];
+    });
+    const position = indices.indexOf(selectedIndex) + 1;
+    const paths = candidatePenPaths(strokes, grapheme);
+    const chosen = paths.findIndex((path) => {
+        return position >= path.first && position <= path.last;
+    });
+    const adjacent = chosen + direction;
+    if (chosen < 0 || adjacent < 0 || adjacent >= paths.length) {
+        throw new Error("No adjacent continuous pen path to move past");
+    }
+    const earlier = paths[Math.min(chosen, adjacent)];
+    const later = paths[Math.max(chosen, adjacent)];
+    const slots = indices.slice(earlier.first - 1, later.last);
+    const former = slots.slice(0, earlier.last - earlier.first + 1);
+    const latter = slots.slice(former.length);
+    const reordered = [...latter, ...former].map((index) => strokes[index]);
+    const next = strokes.slice();
+    slots.forEach((index, offset) => { next[index] = reordered[offset]; });
+    const withinChosen = position - paths[chosen].first;
+    const newPosition = direction === -1 ? withinChosen
+        : latter.length + withinChosen;
+    return {
+        strokes: next, selectedIndex: slots[newPosition],
+    };
+}
 // The construction is defined by an analytic circle; v1 TSV can only
 // preserve its rounded line-segment approximation, not that ideal primitive.
 function acuteAccent(cx, cy, radius, pen, dx, lift, topOffset = radius) {
@@ -1365,6 +1400,8 @@ export function createGlyphStrokeEditor() {
     const remove = required("glyph-remove");
     const reverse = required("glyph-reverse");
     const reversePath = required("glyph-reverse-path");
+    const earlierPath = required("glyph-path-earlier");
+    const laterPath = required("glyph-path-later");
     const earlier = required("glyph-earlier");
     const later = required("glyph-later");
     const join = required("glyph-join");
@@ -1398,7 +1435,8 @@ export function createGlyphStrokeEditor() {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, reverse, reversePath, earlier, later, join, save,
+        remove, reverse, reversePath, earlierPath, laterPath,
+        earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
     let generation = 0;
@@ -1836,6 +1874,10 @@ export function createGlyphStrokeEditor() {
         });
         reversePath.disabled = !active || !chosenPath
             || chosenPath.first === chosenPath.last;
+        const pathIndex = paths.indexOf(chosenPath);
+        earlierPath.disabled = !active || pathIndex <= 0;
+        laterPath.disabled = !active || pathIndex < 0
+            || pathIndex >= paths.length - 1;
         earlier.disabled = !active || neighbor(-1) === null;
         later.disabled = !active || neighbor(1) === null;
         join.disabled = !active || neighbor(1) === null;
@@ -2462,6 +2504,24 @@ export function createGlyphStrokeEditor() {
             message(String(error));
         }
     });
+    const movePath = (direction) => {
+        if (!active || selectedIndex === null)
+            return;
+        try {
+            const glyph = character.value;
+            const index = selectedIndex;
+            const changed = moveCandidatePath(strokes, glyph, index, direction);
+            encodeGlyphLibrary(changed.strokes);
+            strokes = changed.strokes;
+            choose(changed.selectedIndex);
+            message("Reordered selected continuous pen path; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    };
+    earlierPath.addEventListener("click", () => movePath(-1));
+    laterPath.addEventListener("click", () => movePath(1));
     const move = (offset) => {
         if (!active || selectedIndex === null)
             return;
