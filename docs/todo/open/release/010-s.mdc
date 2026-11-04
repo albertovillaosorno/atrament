@@ -52,8 +52,10 @@ file alone does not write, replace or rename it.
 A new real Rust CLI acceptance test exercises an opted-in preprinted profile
 with date placeholder, border, page numbers and paper geometry. Its original
 seven-field bytes remain unchanged while the saved eight-field upgrade
-matches a modern canonical file exactly. Both versions generate identical
-physical two-page vector PDF and page-two transparent PNG bytes.
+matches a modern canonical file exactly. A separate same-path upgrade
+refuses without `--replace` and changes source bytes only when the caller
+explicitly selects replacement. Both versions generate identical physical
+two-page vector PDF and page-two transparent PNG bytes.
 
 The same test refuses an unsupported schema version, unknown field, wrong
 type, oversized JSON and invalid UTF-8 before replacing the accepted target.

@@ -64,6 +64,21 @@ test('legacy seven-field notebook v1 explicitly upgrades without data loss',
             assert.deepEqual(readFileSync(legacy), oldBytes,
                 'source remains byte-for-byte original seven-field JSON');
 
+            const inPlace = join(dir, 'explicit-upgrade.json');
+            writeFileSync(inPlace, oldBytes);
+            const implicitOverwrite = notebook('--profile', inPlace,
+                '--output', inPlace);
+            assert.notEqual(implicitOverwrite.status, 0,
+                'migration cannot silently overwrite its selected source');
+            assert.deepEqual(readFileSync(inPlace), oldBytes,
+                'no-clobber leaves original legacy bytes intact');
+            accepted(notebook('--profile', inPlace, '--output', inPlace,
+                '--replace'), 'user-authorized in-place upgrade');
+            assert.deepEqual(readFileSync(inPlace), expected,
+                'only an explicit --replace performs the in-place upgrade');
+            assert.deepEqual(readFileSync(legacy), oldBytes,
+                'an independent legacy source remains unchanged');
+
             for (const args of [
                 ['--export-paper', 'pdf', '--pages', '2'],
                 ['--export-paper', 'png', '--png-page', '2', '--dpi', '72'],
