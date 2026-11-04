@@ -64,7 +64,8 @@ use atrament_profile_local_file_read::{
     read_local_profile_bytes,
 };
 use atrament_profile_file_commit::{
-    ProfileFileCommitDisposition, commit_profile_file,
+    ProfileFileCommitDisposition, ProfileFileCommitError,
+    commit_profile_file,
 };
 use atrament_profile_import_preflight::ProfileImportBudget;
 use atrament_profile_import_verification::VerifiedAttachedProfileImport;
@@ -155,16 +156,19 @@ impl HandwritingProfileGateway for HandwritingGateway {
             .ok_or(HandwritingProfileError)?
             .copy_string_utf8(&mut glyph_bytes)
             .map_err(|_error| HandwritingProfileError)?;
-        let grapheme = from_utf8(glyph_bytes.get(..glyph_len).ok_or(HandwritingProfileError)?)
-            .map_err(|_error| HandwritingProfileError)?;
+        let grapheme = from_utf8(
+            glyph_bytes.get(..glyph_len).ok_or(HandwritingProfileError)?,
+        ).map_err(|_error| HandwritingProfileError)?;
         let mut key_bytes = [0u8; 32];
         let key_len = root.root_member_value("dimension")
             .ok_or(HandwritingProfileError)?
             .copy_string_utf8(&mut key_bytes)
             .map_err(|_error| HandwritingProfileError)?;
-        let key = from_utf8(key_bytes.get(..key_len).ok_or(HandwritingProfileError)?)
-            .map_err(|_error| HandwritingProfileError)?;
-        let dimension = Dimension::from_key(key).ok_or(HandwritingProfileError)?;
+        let key = from_utf8(
+            key_bytes.get(..key_len).ok_or(HandwritingProfileError)?,
+        ).map_err(|_error| HandwritingProfileError)?;
+        let dimension = Dimension::from_key(key)
+            .ok_or(HandwritingProfileError)?;
         let occurrence = root.root_member_value("occurrence")
             .and_then(ValidatedProfileJsonValue::unsigned_integer)
             .ok_or(HandwritingProfileError)?;
@@ -238,8 +242,9 @@ impl ProfileFileStore {
         match kind {
             ProfileFileKind::Notebook => NotebookGateway.canonical_json(json)
                 .map_err(|_error| ProfileFileError::InvalidInput),
-            ProfileFileKind::Handwriting => HandwritingGateway.canonical_json(json)
-                .map_err(|_error| ProfileFileError::InvalidInput),
+            ProfileFileKind::Handwriting =>
+                HandwritingGateway.canonical_json(json)
+                    .map_err(|_error| ProfileFileError::InvalidInput),
         }
     }
 
@@ -255,16 +260,20 @@ impl ProfileFileStore {
             ProfileFileKind::Handwriting => MAXIMUM_STATISTICS_JSON_BYTES,
         };
         read_local_profile_bytes(&path, limit).map_err(|error| match error {
-            LocalProfileFileReadError::InvalidInput => ProfileFileError::InvalidInput,
+            LocalProfileFileReadError::InvalidInput =>
+                ProfileFileError::InvalidInput,
             LocalProfileFileReadError::FileIo => ProfileFileError::FileIo,
             LocalProfileFileReadError::NotFound => ProfileFileError::NotFound,
-            LocalProfileFileReadError::Unavailable => ProfileFileError::Unavailable,
+            LocalProfileFileReadError::Unavailable =>
+                ProfileFileError::Unavailable,
         })
     }
 
     fn selected_path(&self, kind: ProfileFileKind, name: &str)
         -> Result<PathBuf, ProfileFileError> {
-        if name.len() > 64 || name.rsplit_once('.').is_none_or(|(_, extension)| extension != "json")
+        if name.len() > 64
+            || name.rsplit_once('.')
+                .is_none_or(|(_, extension)| extension != "json")
             || name.starts_with('.') || name.contains("..")
             || !name.bytes().all(|byte| byte.is_ascii_alphanumeric()
                 || matches!(byte, b'-' | b'_' | b'.')) {
@@ -288,7 +297,10 @@ impl ProfileFileGateway for ProfileFileStore {
         Ok(LoadedProfileFile { json, revision: file_revision(&original) })
     }
 
-    #[expect(clippy::wildcard_enum_match_arm, reason = "Other atomic commit errors map to IO refusal")]
+    #[expect(
+        clippy::wildcard_enum_match_arm,
+        reason = "Other atomic commit errors map to IO refusal"
+    )]
     fn save(&self, kind: ProfileFileKind, name: &str, json: &[u8],
         revision: &str) -> Result<String, ProfileFileError> {
         let path = self.selected_path(kind, name)?;
@@ -312,15 +324,16 @@ impl ProfileFileGateway for ProfileFileStore {
             ProfileFileKind::Notebook => MAX_NOTEBOOK_JSON_BYTES,
             ProfileFileKind::Handwriting => MAXIMUM_STATISTICS_JSON_BYTES,
         };
-        let _evidence = commit_profile_file(&path, &canonical, limit, disposition)
-            .map_err(|error| match error {
-                atrament_profile_file_commit::ProfileFileCommitError::TargetExists
-                | atrament_profile_file_commit::ProfileFileCommitError::SelectedTargetChanged
+        let _evidence = commit_profile_file(
+            &path, &canonical, limit, disposition,
+        ).map_err(|error| match error {
+            ProfileFileCommitError::TargetExists
+            | ProfileFileCommitError::SelectedTargetChanged
                 => ProfileFileError::Conflict,
-                atrament_profile_file_commit::ProfileFileCommitError::UnsupportedPlatform
+            ProfileFileCommitError::UnsupportedPlatform
                 => ProfileFileError::Unavailable,
-                _ => ProfileFileError::FileIo,
-            })?;
+            _ => ProfileFileError::FileIo,
+        })?;
         Ok(file_revision(&canonical))
     }
 }
