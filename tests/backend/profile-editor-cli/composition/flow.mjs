@@ -718,6 +718,51 @@ test('deeper headings stay styled and reject unapproved shapes atomically',
         }
     });
 
+test('H4 H5 H6 keep first authored row on the next physical page',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-h4-keep-'));
+        try {
+            const prefix = 'a  \n'.repeat(27);
+            for (const [hashes, markerLines] of [
+                ['####', 2], ['#####', 1], ['######', 1],
+            ]) {
+                const source = `${prefix}${hashes} ó\na`;
+                const fenced = `${prefix}${hashes} ó\n~~~\na\n~~~`;
+                for (const format of ['pdf', 'png']) {
+                    const page = format === 'pdf' ? 1 : 2;
+                    const direct = render(dir, source, format, [],
+                        '--flow-markdown', page);
+                    assert.equal(direct.result.status, 0,
+                        direct.result.stderr);
+                    const expected = readFileSync(direct.output);
+                    const codeRow = render(dir, fenced, format, [],
+                        '--flow-markdown', page);
+                    assert.equal(codeRow.result.status, 0,
+                        codeRow.result.stderr);
+                    assert.deepEqual(readFileSync(codeRow.output), expected,
+                        `${format} ${hashes} and next real row stay together`);
+                    if (format === 'pdf') {
+                        const pdf = expected.toString('latin1');
+                        assert.equal((pdf.match(/\/Type \/Page\b/g) || [])
+                            .length, 2, 'the heading requires page two');
+                        const streams = [...pdf.matchAll(
+                            /stream\n([\s\S]*?)\nendstream/g,
+                        )].map((match) => match[1]);
+                        assert.equal(streams.length, 2);
+                        assert.ok(!streams[0].includes('0.973 0.871'));
+                        assert.equal(streams[1].split('0.973 0.871')
+                            .length - 1, markerLines);
+                    } else {
+                        assert.deepEqual(expected.subarray(0, 8),
+                            Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('literal hashes and empty headings refuse without replacing output',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-flow-'));

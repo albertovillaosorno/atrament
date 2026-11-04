@@ -585,7 +585,10 @@ Two native integration tests compare real PDF and transparent PNG from
 ordinary versus indented/closed headings, assert exact marker counts and
 unchanged ink, exercise underline/double-underline/none output, and refuse
 unsupported seven-hash and unapproved empty/indented forms without changing
-an existing PDF. This extends CLI-only rendering: it does not create
+an existing PDF. A further native regression exercises H4/H5/H6 orphan
+prevention across page two, checking marker strokes in the second PDF stream
+and the same selected-page PNG with and without fenced row syntax.
+This extends CLI-only rendering: it does not create
 persistent semantic title identities, inline styling or a general parser.
 
 ## Forward-only Unicode measurement (partial) — 2026-11-04
