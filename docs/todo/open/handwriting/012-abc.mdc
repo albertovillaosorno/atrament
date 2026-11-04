@@ -1745,6 +1745,28 @@ browser download, then reopens and renders them through the native Rust
 PDF/PNG compositor. This extends opt-in geometry coverage only; it does
 not add automatic logic typesetting or a persisted handwriting notebook.
 
+## Exact school angles and negated entailment (partial) — 2026-11-04
+
+Four additional opt-in Unicode ink forms are independently selectable:
+angle `∠`, right angle `∟`, not-provable `⊬` and not-entails `⊭`.
+Each angle uses a continuous two-ray directed path with a unique corner.
+The negated signs reuse the respective exact positive `⊢`/`⊨` geometry
+but add a separately lifted diagonal stroke, not an automatic fallback.
+
+The optional math fill grows to 67 shapes. All eleven explicit fills now
+produce 180 exact graphemes and 4013 bounded native pen segments, below
+the 4096-segment ceiling. A red-before/green-after geometry regression
+checks rounded endpoints, pen direction, lifted slash, Unicode TSV
+identity and strict glyph-cell clipping.
+
+The native Rust CLI reopens the four exact Unicode keys and exports two
+lines to physical PDF and transparent PNG. Unknown positive turnstiles
+refuse without replacing a previously accepted PDF or mutating the saved
+caller-authored TSV.
+
+This remains explicit manual geometry, not automatic mathematical notation
+recognition, true analytic glyph persistence or finished handwriting flow.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

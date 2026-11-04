@@ -585,8 +585,8 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
     "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
     "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",
-    "¬", "⇒", "⇔"];
-// Extra manual marks do not change the 63-glyph math fill.
+    "∠", "∟", "⊬", "⊭", "¬", "⇒", "⇔"];
+// Extra manual marks do not change the 67-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"];
@@ -668,6 +668,25 @@ function mathParts(cx, cy, radius, glyph) {
             { from: point(-0.82, -0.75), to: point(-0.82, 0.75) },
             { from: point(-0.55, -0.75), to: point(-0.55, 0.75) },
             { from: point(-0.82, 0), to: point(0.75, 0) },
+        ];
+    // School-angle contours keep one continuous directed ray path. A
+    // right angle has a vertical corner, never an alternate angle alias.
+    if (glyph === "∠")
+        return [
+            { from: point(0.78, 0.7), to: point(-0.68, 0.7) },
+            { from: point(-0.68, 0.7), to: point(0.55, -0.7) },
+        ];
+    if (glyph === "∟")
+        return [
+            { from: point(-0.68, -0.78), to: point(-0.68, 0.7) },
+            { from: point(-0.68, 0.7), to: point(0.75, 0.7) },
+        ];
+    // Non-derivability and non-entailment retain their own exact Unicode
+    // keys, each preserving its positive turnstile with a lifted slash.
+    if (glyph === "⊬" || glyph === "⊭")
+        return [
+            ...mathParts(cx, cy, radius, glyph === "⊬" ? "⊢" : "⊨"),
+            { from: point(-0.84, 0.82), to: point(0.86, -0.82) },
         ];
     // Explicit propositional negation is a connected overbar with a
     // descending right terminal, never a disguised Latin dash.
