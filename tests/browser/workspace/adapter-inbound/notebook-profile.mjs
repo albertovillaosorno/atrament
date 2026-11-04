@@ -296,6 +296,32 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.match(elements.get("notebook-status").textContent,
             /exceeds 8192 bytes/);
         assert.equal(downloads.length, 3);
+        const validImport = JSON.stringify({
+            ...defaults, date_style: "box", date_placement: "top-right",
+            date_text: "04/11/2026",
+        });
+        const corrupt = new TextEncoder().encode(validImport);
+        const dateToken = '"date_text":"04/11/2026"';
+        const dateOffset = validImport.indexOf(dateToken);
+        assert.ok(dateOffset >= 0);
+        corrupt[dateOffset + '"date_text":"'.length] = 0xFF;
+        const beforeCorrupt = requests.length;
+        elements.get("notebook-load").files = {
+            item: () => new Blob([corrupt]),
+        };
+        elements.get("notebook-load").dispatch("change");
+        await settle();
+        assert.equal(requests.length, beforeCorrupt,
+            "invalid UTF-8 must not be forwarded as replacement text");
+        assert.equal(elements.get("notebook-date-text").value, "03/11/2026",
+            "invalid file leaves the prior notebook form untouched");
+        elements.get("notebook-load").files = {
+            item: () => new Blob([new TextEncoder().encode(validImport)]),
+        };
+        elements.get("notebook-load").dispatch("change");
+        await settle();
+        assert.equal(elements.get("notebook-date-text").value, "04/11/2026",
+            "valid UTF-8 still imports the selected day-first date");
         const count = requests.length;
         elements.get("notebook-date-style").value = "none";
         elements.get("notebook-save").dispatch("click");

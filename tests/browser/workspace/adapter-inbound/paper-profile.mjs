@@ -147,9 +147,21 @@ test("paper editor exports Rust PDF and PNG", async () => {
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(requests.length, pngRequests);
         const fileText = JSON.stringify({ ...defaults, style: "ruled" });
-        elements.get("paper-load").files = { item: () => ({
-            size: fileText.length, text: async () => fileText,
-        }) };
+        const corrupt = new TextEncoder().encode(fileText);
+        corrupt[fileText.indexOf("ruled") + 2] = 0xFF;
+        const beforeCorrupt = requests.length;
+        elements.get("paper-load").files = {
+            item: () => new Blob([corrupt]),
+        };
+        elements.get("paper-load").dispatch("change");
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(requests.length, beforeCorrupt,
+            "invalid UTF-8 must not reach the Rust paper endpoint");
+        assert.equal(elements.get("paper-pattern").value, "grid",
+            "failed upload preserves the previously admitted paper");
+        elements.get("paper-load").files = {
+            item: () => new Blob([new TextEncoder().encode(fileText)]),
+        };
         elements.get("paper-load").dispatch("change");
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(elements.get("paper-pattern").value, "ruled");

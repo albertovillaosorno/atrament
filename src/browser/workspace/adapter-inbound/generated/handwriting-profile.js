@@ -809,7 +809,13 @@ export function createHandwritingProfileEditor(context) {
             return;
         }
         void action(async (secret, observed) => {
-            const text = await file.text();
+            const bytes = await file.arrayBuffer();
+            if (bytes.byteLength > MAX_JSON_BYTES) {
+                throw new Error("Handwriting JSON exceeds 1 MiB");
+            }
+            // Reject invalid input bytes; File.text() silently substitutes.
+            const text = new TextDecoder("utf-8", { fatal: true })
+                .decode(bytes);
             if (!isCurrent(secret, observed))
                 return;
             const endpoint = "/api/handwriting/profile";

@@ -94,6 +94,20 @@ legacy migration. A regular file can still be modified by another process
 after opening, and the local runtime and print adapters have independent
 admission paths. The wider credential/privacy milestone remains open.
 
+## Exact UTF-8 browser JSON intake (partial) — 2026-11-04
+
+The three local browser JSON pickers (paper, notebook and handwriting) now
+read raw file bytes with fatal UTF-8 decoding before native canonicalization.
+Previously `File.text()` silently substituted malformed bytes with U+FFFD;
+that altered source could reach Rust as if it had been intentionally authored.
+The native admission boundary still validates JSON schema and dimensions.
+
+Three browser regressions reproduce the old unexpected backend POST, then
+verify that invalid UTF-8 does not send a request or replace the current
+form. A valid UTF-8 file still imports, including accented characters;
+file byte limits are checked again after reading. This is partial input
+hardening, not completion of the migration and localhost privacy criteria.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

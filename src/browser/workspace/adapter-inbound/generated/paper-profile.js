@@ -423,7 +423,13 @@ export function createPaperProfileEditor(context) {
             return;
         }
         void action(async (secret, observed) => {
-            const json = await file.text();
+            const bytes = await file.arrayBuffer();
+            if (bytes.byteLength > 4096) {
+                throw new Error("Paper JSON exceeds the 4096-byte limit");
+            }
+            // File.text() replaces bad UTF-8 with U+FFFD before Rust sees it.
+            const json = new TextDecoder("utf-8", { fatal: true })
+                .decode(bytes);
             if (!isCurrent(secret, observed)) {
                 return;
             }
@@ -866,7 +872,12 @@ export function createNotebookProfileEditor(context) {
             return;
         }
         void action(async (secret, observed) => {
-            const proposed = await file.text();
+            const bytes = await file.arrayBuffer();
+            if (bytes.byteLength > 8192) {
+                throw new Error("Notebook JSON exceeds 8192 bytes");
+            }
+            const proposed = new TextDecoder("utf-8", { fatal: true })
+                .decode(bytes);
             if (!active(secret, observed))
                 return;
             const result = await canonical(secret, proposed);

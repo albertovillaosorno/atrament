@@ -365,7 +365,7 @@ test("handwriting editor rejects unsafe input and loads JSON", async () => {
         });
         const json = JSON.stringify(loaded);
         b.elements.get("handwriting-load").files = {
-            item: () => ({ size: json.length, text: async () => json }),
+            item: () => new Blob([new TextEncoder().encode(json)]),
         };
         b.elements.get("handwriting-load").dispatch("change");
         await tick();
@@ -381,6 +381,42 @@ test("handwriting editor rejects unsafe input and loads JSON", async () => {
         await tick();
         assert.equal(b.links.length, 1);
         assert.equal(JSON.parse(b.requests.at(-1).body).glyphs.length, 0);
+    } finally {
+        b.restore();
+    }
+});
+
+test("handwriting import refuses invalid UTF-8 before Rust admission",
+    async () => {
+    const b = mountBackend();
+    try {
+        await b.editor.start("private-session-credential");
+        const profile = defaultProfile();
+        profile.glyphs.push({
+            grapheme: "a", parameters: [parameter(dimensions[2])],
+        });
+        const source = JSON.stringify(profile);
+        const bytes = new TextEncoder().encode(source);
+        const start = source.indexOf('"grapheme":"a"');
+        assert.ok(start >= 0);
+        bytes[start + '"grapheme":"'.length] = 0xFF;
+        const before = b.requests.length;
+        b.elements.get("handwriting-load").files = {
+            item: () => new Blob([bytes]),
+        };
+        b.elements.get("handwriting-load").dispatch("change");
+        await tick();
+        assert.equal(b.requests.length, before,
+            "corrupt bytes cannot become replacement glyph in Rust POST");
+        assert.equal(b.elements.get("handwriting-glyph").children.length, 0,
+            "rejected bytes cannot replace the current ink statistics");
+        b.elements.get("handwriting-load").files = {
+            item: () => new Blob([new TextEncoder().encode(source)]),
+        };
+        b.elements.get("handwriting-load").dispatch("change");
+        await tick();
+        assert.equal(b.elements.get("handwriting-glyph").children[0].value,
+            "a", "valid native glyph bytes remain available");
     } finally {
         b.restore();
     }
