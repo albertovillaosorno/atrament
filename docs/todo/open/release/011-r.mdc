@@ -77,9 +77,11 @@ two actual BiDi journeys passed.
 `pnpm run test:frontend` now uses one test-file worker at a time so multiple
 resource-intensive Firefox journeys do not contend on the workstation.
 This is fixture/test-runner reliability evidence, not an approved PNG/PDF
-golden or proof of every keyboard-only control. Abrupt SIGKILL of the test
-worker is outside normal-exit cleanup, and the full frontend suite still has
-independent source-audit failures that must be resolved separately.
+golden or proof of every keyboard-only control. Abrupt SIGKILL of the test worker remains outside the committed
+normal-exit cleanup. The subsequent source-authority review restored 70/70
+browser privacy and 43/43 native authority tests, including checks that
+reject an extra subprocess in the opt-in print CLI. These audits do not
+substitute for the still-open visual goldens and full keyboard journeys.
 
 ## Acceptance decision
 
