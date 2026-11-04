@@ -489,6 +489,20 @@ independent `pdfinfo` read confirms the one-page PDF 1.5 hybrid fixture.
 This remains a nonrecursive lexical framing check: stream rows, prior
 revisions and physical printer output are not fully validated.
 
+## Bounded older stream revision pointer syntax (partial) — 2026-11-04
+
+A second preflight refinement rejects prior xref-stream dictionaries whose
+own top-level `/Prev` lacks a direct byte offset before that stream. Earlier
+stream headers are deliberately probed without following another revision;
+previously that no-recursion mode ignored the `/Prev` value entirely.
+
+Red-before/green-after fake-CUPS tests reject invalid text, negative,
+zero, oversized, self-referential and forward-pointing older `/Prev` values.
+Source bytes remain unchanged and the printer process is never launched.
+Real one-page hybrid PDF and native table-to-stream fixtures still pass.
+This checks only the older pointer's lexical form, not its target's xref
+dictionary, indirect-object graph or complete revision chain.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

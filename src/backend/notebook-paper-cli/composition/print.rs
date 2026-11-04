@@ -231,7 +231,7 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     let Some(prefix) = target.get(..target.len().min(16_384)) else {
         return false;
     };
-    xref_stream_header_end(prefix, Some((bytes, offset)))
+    xref_stream_header_end(prefix, Some((bytes, offset)), offset)
         .is_some_and(|(start, length)| {
             supported_xref_stream_tail(target, start, length)
         })
@@ -549,7 +549,7 @@ fn bounded_hybrid_xref_stream(
         return false;
     };
     stream.get(..stream.len().min(16_384))
-        .and_then(|prefix| xref_stream_header_end(prefix, None))
+        .and_then(|prefix| xref_stream_header_end(prefix, None, offset))
         .is_some_and(|(start, length)| {
             xref_stream_frame_end(stream, start, length).is_some()
         })
@@ -575,7 +575,7 @@ fn bounded_previous_xref(
     let stream_edition = matches!(document.get(5..8),
         Some([b'1', b'.', b'5'..=b'7'] | [b'2', b'.', b'0']));
     stream_edition && earlier.get(..earlier.len().min(16_384))
-        .and_then(|prefix| xref_stream_header_end(prefix, None))
+        .and_then(|prefix| xref_stream_header_end(prefix, None, offset))
         .is_some_and(|(frame_start, length)| {
             xref_stream_frame_end(earlier, frame_start, length).is_some()
         })
@@ -907,11 +907,28 @@ fn xref_stream_object_header(prefix: &[u8]) -> Option<(usize, usize)> {
     Some((at, object_numbers[0]))
 }
 
+// Earlier stream headers must carry a direct bounded /Prev value, but
+// only a terminal stream follows that pointer one additional revision.
+fn bounded_stream_previous(
+    prefix: &[u8], at: &mut usize,
+    previous: Option<(&[u8], usize)>, stream_start: usize,
+) -> bool {
+    match previous {
+        Some((document, start)) => bounded_previous_xref(
+            prefix, at, document, start,
+        ),
+        None => bounded_xref_pointer(
+            prefix, at, stream_start,
+        ).is_some(),
+    }
+}
+
 // A terminal stream may carry /Prev just like a traditional trailer.
 // Only its immediate earlier header is checked; older chains are outside
 // this bounded lexical preflight and are never parsed recursively.
 fn xref_stream_header_end(
     prefix: &[u8], previous: Option<(&[u8], usize)>,
+    stream_start: usize,
 ) -> Option<(usize, usize)> {
     let (mut at, object_number) = xref_stream_object_header(prefix)?;
     if !prefix.get(at..).is_some_and(|tail| tail.starts_with(b"<<")) {
@@ -990,9 +1007,9 @@ fn xref_stream_header_end(
                         Some(bounded_stream_length(prefix, &mut at)?);
                 } else if depth == 1 && array_depth == 0
                     && pdf_name_is(name, b"Prev") {
-                    if seen_prev || previous.is_some_and(|(document, start)| {
-                        !bounded_previous_xref(prefix, &mut at, document, start)
-                    }) {
+                    if seen_prev || !bounded_stream_previous(
+                        prefix, &mut at, previous, stream_start,
+                    ) {
                         return None;
                     }
                     seen_prev = true;

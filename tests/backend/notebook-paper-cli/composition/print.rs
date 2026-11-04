@@ -1548,6 +1548,32 @@ fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
     assert!(!spooled.exists(), "truncated stream cannot reach CUPS");
     assert_eq!(fs::read(&pdf).expect("source unchanged"), forged);
 
+    // A prior stream's own /Prev must have a direct bounded numeric value,
+    // even when we deliberately do not follow older revision chains.
+    let length_key = b"/Length ";
+    let before_length = prefix.windows(length_key.len())
+        .rposition(|part| part == length_key)
+        .expect("prior xref stream has direct Length");
+    for invalid_prev in [
+        "abc".to_string(), "-1".to_string(),
+        "0".to_string(), "9999999999".to_string(),
+        prior.to_string(), (prior + 1).to_string(),
+    ] {
+        let malformed = [
+            &prefix[..before_length],
+            format!("/Prev {invalid_prev} ").as_bytes(),
+            &prefix[before_length..],
+        ].concat();
+        let candidate = revised(&malformed, &format!("/XRefStm {prior}"));
+        assert!(!supported_pdf_cross_reference(&candidate),
+            "prior stream /Prev must be a bounded decimal: {invalid_prev}");
+        fs::write(&pdf, &candidate).expect("write malformed prior stream");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "malformed older Prev cannot launch fake CUPS");
+        assert!(!spooled.exists(), "no spool side effects");
+        assert_eq!(fs::read(&pdf).expect("unchanged PDF"), candidate);
+    }
+
     let mut obsolete = revised(prefix, &format!("/XRefStm {prior}"));
     *obsolete.get_mut(7).expect("PDF minor version") = b'4';
     assert!(!supported_pdf_cross_reference(&obsolete),

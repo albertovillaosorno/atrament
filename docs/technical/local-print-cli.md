@@ -209,6 +209,11 @@ keys, including escaped-name aliases, refuse before CUPS. A real one-page
 PDF 1.5 hybrid-reference example remains readable by `pdfinfo` and reaches
 the fake spool with exact source bytes.
 
+When an earlier xref stream itself declares `/Prev`, that operand must still
+be a direct positive decimal byte offset before that stream. The older
+target is not followed: terminal `/Prev` and hybrid `/XRefStm` receive
+immediate predecessor framing, not recursive revision-chain validation.
+
 Prior traditional tables need a bounded, complete first subsection with
 valid record fields; any in-use entries in it must point to matching object
 headers before that earlier table. A forged earlier count that omits an
