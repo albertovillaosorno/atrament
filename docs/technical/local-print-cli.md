@@ -45,10 +45,27 @@ cargo run --offline -q -p atrament_notebook_paper_cli \
 ```
 
 The queue is mandatory; no default printer is selected. `--dry-run`
-checks the selected PDF without launching a CUPS process. The binary invokes
-CUPS with fixed arguments equivalent to `lp -d Local_Queue -`, piping the
-already-read PDF bytes into standard input. It does not invoke a shell,
-re-render the PDF, or select a copy count.
+checks the selected PDF without launching a CUPS process and prints its
+SHA-256 digest in lower-case hexadecimal. After reviewing the exact file,
+copy that 64-character digest to require a byte-for-byte match on a later
+physical submission:
+
+```sh
+cargo run --offline -q -p atrament_notebook_paper_cli \
+  --bin atrament-print -- --pdf notebook.pdf --printer Local_Queue \
+  --expect-sha256 64_HEX_DIGITS_FROM_DRY_RUN
+```
+
+`--expect-sha256` is optional; it also works with `--dry-run` and accepts
+upper- or lower-case ASCII hex. Any malformed or stale digest refuses before
+contacting `lp`. SHA-256 verifies the exact snapshot that is subsequently
+piped to CUPS (not a second read of the filename), including the scenario
+where a file changed after the preview. It does not verify PDF semantics,
+printable margins or that a job will actually print.
+
+The binary invokes CUPS with fixed arguments equivalent to
+`lp -d Local_Queue -`, piping the already-read PDF bytes into standard input.
+It does not invoke a shell, re-render the PDF, or select a copy count.
 
 A zero CUPS exit status means that the spooler **accepted the job**, not that
 sheets emerged from the printer. Paper feed, alignment, printer readiness
@@ -56,7 +73,9 @@ and physical margins remain device-specific and unverified.
 
 ## Failure Modes
 
-One `--pdf` and one `--printer` are required. Queue names must be 1–80 ASCII
+One `--pdf` and one `--printer` are required. An optional reviewed
+`--expect-sha256` must contain exactly 64 ASCII hexadecimal digits and may
+appear only once. Queue names must be 1–80 ASCII
 bytes, start with a letter or number, and otherwise contain only letters,
 numbers, `_`, `-` or `.`. Unknown flags, invalid queues and duplicate options
 refuse before any print submission.
@@ -81,7 +100,9 @@ cargo clippy --offline -p atrament_notebook_paper_cli --lib --bins -- \
   -D warnings
 ```
 
-Three focused Rust tests use a real two-page, preprinted native PDF.
+Three focused Rust tests use a real two-page, preprinted native PDF,
+including FIPS SHA-256 known-answer, malformed digest and changed-valid-PDF
+refusals before the fake CUPS transport starts.
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.

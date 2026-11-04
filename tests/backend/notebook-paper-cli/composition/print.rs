@@ -87,6 +87,20 @@ fn printing_requires_exact_file_and_named_queue() {
     assert_eq!(request.pdf, PathBuf::from("notebook.pdf"));
     assert_eq!(request.printer, "Local_Printer-2");
     assert!(!request.dry_run);
+    assert_eq!(request.expected_sha256, None);
+    let checksum = sha256_hex(sha256_profile_bytes(b"abc").bytes())
+        .expect("hex encoder");
+    assert_eq!(checksum,
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    assert_eq!(parse_sha256(&checksum).expect("valid lowercase digest"),
+        parse_sha256(&checksum.to_uppercase()).expect("valid upper digest"));
+    let checksum_args = [
+        "--pdf", "notebook.pdf", "--printer", "Local_Printer-2",
+        "--expect-sha256", &checksum,
+    ].map(str::to_owned);
+    assert_eq!(parse_args(&checksum_args).expect("digest option")
+        .expect("request").expected_sha256,
+        Some(parse_sha256(&checksum).expect("hex digest")));
     let dry_args = [
         "--pdf",
         "notebook.pdf",
@@ -137,6 +151,12 @@ fn printing_requires_exact_file_and_named_queue() {
             "q",
         ],
         vec!["--help", "--pdf", "notebook.pdf"],
+        vec!["--pdf", "file.pdf", "--printer", "q", "--expect-sha256", "ff"],
+        vec!["--pdf", "file.pdf", "--printer", "q", "--expect-sha256", "Z"],
+        vec!["--pdf", "file.pdf", "--printer", "q", "--expect-sha256", ""],
+        vec!["--pdf", "file.pdf", "--printer", "q", "--expect-sha256"],
+        vec!["--pdf", "file.pdf", "--printer", "q", "--expect-sha256",
+            "00", "--expect-sha256", "11"],
         vec![
             "--pdf",
             "file.pdf",
@@ -150,7 +170,22 @@ fn printing_requires_exact_file_and_named_queue() {
         let args = flags.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert!(parse_args(&args).is_err(), "refused {flags:?}");
     }
+    let twice = [
+        "--pdf", "file.pdf", "--printer", "q",
+        "--expect-sha256", &checksum,
+        "--expect-sha256", &checksum,
+    ].map(str::to_owned);
+    assert!(parse_args(&twice).is_err(), "duplicate valid digest refused");
     assert!(!valid_printer(&"a".repeat(81)));
+    for digest in [
+        "0".repeat(63),
+        "0".repeat(65),
+        format!("{}\n", "0".repeat(63)),
+        format!("{}\u{e9}", "0".repeat(63)),
+        format!("{}g", "0".repeat(63)),
+    ] {
+        assert!(parse_sha256(&digest).is_err(), "refused {digest:?}");
+    }
 }
 
 #[test]
@@ -223,20 +258,29 @@ fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
 
     let selected = selected_pdf(&pdf).expect("complete input PDF");
     assert!(!copied.exists(), "reading PDF never silently prints");
+    let digest = sha256_profile_bytes(&bytes).bytes();
     let dry_request = PrintRequest {
         pdf: pdf.clone(),
         printer: "Queue_1".into(),
         dry_run: true,
+        expected_sha256: Some(digest),
     };
-    submit_selected(&dry_request, &script)
-        .expect("bounded PDF checked without spooling");
+    assert_eq!(submit_selected(&dry_request, &script)
+        .expect("bounded PDF checked without spooling"), digest);
     assert!(!copied.exists(), "dry-run never invokes lp");
     let print_request = PrintRequest {
         dry_run: false,
         ..dry_request
     };
-    submit_selected(&print_request, &script)
-        .expect("fake local CUPS acceptance");
+    let invalid_expected = PrintRequest {
+        expected_sha256: Some([0u8; 32]),
+        ..print_request.clone()
+    };
+    assert!(submit_selected(&invalid_expected, &script).is_err(),
+        "a mismatched reviewed checksum refuses before spawning lp");
+    assert!(!copied.exists(), "invalid digest must never spool");
+    assert_eq!(submit_selected(&print_request, &script)
+        .expect("fake local CUPS acceptance"), digest);
     assert_eq!(fs::read(&copied).expect("spooled bytes"), bytes);
     assert_eq!(
         fs::read_to_string(&arguments).expect("arguments"),
@@ -244,6 +288,12 @@ fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
         "no command option injection"
     );
 
+    let different_valid_pdf = real_pdf_with_marks(true);
+    fs::write(&pdf, &different_valid_pdf)
+        .expect("new structurally valid but altered selected PDF");
+    assert!(submit_selected(&print_request, &script).is_err(),
+        "stale checksum must refuse a changed valid PDF");
+    assert_eq!(fs::read(&copied).expect("old spool unchanged"), bytes);
     fs::write(&script, "#!/bin/sh\nexit 7\n")
         .expect("replace fake spool with refusing transport");
     assert!(submit_with(&script, "Queue_1", &selected).is_err());

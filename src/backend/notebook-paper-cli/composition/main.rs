@@ -40,6 +40,8 @@ use atrament_paper_mark_geometry as _;
 use atrament_pdf_composition_plan as _;
 use atrament_pdf_vector_serializer as _;
 use atrament_physical_page_profile as _;
+// The sibling print binary uses this shared package dependency.
+use atrament_profile_entry_sha256 as _;
 use atrament_profile_file_commit as _;
 use atrament_profile_file_reader as _;
 use atrament_profile_selected_file_open as _;

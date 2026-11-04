@@ -502,6 +502,7 @@ dependencies = [
  "atrament_pdf_composition_plan",
  "atrament_pdf_vector_serializer",
  "atrament_physical_page_profile",
+ "atrament_profile_entry_sha256",
  "atrament_profile_file_commit",
  "atrament_profile_file_reader",
  "atrament_profile_json_syntax",

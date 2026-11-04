@@ -34,15 +34,18 @@
 
 use std::env;
 use std::error::Error;
+use std::fmt::{self, Write as _};
 use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+use std::str;
 
 use atrament_notebook_paper_cli::MAX_PAPER_OUTPUT_BYTES;
 use atrament_paper_mark_geometry as _;
 use atrament_pdf_composition_plan as _;
 use atrament_pdf_vector_serializer as _;
 use atrament_physical_page_profile as _;
+use atrament_profile_entry_sha256::sha256_profile_bytes;
 use atrament_profile_file_commit as _;
 use atrament_profile_file_reader::read_bounded_profile_file;
 use atrament_profile_json_syntax as _;
@@ -52,15 +55,17 @@ use nix as _;
 
 const USAGE: &str = concat!(
     "Usage: atrament-print --pdf FILE --printer QUEUE",
-    " [--dry-run]\n",
+    " [--dry-run] [--expect-sha256 64_HEX]\n",
     "Submits one existing PDF to an explicitly named local CUPS printer.\n",
     "Exporting a PDF or PNG never sends a print job.\n",
-    "--dry-run validates the selected PDF without contacting CUPS.",
+    "--dry-run displays the exact PDF SHA-256 without contacting CUPS.\n",
+    "--expect-sha256 refuses any PDF bytes different from the reviewed file.",
 );
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct PrintRequest {
     dry_run: bool,
+    expected_sha256: Option<[u8; 32]>,
     pdf: PathBuf,
     printer: String,
 }
@@ -76,6 +81,36 @@ fn valid_printer(printer: &str) -> bool {
         })
 }
 
+// Parse an exact 256-bit digest without accepting prefixes, whitespace or
+// truncated byte sequences. ASCII hex is case-insensitive on input.
+fn parse_sha256(value: &str) -> Result<[u8; 32], String> {
+    if value.len() != 64
+        || !value.bytes().all(|byte| byte.is_ascii_hexdigit())
+    {
+        return Err(
+            "--expect-sha256 requires exactly 64 hexadecimal digits".into()
+        );
+    }
+    let mut digest = [0u8; 32];
+    for (slot, pair) in digest.iter_mut()
+        .zip(value.as_bytes().as_chunks::<2>().0.iter())
+    {
+        let text = str::from_utf8(pair)
+            .map_err(|error| format!("invalid SHA-256 bytes: {error}"))?;
+        *slot = u8::from_str_radix(text, 16)
+            .map_err(|error| format!("invalid SHA-256 digit: {error}"))?;
+    }
+    Ok(digest)
+}
+
+fn sha256_hex(digest: [u8; 32]) -> Result<String, fmt::Error> {
+    let mut text = String::with_capacity(64);
+    for byte in digest {
+        write!(&mut text, "{byte:02x}")?;
+    }
+    Ok(text)
+}
+
 fn parse_args(args: &[String]) -> Result<Option<PrintRequest>, String> {
     if args == ["--help"] {
         return Ok(None);
@@ -83,6 +118,7 @@ fn parse_args(args: &[String]) -> Result<Option<PrintRequest>, String> {
     let mut pdf = None;
     let mut printer = None;
     let mut dry_run = false;
+    let mut expected_sha256 = None;
     let mut items = args.iter();
     while let Some(flag) = items.next() {
         if flag == "--dry-run" {
@@ -99,6 +135,9 @@ fn parse_args(args: &[String]) -> Result<Option<PrintRequest>, String> {
             "--pdf" if pdf.is_none() && !value.is_empty() => {
                 pdf = Some(PathBuf::from(value));
             }
+            "--expect-sha256" if expected_sha256.is_none() => {
+                expected_sha256 = Some(parse_sha256(value)?);
+            }
             "--printer" if printer.is_none() && valid_printer(value) => {
                 printer = Some(value.clone());
             }
@@ -107,6 +146,7 @@ fn parse_args(args: &[String]) -> Result<Option<PrintRequest>, String> {
     }
     Ok(Some(PrintRequest {
         dry_run,
+        expected_sha256,
         pdf: pdf.ok_or("--pdf requires an existing PDF file")?,
         printer: printer.ok_or("--printer requires an explicit CUPS queue")?,
     }))
@@ -163,15 +203,19 @@ fn submit_with(
 fn submit_selected(
     request: &PrintRequest,
     executable: &Path,
-) -> Result<(), String> {
+) -> Result<[u8; 32], String> {
     let bytes = selected_pdf(&request.pdf)?;
+    let digest = sha256_profile_bytes(&bytes).bytes();
+    if request.expected_sha256.is_some_and(|expected| expected != digest) {
+        return Err("selected PDF SHA-256 differs from reviewed bytes".into());
+    }
     if !request.dry_run {
         submit_with(executable, &request.printer, &bytes)?;
     }
-    Ok(())
+    Ok(digest)
 }
 
-fn submit(request: &PrintRequest) -> Result<(), String> {
+fn submit(request: &PrintRequest) -> Result<[u8; 32], String> {
     submit_selected(request, Path::new("/usr/bin/lp"))
 }
 
@@ -180,12 +224,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     match parse_args(&args)? {
         None => writeln!(io::stdout().lock(), "{USAGE}")?,
         Some(request) => {
-            submit(&request)?;
+            let digest = submit(&request)?;
             if request.dry_run {
                 writeln!(
                     io::stdout().lock(),
-                    "PDF validated for {}; no job submitted",
-                    request.printer
+                    "PDF validated for {}; SHA-256 {}; no job submitted",
+                    request.printer, sha256_hex(digest)?
                 )?;
             } else {
                 writeln!(

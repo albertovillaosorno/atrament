@@ -343,7 +343,7 @@ depends_on = ["atrament_render_quality_profile"]
 depends_on = []
 
 [component.atrament_notebook_paper_cli]
-depends_on = ["atrament_paper_mark_geometry", "atrament_pdf_composition_plan", "atrament_pdf_vector_serializer", "atrament_physical_page_profile", "atrament_profile_file_commit", "atrament_profile_file_reader", "atrament_profile_selected_file_open", "atrament_profile_json_syntax"]
+depends_on = ["atrament_paper_mark_geometry", "atrament_pdf_composition_plan", "atrament_pdf_vector_serializer", "atrament_physical_page_profile", "atrament_profile_entry_sha256", "atrament_profile_file_commit", "atrament_profile_file_reader", "atrament_profile_selected_file_open", "atrament_profile_json_syntax"]
 
 [component.atrament_notebook_profile]
 depends_on = ["atrament_notebook_paper_cli", "atrament_profile_json_syntax"]

@@ -63,6 +63,8 @@ use atrament_physical_page_profile::{
     PaperMarkAppearance, PaperMarkJoin, PaperMarkLayer, PaperPattern, Rect,
     SheetSize,
 };
+// This package also builds atrament-print with SHA-256 confirmation.
+use atrament_profile_entry_sha256 as _;
 use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };

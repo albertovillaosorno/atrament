@@ -49,6 +49,19 @@ strict all-target Clippy, including the previously failing test fixture.
 No real local print queue was contacted; physical alignment, saved image
 layers and complete notebook acceptance remain open.
 
+## Review-locked local print bytes (partial) — 2026-11-04
+
+The opt-in `atrament-print --expect-sha256` now compares an exact 64-digit
+reviewed digest against the same bounded PDF snapshot sent to CUPS. `--dry-run`
+reports SHA-256 without spawning a printer. The native FIPS SHA-256 primitive
+is reused; the print adapter never reopens the pathname after checksum
+validation. Fake-spool acceptance covers unchanged native two-page PDF bytes,
+refusal of malformed/duplicate hashes, and refusal when a different but still
+valid PDF replaces the reviewed file; no print occurs on checksum mismatch.
+
+This is an explicit safety guard for a previously previewed PDF, not a PDF
+security parser, proof of printer output, or complete saved image workflow.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
