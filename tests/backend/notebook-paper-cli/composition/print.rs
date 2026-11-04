@@ -1154,6 +1154,82 @@ fn xref_table_entries_require_one_complete_record_line() {
     fs::remove_dir_all(&directory).expect("remove owned fixture directory");
 }
 
+#[cfg(unix)]
+#[test]
+fn pdf_whitespace_in_xref_metadata_and_eof_is_admitted_exactly() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
+    )).expect("write fake spooler");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spooler executable");
+
+    let native = real_pdf();
+    let size = native.windows(b"/Size ".len())
+        .position(|part| part == b"/Size ")
+        .expect("native trailer declares a size");
+    let number_start = size + b"/Size ".len();
+    let number_end = number_start + native[number_start..].iter()
+        .take_while(|byte| byte.is_ascii_digit()).count();
+    assert_eq!(native[number_end], b' ', "space after native size");
+
+    let mut before_number = native.clone();
+    before_number[number_start - 1] = b'\0';
+    let mut after_number = native.clone();
+    after_number[number_end] = b'\0';
+    let mut after_eof = native.clone();
+    after_eof.push(b'\0');
+
+    let mut stream = one_page_xref_stream_pdf("1.5", " /Index [0 5]");
+    let width = stream.windows(b"/W [".len())
+        .position(|part| part == b"/W [")
+        .expect("xref stream has direct widths");
+    stream[width + b"/W".len()] = b'\0';
+
+    for (label, candidate) in [
+        ("NUL before numeric trailer value", before_number),
+        ("NUL after numeric trailer value", after_number),
+        ("NUL after final EOF", after_eof),
+        ("NUL within stream dictionary", stream),
+    ] {
+        assert!(supported_pdf_cross_reference(&candidate),
+            "PDF-defined whitespace admitted: {label}");
+        fs::write(&pdf, &candidate).expect("write selected PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert_eq!(submit_selected(&request, &fake_spool)
+            .expect("PDF whitespace admitted to fake CUPS"),
+            sha256_profile_bytes(&candidate).bytes(), "{label}");
+        assert_eq!(fs::read(&spooled).expect("fake spool bytes"),
+            candidate, "exact selected bytes: {label}");
+        fs::remove_file(&spooled).expect("clear fake spool");
+    }
+
+    // Vertical tab (0B) is ASCII whitespace but not PDF whitespace.
+    // A forged numeric delimiter must not qualify for print admission.
+    let mut vertical_tab = native;
+    vertical_tab[number_end] = b'\x0b';
+    assert!(!supported_pdf_cross_reference(&vertical_tab),
+        "non-PDF vertical tab cannot delimit trailer size");
+    fs::write(&pdf, &vertical_tab).expect("write invalid PDF");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert!(submit_selected(&request, &fake_spool).is_err(),
+        "non-PDF separator must not reach fake CUPS");
+    assert!(!spooled.exists(), "invalid PDF cannot contact fake CUPS");
+    assert_eq!(fs::read(&pdf).expect("source unchanged"), vertical_tab);
+    fs::remove_dir_all(&directory).expect("remove fixture directory");
+}
+
 #[test]
 fn xref_size_below_resource_ceiling_remains_admissible() {
     let sparse = format!(

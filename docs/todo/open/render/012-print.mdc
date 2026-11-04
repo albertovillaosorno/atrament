@@ -516,6 +516,20 @@ source. An independently generated equivalent 605-byte PDF opens in
 `pdfinfo` as a one-page Letter document without a repair warning. This is
 a compatibility check, not recursive verification or physical printing.
 
+## PDF-defined whitespace at xref boundaries (partial) — 2026-11-04
+
+The opt-in print preflight now uses PDF's exact six whitespace bytes for
+cross-reference metadata and trailing EOF trivia: NUL, tab, LF, form feed,
+CR and space. Rust's ASCII-whitespace predicate had rejected valid NUL
+separators while accepting invalid vertical tab as a numeric delimiter.
+
+A red-before/green-after native PDF and genuine uncompressed PDF 1.5 xref
+stream test inserts NUL before and after `/Size`, within `/W` and after
+`%%EOF`. All four cases retain the exact reviewed SHA-256 and selected
+bytes when sent to an isolated fake spool; a non-PDF vertical-tab control
+refuses before launching the fake queue. This is lexical compatibility and
+refusal, not full PDF interpretation or actual physical print validation.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

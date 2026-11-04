@@ -157,6 +157,19 @@ fn parse_args(args: &[String]) -> Result<Option<PrintRequest>, String> {
     }))
 }
 
+// PDF 1.7 whitespace is NUL, HT, LF, FF, CR or space. Rust's ASCII
+// whitespace excludes NUL and includes vertical tab, so it cannot be used
+// for PDF tokens, trailer metadata or terminal EOF trivia.
+const fn pdf_whitespace(byte: u8) -> bool {
+    matches!(byte, b'\0' | b'\t' | b'\n' | b'\x0c' | b'\r' | b' ')
+}
+
+fn trim_pdf_end(bytes: &[u8]) -> &[u8] {
+    let end = bytes.iter().rposition(|byte| !pdf_whitespace(*byte))
+        .map_or(0, |last| last.saturating_add(1));
+    bytes.get(..end).unwrap_or_default()
+}
+
 // This is deliberately a framing check, not a PDF document parser. Refuse
 // ambiguous version headers before any printer process can be contacted.
 fn supported_pdf_header(bytes: &[u8]) -> bool {
@@ -171,7 +184,7 @@ fn supported_pdf_header(bytes: &[u8]) -> bool {
 // table or an indirect xref-stream object. A header plus a forged %%EOF
 // alone must not reach a printer, even when it looks like a PDF file.
 fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
-    let Some(before_eof) = bytes.trim_ascii_end().strip_suffix(b"%%EOF")
+    let Some(before_eof) = trim_pdf_end(bytes).strip_suffix(b"%%EOF")
     else {
         return false;
     };
@@ -213,7 +226,7 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
         return false;
     };
     if target.starts_with(b"xref")
-        && target.get(4).is_some_and(u8::is_ascii_whitespace)
+        && target.get(4).is_some_and(|byte| pdf_whitespace(*byte))
     {
         return supported_xref_table(target, bytes, offset);
     }
@@ -245,7 +258,7 @@ fn xref_word<'bytes>(bytes: &'bytes [u8], at: &mut usize)
     *at = pdf_trivia_end(bytes, *at);
     let start = *at;
     while bytes.get(*at).is_some_and(|byte| {
-        !byte.is_ascii_whitespace() && *byte != b'%'
+        !pdf_whitespace(*byte) && *byte != b'%'
     }) {
         *at = at.checked_add(1)?;
     }
@@ -438,7 +451,7 @@ fn bounded_xref_size(
     if number == 0 || number < minimum_size
         || number > MAX_SUPPORTED_XREF_OBJECTS
         || !bytes.get(*at).is_some_and(|byte| {
-            byte.is_ascii_whitespace()
+            pdf_whitespace(*byte)
                 || matches!(byte, b'>' | b'/' | b'%')
         }) {
         return None;
@@ -525,7 +538,7 @@ fn bounded_xref_pointer(
         .and_then(|digits| digits.parse::<usize>().ok())?;
     if offset < 9 || offset >= table_start
         || !bytes.get(*at).is_some_and(|byte| {
-            byte.is_ascii_whitespace()
+            pdf_whitespace(*byte)
                 || matches!(byte, b'>' | b'/' | b'%')
         }) {
         return None;
@@ -568,7 +581,7 @@ fn bounded_previous_xref(
         return false;
     };
     if earlier.starts_with(b"xref")
-        && earlier.get(4).is_some_and(u8::is_ascii_whitespace) {
+        && earlier.get(4).is_some_and(|byte| pdf_whitespace(*byte)) {
         return previous_xref_table_header(earlier, document, offset);
     }
     // A PDF 1.5+ incremental revision may refer back to an xref stream.
@@ -690,7 +703,7 @@ fn pdf_name(bytes: &[u8], start: usize) -> Option<(&[u8], usize)> {
     let first = start.checked_add(1)?;
     let mut end = first;
     while bytes.get(end).is_some_and(|byte| {
-        !byte.is_ascii_whitespace() && !b"()<>[]{}/%".contains(byte)
+        !pdf_whitespace(*byte) && !b"()<>[]{}/%".contains(byte)
     }) {
         end = end.saturating_add(1);
     }
@@ -731,7 +744,7 @@ fn pdf_name_is(name: &[u8], literal: &[u8]) -> bool {
 
 fn pdf_trivia_end(bytes: &[u8], mut at: usize) -> usize {
     loop {
-        while bytes.get(at).is_some_and(u8::is_ascii_whitespace) {
+        while bytes.get(at).is_some_and(|byte| pdf_whitespace(*byte)) {
             at = at.saturating_add(1);
         }
         if bytes.get(at) != Some(&b'%') {
@@ -781,7 +794,7 @@ fn bounded_stream_length(bytes: &[u8], at: &mut usize) -> Option<usize> {
         .ok()?.parse::<usize>().ok()?;
     if length == 0 || length > MAX_PAPER_OUTPUT_BYTES
         || !bytes.get(*at).is_some_and(|byte| {
-            byte.is_ascii_whitespace()
+            pdf_whitespace(*byte)
                 || matches!(byte, b'>' | b'/' | b'%')
         }) {
         return None;
@@ -810,7 +823,7 @@ fn xref_stream_field_widths(bytes: &[u8], at: &mut usize) -> Option<()> {
         // The scanner admits at most eight bytes for any object field.
         // Larger values require a reviewed re-export under local policy.
         if *width > 8 || !bytes.get(*at).is_some_and(|byte| {
-            byte.is_ascii_whitespace() || matches!(byte, b']' | b'%')
+            pdf_whitespace(*byte) || matches!(byte, b']' | b'%')
         }) {
             return None;
         }
@@ -866,7 +879,7 @@ fn xref_stream_index_integer(bytes: &[u8], at: &mut usize)
     let digits = bytes.get(start..*at)?;
     let value = str::from_utf8(digits).ok()?.parse::<usize>().ok()?;
     if !bytes.get(*at).is_some_and(|byte| {
-        byte.is_ascii_whitespace() || matches!(byte, b']' | b'%')
+        pdf_whitespace(*byte) || matches!(byte, b']' | b'%')
     }) {
         return None;
     }
@@ -885,7 +898,7 @@ fn xref_stream_object_header(prefix: &[u8]) -> Option<(usize, usize)> {
             at = at.saturating_add(1);
         }
         if start == at || !prefix.get(at)
-            .is_some_and(u8::is_ascii_whitespace)
+            .is_some_and(|byte| pdf_whitespace(*byte))
         {
             return None;
         }
@@ -899,7 +912,7 @@ fn xref_stream_object_header(prefix: &[u8]) -> Option<(usize, usize)> {
     at = pdf_trivia_end(prefix, at);
     if !prefix.get(at..).is_some_and(|tail| tail.starts_with(b"obj"))
         || !prefix.get(at.saturating_add(3))
-            .is_some_and(u8::is_ascii_whitespace)
+            .is_some_and(|byte| pdf_whitespace(*byte))
     {
         return None;
     }
@@ -1059,7 +1072,7 @@ fn xref_stream_frame_end(
     if !bytes.get(endstream..).is_some_and(|rest| {
         rest.starts_with(b"endstream")
             && rest.get(b"endstream".len())
-                .is_some_and(u8::is_ascii_whitespace)
+                .is_some_and(|byte| pdf_whitespace(*byte))
     }) {
         return None;
     }
@@ -1067,7 +1080,7 @@ fn xref_stream_frame_end(
     let endobj = pdf_trivia_end(bytes, endstream_end);
     if !bytes.get(endobj..).is_some_and(|rest| rest.starts_with(b"endobj"))
         || !bytes.get(endobj.saturating_add(b"endobj".len()))
-            .is_some_and(u8::is_ascii_whitespace) {
+            .is_some_and(|byte| pdf_whitespace(*byte)) {
         return None;
     }
     endobj.checked_add(b"endobj".len())

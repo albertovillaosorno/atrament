@@ -87,6 +87,13 @@ or larger-than-24,000,000-byte inputs refuse.
 A selected PDF must begin
 with a complete `%PDF-1.0` through `%PDF-1.7` or `%PDF-2.0` version line,
 terminated by LF or CR, and end with `%%EOF` plus optional whitespace.
+Trailing `%%EOF` trivia and xref dictionary token separators use PDF's
+six whitespace values (NUL, horizontal tab, LF, form feed, CR, space), not
+Rust's ASCII-whitespace predicate. A NUL separator in valid metadata or
+after EOF is preserved and accepted; a vertical tab is not a legal PDF
+numeric delimiter and refuses before CUPS. This is a lexical preflight,
+not a full PDF syntax or content validator.
+
 It must also have a terminal decimal `startxref` locator pointing into the
 source to an `xref` table or a plausible PDF 1.5+ indirect `/Type /XRef`
 stream header. The stream form is admitted only for PDF 1.5–1.7 or 2.0;
