@@ -3,7 +3,7 @@ name = "atrament_notebook_profile"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license = "MIT"
+license-file = "../../../LICENSE"
 
 [dependencies]
 atrament_notebook_paper_cli = { workspace = true }

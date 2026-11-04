@@ -1662,5 +1662,5 @@ claim about who physically wrote an exported page.
 
 Original materials covered by the current [LICENSE](LICENSE) are proprietary.
 That notice preserves valid permissions for earlier licensed versions and
-separate rights for third-party materials; [LICENSE-MIT](LICENSE-MIT) remains
-available for the earlier MIT terms where they apply.
+separate rights for third-party materials. Earlier MIT terms remain in the
+corresponding historical versions; they are not the current source license.

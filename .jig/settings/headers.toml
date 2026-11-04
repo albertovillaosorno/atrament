@@ -1,7 +1,7 @@
 domain = "headers"
 schema_version = 1
 adapters = ["rs:rust:slash-line", "ts:typescript:slash-line"]
-confidential = false
+confidential = true
 copyright = "Copyright © 2026 Alberto Villa Osorno."
 exempt_paths = []
 extensions = ["rs", "ts"]

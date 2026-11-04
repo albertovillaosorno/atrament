@@ -1,4 +1,4 @@
-// Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: MIT
+// Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: LicenseRef-Proprietary
 // Local notebook form adapter: native Rust JSON admission, no ambient state.
 import assert from "node:assert/strict";
 import test from "node:test";

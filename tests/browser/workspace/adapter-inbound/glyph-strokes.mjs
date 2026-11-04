@@ -1,4 +1,4 @@
-// Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: MIT
+// Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: LicenseRef-Proprietary
 // Browser authored Unicode stroke authoring and session-safe TSV contracts.
 import assert from "node:assert/strict";
 import test from "node:test";

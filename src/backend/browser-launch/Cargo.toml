@@ -3,7 +3,7 @@ name = "atrament_browser_launch"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license = "MIT"
+license-file = "../../../LICENSE"
 
 [lib]
 path = "adapter-outbound/lib.rs"
