@@ -1088,3 +1088,81 @@ test('authored italic Unicode ink exports exact native PDF/PNG', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('native glyph shear matches browser TSV and physical exports', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-native-shear-'));
+    try {
+        const nfd = 'a\u0301';
+        const strokes = [
+            { grapheme: nfd, x1: 450, y1: 1000,
+                x2: 850, y2: 1600, width: 250, color: '#243647' },
+            { grapheme: 'á', x1: 600, y1: 1200,
+                x2: 900, y2: 1550, width: 250, color: '#123456' },
+            { grapheme: nfd, x1: 850, y1: 1600,
+                x2: 1300, y2: 2200, width: 250, color: '#243647' },
+            { grapheme: '∞', x1: 500, y1: 900,
+                x2: 700, y2: 1100, width: 250, color: '#112233' },
+            { grapheme: nfd, x1: 1100, y1: 200,
+                x2: 1700, y2: 600, width: 250, color: '#334455' },
+        ];
+        const source = join(dir, 'regular.tsv');
+        const nativeItalic = join(dir, 'native-italic.tsv');
+        const browserItalic = join(dir, 'browser-italic.tsv');
+        const refused = join(dir, 'existing.tsv');
+        const original = encodeGlyphLibrary(strokes);
+        const expected = encodeGlyphLibrary(
+            italicizeGlyphStrokes(strokes, nfd, 12, 3550));
+        writeFileSync(source, original);
+        writeFileSync(browserItalic, expected);
+        const result = native('glyphs', '--profile', source,
+            '--shear-glyph', nfd, '12', '3550',
+            '--output', nativeItalic);
+        assert.equal(result.status, 0, result.stderr);
+        assert.deepEqual(readFileSync(nativeItalic),
+            readFileSync(browserItalic),
+            'native slant uses browser angle and point rounding');
+        const inspected = native('glyphs', '--profile', nativeItalic,
+            '--inspect-paths', nfd);
+        assert.equal(inspected.status, 0, inspected.stderr);
+        assert.match(inspected.stdout, /Strokes: 3\nPaths: 2/);
+        const zero = native('glyphs', '--profile', source,
+            '--shear-glyph', nfd, '0', '3550');
+        assert.equal(zero.status, 0, zero.stderr);
+        assert.equal(zero.stdout, original);
+        writeFileSync(refused, 'approved prior output');
+        for (const [glyph, angle, baseline] of [
+            [nfd, '21', '3550'], [nfd, '12', '4501'],
+            ['a', '12', '3550'], [nfd, '20', '0'],
+        ]) {
+            const bad = native('glyphs', '--profile', source,
+                '--shear-glyph', glyph, angle, baseline,
+                '--output', refused, '--replace');
+            assert.notEqual(bad.status, 0,
+                `invalid ${glyph} ${angle}/${baseline} must fail`);
+            assert.equal(readFileSync(refused, 'utf8'),
+                'approved prior output');
+            assert.equal(readFileSync(source, 'utf8'), original);
+        }
+        for (const format of ['pdf', 'png']) {
+            const flags = ['--export-paper', format];
+            if (format === 'png') flags.push('--dpi', '72');
+            const actual = join(dir, `native.${format}`);
+            const comparison = join(dir, `browser.${format}`);
+            const render = (ink, target) => native('notebook',
+                '--printed-sheet', 'true', '--glyph-file', ink,
+                '--place-text', '1', '30000', '45000', nfd + 'á',
+                ...flags, '--output', target);
+            const run = render(nativeItalic, actual);
+            const reference = render(browserItalic, comparison);
+            assert.equal(run.status, 0, run.stderr);
+            assert.equal(reference.status, 0, reference.stderr);
+            assert.deepEqual(readFileSync(actual), readFileSync(comparison),
+                `native and browser italic ${format} are identical`);
+            if (format === 'png') pngHasTransparentCorner(
+                readFileSync(actual));
+        }
+        assert.equal(readFileSync(source, 'utf8'), original);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

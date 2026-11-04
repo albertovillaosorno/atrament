@@ -33,6 +33,7 @@
 
 //! Exact, explicitly authored glyph contours for a bounded CLI text overlay.
 
+use std::f64::consts::PI;
 use std::fmt::Write as _;
 use std::mem::{replace, swap};
 use std::ops::Range;
@@ -888,6 +889,8 @@ impl GlyphOverlay {
         &mut self, flag: &str, iter: &mut Iter<'_, String>,
     ) -> Result<(), String> {
         match flag {
+            "--copy-glyph" => self.copy_glyph_option(iter)?,
+            "--shear-glyph" => self.shear_glyph_option(iter)?,
             "--glyph-stroke" => {
                 if self.strokes.len() == MAX_STROKES {
                     return Err("more than 4096 glyph strokes refused".into());
@@ -1150,6 +1153,63 @@ impl GlyphOverlay {
             .ok_or("stroke index outside library")?;
         *shape = replacement;
         Ok(())
+    }
+
+    /// Apply the same explicit, baseline-relative shear as the browser ink
+    /// editor. The native v1 file retains sampled integer coordinates,
+    /// not a slant property or a second named glyph variant.
+    /// Preserve other Unicode rows and pen metadata, and refuse the entire
+    /// edit before mutation when any selected endpoint would clip its pen.
+    #[expect(clippy::suboptimal_flops, reason =
+        "match the browser's angle-to-radians and coordinate rounding")]
+    pub(super) fn shear_glyph(
+        &mut self, grapheme: &str, degrees: u32, baseline: u32,
+    ) -> Result<(), String> {
+        if degrees > 20 || baseline > 4500 {
+            return Err("italic angle or baseline outside native bounds".into());
+        }
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let slope = (f64::from(degrees) * PI
+            / 180.0f64).tan();
+        let mut revised = self.strokes.clone();
+        for position in positions {
+            let stroke = revised.get_mut(position)
+                .ok_or("glyph stroke outside library")?;
+            let shear_x = |x: u32, y: u32| -> Result<u32, String> {
+                let shifted = GlyphVariation::round_js(
+                    f64::from(x) + slope
+                        * (f64::from(baseline) - f64::from(y)),
+                )?;
+                let twice = i64::from(shifted).saturating_mul(2);
+                if twice < i64::from(stroke.width_um)
+                    || twice > 7000i64
+                        .saturating_sub(i64::from(stroke.width_um)) {
+                    return Err("italic ink and pen clip glyph cell".into());
+                }
+                u32::try_from(shifted)
+                    .map_err(|_error| "italic coordinate out of bounds".into())
+            };
+            let start = shear_x(stroke.start_um.0, stroke.start_um.1)?;
+            let end = shear_x(stroke.end_um.0, stroke.end_um.1)?;
+            stroke.start_um.0 = start;
+            stroke.end_um.0 = end;
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(super) fn shear_glyph_option(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let grapheme = iter.next()
+            .ok_or("--shear-glyph requires an exact grapheme")?;
+        let degrees = next_integer(iter, "italic angle", 0, 20)?;
+        let baseline = next_integer(iter, "italic baseline", 0, 4500)?;
+        self.shear_glyph(grapheme, degrees, baseline)
     }
 
     /// Shift every directed segment in one exact candidate pen path,

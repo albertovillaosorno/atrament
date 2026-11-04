@@ -758,6 +758,29 @@ explicit click; it does not keep both glyph variants or provide undo.
 The regular TSV should be downloaded first. Persistent curve primitives,
 multiple named variants and joined cursive remain open P1 requirements.
 
+## Native whole-authored-glyph shear parity (partial) — 2026-11-04
+
+The Rust `atrament-profiles glyphs` CLI now admits `--shear-glyph`
+with one exact Unicode glyph, a whole-degree angle (0–20), and a
+baseline Y in the 0–4500 µm cell. Each authored stroke retains its
+position in the original TSV stream, pigment, width, and pen direction.
+The Rust transform matches the browser's baseline-relative tangent
+and JavaScript integer rounding, including zero-angle identity and
+independent NFC/NFD identity. The full candidate is validated before
+publication; clipping or malformed values cannot replace saved output.
+
+Two native regressions prove exact expected coordinates, two separate
+pen paths, Unicode row preservation, saved TSV roundtrips, zero-angle
+identity, bad-angle/missing-glyph refusals, odd-width pen clearance, and
+an unchanged prior destination file. A browser-to-Rust integration test
+independently creates the same italic library in both engines, proves
+byte-identical TSV and actual PDF/transparent PNG output, and verifies
+that invalid edits cannot replace the earlier file.
+
+This adds native parity to destructive sampled-stroke editing, not
+persistent curve authority, italic style metadata, an undo history,
+multiple named variants, or joined cursive.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

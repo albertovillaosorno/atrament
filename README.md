@@ -1026,6 +1026,25 @@ missing glyphs or clipped pen tips refuse the entire edit without erasing
 previously accepted work. The exporter still saves sampled straight lines;
 no analytic curves, named variants or automatic cursive are persisted.
 
+The native Rust glyph CLI now applies that same intentional transform to a
+previously saved exact Unicode glyph, independently of the browser:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile regular.tsv --shear-glyph 'á' 12 3550 \
+  --output italic.tsv
+```
+
+`--shear-glyph GRAPHEME ANGLE_DEG BASELINE_Y_UM` accepts whole degrees
+0–20 and a baseline from 0–4500 µm. The original TSV stays unchanged
+unless the caller explicitly requests `--output` with `--replace`.
+The operation keeps each stroke's color, width, direction, original
+row slot and NFC/NFD spelling. The native and browser shears produce
+byte-identical glyph TSV and physically identical PDF/transparent PNG.
+A clipped pen edge or invalid input refuses before writing an output file;
+0 degrees is a valid identity edit. Saving overwrites sampled coordinates,
+not a retained analytic or named italic variant.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each

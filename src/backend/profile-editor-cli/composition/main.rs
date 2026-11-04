@@ -91,6 +91,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--rotate-path GRAPHEME PATH_INDEX START_STROKE] \
     [--move-path GRAPHEME FROM_PATH TO_PATH] \
     [--translate-path GRAPHEME PATH_INDEX DX_UM DY_UM] \
+    [--shear-glyph GRAPHEME ANGLE_DEG BASELINE_Y_UM] \
     [--join-strokes GRAPHEME FIRST_INDEX] \
     [--set-stroke GRAPHEME INDEX X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--remove-stroke GRAPHEME INDEX] \
@@ -117,6 +118,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --rotate-path changes the first stroke of a closed loop (one-based).\n\
     --close-path inserts a short closing segment on a selected open path.\n\
     --translate-path moves one path using bounded signed micrometres.\n\
+    --shear-glyph slants all exact-glyph pen segments 0..20 degrees.\n\
     --join-strokes inserts a short same-pen connector to the next segment.\n\
     --copy-glyph clones explicit source ink under an unoccupied target.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
@@ -776,8 +778,8 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                     .ok_or("--profile requires a glyph library path")?;
                 glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
             }
-            "--copy-glyph" => glyphs.copy_glyph_option(&mut iter)?,
-            "--glyph-stroke" => glyphs.parse(option, &mut iter)?,
+            "--copy-glyph" | "--glyph-stroke" | "--shear-glyph" =>
+                glyphs.parse(option, &mut iter)?,
             "--reverse-stroke" | "--move-stroke" | "--join-strokes"
             | "--set-stroke" | "--remove-stroke" =>
                 glyphs.edit_stroke(option, &mut iter)?,

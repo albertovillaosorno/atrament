@@ -2521,6 +2521,117 @@ fn native_explicit_path_closure_preserves_unicode_and_refuses_atomically() {
 }
 
 #[test]
+fn native_whole_glyph_shear_keeps_exact_unicode_slots_and_pen_paths() {
+    let source = test_path().with_extension("tsv");
+    let saved = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let saved_name = saved.to_str().expect("destination path");
+    let nfd = "a\u{301}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "450", "1000", "850", "1600",
+        "250", "#243647",
+        "--glyph-stroke", "á", "600", "1200", "900", "1550",
+        "250", "#123456",
+        "--glyph-stroke", nfd, "850", "1600", "1300", "2200",
+        "250", "#243647",
+        "--glyph-stroke", "∞", "500", "900", "700", "1100",
+        "250", "#112233",
+        "--glyph-stroke", nfd, "1100", "200", "1700", "600",
+        "250", "#334455",
+    ])).expect("valid source").expect("source bytes");
+    fs::write(&source, &original).expect("test source");
+    let edited = execute_glyph_library(&args(&[
+        "--profile", source_name, "--shear-glyph", nfd, "12", "3550",
+    ])).expect("italic edit accepted").expect("italic TSV");
+    assert_eq!(edited, concat!(
+        "atrament.glyph-strokes.v1\n",
+        "á\t992\t1000\t1264\t1600\t250\t#243647\n",
+        "á\t600\t1200\t900\t1550\t250\t#123456\n",
+        "á\t1264\t1600\t1587\t2200\t250\t#243647\n",
+        "∞\t500\t900\t700\t1100\t250\t#112233\n",
+        "á\t1812\t200\t2327\t600\t250\t#334455\n",
+    ).as_bytes());
+    assert_eq!(fs::read(&source).expect("source read"), original);
+    let inspected = execute_glyph_library(&args(&[
+        "--profile", source_name, "--shear-glyph", nfd, "12", "3550",
+        "--inspect-paths", nfd,
+    ])).expect("inspect italic path").expect("report");
+    assert!(String::from_utf8_lossy(&inspected)
+        .contains("Strokes: 3\nPaths: 2\nPen lifts: 1"));
+    let wrote = execute_glyph_library(&args(&[
+        "--profile", source_name, "--shear-glyph", nfd, "12", "3550",
+        "--output", saved_name,
+    ])).expect("save italic source");
+    assert!(wrote.is_none());
+    assert_eq!(fs::read(&saved).expect("saved TSV"), edited);
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", saved_name,
+    ])).expect("reopen saved").expect("bytes"), edited);
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--shear-glyph", nfd, "0", "3550",
+    ])).expect("zero angle is a valid identity").expect("TSV"), original);
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(saved).expect("remove saved");
+}
+
+#[test]
+fn native_whole_glyph_shear_refuses_clipping_and_invalid_edits_atomically() {
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let output_name = output.to_str().expect("destination path");
+    let nfd = "a\u{301}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "450", "1000", "850", "1600",
+        "251", "#243647",
+        "--glyph-stroke", "á", "600", "1200", "900", "1550",
+        "250", "#123456",
+        "--glyph-stroke", nfd, "850", "1600", "3250", "2200",
+        "251", "#243647",
+    ])).expect("valid source").expect("source bytes");
+    fs::write(&source, &original).expect("own source");
+    fs::write(&output, b"approved prior glyph file")
+        .expect("test-owned destination");
+    let invalid = [
+        args(&["--shear-glyph"]),
+        args(&["--shear-glyph", nfd]),
+        args(&["--shear-glyph", nfd, "12"]),
+        args(&["--shear-glyph", nfd, "-1", "3550"]),
+        args(&["--shear-glyph", nfd, "21", "3550"]),
+        args(&["--shear-glyph", nfd, "1.5", "3550"]),
+        args(&["--shear-glyph", nfd, "+12", "3550"]),
+        args(&["--shear-glyph", nfd, "12", "-1"]),
+        args(&["--shear-glyph", nfd, "12", "4501"]),
+        args(&["--shear-glyph", "aa", "12", "3550"]),
+        args(&["--shear-glyph", "a", "12", "3550"]),
+        args(&["--shear-glyph", "ó", "12", "3550"]),
+        args(&["--shear-glyph", nfd, "20", "4500"]),
+        args(&["--shear-glyph", nfd, "12", "3550",
+            "--shear-glyph", nfd, "20", "4500"]),
+    ];
+    for edit in invalid {
+        let mut command = args(&["--profile", source_name]);
+        command.extend(edit);
+        command.extend(args(&["--output", output_name, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid italic stroke edit must refuse: {command:?}");
+        assert_eq!(fs::read(&source).expect("source unchanged"), original);
+        assert_eq!(fs::read(&output).expect("prior output unchanged"),
+            b"approved prior glyph file");
+    }
+    // An odd-width pen must not extend over the right edge even though
+    // its rounded endpoint itself remains within 0..3500 micrometres.
+    let clipped = execute_glyph_library(&args(&[
+        "--glyph-stroke", "o", "3375", "100", "3374", "200",
+        "251", "#102030", "--shear-glyph", "o", "0", "4500",
+    ]));
+    assert!(clipped.expect_err("odd-width pen clips the cell")
+        .contains("italic ink and pen clip"));
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(output).expect("remove saved");
+}
+
+#[test]
 fn native_path_translation_round_trips_exact_unicode_pen_geometry() {
     let source = test_path().with_extension("tsv");
     let revised = test_path().with_extension("tsv");
