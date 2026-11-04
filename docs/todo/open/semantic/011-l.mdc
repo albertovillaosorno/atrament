@@ -808,6 +808,18 @@ one-page PDF and transparent RGBA PNG from an explicitly authored U+00A0
 stroke. This is a source-download compatibility fix, not live browser
 notebook rendering or a completed semantic document model.
 
+## Literal indented trailing backslashes (partial) — 2026-11-04
+
+Four-or-more-space-indented Markdown rows already preserve their exact
+physical line boundaries. Their final single backslash now remains literal
+authored ink, rather than being mistaken for an ordinary Markdown paragraph
+hard-break marker and silently omitted. Both inline and native plain text
+retain the same strokes in real PDF and transparent PNG output. A missing
+backslash glyph now refuses before replacing the accepted export.
+
+This deliberately does not change paragraph/list hard-break handling or
+claim general CommonMark code-block semantics or inline escaping.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

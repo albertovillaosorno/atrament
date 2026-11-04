@@ -1307,7 +1307,10 @@ fn markdown_paragraph_break<'text>(
     raw: &str, style: LineStyle, body: &'text str,
 ) -> (&'text str, bool) {
     if !matches!(style, LineStyle::Body | LineStyle::Quote
-        | LineStyle::Bullet | LineStyle::Ordered | LineStyle::Task(_)) {
+        | LineStyle::Bullet | LineStyle::Ordered | LineStyle::Task(_))
+        // Four-space rows are literal physical ink, not Markdown paragraph
+        // syntax. Do not drop a final authored backslash as a hard break.
+        || raw.starts_with("    ") {
         return (body, false);
     }
     if raw.ends_with('\\') && !body.ends_with("\\\\")

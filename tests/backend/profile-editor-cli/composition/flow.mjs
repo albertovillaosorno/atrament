@@ -588,6 +588,41 @@ test('four-space literal Markdown rows preserve source line placement',
         }
     });
 
+test('four-space literal Markdown retains trailing authored backslash ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-literal-slash-'));
+        try {
+            const slash = String.fromCharCode(92);
+            const slashInk = [
+                '--glyph-stroke', slash, '600', '500', '1800', '3000',
+                '250', '#123456',
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const prefix of ['', 'a\n']) {
+                    const input = `${prefix}    ó${slash}`;
+                    const plain = render(dir, input, format, slashInk,
+                        '--flow-text');
+                    assert.equal(plain.result.status, 0,
+                        plain.result.stderr);
+                    const reference = readFileSync(plain.output);
+                    const literal = render(dir, input, format, slashInk);
+                    assert.equal(literal.result.status, 0,
+                        literal.result.stderr);
+                    assert.deepEqual(readFileSync(literal.output), reference,
+                        `literal backslash remains ink in ${format}`);
+                    const missing = render(dir, input, format);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.match(missing.result.stderr,
+                        /missing authored glyph shapes.*U\+005C/);
+                    assert.deepEqual(readFileSync(missing.output), reference,
+                        'missing literal slash must not replace accepted ink');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('heading marker stroke weight is selectable in native PDF and PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/heading-weight-'));
