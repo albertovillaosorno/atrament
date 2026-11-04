@@ -49,10 +49,6 @@ use atrament_diagnostic::{
     DiagnosticCode, DiagnosticSet, Evidence, EvidenceUnit, LocationKind,
     LocationRole, Operation, Remediation, Severity,
 };
-use atrament_notebook_paper_cli::{
-    MAX_PROFILE_BYTES, canonical_paper_profile_json,
-    default_paper_profile_json, paper_profile_pdf, paper_profile_png,
-};
 use atrament_session_draft_port::{DraftField, DraftMutation, SessionDraft};
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
@@ -238,6 +234,36 @@ pub trait NotebookProfileGateway {
         }
         self.paper_png(input, dpi)
     }
+
+    /// Canonicalize one explicit v1 paper template, without persistence.
+    ///
+    /// # Errors
+    /// Refuses invalid template JSON or unencodable geometry.
+    fn paper_profile_canonical_json(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, NotebookProfileError>;
+
+    /// Return the separate v1 paper-template JSON through trusted code.
+    fn paper_profile_default_json(&self) -> Vec<u8>;
+
+    /// Preserve the native paper-template size limit at HTTP admission.
+    fn paper_profile_max_input_bytes(&self) -> usize;
+
+    /// Render one v1 template as a real physical PDF.
+    ///
+    /// # Errors
+    /// Refuses invalid geometry or a failed native paper export.
+    fn paper_profile_pdf(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, NotebookProfileError>;
+
+    /// Render one v1 template as a native transparent PNG.
+    ///
+    /// # Errors
+    /// Refuses malformed templates, DPI or rendering bounds.
+    fn paper_profile_png(
+        &self, input: &[u8], dpi: u32,
+    ) -> Result<Vec<u8>, NotebookProfileError>;
 }
 
 /// File authority is supplied only after an explicit local host selection.
@@ -1262,7 +1288,7 @@ fn route_paper_profile(
     if method == "GET" && target == "/api/paper/profile" {
         return json_response(
             "200 OK",
-            default_paper_profile_json().as_bytes(),
+            &context.notebook_gateway.paper_profile_default_json(),
         );
     }
     if method != "POST" {
@@ -1288,7 +1314,7 @@ fn route_paper_profile(
             br#"{"error":"invalid_request"}"#,
         );
     };
-    if body.len() > MAX_PROFILE_BYTES {
+    if body.len() > context.notebook_gateway.paper_profile_max_input_bytes() {
         return json_response(
             "413 Content Too Large",
             br#"{"error":"paper_profile_too_large"}"#,
@@ -1296,17 +1322,16 @@ fn route_paper_profile(
     }
     match target {
         "/api/paper/profile" => {
-            match canonical_paper_profile_json(body) {
-                Ok(json) => {
-                    json_response("200 OK", json.as_bytes())
-                },
+            match context.notebook_gateway.paper_profile_canonical_json(body) {
+                Ok(json) => json_response("200 OK", &json),
                 Err(_error) => json_response(
                     "400 Bad Request",
                     br#"{"error":"invalid_paper_profile"}"#,
                 ),
             }
         },
-        "/api/paper/pdf" => match paper_profile_pdf(body) {
+        "/api/paper/pdf" => match context.notebook_gateway
+            .paper_profile_pdf(body) {
             Ok(pdf) => response("200 OK", PDF_CONTENT_TYPE, &pdf),
             Err(_error) => json_response(
                 "400 Bad Request",
@@ -1324,7 +1349,7 @@ fn route_paper_profile(
                         br#"{"error":"invalid_png_dpi"}"#,
                     );
                 };
-            match paper_profile_png(body, dpi) {
+            match context.notebook_gateway.paper_profile_png(body, dpi) {
                 Ok(png) => response("200 OK", PNG_CONTENT_TYPE, &png),
                 Err(_error) => json_response(
                     "400 Bad Request",

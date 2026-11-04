@@ -7,7 +7,6 @@ license-file = "../../../LICENSE"
 
 [dependencies]
 atrament_diagnostic = { workspace = true }
-atrament_notebook_paper_cli = { workspace = true }
 atrament_session_draft_port = { workspace = true }
 atrament_session_handshake_port = { workspace = true }
 
@@ -20,6 +19,7 @@ test = false
 workspace = true
 
 [dev-dependencies]
+atrament_notebook_paper_cli = { workspace = true }
 atrament_notebook_profile = { workspace = true }
 atrament_handwriting_statistics_json = { workspace = true }
 atrament_handwriting_statistics = { workspace = true }

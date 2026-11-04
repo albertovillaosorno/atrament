@@ -836,6 +836,7 @@ dependencies = [
  "atrament_explicit_file_path_intent",
  "atrament_handwriting_statistics",
  "atrament_handwriting_statistics_json",
+ "atrament_notebook_paper_cli",
  "atrament_notebook_profile",
  "atrament_profile_entry_sha256",
  "atrament_profile_export_assembly",

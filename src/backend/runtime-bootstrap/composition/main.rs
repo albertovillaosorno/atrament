@@ -47,6 +47,7 @@ use std::str::from_utf8;
 #[cfg(target_os = "linux")]
 use nix::sys::prctl;
 
+use atrament_notebook_paper_cli as paper_api;
 use atrament_notebook_profile::{MAX_NOTEBOOK_JSON_BYTES, NotebookProfile};
 use atrament_browser_launch as browser_launch;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
@@ -258,6 +259,36 @@ impl NotebookProfileGateway for NotebookGateway {
     ) -> Result<Vec<u8>, NotebookProfileError> {
         NotebookProfile::from_json(input)
             .and_then(|profile| profile.paper_layer_png_page(dpi, page))
+            .map_err(|_error| NotebookProfileError)
+    }
+
+    fn paper_profile_canonical_json(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, NotebookProfileError> {
+        paper_api::canonical_paper_profile_json(input)
+            .map(String::into_bytes)
+            .map_err(|_error| NotebookProfileError)
+    }
+
+    fn paper_profile_default_json(&self) -> Vec<u8> {
+        paper_api::default_paper_profile_json().into_bytes()
+    }
+
+    fn paper_profile_max_input_bytes(&self) -> usize {
+        paper_api::MAX_PROFILE_BYTES
+    }
+
+    fn paper_profile_pdf(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, NotebookProfileError> {
+        paper_api::paper_profile_pdf(input)
+            .map_err(|_error| NotebookProfileError)
+    }
+
+    fn paper_profile_png(
+        &self, input: &[u8], dpi: u32,
+    ) -> Result<Vec<u8>, NotebookProfileError> {
+        paper_api::paper_profile_png(input, dpi)
             .map_err(|_error| NotebookProfileError)
     }
 }

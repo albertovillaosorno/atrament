@@ -6,6 +6,7 @@ publish = false
 license-file = "../../../LICENSE"
 
 [dependencies]
+atrament_notebook_paper_cli = { workspace = true }
 atrament_notebook_profile = { workspace = true }
 atrament_browser_launch = { workspace = true }
 atrament_explicit_file_path_intent = { workspace = true }

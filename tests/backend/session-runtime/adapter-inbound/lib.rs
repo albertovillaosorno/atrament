@@ -186,6 +186,36 @@ impl runtime::NotebookProfileGateway for TestNotebookGateway {
             .and_then(|profile| profile.paper_layer_png_page(dpi, page))
             .map_err(|_error| runtime::NotebookProfileError)
     }
+
+    fn paper_profile_canonical_json(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        atrament_notebook_paper_cli::canonical_paper_profile_json(input)
+            .map(String::into_bytes)
+            .map_err(|_error| runtime::NotebookProfileError)
+    }
+
+    fn paper_profile_default_json(&self) -> Vec<u8> {
+        atrament_notebook_paper_cli::default_paper_profile_json().into_bytes()
+    }
+
+    fn paper_profile_max_input_bytes(&self) -> usize {
+        atrament_notebook_paper_cli::MAX_PROFILE_BYTES
+    }
+
+    fn paper_profile_pdf(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        atrament_notebook_paper_cli::paper_profile_pdf(input)
+            .map_err(|_error| runtime::NotebookProfileError)
+    }
+
+    fn paper_profile_png(
+        &self, input: &[u8], dpi: u32,
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        atrament_notebook_paper_cli::paper_profile_png(input, dpi)
+            .map_err(|_error| runtime::NotebookProfileError)
+    }
 }
 
 static NOTEBOOK_GATEWAY: TestNotebookGateway = TestNotebookGateway;
@@ -5090,6 +5120,114 @@ fn paper_http_body(response: &[u8]) -> &[u8] {
         .position(|window| window == b"\r\n\r\n")
         .expect("complete HTTP response has a header separator");
     &response[position + 4..]
+}
+
+// A deliberately distinct trusted implementation proves HTTP transport
+// delegates all v1 paper-template operations rather than invoking the CLI.
+struct ProbePaperGateway;
+
+impl runtime::NotebookProfileGateway for ProbePaperGateway {
+    fn canonical_json(
+        &self, _input: &[u8],
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        panic!("notebook codec must not serve a v1 paper-template route")
+    }
+
+    fn default_json(&self) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        panic!("notebook default must not serve a paper-template route")
+    }
+
+    fn max_input_bytes(&self) -> usize {
+        panic!("notebook budget must not replace paper-template budget")
+    }
+
+    fn paper_pdf(
+        &self, _input: &[u8], _pages: usize,
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        panic!("notebook PDF must not serve a paper-template route")
+    }
+
+    fn paper_png(
+        &self, _input: &[u8], _dpi: u32,
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        panic!("notebook PNG must not serve a paper-template route")
+    }
+
+    fn paper_profile_canonical_json(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        if input == b"ok" {
+            Ok(br#"{"probe":"canonical"}"#.to_vec())
+        } else {
+            Err(runtime::NotebookProfileError)
+        }
+    }
+
+    fn paper_profile_default_json(&self) -> Vec<u8> {
+        br#"{"probe":"default"}"#.to_vec()
+    }
+
+    fn paper_profile_max_input_bytes(&self) -> usize {
+        2
+    }
+
+    fn paper_profile_pdf(
+        &self, input: &[u8],
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        assert_eq!(input, b"ok");
+        Ok(b"%PDF-PROBE".to_vec())
+    }
+
+    fn paper_profile_png(
+        &self, input: &[u8], dpi: u32,
+    ) -> Result<Vec<u8>, runtime::NotebookProfileError> {
+        assert_eq!(input, b"ok");
+        assert_eq!(dpi, 72);
+        Ok(b"PNG-PROBE".to_vec())
+    }
+}
+
+#[test]
+fn paper_transport_delegates_template_codec_and_export_to_gateway() {
+    let context = runtime::RouteRequestContext::new(
+        EXPECTED_HOST, EXPECTED_ORIGIN, EXPECTED_SECRET,
+        &HANDSHAKE, &GATEWAY, &ProbePaperGateway,
+    );
+    let send = |request: Vec<u8>| runtime::route_request(
+        &request, &context, &mut SessionDraftService::default(),
+    );
+    let get = send(paper_endpoint_request(
+        "GET", "/api/paper/profile", Some(EXPECTED_SECRET),
+        None, None, b"",
+    ));
+    assert_eq!(status_line(&get), "HTTP/1.1 200 OK");
+    assert_eq!(paper_http_body(&get), br#"{"probe":"default"}"#);
+
+    let post = |target: &str, input: &[u8]| send(paper_endpoint_request(
+        "POST", target, Some(EXPECTED_SECRET),
+        Some(EXPECTED_ORIGIN), Some("application/json"), input,
+    ));
+    let canonical = post("/api/paper/profile", b"ok");
+    assert_eq!(status_line(&canonical), "HTTP/1.1 200 OK");
+    assert_eq!(paper_http_body(&canonical), br#"{"probe":"canonical"}"#);
+    let pdf = post("/api/paper/pdf", b"ok");
+    assert_eq!(status_line(&pdf), "HTTP/1.1 200 OK");
+    assert_eq!(paper_http_body(&pdf), b"%PDF-PROBE");
+    let png = send(paper_png_request(
+        Some("72"), Some(EXPECTED_SECRET), Some(EXPECTED_ORIGIN),
+        Some("application/json"), b"ok",
+    ));
+    assert_eq!(status_line(&png), "HTTP/1.1 200 OK");
+    assert_eq!(paper_http_body(&png), b"PNG-PROBE");
+
+    let oversized = post("/api/paper/profile", b"bad");
+    assert_eq!(status_line(&oversized), "HTTP/1.1 413 Content Too Large");
+    assert_eq!(paper_http_body(&oversized),
+        br#"{"error":"paper_profile_too_large"}"#);
+    let invalid = post("/api/paper/profile", b"no");
+    assert_eq!(status_line(&invalid), "HTTP/1.1 400 Bad Request");
+    assert_eq!(paper_http_body(&invalid),
+        br#"{"error":"invalid_paper_profile"}"#);
 }
 
 #[test]
