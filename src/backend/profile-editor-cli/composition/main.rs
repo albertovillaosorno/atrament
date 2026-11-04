@@ -744,7 +744,10 @@ fn read_glyph_input(path: &str) -> Result<Vec<u8>, String> {
 fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
     if selected.is_empty()
         || selected.len() > MAX_INVENTORY_TEXT_BYTES
-        || selected.chars().all(char::is_whitespace)
+        // The audit skips ASCII space and control characters. Every
+        // accepted source must contain at least one auditable grapheme;
+        // other Unicode whitespace may have exact authored pen strokes.
+        || !selected.chars().any(|ch| ch != ' ' && !ch.is_control())
         || selected.chars().any(|ch| {
             ch.is_control() && !ch.is_whitespace()
         }) {

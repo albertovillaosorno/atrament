@@ -2121,6 +2121,39 @@ fn glyph_library_audit_separates_nfc_nfd_math_and_missing_punctuation() {
 }
 
 #[test]
+fn glyph_audit_accepts_whitespace_only_when_a_glyph_can_be_authored() {
+    for glyph in ["\u{a0}", "\u{2009}", "\u{202f}"] {
+        let unicode = u32::from(glyph.chars().next().expect("one codepoint"));
+        let missing = String::from_utf8(execute_glyph_library(&args(&[
+            "--audit-text", glyph,
+        ])).expect("Unicode-only source auditable")
+            .expect("read-only glyph audit"))
+            .expect("UTF-8 output");
+        assert!(missing.contains("Distinct visible graphemes: 1"),
+            "{missing}");
+        assert!(missing.contains("Missing authored glyphs: 1"),
+            "{missing}");
+        assert!(missing.contains(&format!("[U+{unicode:04X}]")),
+            "{missing}");
+
+        let authored = String::from_utf8(execute_glyph_library(&args(&[
+            "--glyph-stroke", glyph, "500", "500", "1800", "3000",
+            "250", "#123456", "--audit-text", glyph,
+        ])).expect("single exact space shape auditable")
+            .expect("read-only glyph audit"))
+            .expect("UTF-8 output");
+        assert!(authored.contains("Missing authored glyphs: 0"),
+            "{authored}");
+    }
+    for structural in [" ", "\t", "\n", " \n\t ", "\u{85}", "\u{b}"] {
+        let error = execute_glyph_library(&args(&[
+            "--audit-text", structural,
+        ])).expect_err("implicit source spaces are not authored ink");
+        assert!(error.contains("visible text"), "{error}");
+    }
+}
+
+#[test]
 fn glyph_audit_reports_unicode_whitespace_requiring_authored_ink() {
     let sample = "a\u{a0}a\u{2009}a\u{202f}a";
     let base = args(&[

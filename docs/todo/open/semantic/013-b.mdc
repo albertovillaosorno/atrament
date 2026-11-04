@@ -72,6 +72,17 @@ source tabs/newlines, a single Unicode-space input, and a long bounded
 sequence. This remains a read-only diagnostics report, not authored ink,
 font generation, language-specific line breaking or a render guarantee.
 
+## Single Unicode-space glyph audit admission (partial)
+
+The reusable `glyphs --audit-text` diagnostic also admits input consisting
+solely of an exact non-ASCII space glyph. Previously its all-whitespace
+precheck refused such text even though a longer string including the same
+glyph was auditable and native export accepted its authored strokes.
+U+00A0, U+2009 and U+202F now each report their distinct missing or
+explicitly authored pen shapes on their own. ASCII-space-only and
+control-break-only sources still refuse; the audit remains read-only and
+does not invent a font or replace a saved glyph library.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
