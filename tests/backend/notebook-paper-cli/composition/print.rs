@@ -252,6 +252,44 @@ fn print_admits_real_two_page_pdf_and_refuses_bad_sources() {
 }
 
 #[cfg(unix)]
+fn assert_legacy_xref_stream_refused(
+    stream_framing: &[u8], pdf: &Path, fake_spool: &Path, spooled: &Path,
+) {
+    for &minor in b"04" {
+        let mut obsolete = stream_framing.to_vec();
+        if let Some(version_minor) = obsolete.get_mut(7) {
+            *version_minor = minor;
+        }
+        assert!(!supported_pdf_cross_reference(&obsolete),
+            "xref streams require PDF 1.5+ even with plausible framing");
+        fs::write(pdf, &obsolete).expect("selected unsupported version");
+        let request = PrintRequest {
+            pdf: pdf.to_path_buf(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(submit_selected(&request, fake_spool).is_err(),
+            "older PDF-version xref streams cannot reach CUPS");
+        assert!(!spooled.exists(), "no spoofed stream spool side effect");
+        assert_eq!(fs::read(pdf).expect("source unchanged"), obsolete);
+    }
+    let mut earliest_stream = stream_framing.to_vec();
+    if let Some(version_minor) = earliest_stream.get_mut(7) {
+        *version_minor = b'5';
+    }
+    assert!(supported_pdf_cross_reference(&earliest_stream),
+        "PDF 1.5 is the earliest admitted xref-stream version");
+    let mut pdf_two_stream = stream_framing.to_vec();
+    if let Some(major) = pdf_two_stream.get_mut(5) {
+        *major = b'2';
+    }
+    if let Some(minor) = pdf_two_stream.get_mut(7) {
+        *minor = b'0';
+    }
+    assert!(supported_pdf_cross_reference(&pdf_two_stream),
+        "PDF 2.0 still admits exact xref-stream framing");
+}
+
+#[cfg(unix)]
 #[test]
 fn fake_pdf_trailers_and_retargeted_xrefs_cannot_reach_a_printer() {
     use std::os::unix::fs::PermissionsExt as _;
@@ -260,6 +298,12 @@ fn fake_pdf_trailers_and_retargeted_xrefs_cannot_reach_a_printer() {
     let spooled = directory.join("fake-spool.pdf");
     let fake_spool = directory.join("lp.sh");
     let bytes = real_pdf();
+    let mut old_table = bytes.clone();
+    if let Some(minor) = old_table.get_mut(7) {
+        *minor = b'0';
+    }
+    assert!(supported_pdf_cross_reference(&old_table),
+        "PDF 1.0 still admits legacy table-based framing");
     let xref_marker = b"startxref\n";
     let locator = bytes.windows(xref_marker.len())
         .rposition(|window| window == xref_marker)
@@ -315,6 +359,9 @@ fn fake_pdf_trailers_and_retargeted_xrefs_cannot_reach_a_printer() {
     ].concat();
     assert!(supported_pdf_cross_reference(&stream_framing),
         "indirect xref-stream locator is an admitted framing form");
+    assert_legacy_xref_stream_refused(
+        &stream_framing, &pdf, &fake_spool, &spooled,
+    );
     let ordinary_object = stream_framing.windows(b"/Type /XRef".len())
         .position(|part| part == b"/Type /XRef")
         .expect("xref stream dictionary type");

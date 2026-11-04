@@ -89,8 +89,10 @@ with a complete `%PDF-1.0` through `%PDF-1.7` or `%PDF-2.0` version line,
 terminated by LF or CR, and end with `%%EOF` plus optional whitespace.
 It must also have a terminal decimal `startxref` locator pointing into the
 source to an `xref` table or a plausible PDF 1.5+ indirect `/Type /XRef`
-stream header. The stream type name must end at a PDF name delimiter; longer
-names such as `/XRefShadow` are not treated as the `/XRef` type.
+stream header. The stream form is admitted only for PDF 1.5–1.7 or 2.0;
+older PDF 1.0–1.4 headers require the traditional `xref` table form.
+The stream type name must end at a PDF name delimiter; longer names such
+as `/XRefShadow` are not treated as the `/XRef` type.
 
 Missing, malformed, out-of-bounds or repointed locators,
 non-xref indirect objects, unsupported version numbers and truncated headers

@@ -212,6 +212,14 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     {
         return true;
     }
+    // Cross-reference streams entered the PDF standard in version 1.5.
+    // Old-format headers cannot authorize a stream even if it appears to
+    // have a plausible indirect-object dictionary and terminal locator.
+    if !matches!(bytes.get(5..8),
+        Some([b'1', b'.', b'5'..=b'7'] | [b'2', b'.', b'0']))
+    {
+        return false;
+    }
     // PDF 1.5+ can point at an xref-stream indirect object instead.
     // Check its nearby dictionary type before the stream body, without
     // assuming that every indirect object is a cross-reference object.

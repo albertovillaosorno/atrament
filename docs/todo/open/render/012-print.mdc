@@ -97,6 +97,14 @@ negative regression proves that the malformed type refuses both selected
 file admission and fake-spool launch, preserving the source bytes. The
 PDF grammar itself and earlier object contents are still not validated.
 
+PDF version is now also checked for cross-reference *streams*: a stream
+framing with PDF 1.0 or 1.4 in its header refuses, while the same minimal
+framing under PDF 1.5 remains eligible. The negative regression first
+failed against the old code, then passed with the additional restriction;
+both refused cases are checked against fake CUPS invocation and original
+file bytes. Legacy table-based PDF framing remains eligible across the
+existing supported version range.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.
