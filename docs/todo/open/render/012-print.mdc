@@ -305,6 +305,13 @@ reviewed digest, unchanged source and byte-identical spool input for each
 variant. This confirms compatibility beyond synthetic framing fixtures;
 no physical printing or full PDF semantic validation is claimed.
 
+The genuine cross-reference-stream compatibility fixture now also
+selects an independently read PDF 2.0 one-page document: dry-run review
+and exact fake-CUPS bytes remain admissible. Replacing only the header
+with PDF 1.4 is intentionally refused before fake spooling, even when a
+permissive viewer can repair that out-of-version stream. This keeps the
+local print policy aligned with PDF 1.5's stream introduction.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

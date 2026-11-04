@@ -83,8 +83,9 @@ fn real_pdf() -> Vec<u8> {
 // stream containing free object zero and exact offsets for objects 1..4.
 // Unlike the framing-only probes below, pdfinfo independently reads this
 // construction as a one-page Letter PDF with no repair warnings.
-fn one_page_xref_stream_pdf(index: &str) -> Vec<u8> {
-    let mut bytes = b"%PDF-1.5\n%\xd0\xd4\xc5\xd8\n".to_vec();
+fn one_page_xref_stream_pdf(version: &str, index: &str) -> Vec<u8> {
+    let mut bytes = format!("%PDF-{version}\n").into_bytes();
+    bytes.extend_from_slice(b"%\xd0\xd4\xc5\xd8\n");
     let mut offsets = [0usize; 5];
     for (object, body) in [
         (1, "<< /Type /Catalog /Pages 2 0 R >>"),
@@ -924,12 +925,17 @@ fn genuine_xref_stream_pdf_spools_exact_reviewed_bytes() {
 
     // /Index is optional (implicit [0 /Size]), or may provide an explicit
     // nonoverlapping partition covering all five real indirect objects.
-    for index in [" /Index [0 5]", "", " /Index [0 2 2 3]"] {
-        let bytes = one_page_xref_stream_pdf(index);
+    for (version, index) in [
+        ("1.5", " /Index [0 5]"),
+        ("1.5", ""),
+        ("1.5", " /Index [0 2 2 3]"),
+        ("2.0", " /Index [0 5]"),
+    ] {
+        let bytes = one_page_xref_stream_pdf(version, index);
         fs::write(&pdf, &bytes).expect("write actual single-page PDF");
         assert_eq!(selected_pdf(&pdf).expect("admit genuine PDF"), bytes);
         let digest = sha256_profile_bytes(&bytes).bytes();
-        if index == " /Index [0 5]" {
+        if version == "1.5" && index == " /Index [0 5]" {
             assert_eq!(bytes.len(), 353, "independently parsed PDF size");
             assert_eq!(sha256_hex(digest).expect("format digest"),
                 concat!(
@@ -954,6 +960,21 @@ fn genuine_xref_stream_pdf_spools_exact_reviewed_bytes() {
         assert_eq!(fs::read(&pdf).expect("original document"), bytes);
         fs::remove_file(&spooled).expect("reset fake spool capture");
     }
+    // Cross-reference streams arrived in PDF 1.5. A document with this
+    // exact binary structure and a 1.4 header may be repairable in a
+    // viewer, but the local print preflight intentionally refuses it.
+    let legacy = one_page_xref_stream_pdf("1.4", " /Index [0 5]");
+    assert!(!supported_pdf_cross_reference(&legacy));
+    fs::write(&pdf, &legacy).expect("write legacy-version stream");
+    let invalid = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert!(selected_pdf(&pdf).is_err(), "legacy xref-stream refused");
+    assert!(submit_selected(&invalid, &script).is_err(),
+        "legacy stream cannot contact fake CUPS");
+    assert!(!spooled.exists(), "no fake spool contact");
+    assert_eq!(fs::read(&pdf).expect("original refused bytes"), legacy);
     fs::remove_dir_all(&directory).expect("remove fixture directory");
 }
 

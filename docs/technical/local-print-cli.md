@@ -295,6 +295,11 @@ reads the generated 353-byte document as one Letter page without repair.
 A fake-CUPS test confirms exact SHA-256 review and spool byte identity
 for explicit, implicit and partitioned `/Index` forms; no printer runs.
 
+The same real stream test also exercises PDF 2.0 and requires its
+reviewed bytes to reach fake CUPS unchanged. Identical binary structure
+under a legacy PDF 1.4 header refuses admission before any submission,
+regardless of whether an external viewer can repair the invalid version.
+
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.
