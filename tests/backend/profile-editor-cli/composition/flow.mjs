@@ -567,7 +567,7 @@ test('four-space literal Markdown rows preserve source line placement',
                     assert.equal(literal.result.status, 0,
                         literal.result.stderr);
                     assert.deepEqual(readFileSync(literal.output), reference,
-                        `literal source indentation stays on its row in ${format}`);
+                        `literal Markdown row placement in ${format}`);
                     const broken = render(dir, explicit, format, region,
                         '--flow-markdown', 2);
                     assert.equal(broken.result.status, 0,
