@@ -584,8 +584,9 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "⊄", "⊈", "⊅", "⊉", "∑", "∫",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
     "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
-    "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨"];
-// Extra manual marks do not change the 60-glyph math fill.
+    "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",
+    "¬", "⇒", "⇔"];
+// Extra manual marks do not change the 63-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"];
@@ -667,6 +668,32 @@ function mathParts(cx, cy, radius, glyph) {
             { from: point(-0.82, -0.75), to: point(-0.82, 0.75) },
             { from: point(-0.55, -0.75), to: point(-0.55, 0.75) },
             { from: point(-0.82, 0), to: point(0.75, 0) },
+        ];
+    // Explicit propositional negation is a connected overbar with a
+    // descending right terminal, never a disguised Latin dash.
+    if (glyph === "¬")
+        return [
+            { from: point(-0.75, -0.35), to: point(0.7, -0.35) },
+            { from: point(0.7, -0.35), to: point(0.7, 0.55) },
+        ];
+    // Implication and equivalence use TWO lifted shafts and independent
+    // arrowheads. Their Unicode identities cannot borrow the single-
+    // shaft → or ↔ geometry from the same authored glyph library.
+    if (glyph === "⇒")
+        return [
+            { from: point(-0.8, -0.16), to: point(0.45, -0.16) },
+            { from: point(-0.8, 0.16), to: point(0.45, 0.16) },
+            { from: point(0.2, -0.55), to: point(0.8, 0) },
+            { from: point(0.8, 0), to: point(0.2, 0.55) },
+        ];
+    if (glyph === "⇔")
+        return [
+            { from: point(-0.4, -0.16), to: point(0.4, -0.16) },
+            { from: point(-0.4, 0.16), to: point(0.4, 0.16) },
+            { from: point(-0.2, -0.55), to: point(-0.8, 0) },
+            { from: point(-0.8, 0), to: point(-0.2, 0.55) },
+            { from: point(0.2, -0.55), to: point(0.8, 0) },
+            { from: point(0.8, 0), to: point(0.2, 0.55) },
         ];
     // Identity and negated identity have three independent horizontal
     // strokes. Negation adds its own separately lifted diagonal ink;

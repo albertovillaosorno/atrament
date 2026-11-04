@@ -1723,6 +1723,28 @@ the glyph editor never writes to the backend merely to author these marks.
 This is explicit hand-authored geometry, not formal logic interpretation,
 mathematical typesetting, native PDF path persistence or Unicode-wide fill.
 
+## Exact negation and double-shaft implications (partial) — 2026-11-04
+
+Three further explicit school-logic symbols have distinct directed starter
+strokes: negation `¬` has a connected horizontal and a descending right
+terminal, implication `⇒` has two lifted shafts and a joined arrowhead, and
+equivalence `⇔` has two shafts with separately joined heads at each end.
+They are neither textual substitutions nor single-shaft arrow fallbacks.
+
+The optional math fill now offers 63 exact glyphs. Together with the ten
+other independent fills, it contains 176 distinct editable graphemes and
+4002 sampled pen segments, still below the native 4096-stroke ceiling.
+Browser tests prove all 12 new segments' exact coordinates, pen lifts,
+clipping refusals, custom-ink-preserving fill and read-only ideal SVG guides.
+The Rust CLI reopens the original authored TSV unchanged, audits all three
+exact Unicode keys, renders two physical PDF/PNG rows and refuses missing
+single-shaft arrows without replacing an existing PDF.
+
+A live Firefox session verifies all 63 exact HTML forms and the real TSV
+browser download, then reopens and renders them through the native Rust
+PDF/PNG compositor. This extends opt-in geometry coverage only; it does
+not add automatic logic typesetting or a persisted handwriting notebook.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
