@@ -2355,6 +2355,51 @@ fn glyph_audit_accepts_whitespace_only_when_a_glyph_can_be_authored() {
 }
 
 #[test]
+fn structural_unicode_separators_cannot_be_authored_as_glyph_ink() {
+    // Read-only reports and --flow-markdown treat these as row structure.
+    // They must not become hidden physical pen marks via --place-text.
+    for separator in ["\u{2028}", "\u{2029}"] {
+        let stroke = [
+            "--glyph-stroke", separator, "500", "500", "1800",
+            "3000", "250", "#123456",
+        ];
+        assert!(execute_glyph_library(&args(&stroke)).is_err(),
+            "source row separators are not authorable visible glyphs");
+
+        let target = test_path().with_extension("pdf");
+        fs::write(&target, b"existing selected PDF")
+            .expect("test-owned output sentinel");
+        let mut command = args(&[
+            "--export-paper", "pdf", "--printed-sheet", "false",
+            "--glyph-stroke", "a", "500", "500", "1800", "3000",
+            "250", "#123456",
+        ]);
+        command.extend(args(&stroke));
+        command.extend(args(&[
+            "--place-text", "1", "30000", "40000",
+            &format!("a{separator}a"), "--output",
+            target.to_str().expect("target path"), "--replace",
+        ]));
+        assert!(execute_notebook(&command).is_err(),
+            "invisible row separators cannot create physical glyph ink");
+        let text = format!("a{separator}a");
+        let place_without_separator_shape = args(&[
+            "--export-paper", "pdf", "--printed-sheet", "false",
+            "--glyph-stroke", "a", "500", "500", "1800", "3000",
+            "250", "#123456", "--place-text", "1", "30000",
+            "40000", &text, "--output",
+            target.to_str().expect("target path"), "--replace",
+        ]);
+        let error = execute_notebook(&place_without_separator_shape)
+            .expect_err("row separators must refuse before glyph lookup");
+        assert!(error.contains("structural separators"), "{error}");
+        assert_eq!(fs::read(&target).expect("unchanged target"),
+            b"existing selected PDF");
+        fs::remove_file(&target).expect("remove own target");
+    }
+}
+
+#[test]
 fn glyph_audit_reports_unicode_whitespace_requiring_authored_ink() {
     let sample = "a\u{a0}a\u{2009}a\u{202f}a";
     let base = args(&[

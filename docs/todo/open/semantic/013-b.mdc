@@ -136,6 +136,21 @@ sources refuse, and both commands still count the ignored BOM toward the
 original 4,096-byte input cap. This does not add a font, synthesize ink, or
 claim complete multilingual notebook acceptance.
 
+## Structural Unicode separators cannot be pen glyphs (partial)
+
+The native exact-glyph CLI now refuses U+2028 and U+2029 as authored glyph
+stroke identities and as direct `--place-text` characters. These same
+separators are structural line or paragraph boundaries in imported flow
+and are intentionally omitted from read-only glyph inventory reports.
+Previously explicit strokes could render ink for characters the coverage
+audit ignored, yielding a false diagnostic-to-output correspondence.
+
+A red-before/green-after Rust regression verifies both separators refuse,
+with and without an explicitly authored separator shape, before replacing
+an existing PDF. Other caller-authored Unicode spaces, including NBSP and
+thin space, remain legitimate distinct glyphs. This is a local admission
+consistency fix, not a complete language layout or font implementation.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

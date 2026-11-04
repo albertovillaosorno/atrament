@@ -922,12 +922,14 @@ impl GlyphOverlay {
                 let count = boundaries.grapheme_count(text);
                 if text.is_empty() || text.len() > 384
                     || count > MAX_RUN_GRAPHEMES
-                    || text.chars().any(char::is_control)
+                    || text.chars().any(|ch| ch.is_control()
+                        || matches!(ch, '\u{2028}' | '\u{2029}'))
                     || !text.chars().any(|ch| ch != ' ')
                 {
                     return Err(concat!(
                         "placed text requires 1..96 graphemes, ",
-                        "at least one non-space, and no control characters",
+                        "at least one non-space, and no controls or ",
+                        "structural separators",
                     ).into());
                 }
                 self.runs.push(TextRun {
@@ -1705,7 +1707,8 @@ fn is_exact_visible_grapheme(
     grapheme: &str, boundaries: UnicodeGraphemeSegmentation,
 ) -> bool {
     !grapheme.is_empty() && grapheme.len() <= 64
-        && !grapheme.chars().any(char::is_control)
+        && !grapheme.chars().any(|ch| ch.is_control()
+            || matches!(ch, '\u{2028}' | '\u{2029}'))
         && grapheme != " "
         && boundaries.grapheme_count(grapheme) == 1
 }
