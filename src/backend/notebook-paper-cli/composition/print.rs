@@ -252,27 +252,35 @@ fn supported_xref_table(bytes: &[u8]) -> bool {
         return false;
     }
     let mut seen_entry = false;
+    let mut minimum_size = 0usize;
     loop {
         let Some(first) = xref_word(bytes, &mut at) else {
             return false;
         };
         if first == b"trailer" {
             return seen_entry && supported_xref_table_trailer(
-                bytes.get(at..).unwrap_or_default(),
+                bytes.get(at..).unwrap_or_default(), minimum_size,
             );
         }
-        let valid_first = !first.is_empty()
-            && first.iter().all(u8::is_ascii_digit);
+        let Some(first_index) = str::from_utf8(first).ok()
+            .filter(|digits| !digits.is_empty()
+                && digits.bytes().all(|byte| byte.is_ascii_digit()))
+            .and_then(|digits| digits.parse::<usize>().ok())
+        else { return false; };
         let Some(count) = xref_word(bytes, &mut at)
             .and_then(|value| str::from_utf8(value).ok())
             .and_then(|digits| digits.parse::<usize>().ok())
         else {
             return false;
         };
-        if !valid_first || count.checked_mul(18)
+        if count.checked_mul(18)
             .is_none_or(|minimum| minimum > bytes.len()) {
             return false;
         }
+        let Some(last_exclusive) = first_index.checked_add(count) else {
+            return false;
+        };
+        minimum_size = minimum_size.max(last_exclusive);
         for _ in 0..count {
             let Some(offset) = xref_word(bytes, &mut at) else {
                 return false;
@@ -296,10 +304,11 @@ fn supported_xref_table(bytes: &[u8]) -> bool {
 }
 
 // The required trailer /Size is one positive top-level direct decimal.
+// It must cover every cross-reference subsection's exclusive upper bound.
 // Balance nested dictionaries, arrays and literal/hex strings without
 // mistaking a nested /Size or >> text for the terminal dictionary close.
 // After that close, only whitespace or PDF comments may precede startxref.
-fn supported_xref_table_trailer(bytes: &[u8]) -> bool {
+fn supported_xref_table_trailer(bytes: &[u8], minimum_size: usize) -> bool {
     let mut at = pdf_trivia_end(bytes, 0);
     if !bytes.get(at..).is_some_and(|tail| tail.starts_with(b"<<")) {
         return false;
@@ -364,7 +373,9 @@ fn supported_xref_table_trailer(bytes: &[u8]) -> bool {
                     let value = bytes.get(start..at).unwrap_or_default();
                     if value.is_empty() || str::from_utf8(value).ok()
                         .and_then(|digits| digits.parse::<usize>().ok())
-                        .is_none_or(|number| number == 0)
+                        .is_none_or(|number| {
+                            number == 0 || number < minimum_size
+                        })
                         || !bytes.get(at).is_some_and(|byte| {
                             byte.is_ascii_whitespace()
                                 || matches!(byte, b'>' | b'/' | b'%')

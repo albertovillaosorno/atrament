@@ -97,15 +97,19 @@ fixed-width decimal offset/generation and `n`/`f` state records, followed by
 a `trailer` dictionary. An `xref` keyword alone or an empty or malformed
 table no longer qualifies for print admission. Its trailer also needs a
 lexically recognizable `/Size` entry with a positive direct ASCII decimal;
-missing, zero, signed, non-decimal or duplicate size tokens refuse. Numeric
-values immediately adjacent to the closing `>>` remain eligible.
+missing, zero, signed, non-decimal or duplicate size tokens refuse.
+
+Numeric values immediately adjacent to the closing `>>` remain eligible.
+The declared
+`/Size` must be at least each subsection's first object number plus its
+record count; otherwise a table claims objects outside its own extent.
 
 The trailer scanner now balances nested dictionaries and arrays, skipping
 literal/hex strings and comments when locating the one top-level `/Size`.
 Only whitespace and PDF comments may follow the complete outer `>>` before
 `startxref`; unclosed maps, nested-only size entries or trailing extra
 operators refuse before any printer launch. It does not validate all PDF
-objects or the numeric consistency of cross-reference entries.
+objects or the byte offsets of cross-reference entries.
 
 The stream type name must be an exact top-level `/Type /XRef` dictionary
 entry; longer names such as `/XRefShadow` and apparent type entries inside
@@ -161,6 +165,8 @@ dictionary closure, and `/Size` entries seen only in nested maps or comments.
 Valid compact, nested/commented and native two-page trailers remain eligible.
 A further four fake-CUPS cases reject unmatched single `>` and `]` tokens
 inside the stream header or table trailer; ordinary nested maps still pass.
+Two more refuse impossible `/Size` totals for complete xref subsections,
+while a high-numbered valid subsection remains admissible.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

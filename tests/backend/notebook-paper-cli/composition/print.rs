@@ -486,6 +486,13 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
     ].concat();
     assert!(supported_pdf_cross_reference(multi_section.as_bytes()),
         "multiple table subsections with numbered entries remain eligible");
+    let high_section = concat!(
+        "%PDF-1.4\nxref\n100 1\n0000000044 00000 n \n",
+        "trailer\n<< /Size 101 >>\nstartxref\n9\n%%EOF\n",
+    );
+    assert!(supported_pdf_cross_reference(high_section.as_bytes()),
+        "trailer Size covers highest subsection entry");
+
     assert!(supported_pdf_cross_reference(&real_pdf()),
         "native physical-page PDF xref table remains eligible");
     let with_comment_and_nested = concat!(
@@ -526,6 +533,11 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Meta << /Size 1 >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Meta << /Size 1 >> >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Memo (x) >>\n% /Size 1\n",
+        concat!(
+            "xref\n0 2\n0000000000 65535 f \n",
+            "0000000000 00000 n \ntrailer\n<< /Size 1 >>\n",
+        ),
+        "xref\n100 1\n0000000044 00000 n \ntrailer\n<< /Size 100 >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 > >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 ] >>\n",
     ] {

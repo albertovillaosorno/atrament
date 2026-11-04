@@ -158,6 +158,13 @@ that otherwise plausible xref-stream headers and table trailers with stray
 `>` could reach the fake spool. Paired unmatched `]` controls also refuse,
 while native PDF tables and properly nested stream dictionaries remain admitted.
 
+The table preflight now also bounds its advertised object indices:
+trailer `/Size` must cover the exclusive upper endpoint of every complete
+xref subsection. Previously a two-entry table with `/Size 1` passed, as
+did a subsection beginning at object 100 with `/Size 100`. Both failed the
+new red-before fake-spool tests and now refuse without modifying the PDF;
+a valid `/Size 101` high-numbered subsection and real native pages still pass.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.
