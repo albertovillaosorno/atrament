@@ -728,6 +728,12 @@ preserve italic metadata in the native glyph file, add a handwriting-wide
 italic profile, keep SVG circles analytically exact in PDF, or implement
 joined cursive. The full executable P1 task remains open.
 
+A real Firefox/BiDi localhost session also verifies session-gated italic
+controls, sampled two-storey `á` guide, exact downloaded UTF-8 TSV,
+independent NFD `á` strokes, rejected 21-degree edits without mutation,
+zero-degree replay and no additional backend requests. The regression is
+`Firefox italic a guide exports exact UTF-8 TSV without backend edits`.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

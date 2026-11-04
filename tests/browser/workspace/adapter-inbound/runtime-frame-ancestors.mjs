@@ -47,6 +47,10 @@ import net from "node:net";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import test from "node:test";
+const { geometricStarter, encodeGlyphLibrary } = await import(new URL(
+    "../../../../src/browser/workspace/adapter-inbound/generated/"
+        + "glyph-strokes.js", import.meta.url,
+).href);
 import { runInNewContext } from "node:vm";
 
 const FIREFOX_AVAILABLE = process.platform === "linux"
@@ -11372,6 +11376,176 @@ test(
             ].join("\n"));
             assert.deepEqual(requests, baseline,
                 "closing a glyph path and TSV download stay browser-local");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+
+test(
+    "Firefox italic a guide exports exact UTF-8 TSV without backend edits",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/italic-a-browser-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const find = (id) => document.getElementById(id);
+                    const change = (id, value) => {
+                        const input = find(id);
+                        input.value = value;
+                        input.dispatchEvent(new Event("input", {
+                            bubbles: true,
+                        }));
+                    };
+                    const nfd = "a\u0301";
+                    const initiallyDisabled =
+                        find("glyph-italic-angle").disabled;
+                    change("glyph-character", nfd);
+                    for (const [axis, value] of Object.entries({
+                        x1: 300, y1: 400, x2: 900, y2: 1200,
+                        width: 250,
+                    })) change("glyph-" + axis, String(value));
+                    find("glyph-add").click();
+                    change("glyph-character", "á");
+                    change("glyph-form", "á-two-italic");
+                    change("glyph-circle-radius", "700");
+                    const italicEnabled =
+                        !find("glyph-italic-angle").disabled;
+                    const guide = {
+                        circle: find("glyph-ideal-circle")
+                            .getAttribute("visibility"),
+                        arch: find("glyph-ideal-arch")
+                            .getAttribute("visibility"),
+                        accent: find("glyph-ideal-accent")
+                            .getAttribute("visibility"),
+                        shear: find("glyph-ideal-geometry")
+                            .getAttribute("transform"),
+                    };
+                    find("glyph-construct").click();
+                    const accepted = find("glyph-status").textContent;
+                    const blobs = [];
+                    const names = [];
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            names.push(this.download);
+                        };
+                        find("glyph-save").click();
+                        change("glyph-italic-angle", "21");
+                        const refusedGuide =
+                            find("glyph-ideal-circle")
+                                .getAttribute("visibility");
+                        find("glyph-construct").click();
+                        const refused = find("glyph-status").textContent;
+                        find("glyph-save").click();
+                        change("glyph-italic-angle", "0");
+                        const zeroGuide = find("glyph-ideal-geometry")
+                            .getAttribute("transform");
+                        find("glyph-construct").click();
+                        const zeroStatus =
+                            find("glyph-status").textContent;
+                        find("glyph-save").click();
+                        change("glyph-form", "o");
+                        const regular = {
+                            disabled: find("glyph-italic-angle").disabled,
+                            transform: find("glyph-ideal-geometry")
+                                .getAttribute("transform"),
+                            circle: find("glyph-ideal-circle")
+                                .getAttribute("visibility"),
+                        };
+                        return JSON.stringify({
+                            initiallyDisabled, italicEnabled, guide,
+                            accepted, refusedGuide, refused,
+                            zeroGuide, zeroStatus, regular,
+                            names, media: blobs.map((blob) => blob.type),
+                            files: await Promise.all(blobs.map((blob) =>
+                                blob.text())),
+                        });
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const result = JSON.parse(response.result.value);
+            assert.equal(result.initiallyDisabled, true);
+            assert.equal(result.italicEnabled, true);
+            assert.deepEqual([result.guide.circle, result.guide.arch,
+                result.guide.accent], ["visible", "visible", "visible"]);
+            assert.match(result.guide.shear,
+                /^matrix\(1 0 -0\.2125.+ 1 .+ 0\)$/);
+            assert.match(result.accepted,
+                /Constructed 82 sampled segments for á/);
+            assert.equal(result.refusedGuide, "hidden");
+            assert.match(result.refused, /Italic angle must be 0..20/);
+            assert.equal(result.zeroGuide, "matrix(1 0 0 1 0 0)");
+            assert.match(result.zeroStatus,
+                /Constructed 82 sampled segments for á/);
+            assert.deepEqual(result.regular, {
+                disabled: true, transform: "", circle: "visible",
+            });
+            assert.deepEqual(result.names,
+                Array(3).fill("my-glyph-strokes.tsv"));
+            assert.deepEqual(result.media,
+                Array(3).fill("text/tab-separated-values"));
+            const independent = [{
+                grapheme: "a\u0301", x1: 300, y1: 400,
+                x2: 900, y2: 1200, width: 250, color: "#243647",
+            }];
+            const geometry = [1550, 2450, 700, 250, "#243647"];
+            const italic = geometricStarter("á", ...geometry,
+                { dx: 0, lift: 0, italicDegrees: 12 },
+                "two-storey-italic");
+            const regular = geometricStarter("á", ...geometry,
+                undefined, "two-storey");
+            assert.equal(italic.length, 82);
+            const accepted = encodeGlyphLibrary([...independent, ...italic]);
+            const zero = encodeGlyphLibrary([...independent, ...regular]);
+            assert.equal(result.files[0], accepted);
+            assert.equal(result.files[1], accepted,
+                "invalid slant cannot overwrite accepted Unicode ink");
+            assert.equal(result.files[2], zero,
+                "zero-degree italic retains exact regular geometry");
+            assert.notEqual(accepted, zero);
+            assert.deepEqual(requests, baseline,
+                "italic geometry and TSV downloads remain browser-local");
         } finally {
             bidi?.close();
             await closeFixtureServer(server);
