@@ -520,6 +520,12 @@ with three or more identical marks (optional interior ASCII spaces and up to
 three leading spaces) draw the same thin horizontal rule up to 60 mm wide
 in one physical row, without authored punctuation. When `---` immediately
 follows an ordinary paragraph, it instead marks an H2 title.
+Bare `#`–`######` heading markers, a single `-`, `*` or `+` list marker,
+and one-to-nine-digit ordered labels such as `1.` without item text refuse
+as empty Markdown blocks even if their literal glyph ink was authored.
+Escape a leading marker to print it literally, or use four initial spaces
+for literal indented punctuation. A standalone `-` immediately after a
+paragraph is still a Setext H2 underline rather than an empty list item.
 
 A nonempty title followed immediately by one or more `=` or `-` marks
 on a line of their own becomes a Setext H1 or H2 heading. The delimiter

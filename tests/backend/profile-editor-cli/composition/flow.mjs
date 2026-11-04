@@ -1422,6 +1422,115 @@ test('empty task items refuse even with literal bracket glyphs available',
         }
     });
 
+test('bare Markdown headings and list labels refuse before file replacement',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-empty-markers-'));
+        try {
+            const punctuationInk = ['#', '-', '*', '+', '1', '2', '7',
+                '.', ')'].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '550', '850', '2000', '2750',
+                '250', '#2277AA',
+            ]);
+            for (const format of ['pdf', 'png']) {
+                const accepted = render(dir, 'a', format, punctuationInk);
+                assert.equal(accepted.result.status, 0,
+                    accepted.result.stderr);
+                const original = readFileSync(accepted.output);
+                for (const source of [
+                    '#', '##', '######', ' -', '   *', '+', '1.', '2)',
+                    '  7.', 'a\n\n+', 'a\n\n#',
+                ]) {
+                    const invalid = render(dir, source, format,
+                        punctuationInk);
+                    assert.notEqual(invalid.result.status, 0,
+                        JSON.stringify(source));
+                    assert.match(invalid.result.stderr,
+                        /empty Markdown block refused/,
+                        `bare marker ${JSON.stringify(source)}`);
+                    assert.deepEqual(readFileSync(invalid.output), original,
+                        'rejected structure must not replace native output');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('escaped bare Markdown marks remain literal authored PDF and PNG ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-bare-escape-'));
+        try {
+            const punctuationInk = ['#', '-', '*', '+', '1', '2',
+                '.', ')'].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '550', '850', '2000', '2750',
+                '250', '#2277AA',
+            ]);
+            const plain = ['#', '-', '*', '+', '1.', '2)'].join('\n');
+            const escaped = ['\\#', '\\-', '\\*', '\\+',
+                '1\\.', '2\\)'].join('  \n');
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, plain, format,
+                    punctuationInk, '--flow-text');
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                const markdown = render(dir, escaped, format,
+                    punctuationInk);
+                assert.equal(markdown.result.status, 0,
+                    markdown.result.stderr);
+                assert.deepEqual(readFileSync(markdown.output), expected,
+                    'literal escape keeps exact handwritten punctuation');
+                const literalIndent = render(dir, '    -', format,
+                    punctuationInk);
+                assert.equal(literalIndent.result.status, 0,
+                    literalIndent.result.stderr);
+                const plainIndent = render(dir, '    -', format,
+                    punctuationInk, '--flow-text');
+                assert.equal(plainIndent.result.status, 0,
+                    plainIndent.result.stderr);
+                assert.deepEqual(readFileSync(literalIndent.output),
+                    readFileSync(plainIndent.output),
+                    'four-space indentation stays literal authored text');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('single Setext dash and fenced bare punctuation retain their context',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-context-marker-'));
+        try {
+            const authoredHash = [
+                '--glyph-stroke', '#', '550', '850', '2000', '2750',
+                '250', '#2277AA',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const atx = render(dir, '## a', format);
+                assert.equal(atx.result.status, 0, atx.result.stderr);
+                const expectedHeading = readFileSync(atx.output);
+                const setext = render(dir, 'a\n-', format);
+                assert.equal(setext.result.status, 0,
+                    setext.result.stderr);
+                assert.deepEqual(readFileSync(setext.output), expectedHeading,
+                    'one hyphen after text stays a Setext heading underline');
+                const plain = render(dir, '#', format, authoredHash,
+                    '--flow-text');
+                assert.equal(plain.result.status, 0,
+                    plain.result.stderr);
+                const expectedInk = readFileSync(plain.output);
+                const fenced = render(dir, '```\n#\n```', format,
+                    authoredHash);
+                assert.equal(fenced.result.status, 0,
+                    fenced.result.stderr);
+                assert.deepEqual(readFileSync(fenced.output), expectedInk,
+                    'fenced marker preserves exact authored ink');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('wrapped task checkbox stays on its first physical page',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-'));

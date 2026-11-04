@@ -670,6 +670,23 @@ beyond four spaces and confirms empty padded tasks and bullets refuse
 without replacing an existing export. Ordered item spacing remains authored
 by design, and nested lists are not implemented.
 
+## Refuse empty standalone Markdown markers (partial) — 2026-11-04
+
+A bare ATX heading marker (`#` through `######`), unordered-list marker
+(`-`, `*`, `+`) or one-to-nine-digit ordered label (`1.`, `2)`) now parses
+as an empty structural block. The native CLI refuses with an explicit empty
+block diagnostic before it can replace selected PDF or PNG output, even
+when the literal punctuation glyphs have been authored. An escaped marker
+remains literal ink, including an escaped bare numeral and delimiter.
+Four-space-indented lines remain literal rather than becoming list syntax.
+
+Three independent Rust CLI integration regressions compare real PDF and
+transparent PNG bytes for accepted escaped marks, fenced literal hashes,
+standalone single-dash Setext headings and literal four-space indentation.
+They also prove that eleven empty heading/list variants cannot replace an
+accepted file. This is a bounded Markdown disambiguation, not a complete
+CommonMark parser, semantic list schema or automatic numbering.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

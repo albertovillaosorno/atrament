@@ -1077,6 +1077,15 @@ fn markdown_setext_level(line: &str) -> Option<HeadingLevel> {
     }
 }
 
+// A standalone numeral and delimiter is still an ordered-list marker,
+// but it cannot render without an item. The regular path below handles
+// labels with following authored content and spacing.
+fn empty_ordered_marker(block: &str) -> bool {
+    block.strip_suffix('.').or_else(|| block.strip_suffix(')'))
+        .is_some_and(|digits| (1..=9).contains(&digits.len())
+            && digits.bytes().all(|digit| digit.is_ascii_digit()))
+}
+
 // Restrict Markdown ordered markers to at most nine ASCII digits followed
 // by ". " or ") ". The number and delimiter remain authored text ink;
 // only unordered bullets receive a synthetic short line ornament.
@@ -1117,21 +1126,27 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
     // spaces remain literal text (not an inferred fenced/code block).
     if indent <= 3 {
         for (prefix, level) in [
-            ("###### ", HeadingLevel::Senary),
-            ("##### ", HeadingLevel::Quinary),
-            ("#### ", HeadingLevel::Quaternary),
-            ("### ", HeadingLevel::Tertiary),
-            ("## ", HeadingLevel::Secondary),
-            ("# ", HeadingLevel::Primary),
+            ("######", HeadingLevel::Senary),
+            ("#####", HeadingLevel::Quinary),
+            ("####", HeadingLevel::Quaternary),
+            ("###", HeadingLevel::Tertiary),
+            ("##", HeadingLevel::Secondary),
+            ("#", HeadingLevel::Primary),
         ] {
-            if let Some(body) = block.strip_prefix(prefix) {
-                // Any additional spaces after the required ATX separator
-                // are syntax, not physical left padding. Tabs were expanded
-                // to column stops before this bounded parser runs.
-                return (LineStyle::Heading(level),
-                    Cow::Borrowed(heading_body(body).trim_start_matches(' ')));
+            if let Some(body) = block.strip_prefix(prefix)
+                && (body.is_empty() || body.starts_with(' ')) {
+                // A bare ATX marker is an empty heading, not a literal
+                // printed hash. It will refuse with the other empty blocks.
+                // Tabs are already expanded to physical four-column stops.
+                return (LineStyle::Heading(level), Cow::Borrowed(
+                    heading_body(body.trim_start_matches(' '))));
             }
         }
+    }
+    // Empty list markers have no body ink. Do not silently print an
+    // otherwise caller-authored punctuation glyph in their place.
+    if matches!(block, "-" | "*" | "+") {
+        return (LineStyle::Bullet, Cow::Borrowed(""));
     }
     if let Some(bullet) = block.strip_prefix("- ")
         .or_else(|| block.strip_prefix("* "))
@@ -1160,6 +1175,9 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
         return (LineStyle::Quote, Cow::Borrowed(quote.strip_prefix(' ')
             .unwrap_or(quote).trim_end_matches(' ')));
     }
+    if empty_ordered_marker(block) {
+        return (LineStyle::Ordered, Cow::Borrowed(""));
+    }
     if let Some((marker, item)) = block.split_once(' ')
         && let Some(digits) = marker.strip_suffix('.')
             .or_else(|| marker.strip_suffix(')'))
@@ -1174,14 +1192,19 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
     // escapes only that delimiter: 12\. text is ordinary authored text,
     // not a numbered list. Preserve every digit, punctuation glyph and
     // following source space; no general inline Markdown unescape is implied.
+    let (escaped_label, escaped_item) =
+        block.split_once(' ').unwrap_or((block, ""));
     if indent <= 3
-        && let Some((label, item)) = block.split_once(' ')
-        && let Some((digits, escaped_delimiter)) = label.split_once('\\')
+        && let Some((digits, escaped_delimiter)) =
+            escaped_label.split_once('\\')
         && (1..=9).contains(&digits.len())
         && digits.bytes().all(|digit| digit.is_ascii_digit())
         && matches!(escaped_delimiter, "." | ")")
     {
-        let literal = format!("{digits}{escaped_delimiter} {item}");
+        let separator = if escaped_item.is_empty() { "" } else { " " };
+        let literal = format!(
+            "{digits}{escaped_delimiter}{separator}{escaped_item}"
+        );
         return (LineStyle::Body, Cow::Owned(
             literal.trim_end_matches(' ').to_owned()));
     }
