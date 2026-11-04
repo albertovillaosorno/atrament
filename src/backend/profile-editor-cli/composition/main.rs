@@ -354,6 +354,9 @@ fn parse_inventory_text(
     }
     let text = arguments.next().ok_or("--inventory-text requires text")?;
     if text.is_empty() || text.len() > MAX_INVENTORY_TEXT_BYTES
+        // The inventory skips implicit ASCII space and structural controls;
+        // do not return misleading zero-coverage reports for only those.
+        || !text.chars().any(|ch| ch != ' ' && !ch.is_control())
         || text.chars().any(|ch| ch.is_control() && !ch.is_whitespace())
     {
         return Err(

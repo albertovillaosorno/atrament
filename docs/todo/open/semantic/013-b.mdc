@@ -69,7 +69,10 @@ suffixes, avoiding repeated prefix scans on a bounded 4,095-byte example.
 
 The Rust CLI regression exercises an override, repeated graphemes,
 source tabs/newlines, a single Unicode-space input, and a long bounded
-sequence. This remains a read-only diagnostics report, not authored ink,
+sequence. A further refusal case rejects text containing only implicit
+ASCII spaces or source control characters, which previously produced a
+misleading zero-grapheme report; one exact authored Unicode space remains
+valid. This remains a read-only diagnostics report, not authored ink,
 font generation, language-specific line breaking or a render guarantee.
 
 ## Single Unicode-space glyph audit admission (partial)

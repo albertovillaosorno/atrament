@@ -1068,6 +1068,11 @@ fn inventory_cli_refuses_unsafe_or_conflicting_requests_without_file_effects() {
     for invalid in [
         args(&["--inventory-text"]),
         args(&["--inventory-text", ""]),
+        args(&["--inventory-text", " "]),
+        args(&["--inventory-text", "\t"]),
+        args(&["--inventory-text", " \t\n"]),
+        args(&["--inventory-text", "\u{85}"]),
+        args(&["--inventory-text", "\u{b}"]),
         args(&["--inventory-text", "\u{1b}[31m"]),
         args(&["--inventory-text", "a", "--inventory-text", "b"]),
         args(&["--inventory-text", "\u{f1}", "--inspect"]),
