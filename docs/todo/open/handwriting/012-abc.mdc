@@ -1293,6 +1293,18 @@ refusal test verify that rejected input preserves the previous valid
 authored TSV. The Rust CLI still owns final admission. This does not imply
 a complete baseline font or automated Unicode fallback.
 
+## Strict browser glyph TSV header parity — 2026-11-04
+
+The localhost glyph-file picker now preserves an initial UTF-8 BOM during
+strict decoding so the existing versioned TSV header check refuses it,
+matching the independent Rust loader. Without this guard the browser
+silently stripped the BOM, accepted a file Rust would reject, and changed
+its source bytes on download. A browser regression verifies refusal leaves
+an unsaved draft untouched and a canonical LF UTF-8 file still imports.
+
+This only tightens local file admission; it does not implement missing glyph
+outlines, automatic handwritten text, or full language coverage.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

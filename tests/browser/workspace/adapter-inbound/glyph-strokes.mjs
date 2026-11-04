@@ -763,6 +763,43 @@ test("import refuses bad UTF-8 and stale file operations", async () => {
     }
 });
 
+test("glyph import refuses leading UTF-8 BOM without replacing ink",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("add").dispatch("click");
+        get("save").dispatch("click");
+        const accepted = await downloads[0].text();
+        const canonical = new TextEncoder().encode(encodeGlyphLibrary([
+            stroke("∞"),
+        ]));
+        const prefixed = Uint8Array.of(0xEF, 0xBB, 0xBF, ...canonical);
+        get("load").files = [{
+            size: prefixed.byteLength,
+            arrayBuffer: async () => prefixed.buffer,
+        }];
+        await get("load").dispatch("change");
+        assert.match(get("status").textContent, /header|BOM/i,
+            "Rust rejects a BOM before the exact v1 glyph TSV header");
+        get("save").dispatch("click");
+        assert.equal(await downloads[1].text(), accepted,
+            "failed import must keep the existing unsaved ink intact");
+        get("load").files = [{
+            size: canonical.byteLength,
+            arrayBuffer: async () => canonical.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("save").dispatch("click");
+        assert.equal(await downloads[2].text(),
+            new TextDecoder().decode(canonical),
+            "unprefixed UTF-8 still imports with exact bytes");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("revise any imported stroke without altering neighbors", async () => {
     const ui = mountEditor();
     try {

@@ -4322,7 +4322,12 @@ export function createGlyphStrokeEditor(): {
             }
             const bytes = await file.arrayBuffer();
             if (!active || generation !== expected) return;
-            const decoder = new TextDecoder("utf-8", { fatal: true });
+            // Keep a leading BOM visible to the strict native TSV header
+            // check. TextDecoder normally drops it and would silently admit
+            // a file that Rust rejects as a different source format.
+            const decoder = new TextDecoder("utf-8", {
+                fatal: true, ignoreBOM: true,
+            });
             const text = decoder.decode(bytes);
             const checked = parseGlyphLibrary(text);
             strokes = checked;
