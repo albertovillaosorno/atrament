@@ -629,6 +629,102 @@ test('closing ATX markers and up-to-three-space headings emit identical ink',
         }
     });
 
+
+test('Setext heading underlines match ATX heading PDF and PNG exactly',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/setext-heading-'));
+        try {
+            const baseline = '# ó\n## a\nó';
+            const setext = 'ó\n===\na\n---\nó';
+            const indented = 'ó\n  ==   \na\n ---   \nó';
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, baseline, format);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                for (const source of [setext, indented]) {
+                    const result = render(dir, source, format);
+                    assert.equal(result.result.status, 0,
+                        result.result.stderr);
+                    assert.deepEqual(readFileSync(result.output), expected,
+                        `${format} Setext syntax is not authored pen ink`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('multiline Setext title wraps as one heading; invalid marks refuse',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/setext-atomic-'));
+        try {
+            const canonical = '# ó a\na';
+            const setext = 'ó\na\n=\na';
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, canonical, format);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const accepted = readFileSync(reference.output);
+                const promoted = render(dir, setext, format);
+                assert.equal(promoted.result.status, 0,
+                    promoted.result.stderr);
+                assert.deepEqual(readFileSync(promoted.output), accepted,
+                    'soft-line title becomes one highlighted heading');
+                for (const source of [
+                    '===', 'ó\n== =', 'ó\n    ===',
+                    'ó\n~~~\n===\n~~~', 'ó\n\\===',
+                ]) {
+                    const refused = render(dir, source, format);
+                    assert.notEqual(refused.result.status, 0, source);
+                    assert.match(refused.result.stderr,
+                        /missing authored glyph|no authored ink|visible/i,
+                        `unsupported Setext ${JSON.stringify(source)}`);
+                    assert.deepEqual(readFileSync(refused.output), accepted,
+                        'refusal never replaces the accepted sheet');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+
+test('Setext heading keeps its first body row inside a fixed page region',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/setext-page-keep-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '50000', '30000'];
+            const canonical = 'a  \n# ó\na';
+            const setext = 'a  \nó\n===\na';
+            for (const format of ['pdf', 'png']) {
+                const page = format === 'pdf' ? 1 : 2;
+                const standard = render(dir, canonical, format, region,
+                    '--flow-markdown', page);
+                assert.equal(standard.result.status, 0,
+                    standard.result.stderr);
+                const expected = readFileSync(standard.output);
+                const underlined = render(dir, setext, format, region,
+                    '--flow-markdown', page);
+                assert.equal(underlined.result.status, 0,
+                    underlined.result.stderr);
+                assert.deepEqual(readFileSync(underlined.output), expected,
+                    'H1 and first body row paginate together');
+                if (format === 'pdf') {
+                    const pdf = expected.toString('latin1');
+                    assert.equal((pdf.match(/\/Type \/Page\b/g) || [])
+                        .length, 2, 'heading and body must advance to page 2');
+                } else {
+                    assert.deepEqual(expected.subarray(0, 8),
+                        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('ATX H4 through H6 retain tiered marker strokes in PDF and PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-h4-h6-'));
@@ -1067,8 +1163,8 @@ test('indented thematic rules preserve PDF and PNG ink',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-rule-'));
         try {
-            const canonical = 'a\n---\na\n***\na\n___\na';
-            const indented = 'a\n ---\na\n  ***\na\n   ___\na';
+            const canonical = 'a\n\n---\na\n***\na\n___\na';
+            const indented = 'a\n\n ---\na\n  ***\na\n   ___\na';
             for (const format of ['pdf', 'png']) {
                 const reference = render(dir, canonical, format);
                 assert.equal(reference.result.status, 0,
@@ -1094,8 +1190,8 @@ test('spaced thematic rules render identical native PDF and PNG ink',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-spaced-rule-'));
         try {
-            const canonical = 'a\n---\na\n***\na\n___\na';
-            const spaced = 'a\n- - -  \na\n *  * *\na\n  _ _   _\na';
+            const canonical = 'a\n\n---\na\n***\na\n___\na';
+            const spaced = 'a\n\n- - -  \na\n *  * *\na\n  _ _   _\na';
             for (const format of ['pdf', 'png']) {
                 const reference = render(dir, canonical, format);
                 assert.equal(reference.result.status, 0,

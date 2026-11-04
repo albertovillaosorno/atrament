@@ -4879,7 +4879,7 @@ fn markdown_backslash_control_does_not_inflate_statistical_pitch() {
 fn markdown_thematic_separators_have_identical_native_page_ink() {
     let mut reference = Vec::new();
     for marker in ["---", "***", "___", "-----"] {
-        let markdown = format!("a\n{marker}\na");
+        let markdown = format!("a\n\n{marker}\na");
         let source = FlowSource::new(FlowFormat::Markdown, &markdown)
             .expect("standalone Markdown separator syntax");
         let (runs, marks, pages) = layout_flow(
@@ -4890,11 +4890,11 @@ fn markdown_thematic_separators_have_identical_native_page_ink() {
         assert_eq!(runs.iter().map(|run| run.text.as_str())
             .collect::<Vec<_>>(), ["a", "a"]);
         assert_eq!(runs[0].origin_um, (22_500, 24_500));
-        assert_eq!(runs[1].origin_um, (22_500, 42_500));
+        assert_eq!(runs[1].origin_um, (22_500, 46_500));
         assert_eq!(marks.len(), 1, "one ink line, no delimiter glyphs");
         assert_eq!(marks[0].page, 1);
-        assert_eq!(marks[0].start_um, (22_500, 38_000));
-        assert_eq!(marks[0].end_um, (82_500, 38_000));
+        assert_eq!(marks[0].start_um, (22_500, 42_000));
+        assert_eq!(marks[0].end_um, (82_500, 42_000));
         assert_eq!(marks[0].width_um, 400);
         assert_eq!(marks[0].rgb, [30, 48, 74]);
 
@@ -5001,7 +5001,7 @@ fn markdown_thematic_rule_refusals_preserve_selected_pdf() {
         ("---", "one visible text block"),
         (&format!("{}---", "a  \n".repeat(128)),
             "128 measured lines"),
-        ("a\n--", "U+002D"),
+        ("a\n- -", "U+002D"),
         ("a\n**", "U+002A"),
         ("a\n__", "U+005F"),
         (&format!("{}---\na", "a  \n".repeat(28)),
@@ -5312,7 +5312,7 @@ fn markdown_invalid_structural_block_preserves_existing_output() {
     let target = test_path();
     let filename = target.to_str().expect("test-owned output path");
     fs::write(&target, b"existing PDF").expect("sentinel");
-    for source in ["a\n- ", "a\n* ", "a\n+ ", "a\n# ", "a\n## ", "a\n### "] {
+    for source in ["a\n- [ ]", "a\n* ", "a\n+ ", "a\n# ", "a\n## ", "a\n### "] {
         let error = execute_notebook(&args(&[
             "--export-paper", "pdf", "--glyph-stroke", "a", "0", "0",
             "3500", "4500", "250", "#123456", "--flow-markdown",

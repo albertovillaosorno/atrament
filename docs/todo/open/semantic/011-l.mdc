@@ -616,6 +616,31 @@ mixed Unicode glyphs. The rendered pages match byte-for-byte and remain
 bounded by existing 96-grapheme placed-text admission. This is a source
 traversal change, not an asserted speed-up measurement or glyph synthesis.
 
+## Explicit Setext heading underlines (partial) — 2026-11-04
+
+The bounded native Markdown compiler now recognizes one or more `=` or `-`
+marks, indented by zero to three ASCII spaces, as H1/H2 Setext heading syntax
+when immediately following a nonempty ordinary paragraph. The preceding
+one or more soft-joined title lines receive the existing heading lettering
+and marker/underline controls; neither underline delimiter requires
+caller-authored ink. A final heading keeps the earlier heading-page rule,
+including its first following visible body row when the page permits.
+
+With no preceding ordinary paragraph, `---` remains a thematic rule while
+standalone `===` remains literal and needs explicit `=` glyphs. A blank line
+before `---` requests a separator, and a four-space or mixed-marker row
+remains literal handwriting requiring its own ink. Quote and fenced-code
+rows are never promoted, and this subset does not implement all CommonMark
+Setext/inline conventions.
+
+Native regression tests compare byte-identical real PDF and transparent PNG
+against canonical ATX H1/H2 headings, including up to three-space delimiter
+indentation, trailing spaces, a multi-line title and fixed-region page-two
+orphan protection. Rejected unsupported
+markers, unapproved glyphs and fenced literal content refuse without
+replacing an accepted export. The original thematic-rule tests now use an
+explicit blank line where the horizontal separator follows text.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

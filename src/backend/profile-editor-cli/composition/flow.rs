@@ -1058,6 +1058,25 @@ fn markdown_fence_transition(
     }
 }
 
+// A Setext underline is structural only directly after a nonempty
+// unquoted Markdown paragraph. With no paragraph, "==" stays authored
+// text and "---" retains the existing thematic-separator meaning.
+fn markdown_setext_level(line: &str) -> Option<HeadingLevel> {
+    let indent = line.bytes().take_while(|byte| *byte == b' ').count();
+    if indent > 3 {
+        return None;
+    }
+    let marker = line.get(indent..)?.trim_end_matches(' ');
+    if !marker.is_empty() && marker.bytes().all(|byte| byte == b'=') {
+        Some(HeadingLevel::Primary)
+    } else if !marker.is_empty()
+        && marker.bytes().all(|byte| byte == b'-') {
+        Some(HeadingLevel::Secondary)
+    } else {
+        None
+    }
+}
+
 // Restrict Markdown ordered markers to at most nine ASCII digits followed
 // by ". " or ") ". The number and delimiter remain authored text ink;
 // only unordered bullets receive a synthetic short line ornament.
@@ -1208,6 +1227,26 @@ fn following_heading_gap<'text>(
     None
 }
 
+// A completed paragraph can be promoted into a Setext heading only
+// before a closing delimiter, never inside a fence or quote block.
+fn handle_markdown_setext<'text>(
+    layout: &mut Layout<'_>, paragraph: &mut String,
+    style: LineStyle, input_line: &str,
+    following: impl Iterator<Item = &'text str>,
+) -> Result<bool, String> {
+    if paragraph.is_empty() || !matches!(style, LineStyle::Body) {
+        return Ok(false);
+    }
+    let Some(level) = markdown_setext_level(input_line) else {
+        return Ok(false);
+    };
+    if let Some(gap) = following_heading_gap(following) {
+        layout.keep_heading_with_next(gap)?;
+    }
+    layout.layout_line(&take(paragraph), LineStyle::Heading(level))?;
+    Ok(true)
+}
+
 // End a source paragraph at its structural boundary or explicit hard break.
 // Keep the authored text buffer separate from physical rows and decorations.
 fn flush_paragraph(
@@ -1258,17 +1297,26 @@ fn measured_pitch(
 ) -> Result<u32, String> {
     let mut pitch = DEFAULT_PITCH_UM;
     let mut fence = None;
+    let mut pending_setext = false;
     for raw in source.text.lines() {
         let visible = if source.format == FlowFormat::Markdown {
             if markdown_fence_transition(&mut fence, raw) {
+                pending_setext = false;
                 continue;
             }
             if fence.is_some() {
+                pending_setext = false;
                 Cow::Borrowed(raw)
+            } else if pending_setext && markdown_setext_level(raw).is_some() {
+                pending_setext = false;
+                continue;
             } else {
                 let (style, body) = markdown_line(raw);
-                Cow::Owned(markdown_paragraph_break(
-                    raw, style, body.as_ref()).0.to_owned())
+                let (visible, hard_break) = markdown_paragraph_break(
+                    raw, style, body.as_ref());
+                pending_setext = matches!(style, LineStyle::Body)
+                    && !visible.trim().is_empty() && !hard_break;
+                Cow::Owned(visible.to_owned())
             }
         } else {
             Cow::Borrowed(raw)
@@ -1298,6 +1346,36 @@ fn measured_pitch(
     Ok(pitch)
 }
 
+// Build one physical page layout from the caller's profile and optional
+// rectangle. The source parser never changes the saved paper geometry.
+fn initialize_layout<'model>(
+    profile: &NotebookProfile,
+    statistics: Option<&'model HandwritingStatisticsProfile>,
+    heading: HeadingDecoration, region: Option<FlowRegion>, pitch: u32,
+) -> Result<Layout<'model>, String> {
+    let printable = profile.printable_rect_um()?;
+    let (left, top, right, bottom) = if let Some(fixed) = region {
+        fixed.bounds_within(printable)?
+    } else {
+        printable
+    };
+    Ok(Layout {
+        heading,
+        statistics,
+        lines: Vec::new(),
+        ornaments: Vec::new(),
+        page: 1,
+        y: top.checked_add(INSET_UM)
+            .ok_or("flow top margin overflow")?,
+        top,
+        bottom,
+        left,
+        right,
+        row_count: 0,
+        pitch,
+    })
+}
+
 /// Compile bounded visible text on the caller-selected native page profile.
 /// This does not create persistent notebook semantic state.
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
@@ -1321,29 +1399,10 @@ pub(super) fn layout_flow_with_region(
     decoration: HeadingDecoration,
     region: Option<FlowRegion>,
 ) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
-    let printable = profile.printable_rect_um()?;
-    let (left, top, right, bottom) = if let Some(fixed) = region {
-        fixed.bounds_within(printable)?
-    } else {
-        printable
-    };
     let pitch = measured_pitch(source, statistics)?;
-    let mut layout = Layout {
-        heading: decoration,
-        statistics,
-        lines: Vec::new(),
-        ornaments: Vec::new(),
-        page: 1,
-        y: top
-            .checked_add(INSET_UM)
-            .ok_or("flow top margin overflow")?,
-        top,
-        bottom,
-        left,
-        right,
-        row_count: 0,
-        pitch,
-    };
+    let mut layout = initialize_layout(
+        profile, statistics, decoration, region, pitch,
+    )?;
     // Markdown blank-line runs separate paragraphs once, even after multiple
     // empty source lines; leading and trailing blanks add no physical space.
     // Plain-text blank lines instead consume a full physical writing row.
@@ -1356,6 +1415,11 @@ pub(super) fn layout_flow_with_region(
         if source.format == FlowFormat::Markdown
             && handle_markdown_code_line(&mut layout, &mut paragraph,
                 paragraph_style, &mut pending_gap, &mut fence, input_line)? {
+            continue;
+        }
+        if source.format == FlowFormat::Markdown
+            && handle_markdown_setext(&mut layout, &mut paragraph,
+                paragraph_style, input_line, source_lines.clone())? {
             continue;
         }
         let raw = input_line.trim_end_matches(' ');
