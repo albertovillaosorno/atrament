@@ -678,9 +678,10 @@ function quoteMirror(
 // Math starters retain ideal SVG lines/quadratics; native v1 samples curves
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
-    "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∑", "∫",
+    "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∧", "∨",
+    "∑", "∫",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝"] as const;
-// Extra manually selected marks do not change the 28-glyph math fill.
+// Extra manually selected marks do not change the 30-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -737,6 +738,16 @@ function mathParts(
         line(-0.55, -0.6, 0.6, 0.05),
         line(0.6, 0.05, -0.55, 0.6),
         ...(glyph === "≥" ? [horizontal(0.88)] : []),
+    ];
+    // Logical wedges are exact Unicode ink, never substitutions for the
+    // visually similar Latin v or strict-comparison chevrons.
+    if (glyph === "∧") return [
+        line(-0.65, 0.6, 0, -0.6),
+        line(0, -0.6, 0.65, 0.6),
+    ];
+    if (glyph === "∨") return [
+        line(-0.65, -0.6, 0, 0.6),
+        line(0, 0.6, 0.65, -0.6),
     ];
     if (glyph === "√") return [
         line(-0.85, 0.2, -0.5, 0.1), line(-0.5, 0.1, -0.1, 0.8),

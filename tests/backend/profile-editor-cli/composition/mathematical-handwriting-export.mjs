@@ -972,3 +972,56 @@ test('vertical arrows render native PDF PNG with exact refusal', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+
+test('exact logical wedge ink exports native PDF PNG and refuses alias',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/logical-ink-'));
+        try {
+            const source = join(dir, 'logical.tsv');
+            const output = join(dir, 'logical.pdf');
+            const symbols = ['∧', '∨'];
+            const ink = symbols.flatMap((glyph) => geometricStarter(
+                glyph, 1550, 2450, 1100, 250, '#243647'));
+            assert.equal(ink.length, 4);
+            const bytes = Buffer.from(encodeGlyphLibrary(ink));
+            writeFileSync(source, bytes);
+            const reopened = cli('glyphs', ['--profile', source]);
+            assert.equal(reopened.status, 0, reopened.stderr.toString());
+            assert.deepEqual(reopened.stdout, bytes);
+            const audit = cli('glyphs', ['--profile', source,
+                '--audit-text', symbols.join('')]);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 2/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', source,
+                '--flow-text', `${symbols.join('')}\n${symbols.join('')}`];
+            const pdf = cli('notebook', [...flags,
+                '--export-paper', 'pdf', '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+                .length, ink.length * 2);
+            const png = cli('notebook', [...flags,
+                '--export-paper', 'png', '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            for (const missing of ['v', '⊕']) {
+                const refused = cli('notebook', [
+                    '--printed-sheet', 'true', '--glyph-file', source,
+                    '--flow-text', `∧∨${missing}`, '--export-paper', 'pdf',
+                    '--output', output, '--replace',
+                ]);
+                assert.notEqual(refused.status, 0);
+                assert.match(refused.stderr.toString(),
+                    /missing authored glyph/i);
+                assert.deepEqual(readFileSync(output), accepted);
+            }
+            assert.deepEqual(readFileSync(source), bytes);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

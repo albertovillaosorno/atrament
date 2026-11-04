@@ -1494,6 +1494,27 @@ Rust with no implicit browser save or extra backend authoring request.
 The drawings are sampled manual pen paths, not inferred directional
 fallbacks, symbolic math layout or a persisted analytical font.
 
+## Logical wedge pen ink (partial) — 2026-11-04
+
+The explicit geometric math editor now supports Unicode `∧` and `∨` as
+separately selectable AND/OR glyphs. Each has two joined, directed pen
+segments forming an upper or lower wedge, rather than substituting the
+Latin `v`, relational chevrons, or another Unicode symbol. The optional
+**Fill missing math** operation now covers 30 exact keys and does not
+replace any already-authored stroke geometry.
+
+Browser tests check exact endpoint coordinates, pen continuity, SVG
+visibility, native TSV identity, clipped geometry refusal and atomic batch
+fill. The Rust CLI independently reopens the two logical glyphs and
+renders physical PDF vectors and transparent PNG; both a Latin `v` and an
+unauthored `⊕` refuse PDF replacement while leaving source TSV unchanged.
+A real Firefox session also downloads all 30 math symbols, checks exact
+Unicode option selection, and replays the resulting ink through Rust
+PDF/PNG without a local editor backend write.
+
+These are manually selected sampled pen paths, not a formula typesetter,
+Unicode-wide logical-operator font or automatic glyph fallback.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
