@@ -696,6 +696,111 @@ const numberedInk = ['1', '2', '.', ')'].flatMap((grapheme) => [
     '250', '#2277AA',
 ]);
 
+test('task lists draw checked and unchecked page-local pen boxes',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-'));
+        try {
+            const source = '- [ ] a\n* [x] ó\n+ [X] a\na';
+            const indented = ' - [ ] a\n  * [x] ó\n   + [X] a\na';
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, source, format);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                if (format === 'pdf') {
+                    const pdf = expected.toString('latin1');
+                    assert.equal(pdf.split('0.118 0.188 0.290 RG').length - 1,
+                        16, 'three checkbox outlines, two with check marks');
+                    assert.equal(pdf.split('0.071 0.204 0.337 RG').length - 1,
+                        4, 'four actual authored glyph strokes');
+                } else {
+                    assert.deepEqual(expected.subarray(0, 8),
+                        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+                }
+                const candidate = render(dir, indented, format);
+                assert.equal(candidate.result.status, 0,
+                    candidate.result.stderr);
+                assert.deepEqual(readFileSync(candidate.output), expected,
+                    `syntactic checkbox indentation must not alter ${format}`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('wrapped task checkbox stays on its first physical page',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-'));
+        try {
+            const source = '- [x] ' + Array(31).fill('a').join(' ');
+            const region = [
+                '--flow-region', '30000', '40000', '50000', '30000',
+            ];
+            const pdf = render(dir, source, 'pdf', region);
+            assert.equal(pdf.result.status, 0, pdf.result.stderr);
+            const vector = readFileSync(pdf.output).toString('latin1');
+            assert.match(vector, /\/Count [2-9]\b/,
+                'long task body paginates across physical pages');
+            assert.equal(vector.split('0.118 0.188 0.290 RG').length - 1,
+                6, 'wrapped task emits exactly one checked box');
+            const nextPage = render(dir, source, 'png', region,
+                '--flow-markdown', 2);
+            assert.equal(nextPage.result.status, 0,
+                nextPage.result.stderr);
+            assert.deepEqual(readFileSync(nextPage.output).subarray(0, 8),
+                Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+const checkboxLiteralInk = ['-', '[', ']', 'x'].flatMap((glyph) => [
+    '--glyph-stroke', glyph, '650', '800', '2400', '3100',
+    '250', '#112233',
+]);
+
+test('escaped task source stays literal and invalid boxes refuse atomically',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-'));
+        try {
+            const literal = '- [x] a';
+            const escaped = '\\- [x] a';
+            for (const format of ['pdf', 'png']) {
+                const plain = render(dir, literal, format,
+                    checkboxLiteralInk, '--flow-text');
+                assert.equal(plain.result.status, 0, plain.result.stderr);
+                const expected = readFileSync(plain.output);
+                const markdown = render(dir, escaped, format,
+                    checkboxLiteralInk);
+                assert.equal(markdown.result.status, 0,
+                    markdown.result.stderr);
+                assert.deepEqual(readFileSync(markdown.output), expected,
+                    'escaped task mark is caller-authored handwriting');
+                const fenced = render(dir,
+                    `\`\`\`\n${literal}\n\`\`\``,
+                    format, checkboxLiteralInk);
+                assert.equal(fenced.result.status, 0,
+                    fenced.result.stderr);
+                assert.deepEqual(readFileSync(fenced.output), expected,
+                    'literal fenced task marks keep authored punctuation');
+            }
+            const sentinel = Buffer.from('saved notebook output');
+            const output = join(dir, 'flow-pdf.output');
+            for (const source of [
+                '- [ ]', '- [x]', '- [y] a', '    - [x] a',
+            ]) {
+                writeFileSync(output, sentinel);
+                const candidate = render(dir, source, 'pdf');
+                assert.notEqual(candidate.result.status, 0, source);
+                assert.match(candidate.result.stderr,
+                    /empty Markdown block|missing authored glyph shapes/);
+                assert.deepEqual(readFileSync(output), sentinel);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('indented bullet quote and ordered blocks preserve actual PDF and PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-list-'));

@@ -367,6 +367,7 @@ enum LineStyle {
     Ordered,
     Quote,
     Separator,
+    Task(bool),
 }
 
 struct Layout<'model> {
@@ -579,6 +580,7 @@ impl Layout<'_> {
                 x.checked_add(if matches!(
                     style,
                     LineStyle::Bullet | LineStyle::Ordered | LineStyle::Quote
+                        | LineStyle::Task(_)
                 ) {
                     6_000
                 } else {
@@ -595,6 +597,34 @@ impl Layout<'_> {
             return Err("flow horizontal printable region too narrow".into());
         }
         Ok((start_x, cap))
+    }
+
+    fn write_list_marker(
+        &mut self, style: LineStyle, first: bool,
+        start_x: u32, y: u32,
+    ) -> Result<(), String> {
+        if !first {
+            return Ok(());
+        }
+        if let LineStyle::Task(checked) = style {
+            return self.write_task_box(start_x, y, checked);
+        }
+        if matches!(style, LineStyle::Bullet) {
+            let x1 = start_x
+                .checked_sub(4_400)
+                .ok_or("bullet left inset overflow")?;
+            let x2 = x1.checked_add(1_700).ok_or("bullet width overflow")?;
+            let marker_y = y.checked_add(2_200)
+                .ok_or("bullet height overflow")?;
+            self.ornaments.push(NotebookInkLine {
+                page: self.page,
+                start_um: (x1, marker_y),
+                end_um: (x2, marker_y),
+                width_um: 450,
+                rgb: [30, 48, 74],
+            });
+        }
+        Ok(())
     }
 
     fn write_row(
@@ -679,21 +709,7 @@ impl Layout<'_> {
                 rgb: [30, 48, 74],
             });
         }
-        if first && matches!(style, LineStyle::Bullet) {
-            let x1 = start_x
-                .checked_sub(4_400)
-                .ok_or("bullet left inset overflow")?;
-            let x2 = x1.checked_add(1_700).ok_or("bullet width overflow")?;
-            let marker_y = y.checked_add(2_200)
-                .ok_or("bullet height overflow")?;
-            self.ornaments.push(NotebookInkLine {
-                page: self.page,
-                start_um: (x1, marker_y),
-                end_um: (x2, marker_y),
-                width_um: 450,
-                rgb: [30, 48, 74],
-            });
-        }
+        self.write_list_marker(style, first, start_x, y)?;
         self.lines.push(TextRun {
             heading_ink: if matches!(style, LineStyle::Heading(_)) {
                 self.heading.glyph_ink()
@@ -726,6 +742,57 @@ impl Layout<'_> {
         });
         self.y = y.checked_add(self.pitch)
             .ok_or("separator row advance overflow")?;
+        Ok(())
+    }
+
+    fn write_task_box(
+        &mut self, start_x: u32, y: u32, checked: bool,
+    ) -> Result<(), String> {
+        let left = start_x.checked_sub(4_600)
+            .ok_or("task box exceeds left margin")?;
+        let right = left.checked_add(2_500)
+            .ok_or("task box exceeds right margin")?;
+        let top = y.checked_add(1_200)
+            .ok_or("task box top overflow")?;
+        let bottom = top.checked_add(2_500)
+            .ok_or("task box bottom overflow")?;
+        for (start, end) in [
+            ((left, top), (right, top)),
+            ((right, top), (right, bottom)),
+            ((right, bottom), (left, bottom)),
+            ((left, bottom), (left, top)),
+        ] {
+            self.ornaments.push(NotebookInkLine {
+                page: self.page,
+                start_um: start,
+                end_um: end,
+                width_um: 350,
+                rgb: [30, 48, 74],
+            });
+        }
+        if checked {
+            let middle = (
+                left.checked_add(1_100).ok_or("task check X overflow")?,
+                bottom.checked_sub(350).ok_or("task check Y underflow")?,
+            );
+            let start = (
+                left.checked_add(450).ok_or("task check X overflow")?,
+                top.checked_add(1_250).ok_or("task check Y overflow")?,
+            );
+            let end = (
+                right.checked_sub(250).ok_or("task check X underflow")?,
+                top.checked_add(400).ok_or("task check Y overflow")?,
+            );
+            for (start_um, end_um) in [(start, middle), (middle, end)] {
+                self.ornaments.push(NotebookInkLine {
+                    page: self.page,
+                    start_um,
+                    end_um,
+                    width_um: 450,
+                    rgb: [30, 48, 74],
+                });
+            }
+        }
         Ok(())
     }
 
@@ -943,6 +1010,13 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
         .or_else(|| block.strip_prefix("* "))
         .or_else(|| block.strip_prefix("+ "))
     {
+        if let Some(task) = bullet.strip_prefix("[ ] ") {
+            return (LineStyle::Task(false), task.trim_end_matches(' '));
+        }
+        if let Some(task) = bullet.strip_prefix("[x] ")
+            .or_else(|| bullet.strip_prefix("[X] ")) {
+            return (LineStyle::Task(true), task.trim_end_matches(' '));
+        }
         return (LineStyle::Bullet, bullet.trim_end_matches(' '));
     }
     if let Some(quote) = block.strip_prefix('>') {

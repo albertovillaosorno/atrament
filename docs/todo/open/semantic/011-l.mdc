@@ -449,6 +449,25 @@ invalid too-short region preserves existing PDF bytes.
 Code delimiters never consume region rows or bypass native constraints;
 this remains one repeated fixed rectangle, not semantic per-block placement.
 
+## Native checked and unchecked Markdown tasks (partial) — 2026-11-04
+
+The bounded Rust Markdown flow now recognizes one flat task prefix:
+`- [ ]`, `* [x]`, or `+ [X]`, plus the other bullet/checkbox combinations,
+followed by a separator space and visible authored item text. Zero to three
+leading spaces remain Markdown syntax. A 2.5-mm square of physical pen
+strokes replaces the list bullet; checked tasks add a two-stroke check.
+Only the first physical row gets the box, even when the body wraps onto
+another PDF sheet. Caller-authored body glyphs remain exact and unchanged;
+`[`, `]`, `x` and `X` do not require invented handwriting shapes.
+
+Three native PDF/transparent PNG subprocess regressions count the actual
+box/check ink and authored Unicode text, compare independent indented
+spellings, and exercise the repeated fixed-region page-two export. A fenced
+or escaped task prefix remains literal handwriting when its punctuation
+is explicitly authored; malformed, four-space and empty task sources
+refuse before replacing existing PDF output. Tasks are visual CLI-only
+marks, not interactive persisted check states or nested Markdown lists.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded
