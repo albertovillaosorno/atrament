@@ -6849,3 +6849,66 @@ fn native_glyph_ink_scales_one_exact_unicode_pen_and_refuses_atomically() {
     fs::remove_file(source).expect("remove owned source");
     fs::remove_file(output).expect("remove owned output");
 }
+
+#[test]
+fn native_whole_glyph_translation_preserves_paths_and_refuses_clipping() {
+    let nfd = "o\u{301}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "450", "1000", "850", "1600",
+        "251", "#243647",
+        "--glyph-stroke", "ó", "300", "1000", "500", "1500",
+        "250", "#112233",
+        "--glyph-stroke", nfd, "850", "1600", "1300", "2200",
+        "251", "#243647",
+    ])).expect("source admitted").expect("TSV");
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    fs::write(&source, &original).expect("owned source");
+    fs::write(&output, b"prior destination").expect("sentinel");
+    let source_name = source.to_str().expect("source path");
+    let output_name = output.to_str().expect("output path");
+    let shifted = execute_glyph_library(&args(&[
+        "--profile", source_name, "--translate-glyph", nfd, "-200", "175",
+    ])).expect("move admitted").expect("TSV bytes");
+    assert_eq!(shifted, concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ó\t250\t1175\t650\t1775\t251\t#243647\n",
+        "ó\t300\t1000\t500\t1500\t250\t#112233\n",
+        "ó\t650\t1775\t1100\t2375\t251\t#243647\n",
+    ).as_bytes());
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--translate-glyph", nfd, "0", "0",
+    ])).expect("identity accepted").expect("TSV"), original);
+    let report = execute_glyph_library(&args(&[
+        "--profile", source_name, "--translate-glyph", nfd, "-200", "175",
+        "--inspect-paths", nfd,
+    ])).expect("inspect moved contours").expect("report");
+    assert!(String::from_utf8_lossy(&report)
+        .contains("Strokes: 2\nPaths: 1\nPen lifts: 0"));
+    let mut authored = args(&["--profile", source_name,
+        "--translate-glyph", nfd, "-200", "175",
+        "--output", output_name, "--replace"]);
+    assert!(execute_glyph_library(&authored)
+        .expect("explicit replace allowed").is_none());
+    assert_eq!(fs::read(&output).expect("saved TSV"), shifted);
+    fs::write(&output, b"prior destination").expect("reset sentinel");
+    for values in [
+        (nfd, "-326", "175"), (nfd, "0", "-1000"),
+        (nfd, "3501", "0"), (nfd, "0", "4501"),
+        (nfd, "1.0", "0"), (nfd, "+1", "0"),
+        ("ó", "-300", "0"), ("ñ", "0", "1"),
+        ("ab", "0", "1"),
+    ] {
+        authored = args(&[
+            "--profile", source_name, "--translate-glyph",
+            values.0, values.1, values.2,
+            "--output", output_name, "--replace",
+        ]);
+        assert!(execute_glyph_library(&authored).is_err(), "{values:?}");
+        assert_eq!(fs::read(&output).expect("unchanged output"),
+            b"prior destination");
+    }
+    assert_eq!(fs::read(&source).expect("source remains"), original);
+    fs::remove_file(source).expect("remove owned source");
+    fs::remove_file(output).expect("remove owned output");
+}

@@ -12,7 +12,7 @@ import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
     italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
-    scaleGlyphInk,
+    scaleGlyphInk, translateGlyphStrokes,
     reverseCandidatePath, moveCandidatePath, translateCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath, candidatePenPaths,
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
@@ -1397,6 +1397,83 @@ test('browser and native ink scaling matches physical exports', () => {
             assert.notEqual(refusal.status, 0);
             assert.equal(readFileSync(prior, 'utf8'),
                 'prior approved glyph file');
+            assert.equal(readFileSync(source, 'utf8'), original);
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+
+test('whole-glyph X/Y positioning matches Rust and physical PDF/PNG', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-glyph-move-'));
+    try {
+        const nfd = 'o\u0301';
+        const strokes = [
+            { grapheme: nfd, x1: 450, y1: 1000, x2: 850,
+                y2: 1600, width: 251, color: '#243647' },
+            { grapheme: 'á', x1: 300, y1: 1000, x2: 500,
+                y2: 1500, width: 250, color: '#112233' },
+            { grapheme: nfd, x1: 850, y1: 1600, x2: 1300,
+                y2: 2200, width: 251, color: '#243647' },
+            { grapheme: '∞', x1: 500, y1: 900, x2: 700,
+                y2: 1100, width: 250, color: '#112233' },
+            { grapheme: nfd, x1: 1100, y1: 600, x2: 1700,
+                y2: 1000, width: 251, color: '#334455' },
+        ];
+        const source = join(dir, 'original.tsv');
+        const target = join(dir, 'native.tsv');
+        const browser = join(dir, 'browser.tsv');
+        const original = encodeGlyphLibrary(strokes);
+        writeFileSync(source, original);
+        for (const shear of [false, true]) {
+            const moved = translateGlyphStrokes(strokes, nfd, -200, 175);
+            const expected = encodeGlyphLibrary(shear
+                ? italicizeGlyphStrokes(moved, nfd, 12, 3550) : moved);
+            writeFileSync(browser, expected);
+            const edits = ['--translate-glyph', nfd, '-200', '175'];
+            if (shear) edits.push('--shear-glyph', nfd, '12', '3550');
+            const result = native('glyphs', '--profile', source, ...edits,
+                '--output', target, '--replace');
+            assert.equal(result.status, 0, result.stderr);
+            assert.deepEqual(readFileSync(target), readFileSync(browser),
+                'native positioning matches independent browser TSV');
+            const paths = native('glyphs', '--profile', target,
+                '--inspect-paths', nfd);
+            assert.equal(paths.status, 0, paths.stderr);
+            assert.match(paths.stdout, /Strokes: 3\nPaths: 2\nPen lifts: 1/);
+            for (const format of ['pdf', 'png']) {
+                const flags = ['--export-paper', format];
+                if (format === 'png') flags.push('--dpi', '72');
+                const actual = join(dir, `rust-${shear}.${format}`);
+                const reference = join(dir, `browser-${shear}.${format}`);
+                const render = (file, output) => native('notebook',
+                    '--printed-sheet', 'true', '--glyph-file', file,
+                    '--place-text', '1', '30000', '35000', nfd + 'á',
+                    ...flags, '--output', output);
+                const left = render(target, actual);
+                const right = render(browser, reference);
+                assert.equal(left.status, 0, left.stderr);
+                assert.equal(right.status, 0, right.stderr);
+                assert.deepEqual(readFileSync(actual), readFileSync(reference),
+                    `moved ${format} matches independently authored TSV`);
+                if (format === 'png') pngHasTransparentCorner(
+                    readFileSync(actual));
+            }
+        }
+        const refusal = join(dir, 'prior.tsv');
+        writeFileSync(refusal, 'previous approved TSV');
+        for (const [glyph, dx, dy] of [
+            [nfd, '-326', '175'], [nfd, '3501', '0'],
+            [nfd, '0', '4501'], ['ñ', '0', '1'],
+            [nfd, '1.5', '0'],
+        ]) {
+            const denied = native('glyphs', '--profile', source,
+                '--translate-glyph', glyph, dx, dy,
+                '--output', refusal, '--replace');
+            assert.notEqual(denied.status, 0);
+            assert.equal(readFileSync(refusal, 'utf8'),
+                'previous approved TSV');
             assert.equal(readFileSync(source, 'utf8'), original);
         }
     } finally {

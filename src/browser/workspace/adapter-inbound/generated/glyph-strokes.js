@@ -989,6 +989,36 @@ export function scaleGlyphWidth(source, grapheme, percent, anchor) {
     encodeGlyphLibrary(candidate);
     return candidate;
 }
+// Move the entire caller-authored glyph without changing its geometry,
+// pen order or neighboring exact Unicode records. Zero offset is identity.
+export function translateGlyphStrokes(source, grapheme, dx, dy) {
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Glyph translation requires one exact visible glyph");
+    }
+    if (!Number.isSafeInteger(dx) || !Number.isSafeInteger(dy)
+        || Math.abs(dx) > 3500 || Math.abs(dy) > 4500) {
+        throw new Error("Glyph offsets require signed whole µm within cell");
+    }
+    let found = false;
+    const candidate = source.map((line) => {
+        if (line.grapheme !== grapheme)
+            return line;
+        found = true;
+        const stroke = validateStroke(line);
+        const moved = { ...stroke, x1: stroke.x1 + dx,
+            y1: stroke.y1 + dy, x2: stroke.x2 + dx,
+            y2: stroke.y2 + dy };
+        if ([moved.x1, moved.x2].some((x) => x * 2 < stroke.width || x * 2 > 7000 - stroke.width)
+            || [moved.y1, moved.y2].some((y) => y * 2 < stroke.width || y * 2 > 9000 - stroke.width)) {
+            throw new Error("Translated pen contour clips glyph cell");
+        }
+        return validateStroke(moved);
+    });
+    if (!found)
+        throw new Error("Selected glyph has no authored ink");
+    encodeGlyphLibrary(candidate);
+    return candidate;
+}
 // Scale pen thickness, not the glyph contour. Unlike seeded variation,
 // this is an explicit reversible-by-reload edit of the unsaved TSV draft.
 export function scaleGlyphInk(source, grapheme, percent) {
@@ -1657,6 +1687,11 @@ export function createGlyphStrokeEditor() {
     const scaleWidth = required("glyph-scale-width");
     const widthPreview = required("glyph-width-preview");
     const widthPreviewStatus = required("glyph-width-preview-status");
+    const moveX = required("glyph-move-x");
+    const moveY = required("glyph-move-y");
+    const moveGlyph = required("glyph-move-all");
+    const movePreview = required("glyph-move-preview");
+    const movePreviewStatus = required("glyph-move-preview-status");
     const inkPercent = required("glyph-ink-percent");
     const scaleInk = required("glyph-scale-ink");
     const inkPreview = required("glyph-ink-preview");
@@ -1719,7 +1754,7 @@ export function createGlyphStrokeEditor() {
         authoredAngle, authoredBaseline, slantAuthored,
         heightPercent, heightBaseline, scaleHeight,
         widthPercent, widthAnchor, scaleWidth,
-        inkPercent, scaleInk,
+        inkPercent, scaleInk, moveX, moveY, moveGlyph,
         undoTransform, redoTransform, variationSeed,
         variationSample, variationDownload,
         ...Object.values(variationControls),
@@ -2288,6 +2323,46 @@ export function createGlyphStrokeEditor() {
             inkPreviewStatus.textContent = String(error);
         }
     };
+    const renderMovePreview = () => {
+        movePreview.replaceChildren();
+        if (!active) {
+            movePreviewStatus.textContent =
+                "Requires a compatible backend session";
+            return;
+        }
+        const target = character.value;
+        const authored = strokes.filter((item) => item.grapheme === target);
+        if (authored.length === 0) {
+            movePreviewStatus.textContent =
+                "Author this exact glyph before previewing its position";
+            return;
+        }
+        try {
+            if (moveX.value === "" || moveY.value === "") {
+                throw new Error("Choose horizontal and vertical offsets");
+            }
+            if (authored.length > 128) {
+                throw new Error("Preview limited to 128 authored segments");
+            }
+            const candidate = translateGlyphStrokes(strokes, target, Number(moveX.value), Number(moveY.value));
+            const lines = candidate.filter((item) => item.grapheme === target).map((item) => {
+                const line = document.createElementNS(SVG_NS, "line");
+                for (const axis of ["x1", "y1", "x2", "y2"]) {
+                    line.setAttribute(axis, String(item[axis]));
+                }
+                line.setAttribute("stroke", item.color);
+                line.setAttribute("stroke-width", String(item.width));
+                line.setAttribute("stroke-linecap", "round");
+                return line;
+            });
+            movePreview.replaceChildren(...lines);
+            movePreviewStatus.textContent = `${lines.length} proposed `
+                + "positioned segments; preview only, draft unchanged";
+        }
+        catch (error) {
+            movePreviewStatus.textContent = String(error);
+        }
+    };
     const render = () => {
         if (transformHistory !== null) {
             const expected = transformHistory[transformHistory.side];
@@ -2374,6 +2449,8 @@ export function createGlyphStrokeEditor() {
             || drawing !== null;
         scaleInk.disabled = !active || shown.length === 0
             || drawing !== null;
+        moveGlyph.disabled = !active || shown.length === 0
+            || drawing !== null;
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
         reverse.disabled = !active || selectedIndex === null;
@@ -2458,6 +2535,7 @@ export function createGlyphStrokeEditor() {
         renderHeightPreview();
         renderWidthPreview();
         renderInkPreview();
+        renderMovePreview();
         const label = `${shown.length} strokes for selected glyph`;
         preview.setAttribute("aria-label", label);
         renderVariation();
@@ -2493,6 +2571,10 @@ export function createGlyphStrokeEditor() {
     for (const control of [widthPercent, widthAnchor]) {
         control.addEventListener("input", renderWidthPreview);
         control.addEventListener("change", renderWidthPreview);
+    }
+    for (const control of [moveX, moveY]) {
+        control.addEventListener("input", renderMovePreview);
+        control.addEventListener("change", renderMovePreview);
     }
     inkPercent.addEventListener("input", renderInkPreview);
     inkPercent.addEventListener("change", renderInkPreview);
@@ -2749,6 +2831,25 @@ export function createGlyphStrokeEditor() {
             const next = scaleGlyphWidth(strokes, target, Number(widthPercent.value), Number(widthAnchor.value));
             applyGlyphTransform(next, target, "width");
             message(`Resized all authored ${target} width; unsaved`);
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    moveGlyph.addEventListener("click", () => {
+        if (!active)
+            return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the pen trace before position edit");
+            }
+            if (moveX.value === "" || moveY.value === "") {
+                throw new Error("Choose horizontal and vertical offsets");
+            }
+            const target = character.value;
+            const next = translateGlyphStrokes(strokes, target, Number(moveX.value), Number(moveY.value));
+            applyGlyphTransform(next, target, "move");
+            message(`Moved all authored ${target} strokes; unsaved`);
         }
         catch (error) {
             message(String(error));

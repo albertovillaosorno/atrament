@@ -95,6 +95,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--scale-glyph-height GRAPHEME PERCENT BASELINE_Y_UM] \
     [--scale-glyph-width GRAPHEME PERCENT ANCHOR_X_UM] \
     [--scale-glyph-ink GRAPHEME PERCENT] \
+    [--translate-glyph GRAPHEME DX_UM DY_UM] \
     [--join-strokes GRAPHEME FIRST_INDEX] \
     [--set-stroke GRAPHEME INDEX X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--remove-stroke GRAPHEME INDEX] \
@@ -125,6 +126,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --scale-glyph-height rescales exact-glyph Y about the baseline.\n\
     --scale-glyph-width rescales exact-glyph X about the anchor.\n\
     --scale-glyph-ink rescales exact-glyph pen thickness 50..150%.\n\
+    --translate-glyph moves all exact-glyph strokes within the pen cell.\n\
     --join-strokes inserts a short same-pen connector to the next segment.\n\
     --copy-glyph clones explicit source ink under an unoccupied target.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
@@ -498,9 +500,8 @@ fn parse_handwriting_options(
                 )?);
             }
             "--output" => {
-                output = Some(parse_selected_output(
-                    &mut iter, output.is_some(),
-                )?);
+                output = Some(parse_selected_output(&mut iter,
+                    output.is_some())?);
             }
             "--replace" => {
                 if replace {
@@ -783,8 +784,8 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                     .ok_or("--profile requires a glyph library path")?;
                 glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
             }
-            "--copy-glyph" | "--glyph-stroke" | "--shear-glyph"
-            | "--scale-glyph-height" | "--scale-glyph-width"
+            "--copy-glyph" | "--glyph-stroke" | "--translate-glyph"
+            | "--shear-glyph" | "--scale-glyph-height" | "--scale-glyph-width"
             | "--scale-glyph-ink" => glyphs.parse(option, &mut iter)?,
             "--reverse-stroke" | "--move-stroke" | "--join-strokes"
             | "--set-stroke" | "--remove-stroke" =>

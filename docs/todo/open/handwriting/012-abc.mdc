@@ -885,6 +885,26 @@ A real Firefox BiDi localhost case verifies the actual X-anchor SVG
 candidate, 4 accepted/refused UTF-8 downloads, clipped pen refusal and
 unchanged runtime request counts, separate from mocked unit coverage.
 
+## Whole-glyph position adjustment (partial) — 2026-11-04
+
+The native `glyphs --translate-glyph GRAPHEME DX_UM DY_UM` and localhost
+stroke editor now shift every selected exact-Unicode glyph path together.
+Signed integer micrometre offsets retain all stroke connections, directed
+pen order, color and thickness, including interleaved composed/decomposed
+Unicode and math glyph records. Both engines validate round pen clearance
+against the 3500 × 4500 µm template before publishing any candidate;
+clipping or malformed input cannot replace the existing output.
+
+The browser displays a separate read-only, 128-segment maximum SVG proposal.
+Only an explicit Apply changes the session draft and its one-step exact TSV
+undo/redo history; Download remains a separate action. A zero offset is an
+identity and does not overwrite earlier recovery history. Native and browser
+regressions exercise signed offsets, clip refusal, pen-path preservation,
+exact UTF-8 rows, previous-file immutability, and 4,096-stroke editing.
+
+Position control does not persist an analytic primitive, named variant,
+auto-diacritic anchors or joined cursive. Full P1 coverage remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

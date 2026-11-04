@@ -957,6 +957,32 @@
               explicit edit and download. Previews show at most 128
               segments; clipped pens or collapsed lines are refused.
               Save an original before destructive resizing.</p>
+            <label>Move entire authored glyph X (signed µm)
+              <input id="glyph-move-x" type="number" min="-3500"
+                max="3500" step="1" value="0" disabled>
+            </label>
+            <label>Move entire authored glyph Y (signed µm)
+              <input id="glyph-move-y" type="number" min="-4500"
+                max="4500" step="1" value="0" disabled>
+            </label>
+            <button id="glyph-move-all" type="button" disabled>
+              Move all selected glyph strokes (unsaved)
+            </button>
+            <div class="glyph-slant-preview-region">
+              <svg id="glyph-move-preview"
+                class="glyph-stroke-preview glyph-stroke-slant-preview"
+                viewBox="0 0 3500 4500" role="img"
+                aria-label="Proposed glyph position preview"></svg>
+              <p id="glyph-move-preview-status" class="field-help"
+                role="status" aria-live="polite">
+                Author a glyph to preview its position.
+              </p>
+            </div>
+            <p class="field-help">Move every path of the selected glyph
+              together to adjust its position without deforming ink.
+              Positive X moves right; positive Y moves down. Every round
+              pen cap must remain inside the cell. Preview is read-only;
+              apply and download are separate deliberate actions.</p>
             <label>Authored glyph pen thickness (50–150% of current)
               <input id="glyph-ink-percent" type="number" min="50"
                 max="150" step="1" value="110" disabled>
@@ -981,7 +1007,8 @@
               or any clipped round pen cap refuses atomically. Download the
               TSV explicitly after applying the adjustment.</p>
             <p class="field-help">Undo and redo recover only the latest
-              accepted whole-glyph slant, height, width or ink adjustment.
+              accepted whole-glyph slant, height, width, move or ink
+              adjustment.
               Exact TSV snapshots keep rounding loss reversible until a
               later edit, import or session reset. This is one step, not
               persistent revision history.</p>

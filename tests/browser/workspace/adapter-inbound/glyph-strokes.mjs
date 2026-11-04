@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
-    scaleGlyphInk,
+    scaleGlyphInk, translateGlyphStrokes,
     composeAccentedGlyph, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
@@ -389,6 +389,8 @@ function mountEditor() {
         "glyph-width-preview-status",
         "glyph-ink-percent", "glyph-scale-ink", "glyph-ink-preview",
         "glyph-ink-preview-status",
+        "glyph-move-x", "glyph-move-y", "glyph-move-all",
+        "glyph-move-preview", "glyph-move-preview-status",
         "glyph-ideal-preview", "glyph-ideal-geometry",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
@@ -426,6 +428,8 @@ function mountEditor() {
     get("width-percent").value = "110";
     get("width-anchor").value = "1750";
     get("ink-percent").value = "110";
+    get("move-x").value = "0";
+    get("move-y").value = "0";
     get("path-dx").value = "0";
     get("path-dy").value = "0";
     get("variation-sample").value = "1";
@@ -5069,3 +5073,104 @@ test("exact one-step transform undo restores slant height width and ink",
             ui.restore();
         }
     });
+
+test("whole-glyph translation preserves exact ink paths and refuses clips",
+    () => {
+    const nfd = "o\u0301";
+    const source = [
+        { ...stroke(nfd), x1: 450, y1: 1000, x2: 850, y2: 1600,
+            width: 251 },
+        { ...stroke("ó"), x1: 300, y1: 1000, x2: 500, y2: 1500 },
+        { ...stroke(nfd), x1: 850, y1: 1600, x2: 1300, y2: 2200,
+            width: 251 },
+    ];
+    const before = structuredClone(source);
+    const moved = translateGlyphStrokes(source, nfd, -200, 175);
+    assert.deepEqual(moved.map((row) => row.grapheme),
+        [nfd, "ó", nfd]);
+    assert.equal(moved[0].x1, 250);
+    assert.equal(moved[0].y1, 1175);
+    assert.equal(moved[2].x1, moved[0].x2);
+    assert.equal(moved[2].y1, moved[0].y2);
+    assert.deepEqual(moved[1], source[1]);
+    assert.deepEqual(source, before);
+    assert.deepEqual(translateGlyphStrokes(source, nfd, 0, 0), before);
+    for (const [glyph, dx, dy] of [
+        [nfd, -326, 175], [nfd, 0, -1000], [nfd, 3501, 0],
+        [nfd, 0, 4501], [nfd, 1.5, 0], ["ó", -300, 0],
+        ["ñ", 0, 1], ["oo", 0, 1],
+    ]) {
+        assert.throws(() => translateGlyphStrokes(source, glyph, dx, dy));
+    }
+    assert.equal(translateGlyphStrokes(Array.from({ length: 4096 },
+        (_, i) => ({ ...stroke(nfd), x1: 500, y1: 500,
+            x2: 600 + i % 100, y2: 700 })), nfd, 100, 100).length,
+        4096);
+});
+
+test("whole-glyph position preview, apply and exact one-step recovery",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const nfd = "o\u0301";
+        const preview = get("move-preview");
+        const status = get("move-preview-status");
+        assert.equal(get("move-all").disabled, true);
+        editor.start();
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        for (const [key, value] of Object.entries({
+            x1: 450, y1: 1000, x2: 850, y2: 1600, width: 251,
+        })) get(key).value = String(value);
+        get("add").dispatch("click");
+        const original = [{ grapheme: nfd, x1: 450, y1: 1000,
+            x2: 850, y2: 1600, width: 251, color: "#243647" }];
+        assert.equal(get("move-all").disabled, false);
+        assert.equal(preview.children.length, 1);
+        assert.equal(downloads.length, 0);
+        get("move-x").value = "-200";
+        get("move-x").dispatch("input");
+        get("move-y").value = "175";
+        get("move-y").dispatch("input");
+        assert.equal(Number(preview.children[0].attributes.get("x1")), 250);
+        assert.equal(Number(preview.children[0].attributes.get("y1")), 1175);
+        assert.match(status.textContent, /preview only, draft unchanged/);
+        get("move-x").value = "-326";
+        get("move-x").dispatch("input");
+        assert.equal(preview.children.length, 0);
+        assert.match(status.textContent, /clips glyph cell/);
+        get("move-all").dispatch("click");
+        assert.match(get("status").textContent, /clips glyph cell/);
+        get("move-x").value = "-200";
+        get("move-x").dispatch("input");
+        get("move-all").dispatch("click");
+        const moved = translateGlyphStrokes(original, nfd, -200, 175);
+        assert.match(get("status").textContent, /Moved all authored/);
+        assert.equal(downloads.length, 0);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), encodeGlyphLibrary(moved));
+        assert.equal(get("slant-undo").disabled, false);
+        assert.equal(get("slant-undo").textContent, "Undo last glyph move");
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(original));
+        get("slant-redo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), encodeGlyphLibrary(moved));
+        get("move-x").value = "0";
+        get("move-y").value = "0";
+        get("move-all").dispatch("click");
+        assert.equal(get("slant-undo").disabled, false,
+            "zero movement must preserve valid history");
+        get("character").value = "ó";
+        get("character").dispatch("input");
+        assert.equal(get("move-all").disabled, true);
+        editor.reset();
+        assert.equal(preview.children.length, 0);
+        assert.match(status.textContent, /Requires a compatible backend/);
+    } finally {
+        ui.restore();
+    }
+});

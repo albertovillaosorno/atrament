@@ -894,6 +894,7 @@ impl GlyphOverlay {
             "--scale-glyph-height" => self.scale_glyph_height_option(iter)?,
             "--scale-glyph-width" => self.scale_glyph_width_option(iter)?,
             "--scale-glyph-ink" => self.scale_glyph_ink_option(iter)?,
+            "--translate-glyph" => self.translate_glyph_option(iter)?,
             "--glyph-stroke" => {
                 if self.strokes.len() == MAX_STROKES {
                     return Err("more than 4096 glyph strokes refused".into());
@@ -1383,6 +1384,66 @@ impl GlyphOverlay {
         let degrees = next_integer(iter, "italic angle", 0, 20)?;
         let baseline = next_integer(iter, "italic baseline", 0, 4500)?;
         self.shear_glyph(grapheme, degrees, baseline)
+    }
+
+    /// Move every path of one exact authored glyph together. Refuse the
+    /// entire candidate if any round pen cap clips the physical template.
+    pub(super) fn translate_glyph(
+        &mut self, grapheme: &str, dx: i32, dy: i32,
+    ) -> Result<(), String> {
+        if dx.unsigned_abs() > 3500 || dy.unsigned_abs() > 4500 {
+            return Err("glyph shift outside signed native bounds".into());
+        }
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let mut revised = self.strokes.clone();
+        for position in positions {
+            let stroke = revised.get_mut(position)
+                .ok_or("glyph stroke outside library")?;
+            let move_axis = |value: u32, offset: i32, cell: i64|
+                -> Result<u32, String> {
+                let next = i64::from(value).checked_add(i64::from(offset))
+                    .ok_or("translated coordinate overflow")?;
+                let twice = next.checked_mul(2)
+                    .ok_or("translated pen edge overflow")?;
+                let pen = i64::from(stroke.width_um);
+                let upper = cell.checked_mul(2)
+                    .and_then(|limit| limit.checked_sub(pen))
+                    .ok_or("translated pen limit overflow")?;
+                if twice < pen || twice > upper {
+                    return Err(
+                        "translated pen contour clips glyph cell".into()
+                    );
+                }
+                u32::try_from(next)
+                    .map_err(|_error| {
+                        "translated coordinate out of bounds".into()
+                    })
+            };
+            stroke.start_um = (
+                move_axis(stroke.start_um.0, dx, 3500)?,
+                move_axis(stroke.start_um.1, dy, 4500)?,
+            );
+            stroke.end_um = (
+                move_axis(stroke.end_um.0, dx, 3500)?,
+                move_axis(stroke.end_um.1, dy, 4500)?,
+            );
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(super) fn translate_glyph_option(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let grapheme = iter.next()
+            .ok_or("--translate-glyph requires an exact grapheme")?;
+        let dx = next_signed_path_offset(iter, "glyph dx", 3500)?;
+        let dy = next_signed_path_offset(iter, "glyph dy", 4500)?;
+        self.translate_glyph(grapheme, dx, dy)
     }
 
     /// Shift every directed segment in one exact candidate pen path,
