@@ -2676,9 +2676,13 @@ export function createGlyphStrokeEditor() {
         const before = encodeGlyphLibrary(strokes);
         const after = encodeGlyphLibrary(next);
         strokes = next;
-        transformHistory = before === after ? null : {
-            before, after, side: "after", grapheme: target, kind,
-        };
+        // A 100% resize or zero-degree slant is an identity, not a new
+        // edit. Retain any valid earlier recovery step on either side.
+        if (before !== after) {
+            transformHistory = {
+                before, after, side: "after", grapheme: target, kind,
+            };
+        }
         selectedIndex = null;
         render();
     };

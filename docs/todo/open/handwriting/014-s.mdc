@@ -573,10 +573,10 @@ width or pen-thickness adjustment. Undo and redo restore byte-identical
 interleaved Unicode glyph rows, even when integer rounding would otherwise
 lose the original geometry. The controls require the same exact glyph,
 make no backend request and write no file until the user downloads TSV.
-A later accepted transform replaces history; any separate authored edit,
-TSV load or session reset invalidates it. A refused edit keeps the previous
-recovery step. This does not add persistent named variants or multi-step
-history; P1-014 remains open.
+A later non-identity transform replaces history; a zero-change transform
+or refused edit preserves earlier undo/redo. Any separate authored edit,
+TSV load or session reset invalidates the snapshot. This does not add
+persistent named variants or multi-step history; P1-014 remains open.
 
  The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be

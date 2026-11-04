@@ -787,7 +787,8 @@ The authenticated browser glyph editor now exposes explicit undo/redo for
 one nonzero whole-authored-glyph slant. The editor holds both pre/post
 canonical TSV byte snapshots, so original geometry, interleaved Unicode
 records, pen order, pigment and width return exactly. A second accepted
-slant replaces the previous step; a zero-degree identity creates no undo.
+slant replaces the previous step; a zero-degree identity does not replace
+an earlier valid recovery step.
 
 History is in memory only. Changing an unrelated or selected ink stroke,
 loading even a byte-identical TSV, or resetting the admitted session

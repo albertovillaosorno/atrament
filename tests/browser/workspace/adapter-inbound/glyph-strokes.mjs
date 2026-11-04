@@ -5005,6 +5005,11 @@ test("exact one-step transform undo restores slant height width and ink",
             assert.match(get("status").textContent,
                 /Glyph TSV downloaded/);
             assert.equal(redo.disabled, false);
+            get("height-percent").value = "100";
+            get("scale-height").dispatch("click");
+            assert.equal(redo.disabled, false,
+                "identity height must preserve redo of accepted height");
+            get("height-percent").value = "110";
             await recoverBytes(redo, tall,
                 "redo height restores revised bytes");
             const wider = scaleGlyphWidth(tall, nfd, 110, 1750);
@@ -5015,6 +5020,11 @@ test("exact one-step transform undo restores slant height width and ink",
             get("scale-ink").dispatch("click");
             assert.equal(undo.disabled, false);
             assert.equal(redo.disabled, true);
+            get("ink-percent").value = "100";
+            get("scale-ink").dispatch("click");
+            assert.equal(undo.disabled, false,
+                "identity ink must retain previous accepted recovery");
+            get("ink-percent").value = "110";
             assert.equal(downloads.length, 4,
                 "transforms never download files automatically");
             get("ink-percent").value = "151";

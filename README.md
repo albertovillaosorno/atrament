@@ -1054,11 +1054,12 @@ including rounding losses, and redo reapplies the exact accepted change.
 No automatic download or Rust profile write occurs. Recovery is available
 only while the same exact Unicode grapheme is selected.
 
-A later successful transform replaces the one-step history. A separate
-manual ink edit, TSV import or session reset invalidates it, and an invalid
-transform does not discard valid history. Download independent TSV copies
-for long-term recovery or named style variants. This is **not a general
-multi-step history** or persistent reversible curve model.
+A later non-identity transform replaces the one-step history, whereas a
+100% resize or zero-degree slant preserves any valid earlier undo or redo.
+A separate manual ink edit, TSV import or session reset invalidates the step,
+and an invalid transform does not discard valid history. Download
+independent TSV copies for long-term recovery or named style variants.
+This is **not a general multi-step history** or a persistent curve model.
 
 Beside these controls, **Proposed slanted glyph preview** shows the exact
 sampled pen coordinates before changing any authored ink. Changing the
