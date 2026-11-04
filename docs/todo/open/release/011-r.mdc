@@ -96,6 +96,28 @@ necessary alongside these synthetic process fixtures. This does not change
 production browser lifecycle guarantees or complete the still-open visual
 goldens and keyboard-only control coverage.
 
+## Reproducible ruled/grid candidate image digests (partial) — 2026-11-04
+
+The native paper crate now pins SHA-256 candidate references for A4 ruled
+and squared/grid pages at 72 DPI. One Rust regression checks each actual
+PDF vector stream, encoded transparent PNG and independently reconstructed
+596×842 RGBA pixel buffer. It asserts exact visible blue-grey pixel counts
+(34,500 ruled and 66,468 grid), then independently recolors the page to
+prove changed ink does not match the saved candidate reference.
+
+The reference hashes were captured from separately invoked, real native
+`atrament-paper` CLI PDF/PNG exports; the test calculates digests using the
+already-admitted Rust SHA-256 implementation, not a second image renderer.
+Run `cargo test --offline -p atrament_notebook_paper_cli --lib
+ruled_and_grid_page_candidate_golden_bytes_and_pixels_are_stable`.
+All-target Clippy and the full paper test suite pass.
+
+These are **candidate machine-byte and pixel goldens**, not human-reviewed
+or owner-approved visual reference images. The test freezes encoding as well
+as painted pixels, so intentional renderer/serializer changes will require
+an explicit candidate update and visual approval. Keyboard-only coverage
+of every editor control and approved image-file goldens remain open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

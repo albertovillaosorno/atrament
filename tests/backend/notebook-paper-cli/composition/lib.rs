@@ -760,6 +760,61 @@ fn transparent_png_grid_has_real_ink_and_physical_resolution() {
     assert_eq!(bytes, render_png(options, 150).expect("deterministic PNG"));
 }
 
+// These are deterministic *candidate* image goldens, not an owner's
+// visually approved reference. Pin real compressed PNG, decoded RGBA and
+// vector PDF separately so encoder and physical ink drift are visible.
+#[test]
+fn ruled_and_grid_page_candidate_golden_bytes_and_pixels_are_stable() {
+    use atrament_profile_entry_sha256::sha256_profile_bytes;
+    use std::fmt::Write as _;
+
+    let hex_digest = |source: &[u8]| -> String {
+        let mut hex = String::with_capacity(64);
+        for byte in sha256_profile_bytes(source).bytes() {
+            write!(&mut hex, "{byte:02x}").expect("String formatting");
+        }
+        hex
+    };
+    let cases = [
+        (Style::Ruled,
+            "fa59a88a53ffba9a11b8f7dd1416101bf3cd9b6d63693fed6b5692b5899bad8e",
+            "d775db518f8cba371e5af6cf1608aef7ad38c33d1ec8d37ab6bda71700c50aaf",
+            "27b9e33ced9c7b89e27a768ea30dc127bc82368ac4535a29856c46418bb81254",
+            34_500),
+        (Style::Grid,
+            "6bbf7d74ded9f62210b45f04fb1b5c48a51422cc4f315019de1b45c16e10b773",
+            "46e2ff82bda2db65a685836a6a3fa96f8b73e883aabc0571e28127308f270631",
+            "db38766c7658e9179277585b5e982a61a61660939fc607afe4a83f3bf902c4be",
+            66_468),
+    ];
+    for (style, pdf_golden, png_golden, rgba_golden, ink_golden) in cases {
+        let options = Options { style, ..Options::default() };
+        let pdf = render_pages(options, 1).expect("real A4 vector paper");
+        assert!(pdf.starts_with(b"%PDF-1.4"));
+        assert_eq!(hex_digest(&pdf), pdf_golden, "vector page golden");
+        let png = render_png(options, 72).expect("real transparent paper");
+        assert_eq!(hex_digest(&png), png_golden, "encoded PNG golden");
+        let (width, height, raw) = stored_png_pixels(&png);
+        assert_eq!((width, height), (596, 842), "A4 at 72 DPI");
+        let mut rgba = Vec::with_capacity(width * height * 4);
+        for row in raw.chunks_exact(width * 4 + 1) {
+            assert_eq!(row.first(), Some(&0), "unfiltered PNG scanline");
+            rgba.extend_from_slice(row.get(1..).expect("pixel row"));
+        }
+        assert_eq!(rgba.len(), width * height * 4);
+        let painted = rgba.as_chunks::<4>().0.iter()
+            .filter(|pixel| **pixel == [197, 212, 231, 255]).count();
+        assert_eq!(painted, ink_golden, "exact visible paper pixels");
+        assert_eq!(hex_digest(&rgba), rgba_golden, "decoded RGBA golden");
+        let changed = render_png(Options {
+            color: PdfRgb { red: 123, green: 212, blue: 231 },
+            ..options
+        }, 72).expect("same geometry in new ink color");
+        assert_ne!(hex_digest(&changed), png_golden,
+            "ink changes must not falsely match the candidate golden");
+    }
+}
+
 #[test]
 fn transparent_blank_has_no_ink_and_paper_variants_do() {
     let basic = Options {
