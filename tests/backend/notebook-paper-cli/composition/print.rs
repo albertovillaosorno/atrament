@@ -430,6 +430,8 @@ fn xref_stream_tokens_cannot_hide_in_comments_or_string_literals() {
         "1 0 obj\n<< % /Type /XRef\n /Type /Page >>\nstream\n",
         "1 0 obj\n<< /Other << /Type /XRef >> >>\nstream\n",
         "1 0 obj\n<< /List [/Type /XRef] >>\nstream\n",
+        "1 0 obj\n<< /Type /XRef > >>\nstream\n\0\nendstream\nendobj\n",
+        "1 0 obj\n<< /Type /XRef ] >>\nstream\n\0\nendstream\nendobj\n",
         "1 0 obj\n<< /Type /XRef >>\ndownstream\n",
         "1 0 obj\n<< /Type /XRef >>\n%stream\n",
         // A plausible header alone is not a complete terminal stream.
@@ -524,6 +526,8 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Meta << /Size 1 >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Meta << /Size 1 >> >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Memo (x) >>\n% /Size 1\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 > >>\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 ] >>\n",
     ] {
         let fake = format!(
             "%PDF-1.7\n{fake_body}startxref\n9\n%%EOF\n"

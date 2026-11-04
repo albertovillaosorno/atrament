@@ -152,6 +152,12 @@ Five added fake-table refusals and a valid nested/commented trailer now pass
 beside the real native two-page PDF. Refused bytes remain unchanged, with no
 fake-spool launch; no physical printer or full PDF grammar was exercised.
 
+The bounded PDF dictionary scanners also now reject an unmatched
+single `>` rather than silently skipping it. Two red-before cases showed
+that otherwise plausible xref-stream headers and table trailers with stray
+`>` could reach the fake spool. Paired unmatched `]` controls also refuse,
+while native PDF tables and properly nested stream dictionaries remain admitted.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

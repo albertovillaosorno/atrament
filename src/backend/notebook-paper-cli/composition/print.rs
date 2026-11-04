@@ -335,6 +335,7 @@ fn supported_xref_table_trailer(bytes: &[u8]) -> bool {
                         && pdf_trivia_end(bytes, at) == bytes.len();
                 }
             }
+            Some(&b'>') => return false,
             Some(&b'[') => {
                 array_depth = array_depth.saturating_add(1);
                 at = at.saturating_add(1);
@@ -491,6 +492,7 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
                     break;
                 }
             }
+            Some(&b'>') => return None,
             Some(&b'[') => {
                 array_depth = array_depth.saturating_add(1);
                 at = at.saturating_add(1);

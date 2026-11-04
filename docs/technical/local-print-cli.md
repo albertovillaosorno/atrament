@@ -111,7 +111,9 @@ The stream type name must be an exact top-level `/Type /XRef` dictionary
 entry; longer names such as `/XRefShadow` and apparent type entries inside
 comments, literal strings, arrays or nested dictionaries are not sufficient.
 The dictionary must be followed by an actual `stream` keyword and line break,
-not an incidental word substring.
+not an incidental word substring. A solitary `>` delimiter outside a hex
+string cannot impersonate a nested or terminal dictionary closure in either
+xref stream or traditional-table trailer preflight.
 
 A typed cross-reference stream must also
 end with standalone `endstream` and `endobj` keywords, allowing whitespace
@@ -157,6 +159,9 @@ terminal delimiter cases without spooling, while admitting terminal comments.
 Five additional fake-table cases refuse trailing tokens, missing outer
 dictionary closure, and `/Size` entries seen only in nested maps or comments.
 Valid compact, nested/commented and native two-page trailers remain eligible.
+A further four fake-CUPS cases reject unmatched single `>` and `]` tokens
+inside the stream header or table trailer; ordinary nested maps still pass.
+
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.
