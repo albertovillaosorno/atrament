@@ -64,6 +64,35 @@ This establishes a real keyboard-only save/reopen subset. It does not provide
 approved ruled/squared raster goldens or verify every currently implemented
 page-editor control, so this record remains open.
 
+## Trusted keyboard bilingual glyph baseline (partial) — 2026-11-04
+
+A second real Firefox/WebDriver BiDi journey exercises the browser's exact
+114-key English/Spanish glyph editor without synthetic DOM activation or
+pointer input. Trusted Tab, Shift+Tab, Ctrl+A and Enter inspect the next
+missing glyph, change geometric input, refuse an out-of-cell circle center
+without adding ink, then correct that value and fill the missing baseline.
+The live coverage readout reaches exactly 114/114 glyphs, and activating
+Fill again leaves the completed draft unchanged.
+
+The same trusted keyboard reaches Download and emits one complete versioned
+TSV. A passive download spy verifies that its bytes match the independently
+computed 114-key geometric baseline exactly; the action contacts no backend
+API and writes no unrequested file. Existing independent real Firefox/native
+Rust PDF and transparent PNG tests cover opening and rendering that same
+baseline, but this test does not add physical output or claim approved
+visual goldens.
+
+Run the focused acceptance:
+
+```sh
+node --test \
+  --test-name-pattern='Firefox trusted keyboard fills and downloads' \
+  tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs
+```
+
+The larger requirement to navigate and refuse every editor control using
+only keyboard input remains open.
+
 ## Disposable Firefox process-group cleanup (partial) — 2026-11-04
 
 The Linux BiDi launcher now tracks each owned detached Firefox group, kills
