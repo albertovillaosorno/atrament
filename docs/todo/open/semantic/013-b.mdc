@@ -104,6 +104,23 @@ same line-ending boundary. Paired CRLF and plain LF remain valid.
 
 This is input-parity hardening, not general bilingual layout or printed marks.
 
+## Unicode separators in glyph coverage (partial) — 2026-11-04
+
+The read-only native `glyphs --audit-text` and
+`handwriting --inventory-text` reports now recognize U+2028 line separators
+and U+2029 paragraph separators as *structural*, matching the native
+Markdown/plain-text flow importer. Previously both reports listed those
+source row boundaries as outside-baseline or missing authored glyphs,
+misleading users about a bilingual source's actual ink coverage.
+
+One red-before/green-after Rust regression proves both reports exclude
+those separators while keeping composed `ñ`, decomposed `n` plus tilde,
+U+00A0 nonbreaking spaces and U+2009 thin spaces distinct. Purely
+structural-only sources still refuse rather than reporting zero coverage.
+The existing C0/C1, bare-CR and exact-Unicode admission rules remain in
+place. This repairs coverage diagnostics; it does not implement a complete
+semantic notebook, custom ruler sampling, or implicit glyph synthesis.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

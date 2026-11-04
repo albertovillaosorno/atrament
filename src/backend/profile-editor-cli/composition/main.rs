@@ -347,6 +347,18 @@ fn remove_glyph_option(
         .map_err(|error| format!("statistics refused: {error:?}"))
 }
 
+// Only implicit ASCII space and source row boundaries are not ink.
+// Distinct Unicode spaces (NBSP, thin space, and others) remain auditable.
+const fn is_non_ink_audit_character(ch: char) -> bool {
+    ch == ' ' || ch.is_control()
+        || matches!(ch, '\u{2028}' | '\u{2029}')
+}
+
+fn is_non_ink_audit_grapheme(grapheme: &str) -> bool {
+    matches!(grapheme, " " | "\u{2028}" | "\u{2029}")
+        || grapheme.chars().all(char::is_control)
+}
+
 fn parse_inventory_text(
     arguments: &mut Iter<'_, String>,
     previous: Option<&str>,
@@ -356,9 +368,9 @@ fn parse_inventory_text(
     }
     let text = arguments.next().ok_or("--inventory-text requires text")?;
     if text.is_empty() || text.len() > MAX_INVENTORY_TEXT_BYTES
-        // Only ASCII space, CRLF/LF and tabs are source structure;
-        // do not return misleading zero-coverage reports for only those.
-        || !text.chars().any(|ch| ch != ' ' && !ch.is_control())
+        // Tabs, CRLF/LF and Unicode line/paragraph separators are
+        // structure, not visible ink in a coverage report.
+        || !text.chars().any(|ch| !is_non_ink_audit_character(ch))
         || text.chars().any(|ch| {
             ch.is_control() && !matches!(ch, '\t' | '\r' | '\n')
         })
@@ -601,10 +613,9 @@ fn inventory_handwriting(
         // Walk each suffix once; numbered offsets rescan long source prefixes.
         let (grapheme, rest) = first_grapheme(remaining)?;
         remaining = rest;
-        // Only ASCII spaces are implicit in native handwriting ink.
-        // Other Unicode whitespace has exact glyph identity, unless it is
-        // a structural control-character source break.
-        if grapheme == " " || grapheme.chars().all(char::is_control)
+        // Native source line/paragraph boundaries never require ink.
+        // Other exact Unicode whitespace remains auditable.
+        if is_non_ink_audit_grapheme(grapheme)
             || distinct.contains(&grapheme)
         {
             continue;
@@ -752,10 +763,9 @@ fn read_glyph_input(path: &str) -> Result<Vec<u8>, String> {
 fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
     if selected.is_empty()
         || selected.len() > MAX_INVENTORY_TEXT_BYTES
-        // The audit skips ASCII space, CRLF/LF and tabs as source structure.
-        // Every accepted source must contain an auditable grapheme;
-        // other Unicode whitespace may have exact authored pen strokes.
-        || !selected.chars().any(|ch| ch != ' ' && !ch.is_control())
+        // Keep Unicode line/paragraph separators non-ink like CRLF/LF;
+        // other Unicode spaces can have exact authored pen strokes.
+        || !selected.chars().any(|ch| !is_non_ink_audit_character(ch))
         || selected.chars().any(|ch| {
             ch.is_control() && !matches!(ch, '\t' | '\r' | '\n')
         })

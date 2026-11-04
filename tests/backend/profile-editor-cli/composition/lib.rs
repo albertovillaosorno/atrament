@@ -1106,6 +1106,65 @@ fn inventory_cli_reports_exact_unicode_spaces_and_statistics_overrides() {
 }
 
 #[test]
+fn unicode_line_and_paragraph_separators_are_audit_structure() {
+    // Native flow normalizes these Unicode separators into physical rows,
+    // not missing or outside-baseline authored glyphs.
+    let source = "\u{f1}\u{2028}n\u{303}\u{2029}\u{f1}";
+    let glyph = String::from_utf8(execute_glyph_library(&args(&[
+        "--audit-text", source,
+    ])).expect("Unicode separators may delimit an audit")
+        .expect("read-only glyph report"))
+        .expect("UTF-8 report");
+    assert!(glyph.contains("Distinct visible graphemes: 2"), "{glyph}");
+    assert!(glyph.contains("Missing authored glyphs: 2"), "{glyph}");
+    for codepoint in ["U+00F1", "U+006E U+0303"] {
+        assert!(glyph.contains(codepoint), "{glyph}");
+    }
+    for boundary in ["U+2028", "U+2029"] {
+        assert!(!glyph.contains(boundary), "{glyph}");
+    }
+
+    let inventory = String::from_utf8(execute_handwriting(&args(&[
+        "--inventory-text", source,
+    ])).expect("Unicode separators may delimit an inventory")
+        .expect("read-only inventory report"))
+        .expect("UTF-8 report");
+    assert!(inventory.contains("Distinct visible graphemes: 2"),
+        "{inventory}");
+    assert!(inventory.contains("Outside English/Spanish text baseline: 0"),
+        "{inventory}");
+    for boundary in ["U+2028", "U+2029"] {
+        assert!(!inventory.contains(boundary), "{inventory}");
+    }
+
+    // Unicode spaces may have exact authored strokes; unlike a pasted
+    // line or paragraph separator, they must stay in both reports.
+    let spaced = "a\u{2028}\u{a0}\u{2029}\u{2009}";
+    for report in [
+        execute_glyph_library(&args(&["--audit-text", spaced])),
+        execute_handwriting(&args(&["--inventory-text", spaced])),
+    ] {
+        let printed = String::from_utf8(report.expect("spaced source admitted")
+            .expect("read-only report"))
+            .expect("UTF-8 report");
+        assert!(printed.contains("Distinct visible graphemes: 3"),
+            "{printed}");
+        assert!(printed.contains("U+00A0"), "{printed}");
+        assert!(printed.contains("U+2009"), "{printed}");
+    }
+
+    for structural in ["\u{2028}", "\u{2029}",
+        " \u{2028}\r\n\u{2029}\t"] {
+        assert!(execute_glyph_library(&args(&[
+            "--audit-text", structural,
+        ])).is_err(), "empty glyph audit: {structural:?}");
+        assert!(execute_handwriting(&args(&[
+            "--inventory-text", structural,
+        ])).is_err(), "empty inventory: {structural:?}");
+    }
+}
+
+#[test]
 fn unicode_coverage_audits_reject_nonstructural_control_breaks() {
     // An otherwise visible source must not conceal control breaks that the
     // native placed-text compositor refuses. CRLF, LF and tabs are structure.

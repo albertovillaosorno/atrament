@@ -50,8 +50,8 @@ use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 use super::{
-    export_integer, GlyphFallback, GlyphOverlay, GlyphStroke, TextRun,
-    MAX_GLYPH_LIBRARY_BYTES,
+    export_integer, is_non_ink_audit_grapheme, GlyphFallback, GlyphOverlay,
+    GlyphStroke, TextRun, MAX_GLYPH_LIBRARY_BYTES,
 };
 
 const ADVANCE_UM: u32 = 4_000;
@@ -282,8 +282,8 @@ impl GlyphOverlay {
             // Only ASCII spaces are implicit 4-mm blank advances in the
             // actual compositor. Other Unicode whitespace may be authored
             // visible ink and must appear in this exact coverage audit.
-            // Control-character line boundaries are source structure.
-            if grapheme == " " || grapheme.chars().all(char::is_control)
+            // Source line and paragraph separators are non-ink structure.
+            if is_non_ink_audit_grapheme(grapheme)
                 || seen.contains(&grapheme) {
                 continue;
             }
