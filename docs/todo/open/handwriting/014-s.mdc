@@ -359,6 +359,26 @@ These path boundaries are inferred solely for inspection. No plotter pen-up
 commands, grouped curve geometry, persisted path identity or automatic
 cursive is claimed. The P1 joined-strokes task remains open.
 
+## Browser reversal of a whole connected path (partial) — 2026-11-03
+
+The glyph editor can now reverse an explicitly selected continuous path
+of two or more touching segments, not merely one line's direction. The
+operation flips the full segment order and each segment's endpoints,
+preserves the exact pen width/color, and keeps interleaved unrelated glyph
+records in their original TSV slots. The selected physical segment stays
+selected at its mirrored index. Single-stroke paths cannot use this action.
+
+Two browser regressions cover an NFD grapheme interleaved with composed ñ
+and ∞, exact path endpoints, selected-stroke tracking, missing/single-stroke
+refusals, and a second reversal restoring byte-identical source TSV.
+A separate browser-to-Rust integration reopens the resulting TSV, inspects
+its continuous path and compares actual vector PDF and transparent PNG ink
+to independent explicitly authored reversed lines, byte for byte.
+
+This is a reversible sequence edit within existing v1 straight segments.
+It introduces no saved pen-down group, true circle primitive or continuous
+Bezier geometry; P1-014 is still unfinished.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

@@ -154,6 +154,38 @@ export function candidatePenPaths(strokes, grapheme) {
     record(first, chosen.length);
     return paths;
 }
+// Reverse every directed segment in one touching path AND its sequence.
+// Interleaved glyph rows stay in their original v1 TSV positions.
+export function reverseCandidatePath(strokes, grapheme, selectedIndex) {
+    if (!Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path reversal needs a selected stroke of this glyph");
+    }
+    const indices = strokes.flatMap((stroke, index) => {
+        return stroke.grapheme === grapheme ? [index] : [];
+    });
+    const position = indices.indexOf(selectedIndex);
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) => {
+        return position + 1 >= candidate.first
+            && position + 1 <= candidate.last;
+    });
+    if (!path || path.first === path.last) {
+        throw new Error("Path reversal requires two continuous strokes");
+    }
+    const slots = indices.slice(path.first - 1, path.last);
+    const reversed = slots.map((index) => strokes[index]).reverse()
+        .map((stroke) => ({
+        ...stroke, x1: stroke.x2, y1: stroke.y2,
+        x2: stroke.x1, y2: stroke.y1,
+    }));
+    const next = strokes.slice();
+    slots.forEach((index, i) => { next[index] = reversed[i]; });
+    return {
+        strokes: next,
+        selectedIndex: slots[slots.length - 1
+            - slots.indexOf(selectedIndex)],
+    };
+}
 // The construction is defined by an analytic circle; v1 TSV can only
 // preserve its rounded line-segment approximation, not that ideal primitive.
 function acuteAccent(cx, cy, radius, pen, dx, lift, topOffset = radius) {
@@ -1332,6 +1364,7 @@ export function createGlyphStrokeEditor() {
     const update = required("glyph-update");
     const remove = required("glyph-remove");
     const reverse = required("glyph-reverse");
+    const reversePath = required("glyph-reverse-path");
     const earlier = required("glyph-earlier");
     const later = required("glyph-later");
     const join = required("glyph-join");
@@ -1365,7 +1398,7 @@ export function createGlyphStrokeEditor() {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, reverse, earlier, later, join, save,
+        remove, reverse, reversePath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
     let generation = 0;
@@ -1794,6 +1827,15 @@ export function createGlyphStrokeEditor() {
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
         reverse.disabled = !active || selectedIndex === null;
+        const chosenPosition = shown.findIndex(({ index }) => {
+            return index === selectedIndex;
+        }) + 1;
+        const chosenPath = paths.find((path) => {
+            return chosenPosition >= path.first
+                && chosenPosition <= path.last;
+        });
+        reversePath.disabled = !active || !chosenPath
+            || chosenPath.first === chosenPath.last;
         earlier.disabled = !active || neighbor(-1) === null;
         later.disabled = !active || neighbor(1) === null;
         join.disabled = !active || neighbor(1) === null;
@@ -2404,6 +2446,21 @@ export function createGlyphStrokeEditor() {
         strokes = next;
         choose(index);
         message("Reversed selected pen stroke; unsaved");
+    });
+    reversePath.addEventListener("click", () => {
+        if (!active || selectedIndex === null)
+            return;
+        try {
+            const glyph = character.value;
+            const changed = reverseCandidatePath(strokes, glyph, selectedIndex);
+            encodeGlyphLibrary(changed.strokes);
+            strokes = changed.strokes;
+            choose(changed.selectedIndex);
+            message("Reversed selected continuous pen path; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+        }
     });
     const move = (offset) => {
         if (!active || selectedIndex === null)

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, composeAccentedGlyph, varyGlyphStrokes,
-    candidatePenPaths } =
+    candidatePenPaths, reverseCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -81,6 +81,51 @@ test("candidate pen-path inspector handles full native stroke budget", () => {
         { first: 1, last: 4096, start: { x: 100, y: 0 },
             end: { x: 100, y: 4096 }, width: 250, color: "#A1B2C3" },
     ]);
+});
+
+test("reversing one candidate path preserves exact Unicode TSV slots", () => {
+    const nfd = "n\u{303}";
+    const first = { ...stroke(nfd), x1: 400, y1: 500,
+        x2: 800, y2: 900 };
+    const second = { ...first, x1: 800, y1: 900,
+        x2: 1200, y2: 1500 };
+    const third = { ...first, x1: 1200, y1: 1500,
+        x2: 1800, y2: 2000 };
+    const other = { ...stroke("ñ"), x1: 900, y1: 1000 };
+    const math = { ...stroke("∞"), x1: 600, y1: 700 };
+    const isolated = { ...stroke(nfd), x1: 2000, y1: 2500 };
+    const original = [first, other, second, third, math, isolated];
+    const before = encodeGlyphLibrary(original);
+    const result = reverseCandidatePath(original, nfd, 0);
+    const flipped = (line) => ({
+        ...line, x1: line.x2, y1: line.y2, x2: line.x1, y2: line.y1,
+    });
+    const expected = [
+        flipped(third), other, flipped(second), flipped(first), math, isolated,
+    ];
+    assert.equal(result.selectedIndex, 3,
+        "the same selected segment moves to its mirrored authored slot");
+    assert.deepEqual(result.strokes, expected);
+    assert.deepEqual(candidatePenPaths(result.strokes, nfd), [
+        { first: 1, last: 3, start: { x: 1800, y: 2000 },
+            end: { x: 400, y: 500 }, width: 250, color: "#A1B2C3" },
+        { first: 4, last: 4, start: { x: 2000, y: 2500 },
+            end: { x: 3000, y: 4200 }, width: 250, color: "#A1B2C3" },
+    ]);
+    assert.equal(encodeGlyphLibrary(result.strokes),
+        encodeGlyphLibrary(expected), "native TSV order stays exact");
+    const again = reverseCandidatePath(
+        result.strokes, nfd, result.selectedIndex,
+    );
+    assert.equal(again.selectedIndex, 0);
+    assert.equal(encodeGlyphLibrary(again.strokes), before,
+        "reversing a path twice restores every source byte");
+    for (const [glyph, index] of [["ñ", 0], [nfd, 1], [nfd, 5],
+        [nfd, -1], [nfd, 0.5], ["ab", 0]]) {
+        assert.throws(() => reverseCandidatePath(original, glyph, index));
+    }
+    assert.equal(encodeGlyphLibrary(original), before,
+        "refused reversal cannot mutate the original in-memory draft");
 });
 
 test("untrusted glyph TSV and edited numeric fields fail closed", () => {
@@ -229,6 +274,7 @@ function mountEditor() {
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
         "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
+        "glyph-reverse-path",
         "glyph-earlier", "glyph-later", "glyph-join",
         "glyph-paths", "glyph-variation-preview", "glyph-variation-status",
         "glyph-variation-seed", "glyph-variation-sample",
@@ -801,6 +847,67 @@ test("stroke reversal and reorder affect only the chosen glyph", async () => {
     }
 });
 
+
+test("browser reverses whole selected pen path and retains TSV rows",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const nfd = "n\u{303}";
+        const a = { ...stroke(nfd), x1: 500, y1: 600,
+            x2: 1100, y2: 1400 };
+        const b = { ...stroke(nfd), x1: 1100, y1: 1400,
+            x2: 1800, y2: 2100 };
+        const c = { ...stroke(nfd), x1: 1800, y1: 2100,
+            x2: 2200, y2: 2600 };
+        const other = stroke("ñ");
+        const source = [a, other, b, c];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(source));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        assert.equal(get("reverse-path").disabled, true);
+        get("selected").value = "0";
+        get("selected").dispatch("change");
+        assert.equal(get("reverse-path").disabled, false);
+        get("reverse-path").dispatch("click");
+        assert.match(get("status").textContent,
+            /Reversed selected continuous pen path/);
+        assert.equal(get("selected").value, "3",
+            "selected physical segment follows reverse path order");
+        assert.equal(get("x1").value, "1100");
+        assert.equal(get("y1").value, "1400");
+        assert.match(get("paths").textContent,
+            /3 directed strokes, 1 candidate pen path, 0 apparent pen lifts/);
+        assert.match(get("paths").textContent,
+            /Path 1: strokes 1–3, \(2200, 2600\) → \(500, 600\)/);
+        get("save").dispatch("click");
+        const flipped = (line) => ({
+            ...line, x1: line.x2, y1: line.y2,
+            x2: line.x1, y2: line.y1,
+        });
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()),
+            [flipped(c), other, flipped(b), flipped(a)]);
+        get("reverse-path").dispatch("click");
+        assert.equal(get("selected").value, "0");
+        get("save").dispatch("click");
+        assert.equal(await downloads[1].text(), encodeGlyphLibrary(source));
+        get("character").value = "ñ";
+        get("character").dispatch("input");
+        get("selected").value = "1";
+        get("selected").dispatch("change");
+        assert.equal(get("reverse-path").disabled, true,
+            "a single isolated stroke is not a continuous path of two");
+        editor.reset();
+        assert.equal(get("reverse-path").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
 
 test("browser joins preserve Unicode rows and export Rust TSV", async () => {
     const ui = mountEditor();

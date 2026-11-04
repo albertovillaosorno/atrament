@@ -11,6 +11,7 @@ import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
+    reverseCandidatePath,
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -262,6 +263,82 @@ test('browser loop shapes derive independent accented glyphs in Rust', () => {
                 pngHasTransparentCorner(readFileSync(artifact));
             } else {
                 assert.ok(readFileSync(artifact).subarray(0, 8).toString()
+                    .startsWith('%PDF-1.4'));
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+
+test('browser reversed path has native inspection and PDF/PNG parity', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-reverse-path-'));
+    try {
+        const nfd = 'n\u0303';
+        const line = (grapheme, x1, y1, x2, y2) => ({
+            grapheme, x1, y1, x2, y2,
+            width: 250, color: '#243647',
+        });
+        const original = [
+            line(nfd, 500, 600, 1100, 1400),
+            line('ñ', 300, 500, 2000, 3000),
+            line(nfd, 1100, 1400, 1800, 2100),
+            line('∞', 700, 700, 1700, 2100),
+            line(nfd, 1800, 2100, 2200, 2600),
+        ];
+        const input = encodeGlyphLibrary(original);
+        const result = reverseCandidatePath(original, nfd, 2);
+        assert.equal(result.selectedIndex, 2);
+        const library = join(dir, 'browser-reversed.tsv');
+        writeFileSync(library, encodeGlyphLibrary(result.strokes));
+        const reverseInk = [
+            line(nfd, 2200, 2600, 1800, 2100),
+            line(nfd, 1800, 2100, 1100, 1400),
+            line(nfd, 1100, 1400, 500, 600),
+        ];
+        assert.deepEqual(result.strokes, [reverseInk[0], original[1],
+            reverseInk[1], original[3], reverseInk[2]]);
+        assert.equal(encodeGlyphLibrary(original), input,
+            'the browser keeps its original authored TSV unmodified');
+
+        const report = native('glyphs', '--profile', library,
+            '--inspect-paths', nfd);
+        assert.equal(report.status, 0, report.stderr);
+        assert.match(report.stdout, /Strokes: 3\nPaths: 1\nPen lifts: 0/);
+        assert.ok(report.stdout.includes(
+            'Path 1: strokes 1..3 (3 segments) (2200, 2600) '
+            + '-> (500, 600) width 250 um color #243647'));
+        const originalGlyph = native('glyphs', '--profile', library,
+            '--inspect-glyph', 'ñ');
+        assert.equal(originalGlyph.status, 0, originalGlyph.stderr);
+        assert.match(originalGlyph.stdout,
+            /1: \(300, 500\) -> \(2000, 3000\)/);
+
+        for (const format of ['pdf', 'png']) {
+            const flags = ['--export-paper', format];
+            if (format === 'png') flags.push('--dpi', '72');
+            const actual = join(dir, `reversed.${format}`);
+            const equivalent = join(dir, `direct.${format}`);
+            const run = (args, path) => native('notebook',
+                '--printed-sheet', 'true', ...args,
+                '--place-text', '1', '30000', '45000', nfd,
+                ...flags, '--output', path);
+            const generated = run(['--glyph-file', library], actual);
+            const ink = reverseInk.flatMap((stroke) => [
+                '--glyph-stroke', nfd, String(stroke.x1), String(stroke.y1),
+                String(stroke.x2), String(stroke.y2),
+                String(stroke.width), stroke.color,
+            ]);
+            const manual = run(ink, equivalent);
+            assert.equal(generated.status, 0, generated.stderr);
+            assert.equal(manual.status, 0, manual.stderr);
+            assert.deepEqual(readFileSync(actual), readFileSync(equivalent),
+                `${format} must preserve exact reversed pen order`);
+            if (format === 'png') {
+                pngHasTransparentCorner(readFileSync(actual));
+            } else {
+                assert.ok(readFileSync(actual).subarray(0, 8).toString()
                     .startsWith('%PDF-1.4'));
             }
         }
