@@ -115,10 +115,10 @@ fn rectangle_for_path(
     }
 }
 
-// Rasterize caller-authored diagonal ink at physical pixel centers.
-// Axis-aligned ruled lines retain their historical rectangle projection.
-// The bounded physical segment box avoids scanning the entire page per stroke.
-fn paint_diagonal_ink(
+// Rasterize caller-authored ink at physical pixel centers. The PDF writer
+// uses round caps for these paths, including horizontal and vertical lines.
+// The bounded segment box avoids scanning the entire page per stroke.
+fn paint_segment_ink(
     pixels: &mut [u8],
     width: usize,
     height: usize,
@@ -129,7 +129,7 @@ fn paint_diagonal_ink(
 ) -> Result<(), String> {
     if stroke_width_um == 0 || start == end {
         return Err(
-            "diagonal ink needs a nonempty positive-width segment".into()
+            "authored ink needs a nonempty positive-width segment".into()
         );
     }
     let pitch = 25_400.0f64 / f64::from(dpi);
@@ -435,8 +435,12 @@ pub(super) fn render_paper_png(
     height_um: u32,
     dpi: u32,
     paths: &[PdfVectorPath],
+    ink_start: usize,
     border: Option<RoundedPaperBorder>,
 ) -> Result<Vec<u8>, String> {
+    if ink_start > paths.len() {
+        return Err("PNG ink path boundary is outside page paths".into());
+    }
     if !(72..=300).contains(&dpi) {
         return Err("PNG DPI must be between 72 and 300".into());
     }
@@ -454,7 +458,32 @@ pub(super) fn render_paper_png(
         .try_reserve_exact(bytes)
         .map_err(|error| format!("PNG raster allocation refused: {error}"))?;
     raster.resize(bytes, 0);
-    for path in paths {
+    for (index, path) in paths.iter().enumerate() {
+        // PDF paints the rounded border before authored ink. Without ink,
+        // keep the historical paper-only paint order and byte output.
+        if index == ink_start && let Some(outline) = border {
+            paint_rounded_border(
+                &mut raster, width, height, dpi, outline,
+            )?;
+        }
+        // Retain exact legacy rectangle rasterization for paper marks and
+        // printed annotations. Only explicitly appended pen paths use the
+        // PDF's round-capped segment semantics, independent of angle.
+        if index >= ink_start {
+            if let (
+                [PdfPathCommand::MoveTo(start), PdfPathCommand::LineTo(end)],
+                PdfPathPaint::Stroke {
+                    color, width_um: pen_width_um,
+                },
+            ) = (path.commands.as_slice(), path.paint) {
+                paint_segment_ink(
+                    &mut raster, width, height, dpi, (*start, *end),
+                    pen_width_um, color,
+                )?;
+                continue;
+            }
+            return Err("PNG authored ink requires a single pen segment".into());
+        }
         if let Ok((rectangle, color)) = rectangle_for_path(path) {
             paint_rectangle(&mut raster, width, height, dpi, rectangle, color)?;
         } else if let (
@@ -464,7 +493,7 @@ pub(super) fn render_paper_png(
             if start.x_um == end.x_um || start.y_um == end.y_um {
                 return Err("invalid zero-length paper stroke".into());
             }
-            paint_diagonal_ink(
+            paint_segment_ink(
                 &mut raster, width, height, dpi, (*start, *end),
                 line_width_um, color,
             )?;
@@ -474,7 +503,7 @@ pub(super) fn render_paper_png(
             );
         }
     }
-    if let Some(outline) = border {
+    if ink_start == paths.len() && let Some(outline) = border {
         paint_rounded_border(&mut raster, width, height, dpi, outline)?;
     }
     encode_rgba(

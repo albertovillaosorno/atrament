@@ -131,6 +131,21 @@ translucent marker simulation or browser text composition; neither images
 nor a persisted two-page notebook document are implemented. P5-011 remains
 open for its full native saved-content and image-layer acceptance.
 
+## Round-capped authored PNG ink and border order — 2026-11-04
+
+The native transparent PNG compositor now distinguishes the explicit ink
+segments appended after historical paper marks. Horizontal, vertical and
+diagonal authored pen strokes use rounded caps at physical pixel centers,
+matching the existing vector PDF round-cap rule; paper-only and printed-mark
+rectangles retain their previous rasterization and deterministic bytes.
+
+When a rounded notebook border is selected, the PNG now paints it before
+authored pen segments, matching the PDF's foreground ink precedence. Two
+red-to-green 150-DPI Rust pixel regressions cover previously opaque square
+corners and overlapping ink/border color, with transparent untouched pixels.
+All 35 paper-library tests and 17 real browser/native PDF+PNG integration
+tests passed. Image overlays and the saved complete notebook remain open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

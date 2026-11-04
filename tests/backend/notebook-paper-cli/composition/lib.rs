@@ -983,6 +983,67 @@ fn manual_diagonal_pen_ink_is_vector_pdf_and_visible_transparent_png() {
 }
 
 #[test]
+fn authored_horizontal_and_vertical_ink_use_round_png_pen_caps() {
+    let paper = default_paper_profile_json();
+    let horizontal = NotebookInkLine {
+        page: 1,
+        start_um: (25_400, 25_400),
+        end_um: (50_800, 25_400),
+        width_um: 1_500,
+        rgb: [0x42, 0x17, 0xc9],
+    };
+    let vertical = NotebookInkLine {
+        start_um: (76_200, 25_400),
+        end_um: (76_200, 50_800),
+        ..horizontal
+    };
+    let png = paper_profile_png_page_with_ink(
+        paper.as_bytes(), 150, false, None, false, 1, 0, None,
+        &[horizontal, vertical],
+    ).expect("axis-aligned authored pen paths rasterize");
+    let (width, _, raw) = stored_png_pixels(&png);
+    let pixel = |x: usize, y: usize| -> &[u8] {
+        let index = y * (width * 4 + 1) + 1 + x * 4;
+        raw.get(index..index + 4).expect("sample in physical page")
+    };
+    // Corners of a square-capped rectangular bounding box must be clear.
+    // Both strokes start at exactly 150 px and share PDF round-cap geometry.
+    assert_eq!(pixel(145, 145), &[0, 0, 0, 0]);
+    assert_eq!(pixel(445, 145), &[0, 0, 0, 0]);
+    assert_eq!(pixel(145, 150), &[0x42, 0x17, 0xc9, 255]);
+    assert_eq!(pixel(450, 145), &[0x42, 0x17, 0xc9, 255]);
+    assert_eq!(pixel(300, 150), &[0x42, 0x17, 0xc9, 255]);
+    assert_eq!(pixel(450, 300), &[0x42, 0x17, 0xc9, 255]);
+}
+
+#[test]
+fn transparent_png_draws_authored_ink_above_rounded_paper_border() {
+    let paper = default_paper_profile_json();
+    let ink = [NotebookInkLine {
+        page: 1,
+        start_um: (70_000, 22_750),
+        end_um: (100_000, 22_750),
+        width_um: 1_500,
+        rgb: [0xdf, 0x26, 0x53],
+    }];
+    // The vector PDF adds the border before ink, so overlapping pixels in
+    // the transparent PNG must display the caller's ink, not the border.
+    let png = paper_profile_png_page_with_ink(
+        paper.as_bytes(), 150, false, None, false, 1, 5_000,
+        None, &ink,
+    ).expect("rounded border and authored ink");
+    let (width, _, raw) = stored_png_pixels(&png);
+    let pixel = |x: usize, y: usize| -> &[u8] {
+        let index = y * (width * 4 + 1) + 1 + x * 4;
+        raw.get(index..index + 4).expect("sample in page")
+    };
+    assert_eq!(pixel(472, 130), &[0xdf, 0x26, 0x53, 255],
+        "ink has visual precedence over the paper border");
+    assert_eq!(pixel(472, 128), &[0, 0, 0, 0],
+        "no opaque backdrop above the paper border");
+}
+
+#[test]
 fn manual_ink_refuses_overflow_and_missing_printable_clearance() {
     let paper = default_paper_profile_json();
     let good = NotebookInkLine {
@@ -1027,6 +1088,11 @@ fn manual_ink_refuses_overflow_and_missing_printable_clearance() {
 }
 
 #[test]
+#[expect(
+    clippy::integer_division,
+    clippy::integer_division_remainder_used,
+    reason = "test-only fixed grid indexing across 32 columns and three pages",
+)]
 fn multilingual_sized_ink_batch_renders_pdf_and_selected_png() {
     let paper = default_paper_profile_json();
     let ink = (0..2738usize).map(|index| {

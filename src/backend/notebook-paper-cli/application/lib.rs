@@ -1179,7 +1179,9 @@ pub fn validate_paper_border_clearance(
 
 fn render_png(opts: Options, dpi: u32) -> Result<Vec<u8>, String> {
     let paths = paper_paths(opts)?;
-    png::render_paper_png(opts.width_um, opts.height_um, dpi, &paths, None)
+    png::render_paper_png(
+        opts.width_um, opts.height_um, dpi, &paths, paths.len(), None,
+    )
 }
 
 fn serialize_paths(
@@ -1677,6 +1679,9 @@ pub fn paper_profile_png_page_with_ink(
     if page_numbers {
         append_page_number(&mut paths, options, page)?;
     }
+    // Preserve the boundary between historical rectangular paper marks and
+    // round-capped authored strokes for the transparent PNG projection.
+    let ink_start = paths.len();
     // Refuse invalid off-page ink as well: selecting PNG page 1 must not
     // silently accept impossible marks intended for another page.
     for requested_page in 1..=MAX_PAGES {
@@ -1688,7 +1693,7 @@ pub fn paper_profile_png_page_with_ink(
     }
     let border = rounded_border(options, border_radius_um)?;
     png::render_paper_png(
-        options.width_um, options.height_um, dpi, &paths, border,
+        options.width_um, options.height_um, dpi, &paths, ink_start, border,
     )
 }
 
