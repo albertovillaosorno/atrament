@@ -22,15 +22,19 @@ const base = [
     '--glyph-stroke', 'ó', '900', '600', '1700', '3300', '250', '#123456',
     '--glyph-stroke', 'o\u0301', '1100', '600', '1900', '3300',
     '250', '#123456',
+];
+const headingOptions = [
     '--heading-style', 'marker', '--heading-color', '#F8DE91',
 ];
 
-function render(dir, markdown, format, extra = []) {
+function render(dir, source, format, extra = [],
+    flowFlag = '--flow-markdown', pngPage = 1) {
     const output = join(dir, `flow-${format}.output`);
-    const args = [...base, ...extra, '--flow-markdown', markdown,
+    const heading = flowFlag === '--flow-markdown' ? headingOptions : [];
+    const args = [...base, ...heading, ...extra, flowFlag, source,
         '--export-paper', format, '--output', output, '--replace'];
     if (format === 'png') {
-        args.push('--png-page', '1', '--dpi', '72');
+        args.push('--png-page', String(pngPage), '--dpi', '72');
     }
     const result = spawnSync('cargo', [
         'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
@@ -39,6 +43,123 @@ function render(dir, markdown, format, extra = []) {
     assert.equal(result.error, undefined, result.error?.message);
     return { result, output };
 }
+
+test('code fences keep literal Unicode ink and physical hard line breaks',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));
+        try {
+            const code = '# ó\n- a\n\n> o\u0301';
+            const samples = [
+                `\`\`\`rust\n${code}\n\`\`\``,
+                `   ~~~~ note\n${code}\n ~~~~  `,
+            ];
+            for (const format of ['pdf', 'png']) {
+                const plain = render(dir, code, format, punctuationInk,
+                    '--flow-text');
+                assert.equal(plain.result.status, 0, plain.result.stderr);
+                const expected = readFileSync(plain.output);
+                if (format === 'pdf') {
+                    assert.equal(expected.toString('latin1')
+                        .split('0.067 0.133 0.200 RG').length - 1, 3,
+                        'code markers are caller-authored literal glyphs');
+                }
+                for (const source of samples) {
+                    const candidate = render(dir, source, format,
+                        punctuationInk);
+                    assert.equal(candidate.result.status, 0,
+                        candidate.result.stderr);
+                    assert.deepEqual(readFileSync(candidate.output),
+                        expected, 'fence must match literal plain handwriting');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('fenced code paginates literal rows and selected page-two PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));
+        try {
+            const lines = Array.from({ length: 35 }, () => 'a');
+            const code = lines.join('\n');
+            const fenced = `\`\`\`\n${code}\n\`\`\``;
+            const plain = render(dir, code, 'pdf', [], '--flow-text');
+            assert.equal(plain.result.status, 0, plain.result.stderr);
+            const expectedPdf = readFileSync(plain.output);
+            assert.match(expectedPdf.toString('latin1'), /\/Type \/Page\b/);
+            const candidate = render(dir, fenced, 'pdf');
+            assert.equal(candidate.result.status, 0,
+                candidate.result.stderr);
+            assert.deepEqual(readFileSync(candidate.output), expectedPdf);
+            for (const page of [1, 2]) {
+                const native = render(dir, code, 'png', [],
+                    '--flow-text', page);
+                assert.equal(native.result.status, 0, native.result.stderr);
+                const expected = readFileSync(native.output);
+                const marked = render(dir, fenced, 'png', [],
+                    '--flow-markdown', page);
+                assert.equal(marked.result.status, 0,
+                    marked.result.stderr);
+                assert.deepEqual(readFileSync(marked.output), expected,
+                    `code page ${page} must use identical RGBA ink`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('fences end before ordinary Markdown headings and bullet ornaments',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));
+        try {
+            const fenced = 'a\n\`\`\`\na\n\`\`\`\n# a\n- a';
+            const reference = 'a  \na  \n# a\n- a';
+            for (const format of ['pdf', 'png']) {
+                const expectedResult = render(dir, reference, format);
+                assert.equal(expectedResult.result.status, 0,
+                    expectedResult.result.stderr);
+                const expected = readFileSync(expectedResult.output);
+                const actual = render(dir, fenced, format);
+                assert.equal(actual.result.status, 0,
+                    actual.result.stderr);
+                assert.deepEqual(readFileSync(actual.output), expected,
+                    'closing the code fence restores heading/list semantics');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('unclosed, unapproved and unsupported code fences refuse atomically',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));
+        try {
+            const output = join(dir, 'flow-pdf.output');
+            const sentinel = Buffer.from('selected preexisting PDF');
+            const cases = [
+                ['\`\`\`\na', /unclosed Markdown code fence refused/],
+                [' ~~~lang\na', /unclosed Markdown code fence refused/],
+                ['\`\`\`\na\n~~~~', /unclosed Markdown code fence refused/],
+                ['\`\`\`\`\na\n\`\`\`',
+                    /unclosed Markdown code fence refused/],
+                ['\`\`\`\n# ó\n\`\`\`',
+                    /missing authored glyph shapes/],
+                ['    \`\`\`\na', /missing authored glyph shapes/],
+                ['\`\`\`\n\`\`\`',
+                    /flow requires at least one visible text block/],
+            ];
+            for (const [source, diagnostic] of cases) {
+                writeFileSync(output, sentinel);
+                const result = render(dir, source, 'pdf');
+                assert.notEqual(result.result.status, 0, source);
+                assert.match(result.result.stderr, diagnostic, source);
+                assert.deepEqual(readFileSync(output), sentinel);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 
 test('closing ATX markers and up-to-three-space headings emit identical ink',
     () => {

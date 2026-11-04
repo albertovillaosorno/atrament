@@ -816,6 +816,53 @@ fn heading_body(body: &str) -> &str {
     trimmed
 }
 
+// Fences are syntactic only with 0..3 initial ASCII spaces. A single
+// optional short ASCII language tag is metadata, never authored ink.
+fn markdown_fence_marker(line: &str) -> Option<(u8, usize, &str)> {
+    let indent = line.bytes().take_while(|&byte| byte == b' ').count();
+    if indent > 3 {
+        return None;
+    }
+    let block = line.get(indent..)?;
+    let marker = *block.as_bytes().first()?;
+    if !matches!(marker, b'`' | b'~') {
+        return None;
+    }
+    let count = block.bytes().take_while(|&byte| byte == marker).count();
+    if count < 3 {
+        return None;
+    }
+    Some((marker, count, block.get(count..)?))
+}
+
+// Only an all-marker closing line can close an active fence. A shorter or
+// differently marked line remains literal code and needs authored glyphs.
+fn markdown_fence_transition(
+    active: &mut Option<(u8, usize)>, line: &str,
+) -> bool {
+    let Some((marker, count, tail)) = markdown_fence_marker(line) else {
+        return false;
+    };
+    let suffix = tail.trim_matches(' ');
+    match *active {
+        Some((open, minimum)) if marker == open
+            && count >= minimum && suffix.is_empty() => {
+            *active = None;
+            true
+        }
+        None if suffix.is_empty()
+            || (suffix.len() <= 32 && !suffix.is_empty()
+                && suffix.bytes().all(|byte| {
+                    byte.is_ascii_alphanumeric()
+                        || matches!(byte, b'_' | b'-' | b'+' | b'.' | b'#')
+                })) => {
+            *active = Some((marker, count));
+            true
+        }
+        _ => false,
+    }
+}
+
 // Restrict Markdown ordered markers to at most nine ASCII digits followed
 // by ". " or ") ". The number and delimiter remain authored text ink;
 // only unordered bullets receive a synthetic short line ornament.
@@ -934,6 +981,35 @@ fn flush_paragraph(
     Ok(())
 }
 
+// A fenced row is literal handwriting with physical hard breaks. Only
+// the fence delimiter is syntax: no invented code font, glyph, or style.
+fn handle_markdown_code_line(
+    layout: &mut Layout<'_>,
+    paragraph: &mut String,
+    paragraph_style: LineStyle,
+    pending_gap: &mut bool,
+    fence: &mut Option<(u8, usize)>,
+    input_line: &str,
+) -> Result<bool, String> {
+    if markdown_fence_transition(fence, input_line) {
+        flush_paragraph(layout, paragraph, paragraph_style)?;
+        return Ok(true);
+    }
+    if fence.is_none() {
+        return Ok(false);
+    }
+    if *pending_gap {
+        layout.add_gap()?;
+        *pending_gap = false;
+    }
+    if input_line.trim_matches(' ').is_empty() {
+        layout.blank_row()?;
+    } else {
+        layout.layout_line(input_line, LineStyle::Body)?;
+    }
+    Ok(true)
+}
+
 // Derive row height from visible authored text, not Markdown syntax. A
 // per-glyph height override for #, -, +, *, or > must not alter pitch
 // when that marker becomes a heading/list/quote ornament instead of ink.
@@ -943,10 +1019,18 @@ fn measured_pitch(
 ) -> Result<u32, String> {
     let boundaries = UnicodeGraphemeSegmentation;
     let mut pitch = DEFAULT_PITCH_UM;
+    let mut fence = None;
     for raw in source.text.lines() {
         let visible = if source.format == FlowFormat::Markdown {
-            let (style, body) = markdown_line(raw);
-            markdown_paragraph_break(raw, style, body).0
+            if markdown_fence_transition(&mut fence, raw) {
+                continue;
+            }
+            if fence.is_some() {
+                raw
+            } else {
+                let (style, body) = markdown_line(raw);
+                markdown_paragraph_break(raw, style, body).0
+            }
         } else {
             raw
         };
@@ -1025,8 +1109,14 @@ pub(super) fn layout_flow_with_region(
     let mut paragraph = String::new();
     let mut paragraph_style = LineStyle::Body;
     let mut pending_gap = false;
+    let mut fence = None;
     let mut source_lines = source.text.lines();
     while let Some(input_line) = source_lines.next() {
+        if source.format == FlowFormat::Markdown
+            && handle_markdown_code_line(&mut layout, &mut paragraph,
+                paragraph_style, &mut pending_gap, &mut fence, input_line)? {
+            continue;
+        }
         let raw = input_line.trim_end_matches(' ');
         if raw.is_empty() {
             if source.format == FlowFormat::Plain {
@@ -1086,6 +1176,9 @@ pub(super) fn layout_flow_with_region(
             }
             layout.layout_line(body, style)?;
         }
+    }
+    if fence.is_some() {
+        return Err("unclosed Markdown code fence refused".into());
     }
     flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
     if layout.lines.is_empty() {

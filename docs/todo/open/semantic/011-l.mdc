@@ -372,6 +372,30 @@ on refusal. A separator-only source still refuses without visible text.
 This does not introduce nested blocks, arbitrary thematic syntax or
 persisted notebook block identity.
 
+## Literal fenced Markdown code rows (partial) — 2026-11-04
+
+The native CLI now recognizes matching three-or-more backticks or tildes
+(with up to three leading ASCII spaces) as a limited Markdown code fence.
+An opening fence may carry one optional ASCII language token of up to 32
+characters; it is metadata, not a handwriting glyph or style. A closing
+fence must use the same marker with at least the opening count and may
+contain only trailing ASCII spaces. Unclosed fences refuse before export.
+
+Each content line inside a fence is literal authored handwriting: `#`,
+`>`, list markers and other Markdown punctuation are no longer interpreted
+as structure. Every source newline occupies a physical row, including
+empty rows; long literal lines still obey native wrapping/page/ink limits.
+Fence characters are syntax and need no authored glyphs, whereas visible
+code punctuation requires an exact caller-authored glyph shape. No inferred
+monospace font, syntax highlighting or hidden fallback is introduced.
+
+Four native PDF/transparent-PNG integration tests cover byte-identical
+plain-vs-fenced Unicode ink, backtick/tilde parity, literal marker colors,
+restored heading/list syntax after a fence, page-two PNG, and strict
+missing-glyph/unterminated-fence refusal and immutable selected output
+on failure. This is a CLI-only literal code
+block slice, not complete CommonMark or persisted semantic code identity.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded
