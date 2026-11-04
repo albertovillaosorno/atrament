@@ -284,6 +284,32 @@ impl Layout<'_> {
         Ok(())
     }
 
+    fn keep_heading_with_next(&mut self, separated: bool) -> Result<(), String> {
+        let top = self.top.checked_add(INSET_UM)
+            .ok_or("heading top inset overflow")?;
+        let bottom = self.bottom.checked_sub(INSET_UM)
+            .ok_or("heading bottom inset overflow")?;
+        let needed = self.pitch.checked_mul(2)
+            .and_then(|value| value.checked_add(if separated {
+                PARAGRAPH_GAP_UM
+            } else { 0 }))
+            .ok_or("heading following-row budget overflow")?;
+        // Extremely short paper may hold only one row. Do not reject a
+        // valid heading there just because two rows cannot coexist.
+        if top.checked_add(needed).is_none_or(|end| end > bottom) {
+            return Ok(());
+        }
+        if self.y.checked_add(needed).is_none_or(|end| end > bottom) {
+            self.page = self.page.checked_add(1)
+                .ok_or("flow page count overflow")?;
+            if self.page > MAX_PAGES {
+                return Err("flow exceeds 32 physical pages".into());
+            }
+            self.y = top;
+        }
+        Ok(())
+    }
+
     fn layout_line(
         &mut self, content: &str, style: LineStyle,
     ) -> Result<(), String> {
@@ -625,6 +651,23 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
     (LineStyle::Body, raw)
 }
 
+// A heading needs its first following visible line; multiple Markdown
+// empty lines are one optional paragraph gap. An ending heading has no
+// following line to keep, so it can occupy the last physical row.
+fn following_heading_gap<'text>(
+    lines: impl Iterator<Item = &'text str>,
+) -> Option<bool> {
+    let mut separated = false;
+    for line in lines {
+        if line.trim_end_matches(' ').is_empty() {
+            separated = true;
+        } else {
+            return Some(separated);
+        }
+    }
+    None
+}
+
 /// Compile bounded visible text on the caller-selected native page profile.
 /// This does not create persistent notebook semantic state.
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
@@ -680,7 +723,8 @@ pub(super) fn layout_flow(
     // Plain-text blank lines instead consume a full physical writing row.
     let mut paragraph = String::new();
     let mut pending_gap = false;
-    for input_line in source.text.lines() {
+    let mut source_lines = source.text.lines();
+    while let Some(input_line) = source_lines.next() {
         let raw = input_line.trim_end_matches(' ');
         if raw.is_empty() {
             if source.format == FlowFormat::Plain {
@@ -721,6 +765,10 @@ pub(super) fn layout_flow(
             if !paragraph.is_empty() {
                 layout.layout_line(&paragraph, LineStyle::Body)?;
                 paragraph.clear();
+            }
+            if matches!(style, LineStyle::Heading(_))
+                && let Some(gap) = following_heading_gap(source_lines.clone()) {
+                layout.keep_heading_with_next(gap)?;
             }
             layout.layout_line(body, style)?;
         }

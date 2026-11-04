@@ -116,6 +116,16 @@ Two native regressions verify page 2 physical ink, byte-identical PDF/PNG
 for collapsed Markdown whitespace, distinct plain output, and immutable
 existing PDF on excessive rows or an insufficient page selection.
 
+Markdown heading placement also reserves one following visible row, including
+an optional collapsed blank-line gap, when that combined span fits a page.
+Near the foot of a sheet, the title and first paragraph/list row therefore
+move together; an ending heading is not forced onto a new page. On paper
+with room for only one physical row, the limited compiler gracefully keeps
+the heading and following content on successive pages rather than refusing.
+Two native tests cover all three heading levels, exact page-local ornament
+coordinates, actual two-page PDF/PNG and the one-row fallback. This is a
+simple first-row orphan guard, not full multi-line widow/orphan control.
+
 Three additional ordered-list tests verify mixed heading, decimal and
 parenthesized numbering alongside bullet marks; native PDF and transparent
 PNG use the same user-authored numerals and delimiters. Wrapped numbered

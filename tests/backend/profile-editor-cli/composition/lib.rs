@@ -3251,6 +3251,83 @@ fn marker_headings_keep_authored_text_and_bullets_with_colored_ink() {
 }
 
 #[test]
+fn markdown_heading_keeps_next_visible_row_on_its_physical_page() {
+    let preceding = "a  \n".repeat(27);
+    for (heading, following, gap) in [
+        ("# a", "\na", 0u32),
+        ("## a", "\n\n\na", 4_000),
+        ("### a", "\n\n\n\na", 4_000),
+    ] {
+        let markdown = format!("{preceding}{heading}{following}");
+        let source = FlowSource::new(FlowFormat::Markdown, &markdown)
+            .expect("bounded heading at final available row");
+        let (runs, ornaments, pages) = layout_flow(
+            &source, &NotebookProfile::default(), None,
+            HeadingDecoration::default(),
+        ).expect("heading and body fitted on one page");
+        assert_eq!(pages, 2);
+        assert_eq!(runs.len(), 29);
+        assert_eq!(runs[26].page, 1);
+        assert_eq!(runs[27].page, 2, "heading moves off orphan row");
+        assert_eq!(runs[28].page, 2, "first body row follows heading");
+        assert_eq!(runs[27].origin_um, (22_500, 24_500));
+        assert_eq!(runs[28].origin_um.1 - runs[27].origin_um.1,
+            9_000 + gap);
+        assert_eq!(ornaments.len(), 1);
+        assert_eq!(ornaments[0].page, 2,
+            "native underline stays with its heading");
+        let mut cli = args(&[
+            "--printed-sheet", "true", "--export-paper", "pdf",
+            "--glyph-stroke", "a", "0", "0", "3500", "4500",
+            "250", "#204060", "--flow-markdown", &markdown,
+        ]);
+        let pdf = execute_notebook(&cli).expect("real two-page PDF")
+            .expect("PDF bytes");
+        let content = String::from_utf8_lossy(&pdf);
+        let streams = content.split("\nstream\n").skip(1)
+            .map(|part| part.split("\nendstream").next().unwrap_or(""))
+            .collect::<Vec<_>>();
+        assert_eq!(streams.len(), 2);
+        assert!(!streams[0].contains("0.118 0.188 0.290 RG"),
+            "no heading underline on previous page");
+        assert!(streams[1].contains("0.118 0.188 0.290 RG"),
+            "heading underline is native page-two ink");
+        cli[3] = "png".into();
+        cli.extend(args(&["--png-page", "2", "--dpi", "72"]));
+        let png = execute_notebook(&cli).expect("page-two PNG")
+            .expect("PNG bytes");
+        assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    }
+    let ending = format!("{preceding}# a");
+    let end_source = FlowSource::new(FlowFormat::Markdown, &ending)
+        .expect("a final heading is allowed");
+    let (runs, ornaments, pages) = layout_flow(
+        &end_source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("no invisible following row reserved");
+    assert_eq!(pages, 1);
+    assert_eq!(runs[27].page, 1);
+    assert_eq!(ornaments[0].page, 1);
+}
+
+#[test]
+fn heading_keep_with_next_degrades_on_one_row_printable_sheet() {
+    let mut profile = NotebookProfile::default();
+    profile.paper_json = profile.paper_json.replace(
+        "\"margin_bottom_um\": 16000", "\"margin_bottom_um\": 258000",
+    );
+    assert!(profile.printable_rect_um().is_ok());
+    let source = FlowSource::new(FlowFormat::Markdown, "# a\na")
+        .expect("heading and follower");
+    let (runs, ornaments, pages) = layout_flow(
+        &source, &profile, None, HeadingDecoration::default(),
+    ).expect("single-row sheet supports a heading and following page");
+    assert_eq!(pages, 2);
+    assert_eq!((runs[0].page, runs[1].page), (1, 2));
+    assert_eq!(ornaments[0].page, 1);
+}
+
+#[test]
 fn markdown_heading_levels_have_distinct_native_ink_weights() {
     let source = FlowSource::new(
         FlowFormat::Markdown, "# a\n## a\n### a\n- a",
