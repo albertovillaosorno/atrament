@@ -4179,6 +4179,132 @@ fn custom_marker_heading_exports_native_pdf_png_and_replays() {
 }
 
 #[test]
+fn heading_lettering_styles_only_markdown_heading_glyph_ink() {
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "# a\n\na\n## a\n- a\n### a",
+    ).expect("Markdown heading and body with a list");
+    let mut heading = HeadingDecoration::default();
+    heading.parse(
+        "--heading-ink-color", &mut args(&["#BD376A"]).iter(),
+    ).expect("explicit title glyph pigment");
+    heading.parse(
+        "--heading-ink-scale", &mut args(&["180"]).iter(),
+    ).expect("explicit 180 percent heading pen weight");
+    let (runs, ornaments, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None, heading,
+    ).expect("measured physical heading ink");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.iter().map(|run| run.heading_ink.is_some())
+        .collect::<Vec<_>>(), [true, false, true, false, true]);
+    assert_eq!(ornaments.len(), 4, "default underlines plus bullet");
+    assert!(ornaments.iter().all(|line| line.rgb != [0xBD, 0x37, 0x6A]),
+        "styling glyph ink does not recolor title ornaments");
+
+    let mut authored = GlyphOverlay::default();
+    authored.parse("--glyph-stroke", &mut args(&[
+        "a", "900", "1200", "2400", "3200", "250", "#123456",
+    ]).iter()).expect("one canonical authored lowercase glyph");
+    let canonical = authored.strokes.clone();
+    authored.runs = runs;
+    let physical = authored.expand(&ornaments, None)
+        .expect("same native PDF/PNG ink segment pipeline");
+    let glyph_lines = &physical[ornaments.len()..];
+    assert_eq!(glyph_lines.len(), 5);
+    assert_eq!(glyph_lines.iter().map(|line| (line.width_um, line.rgb))
+        .collect::<Vec<_>>(), [
+        (450, [0xBD, 0x37, 0x6A]), (250, [0x12, 0x34, 0x56]),
+        (450, [0xBD, 0x37, 0x6A]), (250, [0x12, 0x34, 0x56]),
+        (450, [0xBD, 0x37, 0x6A]),
+    ]);
+    assert_eq!(authored.strokes.first().expect("canonical unchanged").rgb,
+        canonical[0].rgb);
+    assert_eq!(authored.strokes[0].width_um, 250);
+
+    let command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "1200", "2400", "3200",
+        "250", "#123456", "--flow-markdown",
+        "# a\n\na\n## a\n- a\n### a",
+        "--heading-ink-color", "#BD376A", "--heading-ink-scale", "180",
+    ]);
+    let pdf = execute_notebook(&command).expect("native styled PDF")
+        .expect("real vector bytes");
+    let vector = String::from_utf8_lossy(&pdf);
+    assert_eq!(vector.matches("0.741 0.216 0.416 RG").count(), 3,
+        "only the three title glyphs use chosen pigment");
+    assert_eq!(vector.matches("0.071 0.204 0.337 RG").count(), 2,
+        "body and bullet text remain author-colored");
+    assert_eq!(vector.matches("0.450 w").count(), 0,
+        "PDF physical widths use points, not micrometres");
+    assert_eq!(pdf, execute_notebook(&command).expect("PDF replay")
+        .expect("exact bytes"));
+    let mut png_command = command.clone();
+    png_command[3] = "png".into();
+    png_command.extend(args(&["--dpi", "72"]));
+    let png = execute_notebook(&png_command).expect("native PNG")
+        .expect("RGBA bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(png, execute_notebook(&png_command).expect("PNG replay")
+        .expect("stable PNG bytes"));
+    let original = command[..command.len() - 4].to_vec();
+    assert_ne!(pdf, execute_notebook(&original).expect("plain heading ink")
+        .expect("PDF bytes"));
+    let mut plain_png = original;
+    plain_png[3] = "png".into();
+    plain_png.extend(args(&["--dpi", "72"]));
+    assert_ne!(png, execute_notebook(&plain_png).expect("plain PNG")
+        .expect("RGBA bytes"));
+}
+
+#[test]
+fn heading_lettering_rejects_invalid_options_and_oversized_pen_atomically() {
+    let target = test_path();
+    let filename = target.to_str().expect("test-owned output name");
+    fs::write(&target, b"keep-previous-styled-notebook")
+        .expect("sentinel output");
+    let base = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "1200", "2400", "3200",
+        "700", "#123456", "--flow-markdown", "# a\n\na",
+        "--output", filename, "--replace",
+    ]);
+    let invalid = [
+        args(&["--heading-ink-scale", "99"]),
+        args(&["--heading-ink-scale", "251"]),
+        args(&["--heading-ink-scale", "-1"]),
+        args(&["--heading-ink-scale", "100.5"]),
+        args(&["--heading-ink-scale", "4294967296"]),
+        args(&["--heading-ink-scale", "150", "--heading-ink-scale", "200"]),
+        args(&["--heading-ink-scale"]),
+        args(&["--heading-ink-color", "#12345Z"]),
+        args(&["--heading-ink-color", "#12345"]),
+        args(&[
+            "--heading-ink-color", "#abcdef",
+            "--heading-ink-color", "#fedcba",
+        ]),
+        args(&["--heading-ink-color"]),
+        args(&["--heading-ink-scale", "250"]),
+    ];
+    for options in invalid {
+        let mut attempt = base.clone();
+        attempt.extend(options);
+        assert!(execute_notebook(&attempt).is_err(), "{attempt:?}");
+        assert_eq!(fs::read(&target).expect("existing output preserved"),
+            b"keep-previous-styled-notebook");
+    }
+    for flag in ["--heading-ink-color", "--heading-ink-scale"] {
+        let argument = if flag.ends_with("color") { "#123456" } else { "150" };
+        assert!(execute_notebook(&args(&[
+            "--printed-sheet", "true", "--export-paper", "pdf",
+            "--glyph-stroke", "a", "900", "1200", "2400", "3200",
+            "250", "#123456", "--flow-text", "a",
+            flag, argument,
+        ])).is_err(), "heading styling requires Markdown flow");
+    }
+    fs::remove_file(target).expect("remove owned sentinel");
+}
+
+#[test]
 fn invalid_heading_decorations_do_not_replace_existing_pdf() {
     let target = test_path();
     let filename = target.to_str().expect("owned target");

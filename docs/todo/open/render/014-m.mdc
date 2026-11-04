@@ -44,6 +44,28 @@ records remain accepted theoretical deliverables and are not reopened:
 - ATR-P5-006 — archived render design
 - ATR-P5-007 — archived render design
 
+## Native heading lettering pigment and weight (partial) — 2026-11-03
+
+The existing Rust `atrament-profiles notebook --flow-markdown` compiler now
+accepts opt-in `--heading-ink-color '#RRGGBB'` and
+`--heading-ink-scale 100..250`. These style the **authored glyph ink** in
+`#`/`##`/`###` heading rows, independently of the ordinary underline,
+double underline or `--heading-style marker` backdrop color. The original
+canonical glyph TSV, geometry, seeded per-occurrence variation and all
+non-heading content remain unchanged. Stroke thickness is multiplied after
+optional mean-profile scaling; a physical pen width above 1500 µm or
+outside page margins refuses before replacing an existing output. This
+only multiplies pen width, not glyph height or ideal curve geometry.
+
+Two native regressions check all three heading levels beside paragraph and
+list body rows, exact page-specific physical ink segments and RGB, unchanged
+source glyphs, genuine deterministic PDF/transparent PNG output, and atomic
+rejection of duplicate, malformed, outside-range or oversized controls.
+The feature has no independently persisted style settings or browser-driven
+native rendering. It does not yet provide marker-shaped glyph lettering,
+opacity/translucent material, calibrated texture or continuous cursive, so
+P5-014 remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

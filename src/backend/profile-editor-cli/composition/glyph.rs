@@ -364,28 +364,9 @@ impl GlyphOverlay {
                             "text exceeds 4096 total pen strokes".into()
                         );
                     }
-                    let translate = |point| {
-                        glyph_point(glyph_x, glyph_y, point, metrics)
-                    };
-                    let width_um = if let Some(values) = metrics {
-                        scale(shape.width_um, values.ink_thickness,
-                            DEFAULT_TEMPLATE_INK_UM)?
-                    } else {
-                        shape.width_um
-                    };
-                    if !(80..=1_500).contains(&width_um) {
-                        return Err(concat!(
-                            "scaled glyph ink width exceeds ",
-                            "80..1500 um",
-                        ).into());
-                    }
-                    expanded.push(NotebookInkLine {
-                        page: run.page,
-                        start_um: translate(shape.start_um)?,
-                        end_um: translate(shape.end_um)?,
-                        width_um,
-                        rgb: shape.rgb,
-                    });
+                    expanded.push(placed_ink(
+                        shape, run, (glyph_x, glyph_y), metrics,
+                    )?);
                 }
                 let advance = if let Some(values) = metrics {
                     i64::from(values.width)
@@ -556,6 +537,7 @@ impl GlyphOverlay {
                     ).into());
                 }
                 self.runs.push(TextRun {
+                    heading_ink: None,
                     page: usize::try_from(page).map_err(|error| {
                         format!("invalid text page: {error}")
                     })?,
@@ -722,6 +704,36 @@ fn coordinate(origin_um: i64, local_um: u32) -> Result<u32, String> {
         .map_err(|_error| {
             "glyph placement needs nonnegative coordinates".into()
         })
+}
+
+// Keep title lettering styling as the last, export-only ink treatment:
+// authored glyph coordinates, colors and dimensions never mutate.
+fn placed_ink(
+    shape: &GlyphStroke, run: &TextRun, origin: (i64, i64),
+    metrics: Option<GlyphMetrics>,
+) -> Result<NotebookInkLine, String> {
+    let translate = |point| glyph_point(origin.0, origin.1, point, metrics);
+    let mean_width = if let Some(values) = metrics {
+        scale(shape.width_um, values.ink_thickness, DEFAULT_TEMPLATE_INK_UM)?
+    } else {
+        shape.width_um
+    };
+    let width_um = if let Some(style) = run.heading_ink {
+        scale(mean_width, style.scale_percent, 100)?
+    } else {
+        mean_width
+    };
+    if !(80..=1_500).contains(&width_um) {
+        return Err("scaled glyph ink width exceeds 80..1500 um".into());
+    }
+    Ok(NotebookInkLine {
+        page: run.page,
+        start_um: translate(shape.start_um)?,
+        end_um: translate(shape.end_um)?,
+        width_um,
+        rgb: run.heading_ink.and_then(|style| style.color)
+            .unwrap_or(shape.rgb),
+    })
 }
 
 fn missing_shapes_error(missing: &[&str]) -> String {

@@ -438,11 +438,29 @@ two 0.95-mm strokes. Underlines likewise step down from 0.55 to 0.42 to
 the underline color. Select `--heading-style double-underline` to add a
 second level-weighted ink line 0.9 mm above the original, optionally with
 `--heading-color '#64A3C5'`; `--heading-style none` removes ornaments.
-These levels change ink decoration, **not** the authored glyph sizes or
-shape. The 4096-ink-segment cap and physical margin checks still apply to
-heading ink. These are simple pen decorations, **not** full title fonts,
-translucent highlighters or arbitrary image layers. They work with the
-opt-in `--glyph-variation` ink sampler described below.
+For independent **handwritten title lettering**, use
+`--heading-ink-color '#BD376A' --heading-ink-scale 180`. This recolors only
+Markdown heading glyphs and increases their pen thickness to 180 percent;
+body text, authored glyph coordinates, canonical TSV and decorative marker
+bands retain their original settings. The permitted weight range is
+100–250 percent. For example:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --heading-style marker --heading-color '#F8DE91' \
+  --heading-ink-color '#BD376A' --heading-ink-scale 180 \
+  --export-paper pdf --output decorated-notes.pdf
+```
+
+Both ink options require Markdown flow, are compatible with the existing
+seeded `--glyph-variation` and saved mean profiles, and apply after the
+selected authored/varied stroke width is established. If a thicker pen
+exceeds the valid 80–1500 µm bound or a page margin, export refuses before
+an existing file is replaced. Levels still change decoration, **not** the
+glyph dimensions or ideal geometry; no new title font is synthesized. The
+4096-ink-segment cap remains. These are simple pen decorations, **not**
+translucent highlighters, continuous cursive or image layers.
 
 For a notebook profile already saved as `notebook.json`, supply
 `--profile notebook.json` before the flow options to use its paper/margins
@@ -532,7 +550,7 @@ no PDF/PNG is created or overwritten. Author more glyphs in the editor
 or select a deliberate native `--fallback-glyph` mapping. The CLI does
 not yet save semantic notebook body content or offer browser Markdown
 paste/preview, automatic handwriting shapes, cursive joining or
-specialty decorative letterforms beyond the simple marker band.
+custom title letterforms beyond recolored/thickened authored strokes.
 
 The same Rust-only CLI can draw **explicit caller-owned pen segments** over
 paper, printed dates, and page numbers. A separate `--ink-line` is repeated

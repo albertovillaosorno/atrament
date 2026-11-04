@@ -42,7 +42,7 @@ use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 use super::glyph::segment_at;
-use super::{GlyphOverlay, TextRun};
+use super::{GlyphOverlay, HeadingInk, TextRun};
 
 const MAX_FLOW_BYTES: usize = 4_096;
 const MAX_FLOW_LINES: usize = 128;
@@ -172,12 +172,29 @@ enum HeadingStyle {
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
 pub(super) struct HeadingDecoration {
     color: Option<[u8; 3]>,
+    glyph_color: Option<[u8; 3]>,
+    glyph_scale: Option<u32>,
     style: Option<HeadingStyle>,
 }
 
 impl HeadingDecoration {
+    const fn glyph_ink(self) -> Option<HeadingInk> {
+        if self.glyph_color.is_some() || self.glyph_scale.is_some() {
+            Some(HeadingInk {
+                color: self.glyph_color,
+                scale_percent: match self.glyph_scale {
+                    Some(scale) => scale,
+                    None => 100,
+                },
+            })
+        } else {
+            None
+        }
+    }
+
     pub(super) const fn is_selected(self) -> bool {
         self.color.is_some() || self.style.is_some()
+            || self.glyph_color.is_some() || self.glyph_scale.is_some()
     }
 
     pub(super) fn parse(
@@ -187,22 +204,42 @@ impl HeadingDecoration {
             format!("{flag} requires a heading setting")
         })?;
         match flag {
-            "--heading-color" => {
-                if self.color.is_some() {
-                    return Err("--heading-color may appear only once".into());
+            "--heading-color" | "--heading-ink-color" => {
+                let destination = if flag == "--heading-color" {
+                    &mut self.color
+                } else {
+                    &mut self.glyph_color
+                };
+                if destination.is_some() {
+                    return Err(format!("{flag} may appear only once"));
                 }
                 if selected.len() != 7 || !selected.is_ascii()
                     || !selected.starts_with('#') {
-                    return Err("heading color must be #RRGGBB".into());
+                    return Err(format!("{flag} requires #RRGGBB"));
                 }
                 let byte = |start: usize| -> Result<u8, String> {
                     let digits = selected.get(start..start.saturating_add(2))
-                        .ok_or("heading color must be #RRGGBB")?;
-                    u8::from_str_radix(digits, 16).map_err(|_error| {
-                        "heading color must be #RRGGBB".into()
-                    })
+                        .ok_or_else(|| format!("{flag} requires #RRGGBB"))?;
+                    u8::from_str_radix(digits, 16)
+                        .map_err(|_error| format!("{flag} requires #RRGGBB"))
                 };
-                self.color = Some([byte(1)?, byte(3)?, byte(5)?]);
+                *destination = Some([byte(1)?, byte(3)?, byte(5)?]);
+            }
+            "--heading-ink-scale" => {
+                if self.glyph_scale.is_some() {
+                    return Err("--heading-ink-scale repeated".into());
+                }
+                if selected.is_empty()
+                    || !selected.bytes().all(|byte| byte.is_ascii_digit()) {
+                    return Err("heading ink scale must be 100..250".into());
+                }
+                let scale = selected.parse::<u32>().map_err(|_error| {
+                    "heading ink scale must be 100..250 percent"
+                })?;
+                if !(100..=250).contains(&scale) {
+                    return Err("heading ink scale must be 100..250".into());
+                }
+                self.glyph_scale = Some(scale);
             }
             "--heading-style" => {
                 if self.style.is_some() {
@@ -600,6 +637,11 @@ impl Layout<'_> {
             });
         }
         self.lines.push(TextRun {
+            heading_ink: if matches!(style, LineStyle::Heading(_)) {
+                self.heading.glyph_ink()
+            } else {
+                None
+            },
             page: self.page,
             origin_um: (start_x, y),
             text,

@@ -115,6 +115,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY] \
     [--heading-style underline|double-underline|marker|none] \
     [--heading-color '#RRGGBB'] \
+    [--heading-ink-color '#RRGGBB'] [--heading-ink-scale 100..250] \
     [--flow-text TEXT | --flow-markdown MARKDOWN | \
      --flow-text-file FILE | --flow-markdown-file FILE] \
     [--flow-region LEFT_UM TOP_UM WIDTH_UM HEIGHT_UM] \
@@ -140,6 +141,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     It auto-selects PDF page count unless --pages is explicit. \
     Markdown headings default to dark underlines; select a user-colored \
     single/double underline, opaque pastel marker band or no ornament. \
+    --heading-ink-color recolors heading glyph ink, and \
+    --heading-ink-scale enlarges only heading pen widths (percent); \
+    the authored body strokes and glyph templates remain unchanged. \
     --handwriting-profile applies selected mean dimensions to authored \
     shapes, not statistical sampling. --glyph-variation explicitly \
     applies reproducible per-occurrence creative jitter to the same shapes; \
@@ -161,8 +165,15 @@ struct GlyphFallback {
     missing: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct HeadingInk {
+    color: Option<[u8; 3]>,
+    scale_percent: u32,
+}
+
 #[derive(Clone, Debug)]
 struct TextRun {
+    heading_ink: Option<HeadingInk>,
     origin_um: (u32, u32),
     page: usize,
     text: String,
@@ -1169,14 +1180,14 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--inspect" => inspect = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
-            "--heading-style" | "--heading-color" =>
+            "--heading-style" | "--heading-color"
+            | "--heading-ink-color" | "--heading-ink-scale" =>
                 heading.parse(option, &mut iter)?,
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
             "--flow-text" | "--flow-markdown"
-            | "--flow-text-file" | "--flow-markdown-file" => {
-                parse_notebook_flow(&mut iter, option, &mut flow)?;
-            }
+            | "--flow-text-file" | "--flow-markdown-file" =>
+                parse_notebook_flow(&mut iter, option, &mut flow)?,
             "--export-paper" | "--pages" | "--dpi" | "--png-page"
             | "--ink-line" | "--glyph-stroke" | "--glyph-file"
             | "--place-text" | "--fallback-glyph"
