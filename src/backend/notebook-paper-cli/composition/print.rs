@@ -316,6 +316,7 @@ fn supported_xref_table(
         if first == b"trailer" {
             return seen_entry && supported_xref_table_trailer(
                 bytes.get(at..).unwrap_or_default(), minimum_size,
+                document, table_start,
             );
         }
         let Some(first_index) = str::from_utf8(first).ok()
@@ -418,12 +419,52 @@ fn bounded_xref_size(
     Some(number)
 }
 
+// /Prev, when present on a terminal traditional table, must lead back to
+// an earlier cross-reference record rather than to arbitrary data, a self
+// reference or a forged future byte offset. This is not recursive parsing
+// of older revisions; it only authenticates the immediate target's header.
+fn bounded_previous_xref(
+    bytes: &[u8], at: &mut usize, document: &[u8], table_start: usize,
+) -> bool {
+    *at = pdf_trivia_end(bytes, *at);
+    let start = *at;
+    while bytes.get(*at).is_some_and(u8::is_ascii_digit) {
+        *at = at.saturating_add(1);
+    }
+    let Some(offset) = bytes.get(start..*at)
+        .and_then(|digits| str::from_utf8(digits).ok())
+        .and_then(|digits| digits.parse::<usize>().ok())
+    else { return false; };
+    if offset < 9 || offset >= table_start
+        || !bytes.get(*at).is_some_and(|byte| {
+            byte.is_ascii_whitespace()
+                || matches!(byte, b'>' | b'/' | b'%')
+        }) {
+        return false;
+    }
+    let Some(earlier) = document.get(offset..table_start) else {
+        return false;
+    };
+    if earlier.starts_with(b"xref")
+        && earlier.get(4).is_some_and(u8::is_ascii_whitespace) {
+        return true;
+    }
+    // A PDF 1.5+ incremental revision may refer back to an xref stream.
+    let stream_edition = matches!(document.get(5..8),
+        Some([b'1', b'.', b'5'..=b'7'] | [b'2', b'.', b'0']));
+    stream_edition && earlier.get(..earlier.len().min(16_384))
+        .is_some_and(|prefix| xref_stream_header_end(prefix).is_some())
+}
+
 // The required trailer /Size is one positive top-level direct decimal.
 // It must cover every cross-reference subsection's exclusive upper bound.
 // Balance nested dictionaries, arrays and literal/hex strings without
 // mistaking a nested /Size or >> text for the terminal dictionary close.
 // After that close, only whitespace or PDF comments may precede startxref.
-fn supported_xref_table_trailer(bytes: &[u8], minimum_size: usize) -> bool {
+fn supported_xref_table_trailer(
+    bytes: &[u8], minimum_size: usize,
+    document: &[u8], table_start: usize,
+) -> bool {
     let mut at = pdf_trivia_end(bytes, 0);
     if !bytes.get(at..).is_some_and(|tail| tail.starts_with(b"<<")) {
         return false;
@@ -432,6 +473,7 @@ fn supported_xref_table_trailer(bytes: &[u8], minimum_size: usize) -> bool {
     let mut depth = 1usize;
     let mut array_depth = 0usize;
     let mut seen_size = false;
+    let mut seen_prev = false;
     while at < bytes.len() {
         at = pdf_trivia_end(bytes, at);
         match bytes.get(at) {
@@ -487,6 +529,14 @@ fn supported_xref_table_trailer(bytes: &[u8], minimum_size: usize) -> bool {
                         return false;
                     }
                     seen_size = true;
+                } else if depth == 1 && array_depth == 0
+                    && pdf_name_is(name, b"Prev") {
+                    if seen_prev || !bounded_previous_xref(
+                        bytes, &mut at, document, table_start,
+                    ) {
+                        return false;
+                    }
+                    seen_prev = true;
                 }
             }
             Some(_) => at = at.saturating_add(1),

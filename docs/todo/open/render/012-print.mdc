@@ -347,6 +347,26 @@ Native paper output, genuine PDF 1.5/2.0 stream fixtures, 24 print tests
 and strict all-target Clippy pass. No PDF decompression, full grammar or
 physical printer acceptance is implied.
 
+## Bounded incremental xref predecessor check (partial) — 2026-11-04
+
+A traditional terminal xref table now checks an optional top-level `/Prev`
+entry before CUPS submission. Its single direct decimal byte offset must
+point backward before the terminal table, to a previous xref-table token or
+an admitted PDF 1.5+ xref-stream header. Duplicate aliases such as
+`/Prev` and `/P#72ev`, zero, signed, nonnumeric, malformed, forward and
+non-xref pointers refuse without sending bytes or modifying the PDF.
+Nested metadata is not mistaken for a top-level predecessor.
+
+The red-before/green-after fake-CUPS test appends an incremental revision
+to the genuine native two-page PDF and verifies that correct direct and
+escaped `/Prev` fields spool exactly the selected bytes, while malformed
+revisions never reach the fake queue. Independent `pdfinfo` read both the
+original and incrementally revised A4 PDF as two pages with no errors.
+
+This inspects only the immediate prior xref header, not a complete chain of
+PDF revisions, object references or contents; no real CUPS device or
+physical alignment is verified. The broader printed-page task stays open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
