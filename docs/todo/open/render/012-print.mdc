@@ -91,6 +91,12 @@ against an executable fake-spool script, with no launch and unchanged input
 bytes. An indirect xref-stream framing case remains eligible, without
 claiming complete PDF parsing.
 
+The indirect-stream preflight also now checks an exact PDF `/XRef` name
+boundary rather than accepting `/XRefShadow` as an xref stream. An added
+negative regression proves that the malformed type refuses both selected
+file admission and fake-spool launch, preserving the source bytes. The
+PDF grammar itself and earlier object contents are still not validated.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

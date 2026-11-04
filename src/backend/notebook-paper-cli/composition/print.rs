@@ -235,11 +235,19 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     let Some(dictionary) = prefix.get(..stream) else {
         return false;
     };
-    dictionary.windows(b"/Type".len())
+    // PDF names terminate at whitespace or a lexical delimiter. A longer
+    // name such as /XRefShadow is not the required indirect-stream type.
+    let Some(type_value) = dictionary.windows(b"/Type".len())
         .position(|part| part == b"/Type")
         .and_then(|index| index.checked_add(b"/Type".len()))
         .and_then(|start| dictionary.get(start..))
-        .is_some_and(|tail| tail.trim_ascii_start().starts_with(b"/XRef"))
+    else {
+        return false;
+    };
+    type_value.trim_ascii_start().strip_prefix(b"/XRef")
+        .is_some_and(|suffix| suffix.first().is_none_or(|next| {
+            next.is_ascii_whitespace() || b"()<>[]/%".contains(next)
+        }))
 }
 
 fn selected_pdf(path: &Path) -> Result<Vec<u8>, String> {

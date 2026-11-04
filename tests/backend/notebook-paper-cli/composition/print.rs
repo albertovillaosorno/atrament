@@ -318,7 +318,7 @@ fn fake_pdf_trailers_and_retargeted_xrefs_cannot_reach_a_printer() {
     let ordinary_object = stream_framing.windows(b"/Type /XRef".len())
         .position(|part| part == b"/Type /XRef")
         .expect("xref stream dictionary type");
-    let mut wrong_type = stream_framing;
+    let mut wrong_type = stream_framing.clone();
     let type_value = ordinary_object.checked_add(b"/Type /".len())
         .expect("dictionary type index");
     wrong_type.get_mut(type_value..)
@@ -326,6 +326,21 @@ fn fake_pdf_trailers_and_retargeted_xrefs_cannot_reach_a_printer() {
         .expect("four-letter type value").copy_from_slice(b"Page");
     assert!(!supported_pdf_cross_reference(&wrong_type),
         "a normal indirect page object is not an xref stream");
+    let mut wrong_name = stream_framing;
+    drop(wrong_name.splice(type_value..type_value + 4,
+        b"XRefShadow".iter().copied()));
+    assert!(!supported_pdf_cross_reference(&wrong_name),
+        "a longer PDF name cannot impersonate the exact /XRef type");
+    fs::write(&pdf, &wrong_name).expect("selected invalid stream type");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert!(selected_pdf(&pdf).is_err(), "invalid type refused");
+    assert!(submit_selected(&request, &fake_spool).is_err(),
+        "invalid stream type must refuse before CUPS process launch");
+    assert!(!spooled.exists(), "no fake spool side effect");
+    assert_eq!(fs::read(&pdf).expect("source unchanged"), wrong_name);
     fs::remove_dir_all(&directory).expect("remove owned fixture directory");
 }
 
