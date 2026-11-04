@@ -481,6 +481,24 @@ the same checked/unchecked NFC/NFD task ink as inline Markdown in both
 PDF and transparent PNG. No file contents are written or modified by
 this read-only source admission path.
 
+## Pasted horizontal tabs as bounded physical spacing — 2026-11-04
+
+The native Rust flow-text and flow-markdown source admission now accepts
+pasted horizontal tabs and expands each to the next four-column stop
+measured in Unicode extended graphemes. This occurs after optional UTF-8
+BOM removal and CRLF-to-LF handling, before any Markdown parsing or physical
+layout. A decomposed vowel plus accent counts as one source column without
+NFC/NFD normalization. Tabs do not require an invented glyph shape.
+
+Original source and expanded source each independently obey the 4096-byte
+cap; an expanded overflow or any other control character refuses before
+a preexisting PDF can be replaced. Three real native subprocess regressions
+compare PDF and transparent PNG bytes against authored ASCII-space source
+for plain text, checked tasks, fenced literal text, and a saved BOM/CRLF
+Markdown file with decomposed accents; they verify that source bytes remain
+unchanged. Tab stops are logical grapheme columns, not measurements of
+variable handwriting width or full CommonMark indentation semantics.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

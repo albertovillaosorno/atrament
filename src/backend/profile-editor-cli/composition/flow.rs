@@ -170,7 +170,8 @@ impl FlowSource {
             || !admitted.chars().any(|ch| !ch.is_whitespace())
             || admitted
                 .chars()
-                .any(|ch| ch.is_control() && ch != '\n' && ch != '\r')
+                .any(|ch| ch.is_control()
+                    && !matches!(ch, '\n' | '\r' | '\t'))
             || admitted.replace("\r\n", "").contains('\r')
         {
             return Err(concat!(
@@ -179,10 +180,43 @@ impl FlowSource {
             )
             .into());
         }
-        Ok(Self {
-            format,
-            text: admitted.replace("\r\n", "\n"),
-        })
+        // A pasted tab advances to the next four-grapheme column, never
+        // inventing a visible glyph. Preserve NFC/NFD identities: one
+        // decomposed grapheme occupies one column just like its NFC form.
+        // Check the expanded bytes as well as the original source bound.
+        let normalized = admitted.replace("\r\n", "\n");
+        let boundaries = UnicodeGraphemeSegmentation;
+        let mut expanded = String::with_capacity(normalized.len());
+        let mut column = 0usize;
+        for index in 0..boundaries.grapheme_count(&normalized) {
+            match segment_at(boundaries, &normalized, index)? {
+                "\n" => {
+                    expanded.push('\n');
+                    column = 0;
+                }
+                "\t" => {
+                    let remainder = column.checked_rem(4)
+                        .ok_or("tab column remainder refused")?;
+                    let spaces = 4usize.checked_sub(remainder)
+                        .ok_or("tab column width refused")?;
+                    for _ in 0..spaces {
+                        expanded.push(' ');
+                    }
+                    column = column.checked_add(spaces)
+                        .ok_or("tab column overflow")?;
+                }
+                grapheme => {
+                    expanded.push_str(grapheme);
+                    column = column.checked_add(1)
+                        .ok_or("tab column overflow")?;
+                }
+            }
+            if expanded.len() > MAX_FLOW_BYTES {
+                return Err("expanded flow text exceeds 4096 UTF-8 bytes"
+                    .into());
+            }
+        }
+        Ok(Self { format, text: expanded })
     }
 }
 

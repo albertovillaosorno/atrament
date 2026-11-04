@@ -84,6 +84,89 @@ test('saved BOM/CRLF Markdown task file exports like inline PDF and PNG',
         }
     });
 
+test('pasted tab stops preserve physical text and Markdown ink parity',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-tabs-'));
+        try {
+            const samples = [
+                {
+                    format: '--flow-text',
+                    tabbed: 'o\u0301\tó\n\tó',
+                    expanded: 'o\u0301   ó\n    ó',
+                },
+                {
+                    format: '--flow-markdown',
+                    tabbed: '- [x]\tó\n~~~rs\nó\t a\n~~~\n# a',
+                    expanded: '- [x]   ó\n~~~rs\nó    a\n~~~\n# a',
+                },
+            ];
+            for (const { format, tabbed, expanded } of samples) {
+                for (const outputFormat of ['pdf', 'png']) {
+                    const reference = render(dir, expanded, outputFormat,
+                        [], format);
+                    assert.equal(reference.result.status, 0,
+                        reference.result.stderr);
+                    const expected = readFileSync(reference.output);
+                    const pasted = render(dir, tabbed, outputFormat,
+                        [], format);
+                    assert.equal(pasted.result.status, 0,
+                        pasted.result.stderr);
+                    assert.deepEqual(readFileSync(pasted.output), expected,
+                        'tab stops preserve actual physical ink bytes');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('saved BOM/CRLF tabs preserve Unicode and physical export parity',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-tabs-file-'));
+        try {
+            const tabbed = '- [x]\tó\no\u0301\t a';
+            const expanded = '- [x]   ó\no\u0301    a';
+            const path = join(dir, 'tabs.md');
+            const saved = Buffer.from('\uFEFF' +
+                tabbed.replaceAll('\n', '\r\n'), 'utf8');
+            writeFileSync(path, saved);
+            for (const format of ['pdf', 'png']) {
+                const inline = render(dir, expanded, format);
+                assert.equal(inline.result.status, 0, inline.result.stderr);
+                const expected = readFileSync(inline.output);
+                const opened = render(dir, path, format, [],
+                    '--flow-markdown-file');
+                assert.equal(opened.result.status, 0,
+                    opened.result.stderr);
+                assert.deepEqual(readFileSync(opened.output), expected);
+            }
+            assert.deepEqual(readFileSync(path), saved,
+                'source tabs and decomposed accents remain byte-identical');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('expanded tab source stays bounded and refuses atomic replacements',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-tabs-'));
+        try {
+            const output = join(dir, 'flow-pdf.output');
+            const sentinel = Buffer.from('accepted physical PDF');
+            for (const source of ['a\t'.repeat(1025), 'a\vó']) {
+                writeFileSync(output, sentinel);
+                const candidate = render(dir, source, 'pdf', [],
+                    '--flow-text');
+                assert.notEqual(candidate.result.status, 0);
+                assert.match(candidate.result.stderr,
+                    /4096 UTF-8 bytes|control characters/);
+                assert.deepEqual(readFileSync(output), sentinel);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('code fences keep literal Unicode ink and physical hard line breaks',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));
