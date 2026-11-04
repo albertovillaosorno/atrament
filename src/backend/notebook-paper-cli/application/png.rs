@@ -426,10 +426,6 @@ fn encode_rgba(
 /// # Errors
 ///
 /// Refuses invalid DPI, oversized raster/output or unsupported path shapes.
-#[expect(
-    clippy::redundant_pub_crate,
-    reason = "child module exports only to its parent, not as a public API"
-)]
 pub(super) fn render_paper_png(
     width_um: u32,
     height_um: u32,

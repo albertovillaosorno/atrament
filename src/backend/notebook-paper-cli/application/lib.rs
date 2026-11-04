@@ -9,14 +9,15 @@
 //
 // Boundary-Contract:
 // - Owns:
-//   - Native CLI projecting admitted paper marks to existing Rust outputs.
+//   - Pure paper profile decoding, physical geometry, and PDF/PNG projection.
 // - Must-Not:
-//   - Claim notebook text rendering, image embedding, or profile-file loading.
+//   - Load profile files, write stdout, or commit caller-selected output.
+//   - Claim notebook text rendering or image embedding.
 // - Allows:
 //   - Inputs: Explicit page options and bounded versioned paper-only JSON.
 //   - Outputs: Canonical paper JSON, vector PDF/PNG or explicit CLI refusal.
-//   - Side effects: Optional caller-selected profile read and explicit file
-//     commit, or stdout write.
+//   - Side effects: None; caller file and stdout effects belong to CLI
+//     composition.
 // - Split-When:
 //   - Production notebook export integrates real user content and file effects.
 // - Merge-When:
@@ -39,11 +40,7 @@ mod png;
 
 pub use date::validate_printed_date_text;
 
-use std::env;
-use std::error::Error;
-use std::io::{self, Write as _};
 use std::mem::swap;
-use std::path::Path;
 use std::str::from_utf8;
 
 use atrament_paper_mark_geometry::{
@@ -64,11 +61,6 @@ use atrament_physical_page_profile::{
 };
 // This package also builds atrament-print with SHA-256 confirmation.
 use atrament_profile_entry_sha256 as _;
-use atrament_profile_file_commit::{
-    ProfileFileCommitDisposition, commit_profile_file,
-};
-use atrament_profile_file_reader::read_bounded_profile_file;
-use atrament_profile_selected_file_open::open_selected_profile_file;
 use atrament_profile_json_syntax::{
     ProfileJsonSyntaxLimits, ValidatedProfileJsonObject,
     validate_profile_json_object,
@@ -81,7 +73,7 @@ const MAX_MARKS: u64 = 10_000;
 /// Maximum admitted versioned paper-profile JSON bytes.
 pub const MAX_PROFILE_BYTES: usize = 4_096;
 const MAX_PAGES: usize = 32;
-const DEFAULT_PNG_DPI: u32 = 150;
+pub(super) const DEFAULT_PNG_DPI: u32 = 150;
 const MAX_OUTPUT_BYTES: usize = 24_000_000;
 /// Maximum bytes for a physical paper PDF or PNG export.
 pub const MAX_PAPER_OUTPUT_BYTES: usize = MAX_OUTPUT_BYTES;
@@ -112,7 +104,7 @@ const DEFAULT_COLOR: PdfRgb = PdfRgb {
     blue: 231,
 };
 
-const USAGE: &str = "Usage: atrament-paper [--profile paper.json] \
+pub(super) const USAGE: &str = "Usage: atrament-paper [--profile paper.json] \
     [--style blank|ruled|grid|dot] [--paper-size a3|a4|a5|b5|letter|legal] \
     [--landscape|--portrait] [--width-mm N] [--height-mm N] [--spacing-mm N] \
     [--margin-top-mm N] [--margin-bottom-mm N] \
@@ -131,7 +123,7 @@ enum Style {
 }
 
 #[derive(Clone, Copy, Debug)]
-struct Options {
+pub(super) struct Options {
     color: PdfRgb,
     height_um: u32,
     margin_bottom_um: u32,
@@ -144,7 +136,7 @@ struct Options {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum OutputFormat {
+pub(super) enum OutputFormat {
     Pdf,
     Png,
 }
@@ -193,14 +185,14 @@ struct RoundedPaperBorder {
 }
 
 #[derive(Clone, Debug)]
-struct CliRequest {
-    dpi: u32,
-    emit_profile: bool,
-    format: OutputFormat,
-    options: Options,
-    output: Option<String>,
-    pages: usize,
-    replace: bool,
+pub(super) struct CliRequest {
+    pub(super) dpi: u32,
+    pub(super) emit_profile: bool,
+    pub(super) format: OutputFormat,
+    pub(super) options: Options,
+    pub(super) output: Option<String>,
+    pub(super) pages: usize,
+    pub(super) replace: bool,
 }
 
 impl Default for Options {
@@ -331,7 +323,7 @@ fn profile_number(
         .map_err(|error| format!("{name} exceeds physical range: {error}"))
 }
 
-fn decode_profile(bytes: &[u8]) -> Result<Options, String> {
+pub(super) fn decode_profile(bytes: &[u8]) -> Result<Options, String> {
     let root = validate_profile_json_object(
         bytes,
         ProfileJsonSyntaxLimits {
@@ -366,7 +358,7 @@ fn decode_profile(bytes: &[u8]) -> Result<Options, String> {
     Ok(options)
 }
 
-fn encode_profile(options: Options) -> String {
+pub(super) fn encode_profile(options: Options) -> String {
     format!(
         concat!(
             "{{\n",
@@ -396,18 +388,7 @@ fn encode_profile(options: Options) -> String {
     )
 }
 
-fn read_profile(path: &str) -> Result<Options, String> {
-    // The selected file opener checks file type on its opened descriptor,
-    // refusing symlink components and path swaps rather than trusting a
-    // separate metadata preflight before File::open.
-    let file = open_selected_profile_file(Path::new(path))
-        .map_err(|error| format!("paper profile file refused: {error:?}"))?;
-    let bytes = read_bounded_profile_file(file, MAX_PROFILE_BYTES)
-        .map_err(|error| format!("paper profile file refused: {error:?}"))?;
-    decode_profile(bytes.bytes())
-}
-
-fn parse_page_count(value: &str) -> Result<usize, String> {
+pub(super) fn parse_page_count(value: &str) -> Result<usize, String> {
     if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err("page count must be an integer from 1 to 32".into());
     }
@@ -420,7 +401,7 @@ fn parse_page_count(value: &str) -> Result<usize, String> {
     Ok(count)
 }
 
-fn apply_paper_edit(
+pub(super) fn apply_paper_edit(
     opts: &mut Options,
     name: &str,
     value: &str,
@@ -489,7 +470,7 @@ fn parse_png_quality(value: &str) -> Result<u32, String> {
     }
 }
 
-fn resolve_png_quality(
+pub(super) fn resolve_png_quality(
     dpi: u32, quality_dpi: Option<u32>,
     format: OutputFormat, seen_dpi: bool,
 ) -> Result<u32, String> {
@@ -503,7 +484,7 @@ fn resolve_png_quality(
     Ok(quality)
 }
 
-fn validate_export_flags(
+pub(super) fn validate_export_flags(
     format: OutputFormat,
     seen_pages: bool,
     seen_dpi: bool,
@@ -524,7 +505,7 @@ fn validate_export_flags(
     Ok(())
 }
 
-fn orient_page(opts: &mut Options, name: &str) {
+pub(super) fn orient_page(opts: &mut Options, name: &str) {
     let wider = opts.width_um > opts.height_um;
     if (name == "--landscape" && !wider)
         || (name == "--portrait" && wider)
@@ -533,7 +514,7 @@ fn orient_page(opts: &mut Options, name: &str) {
     }
 }
 
-fn parse_image_export_option(
+pub(super) fn parse_image_export_option(
     name: &str,
     value: &str,
     format: &mut OutputFormat,
@@ -568,107 +549,6 @@ fn parse_image_export_option(
         }
         _ => Ok(false),
     }
-}
-
-fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
-    let mut opts = Options::default();
-    let mut dpi = DEFAULT_PNG_DPI;
-    let mut seen_dpi = false;
-    let mut quality_dpi = None;
-    let mut format = OutputFormat::Pdf;
-    let mut seen_format = false;
-    let mut emit_profile = false;
-    let mut seen_edit = false;
-    let mut seen_profile = false;
-    let mut seen_size_override = false;
-    let mut seen_preset = false;
-    let mut seen_orientation = false;
-    let mut pages = 1;
-    let mut seen_pages = false;
-    let mut output = None;
-    let mut replace = false;
-    let mut items = args.iter();
-    while let Some(name) = items.next() {
-        if name == "--help" {
-            return Ok(None);
-        }
-        if name == "--emit-profile" {
-            emit_profile = true;
-            continue;
-        }
-        if name == "--replace" {
-            if replace {
-                return Err("--replace may appear only once".into());
-            }
-            replace = true;
-            continue;
-        }
-        if name == "--landscape" || name == "--portrait" {
-            if seen_orientation {
-                return Err("choose only one page orientation".into());
-            }
-            orient_page(&mut opts, name);
-            seen_orientation = true;
-            seen_size_override = true;
-            seen_edit = true;
-            continue;
-        }
-        let value = items.next().ok_or_else(|| {
-            format!("missing value for {name}; use --help for arguments")
-        })?;
-        if name == "--profile" {
-            if seen_edit || seen_profile {
-                return Err("--profile must appear once, before edits".into());
-            }
-            opts = read_profile(value)?;
-            seen_profile = true;
-            continue;
-        }
-        if name == "--output" {
-            if output.is_some() || value.starts_with('-') || value.is_empty() {
-                return Err("--output requires one explicit file path".into());
-            }
-            output = Some(value.clone());
-            continue;
-        }
-        if parse_image_export_option(
-            name, value, &mut format, &mut dpi,
-            &mut seen_format, &mut seen_dpi, &mut quality_dpi,
-        )? {
-            continue;
-        }
-        seen_edit = true;
-        match name.as_str() {
-            "--pages" => {
-                if seen_pages {
-                    return Err("--pages may appear only once".into());
-                }
-                pages = parse_page_count(value)?;
-                seen_pages = true;
-            }
-            _ => apply_paper_edit(
-                &mut opts,
-                name,
-                value,
-                &mut seen_size_override,
-                &mut seen_preset,
-            )?,
-        }
-    }
-    validate_export_flags(format, seen_pages, seen_dpi, emit_profile)?;
-    dpi = resolve_png_quality(dpi, quality_dpi, format, seen_dpi)?;
-    if replace && output.is_none() {
-        return Err("--replace requires --output".into());
-    }
-    Ok(Some(CliRequest {
-        dpi,
-        emit_profile,
-        format,
-        options: opts,
-        output,
-        pages,
-        replace,
-    }))
 }
 
 fn position(value: u64) -> Result<i32, String> {
@@ -959,7 +839,9 @@ fn render(opts: Options) -> Result<Vec<u8>, String> {
     render_pages(opts, 1)
 }
 
-fn render_pages(opts: Options, page_count: usize) -> Result<Vec<u8>, String> {
+pub(super) fn render_pages(
+    opts: Options, page_count: usize,
+) -> Result<Vec<u8>, String> {
     if !(1..=MAX_PAGES).contains(&page_count) {
         return Err("paper PDF needs 1 to 32 pages".into());
     }
@@ -1208,7 +1090,7 @@ pub fn validate_paper_border_clearance(
     rounded_border(decode_profile(profile)?, radius_um).map(|_| ())
 }
 
-fn render_png(opts: Options, dpi: u32) -> Result<Vec<u8>, String> {
+pub(super) fn render_png(opts: Options, dpi: u32) -> Result<Vec<u8>, String> {
     let paths = paper_paths(opts)?;
     png::render_paper_png(
         opts.width_um, opts.height_um, dpi, &paths, paths.len(), None,
@@ -1726,69 +1608,6 @@ pub fn paper_profile_png_page_with_ink(
     png::render_paper_png(
         options.width_um, options.height_um, dpi, &paths, ink_start, border,
     )
-}
-
-fn execute(request: CliRequest) -> Result<Option<Vec<u8>>, String> {
-    // Admission and rendering complete before any selected target can change.
-    let bytes = if request.emit_profile {
-        let _validated = render_pages(request.options, 1)?;
-        encode_profile(request.options).into_bytes()
-    } else {
-        match request.format {
-            OutputFormat::Pdf => render_pages(request.options, request.pages)?,
-            OutputFormat::Png => render_png(request.options, request.dpi)?,
-        }
-    };
-    let Some(output) = request.output else {
-        return Ok(Some(bytes));
-    };
-    let disposition = if request.replace {
-        ProfileFileCommitDisposition::ReplaceExisting
-    } else {
-        ProfileFileCommitDisposition::PreserveExisting
-    };
-    let _evidence = commit_profile_file(
-        Path::new(&output),
-        &bytes,
-        MAX_PAPER_OUTPUT_BYTES,
-        disposition,
-    )
-        .map_err(|error| {
-            if error.may_have_committed() {
-                format!(
-                    "output durability unknown; inspect before retry: {error:?}"
-                )
-            } else {
-                format!("output not saved: {error:?}")
-            }
-        })?;
-    Ok(None)
-}
-
-/// Run the shared Rust paper CLI with caller-provided arguments.
-///
-/// # Errors
-///
-/// Invalid parameters or output errors abort before reporting success.
-pub fn run_cli_args(args: &[String]) -> Result<(), Box<dyn Error>> {
-    let Some(request) = parse_options(args)? else {
-        writeln!(io::stdout().lock(), "{USAGE}")?;
-        return Ok(());
-    };
-    if let Some(bytes) = execute(request)? {
-        io::stdout().lock().write_all(&bytes)?;
-    }
-    Ok(())
-}
-
-/// Run the standalone paper CLI from process arguments.
-///
-/// # Errors
-///
-/// Invalid parameters or output errors abort before reporting success.
-pub fn run_cli() -> Result<(), Box<dyn Error>> {
-    let args: Vec<_> = env::args().skip(1).collect();
-    run_cli_args(&args)
 }
 
 #[cfg(test)]

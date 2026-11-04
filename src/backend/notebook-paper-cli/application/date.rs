@@ -130,10 +130,6 @@ pub fn validate_printed_date_text(value: &str) -> Result<(), String> {
 ///
 /// # Errors
 /// Refuses invalid text or insufficient physical date placement clearance.
-#[expect(
-    clippy::redundant_pub_crate,
-    reason = "child module exports only to its parent"
-)]
 pub(super) fn append_date_text(
     paths: &mut Vec<PdfVectorPath>,
     options: Options,

@@ -39,6 +39,8 @@
 )]
 
 use super::*;
+use crate::cli::{execute, parse_options, read_profile};
+use std::env;
 
 #[test]
 fn grid_page_contains_physical_media_box_and_vector_marks() {

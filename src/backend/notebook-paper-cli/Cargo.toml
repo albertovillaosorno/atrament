@@ -18,7 +18,7 @@ atrament_profile_selected_file_open = { workspace = true }
 atrament_profile_json_syntax = { workspace = true }
 
 [lib]
-path = "application/lib.rs"
+path = "composition/lib.rs"
 
 [[bin]]
 name = "atrament-paper"
