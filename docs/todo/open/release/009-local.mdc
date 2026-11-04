@@ -130,6 +130,20 @@ rather than trusted keyboard paste and does not persist Markdown in an
 editable notebook model or establish general glyph/photo coverage. The
 full localhost editing journey and P8-009 acceptance remain open.
 
+## Unambiguous default native paper command (partial) — 2026-11-04
+
+The documented `cargo run -p atrament_notebook_paper_cli -- ...` paper
+examples previously failed because that package exposes two executables.
+The package now declares `default-run = "atrament-paper"`, preserving
+paper-only output as the implicit selection and requiring explicit
+`--bin atrament-print` for any local print action.
+
+A real Cargo subprocess regression invokes the package without `--bin`
+for both PDF and PNG, then checks byte-for-byte parity with the saved
+A4 grid visual candidates. It never invokes or selects a printer.
+This resolves the ambiguous README command, not the broader unsaved
+notebook model or localhost end-to-end acceptance.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

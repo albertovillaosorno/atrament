@@ -2,6 +2,7 @@
 name = "atrament_notebook_paper_cli"
 version = "0.1.0"
 edition = "2024"
+default-run = "atrament-paper"
 publish = false
 license-file = "../../../LICENSE"
 

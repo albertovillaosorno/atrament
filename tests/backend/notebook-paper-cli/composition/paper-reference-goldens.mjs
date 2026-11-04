@@ -85,3 +85,28 @@ test('native CLI creates exact ruled and squared PDF/PNG references', () => {
         rmSync(directory, { recursive: true, force: true });
     }
 });
+
+// README examples omit --bin. The package default must remain the harmless
+// paper exporter, never the separately opt-in local printer executable.
+test('default Cargo package run selects paper rather than local print', () => {
+    const directory = mkdtempSync(join(root, '.temp/paper-default-'));
+    try {
+        for (const format of ['pdf', 'png']) {
+            const output = join(directory, `paper.${format}`);
+            const formatFlags = format === 'png'
+                ? ['--format', 'png', '--dpi', '72'] : [];
+            const result = spawnSync('cargo', [
+                'run', '--offline', '--quiet', '-p',
+                'atrament_notebook_paper_cli', '--', '--style', 'grid',
+                ...formatFlags, '--output', output,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(result.error, undefined, result.error?.message);
+            assert.equal(result.status, 0, result.stderr);
+            assert.deepEqual(readFileSync(output), readFileSync(join(
+                referenceDir, `a4-grid-72dpi.${format}`)),
+            'unnamed Cargo binary selection is real paper output');
+        }
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});
