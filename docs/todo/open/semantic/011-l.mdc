@@ -211,6 +211,14 @@ placement, and failure without replacing an existing selected PDF for
 unsupported near-miss syntax or exceeded row/page budgets. No claim of
 persistent semantic separator identity or a full Markdown compiler is made.
 
+Follow-up native-output regressions also lock heading keep-with-next
+when the next physical row is a thematic separator at a page boundary,
+including the correct PDF content stream: heading and separator ink move
+together rather than being split across pages. A mixed heading, quote,
+backslash hard-break, separator and paragraph source also produces
+byte-identical PDF and PNG for LF versus CRLF source line endings.
+Both are narrow CLI composition guarantees, not persisted page blocks.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

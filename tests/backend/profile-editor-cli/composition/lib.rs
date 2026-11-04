@@ -2903,6 +2903,66 @@ fn markdown_thematic_rule_refusals_preserve_selected_pdf() {
 }
 
 #[test]
+fn markdown_heading_keeps_following_thematic_rule_on_next_page() {
+    let markdown = format!("{}# a\n---\na", "a  \n".repeat(27));
+    let source = FlowSource::new(FlowFormat::Markdown, &markdown)
+        .expect("near-bottom heading with physical rule");
+    let (runs, rules, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("heading and rule placed together");
+    assert_eq!(pages, 2);
+    assert_eq!(runs.len(), 29);
+    assert_eq!(rules.len(), 2, "heading underline and separator");
+    assert_eq!(runs[27].page, 2, "heading moves off orphan row");
+    assert_eq!(runs[27].origin_um, (22_500, 24_500));
+    assert_eq!(rules[0].page, 2);
+    assert_eq!(rules[1].page, 2);
+    assert_eq!(rules[1].start_um, (22_500, 38_000));
+    assert_eq!(runs[28].page, 2);
+    assert_eq!(runs[28].origin_um, (22_500, 42_500));
+    let pdf = execute_notebook(&args(&[
+        "--export-paper", "pdf", "--printed-sheet", "true",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060", "--flow-markdown", &markdown,
+    ])).expect("two-page PDF").expect("ink bytes");
+    let text = String::from_utf8_lossy(&pdf);
+    let pages = text.split("\nstream\n").skip(1)
+        .map(|part| part.split("\nendstream").next().unwrap_or(""))
+        .collect::<Vec<_>>();
+    assert_eq!(pages.len(), 2);
+    assert!(!pages[0].contains("0.118 0.188 0.290 RG"),
+        "heading/rule ink must not stay on previous page");
+    assert!(pages[1].contains("0.118 0.188 0.290 RG"),
+        "native title and separator ink stay together");
+}
+
+#[test]
+fn markdown_mixed_crlf_and_lf_replay_identically_in_native_exports() {
+    let lf = "# a\n> a\\\n> a\n---\na  \na";
+    let crlf = lf.replace('\n', "\r\n");
+    let normalized = FlowSource::new(FlowFormat::Markdown, &crlf)
+        .expect("CRLF normalizes on admission");
+    assert_eq!(normalized.text, lf);
+    for format in ["pdf", "png"] {
+        let render = |markdown: &str| {
+            let mut cli = args(&[
+                "--export-paper", format, "--printed-sheet", "true",
+                "--glyph-stroke", "a", "0", "0", "3500", "4500",
+                "250", "#204060", "--flow-markdown", markdown,
+            ]);
+            if format == "png" {
+                cli.extend(args(&["--dpi", "72"]));
+            }
+            execute_notebook(&cli).expect("native source export")
+                .expect("image bytes")
+        };
+        assert_eq!(render(lf), render(&crlf),
+            "LF and CRLF must compose identical page-local ink");
+    }
+}
+
+#[test]
 fn markdown_soft_and_hard_breaks_change_measured_page_count() {
     let soft = FlowSource::new(FlowFormat::Markdown, &"a\n".repeat(40))
         .expect("soft-wrapped paragraph");
