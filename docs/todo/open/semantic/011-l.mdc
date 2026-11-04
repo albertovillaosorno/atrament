@@ -63,7 +63,9 @@ The limited Markdown subset recognizes `#`, `##`, and `###` single-line
 headings and `-`, `*` or `+` list items. Headings default to an explicit ink
 underline, while `--heading-style marker` places an opaque colored highlight
 **behind** authored heading ink; `none` suppresses the ornament without
-changing text. The physical decorations now distinguish heading hierarchy:
+changing text.
+
+The physical decorations now distinguish heading hierarchy:
 `#` uses a 0.55-mm underline or four 1.4-mm marker strokes, `##` a 0.42-mm
 underline or three 1.15-mm strokes, and `###` a 0.30-mm underline or two
 0.95-mm strokes. One new Rust integration regression checks the tiered
@@ -82,7 +84,9 @@ Plain-text lines wrap independently at word or grapheme boundaries;
 Markdown ordinary lines now combine as soft-wrapped paragraphs, with two
 trailing spaces preserving a hard row break. Blank lines add paragraph
 spacing; Markdown headings and lists end pending body paragraphs before
-their own styled rows. One-to-nine-digit `1.`/`1)` numbered items now retain
+their own styled rows.
+
+One-to-nine-digit `1.`/`1)` numbered items now retain
 their literal label as exact authored glyph ink, indent continuations and
 do not receive synthetic bullet strokes. Missing digit or separator shapes
 refuse at native export. Long headings refuse their one-line fixed region.
@@ -103,7 +107,9 @@ Four further native regressions distinguish Markdown soft-wrapped Unicode
 paragraphs from exact plain-text and explicit two-space hard breaks. They
 verify preserved decomposed graphemes, heading/list boundaries, original
 ink expansion, blank-line spacing, and one versus two physical pages for the
-same 40 source lines. Existing two-page PDF/PNG and seeded variation tests
+same 40 source lines.
+
+Existing two-page PDF/PNG and seeded variation tests
 now use deliberate hard breaks instead of relying on non-Markdown line
 semantics. Real PDF/PNG parity and atomic empty-heading/list refusal are
 also verified. This is still a restricted export-only parser.
@@ -119,7 +125,9 @@ existing PDF on excessive rows or an insufficient page selection.
 Markdown heading placement also reserves one following visible row, including
 an optional collapsed blank-line gap, when that combined span fits a page.
 Near the foot of a sheet, the title and first paragraph/list row therefore
-move together; an ending heading is not forced onto a new page. On paper
+move together; an ending heading is not forced onto a new page.
+
+On paper
 with room for only one physical row, the limited compiler gracefully keeps
 the heading and following content on successive pages rather than refusing.
 Two native tests cover all three heading levels, exact page-local ornament
@@ -149,7 +157,9 @@ an explicit `atrament-source.md` download for later `--flow-markdown-file`
 use. JavaScript performs only a UTF-8 byte-bound transport guard (4,096
 bytes), does not parse Markdown, and requires compatible session hydration.
 The Rust localhost server serves one pinned new helper module, not a generic
-file-serving route. Firefox verifies the browser-created Blob exactly matches
+file-serving route.
+
+Firefox verifies the browser-created Blob exactly matches
 the session's UTF-8 source with no new network request, and an existing
 Firefox session-disposal regression passes with the added module. Four new
 Node assertions cover byte-bound Unicode, NFD/BOM identity, malformed
@@ -172,7 +182,9 @@ text or structural blocks ends the quoted paragraph. The quote marker is
 syntax, not a required handwriting glyph: Rust insets quote text by 6 mm
 and adds one 0.4-mm vertical ink rule on each physical row, including
 continuations and later physical pages. Empty quote blocks refuse atomically;
-nested quote semantics remain unsupported. Three Rust native tests assert
+nested quote semantics remain unsupported.
+
+Three Rust native tests assert
 exact text/row positions and bar geometry, byte-identical PDF/PNG replay for
 soft lines, different hard-break/ordinary ink, real two-page PDF and PNG,
 plain-text `>` glyph refusal and preservation of a selected existing PDF.
@@ -205,6 +217,7 @@ Each variant emits the same single 0.4-mm native horizontal pen rule, up to
 page placement and the 128-row budget remain authoritative. Separator
 syntax does not need authored marker glyphs, but the CLI flow requires at
 least one visible text block; separator-only flow refuses explicitly.
+
 Three Rust integration regressions verify exact micrometre geometry and
 byte-identical PDF/PNG across spellings, blank-paragraph spacing, page-two
 placement, and failure without replacing an existing selected PDF for
@@ -225,7 +238,9 @@ width (0.55 / 0.42 / 0.30 mm) as ordinary heading underlines. A second
 colored pen stroke is drawn 0.9 mm above the original underline, both
 beneath the author-supplied handwritten heading glyphs. This is bounded
 to the Rust CLI, preserves single-underline bytes by default and retains
-existing marker/none behavior. Two native Rust integration tests check
+existing marker/none behavior.
+
+Two native Rust integration tests check
 each horizontal micrometre coordinate, hierarchy and exact custom ink
 color, quote/separator ornament independence, PDF RGB paint count,
 deterministic PNG replay and true page-two keep-with-next behavior;
@@ -247,7 +262,9 @@ positive-height absolute micrometre geometry, repeated on every physical
 page. It checks overflow and the selected saved paper's actual printable
 rectangle; the same native word/Unicode layout, heading ornaments,
 synthetic bullets, pagination, authored glyph refusals and PDF/PNG ink
-output then operate inside that bounded area. Two native Rust tests
+output then operate inside that bounded area.
+
+Two native Rust tests
 verify measured heading/list/body coordinates on both pages, native
 PDF streams and separate transparent PNG pages, deterministic replay,
 invalid or too-small area diagnostics and unchanged output on page-budget
@@ -264,7 +281,9 @@ mean-profile slant, per-occurrence variation and pen-thickness changes.
 A line that fit nominal text advances but crosses the physical region
 boundary (including half the actual pen width) refuses before writing
 PDF or transparent PNG. All flow-generated page strokes are checked even
-when the caller selects a PNG from another page. Explicit `--ink-line`
+when the caller selects a PNG from another page.
+
+Explicit `--ink-line`
 overlays remain independent annotations and keep the native paper-wide
 printable-region checks. Without a selected fixed region, prior output
 behavior remains unchanged.

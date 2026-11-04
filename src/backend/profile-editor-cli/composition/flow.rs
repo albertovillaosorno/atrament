@@ -411,7 +411,9 @@ impl Layout<'_> {
         Ok(())
     }
 
-    fn keep_heading_with_next(&mut self, separated: bool) -> Result<(), String> {
+    fn keep_heading_with_next(
+        &mut self, separated: bool,
+    ) -> Result<(), String> {
         let top = self.top.checked_add(INSET_UM)
             .ok_or("heading top inset overflow")?;
         let bottom = self.bottom.checked_sub(INSET_UM)
