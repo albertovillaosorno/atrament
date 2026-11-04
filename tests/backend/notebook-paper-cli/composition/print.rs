@@ -813,6 +813,62 @@ fn xref_stream_requires_one_bounded_top_level_width_array() {
 
 #[cfg(unix)]
 #[test]
+fn xref_stream_index_ranges_are_bounded_disjoint_pairs() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("unexpected-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS script");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake CUPS executable");
+    let framed = |index: &str| format!(
+        "%PDF-1.7\n1 0 obj\n\
+         << /Type /XRef /Size 3 /W [1 0 0] /Length 1 {index} >>\n\
+         stream\n\0\nendstream\nendobj\nstartxref\n9\n%%EOF\n",
+    ).into_bytes();
+    for valid in [
+        "", "/Index [1 1]", "/Index[0 1 2 1]",
+        "/Index [0% row comment\n 1 2 1]",
+        "/Meta << /Index [9 9] >> /Index [1 1]",
+    ] {
+        let candidate = framed(valid);
+        assert!(supported_pdf_cross_reference(&candidate),
+            "disjoint or omitted stream ranges remain admitted: {valid:?}");
+    }
+    for invalid in [
+        "/Index []", "/Index [0]", "/Index [0 0]",
+        "/Index [0 -1]", "/Index [0 +1]",
+        "/Index [0 2 1]", "/Index [0 2 1 1]",
+        "/Index [2 2]", "/Index [3 1]",
+        "/Index [9999999999 1]", "/Index [0 9999999999]",
+        "/Index [0 1] /Index [1 1]",
+        "/Index (0 1)", "/Index [0 1 /Other]",
+        "/Index [0 1.0]", "/Index [18446744073709551616 1]",
+    ] {
+        let candidate = framed(invalid);
+        assert!(!supported_pdf_cross_reference(&candidate),
+            "malformed xref-stream index ranges refuse: {invalid:?}");
+        fs::write(&pdf, &candidate).expect("write malformed PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(), "malformed index refused");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "malformed index cannot contact fake CUPS");
+        assert!(!spooled.exists(), "no fake spool contact");
+        assert_eq!(fs::read(&pdf).expect("selected bytes unchanged"),
+            candidate);
+    }
+    fs::remove_dir_all(&directory).expect("remove fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn xref_object_zero_is_always_the_permanent_free_head() {
     use std::os::unix::fs::PermissionsExt as _;
 

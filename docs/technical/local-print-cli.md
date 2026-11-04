@@ -174,6 +174,13 @@ At least one field must occupy bytes. Missing, nested-only, duplicated,
 negative, noninteger, oversized and extra array fields refuse before CUPS.
 This local preflight does not decode compressed or uncompressed stream rows.
 
+An optional top-level `/Index` array must comprise nonempty pairs of
+unsigned decimal object numbers and positive counts. The pairs must be
+ordered and disjoint, with each exclusive endpoint inside `/Size` and the
+same resource ceiling. Invalid, repeated, signed or overflowing entries
+refuse before CUPS; absent `/Index` retains PDF's implicit range policy.
+This does not verify encoded rows or incremental cross-reference chains.
+
 A typed cross-reference stream must also
 end with standalone `endstream` and `endobj` keywords, allowing whitespace
 and comments before its final `startxref` locator. Missing, fused or
@@ -277,6 +284,10 @@ Thirteen additional fake-CUPS refusal cases prove malformed terminal
 xref-stream `/W` arrays cannot be submitted or modify source bytes.
 Three valid direct arrays preserve conservative admission, including a
 nested decoy and a PDF comment between widths.
+
+Sixteen additional fake-spool refusals cover malformed `/Index` ranges,
+including overlap, overflow and pairs outside declared `/Size`. Five
+framing positives preserve optional, bounded and commented forms.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

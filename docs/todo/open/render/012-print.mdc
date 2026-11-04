@@ -283,6 +283,16 @@ remain eligible. Each width is an unsigned decimal from 0 to 8 bytes,
 with at least one nonzero field; this is conservative local print framing.
 It does not decompress or validate actual cross-reference stream entries.
 
+An optional xref-stream `/Index` was previously accepted without
+validating its object ranges, including out-of-size and overlapping entries.
+Sixteen fake-CUPS refusal cases now reject empty, odd-length, signed,
+zero-count, duplicated, nondecimal and overflowing index arrays unchanged.
+
+The bounded parser accepts five omitted or valid direct range forms,
+including PDF comments, sparse gaps and nested decoys. Direct ranges must
+be increasing, disjoint and within `/Size` under the conservative local
+policy; the stream payload itself is still not decoded.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.
