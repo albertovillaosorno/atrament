@@ -516,7 +516,16 @@ and `.` or `)` glyph ink; unlike unordered bullets, there is no automatic
 number shape. Standalone `---`, `***`, `___`, `- - -` and similar lines
 with three or more identical marks (optional interior ASCII spaces and up to
 three leading spaces) draw the same thin horizontal rule up to 60 mm wide
-in one physical row, without authored punctuation.
+in one physical row, without authored punctuation. When `---` immediately
+follows an ordinary paragraph, it instead marks an H2 title.
+
+A nonempty title followed immediately by one or more `=` or `-` marks
+on a line of their own becomes a Setext H1 or H2 heading. The delimiter
+may have zero to three initial ASCII spaces and optional trailing spaces;
+it requires no handwritten punctuation ink. Insert a blank line before
+`---` for a thematic separator, while standalone `===` remains literal
+and requires an explicitly authored `=` glyph.
+
 A source containing only separators refuses until it includes visible text.
 Each list item starts on its own row; wrapped continuations
 align beneath the first item glyph after the *measured* numeral, separator
@@ -539,8 +548,9 @@ unordered bullet markers produce the same physical ink dash; the `+` marker
 does not require a separately authored `+` glyph. In plain text it remains
 literal and still needs an authored shape.
 Only visible handwriting glyphs contribute their selected statistical
-height/baseline to the physical row pitch; Markdown-only `#`, `-`, `*`, `+`
-and `>` markers do not, whereas authored numbered-list labels do.
+height/baseline to the physical row pitch; Markdown-only `#`, `-`, `*`, `+`,
+`>` and Setext heading delimiters do not, whereas authored numbered-list
+labels do.
 The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.
 An initial UTF-8 byte-order mark is accepted as file metadata (still within
 the 4,096-byte cap), not a required glyph. Interior or repeated byte-order
