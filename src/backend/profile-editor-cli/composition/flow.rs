@@ -440,6 +440,16 @@ enum LineStyle {
     Task(bool),
 }
 
+// Paragraph whitespace collapses to one 4-mm gap, but blank fenced
+// lines reserve full physical rows once followed by actual ink. Retain
+// both measurements in the heading orphan guard rather than treating a
+// blank code row as if it were paragraph spacing.
+#[derive(Clone, Copy)]
+struct FollowingInkSpacing {
+    blank_rows: usize,
+    paragraph_gap: bool,
+}
+
 struct Layout<'model> {
     bottom: u32,
     heading: HeadingDecoration,
@@ -1240,16 +1250,6 @@ fn markdown_paragraph_break<'text>(
     (body, raw.ends_with("  "))
 }
 
-// Paragraph whitespace collapses to one 4-mm gap, but blank fenced
-// lines reserve full physical rows once followed by actual ink. Retain
-// both measurements in the heading orphan guard rather than treating a
-// blank code row as if it were paragraph spacing.
-#[derive(Clone, Copy)]
-struct FollowingInkSpacing {
-    blank_rows: usize,
-    paragraph_gap: bool,
-}
-
 // A heading needs its first following visible line. An ending heading has
 // no following ink to keep, even if an empty code fence follows it.
 fn following_heading_gap<'text>(
@@ -1267,7 +1267,7 @@ fn following_heading_gap<'text>(
         }
         if fence.is_some() {
             if line.trim_matches(' ').is_empty() {
-                following.blank_rows += 1;
+                following.blank_rows = following.blank_rows.saturating_add(1);
                 continue;
             }
             return Some(following);
