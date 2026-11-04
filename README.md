@@ -76,6 +76,7 @@ The earlier 77 tasks were accepted as bounded academic/design artifacts, not
 as proof of a finished product. **Eight P1 executable TODOs remain** for
 Spanish/English glyphs, joined strokes, semantic flow, notebook PDF/PNG,
 decoration, image overlays, printing and the personal end-to-end journey.
+
 Another 21 P2–P4 implementation tracks preserve deferred complexity without
 blocking the local CLI and localhost first delivery. The previous NO-GO
 decision still applies to production claims, and physical hardware is not
@@ -435,17 +436,20 @@ cargo run -q -p atrament_profile_editor_cli -- \
 Both exports were smoke-tested with the editor's geometric `a` strokes;
 the PDF is a real one-page document and PNG is 72-DPI RGBA. By default, a
 Markdown heading gets a dark pen underline and a list item gets an ink mark.
+
 To highlight a title with a **colored marker band behind the handwritten
 strokes**, add `--heading-style marker --heading-color '#F8DE91'` to either
 export. Marker weight follows the Markdown heading level: `#` uses four
 **opaque** 1.4-mm pen lines, `##` uses three 1.15-mm strokes, and `###` uses
 two 0.95-mm strokes. Deeper `####`, `#####`, `######` headings use
 respectively two 0.76-mm, one 0.62-mm and one 0.50-mm strokes.
+
 Underline widths step down through 0.55, 0.42, 0.30, 0.24, 0.18 and
 0.12 mm. `--heading-style underline --heading-color '#A462D0'` changes only
 the underline color. Select `--heading-style double-underline` to add a
 second level-weighted ink line 0.9 mm above the original, optionally with
 `--heading-color '#64A3C5'`; `--heading-style none` removes ornaments.
+
 For independent **handwritten title lettering**, use
 `--heading-ink-color '#BD376A' --heading-ink-scale 180`. This recolors only
 Markdown heading glyphs and increases their pen thickness to 180 percent;
@@ -465,7 +469,9 @@ Both ink options require Markdown flow, are compatible with the existing
 seeded `--glyph-variation` and saved mean profiles, and apply after the
 selected authored/varied stroke width is established. If a thicker pen
 exceeds the valid 80–1500 µm bound or a page margin, export refuses before
-an existing file is replaced. Levels still change decoration, **not** the
+an existing file is replaced.
+
+Levels still change decoration, **not** the
 glyph dimensions or ideal geometry; no new title font is synthesized. The
 4096-ink-segment cap remains. These are simple pen decorations, **not**
 translucent highlighters, continuous cursive or image layers.
@@ -481,15 +487,19 @@ micrometres measured from the **top-left of each sheet**. For example,
 writing area starting 30 mm from the left and 40 mm from the top. It
 must fit entirely inside the selected paper's printable margins and
 have enough space for the measured handwritten glyphs and row pitch.
+
 The CLI continues content on the next physical page when needed;
 `--pages` and `--png-page` still refuse impossible selections. Invalid,
 overlapping-margins or too-small areas refuse before any selected file
 is replaced. The final glyph and decorative ink is checked again after
 statistical slant, seeded variation, and heading pen-width changes; an
 overshooting stroke refuses even if the original line measurements fit.
+
 This applies across all PDF pages and separately selected PNG pages.
+
 Explicit caller-authored `--ink-line` annotations stay independent of the
 flow rectangle (but still must fit the physical printable sheet).
+
 Omitting the flag retains full-printable-area composition. This first
 bounded region is **one repeated page-local text rectangle**, not
 arbitrary per-block fixed placements, image avoidance or persisted
@@ -500,30 +510,37 @@ Use `--flow-text-file` for plain text, or `--flow-text` and
 start a physical row. In Markdown, consecutive ordinary lines form one
 soft-wrapped paragraph, while two spaces or a single trailing backslash
 before a newline request a hard row break for ordinary and quoted paragraphs.
+
 Up to three leading ASCII spaces on an ordinary Markdown paragraph line
 are syntax and do not shift ink. Four or more remain literal spaces,
 without inferring an indented code block. If literal indentation would
 consume an entire selected writing row before its first visible glyph,
 flow refuses instead of silently moving that glyph to another row or page.
+
 Paired trailing backslashes remain literal and need authored glyphs.
+
 Consecutive Markdown blank lines collapse to one 4-mm paragraph gap, with
 leading/trailing blanks ignored. Plain-text blank lines instead
 reserve full physical writing rows; they count toward the 128-row limit and
 can create a new page. Headings and lists end ordinary paragraphs.
+
 A list item may soft-continue with a two- or three-space-indented ordinary
 line, preserving one bullet, checkbox or numbered hanging indent after
 wrapping; four-space indentation remains literal and nested lists are not
 supported. Two trailing source spaces end a list item before any
 subsequent indented body row; pasted Unicode line separators do the same.
+
 Adjacent `>` quote lines form one soft-wrapped quoted paragraph, with the
 same two-space hard-break and blank-paragraph rules. A Markdown
 heading keeps its first following visible row on the same physical page when
 there is room for both (including an optional 4-mm paragraph gap); an
 ending heading and a sheet too short for two rows remain valid. Long text
 wraps and paginates automatically (up to 32 physical pages).
+
 The Markdown subset supports single-line `#` through `######` headings;
 spaces separating the ATX marker from the title (including expanded tabs)
 are syntax and do not indent the authored heading ink.
+
 It also supports `-`/`*`/`+` bullets, single-level `> text` or `>text`
 blockquotes, and numbered items such as `1. text` or `2) text`
 (with one to nine ASCII digits). Numbered items use your **authored** digit
@@ -533,9 +550,11 @@ with three or more identical marks (optional interior ASCII spaces and up to
 three leading spaces) draw the same thin horizontal rule up to 60 mm wide
 in one physical row, without authored punctuation. When `---` immediately
 follows an ordinary paragraph, it instead marks an H2 title.
+
 Bare `#`–`######` heading markers, a single `-`, `*` or `+` list marker,
 and one-to-nine-digit ordered labels such as `1.` without item text refuse
 as empty Markdown blocks even if their literal glyph ink was authored.
+
 Escape a leading marker to print it literally, or use four initial spaces
 for literal indented punctuation. A standalone `-` immediately after a
 paragraph is still a Setext H2 underline rather than an empty list item.
@@ -548,21 +567,26 @@ it requires no handwritten punctuation ink. Insert a blank line before
 and requires an explicitly authored `=` glyph.
 
 A source containing only separators refuses until it includes visible text.
+
 Each list item starts on its own row; wrapped continuations
 align beneath the first item glyph after the *measured* numeral, separator
 and any authored spaces. A label too wide to leave room for its first item
 glyph refuses rather than creating an orphan numeral row. Quote text is
 inset 6 mm and gets a 0.4-mm vertical ink rule on each physical row, including
 wrapped continuations; the `>` marker itself needs no authored glyph.
+
 Empty quote blocks refuse. Bounded backtick and tilde code fences (three
 or more identical marks, up to three initial spaces) preserve literal
 handwriting lines, including physical blank rows and source punctuation.
+
 An opening fence may have one short ASCII language tag, but no monospace
 font or syntax highlighting is invented. Fence characters are syntax;
 visible code still requires exact authored glyph shapes. Prefix a
 leading backtick or tilde with one backslash to print it literally outside
 a fence instead of starting one; the punctuation glyph remains authored.
+
 A mismatched or unclosed fence refuses before writing output.
+
 Nested quotes, inline styles,
 tables and full Markdown are not yet supported. In Markdown, all three
 unordered bullet markers produce the same physical ink dash; the `+` marker
@@ -570,14 +594,18 @@ does not require a separately authored `+` glyph. Up to four spaces after
 the bullet marker (including expanded tabs) are syntax, including before
 checkboxes; further leading spaces stay in the authored text. In plain text it remains
 literal and still needs an authored shape.
+
 Only visible handwriting glyphs contribute their selected statistical
 height/baseline to the physical row pitch; Markdown-only `#`, `-`, `*`, `+`,
 `>` and Setext heading delimiters do not, whereas authored numbered-list
 labels do.
+
 The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.
+
 An initial UTF-8 byte-order mark is accepted as file metadata (still within
 the 4,096-byte cap), not a required glyph. Interior or repeated byte-order
 marks remain literal; their missing authored shapes refuse before export.
+
 The same 4096 total exported pen-segment limit still applies.
 
 In the authenticated localhost workspace, paste Markdown into **Source
@@ -687,8 +715,10 @@ segments**. It includes lowercase and uppercase alphabets, NFC and NFD
 Spanish accents, the baseline punctuation/quotes and digits; optional
 mathematics and currencies remain separate. It never replaces existing
 custom strokes, even if the same letter has different NFC and NFD forms.
+
 A clipped shape, ambiguous authored dotted `i`, or oversized TSV library
 refuses the entire change, leaving the previous unsaved draft intact.
+
 Only **Download stroke TSV** writes a file; nothing is sent to the backend
 by the fill action. The native `glyphs --audit-baseline` command can
 independently audit the downloaded 114-key coverage before PDF/PNG export:
@@ -727,14 +757,17 @@ exact readback and exported both PDF and transparent 72-DPI PNG for `hola`.
 For Spanish vowels and `ñ`, click **Fill missing Spanish accents (unsaved)**
 after authoring the lowercase bases. This explicitly composes the seven
 precomposed NFC forms `á é í ó ú ñ ü` without replacing existing target ink.
+
 A missing base or ambiguous handwritten `i` refuses the entire batch; only
 a clearly separated dot in `i` is removed from the copied accented form.
+
 The seven accented letters plus lowercase a–z have 986 sampled strokes by
 default. Rust audited all seven targets with no missing glyphs, reopened the
 TSV byte-for-byte, and rendered `niño` to PDF and transparent 72-DPI PNG.
 
 For pasted text that uses **decomposed Unicode**, click **Fill missing
 decomposed Spanish accents (unsaved)** after authoring the lowercase bases.
+
 The separate button composes `á é í ó ú ñ ü` under their exact NFD keys;
 it never overwrites NFC or already-authored NFD ink. Both batches together
 produce a 1,233-stroke, 40-grapheme default library (26 lowercase, 7 NFC,
@@ -745,12 +778,17 @@ and Rust export remain explicit gestures.
 
 For notebook sentences, choose the explicit geometric starters **. , ! ¡ ? ¿**
 or click **Fill missing basic punctuation (unsaved)** after selecting center,
-radius, pen width and ink. Full and inverted exclamation marks retain exact
+radius, pen width and ink.
+
+Full and inverted exclamation marks retain exact
 straight strokes; `?` and `¿` share three ideal quadratic arcs with a
 separate dot and exact 180-degree rotation of the exported integer samples.
+
 A short pen stroke forms each period and comma. A missing mark is added only
 after the whole batch passes bounds and native TSV caps. Existing ink remains
-unchanged. The combined 26 lowercase, 14 accents and six punctuation forms
+unchanged.
+
+The combined 26 lowercase, 14 accents and six punctuation forms
 produce **1,339 strokes across 46 exact glyphs**. Rust audited the mixed
 phrase `¡hola! ¿qué? ,.` with zero missing forms and exported `¡hola! ¿qué?`
 to real PDF and transparent 72-DPI RGBA PNG. Question-mark curves remain
@@ -758,25 +796,31 @@ sampled segments in the native stroke TSV, not analytic PDF primitives.
 
 For quoted notes, the editor also offers selectable **« » ‘ ’ “ ”**
 geometry and a separate **Fill missing quotation marks (unsaved)** action.
+
 Guillemets are two ordered straight chevrons; curly singles and doubles
 are respectively one or two independent quadratic strokes sampled to the
 Rust TSV. Opening/closing geometry is mirrored exactly after rounding each
 sampled integer coordinate. Existing custom quotation strokes remain
 untouched. The combined default lowercase/accents/punctuation/quotation
 library is **1,443 sampled strokes across 52 exact Unicode glyphs**.
+
 Rust audited `«¡hola!» “¿qué?” ‘sí’` without missing ink and exported
 `«¡hola!» “¿qué?”` to a real PDF and transparent 72-DPI RGBA PNG.
+
 The analytic SVG guides are still approximated by straight TSV chords.
 
 For arithmetic exercises, select **+ - − = × ÷** or click
 **Fill missing basic math operators (unsaved)**. These six shapes use
 exact straight, ordered SVG/TSV strokes, with separate Unicode identities
 for ASCII hyphen-minus `-` and the mathematical minus sign `−`.
+
 Division dots require pen clearance from the bar. Existing glyph ink is
 retained and a bad batch refuses before editing the unsaved draft.
+
 Together with the earlier 52 forms, this yields **58 exact glyphs and
 1,454 sampled strokes**. Rust audited `a+b−c=d×e÷f` with zero missing
 shapes and exported one-page PDF and transparent 72-DPI RGBA PNG.
+
 This does not include equation parsing or mathematical layout.
 
 The wider **Fill missing math** action independently includes 17 exact
@@ -815,10 +859,13 @@ For class exercises, page labels and dates, use the separate **Fill missing
 digits 0–9 (unsaved)** gesture or select each numeral in the geometric
 starter picker. Zero is an exact SVG ellipse, distinct from circular `o`;
 eight has two separate ellipses, and the other numerals use analytic
-quadratic arcs and/or exact straight strokes. Only integer-micrometre
+quadratic arcs and/or exact straight strokes.
+
+Only integer-micrometre
 sampled segments persist to Rust. Previously authored digit shapes are
 never replaced by batch fill, and invalid or oversized batches leave the
 unsaved library unchanged. Default digits add **412 sampled segments**.
+
 Together with lowercase, NFC/NFD accents, punctuation, quotations and
 basic arithmetic, the opt-in library has **68 exact graphemes and 1,866
 strokes**. The Rust CLI separately audited all ten digits with zero
@@ -829,9 +876,11 @@ can exceed that limit and refuse.
 
 The **Fill missing uppercase A–Z (unsaved)** action adds a separately
 selectable print-capital geometric draft without changing authored glyphs.
+
 `O` and `Q` reuse the mathematically exact circle of lowercase `o` in
 SVG; `C` and `G` reuse its open circular arc. Curved capitals have analytic
 quadratic guides, while straight capitals use exact ordered pen segments.
+
 The 26 capitals add **512 sampled segments**, giving **94 exact glyphs
 and 2,378 strokes** after all eight opt-in actions. The Rust CLI audited
 `ABCDEFGHIJKLMNOPQRSTUVWXYZ` with zero missing shapes, read the TSV
@@ -847,7 +896,9 @@ uppercase accents** control adds their seven NFD forms. Both actions use
 the same explicit native-bounded accent composer as lowercase forms, and
 refuse a missing capital base, out-of-cell accent or oversized draft
 atomically. The 14 extra exact Unicode forms add **278 stroke segments**.
+
 All ten opt-in fills now offer **108 distinct glyphs and 2,656 strokes**.
+
 The Rust CLI audited all 14 uppercase accent forms with zero missing ink,
 read their TSV byte-identically, and rendered one-page A4 PDF and a
 transparent 72-DPI RGBA PNG. Neither accented batch downloads a file
@@ -855,8 +906,10 @@ without an explicit save gesture.
 
 One final optional **Fill missing text punctuation (11 forms, unsaved)**
 action adds `; : " ' … – — ( ) [ ]` without replacing existing strokes.
+
 Parentheses use two quadratic SVG arcs (sampled as native pen chords),
 while brackets, dashes, quotes and small marks use exact straight strokes.
+
 The action validates ink bounds and native library caps atomically. Together,
 all eleven opt-in fills create **119 exact Unicode glyphs and 2,738 stroke
 segments**. The 119 include all **114 frozen English/Spanish text baseline
@@ -926,7 +979,9 @@ space is an implicit 4-mm blank advance in positioned handwritten text;
 non-breaking (`U+00A0`), thin (`U+2009`) and narrow non-breaking (`U+202F`)
 spaces count as exact separately authorable glyphs. The read-only audit now
 reports them as missing when not authored, matching native PDF/PNG refusal,
-instead of silently ignoring them. Tabs and ASCII line boundaries in an
+instead of silently ignoring them.
+
+Tabs and ASCII line boundaries in an
 audit are treated as source structure, not glyph ink. No Unicode space
 normalization or invented fallback is performed. To verify the actual
 **stroke order, endpoint direction, physical widths and RGB color** for a
@@ -939,9 +994,12 @@ cargo run -q -p atrament_profile_editor_cli -- glyphs \
 
 For a read-only preview of possible continuous pen paths within one exact
 glyph, use `glyphs --profile my-glyphs.tsv --inspect-paths 'ñ'` instead.
+
 The report groups consecutive authored segments only when the directed end
 of one equals the start of the next and both have the same width and RGB.
+
 It lists stroke-number ranges, endpoints and candidate pen-lift boundaries.
+
 A multi-segment same-pen contour whose last endpoint meets its first is
 labeled `[closed loop]` in both native and browser inspectors. The label
 is derived, not persisted as a new v1 TSV path or analytic-circle field.
@@ -1264,11 +1322,14 @@ Both browser and Rust use half-up micrometre rounding, enforce the native
 80–1500 µm pen range, and reject round caps that would extend past the
 3.5 × 4.5 mm glyph cell. Existing NFC/NFD, mathematical and other sibling
 glyph TSV rows are preserved byte-for-byte. A 100% change is an identity;
-other percentages may lose precision when rounded. New regression tests
+other percentages may lose precision when rounded.
+
+New regression tests
 prove exact TSV and real vector PDF/transparent PNG parity, including after
 an independent height edit. This is an explicit destructive edit of an
 unsaved sampled-line glyph, not a new persistent width variant or a
 calibrated variable-pressure stroke. Download a copy before changing it.
+
 The same one-step recovery buttons restore exact previous widths after an
 accepted pen-thickness edit, even when rounded scaling is not invertible.
 
@@ -1336,6 +1397,7 @@ browser refuses clipped `k` ascenders and `y` descenders, including the
 pen's half-width margin, without replacing saved shapes.
 
 A dotted `i` has one straight stem plus one short dot stroke (2 segments).
+
 A separately selectable `í` instead keeps the stem and puts a rising acute
 above it (2 segments) **without an extra dot**. The dotted `j` extends its
 stem into a quadratic descender hook: the SVG keeps the ideal curve and
@@ -1346,7 +1408,9 @@ into `é` to add the acute as a separate final segment (38 total here).
 
 The **Compose accent from authored base** action normally copies each
 source stroke. For `í` and decomposed `i` plus acute, it recognizes only a
-simple two-stroke `i` with a distinctly separated short upper dot. It
+simple two-stroke `i` with a distinctly separated short upper dot.
+
+It
 replaces that dot with an acute in the new target, preserving the original
 source `i`. Ambiguous hand-drawn `i` forms refuse rather than discarding a
 potentially intentional stroke; use the explicitly dotless `í` geometric
@@ -1473,14 +1537,18 @@ Invalid/oversized files and Unicode controls refuse.
 
 The browser additionally offers **Seeded handwriting comparison** for any
 exact glyph with authored strokes, including `ó`, `ñ`, and decomposed forms.
+
 The top SVG row shows three identical ideal copies; the lower row uses the
 same glyph three times with a reproducible 32-bit integer seed. Width,
 height, pen thickness, slant, horizontal spacing and endpoint regularity
-have independently bounded spread controls. Within each occurrence, scale,
+have independently bounded spread controls.
+
+Within each occurrence, scale,
 slant and pen size vary together; shared pen endpoints stay connected even
 when individual strokes are reordered. A changed seed changes the lower
 row without changing the ideal row. A clipped, collapsed, invalid or overly
 complex (over 128-stroke) sample refuses visibly instead of clipping ink.
+
 A real Firefox/Rust localhost test checks accented `ó` replay and refusal.
 
 The comparison is SVG-only until the user explicitly selects one of its
@@ -1526,7 +1594,9 @@ The seven `--glyph-variation` values are **uint32 seed**, maximum width,
 height and pen-thickness spreads (0–20% each), slant (0–12 degrees),
 per-occurrence horizontal tracking (0–500 µm), and endpoint regularity
 (0–150 µm). It uses the same xorshift samples and exact Unicode glyph keys
-as the browser preview. The occurrence sequence continues across manual
+as the browser preview.
+
+The occurrence sequence continues across manual
 text runs and Markdown flow pages. Rust checks the fully sampled ink and
 pen clearance (up to 128 template segments per glyph) before creating a
 PDF or transparent PNG; invalid settings, clipped shapes and missing
