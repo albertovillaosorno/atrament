@@ -68,6 +68,25 @@ strokes, image overlays or general notebook content**. These are printed
 annotations, not sampled pen strokes. P4-012, P5-011 and P5-012 remain open
 prerequisites; production printing and the full journey are not verified.
 
+## Saved CLI profile and print-ready Markdown journey — 2026-11-04
+
+A repeatable real-subprocess test (`pnpm run test:print-ready`) saves one
+notebook profile with a printed date, page numbers, rounded border and
+preprinted-paper mode, plus a separately authored exact glyph library.
+It reopens both artifacts in the same native Rust CLI and lays out Markdown
+with marker-style heading decoration and 54 explicit hard-line rows.
+The renderer automatically paginates two physical PDF sheets and exports a
+transparent RGBA page-two PNG containing the same authored colored ink.
+
+The test passes the resulting PDF to `atrament-print --dry-run` with an
+explicitly named, unconnected queue, verifying no print job is sent and
+the PDF remains unchanged. A one-page forced export and unsupported glyph
+both refuse without overwriting the accepted two-page document. This is
+an export-only composition: text and styling are not persisted in the
+notebook profile, and no browser canvas, photo layers, actual printer or
+complete saved notebook document is proven here. The executable P8-009
+task remains open pending the full requested CLI/localhost flow.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
