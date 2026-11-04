@@ -531,9 +531,15 @@ inspection, native saved TSV and explicit browser control availability.
 A browser-to-Rust integration proves byte-identical edited TSV for an
 interleaved NFD/NFC/math fixture, atomic duplicate-closure refusal and
 real native vector PDF/transparent PNG parity with independently authored
-physical pen lines. Closure remains an opt-in straight line, not saved
-semantic pen lifts, analytic circle geometry or automatic cursive.
-P1-014 remains open.
+physical pen lines. An additional script closes a later open path, rotates
+its entry, reverses its direction and translates its geometry in both
+browser and native editors without changing interleaved Unicode slots.
+A live localhost Firefox/BiDi test proves the actual closure control is
+session-gated, offers closed-loop entry after the new bridge, downloads
+the exact TSV and makes no additional backend requests.
+
+Closure remains an opt-in straight line, not saved semantic pen lifts,
+analytic circle geometry or automatic cursive. P1-014 remains open.
 
  The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be

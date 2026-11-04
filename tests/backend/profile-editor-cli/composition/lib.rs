@@ -2493,6 +2493,29 @@ fn native_explicit_path_closure_preserves_unicode_and_refuses_atomically() {
         }
         test.clear();
     }
+    // The closing bridge cannot bypass the shared v1 4096-row budget.
+    let mut full = args(&[
+        "--glyph-stroke", "o", "500", "800", "900", "1200",
+        "250", "#243647",
+        "--glyph-stroke", "o", "900", "1200", "1700", "800",
+        "250", "#243647",
+    ]);
+    for _ in 0..4094 {
+        full.extend(args(&[
+            "--glyph-stroke", "∞", "100", "200", "300", "400",
+            "250", "#112233",
+        ]));
+    }
+    let mut beyond = full.clone();
+    beyond.extend(args(&["--close-path", "o", "1",
+        "--output", destination, "--replace"]));
+    assert!(execute_glyph_library(&beyond)
+        .expect_err("4097th glyph stroke refuses")
+        .contains("4096 authored strokes"));
+    assert_eq!(fs::read(&destination_path).expect("prior output"),
+        b"preserved output", "stroke cap refusal is file-atomic");
+    assert!(execute_glyph_library(&full)
+        .expect("the original 4096 glyphs remain valid").is_some());
     fs::remove_file(source_path).expect("remove test input");
     fs::remove_file(destination_path).expect("remove test output");
 }

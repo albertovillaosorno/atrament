@@ -759,6 +759,39 @@ test('explicit browser path closure matches native TSV and printed ink', () => {
         assert.equal(readFileSync(refusal, 'utf8'),
             'existing output is retained');
 
+        // Follow a newly closed path through three other native/browser
+        // geometry edits. The stroke indices are recomputed from the
+        // post-closure candidate path, not from a persisted path ID.
+        const rotated = rotateClosedCandidatePath(
+            browser.strokes, nfd, 4);
+        const reversed = reverseCandidatePath(
+            rotated.strokes, nfd, rotated.selectedIndex);
+        const shifted = translateCandidatePath(
+            reversed.strokes, nfd, reversed.selectedIndex, 50, -50);
+        const scriptedFile = join(dir, 'scripted.tsv');
+        const script = native('glyphs', '--profile', original,
+            '--close-path', nfd, '2',
+            '--rotate-path', nfd, '2', '2',
+            '--reverse-path', nfd, '2',
+            '--translate-path', nfd, '2', '50', '-50',
+            '--output', scriptedFile);
+        assert.equal(script.status, 0, script.stderr);
+        assert.equal(readFileSync(scriptedFile, 'utf8'),
+            encodeGlyphLibrary(shifted.strokes),
+            'close/rotate/reverse/translate has exact browser/native parity');
+        assert.equal(encodeGlyphLibrary(source), before,
+            'compound script preserves original browser source');
+        assert.equal(readFileSync(original, 'utf8'), before,
+            'compound script does not modify native source');
+        const paths = candidatePenPaths(shifted.strokes, nfd);
+        assert.equal(paths.length, 2);
+        assert.deepEqual(paths[1].start, paths[1].end,
+            'closed pen loop remains continuous after compound edits');
+        assert.deepEqual(shifted.strokes.filter((item) =>
+            item.grapheme !== nfd),
+        source.filter((item) => item.grapheme !== nfd),
+        'unrelated composed and mathematical Unicode ink stays exact');
+
         const inline = browser.strokes.filter((item) =>
             item.grapheme === nfd).flatMap((item) => [
             '--glyph-stroke', nfd, String(item.x1), String(item.y1),
