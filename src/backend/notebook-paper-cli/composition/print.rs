@@ -420,6 +420,40 @@ fn bounded_xref_size(
     Some(number)
 }
 
+// A prior traditional xref pointer must at least identify a bounded
+// subsection with a complete first record. A bare "xref" token in a
+// string/comment or an unfinished subsection is not a predecessor header.
+// This does not validate all prior records, trailers or revision chains.
+fn previous_xref_table_header(bytes: &[u8]) -> bool {
+    let mut at = 0usize;
+    if xref_word(bytes, &mut at) != Some(b"xref".as_slice()) {
+        return false;
+    }
+    let decimal = |word: &[u8]| {
+        str::from_utf8(word).ok()
+            .filter(|value| !value.is_empty()
+                && value.bytes().all(|byte| byte.is_ascii_digit()))
+            .and_then(|value| value.parse::<usize>().ok())
+    };
+    let Some(first) = xref_word(bytes, &mut at).and_then(decimal)
+    else { return false; };
+    let Some(count) = xref_word(bytes, &mut at).and_then(decimal)
+    else { return false; };
+    if count == 0 || first.checked_add(count)
+        .is_none_or(|end| end > MAX_SUPPORTED_XREF_OBJECTS) {
+        return false;
+    }
+    let Some((offset, generation, status)) = xref_table_entry(bytes, &mut at)
+    else { return false; };
+    offset.len() == 10 && offset.iter().all(u8::is_ascii_digit)
+        && generation.len() == 5
+        && generation.iter().all(u8::is_ascii_digit)
+        && str::from_utf8(generation).ok()
+            .and_then(|digits| digits.parse::<u16>().ok()).is_some()
+        && matches!(status, b"f" | b"n")
+        && (first != 0 || (status == b"f" && generation == b"65535"))
+}
+
 // /Prev, when present on a terminal traditional table, must lead back to
 // an earlier cross-reference record rather than to arbitrary data, a self
 // reference or a forged future byte offset. This is not recursive parsing
@@ -448,7 +482,7 @@ fn bounded_previous_xref(
     };
     if earlier.starts_with(b"xref")
         && earlier.get(4).is_some_and(u8::is_ascii_whitespace) {
-        return true;
+        return previous_xref_table_header(earlier);
     }
     // A PDF 1.5+ incremental revision may refer back to an xref stream.
     let stream_edition = matches!(document.get(5..8),

@@ -384,6 +384,21 @@ bytes and reviewed SHA-256 digest. This checks the immediate predecessor
 header only; it does not recursively validate prior revisions, decode xref
 stream rows, or demonstrate physical printing.
 
+## Framed immediate predecessor table record (partial) — 2026-11-04
+
+A `/Prev` pointer to a traditional cross-reference table can no longer
+qualify solely by naming the bytes `xref` followed by whitespace. A new
+bounded, nonrecursive probe requires a positive in-range subsection count
+and a complete first record with exact decimal field widths, a valid
+16-bit generation, and a legal object-zero free head when applicable.
+
+Three red-before/green-after incremental PDF selections demonstrate that
+an earlier fake `xref` keyword, an incomplete subsection and a malformed
+record no longer reach fake CUPS. All are refused without modifying the
+selected PDF; the genuine native earlier xref and an earlier PDF 1.5+
+stream header remain eligible. The gate does not validate the remainder
+of previous xref tables, their trailers or full incremental chains.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
