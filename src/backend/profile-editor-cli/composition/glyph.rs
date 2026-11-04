@@ -279,7 +279,11 @@ impl GlyphOverlay {
         while !remaining.is_empty() {
             let (grapheme, rest) = first_grapheme(remaining)?;
             remaining = rest;
-            if grapheme.chars().all(char::is_whitespace)
+            // Only ASCII spaces are implicit 4-mm blank advances in the
+            // actual compositor. Other Unicode whitespace may be authored
+            // visible ink and must appear in this exact coverage audit.
+            // Control-character line boundaries are source structure.
+            if grapheme == " " || grapheme.chars().all(char::is_control)
                 || seen.contains(&grapheme) {
                 continue;
             }

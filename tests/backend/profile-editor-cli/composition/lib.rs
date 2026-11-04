@@ -2075,6 +2075,97 @@ fn glyph_library_audit_separates_nfc_nfd_math_and_missing_punctuation() {
 }
 
 #[test]
+fn glyph_audit_reports_unicode_whitespace_requiring_authored_ink() {
+    let sample = "a\u{a0}a\u{2009}a\u{202f}a";
+    let base = args(&[
+        "--glyph-stroke", "a", "500", "500", "1800", "3000",
+        "250", "#123456",
+    ]);
+    let mut audit_command = base.clone();
+    audit_command.extend(args(&["--audit-text", sample]));
+    let bytes = execute_glyph_library(&audit_command)
+        .expect("non-ASCII spaces are auditable").expect("report bytes");
+    let report = String::from_utf8(bytes).expect("audit is UTF-8");
+    assert!(report.contains("Distinct visible graphemes: 4"), "{report}");
+    assert!(report.contains("Missing authored glyphs: 3"), "{report}");
+    for codepoint in ["U+00A0", "U+2009", "U+202F"] {
+        assert!(report.contains(&format!(
+            "[{codepoint}]: missing authored strokes"
+        )), "missing exact space {codepoint}: {report}");
+    }
+    let mut ascii_audit = base.clone();
+    ascii_audit.extend(args(&["--audit-text", "a a\ta\na"]));
+    let ascii = execute_glyph_library(&ascii_audit)
+        .expect("source whitespace remains auditable")
+        .expect("report bytes");
+    let ascii = String::from_utf8(ascii).expect("ASCII report");
+    assert!(ascii.contains("Missing authored glyphs: 0"), "{ascii}");
+
+    for format in ["pdf", "png"] {
+        let target = test_path().with_extension(format);
+        let path = target.to_str().expect("test output path");
+        fs::write(&target, b"accepted native output sentinel")
+            .expect("test-owned output");
+        let mut export = args(&[
+            "--export-paper", format, "--printed-sheet", "false",
+            "--glyph-stroke", "a", "500", "500", "1800", "3000",
+            "250", "#123456", "--place-text", "1", "30000", "40000",
+            sample, "--output", path, "--replace",
+        ]);
+        if format == "png" {
+            export.extend(args(&["--png-page", "1", "--dpi", "72"]));
+        }
+        let error = execute_notebook(&export)
+            .expect_err("unauthored Unicode space must refuse");
+        for codepoint in ["U+00A0", "U+2009", "U+202F"] {
+            assert!(error.contains(codepoint), "{error}");
+        }
+        assert_eq!(fs::read(&target).expect("retained output"),
+            b"accepted native output sentinel");
+        fs::remove_file(&target).expect("remove test-owned output");
+    }
+}
+
+#[test]
+fn explicitly_authored_unicode_whitespace_has_real_native_pdf_ink() {
+    // These exact Unicode spaces may deliberately carry caller-authored ink.
+    let sample = "a\u{a0}a\u{2009}a\u{202f}a";
+    let base = args(&[
+        "--glyph-stroke", "a", "500", "500", "1800", "3000",
+        "250", "#123456",
+    ]);
+    // The audit must count them, not normalize them to ASCII advances.
+    let mut authored = base;
+    for whitespace in ["\u{a0}", "\u{2009}", "\u{202f}"] {
+        authored.extend(args(&[
+            "--glyph-stroke", whitespace, "500", "500", "1800",
+            "3000", "250", "#123456",
+        ]));
+    }
+    let mut authored_audit = authored.clone();
+    authored_audit.extend(args(&["--audit-text", sample]));
+    let report = execute_glyph_library(&authored_audit)
+        .expect("independently authored whitespace audited")
+        .expect("report bytes");
+    assert!(String::from_utf8_lossy(&report)
+        .contains("Missing authored glyphs: 0"));
+    let mut accepted = args(&[
+        "--export-paper", "pdf", "--printed-sheet", "false",
+    ]);
+    accepted.extend(authored);
+    accepted.extend(args(&[
+        "--place-text", "1", "30000", "40000", sample,
+    ]));
+    let pdf = execute_notebook(&accepted)
+        .expect("selected exact Unicode whitespace shapes render")
+        .expect("real PDF bytes");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    assert_eq!(String::from_utf8_lossy(&pdf)
+        .matches("0.071 0.204 0.337 RG").count(), 7,
+        "four authored letters and three exact Unicode space strokes");
+}
+
+#[test]
 fn path_inspector_groups_only_exact_directed_same_pen_segments() {
     let file = test_path().with_extension("tsv");
     let name = file.to_str().expect("owned TSV");

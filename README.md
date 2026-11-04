@@ -857,7 +857,14 @@ audit `∞`, equations or other symbols separately with `--audit-text`.
 
 The audit lists each distinct visible grapheme, its Unicode code points, and
 its actual authored stroke count or missing status; it does not confuse the
-statistical/text baseline with renderable ink. To verify the actual
+statistical/text baseline with renderable ink. Only an ordinary ASCII
+space is an implicit 4-mm blank advance in positioned handwritten text;
+non-breaking (`U+00A0`), thin (`U+2009`) and narrow non-breaking (`U+202F`)
+spaces count as exact separately authorable glyphs. The read-only audit now
+reports them as missing when not authored, matching native PDF/PNG refusal,
+instead of silently ignoring them. Tabs and ASCII line boundaries in an
+audit are treated as source structure, not glyph ink. No Unicode space
+normalization or invented fallback is performed. To verify the actual
 **stroke order, endpoint direction, physical widths and RGB color** for a
 single authored glyph, inspect it without changing its TSV:
 
