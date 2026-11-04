@@ -4158,6 +4158,34 @@ test(
             assert.equal(fs.readFileSync(variationFile, "utf8"),
                 variationText, "native export never rewrites browser ink");
 
+            // Printer intent remains separate from the Firefox save and
+            // native export. Review its exact PDF bytes without CUPS access.
+            const printBuild = spawnSync(PINNED_CARGO, [
+                "build", "--offline", "--quiet",
+                "-p", "atrament_notebook_paper_cli",
+                "--bin", "atrament-print",
+            ], {
+                env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR },
+                stdio: "pipe", timeout: 90_000,
+            });
+            assert.equal(printBuild.status, 0,
+                "native print review CLI builds without network access");
+            const printCli = path.join(TARGET_DIR, "debug", "atrament-print");
+            const reviewedHash = crypto.createHash("sha256")
+                .update(decoratedPdfBytes).digest("hex");
+            const printReview = spawnSync(printCli, [
+                "--pdf", decoratedPdf,
+                "--printer", "Unconnected_Test_Queue",
+                "--dry-run", "--expect-sha256", reviewedHash.toUpperCase(),
+            ], { encoding: "utf8", stdio: "pipe", timeout: 20_000 });
+            assert.equal(printReview.status, 0,
+                "browser-backed PDF is admitted for explicit print review");
+            assert.match(printReview.stdout,
+                new RegExp(`SHA-256 ${reviewedHash}`));
+            assert.match(printReview.stdout, /no job submitted/);
+            assert.deepEqual(fs.readFileSync(decoratedPdf),
+                decoratedPdfBytes, "dry-run cannot alter the reviewed PDF");
+
             // Inventory checks exact graphemes without falsely claiming
             // visible strokes or rendering fallback for math symbols.
             const inventory = spawnSync(cli, [
