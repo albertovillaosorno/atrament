@@ -502,14 +502,15 @@ variable handwriting width or full CommonMark indentation semantics.
 ## Pasted Unicode line and paragraph separators — 2026-11-04
 
 After CRLF handling, native source admission maps U+2028 line
-separators to one LF and U+2029 paragraph separators to two LFs before
-Markdown parsing. The latter reserves a plain-text blank physical row or
+separators to a hard Markdown line break (two spaces plus LF), and
+U+2029 paragraph separators to two LFs before Markdown parsing.
+The latter reserves a plain-text blank physical row or
 one collapsed 4-mm Markdown paragraph gap. A source of only separators
 still refuses as non-visible text; unrelated controls including U+0085
 remain rejected. Neither separator needs invented handwriting glyph ink.
 
 Real native PDF/transparent PNG regressions compare source separators
-against matching LF and blank-separated paragraphs in plain text,
+against matching hard breaks and blank-separated paragraphs in plain text,
 Markdown heading/task content and a saved BOM/CRLF source. They check
 fixed-region second-page output and unchanged input bytes, plus distinguish
 a paragraph gap from one line break. This is source-boundary admission,

@@ -184,6 +184,28 @@ test('pasted Unicode paragraph separators become physical rows',
         }
     });
 
+test('Unicode line separator keeps a hard Markdown row',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-separators-'));
+        try {
+            for (const format of ['pdf', 'png']) {
+                const hard = render(dir, 'a  \nó', format);
+                assert.equal(hard.result.status, 0, hard.result.stderr);
+                const expected = readFileSync(hard.output);
+                const unicode = render(dir, 'a\u2028ó', format);
+                assert.equal(unicode.result.status, 0,
+                    unicode.result.stderr);
+                assert.deepEqual(readFileSync(unicode.output), expected);
+                const soft = render(dir, 'a\nó', format);
+                assert.equal(soft.result.status, 0, soft.result.stderr);
+                assert.notDeepEqual(readFileSync(soft.output), expected,
+                    'Unicode line break must not soft-wrap a paragraph');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('paragraph separator produces a real measured gap in both modes',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-separators-'));

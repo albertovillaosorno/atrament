@@ -186,10 +186,11 @@ impl FlowSource {
         // Check the expanded bytes as well as the original source bound.
         // Unicode line/paragraph separators are layout boundaries in
         // pasted sources, not missing handwriting glyphs.
-        // A line separator is one break; a paragraph separator also
-        // reserves a blank line and a Markdown paragraph gap.
+        // A Unicode line separator is an explicit hard break (two
+        // trailing Markdown spaces). Plain flow ignores those spaces.
+        // A paragraph separator reserves a blank row/paragraph gap.
         let normalized = admitted.replace("\r\n", "\n")
-            .replace('\u{2028}', "\n")
+            .replace('\u{2028}', "  \n")
             .replace('\u{2029}', "\n\n");
         // Sources without tabs cannot grow after newline normalization.
         // The usual path needs no extra Unicode-boundary traversal.
