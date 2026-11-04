@@ -150,7 +150,12 @@ checks BOM-prefixed NBSP and refuses both BOM-only and ASCII-only spacing.
 
 The regression compares raw Blob octets, not just decoded `Blob.text()`,
 which drops the initial UTF-8 BOM on readback even when the file preserves it.
-The native Rust CLI continues to require separately authored glyph strokes.
+The same exact browser-captured BOM-prefixed Markdown bytes now reopen in
+an independent native Rust CLI with an explicitly authored NBSP glyph. Real
+PDF and transparent RGBA PNG output match the BOM-free inline Unicode source
+byte-for-byte, and the PNG contains actual selected blue ink pixels. An
+unsupported em-space glyph refuses before replacing the accepted PDF.
+
 This does not supply a saved semantic notebook or in-browser PDF compilation.
 
 ## Unambiguous default native paper command (partial) — 2026-11-04

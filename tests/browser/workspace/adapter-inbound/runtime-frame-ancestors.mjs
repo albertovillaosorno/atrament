@@ -10162,6 +10162,76 @@ test(
                 assert.equal(blank.octets, null);
                 assert.equal(blank.status, "Paste source text to download.");
             }
+            // The exact browser Blob, including its BOM octets, must reopen
+            // as authored Unicode ink in the independent native Rust CLI.
+            const sourceFile = path.join(profile, "source-unicode.md");
+            fs.writeFileSync(sourceFile, Buffer.from(variants[4].octets));
+            assert.deepEqual(fs.readFileSync(sourceFile),
+                Buffer.from("\uFEFF\u00A0", "utf8"));
+            const build = spawnSync(PINNED_CARGO, [
+                "build", "--quiet", "-p", "atrament_profile_editor_cli",
+                "--bin", "atrament-profiles",
+            ], {
+                env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR },
+                encoding: "utf8", timeout: 60_000,
+            });
+            assert.equal(build.status, 0, build.stderr);
+            const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            const ink = ["--glyph-stroke", "\u00A0", "500", "500",
+                "2500", "3500", "500", "#123456"];
+            const exportInk = (format, sourceFlag, text, output, replace) =>
+                spawnSync(cli, [
+                    "notebook", "--printed-sheet", "false", ...ink,
+                    sourceFlag, text, "--export-paper", format,
+                    ...(format === "png"
+                        ? ["--png-page", "1", "--dpi", "72"] : []),
+                    "--output", output, ...(replace ? ["--replace"] : []),
+                ], { encoding: "utf8", timeout: 20_000 });
+            for (const format of ["pdf", "png"]) {
+                const fileOutput = path.join(profile, `unicode-file.${format}`);
+                const inlineOutput = path.join(profile,
+                    `unicode-inline.${format}`);
+                const fromFile = exportInk(format, "--flow-markdown-file",
+                    sourceFile, fileOutput, false);
+                assert.equal(fromFile.status, 0, fromFile.stderr);
+                const fromInline = exportInk(format, "--flow-markdown",
+                    "\u00A0", inlineOutput, false);
+                assert.equal(fromInline.status, 0, fromInline.stderr);
+                const bytes = fs.readFileSync(fileOutput);
+                assert.deepEqual(bytes, fs.readFileSync(inlineOutput),
+                    `native ${format} ignores only the initial UTF-8 BOM`);
+                if (format === "pdf") {
+                    assert.match(bytes.toString("latin1"), /^%PDF-1\.4/);
+                    assert.match(bytes.toString("latin1"),
+                        /0\.071 0\.204 0\.337 RG/);
+                } else {
+                    assert.equal(bytes.subarray(0, 8).toString("hex"),
+                        "89504e470d0a1a0a");
+                    assert.equal(bytes[25], 6, "PNG must retain RGBA");
+                    const segments = [];
+                    for (let offset = 8; offset + 12 <= bytes.length;) {
+                        const length = bytes.readUInt32BE(offset);
+                        if (bytes.toString("ascii", offset + 4,
+                            offset + 8) === "IDAT") {
+                            segments.push(bytes.subarray(
+                                offset + 8, offset + 8 + length));
+                        }
+                        offset += length + 12;
+                    }
+                    assert.ok(segments.length > 0);
+                    const pixels = inflateSync(Buffer.concat(segments));
+                    assert.ok(pixels.includes(Buffer.from([18, 52, 86, 255])),
+                        "PNG must include exact authored Unicode ink color");
+                }
+            }
+            const acceptedPdf = path.join(profile, "unicode-file.pdf");
+            const originalPdf = fs.readFileSync(acceptedPdf);
+            const unsupported = exportInk("pdf", "--flow-markdown",
+                "\u2003", acceptedPdf, true);
+            assert.notEqual(unsupported.status, 0);
+            assert.match(unsupported.stderr, /missing authored glyph shapes/);
+            assert.deepEqual(fs.readFileSync(acceptedPdf), originalPdf,
+                "missing exact Unicode space cannot replace native PDF");
         } finally {
             bidi?.close();
             await closeFixtureServer(server);
