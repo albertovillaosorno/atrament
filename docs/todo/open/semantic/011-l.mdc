@@ -687,6 +687,21 @@ They also prove that eleven empty heading/list variants cannot replace an
 accepted file. This is a bounded Markdown disambiguation, not a complete
 CommonMark parser, semantic list schema or automatic numbering.
 
+## Reject physically invisible indentation rows (partial) — 2026-11-04
+
+The native flow compiler refuses literal leading spaces that consume the
+entire writable line before its first visible glyph. Previously a narrow
+fixed region could emit an ink-free text row and then move the actual
+handwriting to a second physical row or page, silently changing pagination.
+The explicit diagnostic leaves the previously accepted PDF/transparent PNG
+unchanged, in both plain and Markdown input (including literal fenced code).
+A wider region continues to admit the same source and preserve its indent.
+
+A real Rust CLI integration regression checks both output formats, both text
+modes, the embedded-code case and a subsequent indented plain row. This is
+only narrow-region placement refusal, not support for inferred indentation
+semantics, nested Markdown blocks or a finished semantic notebook editor.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

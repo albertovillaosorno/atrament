@@ -737,6 +737,14 @@ impl Layout<'_> {
         if text.is_empty() {
             return Ok(());
         }
+        // Literal leading indentation may fill an entire narrow row.
+        // Never consume a page row with only spaces before the first
+        // visible glyph; reject that unrenderable placement explicitly.
+        if text.bytes().all(|byte| byte == b' ') {
+            return Err(
+                "flow indentation cannot fit first visible glyph".into()
+            );
+        }
         let y = self.begin_row()?;
         if let LineStyle::Heading(level) = style {
             let mark_end = start_x

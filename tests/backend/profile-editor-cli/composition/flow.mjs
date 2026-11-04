@@ -287,6 +287,40 @@ test('expanded tab source stays bounded and refuses atomic replacements',
         }
     });
 
+test('indented glyph cannot spill into an invisible physical row',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-indent-'));
+        try {
+            const wide = ['--flow-region', '30000', '40000',
+                '30000', '50000'];
+            const narrow = ['--flow-region', '30000', '40000',
+                '20000', '50000'];
+            for (const format of ['pdf', 'png']) {
+                for (const flag of ['--flow-text', '--flow-markdown']) {
+                    const accepted = render(dir, '    a', format, wide,
+                        flag);
+                    assert.equal(accepted.result.status, 0,
+                        accepted.result.stderr);
+                    const original = readFileSync(accepted.output);
+                    for (const input of flag === '--flow-markdown'
+                        ? ['    a', '```\n    a\n```']
+                        : ['    a', 'a\n    a']) {
+                        const refused = render(dir, input, format,
+                            narrow, flag);
+                        assert.notEqual(refused.result.status, 0,
+                            'spaces-only physical rows must be refused');
+                        assert.match(refused.result.stderr,
+                            /indentation cannot fit first visible glyph/);
+                        assert.deepEqual(readFileSync(refused.output),
+                            original, 'failed layout preserves export');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('code fences keep literal Unicode ink and physical hard line breaks',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));
