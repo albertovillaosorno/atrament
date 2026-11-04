@@ -1235,6 +1235,13 @@ values decode to the intended decomposed code points and their SVG italic,
 entry-tail and upper-story guides appear only for the selected variant.
 These remain manually chosen sampled variants, not automatic cursive joins.
 
+A native Rust integration additionally reopens the exact 2-glyph styled
+TSV (`a` + combining acute, printed two-storey italic; `o` + combining
+acute, explicitly connected pen), audits both NFD keys, and exports the
+ordered pen segments twice as real PDF vectors and transparent PNG ink.
+Both distinct from default geometric forms, their paths remain separately
+authored; an unknown combining-grave still refuses replacement.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

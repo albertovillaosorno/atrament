@@ -104,6 +104,67 @@ test('14 direct NFD accent starters render exact Rust PDF and PNG',
         }
     });
 
+test('styled NFD acute pen paths export exact Rust PDF and PNG', () => {
+    const dir = mkdtempSync(join(root, '.temp/nfd-styled-'));
+    try {
+        const library = join(dir, 'styled.tsv');
+        const output = join(dir, 'styled.pdf');
+        const styles = [
+            ['a\u0301', 'two-storey-italic', 700],
+            ['o\u0301', 'cursive', 1100],
+        ];
+        const rows = styles.flatMap(([glyph, kind, radius]) =>
+            geometricStarter(glyph, 1550, 2450, radius, 250,
+                '#243647', undefined, kind));
+        for (const [glyph, kind, radius] of styles) {
+            const selected = rows.filter((line) => line.grapheme === glyph);
+            assert.ok(selected.length > 5);
+            assert.notDeepEqual(selected, geometricStarter(glyph,
+                1550, 2450, radius, 250, '#243647'));
+            const paths = candidatePenPaths(rows, glyph);
+            assert.ok(paths.length > 0,
+                `${kind} must retain directed caller-authored pen paths`);
+            assert.equal(paths.at(-1).last, selected.length);
+        }
+        const canonical = Buffer.from(encodeGlyphLibrary(rows));
+        writeFileSync(library, canonical);
+        const reopened = cli('glyphs', ['--profile', library]);
+        assert.equal(reopened.status, 0, reopened.stderr.toString());
+        assert.deepEqual(reopened.stdout, canonical);
+        const glyphText = styles.map(([glyph]) => glyph).join('');
+        const audit = cli('glyphs', ['--profile', library,
+            '--audit-text', glyphText]);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        assert.match(audit.stdout.toString(),
+            /Distinct visible graphemes: 2/);
+        const flags = ['--printed-sheet', 'true',
+            '--glyph-file', library,
+            '--flow-text', `${glyphText}\n${glyphText}`];
+        const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+            '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, rows.length * 2);
+        const png = cli('notebook', [...flags, '--export-paper', 'png',
+            '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        const refused = cli('notebook', [
+            '--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', 'a\u0300', '--export-paper', 'pdf',
+            '--output', output, '--replace']);
+        assert.notEqual(refused.status, 0);
+        assert.match(refused.stderr.toString(), /missing authored glyph/i);
+        assert.deepEqual(readFileSync(output), accepted);
+        assert.deepEqual(readFileSync(library), canonical);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('seven selected uppercase accents render real native PDF/PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/uppercase-ink-'));
