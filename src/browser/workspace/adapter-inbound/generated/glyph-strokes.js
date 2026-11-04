@@ -1304,9 +1304,12 @@ function cursiveLoop(base, radius) {
 // Spanish fill. They never normalize or overwrite an existing Unicode key.
 const ACCENTED_STARTERS = {
     "é": "e", "ú": "u", "ü": "u", "ñ": "n",
+    "Á": "A", "É": "E", "Í": "I", "Ó": "O",
+    "Ú": "U", "Ñ": "N", "Ü": "U",
 };
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     if (!["o", "a", "ó", "á", "é", "ú", "ü", "ñ",
+        "Á", "É", "Í", "Ó", "Ú", "Ñ", "Ü",
         "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
         "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s",
@@ -2188,7 +2191,7 @@ export function createGlyphStrokeEditor() {
             idealGeometry.setAttribute("transform", isItalic
                 ? `matrix(1 0 ${-slope} 1 ${slope * baseline} 0)` : "");
             const circleVisible = ["o", "a", "ó", "á", "b", "d",
-                "p", "q", "g", "O", "Q"].includes(chosen.grapheme);
+                "p", "q", "g", "O", "Ó", "Q"].includes(chosen.grapheme);
             const circleState = circleVisible ? shown : "hidden";
             idealCircle.setAttribute("visibility", circleState);
             const stemGlyph = ["a", "á", "b", "d", "p", "q"]
@@ -2314,8 +2317,10 @@ export function createGlyphStrokeEditor() {
             const currencyD = isCurrency ? punctuationGuide(currencyParts(cx, cy, r, chosen.grapheme)) : "";
             const isDigit = /^[0-9]$/.test(chosen.grapheme);
             const digitD = isDigit ? digitGuide(digitGeometry(cx, cy, r, chosen.grapheme)) : "";
-            const isCapital = /^[A-Z]$/.test(chosen.grapheme);
-            const capitalD = isCapital ? capitalGuide(cx, cy, r, chosen.grapheme) : "";
+            const capitalSource = ACCENTED_STARTERS[chosen.grapheme]
+                ?? chosen.grapheme;
+            const isCapital = /^[A-Z]$/.test(capitalSource);
+            const capitalD = isCapital ? capitalGuide(cx, cy, r, capitalSource) : "";
             const isTextMark = [...TEXT_MARKS, ...NOTATION_MARKS]
                 .includes(chosen.grapheme);
             const markD = isTextMark ? punctuationGuide(textMarkParts(cx, cy, r, chosen.grapheme)) : "";
@@ -2349,7 +2354,7 @@ export function createGlyphStrokeEditor() {
                 element.setAttribute("stroke", color.value);
             }
             const roundedVisible = active
-                && ["n", "u", "ñ", "ú", "ü", "h", "m", "r",
+                && (isCapital || ["n", "u", "ñ", "ú", "ü", "h", "m", "r",
                     "j", "g", "s",
                     "v", "w", "k", "x", "y", "z",
                     ".", ",", "!", "¡", "?", "¿",
@@ -2357,7 +2362,7 @@ export function createGlyphStrokeEditor() {
                     ...MATH_GLYPHS, ...CIRCLE_MARKS, ...CURRENCY_MARKS,
                     ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                     ...TEXT_MARKS, ...NOTATION_MARKS]
-                    .includes(chosen.grapheme);
+                    .includes(chosen.grapheme));
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
                 && !isPunctuation && !isQuote && !isMath && !isDigit
@@ -2423,7 +2428,8 @@ export function createGlyphStrokeEditor() {
             const lift = Number(accentLift.value);
             const top = chosen.variant.startsWith("two-storey")
                 ? 2 * r : r;
-            const composedAcute = ["é", "ú"].includes(chosen.grapheme);
+            const composedAcute = ["é", "ú", "Á", "É", "Í", "Ó", "Ú"]
+                .includes(chosen.grapheme);
             const accent = composedAcute ? drafted.at(-1)
                 : acuteAccent(cx, cy, r, pen, dx, lift, top);
             for (const axis of ["x1", "y1", "x2", "y2"]) {
@@ -2431,12 +2437,13 @@ export function createGlyphStrokeEditor() {
             }
             idealAccent.setAttribute("stroke-width", numeric.width.value);
             idealAccent.setAttribute("stroke", color.value);
-            const hasAcute = ["ó", "á", "í", "é", "ú"]
+            const hasAcute = ["ó", "á", "í", "é", "ú",
+                "Á", "É", "Í", "Ó", "Ú"]
                 .includes(chosen.grapheme);
             idealAccent.setAttribute("visibility", active && hasAcute
                 ? "visible" : "hidden");
-            const composedMarks = chosen.grapheme === "ñ" ? 3
-                : chosen.grapheme === "ü" ? 2 : 0;
+            const composedMarks = ["ñ", "Ñ"].includes(chosen.grapheme)
+                ? 3 : ["ü", "Ü"].includes(chosen.grapheme) ? 2 : 0;
             const markLines = composedMarks > 0
                 ? drafted.slice(-composedMarks) : [];
             const diacriticD = markLines.map((line) => `M ${line.x1} ${line.y1} L ${line.x2} ${line.y2}`)

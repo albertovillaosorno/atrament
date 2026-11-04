@@ -1678,6 +1678,73 @@ test("one-click Spanish accents reuse exact bases and honest SVG guides",
         }
     });
 
+test("uppercase Spanish starters inherit exact native capitals and accents",
+    async () => {
+        const args = [1550, 2450, 1100, 250, "#243647"];
+        const cases = [
+            ["Á", "A", 4, 1], ["É", "E", 5, 1],
+            ["Í", "I", 4, 1], ["Ó", "O", 49, 1],
+            ["Ú", "U", 35, 1], ["Ñ", "N", 6, 3],
+            ["Ü", "U", 36, 2],
+        ];
+        for (const [glyph, base, length, marks] of cases) {
+            const source = geometricStarter(base, ...args);
+            const produced = geometricStarter(glyph, ...args);
+            assert.equal(produced.length, length);
+            assert.deepEqual(produced, composeAccentedGlyph(source, base,
+                glyph, "#243647"));
+            assert.deepEqual(produced.slice(0, -marks),
+                source.map((line) => ({ ...line, grapheme: glyph })));
+            assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(produced)),
+                produced, "precomposed uppercase identity stays exact");
+            assert.deepEqual(geometricStarter(glyph, ...args,
+                { dx: -100, lift: 100 }).slice(0, -marks),
+            produced.slice(0, -marks));
+            assert.throws(() => geometricStarter(glyph,
+                1550, 1350, 1100, 250, "#243647"),
+            /Accent and pen must fit inside glyph cell/);
+        }
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            for (const [glyph, , count, marks] of cases) {
+                get("form").value = glyph;
+                get("character").value = glyph;
+                get("form").dispatch("input");
+                assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                    "visible", "capital SVG uses its own base geometry");
+                const diacritic = get("ideal-diacritic");
+                assert.equal(diacritic.attributes.get("visibility"),
+                    marks > 1 ? "visible" : "hidden");
+                assert.equal((diacritic.attributes.get("d")
+                    .match(/ L /g) ?? []).length, marks > 1 ? marks : 0);
+                assert.equal(get("ideal-accent").attributes.get("visibility"),
+                    marks === 1 ? "visible" : "hidden");
+                assert.equal(get("ideal-circle").attributes.get("visibility"),
+                    glyph === "Ó" ? "visible" : "hidden");
+                get("construct").dispatch("click");
+                assert.match(get("status").textContent,
+                    new RegExp(`Constructed ${count} sampled segments`));
+            }
+            get("save").dispatch("click");
+            const original = await downloads.at(-1).text();
+            assert.deepEqual(parseGlyphLibrary(original), cases.flatMap(
+                ([glyph]) => geometricStarter(glyph, ...args)));
+            get("circle-y").value = "1350";
+            get("circle-y").dispatch("input");
+            assert.equal(get("ideal-diacritic").attributes.get("visibility"),
+                "hidden", "clipped diaeresis hides all stale marks");
+            get("construct").dispatch("click");
+            assert.match(get("status").textContent, /Accent and pen/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), original,
+                "invalid uppercase edit preserves prior Unicode library");
+        } finally {
+            ui.restore();
+        }
+    });
+
 test("printed two-storey a samples a continuous analytic upper story", () => {
     const args = [1550, 2450, 1100, 250, "#123456"];
     const circle = geometricStarter("o", ...args);

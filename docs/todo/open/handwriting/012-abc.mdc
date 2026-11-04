@@ -1179,6 +1179,23 @@ and transparent RGBA PNG ink. Missing `ß` refuses replacement of the
 approved PDF. No automatic neighboring cursive or stored font is implied;
 P4-012 remains open.
 
+## Seven uppercase Spanish geometric starters (partial) — 2026-11-04
+
+The same explicit local geometry composer now offers caller-selected
+`Á`, `É`, `Í`, `Ó`, `Ú`, `Ñ` and `Ü` from native uppercase `A E I O U N`.
+Unlike an automatic uppercase substitution, each target keeps an exact
+independent Unicode key and the base ink sequence. Ideal SVG guides reuse
+capital line paths, O's true circle, U's analytic arcs and visible acute,
+tilde or diaeresis strokes. No completed uppercase font is implied.
+
+Browser tests compare seven exact capital sources and composed accents,
+preview correct marks, refuse clipped changes and retain earlier draft
+bytes. A real Rust CLI acceptance reopens 139 independent segments,
+audits all seven keys, exports two rows (278 PDF vectors) plus a physical
+transparent PNG and refuses an unsupported `ß` without replacing the PDF.
+These opt-in forms do not fill other missing accented Unicode identities;
+P4-012 remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
