@@ -86,6 +86,22 @@ test("blank or lossy Unicode handoff refuses without fallback", () => {
     }
 });
 
+test("raw UTF-8 byte limit takes precedence over structural blank scan",
+    () => {
+    for (const source of [" ".repeat(4097),
+        "\uFEFF" + " ".repeat(4094),
+        "\u2028".repeat(1366)]) {
+        assert.deepEqual(prepareMarkdownHandoff(source), {
+            kind: "too-large",
+        });
+    }
+    for (const source of [" ".repeat(4096),
+        "\uFEFF" + " ".repeat(4093),
+        "\u2028".repeat(1365)]) {
+        assert.deepEqual(prepareMarkdownHandoff(source), { kind: "empty" });
+    }
+});
+
 test("Unicode spacing authored as ink remains eligible for native CLI",
     () => {
     // Rust only treats ASCII spacing and pasted line boundaries as

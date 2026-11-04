@@ -156,6 +156,11 @@ PDF and transparent RGBA PNG output match the BOM-free inline Unicode source
 byte-for-byte, and the PNG contains actual selected blue ink pixels. An
 unsupported em-space glyph refuses before replacing the accepted PDF.
 
+The browser download guard now checks the original UTF-8 byte budget
+before determining whether the source is empty. Even structural-only source
+larger than 4,096 bytes returns an explicit size refusal without scanning
+unbounded pasted text, including BOM-prefixed text and Unicode separators.
+
 This does not supply a saved semantic notebook or in-browser PDF compilation.
 
 ## Unambiguous default native paper command (partial) — 2026-11-04
