@@ -32,6 +32,7 @@
 
 //! Loopback runtime transport regression tests.
 
+use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, Shutdown, SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
@@ -53,7 +54,9 @@ use atrament_session_handshake::{
 use atrament_notebook_profile::{MAX_NOTEBOOK_JSON_BYTES, NotebookProfile};
 use atrament_session_runtime as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
-use atrament_handwriting_statistics::HandwritingStatisticsProfile;
+use atrament_handwriting_statistics::{
+    Dimension, HandwritingStatisticsProfile, Unit,
+};
 use atrament_handwriting_statistics_json::{
     decode_statistics_json, encode_statistics_json,
 };
@@ -87,6 +90,38 @@ impl runtime::HandwritingProfileGateway for TestHandwritingGateway {
             &HandwritingStatisticsProfile::baseline(0),
             &UnicodeGraphemeSegmentation,
         ).map_err(|_error| runtime::HandwritingProfileError)
+    }
+
+    fn dimension_catalog_json(&self) -> Vec<u8> {
+        let mut json = String::from("{\"dimensions\":[");
+        for (index, dimension) in Dimension::ALL.into_iter().enumerate() {
+            if index > 0 {
+                json.push(',');
+            }
+            let unit = match dimension.unit() {
+                Unit::Micrometres => "micrometres",
+                Unit::Millidegrees => "millidegrees",
+                Unit::PartsPerThousand => "parts_per_thousand",
+            };
+            let bounds = dimension.bounds();
+            let _written = write!(
+                json,
+                concat!(
+                    "{{\"key\":\"{}\",\"unit\":\"{}\",",
+                    "\"minimum\":{},\"maximum\":{}}}",
+                ),
+                dimension.key(),
+                unit,
+                bounds.minimum,
+                bounds.maximum,
+            );
+        }
+        json.push_str("]}");
+        json.into_bytes()
+    }
+
+    fn max_input_bytes(&self) -> usize {
+        atrament_handwriting_statistics_json::MAXIMUM_STATISTICS_JSON_BYTES
     }
 
     fn numeric_preview_json(

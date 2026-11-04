@@ -39,14 +39,10 @@
 //! transport without owning the application state those routes mutate.
 
 use std::fmt;
-use std::fmt::Write as _;
 use std::io::{self, Read as _, Write as _};
 use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
 use std::time::{Duration, Instant};
-
-use atrament_handwriting_statistics::{Dimension, Unit};
-use atrament_handwriting_statistics_json::MAXIMUM_STATISTICS_JSON_BYTES;
 
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, DIAGNOSTIC_VERSION, Diagnostic,
@@ -169,6 +165,14 @@ pub trait HandwritingProfileGateway {
     ///
     /// Refuses a default profile that cannot be encoded.
     fn default_json(&self) -> Result<Vec<u8>, HandwritingProfileError>;
+
+    /// Return the canonical dimensions catalog from the trusted statistics
+    /// application, without embedding its domain model in HTTP transport.
+    fn dimension_catalog_json(&self) -> Vec<u8>;
+
+    /// Maximum versioned handwriting profile JSON bytes admitted by
+    /// this native codec, before a bounded preview request wrapper.
+    fn max_input_bytes(&self) -> usize;
 
     /// Preview one grapheme/dimension/occurrence through the native sampler.
     ///
@@ -1335,34 +1339,6 @@ fn route_paper_profile(
     }
 }
 
-fn handwriting_dimension_catalog() -> String {
-    let mut json = String::from("{\"dimensions\":[");
-    for (index, dimension) in Dimension::ALL.into_iter().enumerate() {
-        if index > 0 {
-            json.push(',');
-        }
-        let unit = match dimension.unit() {
-            Unit::Micrometres => "micrometres",
-            Unit::Millidegrees => "millidegrees",
-            Unit::PartsPerThousand => "parts_per_thousand",
-        };
-        let bounds = dimension.bounds();
-        let _written = write!(
-            json,
-            concat!(
-                "{{\"key\":\"{}\",\"unit\":\"{}\",",
-                "\"minimum\":{},\"maximum\":{}}}",
-            ),
-            dimension.key(),
-            unit,
-            bounds.minimum,
-            bounds.maximum,
-        );
-    }
-    json.push_str("]}");
-    json
-}
-
 fn route_handwriting_profile(
     request: &[u8],
     method: &str,
@@ -1384,7 +1360,7 @@ fn route_handwriting_profile(
     }
     if method == "GET" && target == "/api/handwriting/dimensions" {
         return json_response(
-            "200 OK", handwriting_dimension_catalog().as_bytes(),
+            "200 OK", &context.handwriting_gateway.dimension_catalog_json(),
         );
     }
     if method == "GET" && target == "/api/handwriting/profile" {
@@ -1421,9 +1397,9 @@ fn route_handwriting_profile(
         );
     };
     let maximum_bytes = if target == "/api/handwriting/preview" {
-        MAXIMUM_STATISTICS_JSON_BYTES.saturating_add(512)
+        context.handwriting_gateway.max_input_bytes().saturating_add(512)
     } else {
-        MAXIMUM_STATISTICS_JSON_BYTES
+        context.handwriting_gateway.max_input_bytes()
     };
     if body.len() > maximum_bytes {
         return json_response(
@@ -1542,7 +1518,8 @@ fn route_profile_file(
             let limit = match kind {
                 ProfileFileKind::Notebook =>
                     context.notebook_gateway.max_input_bytes(),
-                ProfileFileKind::Handwriting => MAXIMUM_STATISTICS_JSON_BYTES,
+                ProfileFileKind::Handwriting =>
+                    context.handwriting_gateway.max_input_bytes(),
             };
             if body.len() > limit {
                 return json_response(

@@ -94,7 +94,7 @@ use atrament_session_runtime::{
     ProfileFileError, ProfileFileGateway, ProfileFileKind, Runtime,
 };
 use atrament_handwriting_statistics::{
-    Dimension, HandwritingStatisticsProfile, preview_value,
+    Dimension, HandwritingStatisticsProfile, Unit, preview_value,
 };
 use atrament_handwriting_statistics_json::{
     MAXIMUM_STATISTICS_JSON_BYTES, decode_statistics_json,
@@ -132,6 +132,38 @@ impl HandwritingProfileGateway for HandwritingGateway {
             &HandwritingStatisticsProfile::baseline(0),
             &UnicodeGraphemeSegmentation,
         ).map_err(|_error| HandwritingProfileError)
+    }
+
+    fn dimension_catalog_json(&self) -> Vec<u8> {
+        let mut json = String::from("{\"dimensions\":[");
+        for (index, dimension) in Dimension::ALL.into_iter().enumerate() {
+            if index > 0 {
+                json.push(',');
+            }
+            let unit = match dimension.unit() {
+                Unit::Micrometres => "micrometres",
+                Unit::Millidegrees => "millidegrees",
+                Unit::PartsPerThousand => "parts_per_thousand",
+            };
+            let bounds = dimension.bounds();
+            let _written = write!(
+                json,
+                concat!(
+                    "{{\"key\":\"{}\",\"unit\":\"{}\",",
+                    "\"minimum\":{},\"maximum\":{}}}",
+                ),
+                dimension.key(),
+                unit,
+                bounds.minimum,
+                bounds.maximum,
+            );
+        }
+        json.push_str("]}");
+        json.into_bytes()
+    }
+
+    fn max_input_bytes(&self) -> usize {
+        MAXIMUM_STATISTICS_JSON_BYTES
     }
 
     fn numeric_preview_json(
@@ -179,6 +211,7 @@ impl HandwritingProfileGateway for HandwritingGateway {
         Ok(format!("{{\"value\":{value}}}").into_bytes())
     }
 }
+
 
 
 /// Compose the native notebook profile codec for the HTTP transport.
