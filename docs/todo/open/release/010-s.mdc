@@ -64,6 +64,29 @@ the independent real Rust acceptance path. This is a narrow v1 optional-field
 compatibility policy, not migration of arbitrary older schema versions.
 The localhost credential/privacy and full migration ledger remain open.
 
+## Symlink-free native CLI source admission (partial) — 2026-11-04
+
+The native `atrament-profiles` read-only inputs now reuse the existing Linux
+`openat2` selected-file adapter instead of first inspecting a pathname and
+then separately calling `File::open`. This covers saved handwriting,
+notebook and paper profile inputs, exact glyph TSV files, and selected plain
+text or Markdown flow files. It refuses symbolic links at both leaf and
+parent components, parent traversal and nonregular files before decoding.
+On platforms without the secure open policy the source read refuses rather
+than falling back to a racy opener.
+
+A real Rust CLI test generates valid files, reopens each normal source,
+exports actual authored-ink PDF content, then refuses linked leaf and parent
+paths across eight input flags while keeping an existing selected output
+byte-identical. An explicit `..` path also refuses; the original five input
+files remain untouched. Run
+`node --test tests/backend/profile-editor-cli/composition/main.mjs`.
+
+This is path-resolution hardening, not a filesystem snapshot or a complete
+legacy migration. A regular file can still be modified by another process
+after opening, and the local runtime and print adapters have independent
+admission paths. The wider credential/privacy milestone remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

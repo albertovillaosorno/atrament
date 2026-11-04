@@ -13,6 +13,7 @@ atrament_notebook_paper_cli = { workspace = true }
 atrament_notebook_profile = { workspace = true }
 atrament_profile_file_commit = { workspace = true }
 atrament_profile_file_reader = { workspace = true }
+atrament_profile_selected_file_open = { workspace = true }
 atrament_unicode_grapheme_boundary_port = { workspace = true }
 atrament_unicode_grapheme_segmentation = { workspace = true }
 

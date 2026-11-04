@@ -39,7 +39,6 @@ mod glyph;
 use std::env;
 use std::error::Error;
 use std::fmt::Write as _;
-use std::fs::{File, metadata};
 use std::io::{self, Write as _};
 use std::path::Path;
 use std::slice::Iter;
@@ -72,6 +71,7 @@ use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };
 use atrament_profile_file_reader::read_bounded_profile_file;
+use atrament_profile_selected_file_open::open_selected_profile_file;
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
@@ -281,16 +281,11 @@ struct NotebookExportOptions {
 fn read_handwriting_profile(
     path: &str,
 ) -> Result<HandwritingStatisticsProfile, String> {
-    // Avoid a blocking FIFO open for ordinary explicit CLI path selection.
-    // This is preflight, not a substitute for opened-handle verification.
-    let source = metadata(path).map_err(|error| {
-        format!("cannot inspect handwriting profile: {error}")
-    })?;
-    if !source.is_file() {
-        return Err("handwriting file refused: NotRegularFile".into());
-    }
-    let file = File::open(path)
-        .map_err(|error| format!("cannot open handwriting profile: {error}"))?;
+    // Bind the selected path to one opened regular-file descriptor. A
+    // metadata preflight followed by File::open could follow a symlink or
+    // change targets between the check and the actual read.
+    let file = open_selected_profile_file(Path::new(path))
+        .map_err(|error| format!("handwriting file refused: {error:?}"))?;
     let bytes = read_bounded_profile_file(file, MAXIMUM_STATISTICS_JSON_BYTES)
         .map_err(|error| format!("handwriting file refused: {error:?}"))?;
     decode_statistics_json(bytes.bytes(), &UnicodeGraphemeSegmentation)
@@ -734,26 +729,16 @@ fn execute_handwriting(args: &[String]) -> Result<Option<Vec<u8>>, String> {
 }
 
 fn read_notebook_input(path: &str, limit: usize) -> Result<Vec<u8>, String> {
-    let source = metadata(path)
-        .map_err(|error| format!("cannot inspect notebook input: {error}"))?;
-    if !source.is_file() {
-        return Err("notebook input refused: NotRegularFile".into());
-    }
-    let file = File::open(path)
-        .map_err(|error| format!("cannot open notebook input: {error}"))?;
+    let file = open_selected_profile_file(Path::new(path))
+        .map_err(|error| format!("notebook input refused: {error:?}"))?;
     let bytes = read_bounded_profile_file(file, limit)
         .map_err(|error| format!("notebook input refused: {error:?}"))?;
     Ok(bytes.bytes().to_vec())
 }
 
 fn read_glyph_input(path: &str) -> Result<Vec<u8>, String> {
-    let source = metadata(path)
-        .map_err(|error| format!("cannot inspect glyph file: {error}"))?;
-    if !source.is_file() {
-        return Err("glyph file refused: NotRegularFile".into());
-    }
-    let file = File::open(path)
-        .map_err(|error| format!("cannot open glyph file: {error}"))?;
+    let file = open_selected_profile_file(Path::new(path))
+        .map_err(|error| format!("glyph file refused: {error:?}"))?;
     let bytes = read_bounded_profile_file(file, MAX_GLYPH_LIBRARY_BYTES)
         .map_err(|error| format!("glyph file refused: {error:?}"))?;
     Ok(bytes.bytes().to_vec())

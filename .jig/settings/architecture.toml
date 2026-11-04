@@ -349,7 +349,7 @@ depends_on = ["atrament_paper_mark_geometry", "atrament_pdf_composition_plan", "
 depends_on = ["atrament_notebook_paper_cli", "atrament_profile_json_syntax"]
 
 [component.atrament_profile_editor_cli]
-depends_on = ["atrament_english_spanish_grapheme_inventory", "atrament_handwriting_statistics", "atrament_handwriting_statistics_json", "atrament_notebook_paper_cli", "atrament_notebook_profile", "atrament_profile_file_commit", "atrament_profile_file_reader", "atrament_unicode_grapheme_boundary_port", "atrament_unicode_grapheme_segmentation"]
+depends_on = ["atrament_english_spanish_grapheme_inventory", "atrament_handwriting_statistics", "atrament_handwriting_statistics_json", "atrament_notebook_paper_cli", "atrament_notebook_profile", "atrament_profile_file_commit", "atrament_profile_file_reader", "atrament_profile_selected_file_open", "atrament_unicode_grapheme_boundary_port", "atrament_unicode_grapheme_segmentation"]
 
 [component.atrament_profile_export_assembly]
 # Import verification is used only by assembly tests.

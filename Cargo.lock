@@ -589,6 +589,7 @@ dependencies = [
  "atrament_notebook_profile",
  "atrament_profile_file_commit",
  "atrament_profile_file_reader",
+ "atrament_profile_selected_file_open",
  "atrament_unicode_grapheme_boundary_port",
  "atrament_unicode_grapheme_segmentation",
  "nix",
