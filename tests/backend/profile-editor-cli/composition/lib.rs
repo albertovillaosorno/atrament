@@ -2637,6 +2637,127 @@ fn markdown_syntax_height_overrides_leave_pdf_and_png_byte_identical() {
 }
 
 #[test]
+fn markdown_backslash_breaks_match_two_spaces_across_native_pages() {
+    for prefix in ["", "> "] {
+        let slash = format!("{prefix}a\\\n").repeat(36);
+        let spaces = format!("{prefix}a  \n").repeat(36);
+        let soft = format!("{prefix}a\n").repeat(36);
+        let source = FlowSource::new(FlowFormat::Markdown, &slash)
+            .expect("backslash hard breaks admitted");
+        let (runs, bars, pages) = layout_flow(
+            &source, &NotebookProfile::default(), None,
+            HeadingDecoration::default(),
+        ).expect("every hard break reserves a physical row");
+        assert_eq!((runs.len(), pages), (36, 2));
+        assert!(runs.iter().all(|run| run.text == "a"));
+        assert_eq!(bars.len(), if prefix.is_empty() { 0 } else { 36 });
+        for format in ["pdf", "png"] {
+            let render = |markdown: &str, page: &str| {
+                let mut command = args(&[
+                    "--export-paper", format, "--printed-sheet", "true",
+                    "--glyph-stroke", "a", "0", "0", "3500", "4500",
+                    "250", "#204060", "--flow-markdown", markdown,
+                ]);
+                if format == "png" {
+                    command.extend(args(&[
+                        "--dpi", "72", "--png-page", page,
+                    ]));
+                }
+                execute_notebook(&command)
+                    .expect("real native handwritten output")
+                    .expect("PDF or PNG bytes")
+            };
+            let actual = render(&slash, "2");
+            assert_eq!(actual, render(&spaces, "2"),
+                "single backslash and two-space breaks have identical ink");
+            if format == "pdf" {
+                assert!(actual.starts_with(b"%PDF-1.4"));
+                assert!(String::from_utf8_lossy(&actual)
+                    .contains("/Count 2"));
+            } else {
+                assert!(actual.starts_with(b"\x89PNG\r\n\x1a\n"));
+                assert_ne!(actual, render(&slash, "1"),
+                    "page 2 carries different physical ink");
+            }
+            assert_ne!(actual, render(&soft, "1"),
+                "soft lines have different physical row placements");
+        }
+    }
+}
+
+#[test]
+fn markdown_backslash_literal_and_empty_refusals_are_atomic() {
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "a\\\\\na",
+    ).expect("doubled literal backslash is text");
+    let (runs, _, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("paired slashes are not hard breaks");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(runs[0].text, "a\\\\ a");
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"existing valid PDF").expect("test sentinel");
+    let path = target.to_str().expect("test path");
+    for input in ["\\", "> \\", "a\\\\\na", "a\\\n\\"] {
+        let error = execute_notebook(&args(&[
+            "--export-paper", "pdf", "--glyph-stroke", "a",
+            "0", "0", "3500", "4500", "250", "#204060",
+            "--flow-markdown", input, "--output", path, "--replace",
+        ])).expect_err("empty or unowned backslashes must refuse");
+        assert!(error.contains("empty Markdown block refused")
+            || error.contains("U+005C"), "{error}");
+        assert_eq!(fs::read(&target).expect("sentinel intact"),
+            b"existing valid PDF");
+    }
+    let plain = execute_notebook(&args(&[
+        "--export-paper", "pdf", "--glyph-stroke", "a",
+        "0", "0", "3500", "4500", "250", "#204060",
+        "--flow-text", "a\\\na",
+    ])).expect_err("plain backslash retains literal identity");
+    assert!(plain.contains("U+005C"), "{plain}");
+    fs::remove_file(target).expect("remove test-owned PDF");
+}
+
+#[test]
+fn markdown_backslash_control_does_not_inflate_statistical_pitch() {
+    let statistics = execute_handwriting(&args(&[
+        "--set-glyph", "\\", "height", "25000", "25000",
+        "25000", "25000", "0",
+    ])).expect("tall slash metrics admitted").expect("profile bytes");
+    let model = decode_statistics_json(
+        &statistics, &UnicodeGraphemeSegmentation,
+    )
+        .expect("read tall slash metrics");
+    let slash = FlowSource::new(FlowFormat::Markdown, "a\\\na")
+        .expect("Markdown hard break");
+    let spaces = FlowSource::new(FlowFormat::Markdown, "a  \na")
+        .expect("two-space break");
+    let (slash_runs, _, _) = layout_flow(&slash,
+        &NotebookProfile::default(), Some(&model),
+        HeadingDecoration::default()).expect("slash is syntax only");
+    let (space_runs, _, _) = layout_flow(&spaces,
+        &NotebookProfile::default(), Some(&model),
+        HeadingDecoration::default()).expect("same visible text");
+    assert_eq!(slash_runs.len(), space_runs.len());
+    for (slash_run, space_run) in slash_runs.iter().zip(&space_runs) {
+        assert_eq!(slash_run.text, space_run.text);
+        assert_eq!(slash_run.origin_um, space_run.origin_um);
+        assert_eq!(slash_run.page, space_run.page);
+    }
+    assert_eq!(slash_runs[1].origin_um.1 - slash_runs[0].origin_um.1,
+        9_000);
+    let literal = FlowSource::new(FlowFormat::Plain, "a\\\na")
+        .expect("literal slashes in plain text");
+    let (literal_runs, _, _) = layout_flow(&literal,
+        &NotebookProfile::default(), Some(&model),
+        HeadingDecoration::default()).expect("plain slash measured");
+    assert_eq!(literal_runs[1].origin_um.1 - literal_runs[0].origin_um.1,
+        29_000);
+}
+
+#[test]
 fn markdown_soft_and_hard_breaks_change_measured_page_count() {
     let soft = FlowSource::new(FlowFormat::Markdown, &"a\n".repeat(40))
         .expect("soft-wrapped paragraph");

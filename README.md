@@ -450,8 +450,11 @@ instead of defaults.
 Use `--flow-text-file` for plain text, or `--flow-text` and
 `--flow-markdown` for inline command arguments. Plain-text newlines each
 start a physical row. In Markdown, consecutive ordinary lines form one
-soft-wrapped paragraph, while two spaces before a newline request a hard
-row break. Consecutive Markdown blank lines collapse to one 4-mm paragraph
+soft-wrapped paragraph, while two spaces or a single trailing backslash
+before a newline request a hard row break for ordinary and quoted paragraphs.
+Paired trailing backslashes remain literal and need authored glyphs.
+Consecutive Markdown blank lines collapse
+to one 4-mm paragraph
 gap, with leading/trailing blanks ignored. Plain-text blank lines instead
 reserve full physical writing rows; they count toward the 128-row limit and
 can create a new page. Headings/lists end a paragraph; adjacent `>` quote

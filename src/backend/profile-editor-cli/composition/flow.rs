@@ -677,6 +677,23 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
     (LineStyle::Body, raw)
 }
 
+// A single trailing backslash is an explicit Markdown hard line break for
+// paragraphs/quotes. Pairs and longer runs remain literal authored glyphs:
+// this restricted parser does not attempt full CommonMark inline escaping.
+// Two trailing spaces retain their existing hard-break semantics.
+fn markdown_paragraph_break<'text>(
+    raw: &str, style: LineStyle, body: &'text str,
+) -> (&'text str, bool) {
+    if !matches!(style, LineStyle::Body | LineStyle::Quote) {
+        return (body, false);
+    }
+    if raw.ends_with('\\') && !body.ends_with("\\\\")
+        && let Some(visible) = body.strip_suffix('\\') {
+        return (visible, true);
+    }
+    (body, raw.ends_with("  "))
+}
+
 // A heading needs its first following visible line; multiple Markdown
 // empty lines are one optional paragraph gap. An ending heading has no
 // following line to keep, so it can occupy the last physical row.
@@ -717,7 +734,8 @@ fn measured_pitch(
     let mut pitch = DEFAULT_PITCH_UM;
     for raw in source.text.lines() {
         let visible = if source.format == FlowFormat::Markdown {
-            markdown_line(raw).1
+            let (style, body) = markdown_line(raw);
+            markdown_paragraph_break(raw, style, body).0
         } else {
             raw
         };
@@ -793,10 +811,15 @@ pub(super) fn layout_flow(
             layout.add_gap()?;
             pending_gap = false;
         }
-        let (style, body) = if source.format == FlowFormat::Markdown {
+        let (style, parsed_body) = if source.format == FlowFormat::Markdown {
             markdown_line(input_line)
         } else {
             (LineStyle::Body, raw)
+        };
+        let (body, hard_break) = if source.format == FlowFormat::Markdown {
+            markdown_paragraph_break(input_line, style, parsed_body)
+        } else {
+            (parsed_body, false)
         };
         if body.trim().is_empty() {
             return Err("empty Markdown block refused".into());
@@ -817,7 +840,7 @@ pub(super) fn layout_flow(
             }
             paragraph_style = style;
             paragraph.push_str(body);
-            if input_line.ends_with("  ") {
+            if hard_break {
                 flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
             }
         } else {

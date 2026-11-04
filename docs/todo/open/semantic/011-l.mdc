@@ -187,6 +187,17 @@ physical row positions and byte-identical PDF/PNG output using extreme
 syntactic marker height overrides. No parser or saved-notebook state change
 is claimed beyond this CLI pitch correction.
 
+A bounded Markdown hard-break refinement recognizes one trailing
+backslash on a body or quote source line as equivalent to two trailing
+spaces, stripping the syntactic backslash before glyph measurement. Paired
+backslashes and plain-text backslashes remain authored ink requirements;
+empty syntactic blocks refuse atomically. Three Rust CLI regressions verify
+source paragraph identity, two physical PDF pages and separate page-two
+RGBA PNG, byte-identical native outputs against two-space breaks, strict
+plain-text missing-glyph refusal, and row-pitch parity even with an extreme
+custom backslash glyph-height override. This remains limited Markdown
+grammar, not a general inline escaping implementation.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
