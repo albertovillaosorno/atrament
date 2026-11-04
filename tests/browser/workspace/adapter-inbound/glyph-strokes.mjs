@@ -3687,6 +3687,35 @@ test("quantifier and therefore symbols retain exact separated ink", () => {
     assert.notDeepEqual(universal, geometricStarter("Δ", ...shared));
 });
 
+test("because and logic turnstiles are exact independently lifted ink", () => {
+    const shared = [1550, 2450, 1100, 250, "#243647"];
+    const examples = [
+        ["∵", [[945, 1768, 945, 1922],
+            [2155, 1768, 2155, 1922], [1550, 3088, 1550, 3242]]],
+        ["⊤", [[780, 1680, 2320, 1680],
+            [1550, 1680, 1550, 3220]]],
+        ["⊢", [[835, 1625, 835, 3275],
+            [835, 2450, 2375, 2450]]],
+        ["⊨", [[648, 1625, 648, 3275],
+            [945, 1625, 945, 3275], [648, 2450, 2375, 2450]]],
+    ];
+    for (const [glyph, expected] of examples) {
+        const ink = geometricStarter(glyph, ...shared);
+        assert.deepEqual(ink.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), expected);
+        assert.deepEqual(candidatePenPaths(ink, glyph).map(
+            ({ first, last }) => [first, last]), expected.map((_, i) =>
+                [i + 1, i + 1]));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("∵", ...shared),
+        geometricStarter("∴", ...shared));
+    assert.notDeepEqual(geometricStarter("⊢", ...shared),
+        geometricStarter("⊨", ...shared));
+});
+
 test("calculus and comparison math SVG preserves ideal curve controls",
     async () => {
         const ui = mountEditor();
@@ -3714,6 +3743,8 @@ test("calculus and comparison math SVG preserves ideal curve controls",
                 ["∼", 2, 1], ["≅", 2, 3],
                 ["∀", 0, 2], ["∃", 0, 4],
                 ["∄", 0, 5], ["∴", 0, 3],
+                ["∵", 0, 3], ["⊤", 0, 2],
+                ["⊢", 0, 2], ["⊨", 0, 3],
             ]) {
                 get("form").value = glyph;
                 get("character").value = glyph;
@@ -3897,7 +3928,7 @@ test("math fill keeps custom ink and refuses over-cap", async () => {
         }];
         await get("load").dispatch("change");
         get("seed-math").dispatch("click");
-        assert.match(get("status").textContent, /Filled 54 missing math/);
+        assert.match(get("status").textContent, /Filled 58 missing math/);
         assert.equal(downloads.length, 0);
         get("save").dispatch("click");
         const saved = parseGlyphLibrary(await downloads.at(-1).text());
@@ -3909,12 +3940,12 @@ test("math fill keeps custom ink and refuses over-cap", async () => {
             "Δ", "≈",
             "→", "←", "↔", "↑", "↓", "↕", "∝",
             "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
-            "∀", "∃", "∄", "∴"];
+            "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨"];
         assert.deepEqual(saved, [...originals, ...missing.flatMap(
             (glyph) => geometricStarter(glyph, 1550, 2450,
                 1100, 250, "#243647"))]);
         get("seed-math").dispatch("click");
-        assert.match(get("status").textContent, /All 56 math/);
+        assert.match(get("status").textContent, /All 60 math/);
         get("save").dispatch("click");
         assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
             saved, "custom Unicode minus remains untouched");
@@ -4808,7 +4839,7 @@ test("refused baseline browser fill preserves an imported custom i", async () =>
     }
 });
 
-test("eleven explicit fills author 169 exact glyphs", async () => {
+test("eleven explicit fills author 173 exact glyphs", async () => {
     const ui = mountEditor();
     try {
         const { editor, get, downloads } = ui;
@@ -4824,8 +4855,8 @@ test("eleven explicit fills author 169 exact glyphs", async () => {
         assert.equal(downloads.length, 0);
         get("save").dispatch("click");
         const all = parseGlyphLibrary(await downloads.at(-1).text());
-        assert.equal(all.length, 3980);
-        assert.equal(new Set(all.map((line) => line.grapheme)).size, 169);
+        assert.equal(all.length, 3990);
+        assert.equal(new Set(all.map((line) => line.grapheme)).size, 173);
         const differentMinuses = ["-", "−"].map((glyph) =>
             all.filter((line) => line.grapheme === glyph));
         assert.equal(differentMinuses[0].length, 1);
@@ -4854,7 +4885,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "⊄", "⊈", "⊅", "⊉", "∑", "∫", "∂",
         "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
         "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
-        "∀", "∃", "∄", "∴",
+        "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",
         "°", "%", "$", "€", ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",
         "/", "\\", "{", "}",
@@ -4896,7 +4927,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 21888);
+    assert.equal(checked, 22464);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

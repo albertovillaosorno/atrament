@@ -698,6 +698,10 @@
                 <option value="∃">There exists ∃ (reverse E)</option>
                 <option value="∄">Does not exist ∄ (struck reverse E)</option>
                 <option value="∴">Therefore ∴ (three lifted dots)</option>
+                <option value="∵">Because ∵ (inverted three dots)</option>
+                <option value="⊤">Truth ⊤ (top bar and stem)</option>
+                <option value="⊢">Proves ⊢ (one upright and bar)</option>
+                <option value="⊨">Models ⊨ (two uprights and bar)</option>
                 <option value="°">Degree ° (one exact ring)</option>
                 <option value="%">Percent % (two rings and slash)</option>
                 <option value="$">Peso/dollar $ (S and vertical stem)</option>
@@ -815,7 +819,7 @@
               Fill missing quotation marks (unsaved)
             </button>
             <button id="glyph-seed-math" type="button" disabled>
-              Fill missing math symbols (56 forms, unsaved)
+              Fill missing math symbols (60 forms, unsaved)
             </button>
             <button id="glyph-seed-digits" type="button" disabled>
               Fill missing digits 0–9 (unsaved)
@@ -890,7 +894,7 @@
             Fill missing math adds +, ASCII -, Unicode −, ±, ∓, =, ×, ÷,
             √, π, ∞, ≠, &lt;, &gt;, ≤, ≥, ∧, ∨, ∩, ∪, ∈, ∉, ∋, ∌,
             ⊂, ⊆, ⊃, ⊇, ⊄, ⊈, ⊅, ⊉, ∑, ∫, ∂, Δ, ≈, →, ←,
-            ↔, ↑, ↓, ↕, ∝, ∅, ∇, ≡, ≢, ∥, ⊥, ∼, ≅, ∀, ∃, ∄ and ∴.
+            ↔, ↑, ↓, ↕, ∝, ∅, ∇, ≡, ≢, ∥, ⊥, ∼, ≅, ∀, ∃, ∄, ∴, ∵, ⊤, ⊢ and ⊨.
             Each direction arrow has its own
             shaft and separately lifted arrowhead paths. AND and OR
             wedges are independent Unicode ink, never Latin-v aliases.
@@ -918,7 +922,9 @@
             keys and existing ink remain distinct. The universal
             quantifier has a two-stroke inverted A and separate bar;
             existential signs preserve the reverse-E strokes and opt-in
-            slash, while therefore has three independent short marks.
+            slash; therefore and because have three reversed independent
+            short marks. Truth, proof and entailment signs use distinct
+            top-bar and left-bar configurations without inferred fallback.
             Numeral 0 is an exact SVG ellipse (distinct from circular o),
             8 uses two ellipses, and 1–7/9 combine ordered lines, arcs or
             loops. The separate digit fill preserves authored shapes and

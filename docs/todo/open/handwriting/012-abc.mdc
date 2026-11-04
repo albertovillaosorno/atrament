@@ -1698,6 +1698,31 @@ unrequested backend writes.
 This expands manual geometric authoring, not handwritten typesetting,
 Unicode normalization fallback or automatic proof interpretation.
 
+## Exact because and logic-turnstile ink (partial) — 2026-11-04
+
+Four additional school-logic marks now have separately selectable Unicode
+pen contours: because `∵`, truth `⊤`, syntactic derivation `⊢` and semantic
+entailment `⊨`. Because reverses the order of the therefore dots into two
+upper marks and one lower mark. Truth uses an upper crossbar and central
+upright; the two turnstiles use one or two left uprights and a lifted bar.
+
+The forms add ten simple directed segments to the optional math fill,
+which now holds 60 exact symbols without overwriting previously authored
+ink. The eleven independent baseline fills retain 3990 of 4096 native
+strokes, so more math forms must continue to respect the shared limit.
+
+Browser red-before/green-after tests verify each rounded native coordinate,
+three or two lifted pen paths, Unicode TSV identity, strict clip rejection,
+preview guidance and atomic math fill. Rust reopens the saved glyphs, audits
+four exact characters and renders two rows to physical PDF and transparent
+PNG. A non-authored `∴`, `⊥` or `⊬` refuses PDF replacement without changing
+its previously accepted bytes or saved TSV. Live Firefox checks all 60
+selectable math symbols and replays the downloaded file in Rust PDF/PNG;
+the glyph editor never writes to the backend merely to author these marks.
+
+This is explicit hand-authored geometry, not formal logic interpretation,
+mathematical typesetting, native PDF path persistence or Unicode-wide fill.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

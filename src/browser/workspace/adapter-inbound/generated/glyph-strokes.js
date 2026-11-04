@@ -584,8 +584,8 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "⊄", "⊈", "⊅", "⊉", "∑", "∫",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
     "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
-    "∀", "∃", "∄", "∴"];
-// Extra manual marks do not change the 56-glyph math fill.
+    "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨"];
+// Extra manual marks do not change the 60-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"];
@@ -640,6 +640,33 @@ function mathParts(cx, cy, radius, glyph) {
             { from: point(0, -0.72), to: point(0, -0.58) },
             { from: point(-0.55, 0.48), to: point(-0.55, 0.62) },
             { from: point(0.55, 0.48), to: point(0.55, 0.62) },
+        ];
+    // Because reverses the therefore dot arrangement without aliasing it.
+    // Short real strokes remain nonzero in native v1 TSV pen geometry.
+    if (glyph === "∵")
+        return [
+            { from: point(-0.55, -0.62), to: point(-0.55, -0.48) },
+            { from: point(0.55, -0.62), to: point(0.55, -0.48) },
+            { from: point(0, 0.58), to: point(0, 0.72) },
+        ];
+    // Mathematical truth / derivation / semantic entailment have distinct
+    // exact Unicode keys and independent lifted pen paths, not a reusable
+    // Latin T or an inferred symbol from an authored perpendicular sign.
+    if (glyph === "⊤")
+        return [
+            horizontal(-0.7),
+            { from: point(0, -0.7), to: point(0, 0.7) },
+        ];
+    if (glyph === "⊢")
+        return [
+            { from: point(-0.65, -0.75), to: point(-0.65, 0.75) },
+            { from: point(-0.65, 0), to: point(0.75, 0) },
+        ];
+    if (glyph === "⊨")
+        return [
+            { from: point(-0.82, -0.75), to: point(-0.82, 0.75) },
+            { from: point(-0.55, -0.75), to: point(-0.55, 0.75) },
+            { from: point(-0.82, 0), to: point(0.75, 0) },
         ];
     // Identity and negated identity have three independent horizontal
     // strokes. Negation adds its own separately lifted diagonal ink;
