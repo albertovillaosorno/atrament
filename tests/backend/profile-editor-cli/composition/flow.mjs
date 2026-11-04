@@ -330,6 +330,56 @@ const punctuationInk = punctuation.flatMap((glyph) => [
     '250', '#112233',
 ]);
 
+test('fenced code respects repeated fixed regions and native page ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-fence-region-'));
+        try {
+            const plain = 'a\n# ó\n\n> a\no\u0301';
+            const markdown = `\`\`\`\n${plain}\n\`\`\``;
+            const region = [
+                '--flow-region', '30000', '40000', '50000', '30000',
+            ];
+            const extra = [...punctuationInk, ...region];
+            for (const [format, pages] of [
+                ['pdf', [1]], ['png', [1, 2, 3]],
+            ]) {
+                for (const page of pages) {
+                    const expectedResult = render(dir, plain, format,
+                        extra, '--flow-text', page);
+                    assert.equal(expectedResult.result.status, 0,
+                        expectedResult.result.stderr);
+                    const expected = readFileSync(expectedResult.output);
+                    const candidate = render(dir, markdown, format,
+                        extra, '--flow-markdown', page);
+                    assert.equal(candidate.result.status, 0,
+                        candidate.result.stderr);
+                    assert.ok(readFileSync(candidate.output).equals(expected),
+                        `page ${page} fenced code in ${format} matches ink`);
+                }
+            }
+            const pngOutput = join(dir, 'flow-png.output');
+            const pngSentinel = Buffer.from('keep the selected PNG');
+            writeFileSync(pngOutput, pngSentinel);
+            const beyond = render(dir, markdown, 'png', extra,
+                '--flow-markdown', 4);
+            assert.notEqual(beyond.result.status, 0);
+            assert.match(beyond.result.stderr, /page|range/);
+            assert.deepEqual(readFileSync(pngOutput), pngSentinel);
+            const output = join(dir, 'flow-pdf.output');
+            const sentinel = Buffer.from('keep the existing PDF');
+            writeFileSync(output, sentinel);
+            const invalid = render(dir, markdown, 'pdf', [
+                ...punctuationInk, '--flow-region',
+                '30000', '40000', '50000', '9000',
+            ]);
+            assert.notEqual(invalid.result.status, 0);
+            assert.match(invalid.result.stderr, /vertical|region/);
+            assert.deepEqual(readFileSync(output), sentinel);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('escaped Markdown structural marks stay literal on physical pages',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-escape-'));

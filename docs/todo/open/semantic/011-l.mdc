@@ -438,6 +438,17 @@ Markdown and require exact caller-authored shapes, with codepoint-specific
 missing-glyph diagnostics and immutable preexisting output on refusal.
 This does not add general inline Markdown escaping or create glyphs.
 
+## Fixed-region fenced code native acceptance — 2026-11-04
+
+Fenced literal punctuation, Unicode and an internal blank physical row
+now have a native multi-page export regression under an explicitly selected
+30,000-µm-high repeated flow region. The test compares PDF bytes and
+transparent PNG pages 1–3 against the same authored lines in plain text,
+then proves that an out-of-range page preserves the selected PNG and an
+invalid too-short region preserves existing PDF bytes.
+Code delimiters never consume region rows or bypass native constraints;
+this remains one repeated fixed rectangle, not semantic per-block placement.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded
