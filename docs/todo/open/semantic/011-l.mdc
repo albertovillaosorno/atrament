@@ -737,6 +737,17 @@ pages, and preserve heading/quote/fence and blank-line boundaries. Missing
 continuation glyphs still refuse without replacing an accepted export.
 This remains CLI-only layout, not a saved semantic notebook.
 
+## Preserve hard line breaks at list boundaries (partial) — 2026-11-04
+
+An explicit two-space Markdown hard break at the end of a list item now
+flushes that list before a two- or three-space-indented ordinary next row.
+The same rule applies to pasted Unicode U+2028, which the source adapter
+expands into a hard line break. It preserves pre-continuation output rather
+than silently joining two physically separate handwriting rows.
+A real PDF/PNG regression first reproduced the wrong joined geometry and
+then checked physical byte parity for bullet, checked-task and numbered
+list forms. This is not a general nested-list line-break engine.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

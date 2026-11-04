@@ -1890,3 +1890,37 @@ test('continued list stops at heading quote fence and paragraph boundaries',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('hard line separators end a list before an indented ordinary row',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-list-hard-'));
+        try {
+            for (const format of ['pdf', 'png']) {
+                for (const marker of ['- a', '- [x] a', '1. a']) {
+                    const reference = render(dir, `${marker}\nó`, format,
+                        numberedInk);
+                    assert.equal(reference.result.status, 0,
+                        reference.result.stderr);
+                    const separatedBytes = readFileSync(reference.output);
+                    const soft = render(dir, `${marker}\n  ó`, format,
+                        numberedInk);
+                    assert.equal(soft.result.status, 0,
+                        soft.result.stderr);
+                    assert.notDeepEqual(readFileSync(soft.output),
+                        separatedBytes, 'soft continuation stays a list item');
+                    for (const hard of [
+                        `${marker}  \n  ó`, `${marker}\u2028  ó`,
+                    ]) {
+                        const actual = render(dir, hard, format, numberedInk);
+                        assert.equal(actual.result.status, 0,
+                            actual.result.stderr);
+                        assert.deepEqual(readFileSync(actual.output),
+                            separatedBytes,
+                            'authored hard break must end the list item');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

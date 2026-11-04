@@ -507,8 +507,10 @@ can create a new page. Headings and lists end ordinary paragraphs.
 A list item may soft-continue with a two- or three-space-indented ordinary
 line, preserving one bullet, checkbox or numbered hanging indent after
 wrapping; four-space indentation remains literal and nested lists are not
-supported. Adjacent `>` quote lines form one soft-wrapped quoted paragraph,
-with the same two-space hard-break and blank-paragraph rules. A Markdown
+supported. Two trailing source spaces end a list item before any
+subsequent indented body row; pasted Unicode line separators do the same.
+Adjacent `>` quote lines form one soft-wrapped quoted paragraph, with the
+same two-space hard-break and blank-paragraph rules. A Markdown
 heading keeps its first following visible row on the same physical page when
 there is room for both (including an optional 4-mm paragraph gap); an
 ending heading and a sheet too short for two rows remain valid. Long text

@@ -1343,6 +1343,22 @@ fn continue_list_item(
     Ok(false)
 }
 
+// Defer a list's physical row until its possible soft continuations.
+// Trailing two spaces also represent pasted Unicode hard line separators,
+// so they end the current list item before the next source row.
+fn queue_list_item(
+    layout: &mut Layout<'_>, paragraph: &mut String,
+    paragraph_style: &mut LineStyle, style: LineStyle,
+    body: &str, hard_break: bool,
+) -> Result<(), String> {
+    *paragraph_style = style;
+    paragraph.push_str(body);
+    if hard_break {
+        flush_paragraph(layout, paragraph, style)?;
+    }
+    Ok(())
+}
+
 // A fenced row is literal handwriting with physical hard breaks. Only
 // the fence delimiter is syntax: no invented code font, glyph, or style.
 fn handle_markdown_code_line(
@@ -1575,8 +1591,9 @@ pub(super) fn layout_flow_with_region(
                 && matches!(style,
                     LineStyle::Bullet | LineStyle::Ordered | LineStyle::Task(_))
             {
-                paragraph_style = style;
-                paragraph.push_str(body);
+                queue_list_item(&mut layout, &mut paragraph,
+                    &mut paragraph_style, style, body,
+                    input_line.ends_with("  "))?;
             } else {
                 layout.layout_line(body, style)?;
             }
