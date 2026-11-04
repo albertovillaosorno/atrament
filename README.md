@@ -1127,6 +1127,10 @@ PDF/transparent PNG after combining width with italic shear. Width edits
 also invalidate any earlier in-memory one-step slant recovery. A sampled
 width change is not a persistent geometric or named glyph variant.
 
+A real headless Firefox/localhost test also verifies X-anchor previews,
+accepted and rejected width actions, exact NFC/NFD TSV bytes and no extra
+backend requests.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each

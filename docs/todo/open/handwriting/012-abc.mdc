@@ -877,6 +877,10 @@ refusals. An independent browser/native integration verifies byte-identical
 TSV and real PDF/PNG exports after width editing and combined italic shear.
 This does not implement persistent analytic contours or named width styles.
 
+A real Firefox BiDi localhost case verifies the actual X-anchor SVG
+candidate, 4 accepted/refused UTF-8 downloads, clipped pen refusal and
+unchanged runtime request counts, separate from mocked unit coverage.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
