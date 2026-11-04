@@ -330,6 +330,34 @@ curve/native motion paths. Browser authored
 stroke connectivity remains per glyph; native parametric curves and
 word-level cursive are still open.
 
+## Explicit adjacent-letter pen anchors (partial) — 2026-11-04
+
+The native CLI now accepts `--join-text-anchors LEFT RIGHT EXIT ENTRY` as
+an alternative to `--join-text-pair`. Both arguments are exact Unicode
+grapheme identities; the last two are 1-based stroke indices *within*
+the authored left/right glyphs. An explicit anchor lets the previous
+letter exit from its main pen contour rather than from a detached final
+accent. The old last-to-first pair spelling remains unchanged.
+
+The selected actual physical stroke endpoints are used after seeded
+variation, statistics, and placement. The same existing 1200-µm gap,
+physical pen and RGB checks apply. A missing stroke ordinal, invalid
+index, unobserved pair, or duplicate selection across both spellings
+refuses before changing the selected output. This is an export-only
+choice: it does not rewrite or persist glyph TSV geometry.
+
+A red-before/green-after native test renders explicit `óa` ink with an
+acute lifted after the main `ó` contour. The legacy last-to-first join
+correctly refuses the large gap, while choosing exit stroke 1 and
+entry stroke 2 admits a single bounded bridge. It verifies native vector
+PDF endpoints and transparent PNG pigment, replay, four original strokes,
+and preserved accepted PDF bytes for seven invalid selections. The broader
+three-test native two-row join/variation suite also remains green.
+
+These are explicitly selected physical straight segments, not automatic
+accent recognition, inferred pen lifts, curve interpolation or a saved
+continuous handwriting model. The P1-014 acceptance criteria remain open.
+
 ## Native continuous-path inspection (partial) — 2026-11-03
 
 `atrament-profiles glyphs --inspect-paths GRAPHEME` reports candidate

@@ -244,10 +244,23 @@ impl GlyphMetrics {
 }
 
 impl GlyphOverlay {
-    /// Select exactly which adjacent Unicode letters may receive physical
-    /// pen bridges on output; the canonical glyph TSV remains unchanged.
+    /// Select explicit exit/entry stroke ordinals for a pair. The source
+    /// glyph geometry and canonical TSV remain unchanged.
+    pub(super) fn add_text_join_anchors(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        self.add_text_join_pair_with_anchors(iter, true)
+    }
+
+    /// Historical last-to-first opt-in pair, preserved for existing callers.
     pub(super) fn add_text_join_pair(
         &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        self.add_text_join_pair_with_anchors(iter, false)
+    }
+
+    fn add_text_join_pair_with_anchors(
+        &mut self, iter: &mut Iter<'_, String>, anchored: bool,
     ) -> Result<(), String> {
         let left = iter.next()
             .ok_or("--join-text-pair needs two exact graphemes")?;
@@ -261,15 +274,29 @@ impl GlyphOverlay {
                 "exact graphemes",
             ).into());
         }
-        if self.text_joins.iter().any(|(first, second)| {
-            first == left && second == right
+        if self.text_joins.iter().any(|join| {
+            join.left == *left && join.right == *right
         }) {
             return Err("duplicate text join pair refused".into());
         }
         if self.text_joins.len() == MAX_TEXT_JOIN_PAIRS {
             return Err("text joins limited to 32 selected pairs".into());
         }
-        self.text_joins.push((left.clone(), right.clone()));
+        let anchors = if anchored {
+            let exit = next_integer(
+                iter, "join exit stroke", 1, 4_096,
+            )?;
+            let entry = next_integer(
+                iter, "join entry stroke", 1, 4_096,
+            )?;
+            Some((usize::try_from(exit)
+                .map_err(|error| error.to_string())?.saturating_sub(1),
+                usize::try_from(entry)
+                .map_err(|error| error.to_string())?.saturating_sub(1)))
+        } else { None };
+        self.text_joins.push(super::TextJoin {
+            left: left.clone(), right: right.clone(), anchors,
+        });
         Ok(())
     }
 
@@ -516,7 +543,7 @@ impl GlyphOverlay {
         for run in &self.runs {
             let mut offset_um = 0i64;
             // A pen lift is implicit at every run/row or authored space.
-            let mut previous: Option<(&str, NotebookInkLine)> = None;
+            let mut previous: Option<(&str, Vec<NotebookInkLine>)> = None;
             let mut remaining = run.text.as_str();
             while !remaining.is_empty() {
                 let (grapheme, rest) = first_grapheme(remaining)?;
@@ -566,11 +593,13 @@ impl GlyphOverlay {
                     placed_ink(shape, run, (glyph_x, glyph_y), metrics)
                 }).collect::<Result<Vec<_>, _>>()?;
                 append_text_ink(
-                    &mut expanded, &rendered, previous, grapheme,
-                    &self.text_joins, &mut joined_pairs,
+                    &mut expanded, &rendered,
+                    previous.as_ref().map(|(glyph, strokes)| (
+                        *glyph, strokes.as_slice(),
+                    )),
+                    grapheme, &self.text_joins, &mut joined_pairs,
                 )?;
-                previous = rendered.last().copied()
-                    .map(|line| (grapheme, line));
+                previous = Some((grapheme, rendered));
                 let advance = if let Some(values) = metrics {
                     i64::from(values.width)
                         .checked_add(i64::from(values.letter_spacing))
@@ -593,16 +622,14 @@ impl GlyphOverlay {
         if !missing.is_empty() {
             return Err(missing_shapes_error(&missing));
         }
-        for ((left, right), seen) in self.text_joins.iter()
-            .zip(joined_pairs)
-        {
+        for (join, seen) in self.text_joins.iter().zip(joined_pairs) {
             if !seen {
                 return Err(format!(
                     concat!(
                         "selected text join pair not adjacent in a run: ",
                         "\"{}\" \"{}\"",
                     ),
-                    left, right,
+                    join.left, join.right,
                 ));
             }
         }
@@ -1812,20 +1839,26 @@ fn placed_ink(
 fn append_text_ink(
     expanded: &mut Vec<NotebookInkLine>,
     rendered: &[NotebookInkLine],
-    previous: Option<(&str, NotebookInkLine)>,
+    previous: Option<(&str, &[NotebookInkLine])>,
     grapheme: &str,
-    text_joins: &[(String, String)],
+    text_joins: &[super::TextJoin],
     joined_pairs: &mut [bool],
 ) -> Result<(), String> {
     if let Some((left, prior)) = previous
-        && let Some(pair_index) = text_joins.iter()
-            .position(|(first, second)| {
-                first == left && second == grapheme
+        && let Some((pair_index, join)) = text_joins.iter()
+            .enumerate().find(|(_, join)| {
+                join.left == left && join.right == grapheme
             })
     {
-        let first = rendered.first()
-            .ok_or("text join needs an authored first stroke")?;
-        if let Some(bridge) = text_join_bridge(prior, *first)? {
+        let (exit, entry) = join.anchors.unwrap_or((
+            prior.len().checked_sub(1)
+                .ok_or("text join needs an authored exit stroke")?, 0,
+        ));
+        let last = prior.get(exit)
+            .ok_or("selected text join exit stroke outside glyph")?;
+        let first = rendered.get(entry)
+            .ok_or("selected text join entry stroke outside glyph")?;
+        if let Some(bridge) = text_join_bridge(*last, *first)? {
             if expanded.len() == MAX_NOTEBOOK_INK_LINES {
                 return Err("text exceeds 4096 total pen strokes".into());
             }

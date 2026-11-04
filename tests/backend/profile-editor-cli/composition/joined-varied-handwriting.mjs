@@ -235,3 +235,80 @@ test('manually selected cursive o/a accents render exact physical native ink',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('selected join anchors bypass detached accents', () => {
+    const dir = mkdtempSync(join(root, '.temp/accent-join-'));
+    try {
+        const destination = join(dir, 'joined.pdf');
+        const shapes = [
+            ['ó', 300, 2500, 3200, 2500],
+            ['ó', 1700, 1100, 2200, 800],
+            ['a', 100, 800, 400, 900],
+            ['a', 350, 2500, 1900, 2500],
+        ].flatMap((row) => [
+            '--glyph-stroke', ...row.map(String), '200', '#102030',
+        ]);
+        const base = ['--printed-sheet', 'true', ...shapes,
+            '--place-text', '1', '25000', '40000', 'óa'];
+        const print = (...extra) => cli('notebook', [
+            ...base, ...extra, '--export-paper', 'pdf',
+        ]);
+        const ordinary = print('--join-text-pair', 'ó', 'a');
+        assert.notEqual(ordinary.status, 0,
+            'the default last stroke is a detached accent, not a pen exit');
+        assert.match(ordinary.stderr.toString(), /join gap/i);
+        const selected = ['--join-text-anchors', 'ó', 'a', '1', '2'];
+        const joined = print(...selected);
+        assert.equal(joined.status, 0, joined.stderr.toString());
+        const starts = pdfPenStarts(joined.stdout);
+        assert.equal(starts.length, 5,
+            'four original lines plus exactly one selected bridge');
+        assert.ok(Math.abs((starts[2][0] - starts[0][0])
+            - (2900 * 72 / 25400)) < 0.01,
+        'bridge starts at the first base-stroke exit, not the acute');
+        assert.equal(starts[2][1], starts[0][1],
+            'selected exit remains on the unaccented pen baseline');
+        const segments = [...joined.stdout.toString('latin1').matchAll(
+            /([0-9.]+) ([0-9.]+) m\n([0-9.]+) ([0-9.]+) l\n/g,
+        )];
+        assert.equal(segments.length, 5);
+        assert.deepEqual(segments[2].slice(3, 5),
+            segments[4].slice(1, 3),
+            'bridge ends at selected second a stroke, not first lifted mark');
+        const png = cli('notebook', [
+            ...base, ...selected, '--export-paper', 'png', '--dpi', '72',
+        ]);
+        assert.equal(png.status, 0, png.stderr.toString());
+        assert.ok(pngPigment(png.stdout),
+            'transparent PNG renders the same opt-in anchored ink');
+        const plain = print();
+        assert.equal(plain.status, 0, plain.stderr.toString());
+        assert.equal(pdfPenStarts(plain.stdout).length, 4);
+        assert.deepEqual(print(...selected).stdout, joined.stdout,
+            'explicit anchors replay identically without editing the glyphs');
+        const accepted = cli('notebook', [...base, ...selected,
+            '--export-paper', 'pdf', '--output', destination]);
+        assert.equal(accepted.status, 0, accepted.stderr.toString());
+        const original = readFileSync(destination);
+        for (const bad of [
+            ['--join-text-anchors', 'ó', 'a', '2', '2'],
+            ['--join-text-anchors', 'ó', 'a', '3', '2'],
+            ['--join-text-anchors', 'ó', 'a', '0', '2'],
+            ['--join-text-anchors', 'ó', 'a', '1', '3'],
+            ['--join-text-anchors', 'ó', 'a', '1', '1'],
+            [...selected, '--join-text-pair', 'ó', 'a'],
+            ['--join-text-anchors', 'a', 'ó', '1', '1'],
+        ]) {
+            const refused = cli('notebook', [
+                ...base, ...bad, '--export-paper', 'pdf',
+                '--output', destination, '--replace',
+            ]);
+            assert.notEqual(refused.status, 0,
+                `bad or absent anchors must refuse: ${bad}`);
+            assert.deepEqual(readFileSync(destination), original,
+                'refusal preserves the accepted destination PDF');
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

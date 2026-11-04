@@ -688,6 +688,17 @@ physically transformed ink has identical RGB and width and a gap of at most
 1200 µm. A wrong direction, long gap or unmatched pair refuses the whole
 export, leaving existing output unchanged.
 
+If a letter's final stroke is a lifted accent rather than the intended
+cursive exit, select `--join-text-anchors LEFT RIGHT EXIT ENTRY` instead
+of `--join-text-pair`. `EXIT` and `ENTRY` are 1-based stroke ordinals
+within their respective exact glyphs. For example, `--join-text-anchors
+'ó' 'a' 1 1` connects the exit of `ó` stroke 1 to the entry of `a`
+stroke 1.
+
+Invalid ordinals, duplicate pair requests and unsafe physical bridges
+refuse before changing a selected PDF or PNG. This selection
+changes only the exported bridge, never the authored glyph TSV.
+
 Spaces, line/page breaks and
 separate placed runs prevent unintended joins. Seeded variation and saved
 mean transforms affect the measured physical bridge, not the source TSV.

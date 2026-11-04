@@ -154,6 +154,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--fallback-glyph MISSING AUTHORED] \
     [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
     [--join-text-pair LEFT RIGHT (repeatable, max 32)] \
+    [--join-text-anchors LEFT RIGHT EXIT_STROKE ENTRY_STROKE] \
     [--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY] \
     [--heading-style underline|double-underline|marker|none] \
     [--heading-color '#RRGGBB'] [--heading-marker-scale 50..105] \
@@ -171,6 +172,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     missing shapes refuse; --glyph-file loads a reusable library. \
     --join-text-pair opt-in bridges selected adjacent glyph pen endpoints \
     within one row; matching physical ink and <=1200 um gap required. \
+    --join-text-anchors chooses explicit 1-based source exit and target \
+    entry strokes for an adjacent pair, without modifying glyph ink. \
     --fallback-glyph borrows a caller-selected existing authored shape \
     for one missing exact grapheme; no implicit or chained mappings. \
     --flow-text keeps explicit lines; --flow-markdown joins plain lines \
@@ -227,13 +230,22 @@ struct TextRun {
     text: String,
 }
 
+#[derive(Debug)]
+struct TextJoin {
+    // Zero-based authored-stroke ordinals within each exact glyph.
+    // None preserves the historical last-to-first join behavior.
+    anchors: Option<(usize, usize)>,
+    left: String,
+    right: String,
+}
+
 #[derive(Debug, Default)]
 struct GlyphOverlay {
     fallbacks: Vec<GlyphFallback>,
     loaded_file: bool,
     runs: Vec<TextRun>,
     strokes: Vec<GlyphStroke>,
-    text_joins: Vec<(String, String)>,
+    text_joins: Vec<TextJoin>,
     variation: Option<GlyphVariation>,
 }
 
@@ -1089,6 +1101,7 @@ fn parse_notebook_export_option(
             glyphs.parse(option, iter)?;
         }
         "--join-text-pair" => glyphs.add_text_join_pair(iter)?,
+        "--join-text-anchors" => glyphs.add_text_join_anchors(iter)?,
         "--glyph-file" => {
             let selected = iter.next()
                 .ok_or("--glyph-file requires a library path")?;
@@ -1278,8 +1291,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--date-style" | "--date-placement" | "--date-text"
             | "--border-radius-um" | "--page-numbers"
             | "--printed-sheet" => {
-                let value = iter
-                    .next()
+                let value = iter.next()
                     .ok_or_else(|| format!("{option} requires a value"))?;
                 apply_notebook_edit(&mut profile, option, value)?;
                 edited = true;
@@ -1300,7 +1312,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--export-paper" | "--pages" | "--dpi" | "--quality"
             | "--png-page" | "--ink-line" | "--glyph-stroke"
             | "--glyph-file" | "--place-text" | "--fallback-glyph"
-            | "--glyph-variation" | "--join-text-pair" => {
+            | "--glyph-variation" | "--join-text-pair"
+            | "--join-text-anchors" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
                     &mut glyphs,
