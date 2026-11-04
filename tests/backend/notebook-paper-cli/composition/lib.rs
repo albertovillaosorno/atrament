@@ -888,6 +888,62 @@ fn png_export_flags_and_resource_limits_fail_closed() {
 }
 
 #[test]
+fn explicit_cpu_png_quality_profiles_preserve_physical_page_geometry() {
+    let defaults = Options::default();
+    let mut sizes = Vec::new();
+    for (quality, dpi) in [("preview", 72), ("final", DEFAULT_PNG_DPI)] {
+        let args = ["--format", "png", "--quality", quality]
+            .map(str::to_owned);
+        let request = parse_options(&args)
+            .expect("quality option accepted").expect("not help");
+        assert_eq!(request.format, OutputFormat::Png);
+        assert_eq!(request.dpi, dpi);
+        let png = execute(request).expect("CPU raster accepted")
+            .expect("unselected PNG returns bytes");
+        assert_eq!(png, render_png(defaults, dpi)
+            .expect("same physical paper and raster DPI"));
+        assert_eq!(png.get(..8), Some(b"\x89PNG\r\n\x1a\n".as_slice()));
+        assert_eq!(png.get(25), Some(&6), "RGBA page always transparent");
+        sizes.push(png.len());
+    }
+    assert!(sizes.first() < sizes.last(),
+        "preview produces fewer raster bytes than final");
+    let wrong = [
+        vec!["--quality", "preview"],
+        vec!["--format", "pdf", "--quality", "final"],
+        vec!["--format", "png", "--quality", "fast"],
+        vec!["--format", "png", "--quality", ""],
+        vec!["--format", "png", "--quality", "final",
+            "--quality", "preview"],
+        vec!["--format", "png", "--quality", "preview",
+            "--dpi", "72"],
+        vec!["--dpi", "150", "--format", "png",
+            "--quality", "final"],
+        vec!["--emit-profile", "--quality", "preview"],
+    ];
+    for tokens in wrong {
+        let args = tokens.into_iter().map(str::to_owned)
+            .collect::<Vec<_>>();
+        assert!(parse_options(&args).is_err(), "{args:?}");
+    }
+    let oversize = ["--format", "png", "--quality", "final",
+        "--width-mm", "500", "--height-mm", "700"]
+        .map(str::to_owned);
+    let request = parse_options(&oversize)
+        .expect("bounded quality request parses").expect("not help");
+    assert!(execute(request).is_err(),
+        "quality presets never bypass the 5-megapixel budget");
+    let explicit = ["--format", "png", "--dpi", "150"]
+        .map(str::to_owned);
+    let default = ["--format", "png", "--quality", "final"]
+        .map(str::to_owned);
+    assert_eq!(parse_options(&explicit).expect("dpi valid")
+        .expect("not help").dpi,
+        parse_options(&default).expect("final valid")
+            .expect("not help").dpi);
+}
+
+#[test]
 fn png_profile_entrypoint_uses_same_canonical_paper_geometry() {
     let options = Options { style: Style::Ruled, ..Options::default() };
     let canonical = encode_profile(options);

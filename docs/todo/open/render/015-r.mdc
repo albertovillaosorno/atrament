@@ -42,6 +42,26 @@ records remain accepted theoretical deliverables and are not reopened:
 - ATR-P5-009 — archived render design
 - ATR-P5-010 — archived render design
 
+## Named CPU PNG preview/final quality controls (partial) — 2026-11-04
+
+The native `atrament-paper` command now supports an explicit PNG-only
+`--quality preview|final` selection: preview uses 72 DPI and final uses the
+existing 150-DPI default. This changes only raster sampling resolution, not
+page geometry, physical pen marks, transparency, PDF vector ink or the saved
+paper profile. Existing callers retain the 150-DPI default and explicit
+`--dpi 72..300` option unchanged.
+
+Quality and DPI are mutually exclusive. Duplicate or unknown quality names
+and use without `--format png` refuse before output, and both named profiles
+still enforce the 5-megapixel raster limit and 24 MB output cap. A native
+regression compares each named output byte-for-byte to its already-tested
+explicit-DPI equivalent and checks invalid/oversized requests.
+
+Preview and final are bounded CPU raster resolutions, not independently
+calibrated paper/pigment looks. The accepted feature still needs CPU time
+and memory measurements, line-art extraction with a loss report and print
+scan correction before the broader task can close.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

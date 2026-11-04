@@ -119,6 +119,7 @@ const USAGE: &str = "Usage: atrament-paper [--profile paper.json] \
     [--margin-left-mm N] [--margin-right-mm N] \
     [--line-color '#RRGGBB'] [--pages 1..32] \
     [--format pdf|png] [--dpi 72..300 (PNG only)] \
+    [--quality preview|final (PNG only, exclusive with --dpi)] \
     [--emit-profile] [--output FILE [--replace]] > output-file";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -478,6 +479,30 @@ fn parse_png_dpi(value: &str) -> Result<u32, String> {
     Ok(dpi)
 }
 
+// Presets choose raster resolution only. Geometry, paper ink and physical
+// dimensions remain identical in the independent native PDF authority.
+fn parse_png_quality(value: &str) -> Result<u32, String> {
+    match value {
+        "preview" => Ok(72),
+        "final" => Ok(DEFAULT_PNG_DPI),
+        _ => Err("--quality must be preview or final".into()),
+    }
+}
+
+fn resolve_png_quality(
+    dpi: u32, quality_dpi: Option<u32>,
+    format: OutputFormat, seen_dpi: bool,
+) -> Result<u32, String> {
+    let Some(quality) = quality_dpi else { return Ok(dpi) };
+    if format != OutputFormat::Png {
+        return Err("--quality requires --format png".into());
+    }
+    if seen_dpi {
+        return Err("--quality and --dpi are mutually exclusive".into());
+    }
+    Ok(quality)
+}
+
 fn validate_export_flags(
     format: OutputFormat,
     seen_pages: bool,
@@ -515,6 +540,7 @@ fn parse_image_export_option(
     dpi: &mut u32,
     seen_format: &mut bool,
     seen_dpi: &mut bool,
+    quality_dpi: &mut Option<u32>,
 ) -> Result<bool, String> {
     match name {
         "--format" => {
@@ -533,6 +559,13 @@ fn parse_image_export_option(
             *seen_dpi = true;
             Ok(true)
         }
+        "--quality" => {
+            if quality_dpi.is_some() {
+                return Err("--quality may appear only once".into());
+            }
+            *quality_dpi = Some(parse_png_quality(value)?);
+            Ok(true)
+        }
         _ => Ok(false),
     }
 }
@@ -541,6 +574,7 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
     let mut opts = Options::default();
     let mut dpi = DEFAULT_PNG_DPI;
     let mut seen_dpi = false;
+    let mut quality_dpi = None;
     let mut format = OutputFormat::Pdf;
     let mut seen_format = false;
     let mut emit_profile = false;
@@ -599,7 +633,7 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
         }
         if parse_image_export_option(
             name, value, &mut format, &mut dpi,
-            &mut seen_format, &mut seen_dpi,
+            &mut seen_format, &mut seen_dpi, &mut quality_dpi,
         )? {
             continue;
         }
@@ -622,6 +656,7 @@ fn parse_options(args: &[String]) -> Result<Option<CliRequest>, String> {
         }
     }
     validate_export_flags(format, seen_pages, seen_dpi, emit_profile)?;
+    dpi = resolve_png_quality(dpi, quality_dpi, format, seen_dpi)?;
     if replace && output.is_none() {
         return Err("--replace requires --output".into());
     }
