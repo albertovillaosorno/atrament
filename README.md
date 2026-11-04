@@ -454,20 +454,26 @@ soft-wrapped paragraph, while two spaces before a newline request a hard
 row break. Consecutive Markdown blank lines collapse to one 4-mm paragraph
 gap, with leading/trailing blanks ignored. Plain-text blank lines instead
 reserve full physical writing rows; they count toward the 128-row limit and
-can create a new page. Headings/lists end a paragraph. A Markdown
+can create a new page. Headings/lists end a paragraph; adjacent `>` quote
+lines form one soft-wrapped quoted paragraph, with the same two-space hard
+break and blank-paragraph rules. A Markdown
 heading keeps its first following visible row on the same physical page when
 there is room for both (including an optional 4-mm paragraph gap); an
 ending heading and a sheet too short for two rows remain valid. Long text
 wraps and paginates automatically (up to 32 physical pages).
 The Markdown subset supports single-line `#`, `##`, `###` headings,
-`-`/`*`/`+` bullets, and numbered items such as `1. text` or `2) text`
+`-`/`*`/`+` bullets, single-level `> text` or `>text` blockquotes, and
+numbered items such as `1. text` or `2) text`
 (with one to nine ASCII digits). Numbered items use your **authored** digit
 and `.` or `)` glyph ink; unlike unordered bullets, there is no automatic
 number shape. Each list item starts on its own row; wrapped continuations
 align beneath the first item glyph after the *measured* numeral, separator
 and any authored spaces. A label too wide to leave room for its first item
-glyph refuses rather than creating an orphan numeral row. Inline styles,
-tables and full Markdown are not yet supported. In Markdown, all three
+glyph refuses rather than creating an orphan numeral row. Quote text is
+inset 6 mm and gets a 0.4-mm vertical ink rule on each physical row, including
+wrapped continuations; the `>` marker itself needs no authored glyph.
+Empty quote blocks refuse; nested quotes, inline styles, tables and full
+Markdown are not yet supported. In Markdown, all three
 unordered bullet markers produce the same physical ink dash; the `+` marker
 does not require a separately authored `+` glyph. In plain text it remains
 literal and still needs an authored shape.

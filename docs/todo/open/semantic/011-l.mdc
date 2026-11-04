@@ -165,6 +165,19 @@ and persisted notebook body content remain open.
 This partial slice does not meet the finite two-page saved-notebook
 acceptance criterion.
 
+A further bounded Markdown blockquote slice supports one level of
+`> text`/`>text` quote syntax. Adjacent quoted source lines join as a soft
+paragraph with explicit two-space hard breaks, while changing to/from normal
+text or structural blocks ends the quoted paragraph. The quote marker is
+syntax, not a required handwriting glyph: Rust insets quote text by 6 mm
+and adds one 0.4-mm vertical ink rule on each physical row, including
+continuations and later physical pages. Empty quote blocks refuse atomically;
+nested quote semantics remain unsupported. Three Rust native tests assert
+exact text/row positions and bar geometry, byte-identical PDF/PNG replay for
+soft lines, different hard-break/ordinary ink, real two-page PDF and PNG,
+plain-text `>` glyph refusal and preservation of a selected existing PDF.
+This remains a CLI export-only subset, not persisted semantic quote blocks.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

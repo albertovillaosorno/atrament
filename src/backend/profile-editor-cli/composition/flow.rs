@@ -216,6 +216,7 @@ enum LineStyle {
     Bullet,
     Heading(HeadingLevel),
     Ordered,
+    Quote,
 }
 
 struct Layout<'model> {
@@ -424,7 +425,8 @@ impl Layout<'_> {
             .checked_add(INSET_UM)
             .and_then(|x| {
                 x.checked_add(if matches!(
-                    style, LineStyle::Bullet | LineStyle::Ordered
+                    style,
+                    LineStyle::Bullet | LineStyle::Ordered | LineStyle::Quote
                 ) {
                     6_000
                 } else {
@@ -490,6 +492,24 @@ impl Layout<'_> {
                 }
                 HeadingStyle::None => {}
             }
+        }
+        if matches!(style, LineStyle::Quote) {
+            // Every physical continuation row retains a quiet quote bar.
+            // The literal Markdown > is syntax, never an invented glyph.
+            let rule_x = start_x.checked_sub(3_000)
+                .ok_or("quote bar left inset overflow")?;
+            let rule_top = y.checked_add(500)
+                .ok_or("quote bar top overflow")?;
+            let rule_bottom = y.checked_add(self.pitch)
+                .and_then(|end| end.checked_sub(600))
+                .ok_or("quote bar bottom overflow")?;
+            self.ornaments.push(NotebookInkLine {
+                page: self.page,
+                start_um: (rule_x, rule_top),
+                end_um: (rule_x, rule_bottom),
+                width_um: 400,
+                rgb: [30, 48, 74],
+            });
         }
         if first && matches!(style, LineStyle::Bullet) {
             let x1 = start_x
@@ -639,6 +659,12 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
     {
         return (LineStyle::Bullet, bullet.trim_end_matches(' '));
     }
+    if let Some(quote) = line.strip_prefix('>') {
+        // One level of Markdown quote syntax, optionally followed by one
+        // separator space. Nested > markers remain literal authored text.
+        return (LineStyle::Quote, quote.strip_prefix(' ')
+            .unwrap_or(quote).trim_end_matches(' '));
+    }
     if let Some((marker, item)) = line.split_once(' ')
         && let Some(digits) = marker.strip_suffix('.')
             .or_else(|| marker.strip_suffix(')'))
@@ -666,6 +692,18 @@ fn following_heading_gap<'text>(
         }
     }
     None
+}
+
+// End a source paragraph at its structural boundary or explicit hard break.
+// Keep the authored text buffer separate from physical rows and decorations.
+fn flush_paragraph(
+    layout: &mut Layout<'_>, paragraph: &mut String, style: LineStyle,
+) -> Result<(), String> {
+    if !paragraph.is_empty() {
+        layout.layout_line(paragraph, style)?;
+        paragraph.clear();
+    }
+    Ok(())
 }
 
 /// Compile bounded visible text on the caller-selected native page profile.
@@ -722,6 +760,7 @@ pub(super) fn layout_flow(
     // empty source lines; leading and trailing blanks add no physical space.
     // Plain-text blank lines instead consume a full physical writing row.
     let mut paragraph = String::new();
+    let mut paragraph_style = LineStyle::Body;
     let mut pending_gap = false;
     let mut source_lines = source.text.lines();
     while let Some(input_line) = source_lines.next() {
@@ -730,10 +769,7 @@ pub(super) fn layout_flow(
             if source.format == FlowFormat::Plain {
                 layout.blank_row()?;
             } else {
-                if !paragraph.is_empty() {
-                    layout.layout_line(&paragraph, LineStyle::Body)?;
-                    paragraph.clear();
-                }
+                flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
                 pending_gap = !layout.lines.is_empty();
             }
             continue;
@@ -751,21 +787,26 @@ pub(super) fn layout_flow(
             return Err("empty Markdown block refused".into());
         }
         if source.format == FlowFormat::Markdown
-            && matches!(style, LineStyle::Body)
+            && matches!(style, LineStyle::Body | LineStyle::Quote)
         {
+            // A quoted paragraph merges adjacent quoted soft lines, but
+            // never joins an unquoted paragraph or another block kind.
+            if !paragraph.is_empty()
+                && matches!(style, LineStyle::Quote)
+                    != matches!(paragraph_style, LineStyle::Quote)
+            {
+                flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
+            }
             if !paragraph.is_empty() {
                 paragraph.push(' ');
             }
+            paragraph_style = style;
             paragraph.push_str(body);
             if input_line.ends_with("  ") {
-                layout.layout_line(&paragraph, LineStyle::Body)?;
-                paragraph.clear();
+                flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
             }
         } else {
-            if !paragraph.is_empty() {
-                layout.layout_line(&paragraph, LineStyle::Body)?;
-                paragraph.clear();
-            }
+            flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
             if matches!(style, LineStyle::Heading(_))
                 && let Some(gap) = following_heading_gap(source_lines.clone()) {
                 layout.keep_heading_with_next(gap)?;
@@ -773,9 +814,7 @@ pub(super) fn layout_flow(
             layout.layout_line(body, style)?;
         }
     }
-    if !paragraph.is_empty() {
-        layout.layout_line(&paragraph, LineStyle::Body)?;
-    }
+    flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
     if layout.lines.is_empty() {
         return Err("flow has no renderable text".into());
     }

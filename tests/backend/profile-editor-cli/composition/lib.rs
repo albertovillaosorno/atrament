@@ -2419,6 +2419,132 @@ fn markdown_soft_wrap_preserves_unicode_and_structural_block_boundaries() {
 }
 
 #[test]
+fn markdown_quote_paragraphs_keep_authored_text_and_physical_bars() {
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "> a\n>a\n> a  \n> a\na\n> a",
+    ).expect("single-level Markdown quotes");
+    let (runs, bars, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("quoted and ordinary paragraphs measured separately");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.iter().map(|run| run.text.as_str())
+        .collect::<Vec<_>>(), ["a a a", "a", "a", "a"]);
+    assert_eq!(runs.iter().map(|run| run.origin_um.0)
+        .collect::<Vec<_>>(), [28_500, 28_500, 22_500, 28_500]);
+    assert_eq!(bars.len(), 3, "one quote bar per visible quote row");
+    for (bar, row) in bars.iter().zip([&runs[0], &runs[1], &runs[3]]) {
+        assert_eq!(bar.page, row.page);
+        assert_eq!(bar.start_um, (25_500, row.origin_um.1 + 500));
+        assert_eq!(bar.end_um, (25_500, row.origin_um.1 + 8_400));
+        assert_eq!(bar.width_um, 400);
+        assert_eq!(bar.rgb, [30, 48, 74]);
+    }
+
+    let long_quote = format!("> {}", "a ".repeat(26));
+    let source = FlowSource::new(FlowFormat::Markdown, &long_quote)
+        .expect("bounded long quote");
+    let (wrapped, marks, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("grapheme-aware quote continuation");
+    assert_eq!(pages, 1);
+    assert!(wrapped.len() >= 2, "quote wraps within physical margins");
+    assert_eq!(wrapped.len(), marks.len(),
+        "every continuation gets its own quote rule");
+    assert!(wrapped.iter().all(|row| row.origin_um.0 == 28_500));
+    assert!(marks.iter().all(|rule| rule.start_um.0 == 25_500));
+}
+
+#[test]
+fn markdown_quote_soft_breaks_replay_real_pdf_and_png_ink() {
+    let base = args(&[
+        "--printed-sheet", "true", "--glyph-stroke", "a", "0", "0",
+        "3500", "4500", "250", "#204060",
+    ]);
+    for format in ["pdf", "png"] {
+        let render = |markdown: &str| {
+            let mut command = base.clone();
+            command.extend(args(&[
+                "--export-paper", format, "--flow-markdown", markdown,
+            ]));
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            execute_notebook(&command)
+                .expect("native quote export").expect("image bytes")
+        };
+        let soft = render("> a\n>a");
+        let joined = render("> a a");
+        let hard = render("> a  \n> a");
+        let plain = render("a a");
+        assert_eq!(soft, joined, "quoted soft line replays identically");
+        assert_ne!(soft, hard, "hard quote break makes a second row");
+        assert_ne!(soft, plain, "quote rule is real page ink");
+        if format == "pdf" {
+            assert!(soft.starts_with(b"%PDF-1.4"));
+        } else {
+            assert!(soft.starts_with(b"\x89PNG\r\n\x1a\n"));
+        }
+    }
+    let unquoted = execute_notebook(&args(&[
+        "--export-paper", "pdf", "--glyph-stroke", "a", "0", "0",
+        "3500", "4500", "250", "#204060", "--flow-text", "> a",
+    ])).expect_err("plain text > is not Markdown syntax");
+    assert!(unquoted.contains("U+003E"), "{unquoted}");
+}
+
+#[test]
+fn markdown_quote_bars_follow_real_page_breaks_and_refuse_empty_blocks() {
+    let markdown = "> a  \n".repeat(36);
+    let source = FlowSource::new(FlowFormat::Markdown, &markdown)
+        .expect("bounded quote rows");
+    let (runs, bars, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("two-page quoted notebook");
+    assert_eq!(pages, 2);
+    assert_eq!(runs.len(), 36);
+    assert_eq!(bars.len(), 36);
+    assert!(bars.iter().any(|bar| bar.page == 2));
+    assert!(runs.iter().zip(&bars).all(|(run, bar)| run.page == bar.page));
+
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060", "--flow-markdown", &markdown,
+    ]);
+    let pdf = execute_notebook(&command)
+        .expect("real two-page quote PDF").expect("PDF bytes");
+    let text = String::from_utf8_lossy(&pdf);
+    let streams = text.split("\nstream\n").skip(1).map(|section| {
+        section.split("\nendstream").next().unwrap_or("")
+    }).collect::<Vec<_>>();
+    assert_eq!(streams.len(), 2);
+    assert!(streams.iter().all(|stream| stream.contains(" m\n")));
+    command[3] = "png".into();
+    command.extend(args(&["--dpi", "72", "--png-page", "2"]));
+    let png = execute_notebook(&command)
+        .expect("page two transparent quote PNG").expect("PNG bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"existing PDF").expect("test-owned sentinel");
+    let name = target.to_str().expect("selected PDF path");
+    for invalid in [">", "> ", ">    ", "a\n> "] {
+        let error = execute_notebook(&args(&[
+            "--export-paper", "pdf", "--glyph-stroke", "a", "0", "0",
+            "3500", "4500", "250", "#204060", "--flow-markdown",
+            invalid, "--output", name, "--replace",
+        ])).expect_err("empty quoted block refused without overwrite");
+        assert!(error.contains("empty Markdown block refused"), "{error}");
+        assert_eq!(fs::read(&target).expect("sentinel intact"),
+            b"existing PDF");
+    }
+    fs::remove_file(target).expect("remove test-owned sentinel");
+}
+
+#[test]
 fn markdown_soft_and_hard_breaks_change_measured_page_count() {
     let soft = FlowSource::new(FlowFormat::Markdown, &"a\n".repeat(40))
         .expect("soft-wrapped paragraph");
