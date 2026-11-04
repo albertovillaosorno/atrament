@@ -1555,6 +1555,26 @@ without an implicit backend save.
 This is explicit pen geometry, not a mathematical font, automatic
 set-algebra markup or analytic PDF path storage.
 
+## Explicit subset notation ink (partial) — 2026-11-04
+
+Two additional exact mathematical Unicode keys, `⊂` and `⊆`, now have
+separate explicitly selected pen contours in the geometric browser editor.
+Both retain an open four-quadratic C guide sampled into 64 directed native
+TSV segments; `⊆` adds a separately lifted horizontal equality bar for 65
+strokes total. Neither is a replacement for `∈`, nor does an unselected
+unknown glyph acquire fallback ink. The optional math fill now covers 36
+independent keys and preserves already-authored paths.
+
+Red-before/green-after browser tests check ideal SVG controls, exact
+rounded coordinates, distinct pen-lift boundaries, strict clipping refusal,
+atomic fill and native TSV identity. Rust CLI acceptance reopens the saved
+Unicode library, renders two rows of real PDF vectors and transparent RGBA
+PNG, and refuses unauthored `∈` and `⊊` without replacing the selected PDF.
+An authenticated Firefox session independently downloads the full 36-key
+library, reopens the exact TSV in Rust and verifies PDF/PNG rendering without
+an editor-side backend write. Native sampled curves remain approximate;
+analytic path persistence and general mathematics layout remain open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
