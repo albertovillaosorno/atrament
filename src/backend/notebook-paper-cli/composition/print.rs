@@ -215,7 +215,7 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     if target.starts_with(b"xref")
         && target.get(4).is_some_and(u8::is_ascii_whitespace)
     {
-        return supported_xref_table(target, bytes);
+        return supported_xref_table(target, bytes, offset);
     }
     // Cross-reference streams entered the PDF standard in version 1.5.
     // Old-format headers cannot authorize a stream even if it appears to
@@ -299,7 +299,9 @@ fn xref_table_entry<'bytes>(
     Some((offset, generation, status))
 }
 
-fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
+fn supported_xref_table(
+    bytes: &[u8], document: &[u8], table_start: usize,
+) -> bool {
     let mut at = 0usize;
     if xref_word(bytes, &mut at) != Some(b"xref".as_slice()) {
         return false;
@@ -378,7 +380,9 @@ fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
                 let Some(object_offset) = str::from_utf8(offset).ok()
                     .and_then(|digits| digits.parse::<usize>().ok())
                 else { return false; };
-                if object_offset < 9 || object_offset >= document.len()
+                // Terminal xref records cannot refer forward into their
+                // own subsection, trailer or its metadata strings.
+                if object_offset < 9 || object_offset >= table_start
                     || !in_use_object_header(
                         document, object_offset, index,
                         usize::from(generation_number),
@@ -472,7 +476,8 @@ fn supported_xref_table_trailer(bytes: &[u8], minimum_size: usize) -> bool {
                     return false;
                 };
                 at = end;
-                if depth == 1 && array_depth == 0 && name == b"Size" {
+                if depth == 1 && array_depth == 0
+                    && pdf_name_is(name, b"Size") {
                     if seen_size {
                         return false;
                     }
@@ -509,6 +514,35 @@ fn pdf_name(bytes: &[u8], start: usize) -> Option<(&[u8], usize)> {
         return None;
     }
     bytes.get(first..end).map(|name| (name, end))
+}
+
+// PDF names may spell bytes with # followed by two hex digits. Normalize
+// comparisons without allocations so an escaped alias cannot evade a
+// duplicate required-key check (for example /Size and /S#69ze).
+fn pdf_name_is(name: &[u8], literal: &[u8]) -> bool {
+    let mut at = 0usize;
+    for expected in literal {
+        let Some(&first) = name.get(at) else { return false; };
+        let byte = if first == b'#' {
+            let Some(pair) = name.get(at.saturating_add(1)
+                ..at.saturating_add(3)) else { return false; };
+            let Some(hex) = str::from_utf8(pair).ok() else {
+                return false;
+            };
+            let Some(decoded) = u8::from_str_radix(hex, 16).ok() else {
+                return false;
+            };
+            at = at.saturating_add(3);
+            decoded
+        } else {
+            at = at.saturating_add(1);
+            first
+        };
+        if byte != *expected {
+            return false;
+        }
+    }
+    at == name.len()
 }
 
 fn pdf_trivia_end(bytes: &[u8], mut at: usize) -> usize {
@@ -739,37 +773,37 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<(usize, usize)> {
             Some(&b'/') => {
                 let (name, end) = pdf_name(prefix, at)?;
                 at = end;
-                if depth == 1 && array_depth == 0 && name == b"Type" {
+                if depth == 1 && array_depth == 0
+                    && pdf_name_is(name, b"Type") {
                     if found_type { return None; }
                     at = pdf_trivia_end(prefix, at);
                     let (value, value_end) = pdf_name(prefix, at)?;
-                    if value != b"XRef" { return None; }
+                    if !pdf_name_is(value, b"XRef") { return None; }
                     found_type = true;
                     at = value_end;
-                } else if depth == 1 && array_depth == 0 && name == b"Size" {
-                    if declared_size.is_some() { return None; }
-                    declared_size = Some(
-                        bounded_xref_size(prefix, &mut at, 1)?,
-                    );
                 } else if depth == 1 && array_depth == 0
-                    && name == b"W" {
+                    && pdf_name_is(name, b"Size") {
+                    if declared_size.is_some() { return None; }
+                    declared_size =
+                        Some(bounded_xref_size(prefix, &mut at, 1)?);
+                } else if depth == 1 && array_depth == 0
+                    && pdf_name_is(name, b"W") {
                     if found_widths {
                         return None;
                     }
                     xref_stream_field_widths(prefix, &mut at)?;
                     found_widths = true;
                 } else if depth == 1 && array_depth == 0
-                    && name == b"Index" {
+                    && pdf_name_is(name, b"Index") {
                     if index_end.is_some() {
                         return None;
                     }
                     index_end = Some(xref_stream_index_end(prefix, &mut at)?);
                 } else if depth == 1 && array_depth == 0
-                    && name == b"Length" {
+                    && pdf_name_is(name, b"Length") {
                     if declared_length.is_some() { return None; }
-                    declared_length = Some(
-                        bounded_stream_length(prefix, &mut at)?,
-                    );
+                    declared_length =
+                        Some(bounded_stream_length(prefix, &mut at)?);
                 }
             }
             _ => at = at.saturating_add(1),

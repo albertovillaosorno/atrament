@@ -316,6 +316,37 @@ The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.
 
+## Terminal table self-reference refusal (partial) — 2026-11-04
+
+The selected-PDF preflight now rejects a traditional in-use xref record whose
+absolute offset points into its own terminal cross-reference table or trailer.
+Previously a forged trailer literal containing `1 0 obj` could impersonate
+an earlier indirect object and reach CUPS despite no actual object at that
+location. A red-before/green-after Rust fake-CUPS regression proves that the
+forged selection now refuses without process launch or source-file mutation.
+
+The complete native two-page PDF and all other supported print fixtures
+remain eligible. The 23-test printer suite and strict all-target print
+Clippy pass. This is still bounded lexical framing, not a PDF object-graph
+parser, a real queue test or proof of physical print alignment.
+
+## Escaped PDF dictionary-key parity (partial) — 2026-11-04
+
+PDF names can contain `#`-encoded bytes: `/S#69ze` is another spelling
+of `/Size`. Previously the local printer gate treated those as unrelated
+keys, admitting duplicate xref table or stream `/Size` declarations whose
+later decoded value could bypass the 24-MB resource-count ceiling.
+
+A red-before/green-after fake-CUPS regression now verifies duplicate
+escaped `/Size` refusal on both forms without changing source bytes or
+contacting CUPS. The same bounded allocation-free name comparison detects
+escaped duplicate `/Type`, `/W`, `/Index` and `/Length` stream keys. Single
+encoded names are still supported, including `/X#52ef` for `/XRef`.
+
+Native paper output, genuine PDF 1.5/2.0 stream fixtures, 24 print tests
+and strict all-target Clippy pass. No PDF decompression, full grammar or
+physical printer acceptance is implied.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

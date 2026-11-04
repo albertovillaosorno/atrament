@@ -1280,6 +1280,138 @@ fn xref_in_use_offsets_must_match_indirect_object_headers() {
 
 #[cfg(unix)]
 #[test]
+fn xref_in_use_object_cannot_point_into_terminal_trailer() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS fixture");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake CUPS executable");
+
+    // The record points at a header-like literal in its own trailer,
+    // not at an indirect object that precedes the terminal xref table.
+    let prefix = b"%PDF-1.7\nxref\n1 1\n";
+    let record = b"0000000000 00000 n \n";
+    let trailer_prefix = b"trailer\n<< /Size 2 /Memo (";
+    let fake_object_offset = prefix.len() + record.len()
+        + trailer_prefix.len();
+    let bytes = [
+        prefix.as_slice(),
+        format!("{fake_object_offset:010} 00000 n \n").as_bytes(),
+        trailer_prefix.as_slice(),
+        b"1 0 obj ) >>\nstartxref\n9\n%%EOF\n".as_slice(),
+    ].concat();
+    assert!(!supported_pdf_cross_reference(&bytes),
+        "trailer text cannot impersonate an earlier indirect object");
+    fs::write(&pdf, &bytes).expect("write selected forged PDF");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert!(selected_pdf(&pdf).is_err(), "forged object pointer refused");
+    assert!(submit_selected(&request, &fake_spool).is_err(),
+        "xref pointing into its own trailer cannot contact CUPS");
+    assert!(!spooled.exists(), "no spool side effect");
+    assert_eq!(fs::read(&pdf).expect("source remains intact"), bytes);
+    assert!(supported_pdf_cross_reference(&real_pdf()),
+        "native two-page output remains admissible");
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
+fn xref_escaped_pdf_names_cannot_hide_duplicate_size_keys() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS fixture");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake CUPS executable");
+
+    // PDF name escapes decode to the same keys, not distinct metadata.
+    let table = concat!(
+        "%PDF-1.7\nxref\n0 1\n0000000000 65535 f \n",
+        "trailer\n<< /Size 1 /S#69ze 999999999 >>\n",
+        "startxref\n9\n%%EOF\n",
+    ).as_bytes();
+    let stream = concat!(
+        "%PDF-1.7\n1 0 obj\n",
+        "<< /Type /XRef /Size 2 /Si#7Ae 999999999 ",
+        "/W [1 0 0] /Length 1 >>\n",
+        "stream\n\0\nendstream\nendobj\n",
+        "startxref\n9\n%%EOF\n",
+    ).as_bytes();
+    for bytes in [table, stream] {
+        assert!(!supported_pdf_cross_reference(bytes),
+            "PDF name escapes must not bypass duplicate Size refusal");
+        fs::write(&pdf, bytes).expect("write forged PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(), "duplicate Size refused");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "alias Size cannot contact CUPS");
+        assert!(!spooled.exists(), "no spool side effect");
+        assert_eq!(fs::read(&pdf).expect("selected bytes intact"), bytes);
+    }
+    // A single encoded spelling must be interpreted as the same PDF name,
+    // including the mandatory type, width, length, index and size fields.
+    let single_table = concat!(
+        "%PDF-1.7\nxref\n0 1\n0000000000 65535 f \n",
+        "trailer\n<< /S#69ze 1 >>\nstartxref\n9\n%%EOF\n",
+    );
+    let single_stream = concat!(
+        "%PDF-1.7\n1 0 obj\n",
+        "<< /T#79pe /X#52ef /Si#7Ae 2 /#57 [1 0 0] ",
+        "/L#65ngth 1 /Ind#65x [1 1] >>\n",
+        "stream\n\0\nendstream\nendobj\n",
+        "startxref\n9\n%%EOF\n",
+    );
+    assert!(supported_pdf_cross_reference(single_table.as_bytes()),
+        "one escaped Size name in a table trailer is valid");
+    assert!(supported_pdf_cross_reference(single_stream.as_bytes()),
+        "a genuine encoded spelling of each required key is valid");
+
+    let stream_with = |extra: &str| format!(
+        "%PDF-1.7\n1 0 obj\n<< /Type /XRef /Size 2 \
+         /W [1 0 0] /Length 1 /Index [1 1] {extra} >>\n\
+         stream\n\0\nendstream\nendobj\n\
+         startxref\n9\n%%EOF\n",
+    ).into_bytes();
+    for extra in [
+        "/T#79pe /Page", "/#57 [1 0 0]",
+        "/L#65ngth 2", "/Ind#65x [1 1]",
+    ] {
+        let candidate = stream_with(extra);
+        assert!(!supported_pdf_cross_reference(&candidate),
+            "escaped duplicate stream key must refuse: {extra}");
+        fs::write(&pdf, &candidate).expect("write malformed stream");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "escaped duplicate must not contact CUPS");
+        assert!(!spooled.exists(), "no spool side effect");
+        assert_eq!(fs::read(&pdf).expect("selected bytes intact"),
+            candidate);
+    }
+    fs::remove_dir_all(&directory).expect("remove fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
     use std::os::unix::fs::{PermissionsExt as _, symlink};
 
