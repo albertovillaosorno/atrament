@@ -61,11 +61,16 @@ An explicit `--pages` smaller than the measured PDF count refuses.
 
 The limited Markdown subset recognizes `#`, `##`, and `###` single-line
 headings and `-` or `*` list items. Headings default to an explicit ink
-underline, while `--heading-style marker` can place a colored four-stroke
-opaque highlight **behind** authored heading ink; `none` suppresses the
-heading mark without changing text. List items keep their distinct physical
-ink mark and indentation. Heading styling is CLI-only and does not create
-semantic block styles or persistent title identities.
+underline, while `--heading-style marker` places an opaque colored highlight
+**behind** authored heading ink; `none` suppresses the ornament without
+changing text. The physical decorations now distinguish heading hierarchy:
+`#` uses a 0.55-mm underline or four 1.4-mm marker strokes, `##` a 0.42-mm
+underline or three 1.15-mm strokes, and `###` a 0.30-mm underline or two
+0.95-mm strokes. One new Rust integration regression checks the tiered
+coordinates and ink weights, actual PDF/PNG output, color and deterministic
+replay; first-level styling remains byte-compatible. List items keep their
+physical marks and indentation. This is still CLI-only decoration, not
+semantic styles or persistent title identities.
 
 Plain-text lines wrap independently at word or grapheme boundaries;
 Markdown ordinary lines now combine as soft-wrapped paragraphs, with two

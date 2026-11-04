@@ -178,10 +178,43 @@ impl HeadingDecoration {
 }
 
 #[derive(Clone, Copy)]
+enum HeadingLevel {
+    Primary,
+    Secondary,
+    Tertiary,
+}
+
+impl HeadingLevel {
+    const fn marker_lifts_um(self) -> &'static [u32] {
+        match self {
+            Self::Primary => &[900, 1_900, 2_900, 3_900],
+            Self::Secondary => &[1_000, 2_000, 3_000],
+            Self::Tertiary => &[1_400, 2_400],
+        }
+    }
+
+    const fn marker_width_um(self) -> u32 {
+        match self {
+            Self::Primary => 1_400,
+            Self::Secondary => 1_150,
+            Self::Tertiary => 950,
+        }
+    }
+
+    const fn underline_width_um(self) -> u32 {
+        match self {
+            Self::Primary => 550,
+            Self::Secondary => 420,
+            Self::Tertiary => 300,
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
 enum LineStyle {
     Body,
     Bullet,
-    Heading,
+    Heading(HeadingLevel),
     Ordered,
 }
 
@@ -312,7 +345,7 @@ impl Layout<'_> {
                             .checked_add(grapheme.len())
                             .is_none_or(|length| length > 384))
                 {
-                    if matches!(style, LineStyle::Heading) {
+                    if matches!(style, LineStyle::Heading(_)) {
                         return Err(
                             "heading exceeds one-line fixed region".into()
                         );
@@ -336,7 +369,7 @@ impl Layout<'_> {
             }
         }
         if !row.is_empty() {
-            if matches!(style, LineStyle::Heading) && !first {
+            if matches!(style, LineStyle::Heading(_)) && !first {
                 return Err("heading exceeds one-line fixed region".into());
             }
             self.write_row(row, start_x, width, style, first)?;
@@ -386,7 +419,7 @@ impl Layout<'_> {
             return Err("flow exceeds 128 measured lines".into());
         }
         let y = self.begin_row()?;
-        if matches!(style, LineStyle::Heading) {
+        if let LineStyle::Heading(level) = style {
             let mark_end = start_x
                 .checked_add(extent)
                 .ok_or("heading ornament exceeds page")?;
@@ -399,22 +432,22 @@ impl Layout<'_> {
                         page: self.page,
                         start_um: (start_x, mark_y),
                         end_um: (mark_end, mark_y),
-                        width_um: 550,
+                        width_um: level.underline_width_um(),
                         rgb: self.heading.color.unwrap_or([30, 48, 74]),
                     });
                 }
                 HeadingStyle::Marker => {
-                    // Four overlapping 1.4-mm strokes create a visible
-                    // pastel marker band behind the subsequent glyph ink.
-                    // Existing Rust compositor width/clearance bounds apply.
-                    for lift in [900u32, 1_900, 2_900, 3_900] {
+                    // Fewer, finer strokes give #, ## and ### a modest
+                    // visual hierarchy without altering authored glyphs.
+                    // Existing compositor width/clearance bounds still apply.
+                    for &lift in level.marker_lifts_um() {
                         let mark_y = y.checked_add(lift)
                             .ok_or("heading marker position overflow")?;
                         self.ornaments.push(NotebookInkLine {
                             page: self.page,
                             start_um: (start_x, mark_y),
                             end_um: (mark_end, mark_y),
-                            width_um: 1_400,
+                            width_um: level.marker_width_um(),
                             rgb: self.heading.color.unwrap_or([255, 237, 159]),
                         });
                     }
@@ -555,9 +588,13 @@ fn measured_word<'text>(
 // only unordered bullets receive a synthetic short line ornament.
 fn markdown_line(line: &str) -> (LineStyle, &str) {
     let raw = line.trim_end_matches(' ');
-    for heading in ["### ", "## ", "# "] {
-        if let Some(body) = line.strip_prefix(heading) {
-            return (LineStyle::Heading, body.trim_end_matches(' '));
+    for (prefix, level) in [
+        ("### ", HeadingLevel::Tertiary),
+        ("## ", HeadingLevel::Secondary),
+        ("# ", HeadingLevel::Primary),
+    ] {
+        if let Some(body) = line.strip_prefix(prefix) {
+            return (LineStyle::Heading(level), body.trim_end_matches(' '));
         }
     }
     if let Some(bullet) = line.strip_prefix("- ")

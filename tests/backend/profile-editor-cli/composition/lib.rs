@@ -3095,6 +3095,86 @@ fn marker_headings_keep_authored_text_and_bullets_with_colored_ink() {
 }
 
 #[test]
+fn markdown_heading_levels_have_distinct_native_ink_weights() {
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "# a\n## a\n### a\n- a",
+    ).expect("three Markdown levels and list item");
+    let profile = NotebookProfile::default();
+    let (runs, underline, pages) = layout_flow(
+        &source, &profile, None, HeadingDecoration::default(),
+    ).expect("level-aware underline ink");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.iter().map(|run| run.text.as_str())
+        .collect::<Vec<_>>(), ["a", "a", "a", "a"]);
+    assert_eq!(underline.len(), 4, "three headings and one bullet");
+    assert_eq!(underline.iter().map(|line| line.width_um)
+        .collect::<Vec<_>>(), [550, 420, 300, 450]);
+    assert!(underline.iter().take(3).all(|line| line.rgb == [30, 48, 74]));
+
+    let mut marker = HeadingDecoration::default();
+    marker.parse("--heading-style", &mut args(&["marker"]).iter())
+        .expect("explicit marker style");
+    marker.parse("--heading-color", &mut args(&["#A1B2C3"]).iter())
+        .expect("exact marker pigment");
+    let (marked_runs, marks, _) = layout_flow(
+        &source, &profile, None, marker,
+    ).expect("three distinct native markers");
+    assert_eq!(marked_runs.iter().map(|run| run.text.as_str())
+        .collect::<Vec<_>>(), ["a", "a", "a", "a"],
+        "heading decoration does not modify authored glyphs");
+    assert_eq!(marks.iter().map(|line| line.width_um)
+        .collect::<Vec<_>>(),
+        [1_400, 1_400, 1_400, 1_400,
+         1_150, 1_150, 1_150, 950, 950, 450]);
+    for (level, (start, end, offsets)) in [
+        (0usize, (0usize, 4usize, &[900, 1900, 2900, 3900][..])),
+        (1, (4, 7, &[1000, 2000, 3000][..])),
+        (2, (7, 9, &[1400, 2400][..])),
+    ] {
+        for (ink, offset) in marks[start..end].iter().zip(offsets) {
+            assert_eq!(ink.page, 1);
+            assert_eq!(ink.start_um.0, marked_runs[level].origin_um.0);
+            assert_eq!(ink.start_um.1,
+                marked_runs[level].origin_um.1 + offset);
+            assert_eq!(ink.rgb, [0xA1, 0xB2, 0xC3]);
+        }
+    }
+    assert_eq!(marks.last().expect("bullet remains").rgb, [30, 48, 74]);
+
+    let mut none = HeadingDecoration::default();
+    none.parse("--heading-style", &mut args(&["none"]).iter())
+        .expect("no heading ornament");
+    let (_, bare, _) = layout_flow(&source, &profile, None, none)
+        .expect("headings remain valid without decoration");
+    assert_eq!(bare.len(), 1, "none removes only heading ink");
+
+    let mut cli = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "1200", "2400", "3200",
+        "250", "#123456", "--flow-markdown", "# a\n## a\n### a",
+        "--heading-style", "marker", "--heading-color", "#A1B2C3",
+    ]);
+    let pdf = execute_notebook(&cli).expect("level markers in PDF")
+        .expect("PDF bytes");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    assert_eq!(String::from_utf8_lossy(&pdf)
+        .matches("0.631 0.698 0.765 RG").count(), 9,
+        "PDF paints nine level-dependent marker lines");
+    cli[3] = "png".into();
+    cli.extend(args(&["--dpi", "72"]));
+    let png = execute_notebook(&cli).expect("level markers in PNG")
+        .expect("transparent PNG bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(png, execute_notebook(&cli)
+        .expect("same level-aware raster").expect("PNG bytes"));
+    let mut undecorated = cli.clone();
+    undecorated.truncate(undecorated.len() - 6);
+    assert_ne!(png, execute_notebook(&undecorated)
+        .expect("ordinary headings").expect("PNG bytes"),
+        "actual raster content must change with selected heading hierarchy");
+}
+
+#[test]
 fn custom_marker_heading_exports_native_pdf_png_and_replays() {
     let mut command = args(&[
         "--printed-sheet", "true", "--export-paper", "pdf",

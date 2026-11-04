@@ -431,11 +431,14 @@ the PDF is a real one-page document and PNG is 72-DPI RGBA. By default, a
 Markdown heading gets a dark pen underline and a list item gets an ink mark.
 To highlight a title with a **colored marker band behind the handwritten
 strokes**, add `--heading-style marker --heading-color '#F8DE91'` to either
-export. Four overlapping, **opaque** 1.4-mm pen lines form this pastel band;
-`--heading-style underline --heading-color '#A462D0'` changes only the
-underline color, and `--heading-style none` removes the heading ornament.
-The marker option does not change authored glyph geometry, and the existing
-512-ink-segment cap and physical margin checks also apply to heading ink.
+export. Marker weight follows the Markdown heading level: `#` uses four
+**opaque** 1.4-mm pen lines, `##` uses three 1.15-mm strokes, and `###` uses
+two 0.95-mm strokes. Underlines likewise step down from 0.55 to 0.42 to
+0.30 mm. `--heading-style underline --heading-color '#A462D0'` changes only
+the underline color; `--heading-style none` removes heading ornaments.
+These levels change ink decoration, **not** the authored glyph sizes or
+shape. The 512-ink-segment cap and physical margin checks still apply to
+heading ink.
 This is a deliberately simple marker-decoration option, **not** a full title
 font, translucent highlighter or arbitrary image layer. It works with the
 opt-in `--glyph-variation` ink sampler described below.
