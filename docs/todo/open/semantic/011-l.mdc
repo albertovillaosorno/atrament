@@ -588,6 +588,22 @@ unsupported seven-hash and unapproved empty/indented forms without changing
 an existing PDF. This extends CLI-only rendering: it does not create
 persistent semantic title identities, inline styling or a general parser.
 
+## Forward-only Unicode measurement (partial) — 2026-11-04
+
+Native pasted-source tab expansion, per-word advance measurement and
+height/baseline pitch estimation now share one bounded next-grapheme
+reader. Each consumes the remaining UTF-8 suffix, rather than repeatedly
+requesting increasing grapheme indices from the entire prefix. This avoids
+a quadratic prefix scan for long words or dense paragraphs without changing
+NFC/NFD exact identity, physical advances, flow limits or Unicode refusals.
+
+A Rust test checks exact NFC, NFD and joined Unicode grapheme boundaries,
+then measures 1,024 decomposed graphemes (3,072 UTF-8 bytes) at their
+unchanged nominal 4-mm advances. Real native Markdown PDF/transparent PNG
+regressions and strict production CLI Clippy cover the same compiler.
+This changes layout cost, not an editable semantic notebook body or an
+independently accepted performance benchmark.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

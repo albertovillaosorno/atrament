@@ -42,7 +42,6 @@ use atrament_notebook_profile::NotebookProfile;
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
-use super::glyph::segment_at;
 use super::{GlyphOverlay, HeadingInk, TextRun};
 
 const MAX_FLOW_BYTES: usize = 4_096;
@@ -198,7 +197,6 @@ impl FlowSource {
         if !normalized.contains('\t') {
             return Ok(Self { format, text: normalized });
         }
-        let boundaries = UnicodeGraphemeSegmentation;
         let mut remaining = normalized.as_str();
         let mut expanded = String::with_capacity(normalized.len());
         let mut column = 0usize;
@@ -206,13 +204,8 @@ impl FlowSource {
             // Advance one grapheme at a time from the current suffix.
             // Querying ordinal indices from the full source would
             // repeatedly rescan its prefix (quadratic on long input).
-            let end = boundaries.byte_offset(remaining, 1)
-                .ok_or("flow source grapheme boundary refused")?;
-            let grapheme = remaining.get(..end)
-                .filter(|span| !span.is_empty())
-                .ok_or("flow source grapheme span refused")?;
-            remaining = remaining.get(end..)
-                .ok_or("flow source grapheme suffix refused")?;
+            let (grapheme, rest) = first_grapheme(remaining)?;
+            remaining = rest;
             match grapheme {
                 "\n" => {
                     expanded.push('\n');
@@ -247,6 +240,27 @@ impl FlowSource {
 #[cfg(test)]
 mod source_tests {
     use super::{FlowFormat, FlowSource};
+
+    #[test]
+    fn measured_words_keep_nfc_nfd_and_joined_unicode_graphemes() {
+        let word = "aóo\u{301}👩\u{200d}🏫";
+        let (glyphs, width) = super::measured_word(word, None)
+            .expect("valid authored Unicode word");
+        let segments = glyphs.iter().map(|(text, _, _)| *text)
+            .collect::<Vec<_>>();
+        assert_eq!(segments, ["a", "ó", "o\u{301}", "👩\u{200d}🏫"]);
+        assert_eq!(width, 16_000);
+        assert!(glyphs.iter().all(|(_, advance, _)| *advance == 4_000));
+
+        // Bounded input can still contain thousands of short graphemes;
+        // measure each exact span once rather than rescanning its prefix.
+        let long = "o\u{301}".repeat(1_024);
+        let (many, width) = super::measured_word(&long, None)
+            .expect("bounded decomposed source");
+        assert_eq!(many.len(), 1_024);
+        assert_eq!(width, 4_096_000);
+        assert!(many.iter().all(|(text, _, _)| *text == "o\u{301}"));
+    }
 
     #[test]
     fn max_tabbed_source_expands_to_exact_byte_limit() {
@@ -960,15 +974,27 @@ fn measured_ordered_label<'text>(
     Ok((indent, marker))
 }
 
+// Consume one exact Unicode grapheme from the remaining suffix. Repeated
+// byte_offset(text, index) requests rescan the full prefix on long words.
+fn first_grapheme(text: &str) -> Result<(&str, &str), String> {
+    let end = UnicodeGraphemeSegmentation.byte_offset(text, 1)
+        .ok_or("flow grapheme boundary refused")?;
+    let glyph = text.get(..end).filter(|span| !span.is_empty())
+        .ok_or("flow grapheme span refused")?;
+    let rest = text.get(end..).ok_or("flow grapheme suffix refused")?;
+    Ok((glyph, rest))
+}
+
 fn measured_word<'text>(
     word: &'text str,
     statistics: Option<&HandwritingStatisticsProfile>,
 ) -> Result<(Vec<MeasuredGrapheme<'text>>, u32), String> {
-    let boundaries = UnicodeGraphemeSegmentation;
-    let mut glyphs = Vec::with_capacity(boundaries.grapheme_count(word));
+    let mut glyphs = Vec::new();
     let mut width = 0u32;
-    for index in 0..boundaries.grapheme_count(word) {
-        let grapheme = segment_at(boundaries, word, index)?;
+    let mut remaining = word;
+    while !remaining.is_empty() {
+        let (grapheme, rest) = first_grapheme(remaining)?;
+        remaining = rest;
         let (advance, outline) = GlyphOverlay::flow_advance_um(
             grapheme, statistics,
         )?;
@@ -1242,7 +1268,6 @@ fn measured_pitch(
     source: &FlowSource,
     statistics: Option<&HandwritingStatisticsProfile>,
 ) -> Result<u32, String> {
-    let boundaries = UnicodeGraphemeSegmentation;
     let mut pitch = DEFAULT_PITCH_UM;
     let mut fence = None;
     for raw in source.text.lines() {
@@ -1260,8 +1285,10 @@ fn measured_pitch(
         } else {
             Cow::Borrowed(raw)
         };
-        for index in 0..boundaries.grapheme_count(visible.as_ref()) {
-            let grapheme = segment_at(boundaries, visible.as_ref(), index)?;
+        let mut remaining = visible.as_ref();
+        while !remaining.is_empty() {
+            let (grapheme, rest) = first_grapheme(remaining)?;
+            remaining = rest;
             if grapheme.chars().all(char::is_whitespace) {
                 continue;
             }
