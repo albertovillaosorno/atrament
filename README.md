@@ -496,7 +496,9 @@ soft-wrapped paragraph, while two spaces or a single trailing backslash
 before a newline request a hard row break for ordinary and quoted paragraphs.
 Up to three leading ASCII spaces on an ordinary Markdown paragraph line
 are syntax and do not shift ink. Four or more remain literal spaces,
-without inferring an indented code block.
+without inferring an indented code block. If literal indentation would
+consume an entire selected writing row before its first visible glyph,
+flow refuses instead of silently moving that glyph to another row or page.
 Paired trailing backslashes remain literal and need authored glyphs.
 Consecutive Markdown blank lines collapse to one 4-mm paragraph gap, with
 leading/trailing blanks ignored. Plain-text blank lines instead
@@ -747,6 +749,29 @@ custom `∂` ink, and choosing not to author it still triggers the native
 missing-glyph refusal. A two-row `∂∫` notebook has been exported as a
 vector PDF and transparent PNG; neither format embeds the original SVG
 curves or supplies general equation typesetting.
+
+For temperatures and percentages, choose the two separate manual glyph
+starters **degree `°`** and **percent `%`** in the geometry editor. Degree
+is a single ideal SVG ring (48 sampled directed TSV strokes); percent is
+two independent rings and one diagonal (97 sampled strokes). Each ring
+keeps its exact circular SVG preview, but native PDF/PNG uses the saved
+integer-micrometre pen chords, not embedded SVG curves. These two manual
+choices do **not** change the 17-symbol math fill batch or overwrite
+existing custom shapes; clipped geometry or inadequate pen clearance
+refuses before altering the draft.
+
+After selecting the glyphs and explicitly downloading their stroke TSV,
+render them with the native notebook flow compiler:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --printed-sheet true --glyph-file my-glyph-strokes.tsv \
+  --flow-text '°%' --export-paper pdf --output degree-percent.pdf
+```
+
+The Rust CLI reopens these exact Unicode glyphs, audits both with zero
+missing shapes and exports physical PDF or transparent PNG. An unauthored
+neighboring symbol still refuses without replacing an accepted export.
 
 For class exercises, page labels and dates, use the separate **Fill missing
 digits 0–9 (unsaved)** gesture or select each numeral in the geometric
