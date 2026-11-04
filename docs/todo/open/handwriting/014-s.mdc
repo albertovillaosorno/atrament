@@ -558,7 +558,9 @@ clipping and size-limit refusals. A separate browser-to-Rust integration
 reopens the edited TSV and compares actual vector PDF/transparent PNG ink
 byte-for-byte, both alone and following a height edit. Invalid native
 edits preserve the source file and existing output; invalid browser edits
-preserve the in-memory draft. Neither engine autosaves.
+preserve the in-memory draft. Neither engine autosaves. A real localhost
+Firefox/BiDi session checks the live control, preview after edits, exact
+UTF-8 TSV downloads, atomic refusals and zero extra backend requests.
 
 This is a sampled-pen-width edit, not authored continuous pressure,
 persistent path identity, analytic curves or automatic joined cursive.

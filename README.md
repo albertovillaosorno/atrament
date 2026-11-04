@@ -1153,6 +1153,10 @@ an independent height edit. This is an explicit destructive edit of an
 unsaved sampled-line glyph, not a new persistent width variant or a
 calibrated variable-pressure stroke. Download a copy before changing it.
 
+A real Firefox/localhost session independently exercises the live pen-width
+SVG preview, accepted and rejected edits, exact Unicode TSV downloads, and
+absence of additional backend requests.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each

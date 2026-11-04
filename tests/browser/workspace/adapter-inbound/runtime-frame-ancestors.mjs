@@ -49,7 +49,7 @@ import { PassThrough } from "node:stream";
 import test from "node:test";
 const { geometricStarter, encodeGlyphLibrary,
     italicizeGlyphStrokes, scaleGlyphHeight,
-    scaleGlyphWidth } = await import(new URL(
+    scaleGlyphWidth, scaleGlyphInk } = await import(new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/"
         + "glyph-strokes.js", import.meta.url,
 ).href);
@@ -12027,6 +12027,171 @@ test(
                 "invalid browser edits cannot overwrite accepted ink");
             assert.deepEqual(requests, baseline,
                 "width editing, previews and downloads stay browser-local");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+
+test(
+    "Firefox ink thickness preview and explicit exact Unicode TSV",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/authored-ink-browser-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const get = (id) => document.getElementById("glyph-" + id);
+                    const change = (id, value) => {
+                        get(id).value = String(value);
+                        get(id).dispatchEvent(new Event("input", {
+                            bubbles: true,
+                        }));
+                    };
+                    const add = (glyph, coords, width) => {
+                        change("character", glyph);
+                        for (const [key, value] of Object.entries({
+                            x1: coords[0], y1: coords[1],
+                            x2: coords[2], y2: coords[3], width,
+                        })) change(key, value);
+                        get("add").click();
+                    };
+                    const nfd = "o\u0301";
+                    const initiallyDisabled = get("scale-ink").disabled;
+                    add(nfd, [175, 800, 850, 1200], 251);
+                    add("ó", [600, 1200, 900, 1550], 250);
+                    add(nfd, [850, 1200, 1100, 1700], 251);
+                    add("∞", [500, 900, 700, 1100], 250);
+                    change("character", nfd);
+                    const enabled = !get("scale-ink").disabled;
+                    const guide = get("ink-preview");
+                    const guideCount = guide.childElementCount;
+                    const guideWidth = guide.querySelector("line")
+                        ?.getAttribute("stroke-width");
+                    const guideStatus = get("ink-preview-status").textContent;
+                    const blobs = [];
+                    const names = [];
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            names.push(this.download);
+                        };
+                        get("save").click();
+                        change("ink-percent", 151);
+                        const invalidGuide = guide.childElementCount;
+                        const invalidStatus = get("ink-preview-status")
+                            .textContent;
+                        get("scale-ink").click();
+                        const refused = get("status").textContent;
+                        get("save").click();
+                        change("ink-percent", 110);
+                        get("scale-ink").click();
+                        const accepted = get("status").textContent;
+                        const afterPreview = guide.querySelector("line")
+                            ?.getAttribute("stroke-width");
+                        get("save").click();
+                        change("ink-percent", 150);
+                        const clippedGuide = guide.childElementCount;
+                        const clippedStatus = get("ink-preview-status")
+                            .textContent;
+                        get("scale-ink").click();
+                        const clipped = get("status").textContent;
+                        get("save").click();
+                        change("character", "ñ");
+                        const missingDisabled = get("scale-ink").disabled;
+                        return JSON.stringify({
+                            initiallyDisabled, enabled, guideCount,
+                            guideWidth, guideStatus, invalidGuide,
+                            invalidStatus,
+                            refused, accepted, afterPreview, clippedGuide,
+                            clippedStatus, clipped, missingDisabled,
+                            names, types: blobs.map((blob) => blob.type),
+                            files: await Promise.all(blobs.map((blob) =>
+                                blob.text())),
+                        });
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const result = JSON.parse(response.result.value);
+            assert.equal(result.initiallyDisabled, true);
+            assert.equal(result.enabled, true);
+            assert.equal(result.missingDisabled, true);
+            assert.equal(result.guideCount, 2);
+            assert.equal(result.guideWidth, "276");
+            assert.match(result.guideStatus,
+                /preview only, draft unchanged/);
+            assert.equal(result.invalidGuide, 0);
+            assert.match(result.invalidStatus, /Ink percent/);
+            assert.match(result.refused, /Ink percent/);
+            assert.match(result.accepted,
+                /Resized all authored ó pen thickness; unsaved/);
+            assert.equal(result.afterPreview, "304",
+                "read-only guide recomputes after a valid ink edit");
+            assert.equal(result.clippedGuide, 0);
+            assert.match(result.clippedStatus, /Scaled ink and pen clip/);
+            assert.match(result.clipped, /Scaled ink and pen clip/);
+            assert.deepEqual(result.names,
+                Array(4).fill("my-glyph-strokes.tsv"));
+            assert.deepEqual(result.types,
+                Array(4).fill("text/tab-separated-values"));
+            const nfd = "o\u0301";
+            const source = [
+                { grapheme: nfd, x1: 175, y1: 800,
+                    x2: 850, y2: 1200, width: 251, color: "#243647" },
+                { grapheme: "ó", x1: 600, y1: 1200,
+                    x2: 900, y2: 1550, width: 250, color: "#243647" },
+                { grapheme: nfd, x1: 850, y1: 1200,
+                    x2: 1100, y2: 1700, width: 251, color: "#243647" },
+                { grapheme: "∞", x1: 500, y1: 900,
+                    x2: 700, y2: 1100, width: 250, color: "#243647" },
+            ];
+            const original = encodeGlyphLibrary(source);
+            const transformed = encodeGlyphLibrary(
+                scaleGlyphInk(source, nfd, 110));
+            assert.deepEqual(result.files,
+                [original, original, transformed, transformed],
+                "refused browser edits cannot overwrite accepted ink");
+            assert.deepEqual(requests, baseline,
+                "ink edits and downloads make no extra backend requests");
         } finally {
             bidi?.close();
             await closeFixtureServer(server);
