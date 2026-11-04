@@ -4321,6 +4321,7 @@ test(
                 requests.some((request) => request.startsWith("/api/")),
                 false,
             );
+            // Requests may arrive in any order; only their exact set matters.
             assert.deepEqual([...requests].sort(), [
                 "/",
                 "/generated/handwriting-profile.js",
@@ -4333,7 +4334,7 @@ test(
                 "/generated/session-fragment.js",
                 "/generated/session-handshake.js",
                 "/workspace.css",
-            ]);
+            ].sort());
         } finally {
             bidi?.close();
             await closeFixtureServer(server);
