@@ -1535,6 +1535,26 @@ its 32-form TSV download as exact Rust PDF/PNG ink without backend writes.
 These sampled manual curves do not constitute native analytic PDF paths,
 a complete mathematics font or a semantic notation layout engine.
 
+## Exact membership and nonmembership pen ink (partial) — 2026-11-04
+
+The opt-in math authoring panel now includes separate exact element-of ∈
+and not-element-of ∉ glyphs. Both use a continuous two-quadratic rounded
+E-shaped bow and a separately lifted horizontal crossbar. Nonmembership
+adds a third directed slash; the model does not infer either identity
+from the other, substitute a Unicode fallback or replace authored ink.
+The optional math fill increases from 32 to 34 exact Unicode keys.
+
+Browser tests check sampled 33/34 segment counts, pen-lift boundaries,
+round-trip TSV identity, ideal SVG controls and out-of-cell refusal. The
+Rust profile CLI independently accepts the saved glyphs, audits coverage,
+renders two printed PDF/transparent PNG rows and refuses absent set
+notation without changing the accepted PDF or source TSV. Real Firefox
+also selects both symbols and reopens its downloaded TSV through Rust
+without an implicit backend save.
+
+This is explicit pen geometry, not a mathematical font, automatic
+set-algebra markup or analytic PDF path storage.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

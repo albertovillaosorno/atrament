@@ -580,9 +580,9 @@ function quoteMirror(cx, glyph, p) {
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∧", "∨",
-    "∩", "∪", "∑", "∫",
+    "∩", "∪", "∈", "∉", "∑", "∫",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝"];
-// Extra manually selected marks do not change the 32-glyph math fill.
+// Extra manually selected marks do not change the 34-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"];
@@ -671,6 +671,21 @@ function mathParts(cx, cy, radius, glyph) {
             { from: point(0, 0.6),
                 control: point(0.65, 0.6), to: point(0.65, -0.65) },
         ];
+    // Membership is a continuous sampled E-shaped bow plus a separately
+    // lifted crossbar; nonmembership adds its own diagonal refusal slash.
+    // Neither is inferred from the other exact Unicode identity.
+    if (glyph === "∈" || glyph === "∉") {
+        const parts = [
+            { from: point(0.65, -0.65),
+                control: point(-0.65, -0.65), to: point(-0.65, 0) },
+            { from: point(-0.65, 0),
+                control: point(-0.65, 0.65), to: point(0.65, 0.65) },
+            line(-0.65, 0, 0.55, 0),
+        ];
+        if (glyph === "∉")
+            parts.push(line(-0.85, 0.85, 0.85, -0.85));
+        return parts;
+    }
     if (glyph === "√")
         return [
             line(-0.85, 0.2, -0.5, 0.1), line(-0.5, 0.1, -0.1, 0.8),
