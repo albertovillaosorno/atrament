@@ -2,7 +2,7 @@
 
 ## Status
 
-Partially implemented and fake-spool tested on Linux, November 3, 2026.
+Partially implemented and fake-spool tested on Linux, November 4, 2026.
 No physical printer has been verified, and ATR-P5-012 remains open.
 
 ## Purpose
@@ -82,16 +82,26 @@ refuse before any print submission.
 
 The PDF is read through Atrament's symlink-refusing Linux selected-file
 opener and exact bounded reader. Missing, nonregular, symlinked, changing
-or larger-than-24,000,000-byte inputs refuse. A selected PDF must begin
+or larger-than-24,000,000-byte inputs refuse.
+
+A selected PDF must begin
 with a complete `%PDF-1.0` through `%PDF-1.7` or `%PDF-2.0` version line,
 terminated by LF or CR, and end with `%%EOF` plus optional whitespace.
-Unsupported version numbers, truncated headers and extra characters before
-the first line break refuse without contacting CUPS.
+It must also have a terminal decimal `startxref` locator pointing into the
+source to an `xref` table or a plausible PDF 1.5+ indirect `/Type /XRef`
+stream header.
 
-The framing check is intentionally not a full PDF grammar or security
-validator. Operators should print PDFs produced by the native Rust exporter
-and review their content first. Missing `/usr/bin/lp` or a failing CUPS
-process returns an error instead of claiming a successful submission.
+Missing, malformed, out-of-bounds or repointed locators,
+non-xref indirect objects, unsupported version numbers and truncated headers
+refuse without contacting CUPS. The last cross-reference section is checked
+for framing; earlier incremental updates are not decoded.
+
+The framing check is intentionally not a full PDF grammar, cross-reference
+parser or security validator. Some unusual or nonconforming external PDF
+writers may need a reviewed re-export before printing. Operators should print
+PDFs produced by the native Rust exporter and review their content first.
+Missing `/usr/bin/lp` or a failing CUPS process returns an error instead of
+claiming a successful submission.
 
 ## Verification
 
@@ -103,9 +113,10 @@ cargo clippy --offline -p atrament_notebook_paper_cli --lib --bins -- \
   -D warnings
 ```
 
-Four focused Rust tests use a real two-page, preprinted native PDF,
-including FIPS SHA-256 known-answer, malformed digest, changed-valid-PDF
-and unsupported PDF-version refusals before the fake CUPS transport starts.
+Five focused Rust tests use a real two-page, preprinted native PDF,
+including SHA-256 known-answer, malformed digest, changed-valid-PDF,
+unsupported PDF versions and forged cross-reference trailer refusals before
+the fake CUPS transport starts.
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.

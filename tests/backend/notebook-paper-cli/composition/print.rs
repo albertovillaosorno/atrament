@@ -253,6 +253,84 @@ fn print_admits_real_two_page_pdf_and_refuses_bad_sources() {
 
 #[cfg(unix)]
 #[test]
+fn fake_pdf_trailers_and_retargeted_xrefs_cannot_reach_a_printer() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    let bytes = real_pdf();
+    let xref_marker = b"startxref\n";
+    let locator = bytes.windows(xref_marker.len())
+        .rposition(|window| window == xref_marker)
+        .expect("native vector PDF has an xref locator");
+    let number_start = locator.checked_add(xref_marker.len())
+        .expect("locator index within input");
+    let number_end = number_start.checked_add(bytes.get(number_start..)
+        .expect("digits follow native locator").iter()
+        .position(|byte| *byte == b'\n').expect("xref digit line"))
+        .expect("digit line end within input");
+    let rewritten_offset = |replacement: &[u8]| {
+        [bytes.get(..number_start).expect("locator prefix"), replacement,
+            bytes.get(number_end..).expect("locator suffix")].concat()
+    };
+    // The old admission logic accepted the first four of these inputs:
+    // they have a supported header and terminal EOF, but no usable xref.
+    let bad_sources = [
+        b"%PDF-1.7\n%%EOF\n".to_vec(),
+        b"%PDF-1.7\nstartxref\n0\n%%EOF\n".to_vec(),
+        b"%PDF-1.7\nxref\nstartxref\n99999\n%%EOF\n".to_vec(),
+        b"%PDF-1.7\nxref\nstartxref\nabc\n%%EOF\n".to_vec(),
+        rewritten_offset(b"0"),
+        rewritten_offset(b"999999999999999999999999"),
+        rewritten_offset(b"12junk"),
+    ];
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS fixture");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+    for candidate in bad_sources {
+        fs::write(&pdf, &candidate).expect("write selected candidate");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(),
+            "malformed xref must fail source admission");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "malformed xref must refuse before subprocess launch");
+        assert!(!spooled.exists(), "no spool side effect");
+        assert_eq!(fs::read(&pdf).expect("source unchanged"), candidate);
+    }
+    // PDF 1.5+ may use an indirect cross-reference *stream* rather than
+    // an ASCII xref table; its offset form remains eligible for admission.
+    let stream_prefix = [
+        b"%PDF-1.7\n1 0 obj\n<< /Type /XRef >>\n".as_slice(),
+        b"stream\n\x00\nendstream\nendobj\n".as_slice(),
+    ].concat();
+    let stream_framing = [
+        stream_prefix.as_slice(),
+        format!("startxref\n{}\n%%EOF\n", b"%PDF-1.7\n".len()).as_bytes(),
+    ].concat();
+    assert!(supported_pdf_cross_reference(&stream_framing),
+        "indirect xref-stream locator is an admitted framing form");
+    let ordinary_object = stream_framing.windows(b"/Type /XRef".len())
+        .position(|part| part == b"/Type /XRef")
+        .expect("xref stream dictionary type");
+    let mut wrong_type = stream_framing;
+    let type_value = ordinary_object.checked_add(b"/Type /".len())
+        .expect("dictionary type index");
+    wrong_type.get_mut(type_value..)
+        .and_then(|tail| tail.get_mut(..b"XRef".len()))
+        .expect("four-letter type value").copy_from_slice(b"Page");
+    assert!(!supported_pdf_cross_reference(&wrong_type),
+        "a normal indirect page object is not an xref stream");
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
     use std::os::unix::fs::{PermissionsExt as _, symlink};
 

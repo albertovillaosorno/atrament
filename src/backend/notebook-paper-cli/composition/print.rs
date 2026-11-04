@@ -161,20 +161,97 @@ fn supported_pdf_header(bytes: &[u8]) -> bool {
         && matches!(bytes.get(8), Some(b'\r' | b'\n'))
 }
 
+// This is a bounded cross-reference *framing* check, not a PDF parser.
+// A valid PDF trailer has a numeric startxref pointer to either an xref
+// table or an indirect xref-stream object. A header plus a forged %%EOF
+// alone must not reach a printer, even when it looks like a PDF file.
+fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
+    let Some(before_eof) = bytes.trim_ascii_end().strip_suffix(b"%%EOF")
+    else {
+        return false;
+    };
+    if !matches!(before_eof.last(), Some(b'\r' | b'\n')) {
+        return false;
+    }
+    let Some(marker) = before_eof.windows(b"startxref".len())
+        .rposition(|part| part == b"startxref")
+    else {
+        return false;
+    };
+    let Some(before_marker) = marker.checked_sub(1) else {
+        return false;
+    };
+    if !matches!(before_eof.get(before_marker), Some(b'\r' | b'\n')) {
+        return false;
+    }
+    let Some(number_start) = marker.checked_add(b"startxref".len())
+    else {
+        return false;
+    };
+    let Some(number_line) = before_eof.get(number_start..)
+        .and_then(|tail| tail.strip_prefix(b"\r\n")
+            .or_else(|| tail.strip_prefix(b"\n"))
+            .or_else(|| tail.strip_prefix(b"\r")))
+    else {
+        return false;
+    };
+    let number = number_line.trim_ascii();
+    if number.is_empty() || !number.iter().all(u8::is_ascii_digit) {
+        return false;
+    }
+    let Some(offset) = str::from_utf8(number).ok()
+        .and_then(|digits| digits.parse::<usize>().ok())
+    else {
+        return false;
+    };
+    let Some(target) = bytes.get(offset..marker) else {
+        return false;
+    };
+    if target.starts_with(b"xref")
+        && target.get(4).is_some_and(u8::is_ascii_whitespace)
+    {
+        return true;
+    }
+    // PDF 1.5+ can point at an xref-stream indirect object instead.
+    // Check its nearby dictionary type before the stream body, without
+    // assuming that every indirect object is a cross-reference object.
+    let Some(prefix) = target.get(..target.len().min(16_384)) else {
+        return false;
+    };
+    let mut words = prefix.split(u8::is_ascii_whitespace)
+        .filter(|word| !word.is_empty());
+    if !matches!((words.next(), words.next(), words.next()),
+        (Some(object), Some(generation), Some(b"obj"))
+            if !object.is_empty() && object.iter().all(u8::is_ascii_digit)
+                && !generation.is_empty()
+                && generation.iter().all(u8::is_ascii_digit)) {
+        return false;
+    }
+    let Some(stream) = prefix.windows(b"stream".len())
+        .position(|part| part == b"stream")
+    else {
+        return false;
+    };
+    let Some(dictionary) = prefix.get(..stream) else {
+        return false;
+    };
+    dictionary.windows(b"/Type".len())
+        .position(|part| part == b"/Type")
+        .and_then(|index| index.checked_add(b"/Type".len()))
+        .and_then(|start| dictionary.get(start..))
+        .is_some_and(|tail| tail.trim_ascii_start().starts_with(b"/XRef"))
+}
+
 fn selected_pdf(path: &Path) -> Result<Vec<u8>, String> {
     let file = open_selected_profile_file(path)
         .map_err(|error| format!("cannot open selected PDF: {error:?}"))?;
     let source = read_bounded_profile_file(file, MAX_PAPER_OUTPUT_BYTES)
         .map_err(|error| format!("cannot read bounded PDF: {error:?}"))?;
     let bytes = source.bytes();
-    let end = bytes.iter().rposition(|byte| !byte.is_ascii_whitespace());
-    let has_eof = end
-        .and_then(|index| bytes.get(..=index))
-        .is_some_and(|prefix| prefix.ends_with(b"%%EOF"));
-    if !has_eof || !supported_pdf_header(bytes) {
+    if !supported_pdf_header(bytes) || !supported_pdf_cross_reference(bytes) {
         return Err(concat!(
-            "selected PDF needs a supported version header ",
-            "and terminal %%EOF",
+            "selected PDF needs a supported version header, ",
+            "cross-reference startxref and terminal %%EOF",
         ).into());
     }
     Ok(bytes.to_vec())
