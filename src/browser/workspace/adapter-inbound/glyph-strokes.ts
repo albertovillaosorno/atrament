@@ -1145,6 +1145,57 @@ export function scaleGlyphWidth(
     return candidate;
 }
 
+// Clockwise rotation in page coordinates (positive Y points down).
+// Rounded directed endpoints and full pen-radius clearance match native CLI.
+export function rotateGlyphStrokes(
+    source: Stroke[], grapheme: string, degrees: number,
+    pivotX: number, pivotY: number,
+): Stroke[] {
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Glyph rotation requires one exact visible glyph");
+    }
+    if (!Number.isSafeInteger(degrees) || Math.abs(degrees) > 20
+        || !Number.isSafeInteger(pivotX) || pivotX < 0 || pivotX > 3500
+        || !Number.isSafeInteger(pivotY) || pivotY < 0 || pivotY > 4500) {
+        throw new Error("Rotation requires -20..20° and bounded X/Y pivot");
+    }
+    const radians = degrees * Math.PI / 180;
+    const sin = Math.sin(radians);
+    const cos = Math.cos(radians);
+    let found = false;
+    const candidate = source.map((line) => {
+        if (line.grapheme !== grapheme) return line;
+        found = true;
+        const stroke = validateStroke(line);
+        if (degrees === 0) return stroke;
+        const rotate = (x: number, y: number): Point => {
+            const relativeX = x - pivotX;
+            const relativeY = y - pivotY;
+            const nextX = Math.round(pivotX + cos * relativeX
+                - sin * relativeY);
+            const nextY = Math.round(pivotY + sin * relativeX
+                + cos * relativeY);
+            if (nextX * 2 < stroke.width
+                || nextX * 2 > 7000 - stroke.width
+                || nextY * 2 < stroke.width
+                || nextY * 2 > 9000 - stroke.width) {
+                throw new Error("Rotated pen contour clips glyph cell");
+            }
+            return { x: nextX, y: nextY };
+        };
+        const start = rotate(stroke.x1, stroke.y1);
+        const end = rotate(stroke.x2, stroke.y2);
+        if (start.x === end.x && start.y === end.y) {
+            throw new Error("Glyph rotation collapses a pen segment");
+        }
+        return validateStroke({ ...stroke, x1: start.x, y1: start.y,
+            x2: end.x, y2: end.y });
+    });
+    if (!found) throw new Error("Selected glyph has no authored ink");
+    encodeGlyphLibrary(candidate);
+    return candidate;
+}
+
 // Move the entire caller-authored glyph without changing its geometry,
 // pen order or neighboring exact Unicode records. Zero offset is identity.
 export function translateGlyphStrokes(
@@ -1922,6 +1973,15 @@ export function createGlyphStrokeEditor(): {
     const widthPreview = required<SVGSVGElement>("glyph-width-preview");
     const widthPreviewStatus =
         required<HTMLElement>("glyph-width-preview-status");
+    const rotateAngle = required<HTMLInputElement>("glyph-rotate-angle");
+    const rotatePivotX =
+        required<HTMLInputElement>("glyph-rotate-pivot-x");
+    const rotatePivotY =
+        required<HTMLInputElement>("glyph-rotate-pivot-y");
+    const rotateGlyph = required<HTMLButtonElement>("glyph-rotate-all");
+    const rotatePreview = required<SVGSVGElement>("glyph-rotate-preview");
+    const rotatePreviewStatus =
+        required<HTMLElement>("glyph-rotate-preview-status");
     const moveX = required<HTMLInputElement>("glyph-move-x");
     const moveY = required<HTMLInputElement>("glyph-move-y");
     const moveGlyph = required<HTMLButtonElement>("glyph-move-all");
@@ -1999,6 +2059,7 @@ export function createGlyphStrokeEditor(): {
         heightPercent, heightBaseline, scaleHeight,
         widthPercent, widthAnchor, scaleWidth,
         inkPercent, scaleInk, moveX, moveY, moveGlyph,
+        rotateAngle, rotatePivotX, rotatePivotY, rotateGlyph,
         undoTransform, redoTransform, variationSeed,
         variationSample, variationDownload,
         ...Object.values(variationControls),
@@ -2023,7 +2084,8 @@ export function createGlyphStrokeEditor(): {
     let downloadUrl: string | null = null;
     // One session-only recovery step for a selected whole-glyph transform.
     // Exact TSV snapshots prevent any later ink edit from being overwritten.
-    type TransformKind = "slant" | "height" | "width" | "ink" | "move";
+    type TransformKind = "slant" | "height" | "width" | "ink"
+        | "move" | "rotation";
     let transformHistory: {
         before: string; after: string;
         side: "before" | "after"; grapheme: string;
@@ -2606,6 +2668,50 @@ export function createGlyphStrokeEditor(): {
             inkPreviewStatus.textContent = String(error);
         }
     };
+    const renderRotatePreview = (): void => {
+        rotatePreview.replaceChildren();
+        if (!active) {
+            rotatePreviewStatus.textContent =
+                "Requires a compatible backend session";
+            return;
+        }
+        const target = character.value;
+        const authored = strokes.filter((item) =>
+            item.grapheme === target);
+        if (authored.length === 0) {
+            rotatePreviewStatus.textContent =
+                "Author this exact glyph before previewing rotation";
+            return;
+        }
+        try {
+            if (rotateAngle.value === "" || rotatePivotX.value === ""
+                || rotatePivotY.value === "") {
+                throw new Error("Choose angle and both rotation pivots");
+            }
+            if (authored.length > 128) {
+                throw new Error("Preview limited to 128 authored segments");
+            }
+            const candidate = rotateGlyphStrokes(strokes, target,
+                Number(rotateAngle.value), Number(rotatePivotX.value),
+                Number(rotatePivotY.value));
+            const lines = candidate.filter((item) =>
+                item.grapheme === target).map((item) => {
+                const line = document.createElementNS(SVG_NS, "line");
+                for (const axis of ["x1", "y1", "x2", "y2"] as const) {
+                    line.setAttribute(axis, String(item[axis]));
+                }
+                line.setAttribute("stroke", item.color);
+                line.setAttribute("stroke-width", String(item.width));
+                line.setAttribute("stroke-linecap", "round");
+                return line;
+            });
+            rotatePreview.replaceChildren(...lines);
+            rotatePreviewStatus.textContent = `${lines.length} proposed `
+                + "rotated segments; preview only, draft unchanged";
+        } catch (error) {
+            rotatePreviewStatus.textContent = String(error);
+        }
+    };
     const renderMovePreview = (): void => {
         movePreview.replaceChildren();
         if (!active) {
@@ -2734,6 +2840,8 @@ export function createGlyphStrokeEditor(): {
             || drawing !== null;
         moveGlyph.disabled = !active || shown.length === 0
             || drawing !== null;
+        rotateGlyph.disabled = !active || shown.length === 0
+            || drawing !== null;
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
         reverse.disabled = !active || selectedIndex === null;
@@ -2815,6 +2923,7 @@ export function createGlyphStrokeEditor(): {
         renderWidthPreview();
         renderInkPreview();
         renderMovePreview();
+        renderRotatePreview();
         const label = `${shown.length} strokes for selected glyph`;
         preview.setAttribute("aria-label", label);
         renderVariation();
@@ -2850,6 +2959,10 @@ export function createGlyphStrokeEditor(): {
     for (const control of [widthPercent, widthAnchor]) {
         control.addEventListener("input", renderWidthPreview);
         control.addEventListener("change", renderWidthPreview);
+    }
+    for (const control of [rotateAngle, rotatePivotX, rotatePivotY]) {
+        control.addEventListener("input", renderRotatePreview);
+        control.addEventListener("change", renderRotatePreview);
     }
     for (const control of [moveX, moveY]) {
         control.addEventListener("input", renderMovePreview);
@@ -3096,6 +3209,26 @@ export function createGlyphStrokeEditor(): {
                 Number(widthPercent.value), Number(widthAnchor.value));
             applyGlyphTransform(next, target, "width");
             message(`Resized all authored ${target} width; unsaved`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    rotateGlyph.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the pen trace before rotation");
+            }
+            if (rotateAngle.value === "" || rotatePivotX.value === ""
+                || rotatePivotY.value === "") {
+                throw new Error("Choose angle and both rotation pivots");
+            }
+            const target = character.value;
+            const next = rotateGlyphStrokes(strokes, target,
+                Number(rotateAngle.value), Number(rotatePivotX.value),
+                Number(rotatePivotY.value));
+            applyGlyphTransform(next, target, "rotation");
+            message(`Rotated all authored ${target} strokes; unsaved`);
         } catch (error) {
             message(String(error));
         }

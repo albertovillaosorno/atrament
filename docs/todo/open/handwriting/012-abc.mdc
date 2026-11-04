@@ -911,6 +911,25 @@ mock browser UI.
 Position control does not persist an analytic primitive, named variant,
 auto-diacritic anchors or joined cursive. Full P1 coverage remains open.
 
+## Per-glyph signed rotation (partial) — 2026-11-04
+
+The native `glyphs --rotate-glyph GRAPHEME DEG X_PIVOT Y_PIVOT` and browser
+editor offer a bounded -20° to +20° clockwise rotation of every path in
+one exact authored glyph. Both use caller-selected integer X/Y anchors,
+round pen-cap clearance within the 3500 × 4500 µm cell, and explicit
+rejection of collapsed segments or invalid parameters before changing ink.
+Other Unicode forms, path direction, pen order, pigment and widths remain
+unchanged. The 0° identity preserves one-step recovery history in the UI.
+
+The read-only browser SVG proposal precedes an explicit Apply; Download is
+always a separate action. Focused tests cover signed angles, boundary
+refusals, exact NFC/NFD separation, pen connections, identity, 4,096-stroke
+libraries and complete TSV undo/redo. An independent physical integration
+compares Rust-authored and browser-authored TSV/PDF/transparent PNG output.
+
+Rotation persists the rounded stroke coordinates, not an editable parametric
+rotation object or independent cursive style. P1-012 remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

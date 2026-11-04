@@ -6912,3 +6912,59 @@ fn native_whole_glyph_translation_preserves_paths_and_refuses_clipping() {
     fs::remove_file(source).expect("remove owned source");
     fs::remove_file(output).expect("remove owned output");
 }
+
+#[test]
+fn native_whole_glyph_rotation_is_bounded_and_preserves_exact_identity() {
+    let nfd = "o\u{301}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "450", "1000", "850", "1600",
+        "251", "#243647",
+        "--glyph-stroke", "ó", "600", "1200", "900", "1550",
+        "250", "#112233",
+        "--glyph-stroke", nfd, "850", "1600", "1300", "2200",
+        "251", "#243647",
+    ])).expect("source admitted").expect("TSV");
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    fs::write(&source, &original).expect("owned original");
+    fs::write(&output, b"prior approved TSV").expect("sentinel");
+    let source_name = source.to_str().expect("source path");
+    let output_name = output.to_str().expect("output path");
+    let identity = execute_glyph_library(&args(&[
+        "--profile", source_name, "--rotate-glyph", nfd, "0", "0", "0",
+    ])).expect("zero admitted").expect("TSV");
+    assert_eq!(identity, original);
+    let rotated = execute_glyph_library(&args(&[
+        "--profile", source_name, "--rotate-glyph",
+        nfd, "10", "1750", "2250",
+    ])).expect("rotation admitted").expect("TSV");
+    assert_ne!(rotated, original);
+    assert!(String::from_utf8_lossy(&rotated)
+        .contains("ó\t600\t1200\t900\t1550\t250\t#112233"));
+    let inspector = execute_glyph_library(&args(&[
+        "--profile", source_name, "--rotate-glyph",
+        nfd, "10", "1750", "2250", "--inspect-paths", nfd,
+    ])).expect("inspector").expect("report");
+    assert!(String::from_utf8_lossy(&inspector)
+        .contains("Strokes: 2\nPaths: 1\nPen lifts: 0"));
+    for (glyph, angle, x, y) in [
+        (nfd, "21", "1750", "2250"),
+        (nfd, "-21", "1750", "2250"),
+        (nfd, "1.5", "1750", "2250"),
+        (nfd, "10", "3501", "2250"),
+        (nfd, "10", "1750", "4501"),
+        (nfd, "20", "0", "0"),
+        ("ñ", "10", "1750", "2250"),
+        ("ab", "10", "1750", "2250"),
+    ] {
+        assert!(execute_glyph_library(&args(&[
+            "--profile", source_name, "--rotate-glyph",
+            glyph, angle, x, y, "--output", output_name, "--replace",
+        ])).is_err(), "{glyph} {angle} {x} {y}");
+        assert_eq!(fs::read(&output).expect("sentinel remains"),
+            b"prior approved TSV");
+    }
+    assert_eq!(fs::read(&source).expect("original stays"), original);
+    fs::remove_file(source).expect("cleanup source");
+    fs::remove_file(output).expect("cleanup destination");
+}

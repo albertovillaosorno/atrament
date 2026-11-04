@@ -891,6 +891,7 @@ impl GlyphOverlay {
         match flag {
             "--copy-glyph" => self.copy_glyph_option(iter)?,
             "--shear-glyph" => self.shear_glyph_option(iter)?,
+            "--rotate-glyph" => self.rotate_glyph_option(iter)?,
             "--scale-glyph-height" => self.scale_glyph_height_option(iter)?,
             "--scale-glyph-width" => self.scale_glyph_width_option(iter)?,
             "--scale-glyph-ink" => self.scale_glyph_ink_option(iter)?,
@@ -1088,6 +1089,85 @@ impl GlyphOverlay {
             .ok_or("stroke index outside library")?;
         swap(&mut shape.start_um, &mut shape.end_um);
         Ok(())
+    }
+
+    /// Rotate all ordered segments of an exact glyph clockwise in physical
+    /// page coordinates, using browser-compatible integer rounding.
+    /// Refuse the entire transformation before modifying any canonical ink.
+    #[expect(clippy::suboptimal_flops, reason =
+        "match browser angle-to-radians arithmetic before trig")]
+    pub(super) fn rotate_glyph(
+        &mut self, grapheme: &str, degrees: i32,
+        pivot_x: u32, pivot_y: u32,
+    ) -> Result<(), String> {
+        if degrees.unsigned_abs() > 20 || pivot_x > 3500
+            || pivot_y > 4500 {
+            return Err("glyph rotation or pivot outside native bounds".into());
+        }
+        let positions = self.matching_stroke_positions(grapheme)?;
+        if degrees == 0i32 { return Ok(()); }
+        let radians = f64::from(degrees) * PI / 180.0f64;
+        let (sin, cos) = radians.sin_cos();
+        let mut revised = self.strokes.clone();
+        for position in positions {
+            let stroke = revised.get_mut(position)
+                .ok_or("glyph stroke outside library")?;
+            let rotate = |(x, y): (u32, u32)|
+                -> Result<(u32, u32), String> {
+                let relative_x = f64::from(x) - f64::from(pivot_x);
+                let relative_y = f64::from(y) - f64::from(pivot_y);
+                let next_x = GlyphVariation::round_js(
+                    f64::from(pivot_x) + cos * relative_x
+                        - sin * relative_y,
+                )?;
+                let next_y = GlyphVariation::round_js(
+                    f64::from(pivot_y) + sin * relative_x
+                        + cos * relative_y,
+                )?;
+                let pen = i64::from(stroke.width_um);
+                let check = |value: i32, max: i64| -> Result<u32, String> {
+                    let twice = i64::from(value).checked_mul(2)
+                        .ok_or("rotated pen edge overflow")?;
+                    let upper = max.checked_mul(2)
+                        .and_then(|limit| limit.checked_sub(pen))
+                        .ok_or("rotated pen limit overflow")?;
+                    if twice < pen || twice > upper {
+                        return Err(
+                            "rotated pen contour clips glyph cell".into()
+                        );
+                    }
+                    u32::try_from(value)
+                        .map_err(|_error| {
+                            "rotated coordinate out of bounds".into()
+                        })
+                };
+                Ok((check(next_x, 3500)?, check(next_y, 4500)?))
+            };
+            let start = rotate(stroke.start_um)?;
+            let end = rotate(stroke.end_um)?;
+            if start == end {
+                return Err("glyph rotation collapses a pen segment".into());
+            }
+            stroke.start_um = start;
+            stroke.end_um = end;
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(super) fn rotate_glyph_option(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let grapheme = iter.next()
+            .ok_or("--rotate-glyph requires an exact grapheme")?;
+        let degrees = next_signed_path_offset(iter, "rotation angle", 20)?;
+        let pivot_x = next_integer(iter, "rotation X pivot", 0, 3500)?;
+        let pivot_y = next_integer(iter, "rotation Y pivot", 0, 4500)?;
+        self.rotate_glyph(grapheme, degrees, pivot_x, pivot_y)
     }
 
     /// Choose a new first segment of a closed candidate pen loop without

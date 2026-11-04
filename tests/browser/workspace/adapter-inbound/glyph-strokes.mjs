@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
-    scaleGlyphInk, translateGlyphStrokes,
+    scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
     composeAccentedGlyph, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
@@ -389,6 +389,9 @@ function mountEditor() {
         "glyph-width-preview-status",
         "glyph-ink-percent", "glyph-scale-ink", "glyph-ink-preview",
         "glyph-ink-preview-status",
+        "glyph-rotate-angle", "glyph-rotate-pivot-x",
+        "glyph-rotate-pivot-y", "glyph-rotate-all",
+        "glyph-rotate-preview", "glyph-rotate-preview-status",
         "glyph-move-x", "glyph-move-y", "glyph-move-all",
         "glyph-move-preview", "glyph-move-preview-status",
         "glyph-ideal-preview", "glyph-ideal-geometry",
@@ -428,6 +431,9 @@ function mountEditor() {
     get("width-percent").value = "110";
     get("width-anchor").value = "1750";
     get("ink-percent").value = "110";
+    get("rotate-angle").value = "0";
+    get("rotate-pivot-x").value = "1750";
+    get("rotate-pivot-y").value = "2250";
     get("move-x").value = "0";
     get("move-y").value = "0";
     get("path-dx").value = "0";
@@ -5170,6 +5176,115 @@ test("whole-glyph position preview, apply and exact one-step recovery",
         editor.reset();
         assert.equal(preview.children.length, 0);
         assert.match(status.textContent, /Requires a compatible backend/);
+    } finally {
+        ui.restore();
+    }
+});
+
+
+test("whole-glyph rotation preserves directed exact Unicode ink", () => {
+    const nfd = "o\u0301";
+    const source = [
+        { ...stroke(nfd), x1: 450, y1: 1000, x2: 850, y2: 1600,
+            width: 251 },
+        { ...stroke("ó"), x1: 600, y1: 1200, x2: 900, y2: 1550 },
+        { ...stroke(nfd), x1: 850, y1: 1600, x2: 1300, y2: 2200,
+            width: 251 },
+        { ...stroke("∞"), x1: 500, y1: 900, x2: 700, y2: 1100 },
+    ];
+    const original = structuredClone(source);
+    for (const angle of [-10, 0, 10, 20]) {
+        const rotated = rotateGlyphStrokes(source, nfd,
+            angle, 1750, 2250);
+        assert.equal(rotated.length, 4);
+        assert.equal(rotated[2].x1, rotated[0].x2);
+        assert.equal(rotated[2].y1, rotated[0].y2);
+        assert.deepEqual(rotated[1], source[1]);
+        assert.deepEqual(rotated[3], source[3]);
+    }
+    assert.deepEqual(rotateGlyphStrokes(source, nfd, 0, 0, 0), source);
+    for (const [glyph, angle, x, y] of [
+        [nfd, 21, 1750, 2250], [nfd, -21, 1750, 2250],
+        [nfd, 1.5, 1750, 2250], [nfd, 10, 3501, 2250],
+        [nfd, 10, 1750, 4501], [nfd, 20, 0, 0],
+        ["ñ", 10, 1750, 2250], ["ab", 10, 1750, 2250],
+    ]) {
+        assert.throws(() => rotateGlyphStrokes(source,
+            glyph, angle, x, y));
+    }
+    assert.deepEqual(source, original);
+    const full = Array.from({ length: 4096 }, (_, i) => ({
+        ...stroke(nfd), x1: 1200, y1: 1600,
+        x2: 1300 + i % 100, y2: 1700,
+    }));
+    assert.equal(rotateGlyphStrokes(full, nfd,
+        10, 1750, 2250).length, 4096);
+});
+
+test("whole-glyph rotation proposal and one-step undo are session-safe",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const nfd = "o\u0301";
+        const preview = get("rotate-preview");
+        assert.equal(get("rotate-all").disabled, true);
+        editor.start();
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        for (const [key, value] of Object.entries({
+            x1: 450, y1: 1000, x2: 850, y2: 1600, width: 251,
+        })) get(key).value = String(value);
+        get("add").dispatch("click");
+        const original = [{ grapheme: nfd, x1: 450, y1: 1000,
+            x2: 850, y2: 1600, width: 251, color: "#243647" }];
+        assert.equal(get("rotate-all").disabled, false);
+        get("rotate-angle").value = "10";
+        get("rotate-angle").dispatch("input");
+        const proposed = rotateGlyphStrokes(original, nfd,
+            10, 1750, 2250);
+        assert.equal(Number(preview.children[0].attributes.get("x1")),
+            proposed[0].x1);
+        assert.match(get("rotate-preview-status").textContent,
+            /preview only, draft unchanged/);
+        assert.equal(downloads.length, 0);
+        get("rotate-angle").value = "20";
+        get("rotate-angle").dispatch("input");
+        get("rotate-pivot-x").value = "0";
+        get("rotate-pivot-x").dispatch("input");
+        get("rotate-pivot-y").value = "0";
+        get("rotate-pivot-y").dispatch("input");
+        assert.equal(preview.children.length, 0);
+        get("rotate-all").dispatch("click");
+        assert.match(get("status").textContent, /clips glyph cell/);
+        get("rotate-angle").value = "10";
+        get("rotate-pivot-x").value = "1750";
+        get("rotate-pivot-y").value = "2250";
+        get("rotate-all").dispatch("click");
+        assert.match(get("status").textContent, /Rotated all authored/);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(proposed));
+        assert.equal(get("slant-undo").textContent,
+            "Undo last glyph rotation");
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(original));
+        get("slant-redo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(proposed));
+        get("rotate-angle").value = "0";
+        get("rotate-all").dispatch("click");
+        assert.equal(get("slant-undo").disabled, false);
+        get("character").value = "ñ";
+        get("character").dispatch("input");
+        assert.equal(get("rotate-all").disabled, true);
+        editor.reset();
+        assert.equal(preview.children.length, 0);
+        assert.match(get("rotate-preview-status").textContent,
+            /Requires a compatible backend/);
     } finally {
         ui.restore();
     }

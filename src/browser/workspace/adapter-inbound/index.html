@@ -957,6 +957,36 @@
               explicit edit and download. Previews show at most 128
               segments; clipped pens or collapsed lines are refused.
               Save an original before destructive resizing.</p>
+            <label>Rotate authored glyph (clockwise -20° to 20°)
+              <input id="glyph-rotate-angle" type="number" min="-20"
+                max="20" step="1" value="0" disabled>
+            </label>
+            <label>Rotation pivot X (0–3500 µm)
+              <input id="glyph-rotate-pivot-x" type="number" min="0"
+                max="3500" step="1" value="1750" disabled>
+            </label>
+            <label>Rotation pivot Y (0–4500 µm)
+              <input id="glyph-rotate-pivot-y" type="number" min="0"
+                max="4500" step="1" value="2250" disabled>
+            </label>
+            <button id="glyph-rotate-all" type="button" disabled>
+              Rotate all selected glyph strokes (unsaved)
+            </button>
+            <div class="glyph-slant-preview-region">
+              <svg id="glyph-rotate-preview"
+                class="glyph-stroke-preview glyph-stroke-slant-preview"
+                viewBox="0 0 3500 4500" role="img"
+                aria-label="Proposed rotated glyph preview"></svg>
+              <p id="glyph-rotate-preview-status" class="field-help"
+                role="status" aria-live="polite">
+                Author a glyph to preview a rotation.
+              </p>
+            </div>
+            <p class="field-help">Rotation changes every selected glyph
+              path around an explicit pivot. Positive angles turn clockwise
+              on the physical page. Rounded pen caps must remain in the cell;
+              a collapsed segment or clipped contour refuses atomically.
+              The preview never modifies the authored TSV.</p>
             <label>Move entire authored glyph X (signed µm)
               <input id="glyph-move-x" type="number" min="-3500"
                 max="3500" step="1" value="0" disabled>
@@ -1007,8 +1037,8 @@
               or any clipped round pen cap refuses atomically. Download the
               TSV explicitly after applying the adjustment.</p>
             <p class="field-help">Undo and redo recover only the latest
-              accepted whole-glyph slant, height, width, move or ink
-              adjustment.
+              accepted whole-glyph slant, height, width, move, rotation
+              or ink adjustment.
               Exact TSV snapshots keep rounding loss reversible until a
               later edit, import or session reset. This is one step, not
               persistent revision history.</p>

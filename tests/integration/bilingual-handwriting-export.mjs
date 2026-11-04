@@ -12,7 +12,7 @@ import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
     italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
-    scaleGlyphInk, translateGlyphStrokes,
+    scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
     reverseCandidatePath, moveCandidatePath, translateCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath, candidatePenPaths,
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
@@ -1474,6 +1474,84 @@ test('whole-glyph X/Y positioning matches Rust and physical PDF/PNG', () => {
             assert.notEqual(denied.status, 0);
             assert.equal(readFileSync(refusal, 'utf8'),
                 'previous approved TSV');
+            assert.equal(readFileSync(source, 'utf8'), original);
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+
+test('clockwise browser glyph rotation equals Rust TSV and PDF/PNG ink',
+    () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-glyph-rotate-'));
+    try {
+        const nfd = 'o\u0301';
+        const strokes = [
+            { grapheme: nfd, x1: 450, y1: 1000, x2: 850,
+                y2: 1600, width: 251, color: '#243647' },
+            { grapheme: 'ó', x1: 600, y1: 1200, x2: 900,
+                y2: 1550, width: 250, color: '#112233' },
+            { grapheme: nfd, x1: 850, y1: 1600, x2: 1300,
+                y2: 2200, width: 251, color: '#243647' },
+            { grapheme: '∞', x1: 500, y1: 900, x2: 700,
+                y2: 1100, width: 250, color: '#334455' },
+        ];
+        const source = join(dir, 'original.tsv');
+        const target = join(dir, 'native.tsv');
+        const browser = join(dir, 'browser.tsv');
+        const original = encodeGlyphLibrary(strokes);
+        writeFileSync(source, original);
+        for (const degrees of [-10, 10]) {
+            const rotated = rotateGlyphStrokes(strokes, nfd,
+                degrees, 1750, 2250);
+            const expected = encodeGlyphLibrary(rotated);
+            writeFileSync(browser, expected);
+            const result = native('glyphs', '--profile', source,
+                '--rotate-glyph', nfd, String(degrees), '1750', '2250',
+                '--output', target, '--replace');
+            assert.equal(result.status, 0, result.stderr);
+            assert.deepEqual(readFileSync(target), readFileSync(browser),
+                'native and browser rotation use the same rounding');
+            const inspection = native('glyphs', '--profile', target,
+                '--inspect-paths', nfd);
+            assert.equal(inspection.status, 0, inspection.stderr);
+            assert.match(inspection.stdout,
+                /Strokes: 2\nPaths: 1\nPen lifts: 0/);
+            for (const format of ['pdf', 'png']) {
+                const flags = ['--export-paper', format];
+                if (format === 'png') flags.push('--dpi', '72');
+                const actual = join(dir,
+                    `actual-${degrees}.${format}`);
+                const reference = join(dir,
+                    `browser-${degrees}.${format}`);
+                const render = (library, output) => native('notebook',
+                    '--printed-sheet', 'true', '--glyph-file', library,
+                    '--place-text', '1', '30000', '35000', nfd + 'ó',
+                    ...flags, '--output', output);
+                const rust = render(target, actual);
+                const own = render(browser, reference);
+                assert.equal(rust.status, 0, rust.stderr);
+                assert.equal(own.status, 0, own.stderr);
+                assert.deepEqual(readFileSync(actual), readFileSync(reference),
+                    `${degrees} degree ${format} ink is byte-identical`);
+                if (format === 'png') pngHasTransparentCorner(
+                    readFileSync(actual));
+            }
+        }
+        const prior = join(dir, 'prior.tsv');
+        writeFileSync(prior, 'previous accepted ink');
+        for (const [angle, x, y] of [
+            ['21', '1750', '2250'], ['-21', '1750', '2250'],
+            ['1.5', '1750', '2250'], ['10', '3501', '2250'],
+            ['10', '1750', '4501'], ['20', '0', '0'],
+        ]) {
+            const denied = native('glyphs', '--profile', source,
+                '--rotate-glyph', nfd, angle, x, y,
+                '--output', prior, '--replace');
+            assert.notEqual(denied.status, 0);
+            assert.equal(readFileSync(prior, 'utf8'),
+                'previous accepted ink');
             assert.equal(readFileSync(source, 'utf8'), original);
         }
     } finally {
