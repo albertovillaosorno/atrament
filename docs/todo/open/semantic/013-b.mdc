@@ -86,6 +86,19 @@ explicitly authored pen shapes on their own. ASCII-space-only and
 control-break-only sources still refuse; the audit remains read-only and
 does not invent a font or replace a saved glyph library.
 
+## Explicit structural breaks in coverage audits (partial) — 2026-11-04
+
+The native `glyphs --audit-text` and `handwriting --inventory-text`
+commands now reject vertical tab, form feed and U+0085 NEL even within
+otherwise visible text. Those control breaks were previously admitted
+as whitespace, then silently omitted from exact coverage reports, while
+`notebook --place-text` refuses them outright. Both read-only diagnostics
+continue accepting ASCII space, tabs, CR and LF as source structure and
+report exact non-ASCII space glyphs separately. A focused regression
+checks both refusal and the accepted CR/LF/tab control case.
+
+This is input-parity hardening, not general bilingual layout or printed marks.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

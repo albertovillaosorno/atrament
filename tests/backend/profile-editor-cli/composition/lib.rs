@@ -1106,6 +1106,34 @@ fn inventory_cli_reports_exact_unicode_spaces_and_statistics_overrides() {
 }
 
 #[test]
+fn unicode_coverage_audits_reject_nonstructural_control_breaks() {
+    // An otherwise visible source must not conceal control bytes that the
+    // native placed-text compositor refuses. CR/LF/tab are source structure.
+    for control in ["\u{85}", "\u{b}", "\u{c}"] {
+        let text = format!("a{control}b");
+        let glyph = execute_glyph_library(&args(&[
+            "--audit-text", &text,
+        ]));
+        assert!(glyph.is_err(), "glyph audit admitted {text:?}");
+        let inventory = execute_handwriting(&args(&[
+            "--inventory-text", &text,
+        ]));
+        assert!(inventory.is_err(), "inventory admitted {text:?}");
+    }
+    for flag in ["--audit-text", "--inventory-text"] {
+        let result = if flag == "--audit-text" {
+            execute_glyph_library(&args(&[flag, "a\r\nb\tc"]))
+        } else {
+            execute_handwriting(&args(&[flag, "a\r\nb\tc"]))
+        }.expect("CR/LF/tab source structure accepted")
+            .expect("coverage report");
+        let report = String::from_utf8(result).expect("readable report");
+        assert!(report.contains("Distinct visible graphemes: 3"),
+            "{flag}: {report}");
+    }
+}
+
+#[test]
 fn inventory_cli_refuses_unsafe_or_conflicting_requests_without_file_effects() {
     let target = test_path();
     fs::write(&target, b"unchanged").expect("write owned sentinel");
