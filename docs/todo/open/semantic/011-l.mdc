@@ -791,6 +791,23 @@ PNG bytes with plain-text literal rows and explicit Markdown hard breaks,
 including adjacent four-space lines and NFC/NFD ink. This is CLI-only
 physical placement, not persisted Markdown semantics or nested lists.
 
+## Browser Markdown download preserves authored Unicode spaces (partial)
+
+The authenticated browser's explicit source-as-Markdown handoff now follows
+Rust's structural-empty distinction instead of JavaScript `trim()`. ASCII
+spaces, tabs, line endings and an optional initial UTF-8 BOM alone remain
+empty, while U+00A0 nonbreaking space, U+2003 em space, U+2009 thin space and
+U+202F narrow nonbreaking space remain exact authored graphemes. Their bytes
+are not normalized; the Rust CLI still requires corresponding user-authored
+strokes and independently validates imported Markdown before rendering.
+
+A focused browser regression first reproduced refusal of lone U+00A0 and now
+checks all four Unicode spaces, BOM preservation, structural-only refusal and
+UTF-8 byte identity. A separate native Rust CLI smoke exported an actual
+one-page PDF and transparent RGBA PNG from an explicitly authored U+00A0
+stroke. This is a source-download compatibility fix, not live browser
+notebook rendering or a completed semantic document model.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

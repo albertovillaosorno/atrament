@@ -36,7 +36,13 @@ export type MarkdownHandoff =
 // This is an early transport guard, not an admission of Markdown syntax.
 // Rust --flow-markdown-file independently validates all file content.
 export function prepareMarkdownHandoff(text: string): MarkdownHandoff {
-    if (!text.trim()) return { kind: "empty" };
+    // Match Rust's structural blank check, not JS trim(): non-ASCII
+    // spacing such as NBSP/thin space can be exact authored ink glyphs.
+    // A leading UTF-8 BOM is transport metadata, never visible text.
+    const admitted = text.startsWith("\uFEFF") ? text.slice(1) : text;
+    if (!/[^ \t\n\r\u2028\u2029]/u.test(admitted)) {
+        return { kind: "empty" };
+    }
     if (text.length > 4_096) return { kind: "too-large" };
     const utf8 = new TextEncoder().encode(text);
     if (utf8.length > 4_096) return { kind: "too-large" };

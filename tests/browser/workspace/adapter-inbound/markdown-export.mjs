@@ -75,13 +75,28 @@ test("CLI file transport accepts exactly 4096 bytes", () => {
 });
 
 test("blank or lossy Unicode handoff refuses without fallback", () => {
-    for (const source of ["", "\n \t", "\u2003"]) {
+    for (const source of ["", "\n \t", "\uFEFF",
+        "\uFEFF \t\n\r\u2028\u2029"]) {
         assert.deepEqual(prepareMarkdownHandoff(source), { kind: "empty" });
     }
     for (const source of ["a\ud800b", "\udc00", "\ud800\ud800"]) {
         assert.deepEqual(prepareMarkdownHandoff(source), {
             kind: "invalid-unicode",
         });
+    }
+});
+
+test("Unicode spacing authored as ink remains eligible for native CLI",
+    () => {
+    // Rust only treats ASCII spacing and pasted line boundaries as
+    // structure. Other exact space graphemes require authored ink.
+    for (const source of ["\u00A0", "\u2003", "\u2009", "\u202F",
+        "\uFEFF\u00A0", " \u2009\n"]) {
+        const candidate = prepareMarkdownHandoff(source);
+        assert.deepEqual(candidate, {
+            kind: "ready", text: source,
+            bytes: new TextEncoder().encode(source).byteLength,
+        }, `preserve exact Unicode spacing ${JSON.stringify(source)}`);
     }
 });
 
