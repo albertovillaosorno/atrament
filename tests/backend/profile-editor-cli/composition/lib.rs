@@ -2002,6 +2002,111 @@ fn glyph_library_audit_separates_nfc_nfd_math_and_missing_punctuation() {
 }
 
 #[test]
+fn glyph_inspection_preserves_exact_unicode_order_and_ink_direction() {
+    let file = test_path().with_extension("tsv");
+    let path = file.to_str().expect("owned library filename");
+    let template = args(&[
+        "--glyph-stroke", "n\u{303}", "100", "200", "800", "1200",
+        "250", "#112233",
+        "--glyph-stroke", "ñ", "900", "1500", "1000", "2000",
+        "250", "#445566",
+        "--glyph-stroke", "n\u{303}", "800", "1200", "350", "4200",
+        "300", "#AABBCC",
+    ]);
+    let original = execute_glyph_library(&template)
+        .expect("ordered canonical glyphs").expect("TSV bytes");
+    fs::write(&file, &original).expect("owned stroke source");
+    let expected = concat!(
+        "Exact authored stroke sequence (not inferred cursive)\n",
+        "Glyph: \"ñ\" [U+006E U+0303]\n",
+        "Strokes: 2\n",
+        "1: (100, 200) -> (800, 1200) width 250 um color #112233\n",
+        "2: (800, 1200) -> (350, 4200) width 300 um color #AABBCC\n",
+    );
+    let from_disk = execute_glyph_library(&args(&[
+        "--profile", path, "--inspect-glyph", "n\u{303}",
+    ])).expect("inspect loaded NFD glyph").expect("stdout report");
+    assert_eq!(from_disk, expected.as_bytes());
+    let mut inline = template;
+    inline.extend(args(&["--inspect-glyph", "n\u{303}"]));
+    assert_eq!(execute_glyph_library(&inline)
+        .expect("inspect inline geometry").expect("stdout"), from_disk);
+    let nfc = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", path, "--inspect-glyph", "ñ",
+    ])).expect("inspect NFC glyph").expect("report"))
+        .expect("UTF-8 report");
+    assert!(nfc.contains("[U+00F1]"));
+    assert!(nfc.contains("Strokes: 1"));
+    assert!(nfc.contains("1: (900, 1500) -> (1000, 2000)"));
+    assert!(!nfc.contains("(100, 200)"),
+        "NFC and NFD remain independent authored identities");
+    assert_eq!(fs::read(&file).expect("read-only source"), original);
+
+    let pdf = execute_notebook(&args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-file", path, "--place-text", "1", "30000",
+        "45000", "n\u{303}ñ",
+    ])).expect("same authored strokes used for native PDF")
+        .expect("vector PDF");
+    let content = String::from_utf8_lossy(&pdf);
+    let first = content.find("0.067 0.133 0.200 RG")
+        .expect("first NFD pen color");
+    let second = content.find("0.667 0.733 0.800 RG")
+        .expect("second NFD pen color");
+    let third = content.find("0.267 0.333 0.400 RG")
+        .expect("NFC pen color");
+    assert!(first < second && second < third,
+        "native compositing preserves per-glyph segment order");
+    fs::remove_file(file).expect("remove test-owned library");
+}
+
+#[test]
+fn glyph_inspection_is_stdout_only_and_refuses_invalid_selection() {
+    let library = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let name = library.to_str().expect("library filename");
+    let destination = output.to_str().expect("output filename");
+    let source = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "100", "200", "800", "1200",
+        "250", "#112233",
+    ])).expect("original glyph").expect("TSV");
+    fs::write(&library, &source).expect("owned source file");
+    fs::write(&output, b"preserve selected target")
+        .expect("owned sentinel");
+    let invalid = [
+        args(&["--inspect-glyph"]),
+        args(&["--inspect-glyph", "ab"]),
+        args(&["--inspect-glyph", "n\u{303}"]),
+        args(&["--inspect-glyph", " "]),
+        args(&["--inspect-glyph", "\n"]),
+        args(&["--inspect-glyph", ""]),
+        args(&["--inspect-glyph", "ñ", "--inspect-glyph", "ñ"]),
+        args(&["--inspect-glyph", "ñ", "--audit-text", "ñ"]),
+        args(&["--audit-baseline", "--inspect-glyph", "ñ"]),
+        args(&["--inspect-glyph", "ñ", "--replace"]),
+        args(&["--inspect-glyph", "ñ", "--output", destination]),
+    ];
+    for flags in invalid {
+        let mut command = args(&["--profile", name]);
+        command.extend(flags);
+        let rejected = execute_glyph_library(&command);
+        assert!(rejected.is_err(), "{command:?}");
+        assert_eq!(fs::read(&library).expect("source unaffected"), source);
+        assert_eq!(fs::read(&output).expect("target unaffected"),
+            b"preserve selected target");
+    }
+    let rejected = execute_glyph_library(&args(&[
+        "--profile", name, "--inspect-glyph", "ñ",
+        "--output", destination, "--replace",
+    ]));
+    assert!(rejected.is_err(), "inspection never writes");
+    assert_eq!(fs::read(&output).expect("unchanged output"),
+        b"preserve selected target");
+    fs::remove_file(library).expect("remove owned input");
+    fs::remove_file(output).expect("remove owned sentinel");
+}
+
+#[test]
 fn glyph_library_removal_and_reauthoring_updates_pdf_and_png() {
     let library = test_path().with_extension("tsv");
     let path = library.to_str().expect("test library");

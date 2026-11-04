@@ -422,6 +422,48 @@ impl GlyphOverlay {
             || !self.fallbacks.is_empty() || self.variation.is_some()
     }
 
+    /// Show the exact caller-authored order and direction without writing
+    /// a file, inferring joins, normalizing Unicode or sampling variation.
+    pub(super) fn inspect_stroke_order(
+        &self, grapheme: &str,
+    ) -> Result<Vec<u8>, String> {
+        if !is_exact_visible_grapheme(grapheme, UnicodeGraphemeSegmentation) {
+            return Err("inspection requires one exact visible grapheme".into());
+        }
+        let selected = self.strokes.iter()
+            .filter(|stroke| stroke.grapheme == grapheme)
+            .collect::<Vec<_>>();
+        if selected.is_empty() {
+            return Err("no authored strokes for exact glyph inspection".into());
+        }
+        let codepoints = grapheme.chars()
+            .map(|ch| format!("U+{:04X}", u32::from(ch)))
+            .collect::<Vec<_>>().join(" ");
+        let mut output = format!(
+            concat!(
+                "Exact authored stroke sequence (not inferred cursive)\n",
+                "Glyph: \"{}\" [{}]\n",
+                "Strokes: {}\n",
+            ),
+            grapheme.escape_debug(), codepoints, selected.len(),
+        );
+        for (index, stroke) in selected.into_iter().enumerate() {
+            let _written = writeln!(
+                output,
+                concat!(
+                    "{}: ({}, {}) -> ({}, {}) ",
+                    "width {} um color #{:02X}{:02X}{:02X}",
+                ),
+                index.saturating_add(1),
+                stroke.start_um.0, stroke.start_um.1,
+                stroke.end_um.0, stroke.end_um.1,
+                stroke.width_um, stroke.rgb[0], stroke.rgb[1],
+                stroke.rgb[2],
+            );
+        }
+        Ok(output.into_bytes())
+    }
+
     /// Load a reusable exact-Unicode library with tab-separated columns.
     /// Grapheme identities are never implicitly normalized or substituted.
     pub(super) fn load_file_bytes(

@@ -82,7 +82,8 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     | paper [atrament-paper options] \
     | glyphs [--profile strokes.tsv] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
-    [--remove-glyph GRAPHEME] [--audit-text UTF8_TEXT|--audit-baseline] \
+    [--remove-glyph GRAPHEME] \
+    [--audit-text UTF8_TEXT|--audit-baseline|--inspect-glyph GRAPHEME] \
     [--output strokes.tsv [--replace]] \
     | handwriting [--profile ink.json] [--seed U64] \
     [--set-global DIM MIN MAX MEAN MEDIAN DEVIATION] \
@@ -92,6 +93,8 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--output FILE [--replace]]\n\
     Paper is the existing Rust physical-page profile (not a full notebook).\n\
     Handwriting units: micrometres, millidegrees, or parts per thousand.\n\
+    --inspect-glyph prints exact authored stroke order and direction;\n\
+    output is stdout-only and never an inferred cursive pen path.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
     not glyph outlines, available ink shapes, or renderability.\n\
     --preview-glyph reports bounded seeded numerical estimates only; \
@@ -735,6 +738,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let mut output = None;
     let mut audit_text = None;
     let mut audit_baseline = false;
+    let mut inspect_glyph = None;
     let mut replace = false;
     let mut iter = args.iter();
     while let Some(option) = iter.next() {
@@ -774,6 +778,14 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 audit_text = Some(selected.clone());
             }
 
+            "--inspect-glyph" => {
+                if inspect_glyph.is_some() {
+                    return Err("--inspect-glyph may appear only once".into());
+                }
+                inspect_glyph = Some(iter.next()
+                    .ok_or("--inspect-glyph requires an exact grapheme")?
+                    .clone());
+            }
             "--output" => {
                 output = Some(parse_selected_output(
                     &mut iter, output.is_some(),
@@ -791,49 +803,66 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     if replace && output.is_none() {
         return Err("--replace requires --output".into());
     }
+    if let Some(grapheme) = inspect_glyph {
+        if audit_text.is_some() {
+            return Err("--inspect-glyph cannot accompany a glyph audit".into());
+        }
+        if output.is_some() || replace {
+            return Err("--inspect-glyph is stdout-only; omit --output".into());
+        }
+        return glyphs.inspect_stroke_order(&grapheme).map(Some);
+    }
     if let Some(text) = audit_text {
         if output.is_some() || replace {
             return Err("--audit-text is stdout-only; omit --output".into());
         }
-        let mut report = glyphs.audit_text(&text)?;
-        if audit_baseline {
-            let mut label = concat!(
-                "Frozen English/Spanish text baseline; ",
-                "math symbols are separate.\n",
-            ).as_bytes().to_vec();
-            label.append(&mut report);
-            return Ok(Some(label));
-        }
-        return Ok(Some(report));
-
+        return glyph_audit_report(&glyphs, &text, audit_baseline).map(Some);
     }
     let bytes = glyphs.encode_file()?;
-
     if let Some(path) = output {
-        let disposition = if replace {
-            ProfileFileCommitDisposition::ReplaceExisting
-        } else {
-            ProfileFileCommitDisposition::PreserveExisting
-        };
-        let _evidence = commit_profile_file(
-            Path::new(&path),
-            &bytes,
-            MAX_GLYPH_LIBRARY_BYTES,
-            disposition,
-        )
-        .map_err(|error| {
-            if error.may_have_committed() {
-                format!(
-                    "{}: {error:?}",
-                    "glyph save durability unknown; inspect before retry",
-                )
-            } else {
-                format!("glyph library not saved: {error:?}")
-            }
-        })?;
+        save_glyph_library_file(&path, &bytes, replace)?;
         return Ok(None);
     }
     Ok(Some(bytes))
+}
+
+fn glyph_audit_report(
+    glyphs: &GlyphOverlay, text: &str, audit_baseline: bool,
+) -> Result<Vec<u8>, String> {
+    let mut report = glyphs.audit_text(text)?;
+    if audit_baseline {
+        let mut label = concat!(
+            "Frozen English/Spanish text baseline; ",
+            "math symbols are separate.\n",
+        ).as_bytes().to_vec();
+        label.append(&mut report);
+        return Ok(label);
+    }
+    Ok(report)
+}
+
+fn save_glyph_library_file(
+    path: &str, bytes: &[u8], replace: bool,
+) -> Result<(), String> {
+    let disposition = if replace {
+        ProfileFileCommitDisposition::ReplaceExisting
+    } else {
+        ProfileFileCommitDisposition::PreserveExisting
+    };
+    let _evidence = commit_profile_file(
+        Path::new(path), bytes, MAX_GLYPH_LIBRARY_BYTES, disposition,
+    )
+    .map_err(|error| {
+        if error.may_have_committed() {
+            format!(
+                "{}: {error:?}",
+                "glyph save durability unknown; inspect before retry",
+            )
+        } else {
+            format!("glyph library not saved: {error:?}")
+        }
+    })?;
+    Ok(())
 }
 
 fn apply_notebook_edit(

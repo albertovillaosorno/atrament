@@ -787,7 +787,22 @@ audit `∞`, equations or other symbols separately with `--audit-text`.
 
 The audit lists each distinct visible grapheme, its Unicode code points, and
 its actual authored stroke count or missing status; it does not confuse the
-statistical/text baseline with renderable ink. The versioned format
+statistical/text baseline with renderable ink. To verify the actual
+**stroke order, endpoint direction, physical widths and RGB color** for a
+single authored glyph, inspect it without changing its TSV:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyphs.tsv --inspect-glyph 'ñ'
+```
+
+The report numbers the segments in the same order the native PDF compositor
+uses, with original `(start x, start y) -> (end x, end y)` positions in
+micrometres. `ñ` and `ñ` remain different exact Unicode identities, and
+only recorded segments are reported; no cursive joins, pen lifts or stroke
+groups are inferred. Inspection is stdout-only and refuses missing or
+invalid glyphs, conflicting audits and all `--output` selections.
+ The versioned format
 starts with `atrament.glyph-strokes.v1`, followed by one **tab-separated**
 `GRAPHEME X1 Y1 X2 Y2 WIDTH_UM #RRGGBB` record per line (UTF-8, LF).
 It supports 4096 strokes and up to 512 KiB, checks exact grapheme identity

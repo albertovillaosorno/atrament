@@ -205,6 +205,24 @@ cursive and stroke grouping remain unavailable; the CLI variation settings,
 text and page content are not persisted in a saved notebook. A browser
 control still does not directly command native per-occurrence rendering.
 
+## Native exact-Unicode stroke-order inspection (partial) — 2026-11-03
+
+The Rust glyph library CLI now supports stdout-only
+`glyphs --profile glyphs.tsv --inspect-glyph GRAPHEME` to print the exact
+input-sequence segment index, start/end micrometre positions, pen width and
+RGB for a single authored Unicode grapheme. Interleaved glyph records are
+filtered without reordering; precomposed and combining-accent sequences
+remain separate identities. The report does not infer pen lifts, cursive
+joins or continuous geometric paths and cannot write or mutate a file.
+
+Two Rust regressions verify an interleaved NFC/NFD library roundtrip,
+full ordered/directional report parity for inline and saved TSV, actual
+native PDF paint order, and unchanged input/target files when inspection
+receives invalid, duplicate, missing, conflicting or output-selecting
+arguments. This makes the existing browser reordering auditable by the
+native pipeline, not a persisted stroke-group or cursive model. The
+original full handwriting acceptance remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
