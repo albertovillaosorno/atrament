@@ -103,6 +103,22 @@ unchanged through subsequent invalid marker, pagination and glyph refusals.
 This uses real native Rust PDF/PNG/print CLIs but no physical printer. The
 complete saved notebook content and localhost visual journey are still open.
 
+## Browser-saved profile to decorated Markdown export (partial) — 2026-11-04
+
+The real headless Firefox/localhost save-and-reopen journey now passes its
+actual native notebook JSON, saved handwriting statistics and explicitly
+browser-downloaded varied `ó` glyph strokes to one Rust CLI invocation.
+A caller-provided Markdown heading and body render as a single physical PDF
+page with an authored pastel marker band and as a transparent RGBA PNG with
+the same actual marker pigment. An unsupported authored `z` shape refuses
+replacement of the approved PDF, preserving its exact bytes and the
+browser-selected glyph library. The real Firefox-to-native regression passes.
+
+This joins three browser-authored files to native decorated Markdown output.
+It does not persist Markdown in an editable notebook model, paste source into
+the browser workspace, or establish general glyph and photo coverage. The
+full localhost editing journey and P8-009 acceptance remain open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

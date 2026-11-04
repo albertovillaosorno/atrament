@@ -4092,6 +4092,72 @@ test(
                     : bytes.subarray(0, 8).toString("hex"),
                 format === "pdf" ? "%PDF-" : "89504e470d0a1a0a");
             }
+            // Reuse all three actual browser-selected artifacts in one
+            // native decorated Markdown export, not synthetic Node profiles.
+            const decoratedSource = "# óó\n\nó ó  \nóó";
+            const decoratedBase = [
+                "notebook", "--profile", notebookFile,
+                "--handwriting-profile", handwritingFile,
+                "--glyph-file", variationFile,
+                "--heading-style", "marker",
+                "--heading-color", "#F8DE91",
+                "--flow-markdown", decoratedSource,
+            ];
+            const decoratedPdf = path.join(root,
+                "browser-saved-markdown.pdf");
+            const decoratedPng = path.join(root,
+                "browser-saved-markdown.png");
+            for (const [format, output, extra] of [
+                ["pdf", decoratedPdf, ["--pages", "1"]],
+                ["png", decoratedPng, ["--png-page", "1",
+                    "--dpi", "72"]],
+            ]) {
+                const rendered = spawnSync(cli, [
+                    ...decoratedBase, "--export-paper", format,
+                    ...extra, "--output", output,
+                ], { stdio: "pipe", timeout: 20_000 });
+                assert.equal(rendered.status, 0,
+                    `browser-saved profiles render Markdown ${format}`);
+            }
+            const decoratedPdfBytes = fs.readFileSync(decoratedPdf);
+            const decoratedPngBytes = fs.readFileSync(decoratedPng);
+            const pdfInk = decoratedPdfBytes.toString("latin1");
+            assert.match(pdfInk, /^%PDF-1\.4/);
+            assert.match(pdfInk, /\/Count 1\b/);
+            assert.match(pdfInk, /0\.973 0\.871 0\.569 RG/,
+                "browser-saved Markdown must draw an actual marker band");
+            assert.deepEqual(decoratedPngBytes.subarray(0, 8),
+                Buffer.from("89504e470d0a1a0a", "hex"));
+            assert.equal(decoratedPngBytes[25], 6,
+                "native Markdown preview must remain transparent RGBA");
+            const markerChunks = [];
+            for (let offset = 8; offset + 12 <= decoratedPngBytes.length;) {
+                const length = decoratedPngBytes.readUInt32BE(offset);
+                if (decoratedPngBytes.toString("ascii", offset + 4,
+                    offset + 8) === "IDAT") {
+                    markerChunks.push(decoratedPngBytes.subarray(
+                        offset + 8, offset + 8 + length));
+                }
+                offset += length + 12;
+            }
+            assert.ok(markerChunks.length > 0);
+            const markerPixels = inflateSync(Buffer.concat(markerChunks));
+            assert.ok(markerPixels.includes(Buffer.from([248, 222, 145, 255])),
+                "transparent PNG must include real pastel heading pigment");
+            const refusedMarkdown = spawnSync(cli, [
+                ...decoratedBase.slice(0, -2),
+                "--flow-markdown", "# óó\n\nmissing glyph z",
+                "--export-paper", "pdf", "--pages", "1",
+                "--output", decoratedPdf, "--replace",
+            ], { stdio: "pipe", timeout: 20_000 });
+            assert.notEqual(refusedMarkdown.status, 0,
+                "unknown authored shape must refuse Markdown before commit");
+            assert.deepEqual(fs.readFileSync(decoratedPdf),
+                decoratedPdfBytes,
+                "failed Markdown export must preserve approved PDF bytes");
+            assert.equal(fs.readFileSync(variationFile, "utf8"),
+                variationText, "native export never rewrites browser ink");
+
             // Inventory checks exact graphemes without falsely claiming
             // visible strokes or rendering fallback for math symbols.
             const inventory = spawnSync(cli, [
