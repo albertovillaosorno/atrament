@@ -12,7 +12,7 @@ import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
     reverseCandidatePath, moveCandidatePath, translateCandidatePath,
-    candidatePenPaths,
+    rotateClosedCandidatePath, candidatePenPaths,
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -602,6 +602,86 @@ test('browser whole-path translation has native PDF/PNG ink parity', () => {
     }
 });
 
+
+test('browser chosen closed-loop entry matches native TSV and PDF/PNG', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-closed-loop-'));
+    try {
+        const nfd = 'o\u0301';
+        const ink = (grapheme, x1, y1, x2, y2, color = '#243647') =>
+            ({ grapheme, x1, y1, x2, y2, width: 250, color });
+        const a = ink(nfd, 400, 500, 1400, 500);
+        const b = ink(nfd, 1400, 500, 1400, 1500);
+        const c = ink(nfd, 1400, 1500, 400, 1500);
+        const d = ink(nfd, 400, 1500, 400, 500);
+        const accent = ink(nfd, 1700, 2100, 2000, 2400, '#334455');
+        const source = [a, ink('ó', 500, 600, 800, 900), b,
+            ink('∞', 900, 1000, 1200, 1400), c, d, accent];
+        const originalTsv = encodeGlyphLibrary(source);
+        const shifted = rotateClosedCandidatePath(source, nfd, 4).strokes;
+        const desired = encodeGlyphLibrary(shifted);
+        const sourceFile = join(dir, 'source.tsv');
+        const nativeFile = join(dir, 'native.tsv');
+        const refusedFile = join(dir, 'refused.tsv');
+        writeFileSync(sourceFile, originalTsv);
+        writeFileSync(refusedFile, 'preserve existing output');
+        const edited = native('glyphs', '--profile', sourceFile,
+            '--rotate-path', nfd, '1', '3', '--output', nativeFile);
+        assert.equal(edited.status, 0, edited.stderr);
+        assert.equal(readFileSync(nativeFile, 'utf8'), desired,
+            'native pen-start rotation matches browser without normalization');
+        assert.equal(readFileSync(sourceFile, 'utf8'), originalTsv);
+        assert.deepEqual(candidatePenPaths(shifted, nfd).map((path) =>
+            [path.first, path.last, path.start, path.end]), [
+            [1, 4, { x: 1400, y: 1500 }, { x: 1400, y: 1500 }],
+            [5, 5, { x: 1700, y: 2100 }, { x: 2000, y: 2400 }],
+        ]);
+        const inspected = native('glyphs', '--profile', nativeFile,
+            '--inspect-paths', nfd);
+        assert.equal(inspected.status, 0, inspected.stderr);
+        assert.match(inspected.stdout,
+            /Strokes: 5\nPaths: 2\nPen lifts: 1/);
+        assert.match(inspected.stdout,
+            /Path 1: strokes 1\.\.4 \(4 segments\)/);
+        assert.match(inspected.stdout,
+            /\(1400, 1500\) -> \(1400, 1500\)/);
+        const refused = native('glyphs', '--profile', sourceFile,
+            '--set-stroke', nfd, '4', '400', '1500', '600', '600',
+            '250', '#243647', '--rotate-path', nfd, '1', '3',
+            '--output', refusedFile, '--replace');
+        assert.notEqual(refused.status, 0, 'open loop must refuse');
+        assert.match(refused.stderr, /requires a closed pen loop/);
+        assert.equal(readFileSync(refusedFile, 'utf8'),
+            'preserve existing output');
+        assert.equal(readFileSync(sourceFile, 'utf8'), originalTsv);
+        for (const format of ['pdf', 'png']) {
+            const options = ['--export-paper', format];
+            if (format === 'png') options.push('--dpi', '72');
+            const actual = join(dir, 'closed.' + format);
+            const expected = join(dir, 'reference.' + format);
+            const compare = (strokes, output) => native('notebook',
+                '--printed-sheet', 'true', ...strokes,
+                '--place-text', '1', '30000', '45000', nfd,
+                ...options, '--output', output);
+            const inkArgs = shifted.filter((stroke) =>
+                stroke.grapheme === nfd).flatMap((stroke) => [
+                '--glyph-stroke', nfd,
+                String(stroke.x1), String(stroke.y1),
+                String(stroke.x2), String(stroke.y2),
+                String(stroke.width), stroke.color,
+            ]);
+            const output = compare(['--glyph-file', nativeFile], actual);
+            const reference = compare(inkArgs, expected);
+            assert.equal(output.status, 0, output.stderr);
+            assert.equal(reference.status, 0, reference.stderr);
+            assert.deepEqual(readFileSync(actual), readFileSync(expected),
+                'closed-loop new entry has independent physical ' + format
+                + ' parity');
+            if (format === 'png') pngHasTransparentCorner(readFileSync(actual));
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
 
 test('combined pen-path edit script matches native and browser ink', () => {
     const dir = mkdtempSync(join(tmpdir(), 'atrament-path-script-'));

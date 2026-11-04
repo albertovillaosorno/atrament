@@ -878,6 +878,9 @@
             <button id="glyph-reverse-path" type="button" disabled>
               Reverse selected continuous pen path
             </button>
+            <button id="glyph-path-start" type="button" disabled>
+              Start closed pen loop at selected stroke
+            </button>
             <label>Selected path horizontal shift (µm)
               <input id="glyph-path-dx" type="number" min="-3500"
                 max="3500" step="10" value="0" disabled>
@@ -899,6 +902,10 @@
               segments together in micrometres. Enter a signed offset
               for either axis. A zero shift or any clipped pen contour
               is refused without changing the unsaved ink.</p>
+            <p class="field-help">For a closed continuous loop, select a
+              stroke after its current first stroke, then choose Start closed
+              pen loop to change where the pen begins without moving ink.
+              Open paths and single strokes cannot use this action.</p>
             <p class="field-help">Path reversal flips the order and
               direction of every touching segment in the selected path.
               Unrelated strokes and Unicode glyphs keep their positions;

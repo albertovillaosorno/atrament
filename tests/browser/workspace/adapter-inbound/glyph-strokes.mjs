@@ -5,7 +5,7 @@ import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, composeAccentedGlyph, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
-    translateCandidatePath } =
+    rotateClosedCandidatePath, translateCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -381,7 +381,8 @@ function mountEditor() {
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
         "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
-        "glyph-reverse-path", "glyph-path-earlier", "glyph-path-later",
+        "glyph-reverse-path", "glyph-path-start",
+        "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
         "glyph-earlier", "glyph-later", "glyph-join",
         "glyph-paths", "glyph-variation-preview", "glyph-variation-status",
@@ -957,6 +958,104 @@ test("stroke reversal and reorder affect only the chosen glyph", async () => {
     }
 });
 
+
+test("closed candidate loop can change start without changing ink", () => {
+    const nfd = "o\u{301}";
+    const a = { ...stroke(nfd), x1: 400, y1: 500,
+        x2: 1400, y2: 500 };
+    const b = { ...a, x1: 1400, y1: 500,
+        x2: 1400, y2: 1500 };
+    const c = { ...a, x1: 1400, y1: 1500,
+        x2: 400, y2: 1500 };
+    const d = { ...a, x1: 400, y1: 1500,
+        x2: 400, y2: 500 };
+    const other = stroke("ó");
+    const math = stroke("∞");
+    const accent = { ...a, x1: 2000, y1: 2200,
+        x2: 2100, y2: 2700, color: "#112233" };
+    const original = [a, other, b, math, c, d, accent];
+    const saved = encodeGlyphLibrary(original);
+    const changed = rotateClosedCandidatePath(original, nfd, 4);
+    assert.equal(changed.selectedIndex, 0);
+    assert.deepEqual(changed.strokes, [c, other, d, math, a, b, accent]);
+    assert.equal(encodeGlyphLibrary(original), saved,
+        "authored library must remain immutable");
+    assert.deepEqual(candidatePenPaths(changed.strokes, nfd), [
+        { first: 1, last: 4, start: { x: 1400, y: 1500 },
+            end: { x: 1400, y: 1500 }, width: 250,
+            color: "#A1B2C3" },
+        { first: 5, last: 5, start: { x: 2000, y: 2200 },
+            end: { x: 2100, y: 2700 }, width: 250,
+            color: "#112233" },
+    ]);
+    const restored = rotateClosedCandidatePath(changed.strokes, nfd, 4);
+    assert.deepEqual(restored.strokes, original,
+        "same half-loop rotation is exactly reversible");
+    for (const index of [-1, 0, 1, 6, 9]) {
+        assert.throws(() => rotateClosedCandidatePath(original, nfd, index),
+            /selected|later selected/);
+    }
+    const open = original.slice();
+    open[5] = { ...d, x2: 600, y2: 600 };
+    assert.throws(() => rotateClosedCandidatePath(open, nfd, 4),
+        /closed pen loop/);
+    assert.deepEqual(open[5], { ...d, x2: 600, y2: 600 },
+        "failed open-path rotation does not mutate a source");
+});
+
+test("browser chooses closed-loop start using explicit UI", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const nfd = "o\u{301}";
+        const a = { ...stroke(nfd), x1: 400, y1: 500,
+            x2: 1400, y2: 500 };
+        const b = { ...a, x1: 1400, y1: 500,
+            x2: 1400, y2: 1500 };
+        const c = { ...a, x1: 1400, y1: 1500,
+            x2: 400, y2: 1500 };
+        const d = { ...a, x1: 400, y1: 1500,
+            x2: 400, y2: 500 };
+        const other = stroke("ó");
+        const source = [a, other, b, c, d];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(source));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        assert.equal(get("path-start").disabled, true);
+        get("selected").value = "3";
+        get("selected").dispatch("change");
+        assert.equal(get("path-start").disabled, false);
+        get("path-start").dispatch("click");
+        assert.match(get("status").textContent,
+            /Changed closed pen loop starting stroke; unsaved/);
+        assert.equal(get("selected").value, "0",
+            "new pen entry is selected in first exact-glyph slot");
+        assert.equal(get("path-start").disabled, true,
+            "entry cannot be moved to itself");
+        assert.match(get("paths").textContent,
+            /1 candidate pen path, 0 apparent pen lifts/);
+        assert.match(get("paths").textContent,
+            /Path 1: strokes 1–4, \(1400, 1500\) → \(1400, 1500\)/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()),
+            [c, other, d, a, b]);
+        get("character").value = "ó";
+        get("character").dispatch("input");
+        get("selected").value = "1";
+        get("selected").dispatch("change");
+        assert.equal(get("path-start").disabled, true,
+            "one isolated stroke is not a closed multi-stroke loop");
+        editor.reset();
+        assert.equal(get("path-start").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
 
 test("browser reverses whole selected pen path and retains TSV rows",
     async () => {

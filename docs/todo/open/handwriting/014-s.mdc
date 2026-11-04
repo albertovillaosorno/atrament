@@ -483,6 +483,25 @@ independent ordered pen segments byte-for-byte. This protects
 composition of authored operations without implying persistent
 pen lifts or mathematical curve support.
 
+## Explicit closed-loop pen entry selection (partial) — 2026-11-03
+
+The glyph editor can now start an already closed continuous pen loop
+at a chosen later stroke, without moving any sampled line geometry,
+reversing ink direction, or changing an interleaved Unicode TSV slot.
+The Rust CLI exposes the same edit as
+`glyphs --rotate-path GRAPHEME PATH_INDEX START_STROKE`, using one-based
+indices within the selected candidate path. Neither editor guesses
+where a pen lift belongs; only exactly touching same-pen segments
+form an editable candidate loop.
+
+Browser UI and Rust tests cover a four-segment closed contour,
+independent NFC/NFD and math strokes, exact inverse byte recovery,
+explicit refusal for open/short loops, and preserving an existing
+output file on invalid native edits. An independent browser-to-Rust
+integration compares edited TSV and both physical PDF and transparent PNG
+output byte-for-byte with manually authored ink. An analytic native circle
+and persistent pen-lift identity remain unfinished.
+
  The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.

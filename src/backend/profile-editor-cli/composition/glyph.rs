@@ -379,6 +379,10 @@ impl GlyphOverlay {
         let from = next_integer(iter, "path index", 1, 4096)?;
         match flag {
             "--reverse-path" => self.reverse_path(grapheme, from),
+            "--rotate-path" => {
+                let start = next_integer(iter, "path start stroke", 1, 4096)?;
+                self.rotate_path(grapheme, from, start)
+            }
             "--move-path" => {
                 let to = next_integer(iter, "path index", 1, 4096)?;
                 self.move_path(grapheme, from, to)
@@ -1031,6 +1035,42 @@ impl GlyphOverlay {
         let shape = self.strokes.get_mut(selected)
             .ok_or("stroke index outside library")?;
         swap(&mut shape.start_um, &mut shape.end_um);
+        Ok(())
+    }
+
+    /// Choose a new first segment of a closed candidate pen loop without
+    /// moving any geometry, changing direction, or touching other glyphs.
+    /// The start is one-based *within* the selected candidate path.
+    pub(super) fn rotate_path(
+        &mut self, grapheme: &str, ordinal: u32, start: u32,
+    ) -> Result<(), String> {
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("path index outside bounds")?;
+        let offset = usize::try_from(start.checked_sub(1)
+            .ok_or("closed path start indices begin at 1")?)
+            .map_err(|_error| "closed path start outside bounds")?;
+        if path.len() < 2 || offset == 0 || offset >= path.len() {
+            return Err(
+                "closed path rotation needs a later existing stroke".into()
+            );
+        }
+        let slots = positions.get(path.clone())
+            .ok_or("path range outside glyph")?;
+        let mut rotated = slots.iter().map(|position| {
+            self.strokes.get(*position).cloned()
+                .ok_or("path segment outside library")
+        }).collect::<Result<Vec<_>, _>>()?;
+        let first = rotated.first().ok_or("missing first path segment")?;
+        let last = rotated.last().ok_or("missing last path segment")?;
+        if first.start_um != last.end_um {
+            return Err("path rotation requires a closed pen loop".into());
+        }
+        rotated.rotate_left(offset);
+        for (position, stroke) in slots.iter().zip(rotated) {
+            *self.strokes.get_mut(*position)
+                .ok_or("path segment outside library")? = stroke;
+        }
         Ok(())
     }
 

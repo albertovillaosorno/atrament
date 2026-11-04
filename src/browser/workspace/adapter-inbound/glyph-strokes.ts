@@ -187,6 +187,37 @@ export function candidatePenPaths(
     return paths;
 }
 
+// Select a later segment as the entry to an already closed pen loop.
+// A cyclic reorder leaves its actual geometry/direction untouched and
+// retains interleaved exact-Unicode TSV slots and the original input.
+export function rotateClosedCandidatePath(
+    strokes: readonly Stroke[], grapheme: string, selectedIndex: number,
+): { strokes: Stroke[]; selectedIndex: number } {
+    if (!Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path start needs a selected exact glyph stroke");
+    }
+    const indices = strokes.flatMap((stroke, index) =>
+        stroke.grapheme === grapheme ? [index] : []);
+    const position = indices.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) =>
+        position >= candidate.first && position <= candidate.last);
+    if (!path || path.first === path.last || position === path.first) {
+        throw new Error("Closed path needs a later selected start stroke");
+    }
+    if (path.start.x !== path.end.x || path.start.y !== path.end.y) {
+        throw new Error("Path start change requires a closed pen loop");
+    }
+    const slots = indices.slice(path.first - 1, path.last);
+    const shift = position - path.first;
+    const reordered = [...slots.slice(shift), ...slots.slice(0, shift)]
+        .map((index) => strokes[index]!);
+    const next = strokes.slice();
+    slots.forEach((index, offset) => { next[index] = reordered[offset]!; });
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex: slots[0]! };
+}
+
 // Reverse every directed segment in one touching path AND its sequence.
 // Interleaved glyph rows stay in their original v1 TSV positions.
 export function reverseCandidatePath(
@@ -1645,6 +1676,7 @@ export function createGlyphStrokeEditor(): {
     const remove = required<HTMLButtonElement>("glyph-remove");
     const reverse = required<HTMLButtonElement>("glyph-reverse");
     const reversePath = required<HTMLButtonElement>("glyph-reverse-path");
+    const startPath = required<HTMLButtonElement>("glyph-path-start");
     const translatePath = required<HTMLButtonElement>("glyph-path-translate");
     const pathDx = required<HTMLInputElement>("glyph-path-dx");
     const pathDy = required<HTMLInputElement>("glyph-path-dy");
@@ -1690,7 +1722,7 @@ export function createGlyphStrokeEditor(): {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, reverse, reversePath, translatePath, pathDx, pathDy,
+        remove, reverse, reversePath, startPath, translatePath, pathDx, pathDy,
         earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
@@ -2152,6 +2184,11 @@ export function createGlyphStrokeEditor(): {
         });
         reversePath.disabled = !active || !chosenPath
             || chosenPath.first === chosenPath.last;
+        startPath.disabled = !active || !chosenPath
+            || chosenPath.first === chosenPath.last
+            || chosenPosition === chosenPath.first
+            || chosenPath.start.x !== chosenPath.end.x
+            || chosenPath.start.y !== chosenPath.end.y;
         translatePath.disabled = !active || !chosenPath;
         const pathIndex = paths.indexOf(chosenPath!);
         earlierPath.disabled = !active || pathIndex <= 0;
@@ -2760,6 +2797,19 @@ export function createGlyphStrokeEditor(): {
             strokes = changed.strokes;
             choose(changed.selectedIndex);
             message("Reversed selected continuous pen path; unsaved");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    startPath.addEventListener("click", () => {
+        if (!active || selectedIndex === null) return;
+        try {
+            const changed = rotateClosedCandidatePath(
+                strokes, character.value, selectedIndex,
+            );
+            strokes = changed.strokes;
+            choose(changed.selectedIndex);
+            message("Changed closed pen loop starting stroke; unsaved");
         } catch (error) {
             message(String(error));
         }

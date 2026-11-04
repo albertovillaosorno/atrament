@@ -154,6 +154,32 @@ export function candidatePenPaths(strokes, grapheme) {
     record(first, chosen.length);
     return paths;
 }
+// Select a later segment as the entry to an already closed pen loop.
+// A cyclic reorder leaves its actual geometry/direction untouched and
+// retains interleaved exact-Unicode TSV slots and the original input.
+export function rotateClosedCandidatePath(strokes, grapheme, selectedIndex) {
+    if (!Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path start needs a selected exact glyph stroke");
+    }
+    const indices = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const position = indices.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) => position >= candidate.first && position <= candidate.last);
+    if (!path || path.first === path.last || position === path.first) {
+        throw new Error("Closed path needs a later selected start stroke");
+    }
+    if (path.start.x !== path.end.x || path.start.y !== path.end.y) {
+        throw new Error("Path start change requires a closed pen loop");
+    }
+    const slots = indices.slice(path.first - 1, path.last);
+    const shift = position - path.first;
+    const reordered = [...slots.slice(shift), ...slots.slice(0, shift)]
+        .map((index) => strokes[index]);
+    const next = strokes.slice();
+    slots.forEach((index, offset) => { next[index] = reordered[offset]; });
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex: slots[0] };
+}
 // Reverse every directed segment in one touching path AND its sequence.
 // Interleaved glyph rows stay in their original v1 TSV positions.
 export function reverseCandidatePath(strokes, grapheme, selectedIndex) {
@@ -189,9 +215,7 @@ export function reverseCandidatePath(strokes, grapheme, selectedIndex) {
 // Translate one complete candidate pen path while retaining every joint,
 // interleaved Unicode TSV slot, and the original pen/segment direction.
 // Validate the ENTIRE moved contour before returning a changed draft.
-export function translateCandidatePath(
-    strokes, grapheme, selectedIndex, dx, dy
-) {
+export function translateCandidatePath(strokes, grapheme, selectedIndex, dx, dy) {
     if (!Number.isSafeInteger(selectedIndex) || selectedIndex < 0
         || strokes[selectedIndex]?.grapheme !== grapheme) {
         throw new Error("Path translation needs a selected exact glyph stroke");
@@ -201,11 +225,9 @@ export function translateCandidatePath(
         || (dx === 0 && dy === 0)) {
         throw new Error("Path offsets need nonzero bounded whole µm values");
     }
-    const indices = strokes.flatMap((stroke, index) =>
-        stroke.grapheme === grapheme ? [index] : []);
+    const indices = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
     const position = indices.indexOf(selectedIndex) + 1;
-    const path = candidatePenPaths(strokes, grapheme).find((candidate) =>
-        position >= candidate.first && position <= candidate.last);
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) => position >= candidate.first && position <= candidate.last);
     if (!path)
         throw new Error("Selected glyph has no candidate pen path");
     const slots = indices.slice(path.first - 1, path.last);
@@ -218,8 +240,7 @@ export function translateCandidatePath(
         validateStroke(moved);
         const radius = stroke.width / 2;
         if ([moved.x1, moved.x2].some((x) => x < radius || x > 3500 - radius)
-            || [moved.y1, moved.y2].some((y) =>
-                y < radius || y > 4500 - radius)) {
+            || [moved.y1, moved.y2].some((y) => y < radius || y > 4500 - radius)) {
             throw new Error("Translated pen contour clips the glyph cell");
         }
         return moved;
@@ -1443,6 +1464,7 @@ export function createGlyphStrokeEditor() {
     const remove = required("glyph-remove");
     const reverse = required("glyph-reverse");
     const reversePath = required("glyph-reverse-path");
+    const startPath = required("glyph-path-start");
     const translatePath = required("glyph-path-translate");
     const pathDx = required("glyph-path-dx");
     const pathDy = required("glyph-path-dy");
@@ -1481,7 +1503,7 @@ export function createGlyphStrokeEditor() {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, reverse, reversePath, translatePath, pathDx, pathDy,
+        remove, reverse, reversePath, startPath, translatePath, pathDx, pathDy,
         earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
@@ -1920,6 +1942,11 @@ export function createGlyphStrokeEditor() {
         });
         reversePath.disabled = !active || !chosenPath
             || chosenPath.first === chosenPath.last;
+        startPath.disabled = !active || !chosenPath
+            || chosenPath.first === chosenPath.last
+            || chosenPosition === chosenPath.first
+            || chosenPath.start.x !== chosenPath.end.x
+            || chosenPath.start.y !== chosenPath.end.y;
         translatePath.disabled = !active || !chosenPath;
         const pathIndex = paths.indexOf(chosenPath);
         earlierPath.disabled = !active || pathIndex <= 0;
@@ -2551,6 +2578,19 @@ export function createGlyphStrokeEditor() {
             message(String(error));
         }
     });
+    startPath.addEventListener("click", () => {
+        if (!active || selectedIndex === null)
+            return;
+        try {
+            const changed = rotateClosedCandidatePath(strokes, character.value, selectedIndex);
+            strokes = changed.strokes;
+            choose(changed.selectedIndex);
+            message("Changed closed pen loop starting stroke; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
     translatePath.addEventListener("click", () => {
         if (!active || selectedIndex === null)
             return;
@@ -2566,9 +2606,7 @@ export function createGlyphStrokeEditor() {
                 }
                 return value;
             };
-            const changed = translateCandidatePath(
-                strokes, character.value, selectedIndex,
-                signed(pathDx.value, 3500), signed(pathDy.value, 4500));
+            const changed = translateCandidatePath(strokes, character.value, selectedIndex, signed(pathDx.value, 3500), signed(pathDy.value, 4500));
             strokes = changed.strokes;
             choose(changed.selectedIndex);
             message("Translated selected continuous pen path; unsaved");

@@ -2290,6 +2290,97 @@ fn native_path_edits_refuse_invalid_or_nonadjacent_paths_atomically() {
 }
 
 #[test]
+fn native_closed_path_start_rotation_preserves_exact_glyph_slots() {
+    let nfd = "o\u{301}";
+    let source = args(&[
+        "--glyph-stroke", nfd, "400", "500", "1400", "500",
+        "250", "#223344",
+        "--glyph-stroke", "ó", "600", "700", "800", "900",
+        "250", "#556677",
+        "--glyph-stroke", nfd, "1400", "500", "1400", "1500",
+        "250", "#223344",
+        "--glyph-stroke", "∞", "500", "600", "700", "800",
+        "250", "#111111",
+        "--glyph-stroke", nfd, "1400", "1500", "400", "1500",
+        "250", "#223344",
+        "--glyph-stroke", nfd, "400", "1500", "400", "500",
+        "250", "#223344",
+        "--glyph-stroke", nfd, "2000", "2000", "2300", "2400",
+        "300", "#334455",
+    ]);
+    let original = execute_glyph_library(&source)
+        .expect("initial geometry").expect("TSV");
+    let mut rotated = source.clone();
+    rotated.extend(args(&["--rotate-path", nfd, "1", "3"]));
+    let bytes = execute_glyph_library(&rotated)
+        .expect("closed loop rotation").expect("TSV");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ó\t1400\t1500\t400\t1500\t250\t#223344\n",
+        "ó\t600\t700\t800\t900\t250\t#556677\n",
+        "ó\t400\t1500\t400\t500\t250\t#223344\n",
+        "∞\t500\t600\t700\t800\t250\t#111111\n",
+        "ó\t400\t500\t1400\t500\t250\t#223344\n",
+        "ó\t1400\t500\t1400\t1500\t250\t#223344\n",
+        "ó\t2000\t2000\t2300\t2400\t300\t#334455\n",
+    );
+    assert_eq!(bytes, expected.as_bytes(),
+        "only closed path starting segment changes, not geometry");
+    let mut inspected = rotated.clone();
+    inspected.extend(args(&["--inspect-paths", nfd]));
+    let report = String::from_utf8(execute_glyph_library(&inspected)
+        .expect("inspect rotated paths").expect("report"))
+        .expect("UTF-8 paths");
+    assert!(report.contains("Strokes: 5\nPaths: 2\nPen lifts: 1"),
+        "{report}");
+    assert!(report.contains(
+        "Path 1: strokes 1..4 (4 segments) (1400, 1500) -> (1400, 1500)"
+    ), "{report}");
+    rotated.extend(args(&["--rotate-path", nfd, "1", "3"]));
+    assert_eq!(execute_glyph_library(&rotated)
+        .expect("inverse rotation").expect("TSV"), original);
+
+    let source_file = test_path().with_extension("tsv");
+    let target_file = test_path().with_extension("tsv");
+    fs::write(&source_file, &original).expect("owned input");
+    fs::write(&target_file, b"keep prior output").expect("sentinel");
+    let input = source_file.to_str().expect("input name");
+    let output = target_file.to_str().expect("target name");
+    for invalid in [
+        args(&["--rotate-path"]),
+        args(&["--rotate-path", nfd, "1"]),
+        args(&["--rotate-path", nfd, "0", "2"]),
+        args(&["--rotate-path", nfd, "1", "0"]),
+        args(&["--rotate-path", nfd, "1", "1"]),
+        args(&["--rotate-path", nfd, "1", "5"]),
+        args(&["--rotate-path", nfd, "2", "2"]),
+        args(&["--rotate-path", "ó", "1", "2"]),
+        args(&["--rotate-path", "o", "1", "2"]),
+        args(&["--rotate-path", "oo", "1", "2"]),
+        args(&["--rotate-path", nfd, "1", "2.5"]),
+        args(&["--rotate-path", nfd, "1", "4097"]),
+    ] {
+        let mut command = args(&["--profile", input]);
+        command.extend(invalid);
+        command.extend(args(&["--output", output, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid rotation must refuse: {command:?}");
+        assert_eq!(fs::read(&source_file).expect("input"), original);
+        assert_eq!(fs::read(&target_file).expect("output"),
+            b"keep prior output");
+    }
+    let mut open = source.clone();
+    open.extend(args(&[
+        "--set-stroke", nfd, "4", "400", "1500", "600", "600",
+        "250", "#223344", "--rotate-path", nfd, "1", "2",
+    ]));
+    assert!(execute_glyph_library(&open).is_err(),
+        "an open path cannot be rotated as a closed contour");
+    fs::remove_file(source_file).expect("owned input removed");
+    fs::remove_file(target_file).expect("owned output removed");
+}
+
+#[test]
 fn native_path_translation_round_trips_exact_unicode_pen_geometry() {
     let source = test_path().with_extension("tsv");
     let revised = test_path().with_extension("tsv");
