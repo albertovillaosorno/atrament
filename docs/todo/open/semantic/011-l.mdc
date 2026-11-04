@@ -981,3 +981,22 @@ sheet too short for the group still falls back to ordinary pagination.
 This only improves export-time placement of adjacent ATX titles. It is not
 full widow/orphan control, persistent semantic heading identities or a
 completed saved notebook workflow; ATR-P2-011 remains open.
+
+## Keep mixed ATX and Setext title chains together (partial) — 2026-11-04
+
+The bounded native Markdown heading guard now recognizes a one-line Setext
+subtitle immediately after an ATX or Setext title. Its `===` or `---`
+underline is syntax, not a separate writing row. When a fixed region has
+room for the entire adjacent heading chain and its first body row on the
+next sheet, it moves the group together instead of orphaning the first
+title on the preceding page. A shorter sheet still uses ordinary measured
+pagination, and ending headings do not demand an ink-free extra page.
+
+Rust regressions cover three mixed heading sequences in four-row fixed
+regions, terminal Setext headings, and literal, indented or hard-break rows
+that must not be promoted as titles. The native PDF/transparent PNG test
+checks page-local ink parity with independently exported source fragments,
+physical page counts and atomic refusal of an insufficient PDF page limit.
+This is still limited one-line Setext lookahead in a CLI export bridge,
+not full Markdown parsing, generalized orphan control or saved notebook
+semantic identities. ATR-P2-011 remains open.

@@ -1265,7 +1265,8 @@ fn following_heading_gap<'text>(
         paragraph_gap: false,
     };
     let mut fence = None;
-    for line in lines {
+    let mut lookahead = lines.peekable();
+    while let Some(line) = lookahead.next() {
         if markdown_fence_transition(&mut fence, line) {
             // Fence delimiters themselves have no physical row.
             continue;
@@ -1279,12 +1280,28 @@ fn following_heading_gap<'text>(
         }
         if line.trim_end_matches(' ').is_empty() {
             following.paragraph_gap = true;
-        } else if !following.paragraph_gap && following.blank_rows == 0
-            && matches!(markdown_line(line).0, LineStyle::Heading(_)) {
-            // Only adjacent source headings belong to the same group.
-            // A blank line or a code row forms a distinct boundary.
-            following.heading_rows = following.heading_rows.saturating_add(1);
+        } else if !following.paragraph_gap && following.blank_rows == 0 {
+            let (style, body) = markdown_line(line);
+            if matches!(style, LineStyle::Heading(_)) {
+                following.heading_rows =
+                    following.heading_rows.saturating_add(1);
+            } else if matches!(style, LineStyle::Body)
+                && !line.starts_with("    ")
+                && !markdown_paragraph_break(line, style, body.as_ref()).1
+                && lookahead.peek().is_some_and(|next| {
+                    markdown_setext_level(next).is_some()
+                })
+            {
+                // One-line Setext titles are also heading rows. Consume
+                // their underline syntax, not a second physical row.
+                let _: Option<&str> = lookahead.next();
+                following.heading_rows =
+                    following.heading_rows.saturating_add(1);
+            } else {
+                return Some(following);
+            }
         } else {
+            // A blank paragraph or code row separates heading groups.
             return Some(following);
         }
     }

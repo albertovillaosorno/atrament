@@ -174,6 +174,60 @@ test('adjacent heading levels travel with their first body row in PDF/PNG',
         }
     });
 
+test('ATX and Setext heading chains keep native PDF and PNG ink together',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-mixed-headings-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '100000', '45000'];
+            const prelude = 'a  \na  ';
+            for (const group of [
+                '# a\nó\n===\na',
+                'a\n===\nó\n---\na',
+                '# a\nó\n===\n## a\na',
+            ]) {
+                const combined = `${prelude}\n${group}`;
+                const first = render(dir, combined, 'png', region);
+                assert.equal(first.result.status, 0,
+                    first.result.stderr);
+                const firstInk = readFileSync(first.output);
+                const standalonePrelude = render(dir, prelude,
+                    'png', region);
+                assert.equal(standalonePrelude.result.status, 0,
+                    standalonePrelude.result.stderr);
+                assert.deepEqual(firstInk,
+                    readFileSync(standalonePrelude.output),
+                    'page one must not orphan a mixed heading');
+
+                const second = render(dir, combined, 'png', region,
+                    '--flow-markdown', 2);
+                assert.equal(second.result.status, 0,
+                    second.result.stderr);
+                const secondInk = readFileSync(second.output);
+                const standaloneGroup = render(dir, group, 'png', region);
+                assert.equal(standaloneGroup.result.status, 0,
+                    standaloneGroup.result.stderr);
+                assert.deepEqual(secondInk,
+                    readFileSync(standaloneGroup.output),
+                    'page two has every heading stroke and body mark');
+
+                const pdf = render(dir, combined, 'pdf',
+                    [...region, '--pages', '2']);
+                assert.equal(pdf.result.status, 0, pdf.result.stderr);
+                const accepted = readFileSync(pdf.output);
+                assert.match(accepted.toString('latin1'), /\/Count 2/);
+                const refused = render(dir, combined, 'pdf',
+                    [...region, '--pages', '1']);
+                assert.notEqual(refused.result.status, 0);
+                assert.match(refused.result.stderr, /page/i);
+                assert.deepEqual(readFileSync(refused.output), accepted,
+                    'refused page limit cannot replace the accepted PDF');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('saved BOM/CRLF Markdown task file exports like inline PDF and PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-file-'));

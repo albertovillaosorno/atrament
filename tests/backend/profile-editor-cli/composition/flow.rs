@@ -350,3 +350,70 @@ fn heading_chain_never_reserves_nonprinting_trailing_code_rows() {
     assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
         [1, 2, 2]);
 }
+
+#[test]
+fn heading_chain_keeps_setext_subtitles_with_their_first_body_row() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    // Four rows per sheet: the two initial rows leave room for an
+    // isolated heading, but not an adjacent Setext subtitle and body.
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 45_000,
+    };
+    for (text, pages) in [
+        ("a  \na\n# a\nó\n===\na", vec![1, 1, 2, 2, 2]),
+        ("a  \na  \na\n===\nó\n---\na", vec![1, 1, 2, 2, 2]),
+        ("a  \na\n# a\nó\n===\n## a\na",
+            vec![1, 1, 2, 2, 2, 2]),
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, text)
+            .expect("valid adjacent Markdown heading chain");
+        let (runs, _, count) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("heading chain fits together on the second sheet");
+        assert_eq!(count, 2, "unexpected count for {text:?}: {runs:?}");
+        assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+            pages, "Setext subtitles should travel with adjacent titles");
+    }
+}
+
+#[test]
+fn setext_heading_guard_does_not_promote_hard_or_literal_rows() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 45_000,
+    };
+    for literal in ["ó  ", "ó\\", "    ó"] {
+        let text = format!("a  \na\n# a\n{literal}\n===\na");
+        let source = FlowSource::new(FlowFormat::Markdown, &text)
+            .expect("source has one title and subsequent literal ink");
+        let (runs, ornaments, pages) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("hard breaks and indentation remain literal");
+        assert_eq!(pages, 2);
+        assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+            [1, 1, 1, 1, 2], "non-Setext line stays next to its title");
+        assert_eq!(ornaments.len(), 1, "only ATX has heading ink");
+        assert_eq!(runs.last().expect("final row").text, "=== a");
+    }
+
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "a  \na\n# a\nó\n===",
+    ).expect("headings without a body");
+    let (runs, _, pages) = super::layout_flow_with_region(
+        &source, &paper, None, super::HeadingDecoration::default(),
+        Some(region),
+    ).expect("terminal titles still fit four physical rows");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+        [1, 1, 1, 1]);
+}
