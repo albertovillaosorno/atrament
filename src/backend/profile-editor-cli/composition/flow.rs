@@ -840,13 +840,14 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
     {
         return (LineStyle::Body, escaped.trim_end_matches(' '));
     }
-    // Unindented and up-to-three-space thematic rules are the same ink.
-    // Four-space lines remain literal source, not a synthesized divider.
+    // CommonMark thematic rules admit spaces between at least three
+    // identical marks. Four-space lines stay literal (not code blocks).
     let rule = raw.get(indent..).unwrap_or(raw);
-    if indent <= 3 && rule.len() >= 3
+    if indent <= 3
         && let Some(&marker) = rule.as_bytes().first()
         && matches!(marker, b'-' | b'*' | b'_')
-        && rule.bytes().all(|mark| mark == marker) {
+        && rule.bytes().filter(|&mark| mark == marker).count() >= 3
+        && rule.bytes().all(|mark| mark == marker || mark == b' ') {
         return (LineStyle::Separator, "");
     }
     // Standard ATX headings admit up to three indentation spaces. Four

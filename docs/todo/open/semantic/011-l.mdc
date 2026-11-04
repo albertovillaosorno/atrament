@@ -357,6 +357,21 @@ and delimiter glyph strokes. They also prove four-space list/quote source
 without authored punctuation refuses before overwriting an existing PDF.
 This is still a flat, restricted Markdown compiler, not nested list parsing.
 
+## Spaced Markdown thematic marks (partial) — 2026-11-04
+
+The CLI's limited Markdown syntax now accepts up to three initial ASCII
+spaces and interior ASCII spaces in thematic rules such as `- - -`,
+`*  * *` and `_ _   _`. Three or more identical marks produce the same
+single 0.4-mm native horizontal rule as unspaced `---`, `***` and `___`.
+These marks do not need authored glyphs; they do not move adjacent writing.
+
+Two native PDF/transparent-PNG regressions check identical physical bytes
+with unspaced rules, exact rule counts, rejection of fewer/mixed marks,
+escaped markers and four-space indents, and immutable selected PDF output
+on refusal. A separator-only source still refuses without visible text.
+This does not introduce nested blocks, arbitrary thematic syntax or
+persisted notebook block identity.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

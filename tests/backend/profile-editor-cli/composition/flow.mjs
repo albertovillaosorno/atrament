@@ -184,6 +184,62 @@ test('indented thematic rules preserve PDF and PNG ink',
         }
     });
 
+test('spaced thematic rules render identical native PDF and PNG ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-spaced-rule-'));
+        try {
+            const canonical = 'a\n---\na\n***\na\n___\na';
+            const spaced = 'a\n- - -  \na\n *  * *\na\n  _ _   _\na';
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, canonical, format);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                if (format === 'pdf') {
+                    assert.equal(expected.toString('latin1')
+                        .split('0.118 0.188 0.290 RG').length - 1, 3,
+                        'three native horizontal pen rules');
+                }
+                const candidate = render(dir, spaced, format);
+                assert.equal(candidate.result.status, 0,
+                    candidate.result.stderr);
+                assert.deepEqual(readFileSync(candidate.output), expected,
+                    `spaced syntax must not alter physical ${format}`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('near-miss thematic spacing stays literal and refuses replacement',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-spaced-rule-'));
+        try {
+            const output = join(dir, 'flow-pdf.output');
+            const sentinel = Buffer.from('selected PDF is unchanged');
+            for (const source of [
+                'a\n- -', 'a\n- - *', 'a\n- - x',
+                'a\n    - - -', 'a\n\\- - -',
+            ]) {
+                writeFileSync(output, sentinel);
+                const candidate = render(dir, source, 'pdf');
+                assert.notEqual(candidate.result.status, 0, source);
+                assert.match(candidate.result.stderr,
+                    /missing authored glyph shapes/);
+                assert.deepEqual(readFileSync(output), sentinel,
+                    `refusal must not overwrite PDF: ${source}`);
+            }
+            writeFileSync(output, sentinel);
+            const empty = render(dir, ' - - -', 'pdf');
+            assert.notEqual(empty.result.status, 0);
+            assert.match(empty.result.stderr,
+                /flow requires at least one visible text block/);
+            assert.deepEqual(readFileSync(output), sentinel);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('four-space and separator-only Markdown refuse replacement',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-rule-'));
