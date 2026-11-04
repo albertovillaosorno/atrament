@@ -802,6 +802,18 @@ fn measured_word<'text>(
     Ok((glyphs, width))
 }
 
+// Closing ATX markers are syntax only after a separating space. A hash
+// directly touching the title remains a literal authored handwriting glyph.
+fn heading_body(body: &str) -> &str {
+    let trimmed = body.trim_end_matches(' ');
+    let without_hashes = trimmed.trim_end_matches('#');
+    if without_hashes.len() < trimmed.len()
+        && (without_hashes.is_empty() || without_hashes.ends_with(' ')) {
+        return without_hashes.trim_end_matches(' ');
+    }
+    trimmed
+}
+
 // Restrict Markdown ordered markers to at most nine ASCII digits followed
 // by ". " or ") ". The number and delimiter remain authored text ink;
 // only unordered bullets receive a synthetic short line ornament.
@@ -813,13 +825,19 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
         && raw.bytes().all(|mark| mark == marker) {
         return (LineStyle::Separator, "");
     }
-    for (prefix, level) in [
-        ("### ", HeadingLevel::Tertiary),
-        ("## ", HeadingLevel::Secondary),
-        ("# ", HeadingLevel::Primary),
-    ] {
-        if let Some(body) = line.strip_prefix(prefix) {
-            return (LineStyle::Heading(level), body.trim_end_matches(' '));
+    // Standard ATX headings admit up to three indentation spaces. Four
+    // spaces remain literal text (not an inferred fenced/code block).
+    let indent = line.bytes().take_while(|byte| *byte == b' ').count();
+    if indent <= 3 {
+        for (prefix, level) in [
+            ("### ", HeadingLevel::Tertiary),
+            ("## ", HeadingLevel::Secondary),
+            ("# ", HeadingLevel::Primary),
+        ] {
+            if let Some(body) = line.get(indent..)
+                .and_then(|part| part.strip_prefix(prefix)) {
+                return (LineStyle::Heading(level), heading_body(body));
+            }
         }
     }
     if let Some(bullet) = line.strip_prefix("- ")

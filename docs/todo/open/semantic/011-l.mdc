@@ -277,6 +277,23 @@ manual ink outside the flow area. Existing two-page region PDF/PNG and
 full CLI suites pass. This is bounded geometry admission, not semantic
 block persistence, image-aware flow or arbitrary page regions.
 
+## Indented and closed ATX headings (partial) — 2026-11-04
+
+The native Markdown flow now admits zero to three leading ASCII spaces on
+`#`, `##`, and `###` headings, and ignores optional closing `#` sequences
+preceded by a separator space. These are source syntax rather than glyphs.
+A hash attached directly to the title or followed by non-hash text remains
+literal and requires its own authored shape; four-space indents stay literal.
+Empty headings still refuse before replacing a selected output.
+
+Two independent native CLI integration tests compare byte-identical real PDF
+and transparent PNG exports for ordinary and decorated heading syntax,
+including exact NFC `ó` and NFD `o` plus combining acute. They also check
+missing literal hashes, four-space indentation and empty headings refuse
+without overwriting an existing PDF. Heading levels, glyph inks and marker
+ornaments remain identical to the existing limited compiler. This is not a
+full Markdown parser or a persisted semantic notebook identity.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
