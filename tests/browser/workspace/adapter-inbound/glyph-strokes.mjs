@@ -3,7 +3,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
-    geometricStarter, composeAccentedGlyph, varyGlyphStrokes,
+    geometricStarter, italicizeGlyphStrokes,
+    composeAccentedGlyph, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
     translateCandidatePath } =
@@ -376,6 +377,8 @@ function mountEditor() {
         "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
         "glyph-accent-lift", "glyph-italic-angle",
+        "glyph-authored-angle", "glyph-authored-baseline",
+        "glyph-slant-authored",
         "glyph-ideal-preview", "glyph-ideal-geometry",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
@@ -406,6 +409,8 @@ function mountEditor() {
     get("accent-shift").value = "0";
     get("accent-lift").value = "0";
     get("italic-angle").value = "12";
+    get("authored-angle").value = "12";
+    get("authored-baseline").value = "3550";
     get("path-dx").value = "0";
     get("path-dy").value = "0";
     get("variation-sample").value = "1";
@@ -4187,6 +4192,131 @@ test("italic SVG guide and replacement are session-safe", async () => {
         assert.equal(get("italic-angle").disabled, true);
         assert.equal(get("ideal-circle").attributes.get("visibility"),
             "hidden");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("authored italic shear preserves unrelated Unicode and pen paths", () => {
+    const nfd = "n\u0303";
+    const first = { ...stroke(nfd), x1: 450, y1: 1000,
+        x2: 850, y2: 1600, width: 250 };
+    const next = { ...first, x1: 850, y1: 1600,
+        x2: 1300, y2: 2200 };
+    const accent = { ...first, x1: 1100, y1: 200,
+        x2: 1700, y2: 600, color: "#112233" };
+    const composed = { ...stroke("ñ"), x1: 300, y1: 350,
+        x2: 500, y2: 550 };
+    const math = { ...stroke("∞"), x1: 2700, y1: 3300,
+        x2: 2800, y2: 3450 };
+    const library = [first, composed, next, math, accent];
+    const before = encodeGlyphLibrary(library);
+    const slope = Math.tan(12 * Math.PI / 180);
+    const expected = library.map((line) => line.grapheme !== nfd
+        ? line : {
+            ...line,
+            x1: Math.round(line.x1 + slope * (3550 - line.y1)),
+            x2: Math.round(line.x2 + slope * (3550 - line.y2)),
+        });
+    const actual = italicizeGlyphStrokes(library, nfd, 12, 3550);
+    assert.deepEqual(actual, expected);
+    assert.equal(actual[1], composed);
+    assert.equal(actual[3], math);
+    assert.equal(encodeGlyphLibrary(library), before,
+        "shearing is a copy, not an in-place edit");
+    assert.deepEqual(candidatePenPaths(actual, nfd).map((path) =>
+        [path.first, path.last]), [[1, 2], [3, 3]],
+    "transformed touching endpoints preserve the original pen lifts");
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(actual)), actual);
+    assert.deepEqual(italicizeGlyphStrokes(library, nfd, 0, 3550),
+        library, "zero slant is byte-identical to the original");
+    assert.deepEqual(italicizeGlyphStrokes(library, "ñ", 12, 3550)
+        .filter((line) => line.grapheme === nfd),
+    library.filter((line) => line.grapheme === nfd));
+    for (const angle of [-1, 21, 12.5, NaN, Infinity]) {
+        assert.throws(() => italicizeGlyphStrokes(library, nfd,
+            angle, 3550), /Italic angle/);
+    }
+    for (const pivot of [-1, 4501, 1.5, NaN]) {
+        assert.throws(() => italicizeGlyphStrokes(library, nfd,
+            12, pivot), /italic baseline/);
+    }
+    assert.throws(() => italicizeGlyphStrokes(library, "ab", 12,
+        3550), /exact visible/);
+    assert.throws(() => italicizeGlyphStrokes(library, "á", 12,
+        3550), /no authored ink/);
+    const clipped = [{ ...stroke("a"), x1: 3100, y1: 300,
+        x2: 3200, y2: 900, width: 250 }];
+    assert.throws(() => italicizeGlyphStrokes(clipped, "a",
+        20, 3550), /Italic ink and pen clip/);
+    assert.deepEqual(clipped[0].x1, 3100,
+        "clip refusal leaves the caller-owned ink unchanged");
+    const full = Array.from({ length: 4096 }, (_, index) => ({
+        ...first, x1: 450 + index % 100, x2: 850 + index % 100,
+    }));
+    assert.equal(italicizeGlyphStrokes(full, nfd, 12, 3550).length,
+        4096, "same native capacity remains supported");
+});
+
+test("authored italic UI refuses invalid edits without saving", async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const nfd = "n\u0303";
+        assert.equal(get("slant-authored").disabled, true);
+        editor.start();
+        assert.equal(get("slant-authored").disabled, true,
+            "missing glyph ink cannot be transformed");
+        const add = (glyph, coords) => {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            for (const [key, value] of Object.entries({
+                x1: coords[0], y1: coords[1],
+                x2: coords[2], y2: coords[3], width: 250,
+            })) get(key).value = String(value);
+            get("add").dispatch("click");
+        };
+        add(nfd, [450, 1000, 850, 1600]);
+        add("ñ", [300, 350, 500, 550]);
+        add(nfd, [850, 1600, 1300, 2200]);
+        assert.equal(get("slant-authored").disabled, false);
+        const original = [
+            { grapheme: nfd, x1: 450, y1: 1000,
+                x2: 850, y2: 1600, width: 250, color: "#243647" },
+            { grapheme: "ñ", x1: 300, y1: 350,
+                x2: 500, y2: 550, width: 250, color: "#243647" },
+            { grapheme: nfd, x1: 850, y1: 1600,
+                x2: 1300, y2: 2200, width: 250, color: "#243647" },
+        ];
+        get("slant-authored").dispatch("click");
+        assert.match(get("status").textContent,
+            /Slanted all authored ñ ink; unsaved/);
+        assert.equal(downloads.length, 0,
+            "explicit italic edit is only an unsaved draft");
+        get("save").dispatch("click");
+        const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(accepted,
+            italicizeGlyphStrokes(original, nfd, 12, 3550));
+        get("authored-angle").value = "21";
+        get("slant-authored").dispatch("click");
+        assert.match(get("status").textContent, /Italic angle/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(
+            await downloads.at(-1).text()), accepted);
+        get("authored-angle").value = "12";
+        get("authored-baseline").value = "";
+        get("slant-authored").dispatch("click");
+        assert.match(get("status").textContent, /Choose an italic angle/);
+        get("authored-baseline").value = "3550";
+        get("character").value = "ó";
+        get("character").dispatch("input");
+        assert.equal(get("slant-authored").disabled, true);
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        assert.equal(get("slant-authored").disabled, false);
+        editor.reset();
+        assert.equal(get("slant-authored").disabled, true);
+        assert.equal(get("authored-angle").disabled, true);
     } finally {
         ui.restore();
     }

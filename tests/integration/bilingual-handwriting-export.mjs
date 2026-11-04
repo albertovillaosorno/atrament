@@ -11,6 +11,7 @@ import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
+    italicizeGlyphStrokes,
     reverseCandidatePath, moveCandidatePath, translateCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath, candidatePenPaths,
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
@@ -1011,6 +1012,78 @@ test('italic circle and printed a export exact native PDF/PNG ink', () => {
         }
         assert.equal(readFileSync(source, 'utf8'), bytes,
             'rendering cannot modify the original authored TSV');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('authored italic Unicode ink exports exact native PDF/PNG', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-authored-italic-'));
+    try {
+        const nfd = 'n\u0303';
+        const original = [
+            { grapheme: nfd, x1: 450, y1: 1000,
+                x2: 850, y2: 1600, width: 250, color: '#243647' },
+            { grapheme: 'ñ', x1: 700, y1: 1500,
+                x2: 1200, y2: 1900, width: 250, color: '#243647' },
+            { grapheme: nfd, x1: 850, y1: 1600,
+                x2: 1300, y2: 2200, width: 250, color: '#243647' },
+            { grapheme: '∞', x1: 350, y1: 3300,
+                x2: 800, y2: 3350, width: 250, color: '#243647' },
+            { grapheme: nfd, x1: 1100, y1: 200,
+                x2: 1700, y2: 600, width: 250, color: '#334455' },
+        ];
+        const sourceBytes = encodeGlyphLibrary(original);
+        const slope = Math.tan(12 * Math.PI / 180);
+        const expected = original.map((line) => line.grapheme !== nfd
+            ? line : {
+                ...line,
+                x1: Math.round(line.x1 + slope * (3550 - line.y1)),
+                x2: Math.round(line.x2 + slope * (3550 - line.y2)),
+            });
+        const changed = italicizeGlyphStrokes(original, nfd, 12, 3550);
+        assert.deepEqual(changed, expected);
+        assert.equal(encodeGlyphLibrary(original), sourceBytes);
+        const library = join(dir, 'italic.tsv');
+        const bytes = encodeGlyphLibrary(changed);
+        writeFileSync(library, bytes);
+        const parsed = native('glyphs', '--profile', library);
+        assert.equal(parsed.status, 0, parsed.stderr);
+        assert.equal(parsed.stdout, bytes);
+        const inspected = native('glyphs', '--profile', library,
+            '--inspect-paths', nfd);
+        assert.equal(inspected.status, 0, inspected.stderr);
+        assert.match(inspected.stdout, /Strokes: 3\nPaths: 2/);
+        const audit = native('glyphs', '--profile', library,
+            '--audit-text', nfd + 'ñ');
+        assert.equal(audit.status, 0, audit.stderr);
+        assert.match(audit.stdout, /Missing authored glyphs: 0/);
+        const manual = changed.flatMap((line) => [
+            '--glyph-stroke', line.grapheme,
+            String(line.x1), String(line.y1),
+            String(line.x2), String(line.y2),
+            String(line.width), line.color,
+        ]);
+        for (const format of ['pdf', 'png']) {
+            const flags = ['--export-paper', format];
+            if (format === 'png') flags.push('--dpi', '72');
+            const output = join(dir, `ink.${format}`);
+            const comparison = join(dir, `manual.${format}`);
+            const run = (ink, path) => native('notebook',
+                '--printed-sheet', 'true', ...ink,
+                '--place-text', '1', '30000', '45000', nfd + 'ñ',
+                ...flags, '--output', path);
+            const actual = run(['--glyph-file', library], output);
+            const reference = run(manual, comparison);
+            assert.equal(actual.status, 0, actual.stderr);
+            assert.equal(reference.status, 0, reference.stderr);
+            assert.deepEqual(readFileSync(output), readFileSync(comparison),
+                `authored italic NFC/NFD gives native ${format} parity`);
+            if (format === 'png') {
+                pngHasTransparentCorner(readFileSync(output));
+            }
+        }
+        assert.equal(readFileSync(library, 'utf8'), bytes);
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

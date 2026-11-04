@@ -886,6 +886,37 @@ function quadratic(from, control, to, step) {
             + t * t * to.y),
     };
 }
+// Apply a user-selected shear to every existing pen stroke of one exact
+// glyph. Interleaved NFC/NFD and unrelated glyphs are never modified.
+// One rejected endpoint prevents the entire candidate from being returned.
+export function italicizeGlyphStrokes(source, grapheme, angle, baseline) {
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Italic edit requires one exact visible glyph");
+    }
+    if (!Number.isSafeInteger(angle) || angle < 0 || angle > 20) {
+        throw new Error("Italic angle must be 0..20 whole degrees");
+    }
+    const pivot = boundedInteger(String(baseline), 4500, "italic baseline");
+    const slope = Math.tan(angle * Math.PI / 180);
+    let found = false;
+    const candidate = source.map((line) => {
+        if (line.grapheme !== grapheme)
+            return line;
+        found = true;
+        const stroke = validateStroke(line);
+        const x1 = Math.round(stroke.x1 + slope * (pivot - stroke.y1));
+        const x2 = Math.round(stroke.x2 + slope * (pivot - stroke.y2));
+        if ([x1, x2].some((x) => x - stroke.width / 2 < 0
+            || x + stroke.width / 2 > 3500)) {
+            throw new Error("Italic ink and pen clip glyph cell");
+        }
+        return validateStroke({ ...stroke, x1, x2 });
+    });
+    if (!found)
+        throw new Error("Selected glyph has no authored ink");
+    encodeGlyphLibrary(candidate);
+    return candidate;
+}
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
@@ -915,17 +946,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         }
         const baseKind = twoStorey ? "two-storey" : "single";
         const base = geometricStarter(g, x, y, r, w, color, pos, baseKind);
-        const slope = Math.tan(angle * Math.PI / 180);
-        const baseline = y + r;
-        return base.map((line) => {
-            const x1 = Math.round(line.x1 + slope * (baseline - line.y1));
-            const x2 = Math.round(line.x2 + slope * (baseline - line.y2));
-            if ([x1, x2].some((point) => point - line.width / 2 < 0
-                || point + line.width / 2 > 3500)) {
-                throw new Error("Italic ink and pen clip glyph cell");
-            }
-            return validateStroke({ ...line, x1, x2 });
-        });
+        return italicizeGlyphStrokes(base, g, angle, y + r);
     }
     const cx = boundedInteger(String(x), 3500, "center X");
     const cy = boundedInteger(String(y), 4500, "center Y");
@@ -1515,6 +1536,9 @@ export function createGlyphStrokeEditor() {
     const accentShift = required("glyph-accent-shift");
     const accentLift = required("glyph-accent-lift");
     const italicAngle = required("glyph-italic-angle");
+    const authoredAngle = required("glyph-authored-angle");
+    const authoredBaseline = required("glyph-authored-baseline");
+    const slantAuthored = required("glyph-slant-authored");
     const idealGeometry = required("glyph-ideal-geometry");
     const ideal = required("glyph-ideal-preview");
     const idealCircle = required("glyph-ideal-circle");
@@ -1569,7 +1593,8 @@ export function createGlyphStrokeEditor() {
         seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
         seedTextMarks,
         centerX, centerY, radius,
-        accentShift, accentLift, italicAngle, variationSeed,
+        accentShift, accentLift, italicAngle,
+        authoredAngle, authoredBaseline, slantAuthored, variationSeed,
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
@@ -2025,6 +2050,8 @@ export function createGlyphStrokeEditor() {
         selected.replaceChildren(placeholder, ...options);
         selected.value = selectedIndex === null ? "" : String(selectedIndex);
         selected.disabled = !active || shown.length === 0;
+        slantAuthored.disabled = !active || shown.length === 0
+            || drawing !== null;
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
         reverse.disabled = !active || selectedIndex === null;
@@ -2307,6 +2334,30 @@ export function createGlyphStrokeEditor() {
             render();
             message("Constructed " + lines.length + " sampled segments for "
                 + target + "; curves are sampled into TSV");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    slantAuthored.addEventListener("click", () => {
+        if (!active)
+            return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the pen trace before italic edit");
+            }
+            if (authoredAngle.value === ""
+                || authoredBaseline.value === "") {
+                throw new Error("Choose an italic angle and baseline");
+            }
+            const angle = Number(authoredAngle.value);
+            const pivot = Number(authoredBaseline.value);
+            const target = character.value;
+            const next = italicizeGlyphStrokes(strokes, target, angle, pivot);
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Slanted all authored ${character.value} ink; unsaved`);
         }
         catch (error) {
             message(String(error));

@@ -734,6 +734,30 @@ independent NFD `á` strokes, rejected 21-degree edits without mutation,
 zero-degree replay and no additional backend requests. The regression is
 `Firefox italic a guide exports exact UTF-8 TSV without backend edits`.
 
+## Bounded shear for existing authored strokes (partial) — 2026-11-03
+
+A separate explicit browser action now italicizes **any** exact selected
+Unicode grapheme with authored strokes, not only a geometric starter.
+The user sets a whole-degree angle (0–20) and a baseline Y (0–4500 µm),
+then applies one atomic horizontal shear to every endpoint of that glyph.
+Interleaved NFC/NFD and unrelated glyph rows retain their original slots.
+
+Two browser regressions cover connected stroke continuity, independent
+accent ink, zero-angle identity, the full 4096-stroke budget, invalid
+parameters, clipping refusal, session gating and explicit download.
+An additional Rust export integration independently computes the expected
+NFD path shear and verifies native TSV readback, path inspection, audit,
+and byte-identical PDF and transparent PNG against manual pen strokes.
+
+A headless Firefox/BiDi localhost regression exercises the real authored
+slant action, checks both accepted and refused UTF-8 downloads, preserves
+independent NFC/NFD rows and sees no extra backend requests.
+
+This operation edits the unsaved authored draft destructively only on an
+explicit click; it does not keep both glyph variants or provide undo.
+The regular TSV should be downloaded first. Persistent curve primitives,
+multiple named variants and joined cursive remain open P1 requirements.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

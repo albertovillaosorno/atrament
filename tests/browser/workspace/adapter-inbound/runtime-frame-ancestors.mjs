@@ -47,7 +47,8 @@ import net from "node:net";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import test from "node:test";
-const { geometricStarter, encodeGlyphLibrary } = await import(new URL(
+const { geometricStarter, encodeGlyphLibrary,
+    italicizeGlyphStrokes } = await import(new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/"
         + "glyph-strokes.js", import.meta.url,
 ).href);
@@ -11546,6 +11547,123 @@ test(
             assert.notEqual(accepted, zero);
             assert.deepEqual(requests, baseline,
                 "italic geometry and TSV downloads remain browser-local");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox slants authored Unicode without changing sibling glyph ink",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/authored-slant-browser-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const get = (id) => document.getElementById("glyph-" + id);
+                    const change = (id, value) => {
+                        get(id).value = String(value);
+                        get(id).dispatchEvent(new Event("input", {
+                            bubbles: true,
+                        }));
+                    };
+                    const add = (glyph, coordinates) => {
+                        change("character", glyph);
+                        for (const [key, value] of Object.entries({
+                            x1: coordinates[0], y1: coordinates[1],
+                            x2: coordinates[2], y2: coordinates[3],
+                            width: 250,
+                        })) change(key, value);
+                        get("add").click();
+                    };
+                    const nfd = "n\u0303";
+                    const initiallyDisabled = get("slant-authored").disabled;
+                    add(nfd, [450, 1000, 850, 1600]);
+                    add("ñ", [300, 350, 500, 550]);
+                    change("character", nfd);
+                    const enabled = !get("slant-authored").disabled;
+                    get("slant-authored").click();
+                    const accepted = get("status").textContent;
+                    const blobs = [];
+                    const originalUrl = URL.createObjectURL;
+                    const originalClick = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return originalUrl.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {};
+                        get("save").click();
+                        change("authored-angle", 21);
+                        get("slant-authored").click();
+                        const refused = get("status").textContent;
+                        get("save").click();
+                        change("character", "á");
+                        const missing = get("slant-authored").disabled;
+                        return JSON.stringify({
+                            initiallyDisabled, enabled, accepted, refused,
+                            missing, blobs: await Promise.all(blobs.map((b) =>
+                                b.text())),
+                        });
+                    } finally {
+                        URL.createObjectURL = originalUrl;
+                        HTMLAnchorElement.prototype.click = originalClick;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const actual = JSON.parse(response.result.value);
+            assert.equal(actual.initiallyDisabled, true);
+            assert.equal(actual.enabled, true);
+            assert.equal(actual.missing, true);
+            assert.match(actual.accepted, /Slanted all authored ñ ink/);
+            assert.match(actual.refused, /Italic angle must be 0..20/);
+            const nfd = "n\u0303";
+            const source = [
+                { grapheme: nfd, x1: 450, y1: 1000,
+                    x2: 850, y2: 1600, width: 250,
+                    color: "#243647" },
+                { grapheme: "ñ", x1: 300, y1: 350,
+                    x2: 500, y2: 550, width: 250,
+                    color: "#243647" },
+            ];
+            const expected = encodeGlyphLibrary(
+                italicizeGlyphStrokes(source, nfd, 12, 3550),
+            );
+            assert.deepEqual(actual.blobs, [expected, expected],
+                "invalid slant preserves the actual downloaded TSV");
+            assert.deepEqual(requests, baseline,
+                "authored italic transformation stays in the browser");
         } finally {
             bidi?.close();
             await closeFixtureServer(server);

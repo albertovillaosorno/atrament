@@ -1012,6 +1012,20 @@ real Rust export test checks italic accented `áó` (131 ink lines) against
 independently supplied PDF/PNG pen strokes. This is a selectable sampled
 italic starter, **not** cursive joining or persistent geometry metadata.
 
+For **existing hand-drawn strokes** of any exact Unicode glyph, use the
+separate **Authored glyph italic angle** and **shear baseline Y** controls,
+then click **Slant all selected glyph strokes (unsaved)**. A 12-degree tilt
+around 3550 µm is the default; both controls are explicit and bounded.
+The selected glyph's full line and accent sequence shears as one group,
+keeping strokes connected and interleaved NFC/NFD/other glyphs untouched.
+
+This is a deliberate in-memory edit, not a live uncommitted preview: save
+an original TSV before changing the shape, then download the edited TSV
+separately. Repeating the action compounds the shear. Invalid angles,
+missing glyphs or clipped pen tips refuse the entire edit without erasing
+previously accepted work. The exporter still saves sampled straight lines;
+no analytic curves, named variants or automatic cursive are persisted.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each
