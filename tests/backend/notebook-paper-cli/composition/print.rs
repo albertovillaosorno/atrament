@@ -393,6 +393,60 @@ fn fake_pdf_trailers_and_retargeted_xrefs_cannot_reach_a_printer() {
 
 #[cfg(unix)]
 #[test]
+fn xref_stream_tokens_cannot_hide_in_comments_or_string_literals() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS fixture");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+    // Valid xref stream dictionaries may include comments, nested maps,
+    // parenthesized strings and CRLF stream boundaries.
+    let nested_stream = [
+        "%PDF-1.7\n1 0 obj\n<< /Note (/Type /Page)\n",
+        " /Type % ordinary PDF dictionary comment\n /XRef",
+        " /DecodeParms << /Type /Page >> >>\n",
+        "stream\r\n\u{0000}\nendstream\nendobj\n",
+        "startxref\n9\n%%EOF\n",
+    ].concat().into_bytes();
+    assert!(supported_pdf_cross_reference(&nested_stream),
+        "legitimate nested xref stream dictionary remains admitted");
+    // A byte substring is not proof of an xref stream dictionary. Its
+    // /Type must be an actual top-level name, and stream an actual keyword.
+    for fake_body in [
+        "1 0 obj\n/Type /XRef\nstream\n",
+        "1 0 obj\n<< /Memo (/Type /XRef) >>\nstream\n",
+        "1 0 obj\n<< % /Type /XRef\n /Type /Page >>\nstream\n",
+        "1 0 obj\n<< /Other << /Type /XRef >> >>\nstream\n",
+        "1 0 obj\n<< /List [/Type /XRef] >>\nstream\n",
+        "1 0 obj\n<< /Type /XRef >>\ndownstream\n",
+        "1 0 obj\n<< /Type /XRef >>\n%stream\n",
+    ] {
+        let fake = format!(
+            "%PDF-1.7\n{fake_body}startxref\n9\n%%EOF\n"
+        ).into_bytes();
+        assert!(!supported_pdf_cross_reference(&fake),
+            "not an actual xref stream: {fake_body:?}");
+        fs::write(&pdf, &fake).expect("save fake xref stream");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(), "fake stream refused");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "fake stream cannot reach CUPS");
+        assert!(!spooled.exists(), "no fake spool side effect");
+        assert_eq!(fs::read(&pdf).expect("source unchanged"), fake);
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
     use std::os::unix::fs::{PermissionsExt as _, symlink};
 

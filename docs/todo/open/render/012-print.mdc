@@ -105,6 +105,16 @@ both refused cases are checked against fake CUPS invocation and original
 file bytes. Legacy table-based PDF framing remains eligible across the
 existing supported version range.
 
+The bounded xref-stream header scan now also requires an actual outer
+`<< ... >>` dictionary with an exact `/Type /XRef` name entry and a standalone
+`stream` token followed by a line break. A red-before/green-after regression
+rejects fake type names inside comments, strings, arrays, nested maps, or
+outside the dictionary, plus incidental `downstream` and `%stream` text.
+The same test admits nested dictionaries, comments, literal strings and CRLF
+stream framing in a properly typed indirect stream. All six print tests and
+strict all-target paper Clippy pass; fake CUPS remains untouched for refused
+inputs and selected bytes remain unchanged.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

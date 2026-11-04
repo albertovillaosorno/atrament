@@ -226,36 +226,164 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     let Some(prefix) = target.get(..target.len().min(16_384)) else {
         return false;
     };
-    let mut words = prefix.split(u8::is_ascii_whitespace)
-        .filter(|word| !word.is_empty());
-    if !matches!((words.next(), words.next(), words.next()),
-        (Some(object), Some(generation), Some(b"obj"))
-            if !object.is_empty() && object.iter().all(u8::is_ascii_digit)
-                && !generation.is_empty()
-                && generation.iter().all(u8::is_ascii_digit)) {
+    supported_xref_stream_dictionary(prefix)
+}
+
+// These small lexical checks intentionally do not parse PDF object contents
+// or validate stream data. They only keep comments, strings, nested maps and
+// coincidental substrings from impersonating the top-level xref dictionary.
+fn pdf_name(bytes: &[u8], start: usize) -> Option<(&[u8], usize)> {
+    if bytes.get(start) != Some(&b'/') {
+        return None;
+    }
+    let first = start.checked_add(1)?;
+    let mut end = first;
+    while bytes.get(end).is_some_and(|byte| {
+        !byte.is_ascii_whitespace() && !b"()<>[]{}/%".contains(byte)
+    }) {
+        end = end.saturating_add(1);
+    }
+    if end == first {
+        return None;
+    }
+    bytes.get(first..end).map(|name| (name, end))
+}
+
+fn pdf_trivia_end(bytes: &[u8], mut at: usize) -> usize {
+    loop {
+        while bytes.get(at).is_some_and(u8::is_ascii_whitespace) {
+            at = at.saturating_add(1);
+        }
+        if bytes.get(at) != Some(&b'%') {
+            return at;
+        }
+        while let Some(byte) = bytes.get(at) {
+            at = at.saturating_add(1);
+            if matches!(byte, b'\r' | b'\n') {
+                break;
+            }
+        }
+    }
+}
+
+fn pdf_literal_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut depth = 1usize;
+    let mut at = start.checked_add(1)?;
+    while let Some(byte) = bytes.get(at) {
+        match byte {
+            b'\\' => at = at.checked_add(2)?,
+            b'(' => {
+                depth = depth.saturating_add(1);
+                at = at.saturating_add(1);
+            }
+            b')' => {
+                depth = depth.saturating_sub(1);
+                at = at.saturating_add(1);
+                if depth == 0 {
+                    return Some(at);
+                }
+            }
+            _ => at = at.saturating_add(1),
+        }
+    }
+    None
+}
+
+fn supported_xref_stream_dictionary(prefix: &[u8]) -> bool {
+    let mut at = 0usize;
+    for _ in 0u8..2 {
+        at = pdf_trivia_end(prefix, at);
+        let start = at;
+        while prefix.get(at).is_some_and(u8::is_ascii_digit) {
+            at = at.saturating_add(1);
+        }
+        if start == at || !prefix.get(at)
+            .is_some_and(u8::is_ascii_whitespace)
+        {
+            return false;
+        }
+    }
+    at = pdf_trivia_end(prefix, at);
+    if !prefix.get(at..).is_some_and(|tail| tail.starts_with(b"obj"))
+        || !prefix.get(at.saturating_add(3))
+            .is_some_and(u8::is_ascii_whitespace)
+    {
         return false;
     }
-    let Some(stream) = prefix.windows(b"stream".len())
-        .position(|part| part == b"stream")
-    else {
+    at = pdf_trivia_end(prefix, at.saturating_add(3));
+    if !prefix.get(at..).is_some_and(|tail| tail.starts_with(b"<<")) {
         return false;
-    };
-    let Some(dictionary) = prefix.get(..stream) else {
+    }
+    at = at.saturating_add(2);
+    let mut depth = 1usize;
+    let mut array_depth = 0usize;
+    let mut found_type = false;
+    while at < prefix.len() {
+        match prefix.get(at) {
+            Some(&b'%') => at = pdf_trivia_end(prefix, at),
+            Some(&b'(') => match pdf_literal_end(prefix, at) {
+                Some(end) => at = end,
+                None => return false,
+            },
+            Some(&b'<') if prefix.get(at.saturating_add(1)) == Some(&b'<') => {
+                depth = depth.saturating_add(1);
+                at = at.saturating_add(2);
+            }
+            Some(&b'<') => match prefix.get(at.saturating_add(1)..)
+                .and_then(|tail| tail.iter().position(|byte| *byte == b'>'))
+            {
+                Some(end) => at = at.saturating_add(end).saturating_add(2),
+                None => return false,
+            },
+            Some(&b'>') if prefix.get(at.saturating_add(1)) == Some(&b'>') => {
+                depth = depth.saturating_sub(1);
+                at = at.saturating_add(2);
+                if depth == 0 {
+                    break;
+                }
+            }
+            Some(&b'[') => {
+                array_depth = array_depth.saturating_add(1);
+                at = at.saturating_add(1);
+            }
+            Some(&b']') => {
+                if array_depth == 0 {
+                    return false;
+                }
+                array_depth = array_depth.saturating_sub(1);
+                at = at.saturating_add(1);
+            }
+            Some(&b'/') => {
+                let Some((name, end)) = pdf_name(prefix, at) else {
+                    return false;
+                };
+                at = end;
+                if depth == 1 && array_depth == 0 && name == b"Type" {
+                    if found_type {
+                        return false;
+                    }
+                    at = pdf_trivia_end(prefix, at);
+                    let Some((value, value_end)) = pdf_name(prefix, at) else {
+                        return false;
+                    };
+                    if value != b"XRef" {
+                        return false;
+                    }
+                    found_type = true;
+                    at = value_end;
+                }
+            }
+            _ => at = at.saturating_add(1),
+        }
+    }
+    if depth != 0 || array_depth != 0 || !found_type {
         return false;
-    };
-    // PDF names terminate at whitespace or a lexical delimiter. A longer
-    // name such as /XRefShadow is not the required indirect-stream type.
-    let Some(type_value) = dictionary.windows(b"/Type".len())
-        .position(|part| part == b"/Type")
-        .and_then(|index| index.checked_add(b"/Type".len()))
-        .and_then(|start| dictionary.get(start..))
-    else {
-        return false;
-    };
-    type_value.trim_ascii_start().strip_prefix(b"/XRef")
-        .is_some_and(|suffix| suffix.first().is_none_or(|next| {
-            next.is_ascii_whitespace() || b"()<>[]/%".contains(next)
-        }))
+    }
+    at = pdf_trivia_end(prefix, at);
+    prefix.get(at..).is_some_and(|tail| {
+        tail.starts_with(b"stream")
+            && matches!(tail.get(6), Some(b'\n' | b'\r'))
+    })
 }
 
 fn selected_pdf(path: &Path) -> Result<Vec<u8>, String> {
