@@ -227,6 +227,7 @@ struct Layout<'model> {
     page: usize,
     pitch: u32,
     right: u32,
+    row_count: usize,
     statistics: Option<&'model HandwritingStatisticsProfile>,
     top: u32,
     y: u32,
@@ -242,6 +243,9 @@ impl Layout<'_> {
     }
 
     fn begin_row(&mut self) -> Result<u32, String> {
+        if self.row_count == MAX_FLOW_LINES {
+            return Err("flow exceeds 128 measured lines".into());
+        }
         let usable_bottom = self
             .bottom
             .checked_sub(INSET_UM)
@@ -268,7 +272,16 @@ impl Layout<'_> {
         {
             return Err("flow line cannot fit printable vertical region".into());
         }
+        self.row_count = self.row_count.checked_add(1)
+            .ok_or("flow row count overflow")?;
         Ok(self.y)
+    }
+
+    fn blank_row(&mut self) -> Result<(), String> {
+        let y = self.begin_row()?;
+        self.y = y.checked_add(self.pitch)
+            .ok_or("flow blank-row advance overflow")?;
+        Ok(())
     }
 
     fn layout_line(
@@ -414,9 +427,6 @@ impl Layout<'_> {
     ) -> Result<(), String> {
         if text.is_empty() {
             return Ok(());
-        }
-        if self.lines.len() == MAX_FLOW_LINES {
-            return Err("flow exceeds 128 measured lines".into());
         }
         let y = self.begin_row()?;
         if let LineStyle::Heading(level) = style {
@@ -662,21 +672,31 @@ pub(super) fn layout_flow(
         bottom,
         left,
         right,
+        row_count: 0,
         pitch,
     };
-    // A Markdown newline is a soft paragraph wrap, unlike an explicit
-    // line in plain-text mode. Two trailing spaces request a hard line
-    // break. Structural blocks terminate a pending paragraph first.
+    // Markdown blank-line runs separate paragraphs once, even after multiple
+    // empty source lines; leading and trailing blanks add no physical space.
+    // Plain-text blank lines instead consume a full physical writing row.
     let mut paragraph = String::new();
+    let mut pending_gap = false;
     for input_line in source.text.lines() {
         let raw = input_line.trim_end_matches(' ');
         if raw.is_empty() {
-            if !paragraph.is_empty() {
-                layout.layout_line(&paragraph, LineStyle::Body)?;
-                paragraph.clear();
+            if source.format == FlowFormat::Plain {
+                layout.blank_row()?;
+            } else {
+                if !paragraph.is_empty() {
+                    layout.layout_line(&paragraph, LineStyle::Body)?;
+                    paragraph.clear();
+                }
+                pending_gap = !layout.lines.is_empty();
             }
-            layout.add_gap()?;
             continue;
+        }
+        if pending_gap {
+            layout.add_gap()?;
+            pending_gap = false;
         }
         let (style, body) = if source.format == FlowFormat::Markdown {
             markdown_line(input_line)

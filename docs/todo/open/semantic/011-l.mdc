@@ -108,6 +108,14 @@ now use deliberate hard breaks instead of relying on non-Markdown line
 semantics. Real PDF/PNG parity and atomic empty-heading/list refusal are
 also verified. This is still a restricted export-only parser.
 
+Blank layout now distinguishes source formats: consecutive Markdown blank
+lines collapse to a single 4-mm paragraph gap and leading/trailing blanks
+add no space; plain-text blank rows reserve the entire 9-mm default pitch,
+roll across actual page boundaries and count toward the 128-row budget.
+Two native regressions verify page 2 physical ink, byte-identical PDF/PNG
+for collapsed Markdown whitespace, distinct plain output, and immutable
+existing PDF on excessive rows or an insufficient page selection.
+
 Three additional ordered-list tests verify mixed heading, decimal and
 parenthesized numbering alongside bullet marks; native PDF and transparent
 PNG use the same user-authored numerals and delimiters. Wrapped numbered

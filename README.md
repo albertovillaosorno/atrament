@@ -451,8 +451,11 @@ Use `--flow-text-file` for plain text, or `--flow-text` and
 `--flow-markdown` for inline command arguments. Plain-text newlines each
 start a physical row. In Markdown, consecutive ordinary lines form one
 soft-wrapped paragraph, while two spaces before a newline request a hard
-row break. Blank lines add spacing and headings/lists end a paragraph.
-Long text wraps and paginates automatically (up to 32 physical pages).
+row break. Consecutive Markdown blank lines collapse to one 4-mm paragraph
+gap, with leading/trailing blanks ignored. Plain-text blank lines instead
+reserve full physical writing rows; they count toward the 128-row limit and
+can create a new page. Headings/lists end a paragraph. Long text wraps and
+paginates automatically (up to 32 physical pages).
 The Markdown subset supports single-line `#`, `##`, `###` headings,
 `-`/`*`/`+` bullets, and numbered items such as `1. text` or `2) text`
 (with one to nine ASCII digits). Numbered items use your **authored** digit

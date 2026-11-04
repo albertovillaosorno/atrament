@@ -2473,6 +2473,108 @@ fn markdown_soft_wrap_exports_same_real_pages_as_explicit_paragraph() {
 }
 
 #[test]
+fn markdown_blank_runs_collapse_and_plain_blanks_keep_physical_rows() {
+    let profile = NotebookProfile::default();
+    let single = FlowSource::new(FlowFormat::Markdown, "a\n\na")
+        .expect("one Markdown blank");
+    let many = FlowSource::new(FlowFormat::Markdown,
+        "\n\na\n\n\n\n\na\n\n")
+        .expect("leading, repeated and trailing Markdown blanks");
+    let (one, marks, pages) = layout_flow(&single, &profile, None,
+        HeadingDecoration::default()).expect("one paragraph gap");
+    let (collapsed, other_marks, collapsed_pages) = layout_flow(
+        &many, &profile, None, HeadingDecoration::default(),
+    ).expect("one collapsed paragraph gap");
+    assert_eq!((pages, collapsed_pages), (1, 1));
+    assert_eq!(one.iter().map(|run| (run.page, run.origin_um, &run.text))
+        .collect::<Vec<_>>(), collapsed.iter().map(|run| {
+        (run.page, run.origin_um, &run.text)
+    }).collect::<Vec<_>>(), "empty Markdown runs add only one gap");
+    assert_eq!(marks, other_marks);
+    assert_eq!(one[1].origin_um.1 - one[0].origin_um.1, 13_000);
+    let plain = FlowSource::new(FlowFormat::Plain, "a\n\n\na")
+        .expect("two explicit empty rows");
+    let (runs, _, _) = layout_flow(&plain, &profile, None,
+        HeadingDecoration::default()).expect("blank physical rows");
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[1].origin_um.1 - runs[0].origin_um.1, 27_000,
+        "both empty plain-text lines consume a full 9-mm writing row");
+    // These are the same actual page bytes for any number of intervening
+    // Markdown empty lines, and remain different from explicit plain rows.
+    for format in ["pdf", "png"] {
+        let render = |input: &str, markdown: bool| {
+            let mut cli = args(&[
+                "--export-paper", format, "--printed-sheet", "true",
+                "--glyph-stroke", "a", "0", "0", "3500", "4500",
+                "250", "#204060", if markdown { "--flow-markdown" }
+                    else { "--flow-text" }, input,
+            ]);
+            if format == "png" { cli.extend(args(&["--dpi", "72"])); }
+            execute_notebook(&cli).expect("native blank-space export")
+                .expect("physical output")
+        };
+        let canonical = render("a\n\na", true);
+        assert_eq!(canonical, render("\n\na\n\n\n\n\na\n\n", true));
+        assert_ne!(canonical, render("a\n\n\na", false));
+        if format == "png" {
+            assert!(canonical.starts_with(b"\x89PNG\r\n\x1a\n"));
+        } else {
+            assert!(canonical.starts_with(b"%PDF-1.4"));
+        }
+    }
+}
+
+#[test]
+fn plain_blank_rows_paginate_and_obey_row_and_page_limits_atomically() {
+    let long = format!("a\n{}a", "\n".repeat(27));
+    let source = FlowSource::new(FlowFormat::Plain, &long)
+        .expect("bounded plain source");
+    let (runs, marks, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("blank rows carry physical pagination");
+    assert_eq!(pages, 2, "29 rows no longer collapse onto page 1");
+    assert_eq!(runs.len(), 2, "no invisible glyphs are synthesized");
+    assert!(marks.is_empty());
+    assert_eq!((runs[0].page, runs[1].page), (1, 2));
+    assert_eq!(runs[0].origin_um, runs[1].origin_um,
+        "page 2 resumes at the selected physical top inset");
+    let mut cli = args(&[
+        "--export-paper", "pdf", "--printed-sheet", "true",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060", "--flow-text", &long,
+    ]);
+    let pdf = execute_notebook(&cli).expect("two-page native PDF")
+        .expect("PDF bytes");
+    assert_eq!(String::from_utf8_lossy(&pdf)
+        .matches("\nstream\n").count(), 2);
+    cli[1] = "png".into();
+    cli.extend(args(&["--png-page", "2", "--dpi", "72"]));
+    let png = execute_notebook(&cli).expect("physical second-page PNG")
+        .expect("PNG bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    let target = test_path();
+    let filename = target.to_str().expect("test-owned output path");
+    fs::write(&target, b"existing valid PDF").expect("sentinel");
+    for (plain, expected) in [
+        (long.as_str(), "requires 2 physical pages"),
+        (&format!("a\n{}a", "\n".repeat(128)),
+            "flow exceeds 128 measured lines"),
+    ] {
+        let error = execute_notebook(&args(&[
+            "--export-paper", "pdf", "--printed-sheet", "true",
+            "--glyph-stroke", "a", "0", "0", "3500", "4500",
+            "250", "#204060", "--flow-text", plain,
+            "--pages", "1", "--output", filename, "--replace",
+        ])).expect_err("insufficient page or row budget must refuse");
+        assert!(error.contains(expected), "{error}");
+        assert_eq!(fs::read(&target).expect("preserved PDF"),
+            b"existing valid PDF");
+    }
+    fs::remove_file(target).expect("remove test-owned sentinel");
+}
+
+#[test]
 fn markdown_invalid_structural_block_preserves_existing_output() {
     let target = test_path();
     let filename = target.to_str().expect("test-owned output path");
