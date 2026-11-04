@@ -50,6 +50,62 @@ function actualPngInk(bytes) {
     return raw;
 }
 
+test('degree and percent manual rings render native PDF and RGBA PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/math-percent-'));
+        try {
+            const path = join(dir, 'degree-percent.tsv');
+            const output = join(dir, 'degree-percent.pdf');
+            const degrees = geometricStarter('°', 1550, 2450,
+                1100, 250, '#243647');
+            const percent = geometricStarter('%', 1550, 2450,
+                1100, 250, '#243647');
+            const authored = [...degrees, ...percent];
+            assert.equal(authored.length, 145);
+            assert.deepEqual(candidatePenPaths(authored, '%').map(
+                ({ first, last }) => [first, last]),
+            [[1, 48], [49, 96], [97, 97]]);
+            const canonical = Buffer.from(encodeGlyphLibrary(authored));
+            writeFileSync(path, canonical);
+            const opened = cli('glyphs', ['--profile', path]);
+            assert.equal(opened.status, 0, opened.stderr.toString());
+            assert.deepEqual(opened.stdout, canonical);
+            const audit = cli('glyphs', ['--profile', path,
+                '--audit-text', '°%']);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 2/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', path, '--flow-text', '°%\n°%'];
+            const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+                '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const expected = readFileSync(output);
+            assert.match(expected.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((expected.toString('latin1').match(/ m\n/g) ?? [])
+                .length, 290, 'two rows contain 145 directed pen lines');
+            const png = cli('notebook', [...flags, '--export-paper', 'png',
+                '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const refused = cli('notebook', [
+                '--printed-sheet', 'true', '--glyph-file', path,
+                '--flow-text', '°%∝', '--export-paper', 'pdf',
+                '--output', output, '--replace',
+            ]);
+            assert.notEqual(refused.status, 0,
+                'missing neighboring math graphemes need their own ink');
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), expected,
+                'refused shape cannot replace an accepted physical PDF');
+            assert.deepEqual(readFileSync(path), canonical,
+                'the independently authored TSV is never mutated');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('ten math symbols roundtrip TSV and render two real ink rows', () => {
     const dir = mkdtempSync(join(root, '.temp/math-native-'));
     try {

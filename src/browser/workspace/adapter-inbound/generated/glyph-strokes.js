@@ -569,6 +569,8 @@ function quoteMirror(cx, glyph, p) {
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "=", "×", "÷",
     "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈"];
+// Extra manually selected marks do not change the 17-glyph math fill.
+const CIRCLE_MARKS = ["°", "%"];
 function mathParts(cx, cy, radius, glyph) {
     const point = (x, y) => ({
         x: cx + Math.round(radius * x),
@@ -725,6 +727,28 @@ function digitGeometry(cx, cy, radius, glyph) {
             parts: [arc(0.7, -0.37, 0.7, 0.8, -0.4, 1)],
         };
     }
+}
+// Degree and percent have exact ideal SVG circles, sampled only when
+// exporting to the existing integer-micrometre line-only native library.
+function circleMarkGeometry(cx, cy, radius, glyph) {
+    const ring = (x, y) => ({
+        cx: cx + Math.round(radius * x),
+        cy: cy + Math.round(radius * y),
+        rx: Math.round(radius * 0.28),
+        ry: Math.round(radius * 0.28),
+    });
+    if (glyph === "°") {
+        return { ellipses: [ring(0.4, -0.63)], parts: [] };
+    }
+    return {
+        ellipses: [ring(-0.48, -0.56), ring(0.48, 0.56)],
+        parts: [{
+                from: { x: cx + Math.round(radius * 0.75),
+                    y: cy - Math.round(radius * 0.90) },
+                to: { x: cx - Math.round(radius * 0.75),
+                    y: cy + Math.round(radius * 0.90) },
+            }],
+    };
 }
 function ellipsePoint(ellipse, step) {
     const radians = 2 * Math.PI * step / CIRCLE_SEGMENTS;
@@ -1262,7 +1286,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s",
         ".", ",", "!", "¡", "?", "¿",
         "«", "»", "‘", "’", "“", "”",
-        ...MATH_GLYPHS,
+        ...MATH_GLYPHS, ...CIRCLE_MARKS,
         ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ...TEXT_MARKS, ...NOTATION_MARKS].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
@@ -1400,6 +1424,36 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         const parts = geometry.parts.flatMap(({ from, control, to }) => control === undefined ? [line(from, to)]
             : Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1))));
         return [...ellipses, ...parts];
+    }
+    if (CIRCLE_MARKS.includes(g)) {
+        const geometry = circleMarkGeometry(cx, cy, radius, g);
+        if (geometry.ellipses.some((ring) => ring.rx < pen + 40)) {
+            throw new Error("Degree/percent loops need pen-clearance");
+        }
+        const line = (from, to) => {
+            for (const point of [from, to]) {
+                if (point.x - halfPen < 0 || point.x + halfPen > 3500
+                    || point.y - halfPen < 0
+                    || point.y + halfPen > 4500) {
+                    throw new Error("Degree/percent ink clips glyph cell");
+                }
+            }
+            return validateStroke({ grapheme: g,
+                x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+                width: pen, color });
+        };
+        const ink = [];
+        for (const ring of geometry.ellipses) {
+            for (let step = 0; step < CIRCLE_SEGMENTS; step += 1) {
+                const start = ellipsePoint(ring, step);
+                const end = ellipsePoint(ring, step + 1);
+                ink.push(line(start, end));
+            }
+        }
+        for (const { from, to } of geometry.parts) {
+            ink.push(line(from, to));
+        }
+        return ink;
     }
     if (MATH_GLYPHS.includes(g)) {
         if (g === "÷" && radius * 0.58 < pen + 100) {
@@ -2186,9 +2240,18 @@ export function createGlyphStrokeEditor() {
                 to: quoteMirror(cx, chosen.grapheme, to),
                 ...(control ? { control: quoteMirror(cx, chosen.grapheme, control) } : {}),
             }))) : "";
-            const isMath = MATH_GLYPHS
+            const isCircleMark = CIRCLE_MARKS
                 .includes(chosen.grapheme);
-            const mathD = isMath ? punctuationGuide(mathParts(cx, cy, r, chosen.grapheme)) : "";
+            const isMath = isCircleMark
+                || MATH_GLYPHS.includes(chosen.grapheme);
+            let mathD = "";
+            if (isCircleMark) {
+                const geometry = circleMarkGeometry(cx, cy, r, chosen.grapheme);
+                mathD = digitGuide(geometry);
+            }
+            else if (isMath) {
+                mathD = punctuationGuide(mathParts(cx, cy, r, chosen.grapheme));
+            }
             const isDigit = /^[0-9]$/.test(chosen.grapheme);
             const digitD = isDigit ? digitGuide(digitGeometry(cx, cy, r, chosen.grapheme)) : "";
             const isCapital = /^[A-Z]$/.test(chosen.grapheme);
@@ -2229,7 +2292,7 @@ export function createGlyphStrokeEditor() {
                     "v", "w", "k", "x", "y", "z",
                     ".", ",", "!", "¡", "?", "¿",
                     "«", "»", "‘", "’", "“", "”",
-                    ...MATH_GLYPHS,
+                    ...MATH_GLYPHS, ...CIRCLE_MARKS,
                     ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                     ...TEXT_MARKS, ...NOTATION_MARKS]
                     .includes(chosen.grapheme);

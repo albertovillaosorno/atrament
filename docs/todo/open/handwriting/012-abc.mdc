@@ -1107,6 +1107,26 @@ mutating the source library. These are finite extra notation shapes, not a
 persisted handwriting font, automatic stroke joining or symbolic equation
 layout; the full glyph and calibration scope remains open.
 
+## Manual degree and percent circular notation (partial) — 2026-11-04
+
+The browser geometry editor now offers two additional opt-in exact glyphs:
+`°` is one circular upper ring; `%` has two separately closed rings and a
+third diagonal pen stroke. Their editable SVG guides use true circular arcs,
+while the existing Rust v1 TSV format records 48 directed line chords per
+ring (48 and 97 total sampled strokes respectively). The bounded
+construction checks pen clearance and physical cell margins before any
+previously authored draft is replaced.
+
+The 17-symbol **Fill missing math** action intentionally remains unchanged:
+these are separately selected manual starters, not automatic glyph coverage.
+Browser tests check ideal SVG arcs, pen lifts, TSV identity, refused edits
+and 15,984 deterministic candidate cell-margin combinations.
+
+An independent Rust CLI test reopens the UTF-8 glyph library and exports
+two rows of `°%` as 290 vector pen moves to PDF and transparent 72-DPI RGBA
+PNG, with missing `∝` refusing a replacement. Analytic native curves,
+complete mathematical coverage and a persisted handwriting font remain open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

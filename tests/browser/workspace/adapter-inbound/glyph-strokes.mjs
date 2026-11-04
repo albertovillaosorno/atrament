@@ -2998,6 +2998,73 @@ test("calculus and comparison math SVG preserves ideal curve controls",
         }
     });
 
+test("degree and percent preserve ideal circular guides and pen lifts",
+    async () => {
+        const degree = geometricStarter("°", 1550, 2450, 1100,
+            250, "#243647");
+        const percent = geometricStarter("%", 1550, 2450, 1100,
+            250, "#243647");
+        assert.equal(degree.length, 48);
+        assert.equal(percent.length, 97);
+        assert.deepEqual(candidatePenPaths(degree, "°")
+            .map(({ first, last }) => [first, last]), [[1, 48]]);
+        assert.deepEqual(candidatePenPaths(percent, "%")
+            .map(({ first, last }) => [first, last]),
+        [[1, 48], [49, 96], [97, 97]]);
+        for (const glyph of [degree, percent]) {
+            const paths = candidatePenPaths(glyph, glyph[0].grapheme);
+            for (const path of paths.filter(
+                (entry) => entry.last > entry.first)) {
+                assert.deepEqual(path.start, path.end,
+                    "each ideal circular ring is a closed pen path");
+            }
+            assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(glyph)),
+                glyph, "native integer TSV retains the exact grapheme");
+        }
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            for (const [glyph, arcs, counts] of [
+                ["°", 2, 48], ["%", 4, 97],
+            ]) {
+                get("form").value = glyph;
+                get("character").value = glyph;
+                get("form").dispatch("input");
+                const guide = get("ideal-rounded");
+                assert.equal((guide.attributes.get("d").match(/ A /g)
+                    ?? []).length, arcs, "SVG uses real circular arcs");
+                assert.equal(guide.attributes.get("visibility"), "visible");
+                for (const stem of ["ideal-rounded-left",
+                    "ideal-rounded-right"]) {
+                    assert.equal(get(stem).attributes.get("visibility"),
+                        "hidden", "circle marks need no unrelated stems");
+                }
+                get("construct").dispatch("click");
+                get("save").dispatch("click");
+                const authored = parseGlyphLibrary(
+                    await downloads.at(-1).text());
+                assert.equal(authored.filter((s) => s.grapheme === glyph)
+                    .length, counts);
+            }
+            const original = await downloads.at(-1).text();
+            get("circle-x").value = "150";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "hidden", "clipped circles hide their ideal preview");
+            get("construct").dispatch("click");
+            assert.match(get("status").textContent,
+                /fit inside glyph cell|clips glyph cell/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), original,
+                "invalid edited rings preserve existing authored strokes");
+        } finally {
+            ui.restore();
+        }
+        assert.throws(() => geometricStarter("%", 1550, 2450,
+            200, 250, "#243647"), /pen-clearance/);
+    });
+
 test("math fill keeps custom ink and refuses over-cap", async () => {
     const ui = mountEditor();
     try {
@@ -3641,7 +3708,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         ".", ",", "!", "¡", "?", "¿", "«", "»", "‘", "’", "“", "”",
         "+", "-", "−", "=", "×", "÷",
         "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈",
-        ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "°", "%", ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",
         "/", "\\", "{", "}",
         "k", "x", "y", "z", "c", "e", "i", "í", "j"];
@@ -3682,7 +3749,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 15696);
+    assert.equal(checked, 15984);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 
