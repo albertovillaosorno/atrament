@@ -41,6 +41,27 @@ records remain accepted theoretical deliverables and are not reopened:
 - ATR-P8-002 — archived release design
 - ATR-P8-005 — archived release design
 
+## Read-only legacy notebook.v1 upgrade (partial) — 2026-11-04
+
+The existing native notebook codec accepts its earlier seven-field
+`atrament.notebook.v1` profile without `date_text`, interpreting only that
+missing optional field as an empty date. Its eight-field canonical form can
+be written to a different, explicitly selected destination; opening the old
+file alone does not write, replace or rename it.
+
+A new real Rust CLI acceptance test exercises an opted-in preprinted profile
+with date placeholder, border, page numbers and paper geometry. Its original
+seven-field bytes remain unchanged while the saved eight-field upgrade
+matches a modern canonical file exactly. Both versions generate identical
+physical two-page vector PDF and page-two transparent PNG bytes.
+
+The same test refuses an unsupported schema version, unknown field, wrong
+type, oversized JSON and invalid UTF-8 before replacing the accepted target.
+Run `node --test tests/backend/notebook-profile/composition/lib.mjs` for
+the independent real Rust acceptance path. This is a narrow v1 optional-field
+compatibility policy, not migration of arbitrary older schema versions.
+The localhost credential/privacy and full migration ledger remain open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
