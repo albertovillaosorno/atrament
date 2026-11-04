@@ -518,7 +518,8 @@ function unreviewedAmbientProcessInputReads(source, sourcePath) {
         || sourcePath === PROFILE_EDITOR_CLI) {
         return reads.length !== 0 || argumentsRead.length !== 1
             || argumentsRead[0][1] !== "args"
-            || !/\benv\s*::\s*args\s*\(\s*\)\s*\.\s*skip\s*\(\s*1\s*\)/u.test(source);
+            || !/\benv\s*::\s*args\s*\(\s*\)\s*\.\s*skip\s*\(\s*1\s*\)/u
+                .test(source);
     }
     if (argumentsRead.length > 0) {
         return true;
