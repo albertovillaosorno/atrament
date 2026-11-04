@@ -502,8 +502,11 @@ integration compares edited TSV and both physical PDF and transparent PNG
 output byte-for-byte with manually authored ink. A real localhost Firefox
 session additionally selects a closed NFD loop entry, confirms the action
 is gated for first/isolated strokes, downloads the exact interleaved UTF-8
-TSV, and proves no additional backend requests. An analytic native circle
-and persistent pen-lift identity remain unfinished.
+TSV, and proves no additional backend requests. An additional integration
+regression rotates path 2 after an isolated accent, checks exact TSV
+parity between browser and native Rust across interleaved Unicode rows,
+and proves inverse rotation restores every input byte. An analytic circle and
+persistent pen-lift identity remain unfinished.
 
  The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be

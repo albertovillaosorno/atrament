@@ -1001,6 +1001,24 @@ test("closed candidate loop can change start without changing ink", () => {
         /closed pen loop/);
     assert.deepEqual(open[5], { ...d, x2: 600, y2: 600 },
         "failed open-path rotation does not mutate a source");
+
+    const second = [accent, other, a, math, b, c, d];
+    const secondBytes = encodeGlyphLibrary(second);
+    const shiftedSecond = rotateClosedCandidatePath(second, nfd, 5);
+    assert.equal(shiftedSecond.selectedIndex, 2);
+    assert.deepEqual(shiftedSecond.strokes,
+        [accent, other, c, math, d, a, b],
+        "path 2 moves only its own closed segments");
+    assert.deepEqual(candidatePenPaths(shiftedSecond.strokes, nfd)
+        .map((path) => [path.first, path.last]),
+        [[1, 1], [2, 5]]);
+    assert.deepEqual(rotateClosedCandidatePath(
+        shiftedSecond.strokes, nfd, 5,
+    ).strokes, second, "path 2 inverse returns exact original ink");
+    assert.equal(encodeGlyphLibrary(second), secondBytes);
+    assert.throws(() => rotateClosedCandidatePath(second, nfd, 0),
+        /later selected start stroke/,
+        "the isolated path before a loop stays ineligible");
 });
 
 test("browser chooses closed-loop start using explicit UI", async () => {

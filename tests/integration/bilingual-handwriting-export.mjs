@@ -653,6 +653,36 @@ test('browser chosen closed-loop entry matches native TSV and PDF/PNG', () => {
         assert.equal(readFileSync(refusedFile, 'utf8'),
             'preserve existing output');
         assert.equal(readFileSync(sourceFile, 'utf8'), originalTsv);
+
+        const later = [accent, source[1], a, source[3], b, c, d];
+        const laterTsv = encodeGlyphLibrary(later);
+        const laterBrowser = rotateClosedCandidatePath(later, nfd, 5);
+        const laterSource = join(dir, 'later-source.tsv');
+        const laterNative = join(dir, 'later-native.tsv');
+        const laterRestored = join(dir, 'later-restored.tsv');
+        writeFileSync(laterSource, laterTsv);
+        const laterEdit = native('glyphs', '--profile', laterSource,
+            '--rotate-path', nfd, '2', '3', '--output', laterNative);
+        assert.equal(laterEdit.status, 0, laterEdit.stderr);
+        assert.equal(laterBrowser.selectedIndex, 2);
+        assert.equal(readFileSync(laterNative, 'utf8'),
+            encodeGlyphLibrary(laterBrowser.strokes),
+            'path 2 rotation preserves the preceding separate accent');
+        assert.equal(readFileSync(laterSource, 'utf8'), laterTsv);
+        const laterReport = native('glyphs', '--profile', laterNative,
+            '--inspect-paths', nfd);
+        assert.equal(laterReport.status, 0, laterReport.stderr);
+        assert.match(laterReport.stdout,
+            /Path 2: strokes 2\.\.5 \(4 segments\)/);
+        assert.match(laterReport.stdout, /\[closed loop\]/);
+        const laterInverse = native('glyphs', '--profile', laterSource,
+            '--rotate-path', nfd, '2', '3',
+            '--rotate-path', nfd, '2', '3',
+            '--output', laterRestored);
+        assert.equal(laterInverse.status, 0, laterInverse.stderr);
+        assert.equal(readFileSync(laterRestored, 'utf8'), laterTsv,
+            'two half-loop rotations recover the exact UTF-8 TSV source');
+
         for (const format of ['pdf', 'png']) {
             const options = ['--export-paper', format];
             if (format === 'png') options.push('--dpi', '72');
