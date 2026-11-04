@@ -356,12 +356,13 @@ fn parse_inventory_text(
     }
     let text = arguments.next().ok_or("--inventory-text requires text")?;
     if text.is_empty() || text.len() > MAX_INVENTORY_TEXT_BYTES
-        // Only ASCII space, CR/LF and tabs are implicit source structure;
+        // Only ASCII space, CRLF/LF and tabs are source structure;
         // do not return misleading zero-coverage reports for only those.
         || !text.chars().any(|ch| ch != ' ' && !ch.is_control())
         || text.chars().any(|ch| {
             ch.is_control() && !matches!(ch, '\t' | '\r' | '\n')
         })
+        || text.replace("\r\n", "").contains('\r')
     {
         return Err(
             concat!(
@@ -751,13 +752,14 @@ fn read_glyph_input(path: &str) -> Result<Vec<u8>, String> {
 fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
     if selected.is_empty()
         || selected.len() > MAX_INVENTORY_TEXT_BYTES
-        // The audit skips ASCII spaces and CR/LF/tab source structure. Every
-        // accepted source must contain at least one auditable grapheme;
+        // The audit skips ASCII space, CRLF/LF and tabs as source structure.
+        // Every accepted source must contain an auditable grapheme;
         // other Unicode whitespace may have exact authored pen strokes.
         || !selected.chars().any(|ch| ch != ' ' && !ch.is_control())
         || selected.chars().any(|ch| {
             ch.is_control() && !matches!(ch, '\t' | '\r' | '\n')
-        }) {
+        })
+        || selected.replace("\r\n", "").contains('\r') {
         return Err(concat!(
             "glyph audit needs 1..4096 UTF-8 bytes of ",
             "visible text without control characters",

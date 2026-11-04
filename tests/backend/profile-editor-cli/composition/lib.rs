@@ -1107,10 +1107,12 @@ fn inventory_cli_reports_exact_unicode_spaces_and_statistics_overrides() {
 
 #[test]
 fn unicode_coverage_audits_reject_nonstructural_control_breaks() {
-    // An otherwise visible source must not conceal control bytes that the
-    // native placed-text compositor refuses. CR/LF/tab are source structure.
-    for control in ["\u{85}", "\u{b}", "\u{c}"] {
-        let text = format!("a{control}b");
+    // An otherwise visible source must not conceal control breaks that the
+    // native placed-text compositor refuses. CRLF, LF and tabs are structure.
+    for text in [
+        "a\u{85}b", "a\u{b}b", "a\u{c}b", "a\rb",
+        "\ra", "a\r", "a\r\r\nb",
+    ] {
         let glyph = execute_glyph_library(&args(&[
             "--audit-text", &text,
         ]));

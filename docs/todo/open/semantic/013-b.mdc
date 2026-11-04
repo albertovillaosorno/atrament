@@ -93,9 +93,14 @@ commands now reject vertical tab, form feed and U+0085 NEL even within
 otherwise visible text. Those control breaks were previously admitted
 as whitespace, then silently omitted from exact coverage reports, while
 `notebook --place-text` refuses them outright. Both read-only diagnostics
-continue accepting ASCII space, tabs, CR and LF as source structure and
+continue accepting ASCII space, tabs, CRLF and LF as source structure and
 report exact non-ASCII space glyphs separately. A focused regression
-checks both refusal and the accepted CR/LF/tab control case.
+checks both refusal and the accepted CRLF/LF/tab control case.
+
+A follow-up also rejects unpaired carriage returns at the start, middle
+or end of otherwise visible audit text. The native Markdown/plain-text
+flow importer already refuses bare CR, so both diagnostics now use the
+same line-ending boundary. Paired CRLF and plain LF remain valid.
 
 This is input-parity hardening, not general bilingual layout or printed marks.
 
