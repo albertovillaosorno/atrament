@@ -673,6 +673,33 @@ segments combined with `--ink-line` or the selected letter bridges. Physical
 placement and ink width are
 checked by the existing PDF/PNG compositor before the selected output changes.
 
+For a complete **English/Spanish text-only draft**, open the authenticated
+localhost glyph editor and click **Fill missing 114 English/Spanish text
+glyphs (unsaved)**. With the default 3.5 × 4.5-mm template cell, the
+single action creates **114 exact Unicode graphemes and 2,728 sampled pen
+segments**. It includes lowercase and uppercase alphabets, NFC and NFD
+Spanish accents, the baseline punctuation/quotes and digits; optional
+mathematics and currencies remain separate. It never replaces existing
+custom strokes, even if the same letter has different NFC and NFD forms.
+A clipped shape, ambiguous authored dotted `i`, or oversized TSV library
+refuses the entire change, leaving the previous unsaved draft intact.
+Only **Download stroke TSV** writes a file; nothing is sent to the backend
+by the fill action. The native `glyphs --audit-baseline` command can
+independently audit the downloaded 114-key coverage before PDF/PNG export:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyph-strokes.tsv --audit-baseline
+```
+
+The live **Bilingual text baseline** indicator shows exact authored keys
+out of 114 without saving or normalizing data. Click **Inspect next missing
+text glyph (read-only)** to cycle to an unauthored exact character and its
+matching geometric guide (including distinct NFD accents), without drawing
+or downloading ink. This control disables when complete or after session
+end. Real Firefox and Rust acceptance tests verify the explicit TSV output,
+physical PDF/transparent PNG rendering, and refusal on unknown glyphs.
+
 To start a complete **lowercase-only geometric draft** without drawing
 26 letters by hand, open the authenticated localhost glyph editor and click
 **Fill missing lowercase a–z (unsaved)**. It uses the selected center,
