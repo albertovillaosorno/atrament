@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 
-const root = fileURLToPath(new URL('../../', import.meta.url));
+const root = fileURLToPath(new URL('../../../../', import.meta.url));
 
 function command(pkg, binary, args) {
     const result = spawnSync('cargo', [

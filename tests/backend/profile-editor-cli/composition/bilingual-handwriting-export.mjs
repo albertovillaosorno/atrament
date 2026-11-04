@@ -17,9 +17,9 @@ import {
     scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
     reverseCandidatePath, moveCandidatePath, translateCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath, candidatePenPaths,
-} from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
+} from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
-const root = fileURLToPath(new URL('../../', import.meta.url));
+const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const starter = [1550, 2450, 1100, 250, '#243647'];
 const accents = [
     ['a', 'á'], ['e', 'é'], ['i', 'í'], ['o', 'ó'],

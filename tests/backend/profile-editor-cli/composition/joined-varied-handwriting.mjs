@@ -10,9 +10,9 @@ import test from 'node:test';
 import { inflateSync } from 'node:zlib';
 import {
     candidatePenPaths, encodeGlyphLibrary, geometricStarter,
-} from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
+} from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
-const root = fileURLToPath(new URL('../../', import.meta.url));
+const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const nfd = 'a\u0301';
 const nfc = 'ó';
 const text = `${nfd}${nfc}${nfd}${nfc}\n${nfd}${nfc}${nfd}${nfc}`;

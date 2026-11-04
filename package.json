@@ -10,13 +10,15 @@
     "test:frontend":
       "node --test --test-concurrency=1 tests/browser/workspace/adapter-inbound/*.mjs",
     "test:flow":
-      "node --test tests/backend/profile-editor-cli/composition/*.mjs",
+      "node --test tests/backend/profile-editor-cli/composition/flow.mjs",
+    "test:cli-files":
+      "node --test tests/backend/profile-editor-cli/composition/main.mjs",
     "test:print-ready":
-      "node --test tests/integration/print-ready-workflow.mjs",
+      "node --test tests/backend/*/composition/print-ready-workflow.mjs",
     "test:joined-ink":
-      "node --test tests/integration/joined-varied-handwriting.mjs",
+      "node --test tests/backend/*/composition/joined-varied-handwriting.mjs",
     "test:handwriting":
-      "node --test --test-concurrency=1 tests/integration/*handwriting*.mjs"
+      "node --test --test-concurrency=1 tests/backend/*/composition/*hand*.mjs"
   },
   "devDependencies": {
     "typescript": "7.0.2"

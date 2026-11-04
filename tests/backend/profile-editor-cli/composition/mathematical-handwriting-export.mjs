@@ -11,9 +11,9 @@ import test from 'node:test';
 import {
     candidatePenPaths, encodeGlyphLibrary, geometricStarter,
     reverseCandidatePath, rotateClosedCandidatePath,
-} from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
+} from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
-const root = fileURLToPath(new URL('../../', import.meta.url));
+const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const symbols = ['√', 'π', '∞', '≠', '≤', '≥', '∑', '∫', 'Δ', '≈'];
 const text = symbols.join('');
 const ink = symbols.flatMap((symbol) => geometricStarter(symbol,

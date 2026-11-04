@@ -875,7 +875,8 @@ refusal above the 4,096-segment export ceiling. To reproduce:
 
 ```sh
 pnpm run build:frontend
-node --test tests/integration/bilingual-handwriting-export.mjs
+node --test \
+  tests/backend/profile-editor-cli/composition/bilingual-handwriting-export.mjs
 ```
 
 This test uses the Rust CLI through Cargo and temporary test-owned files.
