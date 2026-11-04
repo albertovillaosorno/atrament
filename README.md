@@ -869,6 +869,9 @@ keeping `o` unchanged. You can then edit the new `a` independently via
 missing source ink, invalid Unicode and exceeding the bounded 4,096-stroke
 library refuse. The operation copies **sampled segments**; an exact analytic
 circle, anchored diacritics and joined cursive still require separate work.
+An integration test also copies the browser's actual sampled `o` to `ö`,
+adds two user-owned diaeresis marks and checks exact native PDF/PNG parity
+against an independently assembled browser TSV.
 
 The versioned format
 starts with `atrament.glyph-strokes.v1`, followed by one **tab-separated**

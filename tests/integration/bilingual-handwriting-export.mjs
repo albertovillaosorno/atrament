@@ -187,3 +187,85 @@ test('entire bilingual starter library renders and fails closed', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('browser loop shapes derive independent accented glyphs in Rust', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-derived-'));
+    try {
+        const { strokes } = bilingualStarter();
+        const source = join(dir, 'browser.tsv');
+        const derived = join(dir, 'derived.tsv');
+        const comparison = join(dir, 'equivalent.tsv');
+        const preserve = join(dir, 'preserve.tsv');
+        const original = encodeGlyphLibrary(strokes);
+        writeFileSync(source, original);
+        const sourceO = strokes.filter((stroke) => stroke.grapheme === 'o');
+        assert.ok(sourceO.length > 1, 'browser o is multi-segment ink');
+        assert.ok(!strokes.some((stroke) => stroke.grapheme === 'ö'),
+            'the target is not an already-authored Unicode glyph');
+        const dots = [
+            { grapheme: 'ö', x1: 1200, y1: 350, x2: 1370, y2: 450,
+                width: 180, color: '#243647' },
+            { grapheme: 'ö', x1: 2150, y1: 350, x2: 2320, y2: 450,
+                width: 180, color: '#243647' },
+        ];
+        const expected = encodeGlyphLibrary([
+            ...strokes,
+            ...sourceO.map((stroke) => ({ ...stroke, grapheme: 'ö' })),
+            ...dots,
+        ]);
+        writeFileSync(comparison, expected);
+        const saved = native('glyphs', '--profile', source,
+            '--copy-glyph', 'o', 'ö',
+            '--glyph-stroke', 'ö', '1200', '350', '1370', '450',
+            '180', '#243647',
+            '--glyph-stroke', 'ö', '2150', '350', '2320', '450',
+            '180', '#243647', '--output', derived);
+        assert.equal(saved.status, 0, saved.stderr);
+        assert.deepEqual(readFileSync(derived), Buffer.from(expected),
+            'Rust copies browser-authored o in order before two user dots');
+        assert.deepEqual(readFileSync(source), Buffer.from(original),
+            'base glyph and its browser TSV stay unchanged');
+        const inspected = native('glyphs', '--profile', derived,
+            '--inspect-glyph', 'ö');
+        assert.equal(inspected.status, 0, inspected.stderr);
+        assert.match(inspected.stdout, /Glyph: "ö" \[U\+00F6\]/);
+        assert.match(inspected.stdout,
+            new RegExp(`Strokes: ${sourceO.length + dots.length}`));
+        const audit = native('glyphs', '--profile', derived,
+            '--audit-text', 'o ö ó');
+        assert.equal(audit.status, 0, audit.stderr);
+        assert.match(audit.stdout, /Missing authored glyphs: 0/);
+        writeFileSync(preserve, Buffer.from('previous accepted library'));
+        const duplicate = native('glyphs', '--profile', source,
+            '--copy-glyph', 'o', 'ó', '--output', preserve, '--replace');
+        assert.notEqual(duplicate.status, 0,
+            'copy must not overwrite a browser-authored accented glyph');
+        assert.deepEqual(readFileSync(preserve),
+            Buffer.from('previous accepted library'));
+        for (const format of ['pdf', 'png']) {
+            const flags = ['--export-paper', format];
+            if (format === 'png') flags.push('--dpi', '72');
+            const artifact = join(dir, `derived.${format}`);
+            const equal = join(dir, `manual.${format}`);
+            const make = (library, output) => native('notebook',
+                '--printed-sheet', 'true', '--glyph-file', library,
+                '--place-text', '1', '30000', '45000', 'oö',
+                ...flags, '--output', output);
+            const generated = make(derived, artifact);
+            const manuallyComposed = make(comparison, equal);
+            assert.equal(generated.status, 0, generated.stderr);
+            assert.equal(manuallyComposed.status, 0,
+                manuallyComposed.stderr);
+            assert.deepEqual(readFileSync(artifact), readFileSync(equal),
+                `native ${format} preserves browser geometry and added dots`);
+            if (format === 'png') {
+                pngHasTransparentCorner(readFileSync(artifact));
+            } else {
+                assert.ok(readFileSync(artifact).subarray(0, 8).toString()
+                    .startsWith('%PDF-1.4'));
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

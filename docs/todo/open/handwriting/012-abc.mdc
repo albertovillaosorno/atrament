@@ -689,6 +689,24 @@ regression is not a mathematical circle, the result is not a vector curve,
 and no automatic two-storey `a`, retained accent anchors or joined cursive
 has been implemented. ATR-P4-012 remains open for that full acceptance.
 
+## Browser-to-native independent accent derivation (partial) — 2026-11-03
+
+The full browser-authored 119-glyph, 2,738-stroke bilingual TSV now has an
+independent integration regression for native `--copy-glyph`: Rust copies
+its real sampled `o` geometry into the previously unauthored exact `ö`
+Unicode key, and the caller appends two bounded diaeresis pen segments.
+The saved derived TSV is byte-identical to a separately constructed browser
+library, and inspection counts all copied and manually added pen strokes.
+The exact text audit has no missing shapes for `o ö ó` after derivation.
+
+The test refuses replacing an already-authored `ó` into an existing target
+file, leaving both the source and sentinel unchanged. Actual native PDF
+and 72-DPI transparent PNG outputs for `oö` are byte-identical to the
+independent browser-assembled reference. This verifies a real frontend TSV
+-> Rust CLI -> compositor path for source-derived accent shapes, not a
+shared analytic-circle primitive or automatic anchor placement. The full
+coverage and two-storey/cursive acceptance criteria remain open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
