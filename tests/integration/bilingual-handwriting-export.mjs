@@ -107,6 +107,34 @@ test('entire bilingual starter library renders and fails closed', () => {
         assert.equal(audit.status, 0, audit.stderr);
         assert.match(audit.stdout, /Distinct visible graphemes: 114/);
         assert.match(audit.stdout, /Missing authored glyphs: 0/);
+        // The browser-produced TSV, not a synthetic Rust-only fixture,
+        // determines the exact native pen sequence. NFC and NFD stay apart.
+        const originalTsv = readFileSync(library);
+        for (const key of ['ó', 'o\u0301', 'ñ', 'n\u0303']) {
+            const authored = strokes.filter((stroke) =>
+                stroke.grapheme === key);
+            assert.ok(authored.length > 0, `authored ${key}`);
+            const report = native('glyphs', '--profile', library,
+                '--inspect-glyph', key);
+            assert.equal(report.status, 0, report.stderr);
+            const lines = report.stdout.trimEnd().split('\n');
+            const identity = [...key].map((ch) =>
+                `U+${ch.codePointAt(0).toString(16)
+                    .toUpperCase().padStart(4, '0')}`).join(' ');
+            assert.equal(lines[0],
+                'Exact authored stroke sequence (not inferred cursive)');
+            assert.equal(lines[1], `Glyph: "${key}" [${identity}]`);
+            assert.equal(lines[2], `Strokes: ${authored.length}`);
+            assert.equal(lines.length, authored.length + 3);
+            for (const [index, stroke] of authored.entries()) {
+                assert.equal(lines[index + 3],
+                    `${index + 1}: (${stroke.x1}, ${stroke.y1}) -> `
+                    + `(${stroke.x2}, ${stroke.y2}) width ${stroke.width} `
+                    + `um color ${stroke.color.toUpperCase()}`);
+            }
+        }
+        assert.deepEqual(readFileSync(library), originalTsv,
+            'stroke inspection does not change browser-authored TSV');
         const notebookBase = ['notebook', '--printed-sheet', 'true',
             '--glyph-file', library];
         const args = [...notebookBase, '--flow-text-file', source,

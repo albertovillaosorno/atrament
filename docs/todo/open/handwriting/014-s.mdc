@@ -220,8 +220,12 @@ full ordered/directional report parity for inline and saved TSV, actual
 native PDF paint order, and unchanged input/target files when inspection
 receives invalid, duplicate, missing, conflicting or output-selecting
 arguments. This makes the existing browser reordering auditable by the
-native pipeline, not a persisted stroke-group or cursive model. The
-original full handwriting acceptance remains open.
+native pipeline, not a persisted stroke-group or cursive model. A separate
+browser-generated 119-glyph TSV -> native Rust integration now checks every
+ordered segment and pen direction for `ó`, decomposed `o` plus acute, `ñ`,
+and decomposed `n` plus tilde, and verifies unchanged saved TSV bytes before
+rendering the same full PDF/PNG pages. The original full handwriting
+acceptance remains open.
 
 ## Acceptance decision
 
