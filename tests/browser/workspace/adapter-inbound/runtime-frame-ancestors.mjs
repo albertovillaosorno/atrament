@@ -13163,3 +13163,201 @@ test(
         }
     },
 );
+
+test(
+    "Firefox authors Spanish accent starters for exact native PDF/PNG",
+    { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/accents-firefox-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const get = (id) => document.getElementById("glyph-" + id);
+                    const change = (id, value) => {
+                        get(id).value = String(value);
+                        get(id).dispatchEvent(new Event("input", {
+                            bubbles: true,
+                        }));
+                    };
+                    const guides = [];
+                    for (const glyph of ["é", "ú", "ü", "ñ"]) {
+                        change("form", glyph);
+                        change("character", glyph);
+                        const preview = (id) => ({
+                            visible: get(id).getAttribute("visibility"),
+                            d: get(id).getAttribute("d"),
+                        });
+                        const guide = {
+                            glyph, round: preview("ideal-rounded"),
+                            open: preview("ideal-c-loop"),
+                            acute: get("ideal-accent")
+                                .getAttribute("visibility"),
+                            marks: preview("ideal-diacritic"),
+                            bar: get("ideal-e-bar")
+                                .getAttribute("visibility"),
+                        };
+                        get("construct").click();
+                        guides.push({ ...guide,
+                            status: get("status").textContent });
+                    }
+                    const names = [];
+                    const blobs = [];
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            names.push(this.download);
+                        };
+                        get("save").click();
+                        change("circle-y", 1350);
+                        const hidden = get("ideal-rounded")
+                            .getAttribute("visibility");
+                        const hiddenAccent = get("ideal-diacritic")
+                            .getAttribute("visibility");
+                        get("construct").click();
+                        const refused = get("status").textContent;
+                        get("save").click();
+                        return JSON.stringify({ guides, hidden, hiddenAccent,
+                            refused, names, files: await Promise.all(
+                                blobs.map((blob) => blob.text())) });
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const actual = JSON.parse(response.result.value);
+            for (const [index, glyph, count] of [
+                [0, "é", 38], [1, "ú", 35],
+                [2, "ü", 36], [3, "ñ", 37],
+            ]) {
+                const guide = actual.guides[index];
+                assert.equal(guide.glyph, glyph);
+                assert.equal(guide.round.visible,
+                    glyph === "é" ? "hidden" : "visible");
+                assert.equal(guide.open.visible,
+                    glyph === "é" ? "visible" : "hidden");
+                assert.equal(guide.bar, glyph === "é" ? "visible" : "hidden");
+                if (glyph === "é") assert.match(guide.open.d, / A /);
+                else assert.equal((guide.round.d.match(/ Q /g) ?? []).length,
+                    2, "Spanish rounded base retains ideal quadratic arcs");
+                assert.equal(guide.acute,
+                    ["é", "ú"].includes(glyph) ? "visible" : "hidden");
+                assert.equal(guide.marks.visible,
+                    ["ü", "ñ"].includes(glyph) ? "visible" : "hidden");
+                assert.equal((guide.marks.d.match(/ L /g) ?? []).length,
+                    glyph === "ü" ? 2 : glyph === "ñ" ? 3 : 0);
+                assert.match(guide.status,
+                    new RegExp(`Constructed ${count} sampled segments`));
+            }
+            assert.equal(actual.hidden, "hidden");
+            assert.equal(actual.hiddenAccent, "hidden");
+            assert.match(actual.refused, /Accent and pen/);
+            assert.deepEqual(actual.names,
+                Array(2).fill("my-glyph-strokes.tsv"));
+            const glyphs = ["é", "ú", "ü", "ñ"];
+            const rows = glyphs.flatMap((glyph) => geometricStarter(
+                glyph, 1550, 2450, 1100, 250, "#243647"));
+            assert.equal(rows.length, 146);
+            const expected = encodeGlyphLibrary(rows);
+            assert.deepEqual(actual.files, [expected, expected],
+                "real Firefox edit refusal retains exact Unicode pen order");
+            assert.deepEqual(requests, baseline,
+                "browser drafting and downloads use no backend calls");
+
+            const library = path.join(profile, "accented.tsv");
+            fs.writeFileSync(library, actual.files[0]);
+            const build = spawnSync(PINNED_CARGO, [
+                "build", "--offline", "--quiet",
+                "-p", "atrament_profile_editor_cli",
+                "--bin", "atrament-profiles",
+            ], { timeout: 90_000, stdio: "pipe",
+                env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR } });
+            assert.equal(build.status, 0,
+                "native CLI must build offline for actual Firefox ink");
+            const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            const invoke = (...flags) => spawnSync(cli, flags, {
+                timeout: 20_000, maxBuffer: 16 * 1024 * 1024,
+            });
+            const reopen = invoke("glyphs", "--profile", library);
+            assert.equal(reopen.status, 0, reopen.stderr.toString());
+            assert.equal(reopen.stdout.toString(), expected);
+            const flags = ["notebook", "--printed-sheet", "true",
+                "--glyph-file", library, "--flow-text", "éúüñ"];
+            const output = path.join(profile, "accented.pdf");
+            const pdf = invoke(...flags, "--export-paper", "pdf",
+                "--output", output);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const approved = fs.readFileSync(output);
+            assert.match(approved.toString("latin1"), /^%PDF-1\.4/);
+            assert.equal((approved.toString("latin1").match(/ m\n/g) ?? [])
+                .length, 146, "one Firefox-authored row emits 146 ink lines");
+            const png = invoke(...flags, "--export-paper", "png",
+                "--dpi", "72");
+            assert.equal(png.status, 0, png.stderr.toString());
+            const bytes = png.stdout;
+            assert.deepEqual(bytes.subarray(0, 8),
+                Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+            assert.equal(bytes.readUInt32BE(16), 596);
+            assert.equal(bytes.readUInt32BE(20), 842);
+            assert.equal(bytes[25], 6, "native RGBA remains transparent");
+            const chunks = [];
+            for (let offset = 8; offset + 12 <= bytes.length;) {
+                const length = bytes.readUInt32BE(offset);
+                if (bytes.toString("ascii", offset + 4, offset + 8)
+                    === "IDAT") {
+                    chunks.push(bytes.subarray(offset + 8,
+                        offset + 8 + length));
+                }
+                offset += length + 12;
+            }
+            assert.ok(inflateSync(Buffer.concat(chunks)).includes(
+                Buffer.from([36, 54, 71, 255])),
+            "real native PNG includes explicitly authored Spanish ink");
+            const refused = invoke("notebook", "--printed-sheet", "true",
+                "--glyph-file", library, "--flow-text", "éúüñß",
+                "--export-paper", "pdf", "--output", output, "--replace");
+            assert.notEqual(refused.status, 0);
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(fs.readFileSync(output), approved,
+                "native missing glyph must not overwrite reviewed PDF");
+            assert.equal(fs.readFileSync(library, "utf8"), expected);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);

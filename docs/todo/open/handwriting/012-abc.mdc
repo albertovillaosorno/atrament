@@ -1168,7 +1168,16 @@ acceptance reopens 146 caller-authored segments, renders two rows with 292
 real PDF vector moves and transparent RGBA PNG ink, and refuses a missing
 `ß` before replacing an accepted PDF. SVG curves still compile into native
 straight micrometre chords, not persisted analytic contours or a complete
-Spanish/English glyph set. P4-012 remains open.
+Spanish/English glyph set.
+
+An independent real-Firefox localhost regression then selects all four
+starters in the authenticated live DOM, verifies analytic base SVG and
+exact visible accent guides, downloads the combined native TSV and refuses
+an invalid accent edit without altering it. The same browser bytes reopen
+through the Rust CLI and produce a one-page PDF with 146 directed pen moves
+and transparent RGBA PNG ink. Missing `ß` refuses replacement of the
+approved PDF. No automatic neighboring cursive or stored font is implied;
+P4-012 remains open.
 
 ## Acceptance decision
 
