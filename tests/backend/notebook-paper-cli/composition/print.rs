@@ -480,14 +480,14 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
         "traditional table framing remains eligible for PDF 1.4");
     let multi_section = [
         "%PDF-1.7\nxref\n0 1\n0000000000 65535 f \n",
-        "1 1\n0000000044 00000 n \n",
+        "1 1\n0000000000 65535 f \n",
         "trailer\n<< /Size 2 /Root 1 0 R >>\n",
         "startxref\n9\n%%EOF\n",
     ].concat();
     assert!(supported_pdf_cross_reference(multi_section.as_bytes()),
         "multiple table subsections with numbered entries remain eligible");
     let high_section = concat!(
-        "%PDF-1.4\nxref\n100 1\n0000000044 00000 n \n",
+        "%PDF-1.4\nxref\n100 1\n0000000000 65535 f \n",
         "trailer\n<< /Size 101 >>\nstartxref\n9\n%%EOF\n",
     );
     assert!(supported_pdf_cross_reference(high_section.as_bytes()),
@@ -558,6 +558,55 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
             "invalid table cannot reach CUPS");
         assert!(!spooled.exists(), "no fake spool side effect");
         assert_eq!(fs::read(&pdf).expect("source unchanged"), fake);
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
+fn xref_in_use_offsets_must_match_indirect_object_headers() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS fixture");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+
+    let object = b"%PDF-1.7\n1 0 obj\n(null)\nendobj\n";
+    let object_offset = b"%PDF-1.7\n".len();
+    let xref_offset = object.len();
+    let framed = |index: usize, generation: usize, offset: usize| {
+        [object.as_slice(), format!(
+            "xref\n{index} 1\n{offset:010} {generation:05} n \n\
+             trailer\n<< /Size 3 >>\nstartxref\n{xref_offset}\n%%EOF\n",
+        ).as_bytes()].concat()
+    };
+    let valid = framed(1, 0, object_offset);
+    assert!(supported_pdf_cross_reference(&valid),
+        "an exact in-use object header remains an eligible table entry");
+    for invalid in [
+        framed(1, 0, xref_offset),
+        framed(1, 0, object_offset + b"1 0 obj\n".len()),
+        framed(2, 0, object_offset),
+        framed(1, 1, object_offset),
+    ] {
+        assert!(!supported_pdf_cross_reference(&invalid),
+            "in-use offset must point at the recorded object/generation");
+        fs::write(&pdf, &invalid).expect("write malformed PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(), "bad object pointer refused");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "bad pointer cannot contact CUPS");
+        assert!(!spooled.exists(), "no spool side effect");
+        assert_eq!(fs::read(&pdf).expect("source intact"), invalid);
     }
     fs::remove_dir_all(&directory).expect("remove owned fixture directory");
 }

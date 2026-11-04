@@ -106,9 +106,11 @@ record count; otherwise a table claims objects outside its own extent.
 
 Each in-use `n` record also needs an absolute decimal byte offset within
 the selected PDF, after its version header. An offset of zero or past the
-file refuses before CUPS; free `f` entries use object indices, not document
-byte offsets, and are not subject to that check. This does not confirm that
-an in-use offset actually points to an indirect object.
+file refuses before CUPS. At an in-use offset the gate also requires a
+matching `number generation obj` header; an offset into a body, the xref
+section, or a different numbered/generation object refuses. Free `f` entries
+use object indices, not document byte offsets, and are exempt. This does
+not parse the referenced object body or prove cross-reference completeness.
 
 The trailer scanner now balances nested dictionaries and arrays, skipping
 literal/hex strings and comments when locating the one top-level `/Size`.
@@ -174,8 +176,10 @@ inside the stream header or table trailer; ordinary nested maps still pass.
 Two more refuse impossible `/Size` totals for complete xref subsections,
 while a high-numbered valid subsection remains admissible.
 
-Another two fake-spool refusals cover zero and out-of-file in-use object
-offsets.
+Two fake-spool refusals cover zero and out-of-file in-use object offsets.
+Four more refuse an in-range offset into a table or object body and a
+mismatched object number or generation. A matching synthetic indirect
+object and native two-page Rust PDF still pass; no real printer was used.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

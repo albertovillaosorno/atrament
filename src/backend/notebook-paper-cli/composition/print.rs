@@ -210,7 +210,7 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     if target.starts_with(b"xref")
         && target.get(4).is_some_and(u8::is_ascii_whitespace)
     {
-        return supported_xref_table(target, bytes.len());
+        return supported_xref_table(target, bytes);
     }
     // Cross-reference streams entered the PDF standard in version 1.5.
     // Old-format headers cannot authorize a stream even if it appears to
@@ -246,7 +246,28 @@ fn xref_word<'bytes>(bytes: &'bytes [u8], at: &mut usize)
     bytes.get(start..*at).filter(|word| !word.is_empty())
 }
 
-fn supported_xref_table(bytes: &[u8], document_len: usize) -> bool {
+// An in-use table entry must identify the numbered indirect object at its
+// exact absolute byte position, not just some byte within the PDF. This is
+// a narrow header check, not a scan of an object's contents or stream data.
+fn in_use_object_header(
+    document: &[u8], offset: usize, index: usize, generation: usize,
+) -> bool {
+    let Some(tail) = document.get(offset..) else { return false; };
+    if !tail.first().is_some_and(u8::is_ascii_digit) {
+        return false;
+    }
+    let mut at = 0usize;
+    let decimal = |word: &[u8]| {
+        str::from_utf8(word).ok()
+            .filter(|digits| digits.bytes().all(|byte| byte.is_ascii_digit()))
+            .and_then(|digits| digits.parse::<usize>().ok())
+    };
+    xref_word(tail, &mut at).and_then(decimal) == Some(index)
+        && xref_word(tail, &mut at).and_then(decimal) == Some(generation)
+        && xref_word(tail, &mut at) == Some(b"obj".as_slice())
+}
+
+fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
     let mut at = 0usize;
     if xref_word(bytes, &mut at) != Some(b"xref".as_slice()) {
         return false;
@@ -281,7 +302,7 @@ fn supported_xref_table(bytes: &[u8], document_len: usize) -> bool {
             return false;
         };
         minimum_size = minimum_size.max(last_exclusive);
-        for _ in 0..count {
+        for index in first_index..last_exclusive {
             let Some(offset) = xref_word(bytes, &mut at) else {
                 return false;
             };
@@ -298,14 +319,19 @@ fn supported_xref_table(bytes: &[u8], document_len: usize) -> bool {
             {
                 return false;
             }
-            // In-use offsets are absolute from the start of the selected
-            // PDF. They cannot name the header or a byte beyond the file.
-            // Free-table values are object indices, not byte offsets.
+            // Free-table values are object indices rather than byte offsets.
+            // An in-use record must name its own indirect object header.
             if status == b"n" {
                 let Some(object_offset) = str::from_utf8(offset).ok()
                     .and_then(|digits| digits.parse::<usize>().ok())
                 else { return false; };
-                if object_offset < 9 || object_offset >= document_len {
+                let Some(generation_number) = str::from_utf8(generation).ok()
+                    .and_then(|digits| digits.parse::<usize>().ok())
+                else { return false; };
+                if object_offset < 9 || object_offset >= document.len()
+                    || !in_use_object_header(
+                        document, object_offset, index, generation_number,
+                    ) {
                     return false;
                 }
             }
