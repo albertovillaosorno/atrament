@@ -379,6 +379,7 @@ function mountEditor() {
         "glyph-accent-lift", "glyph-italic-angle",
         "glyph-authored-angle", "glyph-authored-baseline",
         "glyph-slant-authored", "glyph-slant-undo", "glyph-slant-redo",
+        "glyph-slant-preview", "glyph-slant-preview-status",
         "glyph-ideal-preview", "glyph-ideal-geometry",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
@@ -4469,6 +4470,135 @@ test("slant history is one-level and clears on import or ink edits",
         assert.equal(get("save").disabled, false);
         assert.equal(get("status").textContent.startsWith("0 unsaved"),
             true, "stale undo does not restore a removed stroke");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("read-only authored slant guide predicts exact accepted pen coordinates",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { get, editor, downloads } = ui;
+            const nfd = "a\u0301";
+            const guide = get("slant-preview");
+            const guideStatus = get("slant-preview-status");
+            assert.equal(guide.children.length, 0);
+            editor.start();
+            assert.match(guideStatus.textContent, /Author this exact glyph/);
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            for (const [key, value] of Object.entries({
+                x1: 450, y1: 1000, x2: 850, y2: 1600, width: 250,
+            })) get(key).value = String(value);
+            get("add").dispatch("click");
+            const authored = [{
+                grapheme: nfd, x1: 450, y1: 1000,
+                x2: 850, y2: 1600, width: 250, color: "#243647",
+            }];
+            assert.equal(guide.children.length, 1);
+            assert.match(guideStatus.textContent,
+                /preview only, draft unchanged/);
+            const coord = (key) => Number(guide.children[0]
+                .attributes.get(key));
+            const predicted = italicizeGlyphStrokes(
+                authored, nfd, 12, 3550)[0];
+            assert.equal(coord("x1"), predicted.x1);
+            assert.equal(coord("x2"), predicted.x2);
+            assert.equal(guide.children[0].attributes.get("stroke"),
+                "#243647");
+            assert.equal(downloads.length, 0,
+                "guide must never download or mutate authored ink");
+            get("authored-angle").value = "0";
+            get("authored-angle").dispatch("input");
+            assert.equal(coord("x1"), authored[0].x1);
+            get("authored-baseline").value = "4501";
+            get("authored-baseline").dispatch("input");
+            assert.equal(guide.children.length, 0);
+            assert.match(guideStatus.textContent, /italic baseline/);
+            get("authored-baseline").value = "3550";
+            get("authored-baseline").dispatch("input");
+            assert.equal(guide.children.length, 1);
+            get("authored-angle").value = "20";
+            get("authored-angle").dispatch("input");
+            assert.equal(guide.children.length, 1);
+            get("authored-angle").value = "21";
+            get("authored-angle").dispatch("input");
+            assert.equal(guide.children.length, 0);
+            assert.match(guideStatus.textContent, /Italic angle/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(),
+                encodeGlyphLibrary(authored),
+                "invalid preview cannot overwrite the existing draft");
+            get("authored-angle").value = "12";
+            get("authored-angle").dispatch("input");
+            const before = [...guide.children[0].attributes];
+            get("slant-authored").dispatch("click");
+            assert.equal(get("preview").children.length, 1);
+            assert.deepEqual([
+                ...get("preview").children[0].attributes
+            ].filter(([name]) => ["x1", "x2", "y1", "y2",
+                "stroke", "stroke-width"].includes(name)),
+            before.filter(([name]) => ["x1", "x2", "y1", "y2",
+                "stroke", "stroke-width"].includes(name)));
+            editor.reset();
+            assert.equal(guide.children.length, 0);
+            assert.match(guideStatus.textContent,
+                /Requires a compatible backend session/);
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("slant preview refuses clipping and its display budget",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        editor.start();
+        get("character").value = "o";
+        get("character").dispatch("input");
+        const load = async (library) => {
+            const bytes = encodeGlyphLibrary(library);
+            get("load").files = [{
+                size: bytes.length,
+                arrayBuffer: async () =>
+                    new TextEncoder().encode(bytes).buffer,
+            }];
+            await get("load").dispatch("change");
+            return bytes;
+        };
+        const clipped = [{
+            grapheme: "o", x1: 3100, y1: 300,
+            x2: 3200, y2: 900, width: 250, color: "#243647",
+        }];
+        const original = await load(clipped);
+        get("authored-angle").value = "20";
+        get("authored-angle").dispatch("input");
+        assert.equal(get("slant-preview").children.length, 0);
+        assert.match(get("slant-preview-status").textContent,
+            /Italic ink and pen clip/);
+        assert.equal(get("slant-authored").disabled, false,
+            "refused candidate still uses the action's bounds checks");
+        get("slant-authored").dispatch("click");
+        assert.match(get("status").textContent, /Italic ink and pen clip/);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), original);
+        const full = Array.from({ length: 129 }, (_, index) => ({
+            grapheme: "o", x1: 450 + index,
+            y1: 1000, x2: 850 + index,
+            y2: 1600, width: 250, color: "#243647",
+        }));
+        await load(full);
+        assert.equal(get("slant-preview").children.length, 0);
+        assert.match(get("slant-preview-status").textContent,
+            /Preview limited to 128 authored segments/);
+        get("authored-angle").value = "12";
+        get("slant-authored").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), encodeGlyphLibrary(
+            italicizeGlyphStrokes(full, "o", 12, 3550)),
+        "read-only preview limit does not lower native edit capacity");
     } finally {
         ui.restore();
     }

@@ -1058,6 +1058,17 @@ and italic TSV files separately for long-lived named variants or recovery.
 This is **one-level slant undo/redo**, not a general edit history or
 persistent reversible curve model.
 
+Beside these controls, **Proposed slanted glyph preview** shows the exact
+sampled pen coordinates before changing any authored ink. Changing the
+angle or baseline updates the read-only SVG immediately. The preview
+uses the same Unicode key, tangent rounding and pen-edge validation as
+the actual Rust-compatible edit; refused inputs clear the preview and
+display a visible reason. The SVG is deliberately limited to **128
+segments per selected glyph**; the actual edit keeps the larger native
+4,096-stroke library limit. The guide draws straight sampled chords,
+not persisted analytic vector curves, and never downloads or saves ink.
+Its touch-safe region permits ordinary scrolling on mobile.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each

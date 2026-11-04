@@ -11609,6 +11609,12 @@ test(
                     add("ñ", [300, 350, 500, 550]);
                     change("character", nfd);
                     const enabled = !get("slant-authored").disabled;
+                    const preview = get("slant-preview");
+                    const guideX1 = preview.querySelector("line")
+                        ?.getAttribute("x1");
+                    const guideCount = preview.childElementCount;
+                    const guideStatus = get("slant-preview-status")
+                        .textContent;
                     get("slant-authored").click();
                     const accepted = get("status").textContent;
                     const undoEnabled = !get("slant-undo").disabled;
@@ -11630,6 +11636,9 @@ test(
                         const redone = get("status").textContent;
                         get("save").click();
                         change("authored-angle", 21);
+                        const invalidGuide = preview.childElementCount;
+                        const invalidGuideStatus =
+                            get("slant-preview-status").textContent;
                         get("slant-authored").click();
                         const refused = get("status").textContent;
                         get("save").click();
@@ -11638,6 +11647,8 @@ test(
                         return JSON.stringify({
                             initiallyDisabled, enabled, accepted, refused,
                             undoEnabled, undone, redoEnabled, redone,
+                            guideX1, guideCount, guideStatus,
+                            invalidGuide, invalidGuideStatus,
                             missing, blobs: await Promise.all(blobs.map((b) =>
                                 b.text())),
                         });
@@ -11655,6 +11666,11 @@ test(
             assert.equal(actual.initiallyDisabled, true);
             assert.equal(actual.enabled, true);
             assert.equal(actual.missing, true);
+            assert.equal(actual.guideCount, 1);
+            assert.equal(actual.guideX1, "992");
+            assert.match(actual.guideStatus, /preview only, draft unchanged/);
+            assert.equal(actual.invalidGuide, 0);
+            assert.match(actual.invalidGuideStatus, /Italic angle/);
             assert.equal(actual.undoEnabled, true);
             assert.equal(actual.redoEnabled, true);
             assert.match(actual.undone, /Undid last glyph slant; unsaved/);

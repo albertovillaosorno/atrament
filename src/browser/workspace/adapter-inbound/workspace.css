@@ -983,6 +983,16 @@ button:focus-visible {
   touch-action: none;
 }
 
+/* Read-only slant guide occupies its own row and allows touch scrolling. */
+.glyph-slant-preview-region {
+  flex-basis: 100%;
+  min-width: 0;
+}
+
+.glyph-stroke-slant-preview {
+  touch-action: auto;
+}
+
 /* Comparison shows three ideal copies above three seeded variations. */
 .glyph-stroke-variation-preview {
   width: min(100%, 560px);

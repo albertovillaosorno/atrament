@@ -892,11 +892,22 @@
             <button id="glyph-slant-redo" type="button" disabled>
               Redo last glyph slant
             </button>
+            <div class="glyph-slant-preview-region">
+              <svg id="glyph-slant-preview"
+                class="glyph-stroke-preview glyph-stroke-slant-preview"
+                viewBox="0 0 3500 4500" role="img"
+                aria-label="Proposed slanted glyph preview"></svg>
+              <p id="glyph-slant-preview-status" class="field-help"
+                role="status" aria-live="polite">
+                Author a glyph to preview a proposed slant.
+              </p>
+            </div>
             <p class="field-help">Apply a whole-glyph italic tilt to
               existing hand-authored segments without rebuilding any letter.
               The selected exact Unicode glyph changes only on an explicit
               click; other letters keep their pen order and geometry.
-              Preview the result, then download the TSV separately.
+              Preview the proposed result before applying it, then download
+              the TSV separately.
               Refused angles, clipping or missing glyph ink leave the
               current unsaved draft untouched. Applying twice compounds the
               tilt. One undo/redo step is available for the last slant

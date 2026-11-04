@@ -1762,6 +1762,9 @@ export function createGlyphStrokeEditor(): {
         required<HTMLButtonElement>("glyph-slant-authored");
     const undoSlant = required<HTMLButtonElement>("glyph-slant-undo");
     const redoSlant = required<HTMLButtonElement>("glyph-slant-redo");
+    const slantPreview = required<SVGSVGElement>("glyph-slant-preview");
+    const slantPreviewStatus =
+        required<HTMLElement>("glyph-slant-preview-status");
     const idealGeometry = required<SVGGElement>("glyph-ideal-geometry");
     const ideal = required<SVGSVGElement>("glyph-ideal-preview");
     const idealCircle = required<SVGCircleElement>("glyph-ideal-circle");
@@ -2255,6 +2258,54 @@ export function createGlyphStrokeEditor(): {
             variationStatus.textContent = String(error);
         }
     };
+    // The candidate never replaces authored strokes until an explicit click.
+    // SVG is a diagnostic over sampled native pen segments, not a curve asset.
+    const renderSlantPreview = (): void => {
+        slantPreview.replaceChildren();
+        if (!active) {
+            slantPreviewStatus.textContent =
+                "Requires a compatible backend session";
+            return;
+        }
+        const target = character.value;
+        const authored = strokes.filter((item) =>
+            item.grapheme === target);
+        if (authored.length === 0) {
+            slantPreviewStatus.textContent =
+                "Author this exact glyph before previewing its slant";
+            return;
+        }
+        try {
+            if (authoredAngle.value === ""
+                || authoredBaseline.value === "") {
+                throw new Error("Choose an italic angle and baseline");
+            }
+            if (authored.length > 128) {
+                throw new Error("Preview limited to 128 authored segments");
+            }
+            const angle = Number(authoredAngle.value);
+            const baseline = Number(authoredBaseline.value);
+            const shear = italicizeGlyphStrokes;
+            const candidate = shear(strokes, target, angle, baseline);
+            const chosen = candidate.filter((item) =>
+                item.grapheme === target);
+            const lines = chosen.map((item) => {
+                const line = document.createElementNS(SVG_NS, "line");
+                for (const axis of ["x1", "y1", "x2", "y2"] as const) {
+                    line.setAttribute(axis, String(item[axis]));
+                }
+                line.setAttribute("stroke", item.color);
+                line.setAttribute("stroke-width", String(item.width));
+                line.setAttribute("stroke-linecap", "round");
+                return line;
+            });
+            slantPreview.replaceChildren(...lines);
+            slantPreviewStatus.textContent = `${lines.length} proposed `
+                + "sampled pen segments; preview only, draft unchanged";
+        } catch (error) {
+            slantPreviewStatus.textContent = String(error);
+        }
+    };
     const render = (): void => {
         if (slantHistory !== null) {
             const expected = slantHistory[slantHistory.side];
@@ -2402,6 +2453,7 @@ export function createGlyphStrokeEditor(): {
             }
         }
         preview.replaceChildren(...lines);
+        renderSlantPreview();
         const label = `${shown.length} strokes for selected glyph`;
         preview.setAttribute("aria-label", label);
         renderVariation();
@@ -2426,6 +2478,10 @@ export function createGlyphStrokeEditor(): {
         width: boundedInteger(numeric.width.value, 1500, "width"),
     });
 
+    for (const control of [authoredAngle, authoredBaseline]) {
+        control.addEventListener("input", renderSlantPreview);
+        control.addEventListener("change", renderSlantPreview);
+    }
     for (const control of [
         form, centerX, centerY, radius, color, accentShift, accentLift,
         italicAngle,
