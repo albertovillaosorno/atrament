@@ -57,6 +57,8 @@ const MAX_STROKES: usize = 4096;
 const MAX_RUNS: usize = 16;
 const MAX_RUN_GRAPHEMES: usize = 96;
 const MAX_FALLBACKS: usize = 64;
+// An explicit short pen bridge must not silently cross a wide glyph gap.
+const MAX_JOIN_GAP_UM: u64 = 1_200;
 const GLYPH_LIBRARY_HEADER: &str = "atrament.glyph-strokes.v1";
 
 // Authored local coordinates are only scaled when a separate saved
@@ -350,6 +352,7 @@ impl GlyphOverlay {
                 self.move_stroke(grapheme, from, to)
             }
             "--remove-stroke" => self.remove_stroke(grapheme, from),
+            "--join-strokes" => self.join_strokes(grapheme, from),
             "--set-stroke" => {
                 let replacement = Self::parse_stroke(grapheme, iter)?;
                 self.set_stroke(grapheme, from, replacement)
@@ -543,6 +546,54 @@ impl GlyphOverlay {
             );
         }
         Ok(output.into_bytes())
+    }
+
+    /// Connect the first segment's pen-down endpoint to the *next* segment's
+    /// starting point in one exact Unicode glyph. Explicitly preserve the
+    /// authored endpoints, ink color and width; do not infer cursive joins.
+    pub(super) fn join_strokes(
+        &mut self, grapheme: &str, ordinal: u32,
+    ) -> Result<(), String> {
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let index = Self::checked_stroke_position(&positions, ordinal)?;
+        let next = index.checked_add(1).ok_or("stroke index overflow")?;
+        let first = *positions.get(index)
+            .ok_or("stroke index outside bounds")?;
+        let second = *positions.get(next)
+            .ok_or("joining requires a following stroke in the same glyph")?;
+        let before = self.strokes.get(first)
+            .ok_or("stroke index outside library")?;
+        let after = self.strokes.get(second)
+            .ok_or("stroke index outside library")?;
+        if before.width_um != after.width_um || before.rgb != after.rgb {
+            return Err("joining requires matching pen width and RGB".into());
+        }
+        let start = before.end_um;
+        let end = after.start_um;
+        if start == end {
+            return Err("strokes are already continuous".into());
+        }
+        let dx = i64::from(start.0).saturating_sub(i64::from(end.0));
+        let dy = i64::from(start.1).saturating_sub(i64::from(end.1));
+        let distance_squared = dx.unsigned_abs().pow(2)
+            .saturating_add(dy.unsigned_abs().pow(2));
+        if distance_squared > MAX_JOIN_GAP_UM.pow(2) {
+            return Err("stroke gap exceeds 1200 um join limit".into());
+        }
+        if self.strokes.len() == MAX_STROKES {
+            return Err("joining exceeds 4096 authored strokes".into());
+        }
+        let bridge = GlyphStroke {
+            grapheme: grapheme.to_owned(),
+            start_um: start,
+            end_um: end,
+            width_um: before.width_um,
+            rgb: before.rgb,
+        };
+        // The connector follows the first glyph segment. Unrelated
+        // interleaved rows retain their own order and exact shapes.
+        self.strokes.insert(first.saturating_add(1), bridge);
+        Ok(())
     }
 
     /// Load a reusable exact-Unicode library with tab-separated columns.

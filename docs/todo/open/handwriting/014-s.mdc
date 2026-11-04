@@ -265,6 +265,28 @@ source/target files, and refusal to save an empty library. No authored
 curve grouping, connected cursive pen paths, or persistent semantic model
 is inferred; ATR-P4-014 remains open.
 
+## Native explicit short stroke connectors (partial) — 2026-11-03
+
+The native glyph CLI supports `--join-strokes GRAPHEME FIRST_INDEX` to insert
+an explicitly requested connector between one stroke's pen-end and the next
+stroke's pen-start within the **same exact Unicode grapheme**. The one-based
+index follows `--inspect-glyph` order; the two segments must share an exact
+ink width and RGB, be separated by a nonzero gap of at most 1200 µm, and fit
+within the 4096-segment library cap. The original authored endpoints and
+neighboring NFC/NFD/other Unicode glyph entries are preserved.
+
+Three Rust tests cover a decomposed-accent glyph interleaved with precomposed
+`ñ`, exact TSV inspection and save/reopen, and byte-for-byte PDF/PNG parity
+with independently authored connector segments. Invalid indices, missing
+neighbors, excessive gaps, already touching endpoints, mismatched color or
+width, repeated joins and stroke-budget overflow refuse without modifying
+existing source or destination files.
+
+This is an opt-in **straight bridge**, not a native parametric curve, inferred
+continuous pen-lift model or automatic cursive across adjacent letters.
+Seeded variation and joined word/line output remain separate unfinished
+requirements; the full P1-014 acceptance remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

@@ -2529,6 +2529,180 @@ fn targeted_stroke_geometry_and_deletion_round_trip_into_native_exports() {
 }
 
 #[test]
+fn explicit_joins_connect_one_exact_glyph_in_ink_and_native_exports() {
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("join source");
+    let target_name = target.to_str().expect("join output");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "500", "600", "1100",
+        "1400", "250", "#102030",
+        "--glyph-stroke", "\u{f1}", "1000", "1000", "1200",
+        "2200", "350", "#AABBCC",
+        "--glyph-stroke", "n\u{303}", "1500", "1800", "2200",
+        "2600", "250", "#102030",
+    ])).expect("authored ink").expect("source TSV");
+    fs::write(&source, &original).expect("test source");
+    let joined = execute_glyph_library(&args(&[
+        "--profile", source_name, "--join-strokes", "n\u{303}", "1",
+    ])).expect("explicit pen-down bridge").expect("joined TSV");
+    let exact = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "n\u{303}\t500\t600\t1100\t1400\t250\t#102030\n",
+        "n\u{303}\t1100\t1400\t1500\t1800\t250\t#102030\n",
+        "\u{f1}\t1000\t1000\t1200\t2200\t350\t#AABBCC\n",
+        "n\u{303}\t1500\t1800\t2200\t2600\t250\t#102030\n",
+    );
+    assert_eq!(joined, exact.as_bytes());
+    assert_eq!(fs::read(&source).expect("canonical unchanged"), original);
+
+    let inspection = execute_glyph_library(&args(&[
+        "--profile", source_name, "--join-strokes", "n\u{303}", "1",
+        "--inspect-glyph", "n\u{303}",
+    ])).expect("inspect pen sequence").expect("report");
+    let report = String::from_utf8(inspection).expect("UTF-8 report");
+    assert!(report.contains("Strokes: 3"), "{report}");
+    assert!(report.contains("2: (1100, 1400) -> (1500, 1800)"),
+        "{report}");
+    assert!(!report.contains("Glyph: \"\u{f1}\""));
+
+    assert!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--join-strokes", "n\u{303}", "1",
+        "--output", target_name,
+    ])).expect("save connected exact shape").is_none());
+    assert_eq!(fs::read(&target).expect("saved file"), joined);
+    for format in ["pdf", "png"] {
+        let mut stored = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", target_name,
+            "--place-text", "1", "30000", "45000", "n\u{303}\u{f1}",
+        ]);
+        let mut inline = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", "n\u{303}", "500", "600", "1100",
+            "1400", "250", "#102030",
+            "--glyph-stroke", "n\u{303}", "1100", "1400", "1500",
+            "1800", "250", "#102030",
+            "--glyph-stroke", "\u{f1}", "1000", "1000", "1200",
+            "2200", "350", "#AABBCC",
+            "--glyph-stroke", "n\u{303}", "1500", "1800", "2200",
+            "2600", "250", "#102030",
+            "--place-text", "1", "30000", "45000", "n\u{303}\u{f1}",
+        ]);
+        if format == "png" {
+            stored.extend(args(&["--dpi", "72"]));
+            inline.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&stored)
+            .expect("saved joined ink renders").expect("ink bytes"),
+            execute_notebook(&inline)
+                .expect("explicit segments render").expect("ink bytes"),
+            "native {format} must paint exact connector and original ink");
+    }
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(target).expect("remove target");
+}
+
+#[test]
+fn explicit_joins_obey_physical_gap_boundary_and_pen_direction() {
+    let base = args(&[
+        "--glyph-stroke", "\u{f3}", "500", "500", "1000", "1000",
+        "250", "#204060",
+        "--glyph-stroke", "\u{f3}", "2300", "1200", "2200", "1000",
+        "250", "#204060",
+    ]);
+    let mut selected = base.clone();
+    selected.extend(args(&[
+        "--reverse-stroke", "\u{f3}", "2", "--join-strokes", "\u{f3}", "1",
+    ]));
+    let joined = execute_glyph_library(&selected)
+        .expect("caller-directed exact 1200 um bridge")
+        .expect("canonical joined strokes");
+    assert!(String::from_utf8(joined).expect("UTF-8").contains(
+        "\u{f3}\t1000\t1000\t2200\t1000\t250\t#204060\n"));
+
+    let mut wrong_direction = base;
+    wrong_direction.extend(args(&["--join-strokes", "\u{f3}", "1"]));
+    assert!(execute_glyph_library(&wrong_direction).is_err(),
+        "never infer pen direction from the shorter endpoint");
+    let outside = args(&[
+        "--glyph-stroke", "\u{f3}", "500", "500", "1000", "1000",
+        "250", "#204060",
+        "--glyph-stroke", "\u{f3}", "2201", "1000", "2300", "1200",
+        "250", "#204060", "--join-strokes", "\u{f3}", "1",
+    ]);
+    assert!(execute_glyph_library(&outside).is_err(),
+        "1201 um gap is outside inclusive 1200 um bound");
+}
+
+#[test]
+fn explicit_joins_refuse_unsafe_gaps_colors_and_indices_atomically() {
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("join source");
+    let target_name = target.to_str().expect("join target");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "\u{f1}", "500", "600", "1100", "1400",
+        "250", "#102030",
+        "--glyph-stroke", "\u{f1}", "1500", "1800", "2200", "2600",
+        "250", "#102030",
+        "--glyph-stroke", "a", "500", "600", "1100", "1400",
+        "250", "#AABBCC",
+    ])).expect("original glyphs").expect("original TSV");
+    fs::write(&source, &original).expect("source TSV");
+    fs::write(&target, b"preserve selected output")
+        .expect("target sentinel");
+    let invalid = [
+        args(&["--join-strokes"]),
+        args(&["--join-strokes", "\u{f1}"]),
+        args(&["--join-strokes", "\u{f1}", "0"]),
+        args(&["--join-strokes", "\u{f1}", "2"]),
+        args(&["--join-strokes", "\u{f1}", "4097"]),
+        args(&["--join-strokes", "n", "1"]),
+        args(&["--join-strokes", "a", "1"]),
+        args(&["--join-strokes", "\u{f1}", "1",
+            "--join-strokes", "\u{f1}", "1"]),
+        args(&["--set-stroke", "\u{f1}", "2", "1100", "1400",
+            "2200", "2600", "250", "#102030",
+            "--join-strokes", "\u{f1}", "1"]),
+        args(&["--set-stroke", "\u{f1}", "2", "3000", "3000",
+            "3200", "3500", "250", "#102030",
+            "--join-strokes", "\u{f1}", "1"]),
+        args(&["--set-stroke", "\u{f1}", "2", "1500", "1800",
+            "2200", "2600", "350", "#102030",
+            "--join-strokes", "\u{f1}", "1"]),
+        args(&["--set-stroke", "\u{f1}", "2", "1500", "1800",
+            "2200", "2600", "250", "#AABBCC",
+            "--join-strokes", "\u{f1}", "1"]),
+    ];
+    for flags in invalid {
+        let mut command = args(&["--profile", source_name]);
+        command.extend(flags);
+        command.extend(args(&["--output", target_name, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid join refuses: {command:?}");
+        assert_eq!(fs::read(&source).expect("source unchanged"), original);
+        assert_eq!(fs::read(&target).expect("output unchanged"),
+            b"preserve selected output");
+    }
+    let complete = test_path().with_extension("tsv");
+    let complete_name = complete.to_str().expect("full library name");
+    let full = String::from("atrament.glyph-strokes.v1\n")
+        + &"\u{f1}\t500\t600\t1100\t1400\t250\t#102030\n".repeat(4096);
+    fs::write(&complete, full).expect("maximum authored shapes");
+    let error = execute_glyph_library(&args(&[
+        "--profile", complete_name, "--join-strokes", "\u{f1}", "1",
+        "--output", target_name, "--replace",
+    ])).expect_err("capacity cannot be exceeded");
+    assert!(error.contains("4096"), "{error}");
+    assert_eq!(fs::read(&target).expect("output unchanged"),
+        b"preserve selected output");
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(target).expect("remove target");
+    fs::remove_file(complete).expect("remove full library");
+}
+
+#[test]
 fn targeted_stroke_edits_refuse_bad_shapes_and_leave_files_untouched() {
     let source = test_path().with_extension("tsv");
     let target = test_path().with_extension("tsv");
