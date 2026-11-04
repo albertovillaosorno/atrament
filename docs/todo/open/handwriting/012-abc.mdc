@@ -1575,6 +1575,27 @@ library, reopens the exact TSV in Rust and verifies PDF/PNG rendering without
 an editor-side backend write. Native sampled curves remain approximate;
 analytic path persistence and general mathematics layout remain open.
 
+## Mirrored superset notation ink (partial) — 2026-11-04
+
+The explicit geometric math authoring menu now also includes `⊃` and `⊇`
+as independent Unicode keys, not aliases or automatic reversed output of
+`⊂` and `⊆`. Their editable SVG guides reflect the four ideal quadratic
+control points horizontally around the caller-selected center; native TSV
+samples one continuous 64-segment reverse-facing contour for each.
+Inclusive `⊇` adds a separately lifted horizontal equality mark for 65
+strokes. The optional math fill now covers 38 exact notation glyphs and
+retains any earlier caller-authored subset, membership or other ink.
+
+A red-before/green-after browser regression checks mirrored integer pen
+coordinates, 64/65 counts, directed continuity, separate Unicode TSV keys
+and clipped construction refusal. The Rust CLI independently roundtrips
+`⊃` and `⊇` in TSV, audits exact coverage, exports real physical PDF and
+transparent PNG with both rows, and preserves accepted output when an
+unauthored `⊂` or `⊋` is requested. Authenticated Firefox verifies 38-form
+fill, selectable independent SVG guides, and actual Rust PDF/PNG replay.
+These manual sampled paths do not provide native analytic glyph shapes or
+infer symbolic set relationships in text.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

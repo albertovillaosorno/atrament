@@ -1131,6 +1131,59 @@ test('proper and inclusive subset glyphs render exact native PDF PNG',
         }
     });
 
+test('superset signs keep separate identities in native PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/superset-ink-'));
+        try {
+            const source = join(dir, 'superset.tsv');
+            const output = join(dir, 'superset.pdf');
+            const symbols = ['⊃', '⊇'];
+            const strokes = symbols.flatMap((glyph) => geometricStarter(
+                glyph, 1550, 2450, 1100, 250, '#243647'));
+            assert.equal(strokes.length, 129);
+            const data = Buffer.from(encodeGlyphLibrary(strokes));
+            writeFileSync(source, data);
+            const reopened = cli('glyphs', ['--profile', source]);
+            assert.equal(reopened.status, 0, reopened.stderr.toString());
+            assert.deepEqual(reopened.stdout, data);
+            const audit = cli('glyphs', [
+                '--profile', source, '--audit-text', symbols.join(''),
+            ]);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 2/);
+            assert.match(audit.stdout.toString(),
+                /Missing authored glyphs: 0/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', source, '--flow-text', '⊃⊇\n⊇⊃'];
+            const pdf = cli('notebook', [...flags,
+                '--export-paper', 'pdf', '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+                .length, strokes.length * 2);
+            const png = cli('notebook', [...flags,
+                '--export-paper', 'png', '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            for (const missing of ['⊂', '⊋']) {
+                const rejected = cli('notebook', [
+                    '--printed-sheet', 'true', '--glyph-file', source,
+                    '--flow-text', '⊃⊇' + missing,
+                    '--export-paper', 'pdf', '--output', output, '--replace',
+                ]);
+                assert.notEqual(rejected.status, 0);
+                assert.match(rejected.stderr.toString(),
+                    /missing authored glyph/i);
+                assert.deepEqual(readFileSync(output), accepted);
+            }
+            assert.deepEqual(readFileSync(source), data);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('membership and nonmembership export distinct native PDF PNG ink',
     () => {
         const dir = mkdtempSync(join(root, '.temp/membership-'));
