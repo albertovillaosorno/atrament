@@ -365,6 +365,66 @@ test('escaped Markdown structural marks stay literal on physical pages',
         }
     });
 
+const fenceLiteralInk = ['`', '~'].flatMap((glyph) => [
+    '--glyph-stroke', glyph, '650', '800', '2400', '3100',
+    '250', '#112233',
+]);
+
+test('escaped fence-like source prints exact authored PDF and PNG glyphs',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-fence-escape-'));
+        try {
+            const literal = '``` a\n~~~ a';
+            const escaped = '\\``` a  \n\\~~~ a';
+            const indented = '  \\``` a  \n   \\~~~ a';
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, literal, format,
+                    fenceLiteralInk, '--flow-text');
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                if (format === 'pdf') {
+                    const pdf = expected.toString('latin1');
+                    assert.equal(pdf.split('0.067 0.133 0.200 RG').length - 1,
+                        6, 'six literal backticks and tildes are authored');
+                }
+                for (const markdown of [escaped, indented]) {
+                    const candidate = render(dir, markdown, format,
+                        fenceLiteralInk);
+                    assert.equal(candidate.result.status, 0,
+                        candidate.result.stderr);
+                    assert.ok(readFileSync(candidate.output).equals(expected),
+                        `escaped fence marks must be literal in ${format}`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('literal fence marks without authored glyphs refuse atomically',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-fence-escape-'));
+        try {
+            const output = join(dir, 'flow-pdf.output');
+            const sentinel = Buffer.from('preserve selected document');
+            for (const [source, codepoint] of [
+                ['\\``` a', /U\+0060/],
+                ['\\~~~ a', /U\+007E/],
+            ]) {
+                writeFileSync(output, sentinel);
+                const failed = render(dir, source, 'pdf');
+                assert.notEqual(failed.result.status, 0, source);
+                assert.match(failed.result.stderr,
+                    /missing authored glyph shapes/);
+                assert.match(failed.result.stderr, codepoint);
+                assert.deepEqual(readFileSync(output), sentinel);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('unsupported backslashes and unauthored literal marks refuse atomically',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-escape-'));

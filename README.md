@@ -527,8 +527,11 @@ or more identical marks, up to three initial spaces) preserve literal
 handwriting lines, including physical blank rows and source punctuation.
 An opening fence may have one short ASCII language tag, but no monospace
 font or syntax highlighting is invented. Fence characters are syntax;
-visible code still requires exact authored glyph shapes. A mismatched or
-unclosed fence refuses before writing output. Nested quotes, inline styles,
+visible code still requires exact authored glyph shapes. Prefix a
+leading backtick or tilde with one backslash to print it literally outside
+a fence instead of starting one; the punctuation glyph remains authored.
+A mismatched or unclosed fence refuses before writing output.
+Nested quotes, inline styles,
 tables and full Markdown are not yet supported. In Markdown, all three
 unordered bullet markers produce the same physical ink dash; the `+` marker
 does not require a separately authored `+` glyph. In plain text it remains

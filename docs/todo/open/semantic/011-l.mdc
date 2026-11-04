@@ -424,6 +424,20 @@ Two native PDF/transparent-PNG regressions cover an exact last-row title
 with an empty fence, equivalent visible code/text after syntax delimiters,
 and page-two physical ink with preserved heading decoration.
 
+## Escaped code fence punctuation (partial) — 2026-11-04
+
+The bounded Markdown first-marker escape now admits a backslash before
+leading backticks or tildes, in addition to the existing `#`, `>`, `-`,
+`*`, `+` and `_`. A literal fence-like line consequently prints the
+caller's exact punctuation glyphs instead of consuming the sequence as a
+code block opener. Up to three leading syntax spaces remain inert, and
+normal two-space hard line breaks still apply between such source rows.
+
+Two native PDF/PNG tests compare literal plain-text punctuation to escaped
+Markdown and require exact caller-authored shapes, with codepoint-specific
+missing-glyph diagnostics and immutable preexisting output on refusal.
+This does not add general inline Markdown escaping or create glyphs.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

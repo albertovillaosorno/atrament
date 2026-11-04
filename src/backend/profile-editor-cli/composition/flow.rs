@@ -883,6 +883,7 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
             .strip_prefix('\\')
         && escaped.bytes().next().is_some_and(|mark| {
             matches!(mark, b'#' | b'>' | b'-' | b'*' | b'+' | b'_')
+                || matches!(mark, b'`' | b'~')
         })
     {
         return (LineStyle::Body, escaped.trim_end_matches(' '));
