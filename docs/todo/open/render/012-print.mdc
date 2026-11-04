@@ -115,6 +115,15 @@ stream framing in a properly typed indirect stream. All six print tests and
 strict all-target paper Clippy pass; fake CUPS remains untouched for refused
 inputs and selected bytes remain unchanged.
 
+The traditional `xref` locator now additionally demands at least one complete
+fixed-width record in a numbered subsection, followed by a `trailer` and
+`<< ... >>` dictionary. A red-before/green-after fixture had accepted a bare
+`xref` keyword or partial table as printable; the corrected gate refuses
+those forms, bad decimal records, wrong statuses and absent closing trailers
+without CUPS side effects. Native two-page and multi-subsection table framing
+remain admitted. All seven focused print tests and strict all-target Clippy
+pass; this remains a bounded framing check, not a full PDF parser.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

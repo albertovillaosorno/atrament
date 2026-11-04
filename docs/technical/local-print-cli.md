@@ -92,6 +92,11 @@ source to an `xref` table or a plausible PDF 1.5+ indirect `/Type /XRef`
 stream header. The stream form is admitted only for PDF 1.5–1.7 or 2.0;
 older PDF 1.0–1.4 headers require the traditional `xref` table form.
 
+The table form also requires at least one numbered subsection with
+fixed-width decimal offset/generation and `n`/`f` state records, followed by
+a `trailer` dictionary. An `xref` keyword alone or an empty or malformed
+table no longer qualifies for print admission.
+
 The stream type name must be an exact top-level `/Type /XRef` dictionary
 entry; longer names such as `/XRefShadow` and apparent type entries inside
 comments, literal strings, arrays or nested dictionaries are not sufficient.
@@ -127,6 +132,10 @@ unsupported PDF versions and forged cross-reference trailer refusals before
 the fake CUPS transport starts. A sixth regression rejects false stream types
 in comments, strings, arrays and nested maps while accepting a real-looking
 nested stream dictionary with CRLF boundaries.
+
+A seventh regression refuses empty, truncated and invalid traditional
+`xref` tables before fake-CUPS invocation, while admitting numbered
+multi-subsection framing and the unchanged native two-page output.
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.

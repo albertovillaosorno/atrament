@@ -210,7 +210,7 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     if target.starts_with(b"xref")
         && target.get(4).is_some_and(u8::is_ascii_whitespace)
     {
-        return true;
+        return supported_xref_table(target);
     }
     // Cross-reference streams entered the PDF standard in version 1.5.
     // Old-format headers cannot authorize a stream even if it appears to
@@ -227,6 +227,54 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
         return false;
     };
     supported_xref_stream_dictionary(prefix)
+}
+
+// Traditional xref tables have fixed-width decimal entries and a trailer
+// dictionary. Do not spool a bare `xref` token or a forged subsection stub.
+// This confirms only the terminal table's framing, not offset correctness.
+fn supported_xref_table(bytes: &[u8]) -> bool {
+    let mut words = bytes.split(u8::is_ascii_whitespace)
+        .filter(|word| !word.is_empty());
+    if words.next() != Some(b"xref".as_slice()) {
+        return false;
+    }
+    let mut seen_entry = false;
+    loop {
+        let Some(first) = words.next() else {
+            return false;
+        };
+        if first == b"trailer" {
+            return seen_entry && words.next().is_some_and(|word| {
+                word.starts_with(b"<<")
+            }) && words.any(|word| word.windows(2)
+                .any(|pair| pair == b">>"));
+        }
+        let valid_first = !first.is_empty()
+            && first.iter().all(u8::is_ascii_digit);
+        let Some(count) = words.next()
+            .and_then(|value| str::from_utf8(value).ok())
+            .and_then(|digits| digits.parse::<usize>().ok())
+        else {
+            return false;
+        };
+        if !valid_first || count.checked_mul(18)
+            .is_none_or(|minimum| minimum > bytes.len()) {
+            return false;
+        }
+        for _ in 0..count {
+            let Some(offset) = words.next() else { return false; };
+            let Some(generation) = words.next() else { return false; };
+            let Some(status) = words.next() else { return false; };
+            if offset.len() != 10 || !offset.iter().all(u8::is_ascii_digit)
+                || generation.len() != 5
+                || !generation.iter().all(u8::is_ascii_digit)
+                || !matches!(status, b"f" | b"n")
+            {
+                return false;
+            }
+            seen_entry = true;
+        }
+    }
 }
 
 // These small lexical checks intentionally do not parse PDF object contents

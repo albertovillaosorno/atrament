@@ -447,6 +447,61 @@ fn xref_stream_tokens_cannot_hide_in_comments_or_string_literals() {
 
 #[cfg(unix)]
 #[test]
+fn xref_tables_require_a_real_subsection_and_trailer() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS fixture");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+    let plausible = b"%PDF-1.4\nxref\n0 1\n0000000000 65535 f \n\
+        trailer\n<< /Size 1 >>\nstartxref\n9\n%%EOF\n";
+    assert!(supported_pdf_cross_reference(plausible),
+        "traditional table framing remains eligible for PDF 1.4");
+    let multi_section = [
+        "%PDF-1.7\nxref\n0 1\n0000000000 65535 f \n",
+        "1 1\n0000000044 00000 n \n",
+        "trailer\n<< /Size 2 /Root 1 0 R >>\n",
+        "startxref\n9\n%%EOF\n",
+    ].concat();
+    assert!(supported_pdf_cross_reference(multi_section.as_bytes()),
+        "multiple table subsections with numbered entries remain eligible");
+    assert!(supported_pdf_cross_reference(&real_pdf()),
+        "native physical-page PDF xref table remains eligible");
+    for fake_body in [
+        "xref\n",
+        "xref\ntrailer\n<< /Size 1 >>\n",
+        "xref\n0 1\ninvalid 00000 n\ntrailer\n<< /Size 1 >>\n",
+        "xref\n0 2\n0000000000 65535 f \ntrailer\n<< >>\n",
+        "xref\n0 1\n0000000000 65535 z \ntrailer\n<< >>\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1\n",
+        "xref\n0 1\n0000000000 65535 f \n",
+    ] {
+        let fake = format!(
+            "%PDF-1.7\n{fake_body}startxref\n9\n%%EOF\n"
+        ).into_bytes();
+        assert!(!supported_pdf_cross_reference(&fake),
+            "not a framed xref table: {fake_body:?}");
+        fs::write(&pdf, &fake).expect("save fake table");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(), "invalid table refused");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "invalid table cannot reach CUPS");
+        assert!(!spooled.exists(), "no fake spool side effect");
+        assert_eq!(fs::read(&pdf).expect("source unchanged"), fake);
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
     use std::os::unix::fs::{PermissionsExt as _, symlink};
 
