@@ -396,6 +396,21 @@ missing-glyph/unterminated-fence refusal and immutable selected output
 on failure. This is a CLI-only literal code
 block slice, not complete CommonMark or persisted semantic code identity.
 
+## Ordinary Markdown paragraph indentation (partial) — 2026-11-04
+
+The bounded Rust parser now treats zero to three leading ASCII spaces on an
+ordinary Markdown paragraph line as syntactic, matching its existing
+heading/list/quote indentation behavior. Those spaces no longer shift
+handwriting or reduce the physical wrap width. At four spaces, source
+spacing remains literal authored ink advance rather than an inferred code
+block. Inside explicitly fenced code, all original leading spaces remain.
+
+Two real PDF/transparent-PNG regressions compare accented multiline body
+and heading ink against unindented Markdown, then verify that four-space
+body text and two-space fenced code preserve exactly the same physical
+position as plain text. Neither changes authored glyph shapes, fixed-region
+refusals or persisted notebook structure.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

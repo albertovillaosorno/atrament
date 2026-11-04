@@ -492,6 +492,9 @@ Use `--flow-text-file` for plain text, or `--flow-text` and
 start a physical row. In Markdown, consecutive ordinary lines form one
 soft-wrapped paragraph, while two spaces or a single trailing backslash
 before a newline request a hard row break for ordinary and quoted paragraphs.
+Up to three leading ASCII spaces on an ordinary Markdown paragraph line
+are syntax and do not shift ink. Four or more remain literal spaces,
+without inferring an indented code block.
 Paired trailing backslashes remain literal and need authored glyphs.
 Consecutive Markdown blank lines collapse to one 4-mm paragraph gap, with
 leading/trailing blanks ignored. Plain-text blank lines instead
@@ -508,9 +511,10 @@ The Markdown subset supports single-line `#`, `##`, `###` headings,
 numbered items such as `1. text` or `2) text`
 (with one to nine ASCII digits). Numbered items use your **authored** digit
 and `.` or `)` glyph ink; unlike unordered bullets, there is no automatic
-number shape. Standalone `---`, `***` or `___` lines (three or more
-matching ASCII marks, without interior spaces) draw the same thin horizontal
-rule up to 60 mm wide in one physical row, without authored punctuation.
+number shape. Standalone `---`, `***`, `___`, `- - -` and similar lines
+with three or more identical marks (optional interior ASCII spaces and up to
+three leading spaces) draw the same thin horizontal rule up to 60 mm wide
+in one physical row, without authored punctuation.
 A source containing only separators refuses until it includes visible text.
 Each list item starts on its own row; wrapped continuations
 align beneath the first item glyph after the *measured* numeral, separator
@@ -518,8 +522,14 @@ and any authored spaces. A label too wide to leave room for its first item
 glyph refuses rather than creating an orphan numeral row. Quote text is
 inset 6 mm and gets a 0.4-mm vertical ink rule on each physical row, including
 wrapped continuations; the `>` marker itself needs no authored glyph.
-Empty quote blocks refuse; nested quotes, inline styles, tables and full
-Markdown are not yet supported. In Markdown, all three
+Empty quote blocks refuse. Bounded backtick and tilde code fences (three
+or more identical marks, up to three initial spaces) preserve literal
+handwriting lines, including physical blank rows and source punctuation.
+An opening fence may have one short ASCII language tag, but no monospace
+font or syntax highlighting is invented. Fence characters are syntax;
+visible code still requires exact authored glyph shapes. A mismatched or
+unclosed fence refuses before writing output. Nested quotes, inline styles,
+tables and full Markdown are not yet supported. In Markdown, all three
 unordered bullet markers produce the same physical ink dash; the `+` marker
 does not require a separately authored `+` glyph. In plain text it remains
 literal and still needs an authored shape.

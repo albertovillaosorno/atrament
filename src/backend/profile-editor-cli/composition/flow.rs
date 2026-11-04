@@ -932,7 +932,11 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
             if item.trim().is_empty() { "" }
             else { block.trim_end_matches(' ') });
     }
-    (LineStyle::Body, raw)
+    // Leading 0..3 spaces on a Markdown paragraph are syntax, not ink.
+    // Four or more remain literal rather than silently becoming code.
+    (LineStyle::Body, if indent <= 3 {
+        block.trim_end_matches(' ')
+    } else { raw })
 }
 
 // A single trailing backslash is an explicit Markdown hard line break for

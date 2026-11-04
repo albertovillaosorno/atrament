@@ -161,6 +161,60 @@ test('unclosed, unapproved and unsupported code fences refuse atomically',
         }
     });
 
+test('ordinary Markdown paragraphs ignore up to three indentation spaces',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-body-indent-'));
+        try {
+            const ordinary = 'ó a\no\u0301 a\n# ó\nó\na';
+            const indented = '   ó a\n  o\u0301 a\n# ó\n ó\n   a';
+            for (const format of ['pdf', 'png']) {
+                const baseline = render(dir, ordinary, format);
+                assert.equal(baseline.result.status, 0,
+                    baseline.result.stderr);
+                const expected = readFileSync(baseline.output);
+                const result = render(dir, indented, format);
+                assert.equal(result.result.status, 0,
+                    result.result.stderr);
+                assert.deepEqual(readFileSync(result.output), expected,
+                    `normal paragraph indent must not affect ${format}`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('four-space paragraphs and fenced code retain literal indentation',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-body-indent-'));
+        try {
+            for (const format of ['pdf', 'png']) {
+                const unindented = render(dir, 'a', format);
+                assert.equal(unindented.result.status, 0,
+                    unindented.result.stderr);
+                const noIndent = readFileSync(unindented.output);
+                for (const [markdown, plain] of [
+                    ['    a', '    a'],
+                    ['\`\`\`\n  a\n\`\`\`', '  a'],
+                ]) {
+                    const reference = render(dir, plain, format, [],
+                        '--flow-text');
+                    assert.equal(reference.result.status, 0,
+                        reference.result.stderr);
+                    const expected = readFileSync(reference.output);
+                    const result = render(dir, markdown, format);
+                    assert.equal(result.result.status, 0,
+                        result.result.stderr);
+                    assert.deepEqual(readFileSync(result.output), expected,
+                        `literal indentation must survive in ${format}`);
+                    assert.notDeepEqual(expected, noIndent,
+                        'authored spaces change physical handwriting offset');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('closing ATX markers and up-to-three-space headings emit identical ink',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-flow-'));
