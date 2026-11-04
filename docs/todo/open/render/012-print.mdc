@@ -208,7 +208,18 @@ PDF consumer to an unbounded object count. A red-before fake-CUPS
 regression now refuses sizes above the bounded record-equivalent ceiling
 (1,333,334). The exact ceiling remains admitted, along with ordinary
 native two-page output. This conservative resource policy may refuse
-unusually sparse external PDFs, and does not validate stream-based xrefs.
+unusually sparse external PDFs, and does not decode stream records.
+
+A red-before regression also exposed a cross-reference stream with no
+advertised object count reaching the printer gate. Stream dictionaries now
+require exactly one top-level direct decimal `/Size`, between 1 and the
+existing 1,333,334-object input-budget ceiling. Ten malformed stream
+fixtures refuse before fake CUPS can run, preserving selected bytes.
+
+The shared numeric bound permits one plausible nested/commented stream
+and the inclusive size ceiling while refusing oversized, signed, zero,
+duplicated, malformed or nested-only `/Size` entries. These checks do not
+decode stream records or establish whether PDF objects are complete.
 
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.

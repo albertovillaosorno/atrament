@@ -132,6 +132,12 @@ not an incidental word substring. A solitary `>` delimiter outside a hex
 string cannot impersonate a nested or terminal dictionary closure in either
 xref stream or traditional-table trailer preflight.
 
+Cross-reference streams now also need a single direct, top-level decimal
+`/Size` in the same range as traditional-table trailers: 1 through
+1,333,334 objects. The stream scanner skips nested dictionaries, strings
+and comments when finding that value and refuses missing, duplicate,
+nondecimal, signed or oversized entries without launching the spooler.
+
 A typed cross-reference stream must also
 end with standalone `endstream` and `endobj` keywords, allowing whitespace
 and comments before its final `startxref` locator. Missing, fused or
@@ -202,6 +208,12 @@ rounded up (1,333,334 objects). This is a conservative local print resource
 policy, not a PDF-specification size limit: extremely sparse external PDFs
 above it require reviewed re-export. The inclusive ceiling and a forged
 9,999,999,999-object trailer have positive and fake-spool refusal tests.
+
+Ten more fake-spool refusals exercise malformed or unbounded cross-reference
+stream `/Size` declarations, including missing and nested-only values.
+The tests began red on the prior stream framing gate, then passed after
+sharing the numeric bound with tables. Plausible bounded stream framing
+and the exact inclusive size ceiling remain accepted.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

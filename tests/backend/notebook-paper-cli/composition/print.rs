@@ -350,7 +350,7 @@ fn fake_pdf_trailers_and_retargeted_xrefs_cannot_reach_a_printer() {
     // PDF 1.5+ may use an indirect cross-reference *stream* rather than
     // an ASCII xref table; its offset form remains eligible for admission.
     let stream_prefix = [
-        b"%PDF-1.7\n1 0 obj\n<< /Type /XRef >>\n".as_slice(),
+        b"%PDF-1.7\n1 0 obj\n<< /Type /XRef /Size 2 >>\n".as_slice(),
         b"stream\n\x00\nendstream\nendobj\n".as_slice(),
     ].concat();
     let stream_framing = [
@@ -409,7 +409,7 @@ fn xref_stream_tokens_cannot_hide_in_comments_or_string_literals() {
     let nested_stream = [
         "%PDF-1.7\n1 0 obj\n<< /Note (/Type /Page)\n",
         " /Type % ordinary PDF dictionary comment\n /XRef",
-        " /DecodeParms << /Type /Page >> >>\n",
+        " /Size 2 /DecodeParms << /Type /Page >> >>\n",
         "stream\r\n\u{0000}\nendstream\nendobj\n",
         "startxref\n9\n%%EOF\n",
     ].concat().into_bytes();
@@ -428,19 +428,25 @@ fn xref_stream_tokens_cannot_hide_in_comments_or_string_literals() {
         "1 0 obj\n/Type /XRef\nstream\n",
         "1 0 obj\n<< /Memo (/Type /XRef) >>\nstream\n",
         "1 0 obj\n<< % /Type /XRef\n /Type /Page >>\nstream\n",
-        "1 0 obj\n<< /Other << /Type /XRef >> >>\nstream\n",
+        "1 0 obj\n<< /Other << /Type /XRef /Size 2 >> >>\nstream\n",
         "1 0 obj\n<< /List [/Type /XRef] >>\nstream\n",
-        "1 0 obj\n<< /Type /XRef > >>\nstream\n\0\nendstream\nendobj\n",
-        "1 0 obj\n<< /Type /XRef ] >>\nstream\n\0\nendstream\nendobj\n",
-        "1 0 obj\n<< /Type /XRef >>\ndownstream\n",
-        "1 0 obj\n<< /Type /XRef >>\n%stream\n",
+        "1 0 obj\n<< /Type /XRef /Size 2 > >>\nstream\n\0\nendstream\nendobj\n",
+        "1 0 obj\n<< /Type /XRef /Size 2 ] >>\nstream\n\0\nendstream\nendobj\n",
+        "1 0 obj\n<< /Type /XRef /Size 2 >>\ndownstream\n",
+        "1 0 obj\n<< /Type /XRef /Size 2 >>\n%stream\n",
         // A plausible header alone is not a complete terminal stream.
-        "1 0 obj\n<< /Type /XRef >>\nstream\n",
-        "1 0 obj\n<< /Type /XRef >>\nstream\n\0\nendobj\n",
-        "1 0 obj\n<< /Type /XRef >>\nstream\n\0\nendstream\n",
-        "1 0 obj\n<< /Type /XRef >>\nstream\n\0\nendstreamX\nendobj\n",
-        "1 0 obj\n<< /Type /XRef >>\nstream\n\0\nendstream\nendobjFake\n",
-        "1 0 obj\n<< /Type /XRef >>\nstream\n\0\nendstream\nendobj\njunk\n",
+        "1 0 obj\n<< /Type /XRef /Size 2 >>\nstream\n",
+        "1 0 obj\n<< /Type /XRef /Size 2 >>\nstream\n\0\nendobj\n",
+        "1 0 obj\n<< /Type /XRef /Size 2 >>\nstream\n\0\nendstream\n",
+        "1 0 obj\n<< /Type /XRef /Size 2 >>\nstream\n\0\nendstreamX\nendobj\n",
+        concat!(
+            "1 0 obj\n<< /Type /XRef /Size 2 >>\nstream\n",
+            "\0\nendstream\nendobjFake\n",
+        ),
+        concat!(
+            "1 0 obj\n<< /Type /XRef /Size 2 >>\nstream\n",
+            "\0\nendstream\nendobj\njunk\n",
+        ),
     ] {
         let fake = format!(
             "%PDF-1.7\n{fake_body}startxref\n9\n%%EOF\n"
@@ -560,6 +566,62 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
             "invalid table cannot reach CUPS");
         assert!(!spooled.exists(), "no fake spool side effect");
         assert_eq!(fs::read(&pdf).expect("source unchanged"), fake);
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
+fn xref_stream_advertised_size_must_be_bounded_and_unique() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("unexpected-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS fixture");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+    let framed = |dictionary: &str| format!(
+        "%PDF-1.7\n1 0 obj\n<< {dictionary} >>\n\
+         stream\n\0\nendstream\nendobj\nstartxref\n9\n%%EOF\n",
+    ).into_bytes();
+    for valid in [
+        framed("/Type /XRef /Size 2"),
+        framed(&format!("/Type /XRef /Size {MAX_SUPPORTED_XREF_OBJECTS}")),
+        framed("/Meta << /Size 9999999999 >> /Size 2 /Type /XRef"),
+    ] {
+        assert!(supported_pdf_cross_reference(&valid),
+            "valid bounded top-level /Size remains eligible");
+    }
+    for dictionary in [
+        "/Type /XRef",
+        "/Type /XRef /Size 0",
+        "/Type /XRef /Size -2",
+        "/Type /XRef /Size 9999999999",
+        "/Type /XRef /Size 2 /Size 3",
+        "/Type /XRef /Meta << /Size 2 >>",
+        "/Type /XRef /Meta [/Size 2]",
+        "/Type /XRef /Size 2.5",
+        "/Type /XRef /Size 2oops",
+        "/Type /XRef /Size +2",
+    ] {
+        let invalid = framed(dictionary);
+        assert!(!supported_pdf_cross_reference(&invalid),
+            "invalid xref-stream object count must refuse: {dictionary}");
+        fs::write(&pdf, &invalid).expect("selected malformed PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(),
+            "bad stream /Size must fail selected-file admission");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "bad stream /Size cannot contact CUPS");
+        assert!(!spooled.exists(), "fake CUPS was never invoked");
+        assert_eq!(fs::read(&pdf).expect("source unchanged"), invalid);
     }
     fs::remove_dir_all(&directory).expect("remove owned fixture directory");
 }

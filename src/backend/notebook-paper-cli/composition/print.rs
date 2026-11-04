@@ -362,6 +362,29 @@ fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
     }
 }
 
+// A declared cross-reference object count must fit the bounded local PDF
+// input policy. Both tables and streams use this lexical numeric boundary.
+fn bounded_xref_size(bytes: &[u8], at: &mut usize, minimum_size: usize)
+    -> bool {
+    *at = pdf_trivia_end(bytes, *at);
+    let start = *at;
+    while bytes.get(*at).is_some_and(u8::is_ascii_digit) {
+        *at = at.saturating_add(1);
+    }
+    let value = bytes.get(start..*at).unwrap_or_default();
+    !value.is_empty()
+        && str::from_utf8(value).ok()
+            .and_then(|digits| digits.parse::<usize>().ok())
+            .is_some_and(|number| {
+                number > 0 && number >= minimum_size
+                    && number <= MAX_SUPPORTED_XREF_OBJECTS
+            })
+        && bytes.get(*at).is_some_and(|byte| {
+            byte.is_ascii_whitespace()
+                || matches!(byte, b'>' | b'/' | b'%')
+        })
+}
+
 // The required trailer /Size is one positive top-level direct decimal.
 // It must cover every cross-reference subsection's exclusive upper bound.
 // Balance nested dictionaries, arrays and literal/hex strings without
@@ -424,22 +447,7 @@ fn supported_xref_table_trailer(bytes: &[u8], minimum_size: usize) -> bool {
                     if seen_size {
                         return false;
                     }
-                    at = pdf_trivia_end(bytes, at);
-                    let start = at;
-                    while bytes.get(at).is_some_and(u8::is_ascii_digit) {
-                        at = at.saturating_add(1);
-                    }
-                    let value = bytes.get(start..at).unwrap_or_default();
-                    if value.is_empty() || str::from_utf8(value).ok()
-                        .and_then(|digits| digits.parse::<usize>().ok())
-                        .is_none_or(|number| {
-                            number == 0 || number < minimum_size
-                                || number > MAX_SUPPORTED_XREF_OBJECTS
-                        })
-                        || !bytes.get(at).is_some_and(|byte| {
-                            byte.is_ascii_whitespace()
-                                || matches!(byte, b'>' | b'/' | b'%')
-                        }) {
+                    if !bounded_xref_size(bytes, &mut at, minimum_size) {
                         return false;
                     }
                     seen_size = true;
@@ -541,6 +549,7 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
     let mut depth = 1usize;
     let mut array_depth = 0usize;
     let mut found_type = false;
+    let mut found_size = false;
     while at < prefix.len() {
         match prefix.get(at) {
             Some(&b'%') => at = pdf_trivia_end(prefix, at),
@@ -589,12 +598,17 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
                     }
                     found_type = true;
                     at = value_end;
+                } else if depth == 1 && array_depth == 0 && name == b"Size" {
+                    if found_size || !bounded_xref_size(prefix, &mut at, 1) {
+                        return None;
+                    }
+                    found_size = true;
                 }
             }
             _ => at = at.saturating_add(1),
         }
     }
-    if depth != 0 || array_depth != 0 || !found_type {
+    if depth != 0 || array_depth != 0 || !found_type || !found_size {
         return None;
     }
     at = pdf_trivia_end(prefix, at);
