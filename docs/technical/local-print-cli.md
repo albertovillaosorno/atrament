@@ -189,8 +189,11 @@ lexical framing checks, not PDF stream decoding or a complete syntax parser.
 
 Missing, malformed, out-of-bounds or repointed locators,
 non-xref indirect objects, unsupported version numbers and truncated headers
-refuse without contacting CUPS. The last cross-reference section is checked
-for framing; earlier incremental updates are not decoded.
+refuse without contacting CUPS. An optional terminal `/Prev` must point
+back to a prior xref section. Prior traditional tables need a bounded first
+subsection and record; prior xref streams need an admitted dictionary,
+their exact encoded data length, and standalone `endstream`/`endobj` markers.
+The older revision chain is not recursively validated or decoded.
 
 The framing check is intentionally not a full PDF grammar, cross-reference
 parser or security validator. Some unusual or nonconforming external PDF

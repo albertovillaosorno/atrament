@@ -488,7 +488,10 @@ fn bounded_previous_xref(
     let stream_edition = matches!(document.get(5..8),
         Some([b'1', b'.', b'5'..=b'7'] | [b'2', b'.', b'0']));
     stream_edition && earlier.get(..earlier.len().min(16_384))
-        .is_some_and(|prefix| xref_stream_header_end(prefix, None).is_some())
+        .and_then(|prefix| xref_stream_header_end(prefix, None))
+        .is_some_and(|(frame_start, length)| {
+            xref_stream_frame_end(earlier, frame_start, length).is_some()
+        })
 }
 
 // The required trailer /Size is one positive top-level direct decimal.
@@ -916,49 +919,54 @@ fn xref_stream_header_end(
     Some((at.checked_add(6)?, declared_length?))
 }
 
-// A syntactically plausible xref-stream header is not sufficient: a selected
-// document must also frame its terminal stream and indirect object before
-// startxref. This remains lexical preflight, not PDF stream decoding.
-fn supported_xref_stream_tail(
+// Validate exact encoded bytes and both closing delimiters for every xref
+// stream header, including a prior /Prev target. This stops at the object
+// boundary; only the terminal stream requires trivia up to startxref.
+// It is lexical framing, not PDF stream decoding or object graph parsing.
+fn xref_stream_frame_end(
     bytes: &[u8], after_stream: usize, length: usize,
-) -> bool {
-    let Some(raw) = bytes.get(after_stream..) else { return false; };
+) -> Option<usize> {
+    let raw = bytes.get(after_stream..)?;
     let newline = if raw.starts_with(b"\r\n") { 2 }
         else if raw.starts_with(b"\n") || raw.starts_with(b"\r") {
             1
         } else {
-            return false;
+            return None;
         };
-    let Some(data_end) = after_stream.checked_add(newline)
-        .and_then(|start| start.checked_add(length))
-    else { return false; };
-    // /Length counts encoded stream data bytes, excluding the line break
-    // before endstream. A stray delimiter inside payload is not a terminator.
-    let Some(after_data) = bytes.get(data_end..) else { return false; };
+    let data_end = after_stream.checked_add(newline)
+        .and_then(|start| start.checked_add(length))?;
+    // /Length counts encoded stream bytes, not apparent delimiters inside
+    // a payload. Only one CR/LF ending may follow before `endstream`.
+    let after_data = bytes.get(data_end..)?;
     let tail_newline = if after_data.starts_with(b"\r\n") { 2 }
         else if after_data.starts_with(b"\n")
             || after_data.starts_with(b"\r") { 1 }
-        else { return false; };
-    let Some(endstream) = data_end.checked_add(tail_newline) else {
-        return false;
-    };
+        else { return None; };
+    let endstream = data_end.checked_add(tail_newline)?;
     if !bytes.get(endstream..).is_some_and(|rest| {
         rest.starts_with(b"endstream")
             && rest.get(b"endstream".len())
                 .is_some_and(u8::is_ascii_whitespace)
     }) {
-        return false;
+        return None;
     }
-    let Some(endstream_end) = endstream.checked_add(b"endstream".len())
-    else { return false; };
+    let endstream_end = endstream.checked_add(b"endstream".len())?;
     let endobj = pdf_trivia_end(bytes, endstream_end);
     if !bytes.get(endobj..).is_some_and(|rest| rest.starts_with(b"endobj"))
         || !bytes.get(endobj.saturating_add(b"endobj".len()))
             .is_some_and(u8::is_ascii_whitespace) {
-        return false;
+        return None;
     }
-    pdf_trivia_end(bytes, endobj.saturating_add(b"endobj".len()))
-        == bytes.len()
+    endobj.checked_add(b"endobj".len())
+}
+
+// A terminal cross-reference object must end at the final startxref locator;
+// prior revisions may legitimately have their own old locator and later data.
+fn supported_xref_stream_tail(
+    bytes: &[u8], after_stream: usize, length: usize,
+) -> bool {
+    xref_stream_frame_end(bytes, after_stream, length)
+        .is_some_and(|end| pdf_trivia_end(bytes, end) == bytes.len())
 }
 
 fn selected_pdf(path: &Path) -> Result<Vec<u8>, String> {

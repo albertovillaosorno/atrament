@@ -399,6 +399,21 @@ selected PDF; the genuine native earlier xref and an earlier PDF 1.5+
 stream header remain eligible. The gate does not validate the remainder
 of previous xref tables, their trailers or full incremental chains.
 
+## Framed immediate predecessor stream body (partial) — 2026-11-04
+
+The earlier xref-stream target of a terminal `/Prev` pointer must now have
+not only a plausible indirect `/Type /XRef` header, but also the exact
+announced `/Length` bytes and standalone `endstream` and `endobj` framing.
+The same bounded byte-frame routine serves the terminal xref-stream gate;
+only terminal streams require no subsequent nontrivia bytes before
+`startxref`, since earlier revisions have their own older trailer.
+
+Three red-before/green-after fake-CUPS regressions refuse a header with no
+stream data, a missing `endobj`, and a fused `endobjjunk` marker. All leave
+the selected PDF unchanged and never invoke the fake queue. The genuine
+PDF 1.5 prior stream and native two-page PDF remain admitted. This does not
+parse stream rows, authenticate older object graphs or certify a printer.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

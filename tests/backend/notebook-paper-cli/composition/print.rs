@@ -1555,6 +1555,38 @@ fn xref_table_prev_accepts_earlier_xref_stream_on_pdf_15() {
     assert_eq!(digest, sha256_profile_bytes(&bytes).bytes());
     assert_eq!(fs::read(&spooled).expect("fake spool bytes"), bytes);
     assert_eq!(fs::read(&pdf).expect("original unchanged"), bytes);
+    fs::remove_file(&spooled).expect("clear valid fake spool");
+    // A plausible prior stream dictionary alone is not a complete xref
+    // object. A forged /Prev must not accept a missing or fused terminator.
+    for fragment in [
+        b"5 0 obj\n<< /Type /XRef /Size 6 /W [1 4 2] \
+          /Length 7 >>\nstream\n".as_slice(),
+        b"5 0 obj\n<< /Type /XRef /Size 6 /W [1 4 2] \
+          /Length 7 >>\nstream\n1234567\nendstream\n".as_slice(),
+        b"5 0 obj\n<< /Type /XRef /Size 6 /W [1 4 2] \
+          /Length 7 >>\nstream\n1234567\nendstream\nendobjjunk\n"
+            .as_slice(),
+    ] {
+        let fake_previous = original.len();
+        let terminal = fake_previous + fragment.len();
+        let candidate = [
+            original.as_slice(), fragment,
+            format!(
+                "xref\n0 1\n0000000000 65535 f \n\
+                 trailer\n<< /Size 6 /Root 1 0 R \
+                 /Prev {fake_previous} >>\n\
+                 startxref\n{terminal}\n%%EOF\n",
+            ).as_bytes(),
+        ].concat();
+        assert!(!supported_pdf_cross_reference(&candidate),
+            "incomplete prior stream must not qualify");
+        fs::write(&pdf, &candidate).expect("write forged PDF");
+        assert!(selected_pdf(&pdf).is_err());
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "fake previous stream cannot reach CUPS");
+        assert!(!spooled.exists(), "refusal has no spool side effect");
+        assert_eq!(fs::read(&pdf).expect("unchanged PDF"), candidate);
+    }
     fs::remove_dir_all(&directory).expect("remove fixture directory");
 }
 
