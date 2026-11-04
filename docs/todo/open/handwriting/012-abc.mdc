@@ -1319,6 +1319,21 @@ NBSP, thin and narrow no-break spaces remain separately authored glyphs.
 This is admission consistency, not automatic glyph synthesis, Unicode
 normalization or a completed baseline font.
 
+## Statistics and ink separator identity parity — 2026-11-04
+
+Handwriting statistics and the numeric sampler now refuse U+2028/U+2029 as
+exact glyph identities, matching the native text/Markdown flow and authored
+pen TSV gate. Previously a separator could be stored as a statistical glyph
+or sampled through the browser while the ink audit treated it as a line or
+paragraph break. Browser profile import and draft/sample controls now refuse
+these identities before changing the editable state or submitting a request.
+
+Red-before/green-after Rust and browser regressions cover both separators.
+A joined ZWJ emoji remains a valid exact grapheme; combining accents, NFC/NFD
+identity and printable spacing characters retain their prior semantics.
+This is bounded profile admission parity, not generated glyph ink or a
+complete handwriting profile calibration pipeline.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

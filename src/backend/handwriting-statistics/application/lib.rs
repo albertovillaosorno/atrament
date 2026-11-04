@@ -456,10 +456,7 @@ impl HandwritingStatisticsProfile {
             }
         }
         for (index, glyph) in self.glyphs.iter().enumerate() {
-            if glyph.grapheme.is_empty()
-                || glyph.grapheme.len() > MAXIMUM_GRAPHEME_BYTES
-                || glyph.grapheme.chars().any(char::is_control)
-                || boundaries.grapheme_count(&glyph.grapheme) != 1
+            if !valid_exact_glyph(&glyph.grapheme, boundaries)
             {
                 return Err(HandwritingStatisticsError::InvalidGrapheme(index));
             }
@@ -632,4 +629,21 @@ impl HandwritingStatisticsProfile {
         candidate.validate(boundaries)?;
         Ok(candidate)
     }
+}
+
+// The layout treats Unicode line/paragraph separators as structural breaks,
+// never drawable glyphs. Preserve other exact Unicode clusters, including
+// ZWJ emoji and the distinct NFC/NFD spellings of accented letters.
+fn valid_exact_glyph<Boundary>(grapheme: &str, boundaries: &Boundary) -> bool
+where
+    Boundary: GraphemeBoundaryProvider,
+{
+    !grapheme.is_empty()
+        && grapheme.len() <= MAXIMUM_GRAPHEME_BYTES
+        && !grapheme.chars().any(|character| {
+            character.is_control()
+                || character == '\u{2028}'
+                || character == '\u{2029}'
+        })
+        && boundaries.grapheme_count(grapheme) == 1
 }

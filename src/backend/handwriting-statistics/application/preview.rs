@@ -43,7 +43,7 @@ use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 
 use super::{
     Dimension, HandwritingStatisticsError, HandwritingStatisticsProfile,
-    MAXIMUM_GRAPHEME_BYTES,
+    valid_exact_glyph,
 };
 
 // Stable integer mixing, not the platform-dependent DefaultHasher.
@@ -80,10 +80,7 @@ where
     Boundary: GraphemeBoundaryProvider,
 {
     profile.validate(boundaries)?;
-    if grapheme.is_empty()
-        || grapheme.len() > MAXIMUM_GRAPHEME_BYTES
-        || grapheme.chars().any(char::is_control)
-        || boundaries.grapheme_count(grapheme) != 1
+    if !valid_exact_glyph(grapheme, boundaries)
     {
         return Err(HandwritingStatisticsError::InvalidPreviewGrapheme);
     }

@@ -221,7 +221,9 @@ test("handwriting refuses non-native glyph identity before draft and sample",
         await b.editor.start("private-session-credential");
         edit(b.elements, "handwriting-scope", "glyph", "change");
         const count = b.requests.length;
-        for (const glyph of ["ab", "\uD800", "\uDC00", "\u0007"]) {
+        for (const glyph of [
+            "ab", "\uD800", "\uDC00", "\u0007", "\u2028", "\u2029",
+        ]) {
             edit(b.elements, "handwriting-new-glyph", glyph);
             b.elements.get("handwriting-add-glyph").dispatch("click");
             assert.equal(b.elements.get("handwriting-glyph").children.length,
@@ -236,6 +238,10 @@ test("handwriting refuses non-native glyph identity before draft and sample",
         b.elements.get("handwriting-add-glyph").dispatch("click");
         assert.equal(b.elements.get("handwriting-glyph").children[0].value,
             "🖋", "valid supplementary scalar stays exact");
+        edit(b.elements, "handwriting-new-glyph", "👩‍🏫");
+        b.elements.get("handwriting-add-glyph").dispatch("click");
+        assert.equal(b.elements.get("handwriting-glyph").children[1].value,
+            "👩‍🏫", "joined emoji remains an exact valid grapheme");
         b.editor.reset();
     } finally {
         b.restore();
@@ -243,7 +249,9 @@ test("handwriting refuses non-native glyph identity before draft and sample",
 });
 
 test("handwriting rejects invalid native profile glyph", async () => {
-    for (const grapheme of ["ab", "\uD800", "\u0007"]) {
+    for (const grapheme of [
+        "ab", "\uD800", "\u0007", "\u2028", "\u2029",
+    ]) {
         const b = mountBackend({
             fetch(endpoint, init) {
                 if (endpoint === "./api/handwriting/dimensions") {

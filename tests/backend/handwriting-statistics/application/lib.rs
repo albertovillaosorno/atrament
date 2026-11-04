@@ -285,12 +285,14 @@ fn multi_grapheme_and_empty_keys_are_rejected() {
     let param =
         parameter(Dimension::Height, stat(2_000, 4_000, 3_000, 3_000, 100));
     let long = "a".repeat(65);
-    for key in ["", "ab", "\n", long.as_str()] {
+    for key in ["", "ab", "\n", "\u{2028}", "\u{2029}", long.as_str()] {
         assert_eq!(
             baseline.with_glyph(key, param, &BOUNDARIES),
             Err(HandwritingStatisticsError::InvalidGrapheme(0))
         );
     }
+    let joined = baseline.with_glyph("👩‍🏫", param, &BOUNDARIES).unwrap();
+    assert_eq!(joined.glyphs[0].grapheme, "👩‍🏫");
 }
 
 #[test]
@@ -504,7 +506,15 @@ fn numeric_preview_replays_per_seed_exact_glyph_and_occurrence() {
 #[test]
 fn numeric_preview_rejects_invalid_exact_keys_and_malformed_profiles() {
     let profile = HandwritingStatisticsProfile::baseline(u64::MAX);
-    for invalid in ["", "ab", "ñ\n", "\u{1b}", &"a".repeat(65)] {
+    for invalid in [
+        "",
+        "ab",
+        "ñ\n",
+        "\u{1b}",
+        "\u{2028}",
+        "\u{2029}",
+        &"a".repeat(65),
+    ] {
         assert_eq!(
             preview_value(&profile, invalid, Dimension::Height, 0, &BOUNDARIES),
             Err(HandwritingStatisticsError::InvalidPreviewGrapheme),

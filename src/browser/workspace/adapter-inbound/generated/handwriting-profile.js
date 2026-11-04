@@ -38,11 +38,12 @@ const MAX_GLYPHS = 512;
 const MAX_CATALOG_BYTES = 4096;
 const U64_MAXIMUM = "18446744073709551615";
 // Mirror native handwriting-statistics admission before changing a draft
-// or querying a numeric sample. UTF-8 encoding of a lone UTF-16 surrogate
-// silently substitutes U+FFFD, so reject it before checking byte length.
+// or querying a numeric sample. Structural line/paragraph separators are
+// layout breaks, not ink. UTF-8 encoding of an unpaired UTF-16 surrogate
+// silently substitutes U+FFFD, so refuse it before checking byte length.
 function exactNativeGrapheme(value) {
     if (!value || /[\uD800-\uDFFF]/u.test(value)
-        || /[\p{Cc}]/u.test(value)
+        || /[\p{Cc}\u2028\u2029]/u.test(value)
         || new TextEncoder().encode(value).length > 64
         || typeof Intl.Segmenter !== "function")
         return false;
