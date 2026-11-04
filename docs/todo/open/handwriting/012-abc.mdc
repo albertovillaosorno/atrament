@@ -1809,6 +1809,25 @@ accepted PDF. Live
 Firefox verifies the same selectable forms, full TSV download and Rust
 roundtrip. This is editable sample ink, not automatic Unicode typesetting.
 
+## Four-way diagonal ink and converse implication (partial)
+
+The opt-in editor now adds exact up-left `↖`, down-left `↙`, and
+converse implication `⇐`. Together with the prior right-facing arrows,
+all four diagonals use a separately lifted two-segment arrowhead. The
+left-facing double implication has two directed shafts and a connected
+leftward head; it cannot borrow another Unicode key from the TSV library.
+
+The 78 math starters and ten other independent fills now produce 191 exact
+graphemes and 4051 native pen segments, below the 4096 limit. Browser
+red-before/green-after checks assert endpoints, path joins, Unicode TSV
+identity, clipping and full-fill atomicity. Rust independently audits the
+saved three-key file, draws real PDF and transparent PNG and refuses missing
+right-facing counterparts without replacing accepted output.
+
+Real Firefox validates the new selectable guide shapes and exact TSV replay
+into the native compositor. These remain manual samples and do not imply
+full semantic mathematics or automatic handwriting layout.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

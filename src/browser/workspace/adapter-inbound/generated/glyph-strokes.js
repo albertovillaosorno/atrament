@@ -586,8 +586,9 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
     "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",
     "∠", "∟", "⊬", "⊭", "¬", "⇒", "⇔",
-    "≪", "≫", "≮", "≯", "≰", "≱", "↗", "↘"];
-// Extra manual marks do not change the 75-glyph math fill.
+    "≪", "≫", "≮", "≯", "≰", "≱", "↗", "↘",
+    "↖", "↙", "⇐"];
+// Extra manual marks do not change the 78-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"];
@@ -706,6 +707,15 @@ function mathParts(cx, cy, radius, glyph) {
             { from: point(0.2, -0.55), to: point(0.8, 0) },
             { from: point(0.8, 0), to: point(0.2, 0.55) },
         ];
+    // Converse implication keeps two left-bound shafts plus one
+    // connected left head, not a re-keyed single arrow.
+    if (glyph === "⇐")
+        return [
+            { from: point(0.8, -0.16), to: point(-0.45, -0.16) },
+            { from: point(0.8, 0.16), to: point(-0.45, 0.16) },
+            { from: point(-0.2, -0.55), to: point(-0.8, 0) },
+            { from: point(-0.8, 0), to: point(-0.2, 0.55) },
+        ];
     if (glyph === "⇔")
         return [
             { from: point(-0.4, -0.16), to: point(0.4, -0.16) },
@@ -805,6 +815,20 @@ function mathParts(cx, cy, radius, glyph) {
             line(-0.7, -0.7, 0.7, 0.7),
             line(-0.1, 0.7, 0.7, 0.7),
             line(0.7, 0.7, 0.7, -0.1),
+        ];
+    // Both remaining diagonals retain a separate, two-stroke arrowhead
+    // and their own Unicode identity, never a reflected saved key.
+    if (glyph === "↖")
+        return [
+            line(0.7, 0.7, -0.7, -0.7),
+            line(-0.7, 0.1, -0.7, -0.7),
+            line(-0.7, -0.7, 0.1, -0.7),
+        ];
+    if (glyph === "↙")
+        return [
+            line(0.7, -0.7, -0.7, 0.7),
+            line(0.1, 0.7, -0.7, 0.7),
+            line(-0.7, 0.7, -0.7, -0.1),
         ];
     // Logical wedges are exact Unicode ink, never substitutions for the
     // visually similar Latin v or strict-comparison chevrons.
