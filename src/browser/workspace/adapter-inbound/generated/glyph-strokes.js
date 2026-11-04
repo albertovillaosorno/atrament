@@ -45,8 +45,11 @@ function exactGrapheme(value) {
     // U+FFFD on TSV download, changing the caller's authored glyph identity.
     if (!value || /[\uD800-\uDFFF]/u.test(value)
         || new TextEncoder().encode(value).length > 64
-        || /[\p{Cc}]/u.test(value) || value === " ")
+        // Native flow and coverage audits reserve these two Unicode row
+        // separators as structure; they can never name explicit pen ink.
+        || /[\p{Cc}\u2028\u2029]/u.test(value) || value === " ") {
         return false;
+    }
     if (typeof Intl.Segmenter !== "function")
         return false;
     return [...new Intl.Segmenter(undefined, {

@@ -1305,6 +1305,20 @@ an unsaved draft untouched and a canonical LF UTF-8 file still imports.
 This only tightens local file admission; it does not implement missing glyph
 outlines, automatic handwritten text, or full language coverage.
 
+## Browser and Rust row-separator glyph parity — 2026-11-04
+
+The browser's exact-glyph stroke editor and v1 TSV parser now refuse U+2028
+and U+2029 as pen identities. These are structural line and paragraph breaks
+in native imported text and are excluded from native glyph coverage audits.
+Previously a browser download could successfully encode a separator stroke
+that the Rust CLI could render despite declaring it non-ink in reports.
+
+Red-before/green-after tests cover both browser TSV import and export, plus
+a mounted editor refusal that preserves the previously accepted download.
+NBSP, thin and narrow no-break spaces remain separately authored glyphs.
+This is admission consistency, not automatic glyph synthesis, Unicode
+normalization or a completed baseline font.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

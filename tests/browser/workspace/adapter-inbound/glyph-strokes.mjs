@@ -53,6 +53,25 @@ test("invalid UTF-16 glyphs cannot silently become replacement ink", () => {
     }
 });
 
+test("Unicode row separators cannot become authored browser TSV ink", () => {
+    // Native --audit-text and flow treat these as row boundaries, not ink.
+    for (const separator of ["\u2028", "\u2029"]) {
+        assert.throws(() => encodeGlyphLibrary([stroke(separator)]),
+            /visible Unicode grapheme/,
+            "browser must refuse unrenderable separator before download");
+        const raw = header
+            + `${separator}\t100\t200\t3000\t4200\t250\t#A1B2C3\n`;
+        assert.throws(() => parseGlyphLibrary(raw),
+            /visible Unicode grapheme/,
+            "browser must not admit a TSV rejected by Rust");
+    }
+    for (const authored of ["\u00A0", "\u2009", "\u202F"]) {
+        assert.deepEqual(parseGlyphLibrary(
+            encodeGlyphLibrary([stroke(authored)])), [stroke(authored)],
+            "exact authored Unicode spaces remain independent glyphs");
+    }
+});
+
 test("candidate pen paths respect directed endpoints and exact Unicode", () => {
     const nfd = "n\u{303}";
     const source = [
@@ -671,6 +690,30 @@ test("glyph editor refuses surrogate input without replacing valid TSV",
             get("save").dispatch("click");
             assert.equal(await downloads.at(-1).text(), accepted,
                 "invalid glyph must not mutate the existing ink draft");
+        }
+        editor.reset();
+    } finally {
+        ui.restore();
+    }
+});
+
+test("glyph editor refuses structural separators without replacing TSV",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        editor.start();
+        get("add").dispatch("click");
+        get("save").dispatch("click");
+        const accepted = await downloads[0].text();
+        for (const separator of ["\u2028", "\u2029"]) {
+            get("character").value = separator;
+            get("character").dispatch("input");
+            get("add").dispatch("click");
+            assert.match(get("status").textContent, /visible Unicode/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), accepted,
+                "invalid row structure must not mutate authored ink");
         }
         editor.reset();
     } finally {
