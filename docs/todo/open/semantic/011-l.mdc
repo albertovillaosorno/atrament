@@ -604,6 +604,15 @@ regressions and strict production CLI Clippy cover the same compiler.
 This changes layout cost, not an editable semantic notebook body or an
 independently accepted performance benchmark.
 
+The exact same suffix boundary reader now serves glyph-library audits and
+physical placed-text expansion. No independent glyph segmentation remains
+in the native CLI. Two additional native tests audit 1,024 NFD graphemes
+alongside NFC, ASCII and a joined emoji, and compare 28 explicitly authored
+colored pen strokes with the exact PDF/PNG generated from seven repeats of
+mixed Unicode glyphs. The rendered pages match byte-for-byte and remain
+bounded by existing 96-grapheme placed-text admission. This is a source
+traversal change, not an asserted speed-up measurement or glyph synthesis.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

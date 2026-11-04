@@ -272,12 +272,13 @@ impl GlyphOverlay {
     /// An English/Spanish statistics baseline alone never implies ink.
     pub(super) fn audit_text(&self, text: &str)
         -> Result<Vec<u8>, String> {
-        let boundaries = UnicodeGraphemeSegmentation;
         let mut seen = Vec::new();
         let mut missing = 0usize;
         let mut details = String::new();
-        for index in 0..boundaries.grapheme_count(text) {
-            let grapheme = segment_at(boundaries, text, index)?;
+        let mut remaining = text;
+        while !remaining.is_empty() {
+            let (grapheme, rest) = first_grapheme(remaining)?;
+            remaining = rest;
             if grapheme.chars().all(char::is_whitespace)
                 || seen.contains(&grapheme) {
                 continue;
@@ -499,7 +500,6 @@ impl GlyphOverlay {
         statistics: Option<&HandwritingStatisticsProfile>,
     ) -> Result<Vec<NotebookInkLine>, String> {
         self.validate_pairing()?;
-        let boundaries = UnicodeGraphemeSegmentation;
         let mut expanded = manual.to_vec();
         let mut missing = Vec::new();
         let mut occurrence = 0u32;
@@ -508,8 +508,10 @@ impl GlyphOverlay {
             let mut offset_um = 0i64;
             // A pen lift is implicit at every run/row or authored space.
             let mut previous: Option<(&str, NotebookInkLine)> = None;
-            for index in 0..boundaries.grapheme_count(&run.text) {
-                let grapheme = segment_at(boundaries, &run.text, index)?;
+            let mut remaining = run.text.as_str();
+            while !remaining.is_empty() {
+                let (grapheme, rest) = first_grapheme(remaining)?;
+                remaining = rest;
                 if grapheme == " " {
                     previous = None;
                     offset_um = offset_um.checked_add(i64::from(ADVANCE_UM))
@@ -1908,19 +1910,17 @@ fn scale(local_um: u32, target_um: u32, reference_um: u32)
     u32::try_from(scaled).map_err(|_error| "glyph scale too large".into())
 }
 
+/// Read one exact Unicode grapheme from the remaining UTF-8 suffix.
+/// Sharing this boundary with flow prevents quadratic indexed prefix scans.
 #[expect(
     clippy::redundant_pub_crate,
     reason = "Sibling flow module shares Unicode boundary authority"
 )]
-pub(super) fn segment_at(
-    boundaries: UnicodeGraphemeSegmentation,
-    text: &str,
-    index: usize,
-) -> Result<&str, String> {
-    let start = boundaries.byte_offset(text, index)
-        .ok_or("glyph start boundary unavailable")?;
-    let end = boundaries.byte_offset(
-        text, index.checked_add(1).ok_or("glyph index overflow")?,
-    ).ok_or("glyph end boundary unavailable")?;
-    text.get(start..end).ok_or_else(|| "invalid glyph UTF-8 boundary".into())
+pub(super) fn first_grapheme(text: &str) -> Result<(&str, &str), String> {
+    let end = UnicodeGraphemeSegmentation.byte_offset(text, 1)
+        .ok_or("flow grapheme boundary refused")?;
+    let glyph = text.get(..end).filter(|span| !span.is_empty())
+        .ok_or("flow grapheme span refused")?;
+    let rest = text.get(end..).ok_or("flow grapheme suffix refused")?;
+    Ok((glyph, rest))
 }

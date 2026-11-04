@@ -1312,6 +1312,79 @@ fn notebook_cli_ink_refusals_leave_preexisting_output_unchanged() {
 }
 
 #[test]
+fn long_exact_unicode_audit_reads_each_decomposed_grapheme() {
+    let mut commands = args(&[
+        "--glyph-stroke", "ó", "250", "500", "1500", "3200",
+        "250", "#113355",
+        "--glyph-stroke", "o\u{301}", "250", "500", "1500", "3200",
+        "250", "#224466",
+        "--glyph-stroke", "a", "250", "500", "1500", "3200",
+        "250", "#335577",
+        "--glyph-stroke", "👩\u{200d}🏫", "250", "500", "1500",
+        "3200", "250", "#446688",
+    ]);
+    let source = format!(
+        "{}óa👩\u{200d}🏫", "o\u{301}".repeat(1_024),
+    );
+    commands.extend(args(&["--audit-text", &source]));
+    let report = execute_glyph_library(&commands)
+        .expect("long bounded audit accepted").expect("audit report");
+    let report = String::from_utf8(report).expect("UTF-8 glyph audit");
+    assert!(report.contains("Distinct visible graphemes: 4"), "{report}");
+    assert!(report.contains("Missing authored glyphs: 0"), "{report}");
+    for glyph in ["ó", "o\u{301}", "a"] {
+        assert!(report.contains(glyph), "exact {glyph} preserved");
+    }
+    assert!(report.contains("U+1F469 U+200D U+1F3EB"),
+        "joined Unicode scalars remain one exact glyph");
+}
+
+#[test]
+fn unicode_suffix_placement_matches_explicit_pdf_and_png_strokes() {
+    let sample = "óo\u{301}a👩\u{200d}🏫 ".repeat(7);
+    let shapes = [
+        ("ó", "#113355"), ("o\u{301}", "#224466"),
+        ("a", "#335577"), ("👩\u{200d}🏫", "#446688"),
+    ];
+    for (format, opts) in [
+        ("pdf", vec![]), ("png", args(&["--dpi", "72"])),
+    ] {
+        let mut glyph = args(&[
+            "--printed-sheet", "true", "--export-paper", format,
+        ]);
+        glyph.extend(opts.clone());
+        let mut manual = glyph.clone();
+        for (key, color) in shapes {
+            glyph.extend(args(&[
+                "--glyph-stroke", key, "250", "500", "1500",
+                "3200", "250", color,
+            ]));
+        }
+        for row in 0..7 {
+            for (slot, (_, color)) in shapes.iter().enumerate() {
+                let position = 25_000 + (row * 5 + slot) * 4_000;
+                manual.extend(args(&[
+                    "--ink-line", "1", &(position + 250).to_string(),
+                    "30500", &(position + 1_500).to_string(), "33200",
+                    "250", color,
+                ]));
+            }
+        }
+        glyph.extend(args(&[
+            "--place-text", "1", "25000", "30000", &sample,
+        ]));
+        let output = execute_notebook(&glyph)
+            .expect("exact Unicode native placement")
+            .expect("physical export");
+        let manual_ink = execute_notebook(&manual)
+            .expect("manual native strokes").expect("physical export");
+        assert!(output == manual_ink,
+            "{format}: placement {} bytes differs from manual {} bytes",
+            output.len(), manual_ink.len());
+    }
+}
+
+#[test]
 fn exact_authored_unicode_glyphs_match_page_specific_manual_strokes() {
     // Each shape is user authored, not a font or statistical substitution.
     // The NFD grapheme occupies one 4-mm cell even though it has two scalars.

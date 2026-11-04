@@ -39,9 +39,8 @@ use std::slice::Iter;
 use atrament_handwriting_statistics::{Dimension, HandwritingStatisticsProfile};
 use atrament_notebook_paper_cli::NotebookInkLine;
 use atrament_notebook_profile::NotebookProfile;
-use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider as _;
-use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
+use super::glyph::first_grapheme;
 use super::{GlyphOverlay, HeadingInk, TextRun};
 
 const MAX_FLOW_BYTES: usize = 4_096;
@@ -972,17 +971,6 @@ fn measured_ordered_label<'text>(
         );
     }
     Ok((indent, marker))
-}
-
-// Consume one exact Unicode grapheme from the remaining suffix. Repeated
-// byte_offset(text, index) requests rescan the full prefix on long words.
-fn first_grapheme(text: &str) -> Result<(&str, &str), String> {
-    let end = UnicodeGraphemeSegmentation.byte_offset(text, 1)
-        .ok_or("flow grapheme boundary refused")?;
-    let glyph = text.get(..end).filter(|span| !span.is_empty())
-        .ok_or("flow grapheme span refused")?;
-    let rest = text.get(end..).ok_or("flow grapheme suffix refused")?;
-    Ok((glyph, rest))
 }
 
 fn measured_word<'text>(
