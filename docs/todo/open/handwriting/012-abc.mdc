@@ -851,6 +851,11 @@ browser-to-Rust test checks byte-identical TSV, inspector and actual
 PDF/transparent PNG ink, also for height scaling followed by italic shear.
 The browser display never downloads or writes without the explicit gesture.
 
+A real Firefox BiDi/localhost regression additionally exercises the
+session-gated height controls and read-only SVG, sampled coordinate
+rounding on the accepted draft, refused percent and pen-edge changes,
+byte-identical downloaded UTF-8 TSV and zero extra backend requests.
+
 Height changes invalidate one-step slant undo, and integer resizing is not
 always reversible. This is not a saved height variant, analytic geometry,
 joined cursive or complete P1 inventory coverage; the task stays open.

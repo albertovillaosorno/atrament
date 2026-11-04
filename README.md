@@ -1102,6 +1102,10 @@ change is not guaranteed to be invertible after integer rounding. Download
 an original TSV before destructive editing. This is not a persistent
 regular/tall glyph variant or a calibrated continuous curve.
 
+A real headless Firefox/localhost regression checks preview rounding,
+explicit downloads for accepted and refused edits, independent NFC/NFD
+rows and mathematical ink, and unchanged backend-request counts.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each
