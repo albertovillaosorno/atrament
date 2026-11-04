@@ -150,6 +150,7 @@ Direct SVG pointer drawing now records up to 128 connected native-unit
 segments per gesture, with canceled and oversized traces refusing atomically.
 The editor can explicitly copy a source glyph's authored strokes into a
 separate exact Unicode target, then independently edit those segments.
+
 Browser and Rust CLI glyph library caps are now 4096 authored strokes and
 512 KiB; a real 600-stroke mixed composed/decomposed Unicode library passes
 byte-identical Rust readback. At this stage, rendered text still had a
@@ -478,6 +479,7 @@ arcs, an independent stem and dot, and 50 sampled TSV strokes per glyph.
 The inverted forms rotate the normal samples by 180 degrees using exact
 integer micrometre coordinates, avoiding separate float-rounding drift.
 Dot clearance, ink bounds and the TSV size/stroke limits refuse atomically.
+
 Custom glyphs are preserved; no file is downloaded without an explicit
 save gesture.
 
@@ -507,7 +509,9 @@ mirror geometry, separate pen gestures, SVG paths, custom-stroke
 preservation, no automatic file writes, idempotence, atomically refused
 clipped geometry, an integrated 52-glyph fill and oversized libraries.
 The geometry boundary grid now
-covers 5,904 cases. Default combined lowercase/accent/punctuation/quote
+covers 5,904 cases.
+
+Default combined lowercase/accent/punctuation/quote
 library: **52 exact graphemes, 1,443 sampled ink strokes**. Rust audited
 `«¡hola!» “¿qué?” ‘sí’` with **zero missing glyphs** and exported
 `«¡hola!» “¿qué?”` to a genuine one-page PDF and transparent
@@ -528,7 +532,9 @@ Four browser regressions verify exact native micrometre endpoints,
 Unicode-key independence, SVG matches, author-owned ink preservation,
 invalid-geometry, all 58 opt-in forms and over-cap atomic refusal.
 The parameter boundary
-grid now checks 6,768 glyph/geometry/pen combinations. The 58-glyph
+grid now checks 6,768 glyph/geometry/pen combinations.
+
+The 58-glyph
 default lowercase/accent/punctuation/quote/math library has **1,454
 stroke segments**. Rust audited `a+b−c=d×e÷f` with zero missing glyphs,
 and emitted a real one-page PDF plus 72-DPI 596×842 transparent RGBA PNG.
@@ -621,7 +627,9 @@ A native audit of the combined 108 exact starter glyphs against the frozen
 114-grapheme English/Spanish text inventory identified eleven precise
 missing keys: `; : " ' … – — ( ) [ ]`. The authenticated browser editor now
 offers each as an independently selectable geometric starter and an
-optional **Fill missing text punctuation** action. Brackets, dashes and
+optional **Fill missing text punctuation** action.
+
+Brackets, dashes and
 marks retain exact straight SVG/TSV strokes; parentheses use two SVG
 quadratics sampled to sixteen chords apiece. ASCII and typographic quotes
 remain distinct Unicode keys. The button fills only absent shapes, refuses
@@ -635,7 +643,9 @@ explicit fill actions now produce **119 exact Unicode glyphs across 2,738
 sampled strokes**, including all **114 frozen text baseline shapes** plus
 five additional mathematical signs (ASCII `-` is also in the baseline).
 All **72 focused glyph tests** and **13,536 geometric boundary samples**
-pass, as do TypeScript build and checking. Rust read the combined library
+pass, as do TypeScript build and checking.
+
+Rust read the combined library
 back byte-for-byte and reported **114 baseline graphemes, zero missing**.
 It also emitted one-page real A4 PDF and transparent 72-DPI 596×842 PNG
 for the eleven newly constructed punctuation shapes.
@@ -652,10 +662,12 @@ The native notebook PDF and transparent PNG compositor now admits at most
 **4,096 physical ink segments per export**, rather than 512. This matches
 the existing bounded authored-stroke-library cap without changing its
 versioned TSV format, Unicode identity or source-authored shape policy.
+
 Page-local printable clearance, 32-page pagination, PDF per-page path and
 command budgets, 24-MB maximum output and per-page PNG raster budgets still
 apply. The fixed 119-glyph browser starter library uses 2,738 segments,
 which now fits one export when rendered once per glyph on bounded pages.
+
 The high-capacity tests exercise real PDF/PNG output, deterministic replay
 and failure-before-replacement above the new ceiling. An independent
 Node-to-Rust integration regression creates the browser's complete 119-form
@@ -924,7 +936,9 @@ unchanged. The 0° identity preserves one-step recovery history in the UI.
 The read-only browser SVG proposal precedes an explicit Apply; Download is
 always a separate action. Focused tests cover signed angles, boundary
 refusals, exact NFC/NFD separation, pen connections, identity, 4,096-stroke
-libraries and complete TSV undo/redo. An independent physical integration
+libraries and complete TSV undo/redo.
+
+An independent physical integration
 compares Rust-authored and browser-authored TSV/PDF/transparent PNG output.
 A further 160-stroke interleaved NFC/NFD browser/native parity grid checks
 exact micrometre rounding at nine integer angles, -20° through +20°.
@@ -1002,7 +1016,9 @@ Summation is an ordered four-line angular path; delta is one continuous
 three-line closed triangle. Integral is three connected ideal quadratic
 SVG curves sampled into 48 native strokes. Approximate equality uses two
 separate two-quadratic waves sampled into 64 strokes, preserving the pen
-lift between them. They are explicit distinct Unicode grapheme identities,
+lift between them.
+
+They are explicit distinct Unicode grapheme identities,
 not substitutions for Greek letters or an equation layout engine.
 
 The fill-missing math action now preserves 16 independently authored forms;
@@ -1016,7 +1032,9 @@ The independent native regression reopens a ten-symbol, 200-stroke browser
 TSV unchanged and audits zero missing ink. It renders two real text rows as
 400 separate physical PDF pen moves and transparent 72-DPI PNG ink. An
 unauthored `∂` or invalid page count refuses without replacing the accepted
-PDF. Analytic SVG curves are still sampled for native PDF/PNG and are not
+PDF.
+
+Analytic SVG curves are still sampled for native PDF/PNG and are not
 persisted as native vector splines. Full P1-012 coverage remains open.
 
 A real Firefox/WebDriver BiDi session separately proves the local editor can
@@ -1070,11 +1088,15 @@ One explicit **Fill missing 114 English/Spanish text glyphs** action now
 creates a single unsaved browser draft from the manual geometric starters.
 It includes 26 lowercase and 26 uppercase letters, 28 independent NFC/NFD
 Spanish accents, punctuation, quotes, ten digits and the exact hyphen-minus.
-Optional math/currency glyphs are not silently included. Previously authored
+Optional math/currency glyphs are not silently included.
+
+Previously authored
 Unicode keys, including custom composed/decomposed accents, preserve their
 stroke directions, order and colors. The batch first builds an isolated
 candidate, then checks the entire native TSV stroke/byte limits before it
-can replace any draft. A custom ambiguous dotted `i`, clipped mark or
+can replace any draft.
+
+A custom ambiguous dotted `i`, clipped mark or
 4,096-stroke overflow refuses the whole action, not just the bad glyph.
 A second click is an exact no-op; only explicit TSV download saves bytes.
 
@@ -1085,17 +1107,23 @@ browser-generated TSV, audits all 114 glyphs with zero missing, and renders
 an accented, bilingual three-row page with decomposed marks to a genuine
 vector PDF and transparent physical RGBA PNG. The ink remains sampled TSV
 geometry, not automatically persisted notebook content, personalized
-handwriting, parametric native curves or general Unicode coverage. A real
+handwriting, parametric native curves or general Unicode coverage.
+
+A real
 Firefox WebDriver BiDi test now exercises the visible button, verifies a
 clipped attempt cannot save, confirms the subsequent successful unsaved fill
 and idempotence, captures the explicitly downloaded TSV without extra HTTP
 requests, and reopens its exact bytes in Rust PDF/PNG with an unknown glyph
-refusal preserving the accepted PDF. A subsequent read-only coverage
+refusal preserving the accepted PDF.
+
+A subsequent read-only coverage
 indicator shows the number of exact authored text keys (0–114) as a
 session-local count, with the first eight missing keys as visible hints;
 NFD keys are labeled separately from visually matching NFC accents. Its
 status updates on import, authoring, refusal, fill and reset without saving,
-normalizing or transmitting the draft. A separate read-only next-missing
+normalizing or transmitting the draft.
+
+A separate read-only next-missing
 control cycles through the exact 114-key inventory, keeps the chosen NFD
 input and matching geometry guide aligned, and disables itself when all keys
 have ink or the session ends. No stroke or TSV is changed by inspection.
@@ -1130,6 +1158,7 @@ stroke each. Each brace has four analytic SVG quadratic arcs sampled into
 64 directed segments in the existing bounded Rust TSV format. Both braces
 mirror their ideal horizontal coordinates while retaining their own exact
 Unicode identities; sampling rounds each coordinate to whole micrometres.
+
 These are manual choices, not automatic replacements or additions to the
 frozen eleven-mark Spanish/English text-punctuation fill action.
 
@@ -1178,7 +1207,9 @@ identity, stroke order, clipped-edit refusal and a 16,272-case bounded
 physical-cell matrix. A real native Rust integration reopens the resulting
 103-stroke TSV byte-for-byte, audits `$€`, exports two rows containing 206
 vector pen segments to PDF and transparent 72-DPI RGBA PNG, and refuses
-missing `£` without replacing a previous PDF. A separate real-Firefox
+missing `£` without replacing a previous PDF.
+
+A separate real-Firefox
 BiDi acceptance now selects and constructs both currency signs in the
 session-authenticated browser, checks their live SVG paths, saves the exact
 378-stroke combined math/currency TSV, and replays that actual download
