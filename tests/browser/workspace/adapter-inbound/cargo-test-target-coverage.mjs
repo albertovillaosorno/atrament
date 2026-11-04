@@ -49,7 +49,15 @@ function findRustTestRoots(parent) {
             return findRustTestRoots(path);
         }
         assert.ok(item.isFile(), `unexpected test root entry: ${path}`);
-        return item.name === "lib.rs" ? [path] : [];
+        if (item.name === "lib.rs") return [path];
+        // Non-lib unit modules can be linked directly from a binary target.
+        // Count files containing executable #[test] cases as required roots,
+        // without mistaking supporting Rust fixtures for test entrypoints.
+        if (item.name.endsWith(".rs")
+            && /^#\[test\]$/mu.test(readFileSync(path, "utf8"))) {
+            return [path];
+        }
+        return [];
     });
 }
 
@@ -134,8 +142,11 @@ function checkTestTargetGraph(manifests, testRoots, sources) {
             const suffix = relative(testsRoot, target.path).split(sep);
             assert.equal(suffix.length, 3);
             assert.equal(suffix[0], crate, "test owned by wrong Cargo crate");
-            assert.equal(suffix[2], "lib.rs");
-            if (target.name !== null) {
+            if (target.name === null) {
+                assert.match(suffix[2], /^[a-z0-9_-]+\.rs$/u,
+                    "linked unit target must be a Rust source");
+            } else {
+                assert.equal(suffix[2], "lib.rs");
                 const prefix = `${crate}_`.replaceAll("-", "_");
                 assert.ok(target.name.startsWith(prefix),
                     "test target identity must name its owning crate");
@@ -192,4 +203,19 @@ test("unit modules count only when linked from a compiled Cargo target", () => {
         new Map([[source, unchecked]])), /not wired/);
     assert.throws(() => checkTestTargetGraph([[manifest, content]], [path],
         new Map([[source, linked + linked]])), /duplicate/);
+
+    // A binary's directly linked unit module need not be named lib.rs.
+    const printerSource = resolve(dirname(manifest), "composition/print.rs");
+    const printerPath = resolve(testsRoot, "example/composition/print.rs");
+    const printer = '#[cfg(test)]\n' +
+        '#[path = "../../../../tests/backend/example/composition/print.rs"]\n' +
+        'mod tests;\n';
+    const printerTarget = '[[bin]]\nname = "example_print"\n' +
+        'path = "composition/print.rs"\n';
+    checkTestTargetGraph([[manifest, printerTarget]], [printerPath],
+        new Map([[printerSource, printer]]));
+    assert.throws(() => checkTestTargetGraph(
+        [[manifest, printerTarget]], [printerPath],
+        new Map([[printerSource, printer.replace("cfg(test)",
+            "cfg(debug_assertions)")]])), /not wired/);
 });

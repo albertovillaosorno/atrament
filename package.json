@@ -8,7 +8,7 @@
     "build:frontend": "pnpm --filter @atrament/frontend run build",
     "check:frontend": "pnpm --filter @atrament/frontend run check",
     "test:frontend":
-      "node --test tests/browser/workspace/adapter-inbound/*.mjs",
+      "node --test --test-concurrency=1 tests/browser/workspace/adapter-inbound/*.mjs",
     "test:flow":
       "node --test tests/backend/profile-editor-cli/composition/*.mjs",
     "test:print-ready":

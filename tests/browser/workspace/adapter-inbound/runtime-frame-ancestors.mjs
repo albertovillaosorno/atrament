@@ -214,6 +214,29 @@ function waitForLine(stream, select, timeoutMs = 15_000, child = null) {
     });
 }
 
+// Retain the process groups of disposable Firefox fixtures while this test
+// worker runs. A worker that exits before reaching a test's finally block
+// must not leave its detached browsers and helper processes behind.
+const liveFirefoxFixtureGroups = new Set();
+process.once("exit", () => {
+    for (const pid of liveFirefoxFixtureGroups) {
+        try { process.kill(-pid, "SIGKILL"); } catch { /* best effort */ }
+    }
+});
+
+function trackFirefoxFixtureGroup(child) {
+    if (process.platform !== "linux" || child.fixtureProcessGroup !== true
+        || !Number.isSafeInteger(child.pid) || child.pid <= 1) return;
+    liveFirefoxFixtureGroups.add(child.pid);
+    // The launcher can exit or crash without its helpers exiting. Reap them
+    // immediately instead of waiting for stopChild's normal teardown path.
+    child.once("exit", () => {
+        try { signalOwnedFixtureGroup(child, "SIGKILL"); }
+        catch { /* a subsequent teardown can retry */ }
+        finally { liveFirefoxFixtureGroups.delete(child.pid); }
+    });
+}
+
 // Linux Firefox runs in a dedicated process group. Its helpers can survive
 // the leader, including an abrupt browser crash; reap the owned group even if
 // the leader already emitted exit. Never signal an ordinary shared group.
@@ -295,7 +318,8 @@ function stopChild(child, gracefulMs = 2_000, forcedMs = 10_000) {
         child.once("error", onError);
         gracefulTimer = setTimeout(() => {
             if (child.exitCode !== null || child.signalCode !== null) {
-                finish();
+                // A missed exit event must still reap the owned group.
+                onExit();
                 return;
             }
             forcedTimer = setTimeout(() => finish(new Error(
@@ -309,7 +333,7 @@ function stopChild(child, gracefulMs = 2_000, forcedMs = 10_000) {
 
 // A Firefox launcher is test-owned, but its browser helpers may outlive the
 // leader. A successful leader exit must not silently leave those helpers live.
-test("Linux disposable Firefox group reaps a surviving child after leader exit",
+test("Linux tracked Firefox group reaps a surviving child on leader exit",
     { skip: process.platform !== "linux", timeout: 5_000 },
     async () => {
         const helperCode = "setInterval(() => {}, 1000)";
@@ -325,6 +349,8 @@ test("Linux disposable Firefox group reaps a surviving child after leader exit",
             stdio: ["ignore", "pipe", "ignore"],
         });
         leader.fixtureProcessGroup = true;
+        trackFirefoxFixtureGroup(leader);
+        assert.equal(liveFirefoxFixtureGroups.has(leader.pid), true);
         const exited = once(leader, "exit");
         try {
             const helperPid = Number(await waitForLine(
@@ -335,7 +361,8 @@ test("Linux disposable Firefox group reaps a surviving child after leader exit",
             ));
             assert.ok(Number.isSafeInteger(helperPid) && helperPid > 0);
             await exited;
-            await stopChild(leader, 30, 30);
+            assert.equal(liveFirefoxFixtureGroups.has(leader.pid), false);
+            // The exit observer must reap helpers even without stopChild.
             const stopped = async () => {
                 const deadline = Date.now() + 1_000;
                 do {
@@ -356,6 +383,7 @@ test("Linux disposable Firefox group reaps a surviving child after leader exit",
             };
             assert.equal(await stopped(), true,
                 "fixture cleanup must kill helpers after leader exit");
+            await stopChild(leader, 30, 30);
         } finally {
             // The red-first failure must not leave its owned group running.
             try { process.kill(-leader.pid, "SIGKILL"); } catch {}
@@ -403,6 +431,52 @@ test("disposable child shutdown escalates and observes SIGKILL exit",
         assert.deepEqual(signals, ["SIGTERM", "SIGKILL"]);
         assert.equal(child.listenerCount("exit"), 0);
         assert.equal(child.listenerCount("error"), 0);
+    },
+);
+
+test("missed child-exit notification still reaps its disposable group",
+    { skip: process.platform !== "linux", timeout: 5_000 },
+    async () => {
+        const sleeper = spawn(process.execPath, ["-e", [
+            "process.on('SIGTERM', () => {});",
+            "process.stdout.write('ready\\n');",
+            "setInterval(() => {}, 1000);",
+        ].join("\n")], {
+            detached: true,
+            stdio: ["ignore", "pipe", "ignore"],
+        });
+        const sleeperExited = once(sleeper, "exit");
+        const reported = new EventEmitter();
+        reported.pid = sleeper.pid;
+        reported.fixtureProcessGroup = true;
+        reported.exitCode = null;
+        reported.signalCode = null;
+        reported.kill = () => true;
+        try {
+            // A readiness handshake proves SIGTERM cannot end this sleeper.
+            assert.equal(await waitForLine(sleeper.stdout,
+                (line) => line === "ready" ? line : null, 2_000,
+                sleeper), "ready");
+            // Observe the real exit before stopChild can send SIGKILL.
+            const completion = stopChild(reported, 50, 100);
+            setTimeout(() => { reported.exitCode = 0; }, 10);
+            await completion;
+            let exitDeadline;
+            try {
+                await Promise.race([
+                    sleeperExited,
+                    new Promise((_resolve, reject) => {
+                        exitDeadline = setTimeout(() => reject(new Error(
+                            "disposable process group survived missed exit",
+                        )), 1_000);
+                    }),
+                ]);
+            } finally {
+                clearTimeout(exitDeadline);
+            }
+        } finally {
+            try { process.kill(-sleeper.pid, "SIGKILL"); } catch {}
+        }
     },
 );
 
@@ -2969,6 +3043,7 @@ async function startBidiFirefox(profile, children) {
         },
     );
     firefox.fixtureProcessGroup = process.platform === "linux";
+    trackFirefoxFixtureGroup(firefox);
     children.push(firefox);
     const remote = await waitForLine(firefox.stderr, (line) => {
         const prefix = "WebDriver BiDi listening on ";
