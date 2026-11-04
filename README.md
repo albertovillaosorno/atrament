@@ -73,13 +73,13 @@ the browser preview. These remain paper-layer exports, not drawn handwriting
 or full notebook content.
 
 The earlier 77 tasks were accepted as bounded academic/design artifacts, not
-as proof of a finished product. **Four immediate executable TODOs remain**
-for Spanish/English glyph coverage, rendered notebook content, physical
-printing acceptance and the complete personal end-to-end journey. Another
-25 open follow-up implementation tracks preserve all deferred complexity
-without blocking the local CLI and localhost first delivery. The previous
-NO-GO decision still applies to production claims, and physical hardware
-is not required for local use.
+as proof of a finished product. **Eight P1 executable TODOs remain** for
+Spanish/English glyphs, joined strokes, semantic flow, notebook PDF/PNG,
+decoration, image overlays, printing and the personal end-to-end journey.
+Another 21 P2–P4 implementation tracks preserve deferred complexity without
+blocking the local CLI and localhost first delivery. The previous NO-GO
+decision still applies to production claims, and physical hardware is not
+required for local use. The authoritative open list is [TODO.md](TODO.md).
 
 ### Localhost Open/Save for notebook and handwriting profiles (opt-in)
 
