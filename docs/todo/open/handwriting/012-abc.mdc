@@ -667,6 +667,28 @@ This increases capacity but does **not** establish native analytic circles,
 automatic
 cursive joins, or persistently saved notebook text and glyph geometry.
 
+## Native reusable authored glyph base copy (partial) — 2026-11-03
+
+The Rust glyph CLI now accepts `glyphs --copy-glyph SOURCE TARGET` to copy
+all ordered authored pen segments for one exact visible Unicode source into
+an unoccupied exact Unicode target. The new target is an independent one-time
+copy, not a live relationship; user-authored ink, colors, segment order and
+NFC/NFD distinctions are retained. Additional `--glyph-stroke` segments and
+single-stroke edits can modify the derived target without changing its base.
+
+A native regression copies the caller's four-segment `o` loop sample into
+`a`, adds an explicit right-hand stem and edits one new segment, then verifies
+byte-exact TSV save/reopen, untouched source and unrelated NFD rows, and
+actual PDF/transparent PNG parity against independently authored `oa` ink.
+A second regression checks all missing, duplicate, invalid and conflicting
+Unicode-key refusals against unchanged input/output files, explicit
+successive independent NFD/NFC copies, and the 4,096-stroke source+copy cap.
+
+This is a compositional **sampled-stroke** base only. The source `o` in the
+regression is not a mathematical circle, the result is not a vector curve,
+and no automatic two-storey `a`, retained accent anchors or joined cursive
+has been implemented. ATR-P4-012 remains open for that full acceptance.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

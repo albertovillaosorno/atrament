@@ -82,6 +82,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     | paper [atrament-paper options] \
     | glyphs [--profile strokes.tsv] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
+    [--copy-glyph SOURCE TARGET] \
     [--remove-glyph GRAPHEME] \
     [--reverse-stroke GRAPHEME INDEX] \
     [--move-stroke GRAPHEME FROM TO] \
@@ -102,6 +103,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     Glyph stroke indices are one-based within one exact Unicode glyph;\n\
     --reverse-stroke flips pen direction and --move-stroke shifts order.\n\
     --set-stroke updates ink geometry; --remove-stroke deletes one segment.\n\
+    --copy-glyph clones explicit source ink under an unoccupied target.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
     not glyph outlines, available ink shapes, or renderability.\n\
     --preview-glyph reports bounded seeded numerical estimates only; \
@@ -756,6 +758,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                     .ok_or("--profile requires a glyph library path")?;
                 glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
             }
+            "--copy-glyph" => glyphs.copy_glyph_option(&mut iter)?,
             "--glyph-stroke" => glyphs.parse(option, &mut iter)?,
             "--reverse-stroke" | "--move-stroke"
             | "--set-stroke" | "--remove-stroke" => {

@@ -851,6 +851,25 @@ reordering. A missing glyph or stroke, invalid geometry or empty resulting
 library refuses before saving. An explicit `--output` is required for a
 disk write; add `--replace` only to overwrite an existing regular file.
 
+To **derive a new glyph** from an already-authored base, use
+`--copy-glyph SOURCE TARGET` before adding extra pen strokes. This is a
+one-time copy of the source's ordered segments, not a live link:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyphs.tsv --copy-glyph 'o' 'a' \
+  --glyph-stroke 'a' 2900 850 2900 3950 300 '#203040' \
+  --output derived-a.tsv
+```
+
+This example requires an authored `o` and an unoccupied `a`. It copies the
+source loop segments to `a` and explicitly adds a right-hand stem, while
+keeping `o` unchanged. You can then edit the new `a` independently via
+`--set-stroke`, `--reverse-stroke` and `--move-stroke`. Duplicate targets,
+missing source ink, invalid Unicode and exceeding the bounded 4,096-stroke
+library refuse. The operation copies **sampled segments**; an exact analytic
+circle, anchored diacritics and joined cursive still require separate work.
+
 The versioned format
 starts with `atrament.glyph-strokes.v1`, followed by one **tab-separated**
 `GRAPHEME X1 Y1 X2 Y2 WIDTH_UM #RRGGBB` record per line (UTF-8, LF).

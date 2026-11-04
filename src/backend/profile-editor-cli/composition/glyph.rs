@@ -293,6 +293,49 @@ impl GlyphOverlay {
         Ok(index)
     }
 
+    /// Copy exact authored pen geometry to a new independent Unicode key.
+    /// The source remains untouched; no live dependency is established.
+    pub(super) fn copy_glyph(
+        &mut self, source: &str, target: &str,
+    ) -> Result<(), String> {
+        let boundaries = UnicodeGraphemeSegmentation;
+        if !is_exact_visible_grapheme(source, boundaries)
+            || !is_exact_visible_grapheme(target, boundaries)
+            || source == target
+        {
+            return Err(
+                "glyph copy needs two distinct exact visible graphemes".into()
+            );
+        }
+        if self.strokes.iter().any(|stroke| stroke.grapheme == target) {
+            return Err("glyph copy refuses an already authored target".into());
+        }
+        let copies = self.strokes.iter()
+            .filter(|stroke| stroke.grapheme == source)
+            .map(|stroke| GlyphStroke {
+                grapheme: target.to_owned(), ..stroke.clone()
+            }).collect::<Vec<_>>();
+        if copies.is_empty() {
+            return Err("glyph copy source has no authored strokes".into());
+        }
+        if copies.len() > MAX_STROKES.saturating_sub(self.strokes.len()) {
+            return Err("glyph copy exceeds 4096 authored strokes".into());
+        }
+        self.strokes.extend(copies);
+        Ok(())
+    }
+
+    /// CLI admission for one independently copied glyph pair.
+    pub(super) fn copy_glyph_option(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let source = iter.next()
+            .ok_or("--copy-glyph requires source and target graphemes")?;
+        let target = iter.next()
+            .ok_or("--copy-glyph requires source and target graphemes")?;
+        self.copy_glyph(source, target)
+    }
+
     /// Apply a requested native index edit to the in-memory authored library.
     pub(super) fn edit_stroke(
         &mut self, flag: &str, iter: &mut Iter<'_, String>,
