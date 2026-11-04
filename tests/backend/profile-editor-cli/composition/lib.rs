@@ -2963,6 +2963,77 @@ fn markdown_mixed_crlf_and_lf_replay_identically_in_native_exports() {
 }
 
 #[test]
+fn leading_utf8_bom_keeps_real_plain_and_markdown_pdf_png_identical() {
+    let file = test_path().with_extension("md");
+    for (format, flag, text) in [
+        (FlowFormat::Plain, "--flow-text", "a\na"),
+        (FlowFormat::Markdown, "--flow-markdown",
+            "# a\n> a  \n> a\n---\na"),
+    ] {
+        let bom = format!("\u{feff}{text}");
+        let bom_crlf = bom.replace('\n', "\r\n");
+        fs::write(&file, bom_crlf.as_bytes())
+            .expect("test-owned UTF-8 BOM source");
+        let read = FlowSource::from_file(format,
+            file.to_str().expect("local source path"))
+            .expect("BOM and CRLF imported as normal source");
+        assert_eq!(read.text, text);
+        assert_eq!(read.format, format);
+        for paper in ["pdf", "png"] {
+            let render = |source: &str| {
+                let mut cli = args(&[
+                    "--export-paper", paper, "--printed-sheet", "true",
+                    "--glyph-stroke", "a", "0", "0", "3500", "4500",
+                    "250", "#204060", flag, source,
+                ]);
+                if paper == "png" {
+                    cli.extend(args(&["--dpi", "72"]));
+                }
+                execute_notebook(&cli).expect("native source export")
+                    .expect("native page bytes")
+            };
+            let baseline = render(text);
+            assert_eq!(baseline, render(&bom),
+                "initial transport signature is not authored ink");
+            assert_eq!(baseline, render(&bom_crlf),
+                "BOM and CRLF normalize before rendering");
+        }
+    }
+    fs::remove_file(file).expect("remove test source file");
+}
+
+#[test]
+fn utf8_bom_only_strips_at_first_position_and_keeps_byte_cap() {
+    for invalid in [
+        "\u{feff}".to_owned(),
+        format!("\u{feff}{}", "a".repeat(4_094)),
+    ] {
+        let error = FlowSource::new(FlowFormat::Markdown, &invalid)
+            .expect_err("empty or oversized BOM input");
+        assert!(error.contains("1..4096 UTF-8 bytes"), "{error}");
+    }
+    let initial_two = format!("\u{feff}\u{feff}a");
+    let after_first = FlowSource::new(FlowFormat::Markdown, &initial_two)
+        .expect("one BOM stripped, other remains authored text");
+    assert_eq!(after_first.text, "\u{feff}a");
+    let embedded = format!("a\u{feff}a");
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"original PDF").expect("test sentinel");
+    let output = target.to_str().expect("test PDF path");
+    for invalid in [initial_two.as_str(), embedded.as_str()] {
+        let error = execute_notebook(&args(&[
+            "--export-paper", "pdf", "--glyph-stroke", "a",
+            "0", "0", "3500", "4500", "250", "#204060",
+            "--flow-markdown", invalid, "--output", output, "--replace",
+        ])).expect_err("only first BOM is transport metadata");
+        assert!(error.contains("U+FEFF"), "{error}");
+        assert_eq!(fs::read(&target).expect("unchanged output"),
+            b"original PDF");
+    }
+    fs::remove_file(target).expect("remove test sentinel");
+}
+
+#[test]
 fn markdown_soft_and_hard_breaks_change_measured_page_count() {
     let soft = FlowSource::new(FlowFormat::Markdown, &"a\n".repeat(40))
         .expect("soft-wrapped paragraph");

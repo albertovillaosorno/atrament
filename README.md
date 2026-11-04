@@ -488,6 +488,9 @@ Only visible handwriting glyphs contribute their selected statistical
 height/baseline to the physical row pitch; Markdown-only `#`, `-`, `*`, `+`
 and `>` markers do not, whereas authored numbered-list labels do.
 The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.
+An initial UTF-8 byte-order mark is accepted as file metadata (still within
+the 4,096-byte cap), not a required glyph. Interior or repeated byte-order
+marks remain literal; their missing authored shapes refuse before export.
 The same 512 total exported pen-segment limit still applies.
 
 In the authenticated localhost workspace, paste Markdown into **Source

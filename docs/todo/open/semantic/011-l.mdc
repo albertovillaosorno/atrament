@@ -232,6 +232,15 @@ deterministic PNG replay and true page-two keep-with-next behavior;
 duplicate style refusal is also covered. It does not establish a
 separate saved semantic title style.
 
+A bounded source-admission compatibility refinement treats one initial
+UTF-8 U+FEFF BOM as transport metadata, not handwritten ink, for both
+explicit inline text and caller-selected UTF-8 files. The raw 4,096-byte
+limit includes the BOM; an interior or duplicate U+FEFF stays literal and
+needs its own authored shape. Two Rust regressions confirm real PDF/PNG
+byte parity for plain/Markdown, LF/CRLF, and real file import; invalid
+BOM-only/over-limit source and interior unauthored glyphs refuse without
+replacing an existing output. No other Unicode normalization is inferred.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

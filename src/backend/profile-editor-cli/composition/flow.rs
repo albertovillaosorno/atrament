@@ -82,13 +82,16 @@ impl FlowSource {
     pub(super) fn new(
         format: FlowFormat, source: &str,
     ) -> Result<Self, String> {
-        if source.is_empty()
+        // A leading UTF-8 signature is transport metadata, not ink.
+        // Keep the byte cap on the *original* input, including its BOM.
+        let admitted = source.strip_prefix('\u{feff}').unwrap_or(source);
+        if admitted.is_empty()
             || source.len() > MAX_FLOW_BYTES
-            || !source.chars().any(|ch| !ch.is_whitespace())
-            || source
+            || !admitted.chars().any(|ch| !ch.is_whitespace())
+            || admitted
                 .chars()
                 .any(|ch| ch.is_control() && ch != '\n' && ch != '\r')
-            || source.replace("\r\n", "").contains('\r')
+            || admitted.replace("\r\n", "").contains('\r')
         {
             return Err(concat!(
                 "flow text needs 1..4096 UTF-8 bytes, LF/CRLF lines ",
@@ -98,7 +101,7 @@ impl FlowSource {
         }
         Ok(Self {
             format,
-            text: source.replace("\r\n", "\n"),
+            text: admitted.replace("\r\n", "\n"),
         })
     }
 }
