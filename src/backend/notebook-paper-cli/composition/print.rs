@@ -263,12 +263,14 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
 // Traditional xref tables have fixed-width decimal entries and a trailer
 // dictionary. Do not spool a bare `xref` token or a forged subsection stub.
 // This confirms only the terminal table's framing, not offset correctness.
+// PDF delimiters terminate a keyword without requiring intervening space:
+// a direct `trailer<<` dictionary is still a legal token boundary.
 fn xref_word<'bytes>(bytes: &'bytes [u8], at: &mut usize)
     -> Option<&'bytes [u8]> {
     *at = pdf_trivia_end(bytes, *at);
     let start = *at;
     while bytes.get(*at).is_some_and(|byte| {
-        !pdf_whitespace(*byte) && *byte != b'%'
+        !pdf_whitespace(*byte) && !b"()<>[]{}/%".contains(byte)
     }) {
         *at = at.checked_add(1)?;
     }

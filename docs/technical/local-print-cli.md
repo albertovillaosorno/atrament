@@ -111,6 +111,11 @@ The terminal decimal byte offset allows the same PDF whitespace on either
 side of its digits, while refusing vertical tab. The offset must still be
 an unsigned decimal and point to a framed cross-reference structure.
 
+A traditional `trailer` keyword may directly touch its `<<` dictionary
+opener: PDF delimiters separate tokens without intervening whitespace.
+The parser still rejects extended keywords such as `trailerX` and checks
+the same bounded trailer dictionary after the token boundary.
+
 The table form also requires at least one numbered subsection with
 fixed-width decimal offset/generation and `n`/`f` state records, followed by
 a `trailer` dictionary. An `xref` keyword alone or an empty or malformed

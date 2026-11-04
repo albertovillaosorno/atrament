@@ -2123,6 +2123,61 @@ fn terminal_xref_stream_prev_must_point_back_to_a_prior_xref() {
 
 #[cfg(unix)]
 #[test]
+fn traditional_trailer_dictionary_delimiter_can_touch_keyword() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("spooled.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
+    )).expect("write fake spooler");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+
+    let native = real_pdf();
+    let trailer = native.windows(b"trailer\n<<".len())
+        .position(|part| part == b"trailer\n<<")
+        .expect("native PDF carries a direct table trailer dictionary");
+    let touching = [
+        native.get(..trailer).expect("prefix").to_vec(),
+        b"trailer<<".to_vec(),
+        native.get(trailer + b"trailer\n<<".len()..)
+            .expect("suffix").to_vec(),
+    ].concat();
+    assert!(supported_pdf_cross_reference(&touching),
+        "PDF dictionary delimiter is a legal lexical token boundary");
+    fs::write(&pdf, &touching).expect("write native touching trailer PDF");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert_eq!(submit_selected(&request, &fake_spool)
+        .expect("direct trailer dictionary is accepted"),
+        sha256_profile_bytes(&touching).bytes());
+    assert_eq!(fs::read(&spooled).expect("fake CUPS exact bytes"),
+        touching, "source and spool bytes match");
+
+    let fake = [
+        native.get(..trailer).expect("prefix").to_vec(),
+        b"trailerX<<".to_vec(),
+        native.get(trailer + b"trailer\n<<".len()..)
+            .expect("suffix").to_vec(),
+    ].concat();
+    assert!(!supported_pdf_cross_reference(&fake),
+        "a longer keyword must not impersonate trailer");
+    fs::remove_file(&spooled).expect("clear prior fake queue");
+    fs::write(&pdf, &fake).expect("write invalid PDF");
+    assert!(submit_selected(&request, &fake_spool).is_err(),
+        "invalid trailer keyword must not reach CUPS");
+    assert!(!spooled.exists(), "no new fake spool side effect");
+    assert_eq!(fs::read(&pdf).expect("selected bytes unchanged"), fake);
+    fs::remove_dir_all(&directory).expect("remove fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn stalled_cups_submission_is_bounded_even_for_a_full_stdin_pipe() {
     use std::os::unix::fs::PermissionsExt as _;
 

@@ -560,6 +560,20 @@ does not need a real queue. Existing exact PDF hash and argv/byte stream
 acceptance tests remain green. This is not proof of a physically printed
 page or of cleanup of arbitrary descendant processes launched by `lp`.
 
+## Direct traditional trailer delimiters (partial) — 2026-11-04
+
+The bounded table scanner now treats PDF delimiter characters as lexical
+word boundaries, independent of whitespace. A direct traditional trailer
+dictionary may validly begin `trailer<<` rather than requiring an added
+newline between the keyword and the opening dictionary delimiter.
+
+A red-before/green-after native two-page PDF test confirms the compact
+trailer reaches isolated fake CUPS with the exact selected SHA-256 and
+bytes. A longer `trailerX<<` word still refuses before queue contact.
+All existing table and xref-stream compatibility cases stay eligible.
+This admits a legal token boundary, not a complete PDF parse or physical
+printer verification.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
