@@ -219,6 +219,19 @@ backslash hard-break, separator and paragraph source also produces
 byte-identical PDF and PNG for LF versus CRLF source line endings.
 Both are narrow CLI composition guarantees, not persisted page blocks.
 
+One optional title-decoration refinement adds
+`--heading-style double-underline` with the same level-dependent pen
+width (0.55 / 0.42 / 0.30 mm) as ordinary heading underlines. A second
+colored pen stroke is drawn 0.9 mm above the original underline, both
+beneath the author-supplied handwritten heading glyphs. This is bounded
+to the Rust CLI, preserves single-underline bytes by default and retains
+existing marker/none behavior. Two native Rust integration tests check
+each horizontal micrometre coordinate, hierarchy and exact custom ink
+color, quote/separator ornament independence, PDF RGB paint count,
+deterministic PNG replay and true page-two keep-with-next behavior;
+duplicate style refusal is also covered. It does not establish a
+separate saved semantic title style.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

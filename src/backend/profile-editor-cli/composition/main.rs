@@ -108,7 +108,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--fallback-glyph MISSING AUTHORED] \
     [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
     [--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY] \
-    [--heading-style underline|marker|none] [--heading-color '#RRGGBB'] \
+    [--heading-style underline|double-underline|marker|none] \
+    [--heading-color '#RRGGBB'] \
     [--flow-text TEXT | --flow-markdown MARKDOWN | \
      --flow-text-file FILE | --flow-markdown-file FILE] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
@@ -128,7 +129,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     Both use physical printable regions and exact authored ink; \
     it auto-selects PDF page count unless --pages is explicit. \
     Markdown headings default to dark underlines; select a user-colored \
-    underline, opaque pastel marker band or no ornament. \
+    single/double underline, opaque pastel marker band or no ornament. \
     --handwriting-profile applies selected mean dimensions to authored \
     shapes, not statistical sampling. --glyph-variation explicitly \
     applies reproducible per-occurrence creative jitter to the same shapes; \

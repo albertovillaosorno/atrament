@@ -107,6 +107,7 @@ impl FlowSource {
 /// painted after any marker ink, preserving original handwriting strokes.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum HeadingStyle {
+    DoubleUnderline,
     Marker,
     None,
     Underline,
@@ -153,12 +154,16 @@ impl HeadingDecoration {
                     return Err("--heading-style may appear only once".into());
                 }
                 self.style = Some(match selected.as_str() {
+                    "double-underline" => HeadingStyle::DoubleUnderline,
                     "marker" => HeadingStyle::Marker,
                     "none" => HeadingStyle::None,
                     "underline" => HeadingStyle::Underline,
                     _ => {
                         let message =
-                            "heading style must be marker, underline or none";
+                            concat!(
+                                "heading style must be double-underline, ",
+                                "marker, underline or none",
+                            );
                         return Err(message.into());
                     }
                 });
@@ -463,10 +468,22 @@ impl Layout<'_> {
                 .checked_add(extent)
                 .ok_or("heading ornament exceeds page")?;
             match self.heading.style.unwrap_or(HeadingStyle::Underline) {
-                HeadingStyle::Underline => {
+                HeadingStyle::DoubleUnderline | HeadingStyle::Underline => {
                     let mark_y = y.checked_add(self.pitch)
                         .and_then(|end| end.checked_sub(2_300))
                         .ok_or("heading underline position overflow")?;
+                    if self.heading.style
+                        == Some(HeadingStyle::DoubleUnderline) {
+                        let upper = mark_y.checked_sub(900)
+                            .ok_or("double underline position overflow")?;
+                        self.ornaments.push(NotebookInkLine {
+                            page: self.page,
+                            start_um: (start_x, upper),
+                            end_um: (mark_end, upper),
+                            width_um: level.underline_width_um(),
+                            rgb: self.heading.color.unwrap_or([30, 48, 74]),
+                        });
+                    }
                     self.ornaments.push(NotebookInkLine {
                         page: self.page,
                         start_um: (start_x, mark_y),

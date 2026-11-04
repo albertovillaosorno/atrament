@@ -435,12 +435,13 @@ export. Marker weight follows the Markdown heading level: `#` uses four
 **opaque** 1.4-mm pen lines, `##` uses three 1.15-mm strokes, and `###` uses
 two 0.95-mm strokes. Underlines likewise step down from 0.55 to 0.42 to
 0.30 mm. `--heading-style underline --heading-color '#A462D0'` changes only
-the underline color; `--heading-style none` removes heading ornaments.
+the underline color. Select `--heading-style double-underline` to add a
+second level-weighted ink line 0.9 mm above the original, optionally with
+`--heading-color '#64A3C5'`; `--heading-style none` removes ornaments.
 These levels change ink decoration, **not** the authored glyph sizes or
 shape. The 512-ink-segment cap and physical margin checks still apply to
-heading ink.
-This is a deliberately simple marker-decoration option, **not** a full title
-font, translucent highlighter or arbitrary image layer. It works with the
+heading ink. These are simple pen decorations, **not** full title fonts,
+translucent highlighters or arbitrary image layers. They work with the
 opt-in `--glyph-variation` ink sampler described below.
 
 For a notebook profile already saved as `notebook.json`, supply

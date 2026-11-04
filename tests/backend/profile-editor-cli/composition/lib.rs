@@ -3750,6 +3750,119 @@ fn seeded_variation_keeps_exact_nfd_fallback_and_applies_selected_means() {
 }
 
 #[test]
+fn double_underlined_headings_keep_tiered_authored_text_and_native_ink() {
+    let markdown = "# a\n## a\n### a\n> a\n---\na";
+    let source = FlowSource::new(FlowFormat::Markdown, markdown)
+        .expect("tiered headings and physical decorations");
+    let mut decoration = HeadingDecoration::default();
+    decoration.parse(
+        "--heading-style", &mut args(&["double-underline"]).iter(),
+    ).expect("explicit double underline");
+    decoration.parse(
+        "--heading-color", &mut args(&["#64A3C5"]).iter(),
+    ).expect("explicit custom title ink");
+    let (runs, ornaments, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None, decoration,
+    ).expect("physical heading hierarchy with real ornaments");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.len(), 5);
+    assert!(runs.iter().all(|run| run.text == "a"));
+    assert_eq!(ornaments.len(), 8,
+        "two lines per heading, quote bar, one separator");
+    for (index, width) in [550, 420, 300].iter().enumerate() {
+        let heading = &runs[index];
+        for (line, rise) in [5_800, 6_700].iter().enumerate() {
+            let ornament = &ornaments[index * 2 + line];
+            assert_eq!(ornament.page, 1);
+            assert_eq!(ornament.start_um,
+                (heading.origin_um.0, heading.origin_um.1 + rise));
+            assert_eq!(ornament.end_um,
+                (heading.origin_um.0 + 4_000,
+                    heading.origin_um.1 + rise));
+            assert_eq!(ornament.width_um, *width);
+            assert_eq!(ornament.rgb, [0x64, 0xA3, 0xC5]);
+        }
+    }
+    assert_eq!(ornaments[6].rgb, [30, 48, 74],
+        "quotations keep their own rule color");
+    assert_eq!(ornaments[7].rgb, [30, 48, 74],
+        "thematic rules remain independent from title tint");
+
+    for format in ["pdf", "png"] {
+        let mut base = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", "a", "0", "0", "3500", "4500",
+            "250", "#204060", "--flow-markdown", markdown,
+        ]);
+        if format == "png" {
+            base.extend(args(&["--dpi", "72"]));
+        }
+        let default = execute_notebook(&base)
+            .expect("original single underline").expect("image bytes");
+        base.extend(args(&[
+            "--heading-style", "double-underline",
+            "--heading-color", "#64A3C5",
+        ]));
+        let decorated = execute_notebook(&base)
+            .expect("double underline native export").expect("image bytes");
+        assert_ne!(decorated, default);
+        assert_eq!(decorated, execute_notebook(&base)
+            .expect("deterministic layout").expect("same image bytes"));
+        if format == "pdf" {
+            assert!(decorated.starts_with(b"%PDF-1.4"));
+            assert_eq!(String::from_utf8_lossy(&decorated)
+                .matches("0.392 0.639 0.773 RG").count(), 6,
+                "two colored strokes for each heading level");
+        } else {
+            assert!(decorated.starts_with(b"\x89PNG\r\n\x1a\n"));
+        }
+    }
+}
+
+#[test]
+fn double_underline_and_following_text_stay_on_page_two() {
+    let markdown = format!("{}# a\na", "a  \n".repeat(27));
+    let source = FlowSource::new(FlowFormat::Markdown, &markdown)
+        .expect("heading after last safe row");
+    let mut decoration = HeadingDecoration::default();
+    decoration.parse(
+        "--heading-style", &mut args(&["double-underline"]).iter(),
+    ).expect("double underline style");
+    let (runs, ornaments, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None, decoration,
+    ).expect("keep heading and follower together");
+    assert_eq!(pages, 2);
+    assert_eq!(runs.len(), 29);
+    assert_eq!(runs[27].page, 2);
+    assert_eq!(runs[28].page, 2);
+    assert_eq!(ornaments.len(), 2);
+    assert!(ornaments.iter().all(|line| line.page == 2));
+    assert_eq!(ornaments[0].start_um, (22_500, 30_300));
+    assert_eq!(ornaments[1].start_um, (22_500, 31_200));
+    let mut cli = args(&[
+        "--export-paper", "pdf", "--printed-sheet", "true",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060", "--flow-markdown", &markdown,
+        "--heading-style", "double-underline",
+    ]);
+    let pdf = execute_notebook(&cli)
+        .expect("PDF with second-page double ornament")
+        .expect("PDF bytes");
+    let streams = String::from_utf8_lossy(&pdf)
+        .split("\nstream\n").skip(1).map(|part| {
+            part.split("\nendstream").next().unwrap_or("").to_owned()
+        }).collect::<Vec<_>>();
+    assert_eq!(streams.len(), 2);
+    assert_eq!(streams[0].matches("0.118 0.188 0.290 RG").count(), 0);
+    assert_eq!(streams[1].matches("0.118 0.188 0.290 RG").count(), 2);
+    cli[1] = "png".into();
+    cli.extend(args(&["--dpi", "72", "--png-page", "2"]));
+    let png = execute_notebook(&cli)
+        .expect("page two raster").expect("PNG bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+}
+
+#[test]
 fn marker_headings_keep_authored_text_and_bullets_with_colored_ink() {
     let source = FlowSource::new(FlowFormat::Markdown, "# a\n- a")
         .expect("bounded Markdown");
@@ -4008,6 +4121,10 @@ fn invalid_heading_decorations_do_not_replace_existing_pdf() {
     for invalid in [
         args(&["--heading-style", "invalid"]),
         args(&["--heading-style", "marker", "--heading-style", "none"]),
+        args(&[
+            "--heading-style", "double-underline",
+            "--heading-style", "underline",
+        ]),
         args(&["--heading-color", "#XYZXYZ"]),
         args(&["--heading-color", "#12345"]),
         args(&["--heading-color", "#112233", "--heading-color", "#445566"]),
