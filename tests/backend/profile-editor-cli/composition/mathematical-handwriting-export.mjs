@@ -926,3 +926,49 @@ test('left and bidirectional arrow ink renders Rust PDF PNG and refuses',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+
+test('vertical arrows render native PDF PNG with exact refusal', () => {
+    const dir = mkdtempSync(join(root, '.temp/vertical-arrow-'));
+    try {
+        const source = join(dir, 'vertical.tsv');
+        const output = join(dir, 'vertical.pdf');
+        const symbols = ['↑', '↓', '↕'];
+        const ink = symbols.flatMap((glyph) => geometricStarter(
+            glyph, 1550, 2450, 1100, 250, '#243647'));
+        assert.equal(ink.length, 11);
+        const canonical = Buffer.from(encodeGlyphLibrary(ink));
+        writeFileSync(source, canonical);
+        const opened = cli('glyphs', ['--profile', source]);
+        assert.equal(opened.status, 0, opened.stderr.toString());
+        assert.deepEqual(opened.stdout, canonical);
+        const audit = cli('glyphs', ['--profile', source,
+            '--audit-text', symbols.join('')]);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        assert.match(audit.stdout.toString(),
+            /Distinct visible graphemes: 3/);
+        const flags = ['--printed-sheet', 'true', '--glyph-file', source,
+            '--flow-text', `${symbols.join('')}\n${symbols.join('')}`];
+        const exported = cli('notebook', [...flags,
+            '--export-paper', 'pdf', '--output', output]);
+        assert.equal(exported.status, 0, exported.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, ink.length * 2);
+        const png = cli('notebook', [...flags,
+            '--export-paper', 'png', '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        const refused = cli('notebook', ['--printed-sheet', 'true',
+            '--glyph-file', source, '--flow-text', '↑↕↥',
+            '--export-paper', 'pdf', '--output', output, '--replace']);
+        assert.notEqual(refused.status, 0);
+        assert.match(refused.stderr.toString(), /missing authored glyph/i);
+        assert.deepEqual(readFileSync(output), accepted);
+        assert.deepEqual(readFileSync(source), canonical);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

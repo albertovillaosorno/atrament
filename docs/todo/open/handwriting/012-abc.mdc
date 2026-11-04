@@ -1474,6 +1474,26 @@ without an extra browser-to-backend request during local drawing.
 These remain manually authored vector-chord templates, not automatic
 symbolic typesetting, native analytic path resources, or full font coverage.
 
+## Vertical directed arrows (partial) — 2026-11-04
+
+The same explicit school-notation composer can now author exact up `↑`,
+down `↓` and both-ways `↕` pen glyphs, with their own ordered shafts and
+separately lifted arrowheads. The bidirectional vertical form has five
+segments; single directions each have three. Their Unicode identities
+remain separate from `→`, `←` and `↔`, and the opt-in math fill now covers
+28 explicitly chosen symbols without altering previously authored ink.
+
+Browser regressions verify each exact directed coordinate, candidate pen
+path, native TSV encoding, bounded clipping refusal and visible SVG guide.
+The independent Rust CLI reopens the browser-compatible glyph library and
+renders two physical rows as PDF vectors and transparent PNG, then refuses
+an unauthored `↥` without replacing accepted output. A live Firefox test
+selects all three controls and renders their exact downloaded bytes through
+Rust with no implicit browser save or extra backend authoring request.
+
+The drawings are sampled manual pen paths, not inferred directional
+fallbacks, symbolic math layout or a persisted analytical font.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

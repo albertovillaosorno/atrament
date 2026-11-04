@@ -679,8 +679,8 @@ function quoteMirror(
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∑", "∫",
-    "∂", "Δ", "≈", "→", "←", "↔", "∝"] as const;
-// Extra manually selected marks do not change the 25-glyph math fill.
+    "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝"] as const;
+// Extra manually selected marks do not change the 28-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -781,6 +781,26 @@ function mathParts(
         line(-0.8, 0, -0.2, 0.55),
         line(0.2, -0.55, 0.8, 0),
         line(0.8, 0, 0.2, 0.55),
+    ];
+    // Vertical arrows keep their own exact Unicode and ordered shaft.
+    // Each separate head joins at its tip without making an implied
+    // continuous stroke across the opposite head or another glyph.
+    if (glyph === "↑") return [
+        line(0, 0.8, 0, -0.8),
+        line(-0.55, -0.2, 0, -0.8),
+        line(0, -0.8, 0.55, -0.2),
+    ];
+    if (glyph === "↓") return [
+        line(0, -0.8, 0, 0.8),
+        line(-0.55, 0.2, 0, 0.8),
+        line(0, 0.8, 0.55, 0.2),
+    ];
+    if (glyph === "↕") return [
+        line(0, -0.8, 0, 0.8),
+        line(-0.55, -0.2, 0, -0.8),
+        line(0, -0.8, 0.55, -0.2),
+        line(-0.55, 0.2, 0, 0.8),
+        line(0, 0.8, 0.55, 0.2),
     ];
     const curve = (start: [number, number],
         handle: [number, number], end: [number, number]): MarkPiece => ({
