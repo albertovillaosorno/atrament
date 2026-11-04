@@ -1,10 +1,19 @@
 # Rust-first notebook implementation roadmap
 
+## Status
+
 **Owner decision, November 2, 2026:** re-prioritize, do not delete the
 complex designs. Atrament is a personal, local notebook and handwriting
 application. The immediate executable target is a **Rust CLI plus a localhost
 web editor** that loads, changes, previews, and saves notebook and handwriting
 profiles, then exports printable PDF and transparent PNG pages.
+
+These milestones describe the intended complete local experience, not a
+production-readiness claim. Eight P1 implementation tasks remain open in
+the current [backlog](../../TODO.md); partial CLI/editor acceptance does not
+close them.
+
+## Purpose
 
 **Glyph-first vision:** Start with exact, inspectable geometric letterforms,
 not random strokes or an opaque handwriting font. A simple lowercase **o** is
@@ -21,13 +30,28 @@ it matches their own handwriting. Width, height, slant, thickness, baseline,
 spacing, regularity, texture and context variation act **on top of** the
 canonical geometry; repeatable settings must visibly change the final ink.
 
+## Scope
+
 **Notebook workflow:** Paste plain text or Markdown, lay headings and body
 text onto the selected physical pages, paginate without silent clipping, and
 export PDF/transparent PNG. Headings may use decorative lettering, marker
 strokes and highlighter treatments with independently editable colors and
 thicknesses. The local editor and Rust CLI share the same saved profiles.
 
-## Architecture and ownership
+### Preserved advanced work (not discarded)
+
+The historical P1–P9 `.mdc` records are **completed theoretical or partial
+artifacts**, not proof of a working product. They remain in
+`docs/todo/completed/` with their original identities and evidence. Their
+advanced subjects—calibration, extended mathematics, complex page solvers,
+semantic editing, LLM/MCP, further theme effects, animation,
+accessibility, paper realism, plotters, and device safety—remain available as
+future extensions, but none may block M1–M4 unless it is actually required by
+an identified dependency. Physical hardware remains theory-only.
+
+## Contract
+
+### Architecture and ownership
 
 1. **Rust is the source of truth.** Reuse the existing Rust notebook, physical
    page, handwriting variation, grapheme, profile-container, and PDF modules.
@@ -50,9 +74,9 @@ thicknesses. The local editor and Rust CLI share the same saved profiles.
    against localhost; the CLI remains fully usable without a browser.
    Windows/macOS portability is not a release gate for personal local use.
 
-## Immediate milestones, in dependency order
+### Immediate milestones, in dependency order
 
-### M1. Shared Rust profiles and native CLI
+#### M1. Shared Rust profiles and native CLI
 
 - One canonical schema for notebook and handwriting profiles, with explicit
   version, physical units, and defaults. Validate existing paper styles,
@@ -65,7 +89,7 @@ thicknesses. The local editor and Rust CLI share the same saved profiles.
 - One accepted and one rejected file fixture prove the CLI and domain return
   the same validation outcome. No exhaustive third-party proof is required.
 
-### M2. Localhost profile editor
+#### M2. Localhost profile editor
 
 - Open the existing Rust local server and see a separate **Notebook** and
   **Handwriting** profile editor with Open, Save, and Save As actions.
@@ -77,7 +101,7 @@ thicknesses. The local editor and Rust CLI share the same saved profiles.
 - A user can close and reopen the UI, load the saved files, and recover the
   same values. Browser storage must not be the only copy of private profiles.
 
-### M3. Handwriting fidelity and Spanish/English glyph coverage
+#### M3. Handwriting fidelity and Spanish/English glyph coverage
 
 - Every existing variation variable is represented: height, width, baseline,
   slant/rotation, spacing, roundness, flattening, pressure/ink thickness,
@@ -111,7 +135,7 @@ thicknesses. The local editor and Rust CLI share the same saved profiles.
   distribution bounds, and a reproducible sample preview. A reference photo
   can be used as a **manual** measuring aid, not mandatory OCR.
 
-### M4. Export and physical notebook workflow
+#### M4. Export and physical notebook workflow
 
 - Paste or load text/Markdown with paragraphs, headings and lists. Apply
   measured wrapping and automatic page breaks to the configured paper profile
@@ -129,18 +153,12 @@ thicknesses. The local editor and Rust CLI share the same saved profiles.
   plotter, robot, Windows/macOS installer, cloud service, or AI account is
   required to finish this milestone.
 
-## Preserved advanced work (not discarded)
+## Failure Modes
 
-The historical P1–P9 `.mdc` records are **completed theoretical or partial
-artifacts**, not proof of a working product. They remain in
-`docs/todo/completed/` with their original identities and evidence. Their
-advanced subjects—calibration, extended mathematics, complex page solvers,
-semantic editing, LLM/MCP, further theme effects, animation,
-accessibility, paper realism, plotters, and device safety—remain available as
-future extensions, but none may block M1–M4 unless it is actually required by
-an identified dependency. Physical hardware remains theory-only.
-
-## Decision and stop rules
+An unadmitted saved profile, missing authored glyph, impossible physical
+page region or unauthorized file replacement must refuse before changing
+any selected output. A successful export or CUPS job acknowledgement does
+not establish that a physical page has been printed correctly.
 
 Each **new implementation TODO** must have a finite working outcome, an
 observable acceptance example, and an honest failure result. The owner may
@@ -149,3 +167,19 @@ only closes its *design artifact*: the dependent executable feature stays open
 until usable. Never equate a completed historical record with implemented
 functionality. Keep this roadmap updated when a new executable feature is
 admitted; do not silently grow the critical path.
+
+## Verification
+
+For currently implemented CLI and physical flow behavior, run the focused
+unit and integration checks below from the repository root. Passing them
+verifies an executable subset, not completion of every M1–M4 requirement.
+
+```sh
+cargo test --offline -p atrament_profile_editor_cli --bin atrament-profiles
+node --test tests/backend/profile-editor-cli/composition/flow.mjs
+node --test tests/backend/profile-editor-cli/composition/main.mjs
+```
+
+Review [the open implementation backlog](../../TODO.md) and its linked
+acceptance evidence before declaring any milestone complete. A local print
+submission is never a substitute for a documented physical print trial.
