@@ -151,6 +151,10 @@ an existing PDF. Other caller-authored Unicode spaces, including NBSP and
 thin space, remain legitimate distinct glyphs. This is a local admission
 consistency fix, not a complete language layout or font implementation.
 
+Saved glyph TSV regression coverage also loads both refused separators
+through the native library parser and PDF export path. Refusal preserves
+the selected input TSV and previously accepted PDF bytes.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

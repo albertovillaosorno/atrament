@@ -2400,6 +2400,40 @@ fn structural_unicode_separators_cannot_be_authored_as_glyph_ink() {
 }
 
 #[test]
+fn saved_glyph_library_rejects_structural_separators_before_pdf_replacement() {
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("pdf");
+    let filename = source.to_str().expect("selected library path");
+    let destination = target.to_str().expect("selected PDF path");
+    fs::write(&target, b"previous accepted document")
+        .expect("test-owned PDF sentinel");
+    for separator in ["\u{2028}", "\u{2029}"] {
+        let bytes = format!(
+            "atrament.glyph-strokes.v1\n{separator}\t500\t500\t1800\t3000\t250\t#123456\n"
+        );
+        fs::write(&source, bytes.as_bytes())
+            .expect("test-owned selected TSV");
+        let refused = execute_glyph_library(&args(&[
+            "--profile", filename, "--audit-text", "a",
+        ])).expect_err("structural separator TSV cannot be loaded");
+        assert!(refused.contains("visible grapheme"), "{refused}");
+        let error = execute_notebook(&args(&[
+            "--export-paper", "pdf", "--printed-sheet", "false",
+            "--glyph-file", filename, "--place-text", "1",
+            "30000", "40000", "a", "--output", destination,
+            "--replace",
+        ])).expect_err("invalid TSV must not reach PDF rendering");
+        assert!(error.contains("visible grapheme"), "{error}");
+        assert_eq!(fs::read(&target).expect("unchanged PDF"),
+            b"previous accepted document");
+        assert_eq!(fs::read(&source).expect("unchanged TSV"),
+            bytes.as_bytes());
+    }
+    fs::remove_file(&source).expect("remove test-owned TSV");
+    fs::remove_file(&target).expect("remove test-owned PDF");
+}
+
+#[test]
 fn glyph_audit_reports_unicode_whitespace_requiring_authored_ink() {
     let sample = "a\u{a0}a\u{2009}a\u{202f}a";
     let base = args(&[
