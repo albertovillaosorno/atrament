@@ -414,6 +414,22 @@ the selected PDF unchanged and never invoke the fake queue. The genuine
 PDF 1.5 prior stream and native two-page PDF remain admitted. This does not
 parse stream rows, authenticate older object graphs or certify a printer.
 
+## Single-line traditional subsection headers (partial) — 2026-11-04
+
+The local printer now requires each traditional cross-reference subsection's
+first-object index and count on one physical line, separated by horizontal
+spaces or tabs. The former token-by-token scanner could join `0` on one
+line with `1` on another and still send the selected PDF to fake CUPS.
+
+A red-before/green-after fake-spool regression refuses split LF, CRLF,
+trailing-whitespace and comment-separated subsection headers, plus an
+`xref` marker illegally sharing the first subsection line. Three valid
+single-line space/tab controls and genuine native PDF output still pass.
+The same nonallocating bounded header check also guards `/Prev` targets:
+a split index/count in an earlier table no longer impersonates a valid
+cross-reference section. Neither earlier revisions nor full PDF syntax
+are recursively parsed; no physical queue was contacted.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

@@ -122,6 +122,12 @@ as their first object indices already do. Signed tokens such as `+1` and
 `+0001` refuse before CUPS, even though the Rust integer parser could
 otherwise convert them to valid record counts.
 
+The index and count must
+occupy one physical line separated by horizontal whitespace; LF/CRLF or
+PDF comments cannot splice them across separate lines. The `xref` keyword
+itself needs a line break before the first subsection. These framing checks
+also apply to the first section of an earlier `/Prev` table target.
+
 Traditional table entries now require the offset, generation and `f`/`n`
 status to appear on one complete CR- or LF-terminated physical line, after
 the subsection header's line break, with horizontal whitespace between

@@ -252,6 +252,42 @@ fn xref_word<'bytes>(bytes: &'bytes [u8], at: &mut usize)
     bytes.get(start..*at).filter(|word| !word.is_empty())
 }
 
+// The xref keyword starts its own table line. It cannot share a row with
+// an index/count, even if the later tokens are individually well-formed.
+fn xref_table_keyword(bytes: &[u8], at: &mut usize) -> bool {
+    if xref_word(bytes, at) != Some(b"xref".as_slice()) {
+        return false;
+    }
+    let end = pdf_trivia_end(bytes, *at);
+    bytes.get(*at..end).is_some_and(|gap| gap.iter()
+        .any(|byte| matches!(byte, b'\n' | b'\r')))
+}
+
+// Subsection index and count form one physical line with horizontal-space
+// separation. Token-by-token trivia skipping would accept a forged two-line
+// header, including when validating the immediate /Prev table predecessor.
+fn xref_subsection_header(
+    bytes: &[u8], at: &mut usize, first: &[u8],
+) -> Option<(usize, usize)> {
+    let decimal = |word: &[u8]| {
+        str::from_utf8(word).ok()
+            .filter(|value| !value.is_empty()
+                && value.bytes().all(|byte| byte.is_ascii_digit()))
+            .and_then(|value| value.parse::<usize>().ok())
+    };
+    let first_index = decimal(first)?;
+    let after_first = *at;
+    let count_word = xref_word(bytes, at)?;
+    let count = decimal(count_word)?;
+    let count_start = at.checked_sub(count_word.len())?;
+    let separation = bytes.get(after_first..count_start)?;
+    if separation.is_empty()
+        || !separation.iter().all(|byte| matches!(byte, b' ' | b'\t')) {
+        return None;
+    }
+    Some((first_index, count))
+}
+
 // An in-use table entry must identify the numbered indirect object at its
 // exact absolute byte position, not just some byte within the PDF. This is
 // a narrow header check, not a scan of an object's contents or stream data.
@@ -304,7 +340,7 @@ fn supported_xref_table(
     bytes: &[u8], document: &[u8], table_start: usize,
 ) -> bool {
     let mut at = 0usize;
-    if xref_word(bytes, &mut at) != Some(b"xref".as_slice()) {
+    if !xref_table_keyword(bytes, &mut at) {
         return false;
     }
     let mut seen_entry = false;
@@ -320,19 +356,9 @@ fn supported_xref_table(
                 document, table_start,
             );
         }
-        let Some(first_index) = str::from_utf8(first).ok()
-            .filter(|digits| !digits.is_empty()
-                && digits.bytes().all(|byte| byte.is_ascii_digit()))
-            .and_then(|digits| digits.parse::<usize>().ok())
+        let Some((first_index, count)) =
+            xref_subsection_header(bytes, &mut at, first)
         else { return false; };
-        let Some(count) = xref_word(bytes, &mut at)
-            .and_then(|value| str::from_utf8(value).ok())
-            .filter(|digits| !digits.is_empty()
-                && digits.bytes().all(|byte| byte.is_ascii_digit()))
-            .and_then(|digits| digits.parse::<usize>().ok())
-        else {
-            return false;
-        };
         if count.checked_mul(18)
             .is_none_or(|minimum| minimum > bytes.len()) {
             return false;
@@ -426,18 +452,14 @@ fn bounded_xref_size(
 // This does not validate all prior records, trailers or revision chains.
 fn previous_xref_table_header(bytes: &[u8]) -> bool {
     let mut at = 0usize;
-    if xref_word(bytes, &mut at) != Some(b"xref".as_slice()) {
+    if !xref_table_keyword(bytes, &mut at) {
         return false;
     }
-    let decimal = |word: &[u8]| {
-        str::from_utf8(word).ok()
-            .filter(|value| !value.is_empty()
-                && value.bytes().all(|byte| byte.is_ascii_digit()))
-            .and_then(|value| value.parse::<usize>().ok())
+    let Some(first_word) = xref_word(bytes, &mut at) else {
+        return false;
     };
-    let Some(first) = xref_word(bytes, &mut at).and_then(decimal)
-    else { return false; };
-    let Some(count) = xref_word(bytes, &mut at).and_then(decimal)
+    let Some((first, count)) =
+        xref_subsection_header(bytes, &mut at, first_word)
     else { return false; };
     if count == 0 || first.checked_add(count)
         .is_none_or(|end| end > MAX_SUPPORTED_XREF_OBJECTS) {

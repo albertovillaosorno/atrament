@@ -1061,6 +1061,42 @@ fn xref_subsection_count_is_unsigned_decimal_digits_only() {
         assert!(!spooled.exists(), "no fake CUPS contact");
         assert_eq!(fs::read(&pdf).expect("source intact"), invalid);
     }
+    let header = |subsection: &str| format!(
+        "%PDF-1.7\nxref\n{subsection}\n0000000000 65535 f \n\
+         trailer\n<< /Size 1 >>\nstartxref\n9\n%%EOF\n",
+    ).into_bytes();
+    for valid in ["0 1", "0\t1", "0   1"] {
+        assert!(supported_pdf_cross_reference(&header(valid)),
+            "complete horizontal-space header remains admitted");
+    }
+    // The xref keyword itself must also end before the first subsection.
+    let inline_xref = b"%PDF-1.7\nxref 0 1\n0000000000 65535 f \n\
+         trailer\n<< /Size 1 >>\nstartxref\n9\n%%EOF\n";
+    assert!(!supported_pdf_cross_reference(inline_xref),
+        "xref marker cannot share its subsection line");
+    fs::write(&pdf, inline_xref).expect("write inline xref keyword");
+    let inline_request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert!(submit_selected(&inline_request, &fake_spool).is_err());
+    assert!(!spooled.exists(), "inline xref never reaches fake CUPS");
+    assert_eq!(fs::read(&pdf).expect("unchanged inline PDF"),
+        inline_xref);
+    for invalid in ["0\n1", "0\r\n1", "0  \n1", "0 %comment\n1"] {
+        let candidate = header(invalid);
+        assert!(!supported_pdf_cross_reference(&candidate),
+            "subsection object index and count must share one line");
+        fs::write(&pdf, &candidate).expect("write malformed header");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "split header cannot contact CUPS");
+        assert!(!spooled.exists(), "no fake CUPS effect");
+        assert_eq!(fs::read(&pdf).expect("intact input"), candidate);
+    }
     fs::remove_dir_all(&directory).expect("remove owned fixtures");
 }
 
@@ -1488,6 +1524,8 @@ fn xref_table_prev_must_point_back_to_a_prior_xref() {
         b"xref\nnot-a-subsection\n".as_slice(),
         b"xref\n0 1\n".as_slice(),
         b"xref\n0 1\n0000000000 65535 z \n".as_slice(),
+        b"xref\n0\n1\n0000000000 65535 f \n".as_slice(),
+        b"xref 0 1\n0000000000 65535 f \n".as_slice(),
     ] {
         let fake_previous = native.len();
         let terminal = fake_previous + fragment.len();
