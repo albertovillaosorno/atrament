@@ -649,6 +649,12 @@ native row-pitch regression uses a 25-mm `=` height override and compares
 the real PDF and transparent PNG to the equivalent single-line literal
 text. Actual Setext underlines still do not require or measure `=` ink.
 
+A follow-up regression covers the same measurement issue after two- and
+three-space list continuations. They are still part of the pending list,
+not a new paragraph that a following `=` could turn into Setext syntax.
+The native row pitches and exact PDF/PNG outputs now match the same list
+with its literal `=` text already combined on the next source line.
+
 ## ATX heading whitespace parity (partial) — 2026-11-04
 
 The Rust CLI now treats additional ASCII spaces following the mandatory

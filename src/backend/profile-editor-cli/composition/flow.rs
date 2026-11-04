@@ -331,6 +331,21 @@ mod source_tests {
         ).expect("heading underline is syntax, not glyph ink");
         assert_eq!(rows[1].origin_um.1 - rows[0].origin_um.1,
             9_000, "actual Setext syntax must not inflate row pitch");
+
+        for continuation in ["  ", "   "] {
+            let continued = FlowSource::new(
+                FlowFormat::Markdown,
+                &format!("- a\n{continuation}a\n=\na"),
+            ).expect("indented continuation belongs to the list item");
+            let (list, _, _) = super::layout_flow(
+                &continued, &NotebookProfile::default(), Some(&stats),
+                super::HeadingDecoration::default(),
+            ).expect("equal mark remains literal after the list");
+            assert_eq!(list.iter().map(|run| run.text.as_str())
+                .collect::<Vec<_>>(), ["a a", "= a"]);
+            assert_eq!(list[1].origin_um.1 - list[0].origin_um.1,
+                29_000, "list continuation must not arm Setext syntax");
+        }
     }
 }
 
@@ -1455,14 +1470,17 @@ fn measured_pitch(
     let mut pitch = DEFAULT_PITCH_UM;
     let mut fence = None;
     let mut pending_setext = false;
+    let mut pending_list = false;
     for raw in source.text.lines() {
         let visible = if source.format == FlowFormat::Markdown {
             if markdown_fence_transition(&mut fence, raw) {
                 pending_setext = false;
+                pending_list = false;
                 continue;
             }
             if fence.is_some() {
                 pending_setext = false;
+                pending_list = false;
                 Cow::Borrowed(raw)
             } else if pending_setext && markdown_setext_level(raw).is_some() {
                 pending_setext = false;
@@ -1471,11 +1489,21 @@ fn measured_pitch(
                 let (style, body) = markdown_line(raw);
                 let (visible, hard_break) = markdown_paragraph_break(
                     raw, style, body.as_ref());
-                // Four-space literal rows are laid out immediately,
-                // leaving no paragraph to promote to a Setext heading.
-                // An underline on the next line must stay visible ink.
-                pending_setext = matches!(style, LineStyle::Body)
-                    && !raw.starts_with("    ")
+                // List continuations belong to their pending list item,
+                // not to an ordinary paragraph eligible for Setext.
+                let indent = raw.bytes()
+                    .take_while(|byte| *byte == b' ').count();
+                let list_continuation = pending_list
+                    && (2..=3).contains(&indent)
+                    && matches!(style, LineStyle::Body);
+                pending_list = !hard_break && (list_continuation
+                    || matches!(style, LineStyle::Bullet | LineStyle::Ordered
+                        | LineStyle::Task(_)));
+                // Four-space literal rows are also laid out immediately,
+                // leaving no ordinary paragraph for Setext promotion.
+                pending_setext = !list_continuation
+                    && matches!(style, LineStyle::Body)
+                    && indent < 4
                     && !visible.trim_matches(' ').is_empty()
                     && !hard_break;
                 Cow::Owned(visible.to_owned())

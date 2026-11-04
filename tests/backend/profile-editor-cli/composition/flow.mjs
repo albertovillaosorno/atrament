@@ -2015,16 +2015,22 @@ test('four-space Markdown row before equals measures literal glyph ink',
                 '--handwriting-profile', stats, '--glyph-stroke', '=',
                 '600', '500', '1800', '3000', '250', '#123456',
             ];
-            for (const format of ['pdf', 'png']) {
-                const expected = render(dir, '    a\n= a', format, ink);
-                assert.equal(expected.result.status, 0,
-                    expected.result.stderr);
-                const reference = readFileSync(expected.output);
-                const split = render(dir, '    a\n=\na', format, ink);
-                assert.equal(split.result.status, 0,
-                    split.result.stderr);
-                assert.deepEqual(readFileSync(split.output), reference,
-                    `literal Setext-like mark keeps ${format} row spacing`);
+            for (const [inline, split] of [
+                ['    a\n= a', '    a\n=\na'],
+                ['- a\n  a\n= a', '- a\n  a\n=\na'],
+                ['- a\n   a\n= a', '- a\n   a\n=\na'],
+            ]) {
+                for (const format of ['pdf', 'png']) {
+                    const expected = render(dir, inline, format, ink);
+                    assert.equal(expected.result.status, 0,
+                        expected.result.stderr);
+                    const reference = readFileSync(expected.output);
+                    const actual = render(dir, split, format, ink);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    assert.deepEqual(readFileSync(actual.output), reference,
+                        `literal Setext-like mark keeps ${format} row pitch`);
+                }
             }
         } finally {
             rmSync(dir, { recursive: true, force: true });
