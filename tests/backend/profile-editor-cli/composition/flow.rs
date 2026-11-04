@@ -270,3 +270,83 @@ fn heading_keeps_next_ink_after_interior_fenced_blank_rows() {
             distance, "fenced rows and any paragraph gap remain physical");
     }
 }
+
+#[test]
+fn adjacent_heading_levels_stay_with_their_first_body_row() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    // Four 9-mm rows fit per page. Two prelude rows leave enough room
+    // for either heading alone, but not both titles and their body.
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 45_000,
+    };
+    for (source, expected) in [
+        ("a  \na\n# a\n## ó\na", vec![1, 1, 2, 2, 2]),
+        ("a  \na\n# a\n## ó\n\na", vec![1, 1, 2, 2, 2]),
+        ("a  \na\n# a\n## ó\n### a\na", vec![1, 1, 2, 2, 2, 2]),
+        ("a  \na\n# a\n## ó\n~~~txt\n\na\n~~~", vec![1, 1, 2, 2, 2]),
+    ] {
+        let input = FlowSource::new(FlowFormat::Markdown, source)
+            .expect("adjacent ATX headings and body text");
+        let (runs, _, pages) = super::layout_flow_with_region(
+            &input, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("heading chain fits with its body on a new page");
+        assert_eq!(pages, 2);
+        assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+            expected, "adjacent headings must not orphan earlier title");
+        if source.contains("## ó\n\na") {
+            assert_eq!(runs[4].origin_um.1 - runs[3].origin_um.1,
+                13_000, "blank Markdown paragraph retains its 4-mm gap");
+        }
+    }
+}
+
+#[test]
+fn heading_chain_never_reserves_nonprinting_trailing_code_rows() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 45_000,
+    };
+    let render = |text: &str| {
+        let source = FlowSource::new(FlowFormat::Markdown, text)
+            .expect("valid ending headings and fenced blank lines");
+        super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("terminal blank code rows cannot require another page")
+    };
+    let baseline = render("a  \na\n# a\n## ó");
+    let trailing = render("a  \na\n# a\n## ó\n~~~txt\n\n\n~~~");
+    assert_eq!(baseline.2, trailing.2);
+    assert_eq!(baseline.1, trailing.1);
+    assert_eq!(baseline.0.iter().map(|run| (
+        run.page, run.origin_um, run.text.as_str(),
+    )).collect::<Vec<_>>(), trailing.0.iter().map(|run| (
+        run.page, run.origin_um, run.text.as_str(),
+    )).collect::<Vec<_>>());
+    assert_eq!(trailing.2, 1);
+    assert_eq!(trailing.0.iter().map(|run| run.page)
+        .collect::<Vec<_>>(), [1, 1, 1, 1]);
+
+    // When a region cannot fit a three-row group, normal flow remains
+    // accepted and the later heading can move without losing ink.
+    let too_short = super::FlowRegion { height: 23_000, ..region };
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "# a\n## ó\na",
+    ).expect("valid title and subtitle");
+    let (runs, _, pages) = super::layout_flow_with_region(
+        &source, &paper, None, super::HeadingDecoration::default(),
+        Some(too_short),
+    ).expect("unfittable group falls back to normal pagination");
+    assert_eq!(pages, 2);
+    assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+        [1, 2, 2]);
+}

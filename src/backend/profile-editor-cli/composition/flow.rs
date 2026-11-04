@@ -447,6 +447,7 @@ enum LineStyle {
 #[derive(Clone, Copy)]
 struct FollowingInkSpacing {
     blank_rows: usize,
+    heading_rows: usize,
     paragraph_gap: bool,
 }
 
@@ -545,7 +546,9 @@ impl Layout<'_> {
             .ok_or("heading bottom inset overflow")?;
         let rows = u32::try_from(following.blank_rows)
             .map_err(|_error| "heading blank-row budget overflow")?
-            .checked_add(2)
+            .checked_add(u32::try_from(following.heading_rows)
+                .map_err(|_error| "heading chain-row budget overflow")?)
+            .and_then(|rows| rows.checked_add(2))
             .ok_or("heading following-row budget overflow")?;
         let needed = self.pitch.checked_mul(rows)
             .and_then(|value| value.checked_add(if following.paragraph_gap {
@@ -1250,13 +1253,15 @@ fn markdown_paragraph_break<'text>(
     (body, raw.ends_with("  "))
 }
 
-// A heading needs its first following visible line. An ending heading has
-// no following ink to keep, even if an empty code fence follows it.
+// A heading needs its first following visible line. Consecutive ATX
+// headings also stay with their first body row if that span fits a sheet.
+// Do not reserve blank fenced rows or gaps after the final visible heading.
 fn following_heading_gap<'text>(
     lines: impl Iterator<Item = &'text str>,
 ) -> Option<FollowingInkSpacing> {
     let mut following = FollowingInkSpacing {
         blank_rows: 0,
+        heading_rows: 0,
         paragraph_gap: false,
     };
     let mut fence = None;
@@ -1274,11 +1279,21 @@ fn following_heading_gap<'text>(
         }
         if line.trim_end_matches(' ').is_empty() {
             following.paragraph_gap = true;
+        } else if !following.paragraph_gap && following.blank_rows == 0
+            && matches!(markdown_line(line).0, LineStyle::Heading(_)) {
+            // Only adjacent source headings belong to the same group.
+            // A blank line or a code row forms a distinct boundary.
+            following.heading_rows = following.heading_rows.saturating_add(1);
         } else {
             return Some(following);
         }
     }
-    None
+    // The last heading is printable ink. Trailing blank rows are not.
+    (following.heading_rows > 0).then_some(FollowingInkSpacing {
+        blank_rows: 0,
+        heading_rows: following.heading_rows.saturating_sub(1),
+        paragraph_gap: false,
+    })
 }
 
 // A completed paragraph can be promoted into a Setext heading only

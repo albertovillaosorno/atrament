@@ -961,3 +961,23 @@ for the whole group retains normal pagination without inventing extra ink.
 
 This changes only the CLI's bounded export layout. The saved semantic
 notebook model, general Markdown grammar and full P1 acceptance stay open.
+
+## Keep adjacent ATX headings with their body (partial) — 2026-11-04
+
+The CLI-only physical Markdown orphan guard now considers a contiguous chain
+of ATX headings, not only the next heading row. Previously a primary heading
+near the sheet foot could stay on page one with its subtitle, while the
+subtitle's body moved to page two; with sufficient space on the next sheet,
+the whole heading chain now moves before writing any of its ink.
+
+A red-before/green-after Rust unit regression checks two/three heading levels,
+interior fenced blank rows and the preserved 4-mm paragraph gap in fixed
+physical regions. A native CLI regression compares both transparent PNG
+pages against separately composed prelude and heading-group ink, verifies a
+real two-page vector PDF and preserves accepted bytes when one page is
+requested. Trailing all-blank fences do not force invisible pages, and a
+sheet too short for the group still falls back to ordinary pagination.
+
+This only improves export-time placement of adjacent ATX titles. It is not
+full widow/orphan control, persistent semantic heading identities or a
+completed saved notebook workflow; ATR-P2-011 remains open.

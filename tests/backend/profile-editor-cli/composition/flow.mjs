@@ -126,6 +126,54 @@ test('blank-only fenced block cannot orphan the final Markdown heading',
         }
     });
 
+test('adjacent heading levels travel with their first body row in PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-heading-chain-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '100000', '45000'];
+            const prelude = 'a  \na';
+            const group = '# a\n## ó\na';
+            const combined = `${prelude}\n${group}`;
+            const firstPage = render(dir, combined, 'png', region);
+            assert.equal(firstPage.result.status, 0,
+                firstPage.result.stderr);
+            const firstInk = readFileSync(firstPage.output);
+            const alonePrelude = render(dir, prelude, 'png', region);
+            assert.equal(alonePrelude.result.status, 0,
+                alonePrelude.result.stderr);
+            assert.deepEqual(firstInk, readFileSync(alonePrelude.output),
+                'page one must contain only the prelude');
+
+            const secondPage = render(dir, combined, 'png', region,
+                '--flow-markdown', 2);
+            assert.equal(secondPage.result.status, 0,
+                secondPage.result.stderr);
+            const secondInk = readFileSync(secondPage.output);
+            const aloneGroup = render(dir, group, 'png', region);
+            assert.equal(aloneGroup.result.status, 0,
+                aloneGroup.result.stderr);
+            assert.deepEqual(secondInk, readFileSync(aloneGroup.output),
+                'page two must retain both heading markers and body ink');
+
+            const accepted = render(dir, combined, 'pdf',
+                [...region, '--pages', '2']);
+            assert.equal(accepted.result.status, 0,
+                accepted.result.stderr);
+            const bytes = readFileSync(accepted.output);
+            assert.match(bytes.toString('latin1'), /\/Count 2/,
+                'actual native PDF must contain two physical pages');
+            const refused = render(dir, combined, 'pdf',
+                [...region, '--pages', '1']);
+            assert.notEqual(refused.result.status, 0);
+            assert.match(refused.result.stderr, /page/i);
+            assert.deepEqual(readFileSync(refused.output), bytes,
+                'insufficient page selection preserves accepted PDF bytes');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('saved BOM/CRLF Markdown task file exports like inline PDF and PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-file-'));
