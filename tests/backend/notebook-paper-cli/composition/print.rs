@@ -2123,6 +2123,43 @@ fn terminal_xref_stream_prev_must_point_back_to_a_prior_xref() {
 
 #[cfg(unix)]
 #[test]
+fn stalled_cups_submission_is_bounded_even_for_a_full_stdin_pipe() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let contacted = directory.join("fake-lp-launches.txt");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf X >> '{}'\nexec sleep 20\n",
+        contacted.display(),
+    )).expect("write stalled fake CUPS executable");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake CUPS executable");
+
+    // A tiny payload stalls on wait; two megabytes also fill a nonreading
+    // pipe and would hang the old synchronous write_all indefinitely.
+    for (attempt, pdf) in [
+        (1, vec![0x42u8; 16]),
+        (2, vec![0x42u8; 2_000_000]),
+    ] {
+        let start = Instant::now();
+        let error = submit_with_timeout(
+            &fake_spool, "Queue_1", pdf, Duration::from_millis(350),
+        ).expect_err("stalled fake CUPS must not block forever");
+        assert!(error.contains("outcome uncertain"),
+            "a deadline is not proof that the job was rejected: {error}");
+        assert!(error.contains("inspect the queue before retrying"),
+            "manual reconciliation required: {error}");
+        assert!(start.elapsed() < Duration::from_secs(4),
+            "deadline must bound blocked pipe writes and process waits");
+        assert_eq!(fs::read(&contacted).expect("fake lp was launched"),
+            vec![b'X'; attempt], "one attempt, never an automatic retry");
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
     use std::os::unix::fs::{PermissionsExt as _, symlink};
 
@@ -2206,7 +2243,7 @@ fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
     assert_eq!(fs::read(&copied).expect("old spool unchanged"), bytes);
     fs::write(&script, "#!/bin/sh\nexit 7\n")
         .expect("replace fake spool with refusing transport");
-    assert!(submit_with(&script, "Queue_1", &selected).is_err());
+    assert!(submit_with(&script, "Queue_1", selected).is_err());
     let linked = directory.join("linked.pdf");
     symlink(&pdf, &linked).expect("linked fixture");
     assert!(selected_pdf(&linked).is_err(), "source links fail closed");

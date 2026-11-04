@@ -543,6 +543,23 @@ receives each source byte-for-byte with an exact SHA-256 match; a vertical
 tab before that number refuses without contact. These are bounded lexical
 checks, not full PDF semantic validation or actual physical printing.
 
+## Bounded CUPS submission and uncertain timeout (partial) — 2026-11-04
+
+The opt-in Linux print adapter now waits at most 60 seconds for the exact
+reviewed PDF to enter the named CUPS process and for that process to exit.
+An owned writer thread handles the already-read bytes so a stalled `lp`
+stdin pipe cannot indefinitely block the CLI's main submission path.
+When the deadline expires, Atrament kills and reaps its immediate `lp`
+process and reports an uncertain outcome instead of automatically retrying.
+The operator must inspect the queue before considering a new submission.
+
+A fake-spool regression stalls both a tiny payload's process wait and a
+2-MB nonreading stdin pipe. Each returns the explicit uncertainty warning
+within the short test deadline, records exactly one fake-lp invocation and
+does not need a real queue. Existing exact PDF hash and argv/byte stream
+acceptance tests remain green. This is not proof of a physically printed
+page or of cleanup of arbitrary descendant processes launched by `lp`.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

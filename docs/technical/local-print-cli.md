@@ -71,6 +71,14 @@ A zero CUPS exit status means that the spooler **accepted the job**, not that
 sheets emerged from the printer. Paper feed, alignment, printer readiness
 and physical margins remain device-specific and unverified.
 
+The local submission path has a fixed 60-second deadline, covering both
+the transfer of selected PDF bytes to `lp` stdin and the process exit.
+A stalled spooler is terminated and its immediate process reaped; the CLI
+returns an **uncertain submission outcome**, not proof of rejection.
+Inspect the named CUPS queue before deciding whether to submit again.
+Atrament never retries a job automatically, and does not manage processes
+that `lp` might spawn independently.
+
 ## Failure Modes
 
 One `--pdf` and one `--printer` are required. An optional reviewed

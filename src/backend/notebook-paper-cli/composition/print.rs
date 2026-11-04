@@ -39,6 +39,8 @@ use std::io::{self, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::str;
+use std::thread;
+use std::time::{Duration, Instant};
 
 use atrament_notebook_paper_cli::MAX_PAPER_OUTPUT_BYTES;
 use atrament_paper_mark_geometry as _;
@@ -57,6 +59,7 @@ use nix as _;
 // bytes. Bound downstream reader allocation exposure against the same
 // 24-MB file admission budget (minimum traditional record: 18 bytes).
 const MAX_SUPPORTED_XREF_OBJECTS: usize = MAX_PAPER_OUTPUT_BYTES.div_ceil(18);
+const CUPS_SUBMISSION_TIMEOUT: Duration = Duration::from_secs(60);
 
 const USAGE: &str = concat!(
     "Usage: atrament-print --pdf FILE --printer QUEUE",
@@ -1119,10 +1122,11 @@ fn selected_pdf(path: &Path) -> Result<Vec<u8>, String> {
 
 // No shell or arbitrary command options. The exact already-read PDF goes to
 // stdin, so a selected path cannot be swapped between validation and spooling.
-fn submit_with(
-    executable: &Path,
-    printer: &str,
-    pdf: &[u8],
+// A stalled local spooler must not block the CLI indefinitely, including
+// when its stdin pipe fills. Timeout is an uncertain submission outcome:
+// the caller must inspect the queue before considering another print job.
+fn submit_with_timeout(
+    executable: &Path, printer: &str, pdf: Vec<u8>, timeout: Duration,
 ) -> Result<(), String> {
     let mut child = Command::new(executable)
         .args(["-d", printer, "-"])
@@ -1131,20 +1135,55 @@ fn submit_with(
         .stderr(Stdio::null())
         .spawn()
         .map_err(|error| format!("cannot launch local CUPS lp: {error}"))?;
-    let written = child
-        .stdin
-        .take()
-        .ok_or("lp stdin unavailable")?
-        .write_all(pdf)
-        .map_err(|error| format!("cannot supply PDF to lp: {error}"));
-    let result = child
-        .wait()
-        .map_err(|error| format!("cannot await local lp: {error}"))?;
-    written?;
-    if !result.success() {
-        return Err(format!("CUPS refused print submission: {result}"));
+    let Some(mut input) = child.stdin.take() else {
+        drop(child.kill());
+        drop(child.wait());
+        return Err("lp stdin unavailable".into());
+    };
+    // The writer owns the already-reviewed Vec; no second PDF read or
+    // unbounded copy is needed. On timeout, killing lp closes its pipe.
+    let writer = match thread::Builder::new()
+        .name("atrament-cups-stdin".into())
+        .spawn(move || input.write_all(&pdf)) {
+        Ok(writer) => writer,
+        Err(error) => {
+            drop(child.kill());
+            drop(child.wait());
+            return Err(format!("cannot start lp stdin writer: {error}"));
+        }
+    };
+    let start = Instant::now();
+    let outcome = loop {
+        match child.try_wait() {
+            Ok(Some(status)) if writer.is_finished() => break Ok(status),
+            Ok(_) if start.elapsed() >= timeout => break Err(concat!(
+                "CUPS submission timed out; outcome uncertain; ",
+                "inspect the queue before retrying",
+            ).to_owned()),
+            Ok(_) => thread::sleep(Duration::from_millis(10)),
+            Err(error) => break Err(format!("cannot await local lp: {error}")),
+        }
+    };
+    let status = match outcome {
+        Ok(status) => status,
+        Err(error) => {
+            drop(child.kill());
+            drop(child.wait());
+            return Err(error);
+        }
+    };
+    writer.join()
+        .map_err(|_panic| "lp stdin writer stopped unexpectedly".to_owned())?
+        .map_err(|error| format!("cannot supply PDF to lp: {error}"))?;
+    if !status.success() {
+        return Err(format!("CUPS refused print submission: {status}"));
     }
     Ok(())
+}
+
+fn submit_with(executable: &Path, printer: &str, pdf: Vec<u8>)
+    -> Result<(), String> {
+    submit_with_timeout(executable, printer, pdf, CUPS_SUBMISSION_TIMEOUT)
 }
 
 fn submit_selected(
@@ -1157,7 +1196,7 @@ fn submit_selected(
         return Err("selected PDF SHA-256 differs from reviewed bytes".into());
     }
     if !request.dry_run {
-        submit_with(executable, &request.printer, &bytes)?;
+        submit_with(executable, &request.printer, bytes)?;
     }
     Ok(digest)
 }
