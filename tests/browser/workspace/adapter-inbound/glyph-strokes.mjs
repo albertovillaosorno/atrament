@@ -3065,6 +3065,75 @@ test("degree and percent preserve ideal circular guides and pen lifts",
             200, 250, "#243647"), /pen-clearance/);
     });
 
+test("peso/dollar and euro have distinct directed currency geometry",
+    async () => {
+        const args = [1550, 2450, 1100, 250, "#243647"];
+        const dollar = geometricStarter("$", ...args);
+        const euro = geometricStarter("€", ...args);
+        const simpleS = geometricStarter("s", ...args);
+        const openC = geometricStarter("c", ...args);
+        assert.equal(dollar.length, 65);
+        assert.equal(euro.length, 38);
+        assert.deepEqual(dollar.slice(0, 64), simpleS.map((line) =>
+            ({ ...line, grapheme: "$" })),
+        "dollar upper/lower S maintains the four authored quadratics");
+        assert.deepEqual(euro.slice(0, 36), openC.map((line) =>
+            ({ ...line, grapheme: "€" })),
+        "euro reuses the exact open-circle C ink path");
+        assert.deepEqual(candidatePenPaths(dollar, "$").map(
+            ({ first, last }) => [first, last]), [[1, 64], [65, 65]]);
+        assert.deepEqual(candidatePenPaths(euro, "€").map(
+            ({ first, last }) => [first, last]),
+        [[1, 36], [37, 37], [38, 38]]);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary([
+            ...dollar, ...euro,
+        ])), [...dollar, ...euro]);
+
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            for (const [glyph, curves, count] of [
+                ["$", 4, 65], ["€", 0, 38],
+            ]) {
+                get("form").value = glyph;
+                get("character").value = glyph;
+                get("form").dispatch("input");
+                const guide = get("ideal-rounded");
+                assert.equal(guide.attributes.get("visibility"), "visible");
+                assert.equal((guide.attributes.get("d").match(/ Q /g)
+                    ?? []).length, curves);
+                assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+                    glyph === "€" ? "visible" : "hidden");
+                if (glyph === "€") {
+                    assert.match(get("ideal-c-loop").attributes.get("d"),
+                        / A /, "euro guide retains the true circular arc");
+                    assert.equal((guide.attributes.get("d").match(/ L /g)
+                        ?? []).length, 2, "two separate euro crossbars");
+                }
+                get("construct").dispatch("click");
+                get("save").dispatch("click");
+                const saved = parseGlyphLibrary(
+                    await downloads.at(-1).text());
+                assert.equal(saved.filter((line) => line.grapheme === glyph)
+                    .length, count);
+            }
+            const accepted = await downloads.at(-1).text();
+            get("circle-x").value = "150";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "hidden", "clipped currency hides its ideal geometry");
+            get("construct").dispatch("click");
+            assert.match(get("status").textContent,
+                /fit inside glyph cell|clips glyph cell/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), accepted,
+                "refused currency geometry never erases saved draft ink");
+        } finally {
+            ui.restore();
+        }
+    });
+
 test("math fill keeps custom ink and refuses over-cap", async () => {
     const ui = mountEditor();
     try {
@@ -3708,7 +3777,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         ".", ",", "!", "¡", "?", "¿", "«", "»", "‘", "’", "“", "”",
         "+", "-", "−", "=", "×", "÷",
         "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈",
-        "°", "%", ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+        "°", "%", "$", "€", ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",
         "/", "\\", "{", "}",
         "k", "x", "y", "z", "c", "e", "i", "í", "j"];
@@ -3749,7 +3818,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 15984);
+    assert.equal(checked, 16272);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

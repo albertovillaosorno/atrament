@@ -645,6 +645,8 @@
                 <option value="≈">Approximately equal ≈ (two waves)</option>
                 <option value="°">Degree ° (one exact ring)</option>
                 <option value="%">Percent % (two rings and slash)</option>
+                <option value="$">Peso/dollar $ (S and vertical stem)</option>
+                <option value="€">Euro € (open circle and two bars)</option>
                 <option value="o">Circle o</option>
                 <option value="o-italic">Italic o (sheared circle)</option>
                 <option value="o-cursive">Manual connected-pen o</option>
@@ -799,7 +801,11 @@
             quotes, … – —, parentheses and square brackets, so the fixed
             114-grapheme Spanish/English baseline has manual starter ink.
             Slash, backslash and curly braces are four additional manual
-            notation starters, separate from that baseline fill.
+            notation starters, separate from that baseline fill. Peso/dollar
+            $ and euro € are also explicit manual currency starters: a smooth
+            S and separate stem, or a circular open arc and two bars. Their
+            sampled TSV strokes retain exact Unicode keys; no automatic
+            currency fallback is provided.
             Every fill remains unsaved.</p>
           <p class="field-help">Exact SVG construction guide (not the
             exported TSV ink):</p>

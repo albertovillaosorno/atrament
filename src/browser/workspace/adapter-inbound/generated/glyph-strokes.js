@@ -571,6 +571,8 @@ const MATH_GLYPHS = ["+", "-", "−", "=", "×", "÷",
     "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈"];
 // Extra manually selected marks do not change the 17-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
+// Currency is manual, not an implicit text/math baseline substitution.
+const CURRENCY_MARKS = ["$", "€"];
 function mathParts(cx, cy, radius, glyph) {
     const point = (x, y) => ({
         x: cx + Math.round(radius * x),
@@ -671,6 +673,24 @@ function mathParts(cx, cy, radius, glyph) {
         { from: point(0, -0.7), to: point(0, -0.58) },
         { from: point(0, 0.58), to: point(0, 0.7) },
     ];
+}
+// The dollar reuses the same four smooth S quadratics with a separate
+// vertical pen stroke. The euro reuses the analytic open circle used for c,
+// plus two independent crossbars. Neither is a sampled font or fallback.
+function currencyParts(cx, cy, radius, glyph) {
+    if (glyph === "$") {
+        return [
+            ...smoothS(cx, cy, radius).map(([from, control, to]) => ({ from, control, to })),
+            { from: { x: cx, y: cy - radius },
+                to: { x: cx, y: cy + radius } },
+        ];
+    }
+    return [-0.28, 0.28].map((height) => ({
+        from: { x: cx - Math.round(radius * 0.83),
+            y: cy + Math.round(radius * height) },
+        to: { x: cx + Math.round(radius * 0.23),
+            y: cy + Math.round(radius * height) },
+    }));
 }
 function digitGeometry(cx, cy, radius, glyph) {
     const p = (x, y) => ({
@@ -1286,7 +1306,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s",
         ".", ",", "!", "¡", "?", "¿",
         "«", "»", "‘", "’", "“", "”",
-        ...MATH_GLYPHS, ...CIRCLE_MARKS,
+        ...MATH_GLYPHS, ...CIRCLE_MARKS, ...CURRENCY_MARKS,
         ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ...TEXT_MARKS, ...NOTATION_MARKS].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
@@ -1476,6 +1496,29 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         return mathParts(cx, cy, radius, g).flatMap(({ from, control, to }) => control === undefined
             ? [line(from, to)]
             : Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1))));
+    }
+    if (CURRENCY_MARKS.includes(g)) {
+        const line = (from, to) => {
+            for (const point of [from, to]) {
+                if (point.x - halfPen < 0 || point.x + halfPen > 3500
+                    || point.y - halfPen < 0
+                    || point.y + halfPen > 4500) {
+                    throw new Error("Currency ink clips glyph cell");
+                }
+            }
+            return validateStroke({ grapheme: g,
+                x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+                width: pen, color });
+        };
+        const parts = currencyParts(cx, cy, radius, g);
+        const arc = g === "€" ? Array.from({ length: OPEN_ARC_SEGMENTS }, (_, step) => {
+            const first = openCirclePoint(cx, cy, radius, step);
+            const last = openCirclePoint(cx, cy, radius, step + 1);
+            return line({ x: Math.round(first.x),
+                y: Math.round(first.y) }, { x: Math.round(last.x), y: Math.round(last.y) });
+        }) : [];
+        return [...arc, ...parts.flatMap(({ from, control, to }) => control === undefined ? [line(from, to)]
+                : Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1))))];
     }
     if (["«", "»", "‘", "’", "“", "”"].includes(g)) {
         const glyph = g;
@@ -2252,6 +2295,9 @@ export function createGlyphStrokeEditor() {
             else if (isMath) {
                 mathD = punctuationGuide(mathParts(cx, cy, r, chosen.grapheme));
             }
+            const isCurrency = CURRENCY_MARKS
+                .includes(chosen.grapheme);
+            const currencyD = isCurrency ? punctuationGuide(currencyParts(cx, cy, r, chosen.grapheme)) : "";
             const isDigit = /^[0-9]$/.test(chosen.grapheme);
             const digitD = isDigit ? digitGuide(digitGeometry(cx, cy, r, chosen.grapheme)) : "";
             const isCapital = /^[A-Z]$/.test(chosen.grapheme);
@@ -2259,18 +2305,19 @@ export function createGlyphStrokeEditor() {
             const isTextMark = [...TEXT_MARKS, ...NOTATION_MARKS]
                 .includes(chosen.grapheme);
             const markD = isTextMark ? punctuationGuide(textMarkParts(cx, cy, r, chosen.grapheme)) : "";
-            const roundedD = isTextMark ? markD
-                : isCapital ? capitalD
-                    : isDigit ? digitD
-                        : isMath ? mathD
-                            : isQuote ? quoteD
-                                : isPunctuation ? punctuationD
-                                    : isStraight ? straightD
-                                        : chosen.grapheme === "s" ? sD
-                                            : chosen.grapheme === "j" ? jD
-                                                : chosen.grapheme === "g" ? gD
-                                                    : chosen.grapheme === "m" ? doubledD
-                                                        : [roundedStart, roundedFirst, roundedSecond].join(" ");
+            const roundedD = isCurrency ? currencyD
+                : isTextMark ? markD
+                    : isCapital ? capitalD
+                        : isDigit ? digitD
+                            : isMath ? mathD
+                                : isQuote ? quoteD
+                                    : isPunctuation ? punctuationD
+                                        : isStraight ? straightD
+                                            : chosen.grapheme === "s" ? sD
+                                                : chosen.grapheme === "j" ? jD
+                                                    : chosen.grapheme === "g" ? gD
+                                                        : chosen.grapheme === "m" ? doubledD
+                                                            : [roundedStart, roundedFirst, roundedSecond].join(" ");
             roundedPath.setAttribute("d", roundedD);
             roundedPath.setAttribute("stroke-width", numeric.width.value);
             roundedPath.setAttribute("stroke", color.value);
@@ -2292,14 +2339,14 @@ export function createGlyphStrokeEditor() {
                     "v", "w", "k", "x", "y", "z",
                     ".", ",", "!", "¡", "?", "¿",
                     "«", "»", "‘", "’", "“", "”",
-                    ...MATH_GLYPHS, ...CIRCLE_MARKS,
+                    ...MATH_GLYPHS, ...CIRCLE_MARKS, ...CURRENCY_MARKS,
                     ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                     ...TEXT_MARKS, ...NOTATION_MARKS]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight
                 && !isPunctuation && !isQuote && !isMath && !isDigit
-                && !isCapital && !isTextMark
+                && !isCapital && !isTextMark && !isCurrency
                 && !["j", "g", "s"].includes(chosen.grapheme)
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
@@ -2316,7 +2363,7 @@ export function createGlyphStrokeEditor() {
             openPath.setAttribute("d", openD);
             openPath.setAttribute("stroke-width", numeric.width.value);
             openPath.setAttribute("stroke", color.value);
-            const openVisible = active && ["c", "e", "C", "G"]
+            const openVisible = active && ["c", "e", "C", "G", "€"]
                 .includes(chosen.grapheme);
             const openState = openVisible ? "visible" : "hidden";
             openPath.setAttribute("visibility", openState);
@@ -2374,17 +2421,19 @@ export function createGlyphStrokeEditor() {
                 ? `Manual connected-pen ${form.value} draft, no adjacent joining`
                 : isMath
                     ? `Exact mathematical ${form.value} ink guide`
-                    : isQuote
-                        ? (["«", "»"].includes(chosen.grapheme)
-                            ? `Exact geometric ${form.value} chevrons`
-                            : `Analytic ${form.value} curls sampled to TSV`)
-                        : isPunctuation
-                            ? (["?", "¿"].includes(chosen.grapheme)
-                                ? `Analytic ${form.value} guide, sampled to TSV`
-                                : `Exact straight ${form.value} punctuation ink`)
-                            : isStraight
-                                ? `Exact straight ${form.value} guide, retained in TSV`
-                                : `Analytic geometric ${form.value} guide, not retained in TSV`;
+                    : isCurrency
+                        ? `Analytic currency ${form.value} guide, sampled to TSV`
+                        : isQuote
+                            ? (["«", "»"].includes(chosen.grapheme)
+                                ? `Exact geometric ${form.value} chevrons`
+                                : `Analytic ${form.value} curls sampled to TSV`)
+                            : isPunctuation
+                                ? (["?", "¿"].includes(chosen.grapheme)
+                                    ? `Analytic ${form.value} guide, sampled to TSV`
+                                    : `Exact straight ${form.value} punctuation ink`)
+                                : isStraight
+                                    ? `Exact straight ${form.value} guide, retained in TSV`
+                                    : `Analytic geometric ${form.value} guide, not retained in TSV`;
             ideal.setAttribute("aria-label", guideLabel);
         }
         catch {

@@ -50,6 +50,60 @@ function actualPngInk(bytes) {
     return raw;
 }
 
+test('peso/dollar and euro manual stroke ink reaches real Rust PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/currency-ink-'));
+        try {
+            const path = join(dir, 'currency.tsv');
+            const output = join(dir, 'currency.pdf');
+            const authored = ['$', '€'].flatMap((symbol) =>
+                geometricStarter(symbol, 1550, 2450, 1100,
+                    250, '#243647'));
+            assert.equal(authored.length, 103);
+            assert.deepEqual(candidatePenPaths(authored, '$').map(
+                ({ first, last }) => [first, last]),
+            [[1, 64], [65, 65]]);
+            assert.deepEqual(candidatePenPaths(authored, '€').map(
+                ({ first, last }) => [first, last]),
+            [[1, 36], [37, 37], [38, 38]]);
+            const original = Buffer.from(encodeGlyphLibrary(authored));
+            writeFileSync(path, original);
+            const opened = cli('glyphs', ['--profile', path]);
+            assert.equal(opened.status, 0, opened.stderr.toString());
+            assert.deepEqual(opened.stdout, original);
+            const audit = cli('glyphs', ['--profile', path,
+                '--audit-text', '$€']);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', path, '--flow-text', '$€\n$€'];
+            const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+                '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+                .length, 206, 'two rows with 103 exact authored pen segments');
+            const png = cli('notebook', [...flags, '--export-paper', 'png',
+                '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const refused = cli('notebook', [
+                '--printed-sheet', 'true', '--glyph-file', path,
+                '--flow-text', '$€£', '--export-paper', 'pdf',
+                '--output', output, '--replace',
+            ]);
+            assert.notEqual(refused.status, 0);
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted,
+                'unmapped £ cannot replace the last accepted PDF');
+            assert.deepEqual(readFileSync(path), original,
+                'native export does not mutate browser-authored strokes');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('degree and percent manual rings render native PDF and RGBA PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/math-percent-'));
