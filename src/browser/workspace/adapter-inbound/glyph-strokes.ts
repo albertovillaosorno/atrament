@@ -682,8 +682,9 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "∩", "∪", "∈", "∉", "∋", "∌", "⊂", "⊆", "⊃", "⊇",
     "⊄", "⊈", "⊅", "⊉", "∑", "∫",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
-    "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅"] as const;
-// Extra manual marks do not change the 52-glyph math fill.
+    "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
+    "∀", "∃", "∄", "∴"] as const;
+// Extra manual marks do not change the 56-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -716,6 +717,26 @@ function mathParts(
     if (glyph === "⊥") return [
         { from: point(0, -0.8), to: point(0, 0.7) },
         horizontal(0.7),
+    ];
+    // Manual logic quantifiers and a three-dot inference mark are exact
+    // Unicode shapes, not substitution for Latin A/E or arithmetic dots.
+    if (glyph === "∀") return [
+        { from: point(-0.7, -0.8), to: point(0, 0.85) },
+        { from: point(0, 0.85), to: point(0.7, -0.8) },
+        { from: point(-0.42, 0.15), to: point(0.42, 0.15) },
+    ];
+    if (glyph === "∃" || glyph === "∄") return [
+        { from: point(0.7, -0.75), to: point(0.7, 0.75) },
+        { from: point(-0.6, -0.75), to: point(0.7, -0.75) },
+        { from: point(-0.6, 0), to: point(0.7, 0) },
+        { from: point(-0.6, 0.75), to: point(0.7, 0.75) },
+        ...(glyph === "∄" ? [{ from: point(-0.75, 0.85),
+            to: point(0.75, -0.85) }] : []),
+    ];
+    if (glyph === "∴") return [
+        { from: point(0, -0.72), to: point(0, -0.58) },
+        { from: point(-0.55, 0.48), to: point(-0.55, 0.62) },
+        { from: point(0.55, 0.48), to: point(0.55, 0.62) },
     ];
     // Identity and negated identity have three independent horizontal
     // strokes. Negation adds its own separately lifted diagonal ink;
@@ -916,9 +937,6 @@ function mathParts(
         handle: [number, number], end: [number, number]): MarkPiece => ({
         from: point(...start), control: point(...handle), to: point(...end),
     });
-    // The empty set uses four connected quadratic ellipse guides, each
-    // sampled into sixteen native chords, and a separately lifted slash.
-    // It is not an automatic replacement for Latin Ø or digit zero.
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.
     // A saved '=' or approximate sign never supplies either shape.
@@ -931,6 +949,9 @@ function mathParts(
         curve([0, -0.65], [0.4, -0.15], [0.8, -0.85]),
         horizontal(0.1), horizontal(0.8),
     ];
+    // The empty set uses four connected quadratic ellipse guides, each
+    // sampled into sixteen native chords, and a separately lifted slash.
+    // It is not an automatic replacement for Latin Ø or digit zero.
     if (glyph === "∅") return [
         curve([0, -0.8], [0.65, -0.8], [0.65, 0]),
         curve([0.65, 0], [0.65, 0.8], [0, 0.8]),

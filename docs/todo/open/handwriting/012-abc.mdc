@@ -1677,6 +1677,27 @@ replay verifies the full expanded glyph menu without hidden backend writes.
 These are caller-authored sampled marks, not automatic handwriting joins,
 mathematics layout, native analytic PDF curves or Unicode-wide fallback.
 
+## Exact quantifiers and therefore ink (partial) — 2026-11-04
+
+The local editor now constructs four more exact Unicode manual marks:
+`∀` (for all), `∃` (there exists), `∄` (does not exist) and `∴`
+(therefore). Universal quantification has a connected two-segment
+inverted A and separately lifted middle bar. The existential glyph has
+four distinct strokes; the negated form adds its own diagonal slash.
+
+Therefore uses three short independent lifted marks, never degenerate
+point-to-point strokes. The optional math fill reaches 56 exact keys.
+
+Browser tests check directed endpoints, lifted pen paths, SVG preview,
+cell clipping, import/export identity, and atomic fill near the 4096-stroke
+native cap. Rust accepts the explicit source TSV and physical PDF/PNG,
+while absent `∵`, `⊤` and ordinary equals cannot replace accepted ink.
+Real Firefox exports the extended 56-key batch for native replay without
+unrequested backend writes.
+
+This expands manual geometric authoring, not handwritten typesetting,
+Unicode normalization fallback or automatic proof interpretation.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
