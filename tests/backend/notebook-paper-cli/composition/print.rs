@@ -1630,6 +1630,66 @@ fn xref_table_prev_accepts_earlier_xref_stream_on_pdf_15() {
 
 #[cfg(unix)]
 #[test]
+fn terminal_xref_stream_accepts_prior_native_xref_table() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("native-stream-revision.pdf");
+    let spooled = directory.join("spooled.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
+    )).expect("write fake spooler");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+
+    let mut original = real_pdf();
+    assert!(original.starts_with(b"%PDF-1."),
+        "native exporter uses a PDF 1.x version header");
+    *original.get_mut(7).expect("version digit") = b'5';
+    let previous = original.windows(b"xref\n".len())
+        .position(|part| part == b"xref\n")
+        .expect("native PDF has real traditional xref table");
+    let terminal = original.len();
+    let mut row = vec![1u8];
+    row.extend_from_slice(&u32::try_from(terminal)
+        .expect("small native PDF offset fits u32").to_be_bytes());
+    row.extend_from_slice(&0u16.to_be_bytes());
+    // /Index may be sparse across revisions: only this newly added xref
+    // stream object is redefined; earlier entries remain in the old table.
+    let candidate = [
+        original.as_slice(),
+        format!(
+            "4095 0 obj\n<< /Type /XRef /Size 4096 \
+             /Index [4095 1] /W [1 4 2] /Root 1 0 R \
+             /Prev {previous} /Length 7 >>\nstream\n",
+        ).as_bytes(),
+        row.as_slice(),
+        format!(
+            "\nendstream\nendobj\nstartxref\n{terminal}\n%%EOF\n",
+        ).as_bytes(),
+    ].concat();
+    assert!(supported_pdf_cross_reference(&candidate),
+        "terminal stream can follow a native traditional xref table");
+    fs::write(&pdf, &candidate).expect("selected incremental PDF");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert_eq!(
+        submit_selected(&request, &fake_spool)
+            .expect("native table-to-stream revision reaches fake CUPS"),
+        sha256_profile_bytes(&candidate).bytes(),
+    );
+    assert_eq!(fs::read(&spooled).expect("exact fake spool bytes"),
+        candidate);
+    assert_eq!(fs::read(&pdf).expect("selected source unchanged"),
+        candidate);
+    fs::remove_dir_all(&directory).expect("remove fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn terminal_xref_stream_prev_must_point_back_to_a_prior_xref() {
     use std::os::unix::fs::PermissionsExt as _;
 

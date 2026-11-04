@@ -430,6 +430,16 @@ a split index/count in an earlier table no longer impersonates a valid
 cross-reference section. Neither earlier revisions nor full PDF syntax
 are recursively parsed; no physical queue was contacted.
 
+## Native-table to terminal-stream compatibility (partial) — 2026-11-04
+
+A direct, opt-in fake-CUPS regression now verifies a real two-page native
+PDF whose traditional xref table precedes an appended PDF 1.5 xref stream.
+The terminal stream's `/Prev` references the original xref table, and its
+sparse `/Index` covers only the newly added indirect object. The bounded
+preflight admits the exact selected bytes, and the fake queue receives the
+same SHA-256-verified snapshot without modifying the source. This is a
+compatibility check, not physical output or full revision-chain parsing.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
