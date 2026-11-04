@@ -33,7 +33,7 @@
 //! Every backend regression root must be reachable through a Cargo test target.
 
 import assert from "node:assert/strict";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { dirname, relative, resolve, sep } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
@@ -99,18 +99,67 @@ function sourceTargetPaths(manifest, content) {
     return paths;
 }
 
+// Follow only explicitly imported Rust modules from Cargo entrypoints.
+// Some library test roots live in application modules rather than the
+// first composition file, so immediate-source inspection loses coverage.
 function linkedUnitModules(manifest, content, sources) {
     const modules = [];
-    const pathPattern = new RegExp(
-        String.raw`#\[cfg\(test\)\]\s*#\[path\s*=\s*"([^"\n]+)"\]` +
-        String.raw`\s*mod\s+[a-zA-Z_]\w*\s*;`, "g",
+    const crateRoot = dirname(manifest);
+    const ancestry = new Set();
+    const modulePattern = new RegExp(
+        String.raw`(?:^([ \t]*#\[cfg\(test\)\][ \t]*\r?\n))?` +
+        String.raw`^[ \t]*#\[path[ \t]*=[ \t]*"([^"\n]+)"\][ \t]*\r?\n` +
+        String.raw`^[ \t]*(?:pub(?:\([^)]+\))?[ \t]+)?` +
+        String.raw`mod[ \t]+[a-zA-Z_]\w*[ \t]*;`, "gm",
     );
-    for (const sourcePath of sourceTargetPaths(manifest, content)) {
+    function visit(sourcePath) {
+        assert.ok(!ancestry.has(sourcePath),
+            `explicit Rust module path cycle: ${sourcePath}`);
+        ancestry.add(sourcePath);
         const source = sources?.get(sourcePath)
             ?? readFileSync(sourcePath, "utf8");
-        for (const match of source.matchAll(pathPattern)) {
-            modules.push(resolve(dirname(sourcePath), match[1]));
+        for (const match of source.matchAll(modulePattern)) {
+            // A non-test conditional cannot prove the module participates
+            // in this test build; it is not an executable coverage edge.
+            const before = source.slice(0, match.index).trimEnd();
+            const prior = before.split(/\r?\n/).at(-1) ?? "";
+            if (match[1] === undefined && /^#\[cfg\(/u.test(prior)) {
+                continue;
+            }
+            const child = resolve(dirname(sourcePath), match[2]);
+            if (match[1] !== undefined) {
+                modules.push(child);
+            } else {
+                assert.ok(child.startsWith(crateRoot + sep),
+                    `source module escapes owning crate: ${child}`);
+                visit(child);
+            }
         }
+        // Cargo also compiles conventional `mod flow;` modules without an
+        // explicit #[path], including their own cfg(test) test roots.
+        const conventional = new RegExp(
+            String.raw`^[ \t]*(?:pub(?:\([^)]+\))?[ \t]+)?` +
+            String.raw`mod[ \t]+([a-zA-Z_]\w*)[ \t]*;`, "gm",
+        );
+        for (const match of source.matchAll(conventional)) {
+            const before = source.slice(0, match.index).trimEnd();
+            const prior = before.split(/\r?\n/).at(-1) ?? "";
+            if (/^#\[(?:path|cfg)\b/u.test(prior)) continue;
+            const base = resolve(dirname(sourcePath), match[1]);
+            const candidates = [base + ".rs", resolve(base, "mod.rs")];
+            for (const child of candidates) {
+                if (sources?.has(child) || existsSync(child)) {
+                    assert.ok(child.startsWith(crateRoot + sep),
+                        `source module escapes owning crate: ${child}`);
+                    visit(child);
+                    break;
+                }
+            }
+        }
+        ancestry.delete(sourcePath);
+    }
+    for (const sourcePath of sourceTargetPaths(manifest, content)) {
+        visit(sourcePath);
     }
     return modules;
 }
@@ -186,6 +235,54 @@ test("target coverage rejects duplicate and unrelated files", () => {
     assert.throws(() => checkTestTargetGraph([
         [manifest, content + content],
     ], [path]), /duplicate/);
+});
+
+test("nested explicit modules expose only reachable cfg(test) roots", () => {
+    const manifest = resolve(packagesRoot, "example", "Cargo.toml");
+    const entry = resolve(dirname(manifest), "composition/lib.rs");
+    const nested = resolve(dirname(manifest), "application/lib.rs");
+    const path = resolve(testsRoot, "example/composition/lib.rs");
+    const content = '[lib]\npath = "composition/lib.rs"\n';
+    const link = '#[path = "../application/lib.rs"]\n' +
+        'pub mod application;\n';
+    const nestedTest = '#[cfg(test)]\n' +
+        '#[path = "../../../../tests/backend/example/composition/lib.rs"]\n' +
+        'mod tests;\n';
+    const sources = new Map([[entry, link], [nested, nestedTest]]);
+    checkTestTargetGraph([[manifest, content]], [path], sources);
+
+    // A reference in prose or an unrelated source cannot authorize tests.
+    assert.throws(() => checkTestTargetGraph(
+        [[manifest, content]], [path],
+        new Map([[entry, '// ' + link], [nested, nestedTest]])),
+    /not wired/);
+    assert.throws(() => checkTestTargetGraph(
+        [[manifest, content]], [path],
+        new Map([[entry, link], [nested,
+            nestedTest.replace("cfg(test)", "cfg(debug_assertions)")]])),
+    /not wired/);
+    assert.throws(() => checkTestTargetGraph(
+        [[manifest, content]], [path],
+        new Map([[entry, link], [nested, nestedTest + nestedTest]])),
+    /duplicate/);
+    assert.throws(() => checkTestTargetGraph(
+        [[manifest, content]], [path],
+        new Map([[entry, link], [nested,
+            '#[path = "../composition/lib.rs"]\nmod parent;\n']])),
+    /cycle/);
+
+    // A conventional module remains compiled without a #[path] attribute.
+    const flow = resolve(dirname(manifest), "composition/flow.rs");
+    const flowTest = resolve(testsRoot, "example/composition/flow.rs");
+    const flowSource = '#[cfg(test)]\n' +
+        '#[path = "../../../../tests/backend/example/composition/flow.rs"]\n' +
+        'mod tests;\n';
+    checkTestTargetGraph([[manifest, content]], [flowTest],
+        new Map([[entry, "mod flow;\n"], [flow, flowSource]]));
+    assert.throws(() => checkTestTargetGraph(
+        [[manifest, content]], [flowTest],
+        new Map([[entry, "// mod flow;\n"], [flow, flowSource]])),
+    /not wired/);
 });
 
 test("unit modules count only when linked from a compiled Cargo target", () => {
