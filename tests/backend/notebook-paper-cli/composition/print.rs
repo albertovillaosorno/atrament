@@ -216,7 +216,9 @@ fn print_admits_real_two_page_pdf_and_refuses_bad_sources() {
     // does not claim to parse the modified document structure.
     for header in [b"%PDF-1.0", b"%PDF-1.7", b"%PDF-2.0"] {
         let mut labeled = bytes.clone();
-        labeled[..8].copy_from_slice(header);
+        labeled.get_mut(..header.len())
+            .expect("native PDF has a complete version header")
+            .copy_from_slice(header);
         fs::write(&pdf, &labeled).expect("save version-labeled fixture");
         assert_eq!(selected_pdf(&pdf).expect("supported PDF header"),
             labeled);
