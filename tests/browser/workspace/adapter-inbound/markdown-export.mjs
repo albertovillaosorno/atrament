@@ -86,6 +86,22 @@ test("blank or lossy Unicode handoff refuses without fallback", () => {
     }
 });
 
+test("browser refuses Markdown source controls native Rust cannot render",
+    () => {
+    for (const source of ["a\u0007b", "a\u0085b", "a\u000Bb",
+        "a\u000Cb", "a\rb", "\ra", "a\r", "a\r\r\nb",
+        "\uFEFFa\u0085b", "\u0000"]) {
+        assert.deepEqual(prepareMarkdownHandoff(source), {
+            kind: "invalid-controls",
+        }, `source must be refused: ${JSON.stringify(source)}`);
+    }
+    for (const source of ["a\r\nb", "a\nb\tc", "a\u2028b",
+        "a\u2029b"]) {
+        assert.equal(prepareMarkdownHandoff(source).kind, "ready",
+            `structural separator must remain accepted: ${source}`);
+    }
+});
+
 test("raw UTF-8 byte limit takes precedence over structural blank scan",
     () => {
     for (const source of [" ".repeat(4097),
@@ -127,6 +143,7 @@ test("workspace handoff is explicit and disabled before authentication", () => {
     assert.match(script, /sourceMarkdownExport.addEventListener\("click"/);
     assert.match(script, /sessionSecret === null/);
     assert.match(script, /revokeSourceMarkdownUrl\(\)/);
+    assert.match(script, /Source contains unsupported controls or line breaks/);
     assert.match(script, /link.download = "atrament-source.md"/);
     assert.doesNotMatch(script, /\.\/api\/notebook\/markdown/);
 });

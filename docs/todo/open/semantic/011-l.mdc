@@ -808,6 +808,19 @@ one-page PDF and transparent RGBA PNG from an explicitly authored U+00A0
 stroke. This is a source-download compatibility fix, not live browser
 notebook rendering or a completed semantic document model.
 
+## Markdown download refuses unsupported controls (partial) — 2026-11-04
+
+The authenticated browser now prevents explicit Markdown downloads when
+source contains nonstructural C0/C1 control characters or an unpaired CR.
+Previously those sources were marked ready for download even though the
+native Rust `--flow-markdown-file` boundary would refuse them. The browser
+continues to preserve exact source bytes and accept CRLF, LF, tabs and
+Unicode U+2028/U+2029 separators; Rust remains the final rendering authority.
+
+A focused browser regression proves refusal of the invalid controls and
+bare-CR positions without silently repairing the text. The Rust importer
+continues rejecting the same inputs and does not accept new Markdown syntax.
+
 ## Literal indented trailing backslashes (partial) — 2026-11-04
 
 Four-or-more-space-indented Markdown rows already preserve their exact

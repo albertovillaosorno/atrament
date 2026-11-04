@@ -30,7 +30,8 @@
 //   - No silent source cleanup, normalization or file writes.
 //
 export type MarkdownHandoff =
-    | { kind: "empty" | "too-large" | "invalid-unicode" }
+    | { kind: "empty" | "too-large" | "invalid-unicode"
+        | "invalid-controls" }
     | { kind: "ready"; text: string; bytes: number };
 
 // This is an early transport guard, not an admission of Markdown syntax.
@@ -47,6 +48,13 @@ export function prepareMarkdownHandoff(text: string): MarkdownHandoff {
     const admitted = text.startsWith("\uFEFF") ? text.slice(1) : text;
     if (!/[^ \t\n\r\u2028\u2029]/u.test(admitted)) {
         return { kind: "empty" };
+    }
+    // Rust flow accepts LF/CRLF, tabs and the pasted Unicode separators;
+    // nonstructural C0/C1 controls and lone CR cannot be rendered. Catch
+    // those before offering a downloaded file, without parsing Markdown.
+    if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/u
+        .test(admitted) || admitted.replace(/\r\n/g, "").includes("\r")) {
+        return { kind: "invalid-controls" };
     }
     // Ignore the decoder's default BOM stripping for exact-source replay.
     if (new TextDecoder("utf-8", { ignoreBOM: true })

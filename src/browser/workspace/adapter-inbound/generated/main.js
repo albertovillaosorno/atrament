@@ -229,9 +229,11 @@ function refreshSourceMarkdownExport() {
         : candidate.kind === "empty" ? "Paste source text to download."
             : candidate.kind === "too-large"
                 ? "Source exceeds the Rust CLI 4,096-byte limit."
-                : candidate.kind === "invalid-unicode"
-                    ? "Source contains invalid Unicode; correct it first."
-                    : "Ready for explicit local Markdown download.";
+                : candidate.kind === "invalid-controls"
+                    ? "Source contains unsupported controls or line breaks."
+                    : candidate.kind === "invalid-unicode"
+                        ? "Source contains invalid Unicode; correct it first."
+                        : "Ready for explicit local Markdown download.";
     setTextIfChanged(sourceMarkdownStatus, status);
 }
 sourceInput.addEventListener("input", refreshSourceMarkdownExport);
