@@ -468,6 +468,13 @@ is explicitly authored; malformed, four-space and empty task sources
 refuse before replacing existing PDF output. Tasks are visual CLI-only
 marks, not interactive persisted check states or nested Markdown lists.
 
+A follow-up native regression proves that repeated separator spaces after
+`[ ]` and `[x]` are syntax rather than 4-mm handwriting advances: the
+same visible task body exports byte-identical PDF and PNG with one or
+several spaces. A bare task marker now refuses as an empty item even when
+literal bracket and checkmark glyph shapes have been authored, avoiding
+accidental conversion into an ordinary bulleted handwriting line.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

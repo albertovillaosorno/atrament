@@ -1010,12 +1010,12 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
         .or_else(|| block.strip_prefix("* "))
         .or_else(|| block.strip_prefix("+ "))
     {
-        if let Some(task) = bullet.strip_prefix("[ ] ") {
-            return (LineStyle::Task(false), task.trim_end_matches(' '));
-        }
-        if let Some(task) = bullet.strip_prefix("[x] ")
-            .or_else(|| bullet.strip_prefix("[X] ")) {
-            return (LineStyle::Task(true), task.trim_end_matches(' '));
+        for (marker, checked) in [("[ ]", false), ("[x]", true),
+            ("[X]", true)] {
+            if let Some(after) = bullet.strip_prefix(marker)
+                && (after.is_empty() || after.starts_with(' ')) {
+                return (LineStyle::Task(checked), after.trim_matches(' '));
+            }
         }
         return (LineStyle::Bullet, bullet.trim_end_matches(' '));
     }

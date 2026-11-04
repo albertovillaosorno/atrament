@@ -728,6 +728,51 @@ test('task lists draw checked and unchecked page-local pen boxes',
         }
     });
 
+test('extra checkbox separator spaces do not shift physical handwriting',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-gap-'));
+        try {
+            const source = '- [x] a\n* [ ] ó\n+ [X] a';
+            const separated = '- [x]   a\n* [ ]    ó\n+ [X]  a';
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, source, format);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                const alternate = render(dir, separated, format);
+                assert.equal(alternate.result.status, 0,
+                    alternate.result.stderr);
+                assert.deepEqual(readFileSync(alternate.output), expected,
+                    `task separator spaces are not ${format} pen advances`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('empty task items refuse even with literal bracket glyphs available',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-gap-'));
+        try {
+            const output = join(dir, 'flow-pdf.output');
+            const saved = Buffer.from('existing validated PDF');
+            for (const source of ['- [ ]', '* [x]', '+ [X]', '- [ ]   ']) {
+                writeFileSync(output, saved);
+                const candidate = render(dir, source, 'pdf', [
+                    ...checkboxLiteralInk,
+                    '--glyph-stroke', 'X', '650', '800', '2400', '3100',
+                    '250', '#112233',
+                ]);
+                assert.notEqual(candidate.result.status, 0, source);
+                assert.match(candidate.result.stderr,
+                    /empty Markdown block refused/);
+                assert.deepEqual(readFileSync(output), saved);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('wrapped task checkbox stays on its first physical page',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-'));
