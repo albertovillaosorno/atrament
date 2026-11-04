@@ -603,6 +603,20 @@ persist a joined cursive style, shape variants or sample parameters in a
 saved semantic document. Browser-controlled page composition, analytic
 curves, pen-lift identifiers and a complete personal script remain open.
 
- The finite implementation described above is not established by
+## Browser statistics glyph admission matches Rust — 2026-11-04
+
+The separate handwriting statistics editor now checks the native Rust
+one-grapheme, 64-UTF-8-byte and control-character limits before it adds a
+new override or requests a numeric sample. Lone UTF-16 surrogates cannot
+be converted silently to replacement characters during JSON transport.
+A purported native response with an invalid glyph cannot enable editing.
+
+Red-before/green-after browser regressions cover multi-grapheme values,
+control characters, unmatched surrogates and valid supplementary Unicode.
+Refused values do not enter the editable draft or cause backend sample
+requests; the native profile remains the final authority. This improves
+statistics transport only, not joined ink or calibrated strokes.
+
+The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.

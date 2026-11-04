@@ -37,6 +37,19 @@ const MAX_JSON_BYTES = 1_048_576;
 const MAX_GLYPHS = 512;
 const MAX_CATALOG_BYTES = 4096;
 const U64_MAXIMUM = "18446744073709551615";
+// Mirror native handwriting-statistics admission before changing a draft
+// or querying a numeric sample. UTF-8 encoding of a lone UTF-16 surrogate
+// silently substitutes U+FFFD, so reject it before checking byte length.
+function exactNativeGrapheme(value) {
+    if (!value || /[\uD800-\uDFFF]/u.test(value)
+        || /[\p{Cc}]/u.test(value)
+        || new TextEncoder().encode(value).length > 64
+        || typeof Intl.Segmenter !== "function")
+        return false;
+    return [...new Intl.Segmenter(undefined, {
+            granularity: "grapheme",
+        }).segment(value)].length === 1;
+}
 // Never round Rust's u64 through a JavaScript Number. Canonicalize its
 // decimal spelling before injecting a numeric token into a JSON envelope.
 function unsigned64(value) {
@@ -162,8 +175,7 @@ function parseProfileObject(value, dimensions) {
         const item = record(raw);
         if (!keysMatch(item, ["grapheme", "parameters"])
             || typeof item.grapheme !== "string"
-            || !item.grapheme
-            || new TextEncoder().encode(item.grapheme).length > 64
+            || !exactNativeGrapheme(item.grapheme)
             || !Array.isArray(item.parameters)
             || item.parameters.length < 1
             || item.parameters.length > dimensions.length
@@ -276,7 +288,8 @@ export function createHandwritingProfileEditor(context) {
         glyphSelect.disabled = disabled || !isGlyph
             || profile?.glyphs.length === 0;
         newGlyph.disabled = disabled || !isGlyph;
-        addGlyph.disabled = disabled || !isGlyph || !newGlyph.value;
+        addGlyph.disabled = disabled || !isGlyph
+            || !exactNativeGrapheme(newGlyph.value);
         removeGlyph.disabled = disabled || !isGlyph || glyph === undefined;
         addOverride.disabled = disabled || !isGlyph || glyph === undefined
             || parameter !== undefined;
@@ -634,7 +647,7 @@ export function createHandwritingProfileEditor(context) {
         if (profile === null || scope.value !== "glyph")
             return;
         const grapheme = newGlyph.value;
-        if (!grapheme || new TextEncoder().encode(grapheme).length > 64
+        if (!exactNativeGrapheme(grapheme)
             || profile.glyphs.length >= MAX_GLYPHS
             || profile.glyphs.some((item) => item.grapheme === grapheme)) {
             status.textContent = "Choose a new exact grapheme "
@@ -696,7 +709,7 @@ export function createHandwritingProfileEditor(context) {
             sampleResult.textContent = "No numeric sample requested.";
             const grapheme = sampleGlyph.value;
             const occurrence = unsigned64(sampleOccurrence.value);
-            if (!grapheme || new TextEncoder().encode(grapheme).length > 64) {
+            if (!exactNativeGrapheme(grapheme)) {
                 throw new Error("Invalid numerical sample selection");
             }
             const dim = selectedDimension();

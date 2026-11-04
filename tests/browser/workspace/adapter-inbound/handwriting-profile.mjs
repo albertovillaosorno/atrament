@@ -214,6 +214,64 @@ test("native numeric preview refuses malformed response without retaining output
     }
 });
 
+test("handwriting refuses non-native glyph identity before draft and sample",
+    async () => {
+    const b = mountBackend();
+    try {
+        await b.editor.start("private-session-credential");
+        edit(b.elements, "handwriting-scope", "glyph", "change");
+        const count = b.requests.length;
+        for (const glyph of ["ab", "\uD800", "\uDC00", "\u0007"]) {
+            edit(b.elements, "handwriting-new-glyph", glyph);
+            b.elements.get("handwriting-add-glyph").dispatch("click");
+            assert.equal(b.elements.get("handwriting-glyph").children.length,
+                0, "invalid exact glyph must not enter the editable draft");
+            edit(b.elements, "handwriting-sample-glyph", glyph);
+            b.elements.get("handwriting-sample").dispatch("click");
+            await tick();
+            assert.equal(b.requests.length, count,
+                "invalid sample cannot reach the native preview endpoint");
+        }
+        edit(b.elements, "handwriting-new-glyph", "🖋");
+        b.elements.get("handwriting-add-glyph").dispatch("click");
+        assert.equal(b.elements.get("handwriting-glyph").children[0].value,
+            "🖋", "valid supplementary scalar stays exact");
+        b.editor.reset();
+    } finally {
+        b.restore();
+    }
+});
+
+test("handwriting rejects invalid native profile glyph", async () => {
+    for (const grapheme of ["ab", "\uD800", "\u0007"]) {
+        const b = mountBackend({
+            fetch(endpoint, init) {
+                if (endpoint === "./api/handwriting/dimensions") {
+                    return Response.json(catalog);
+                }
+                if (init.method === "GET") {
+                    const profile = defaultProfile();
+                    profile.glyphs = [{
+                        grapheme, parameters: [parameter(dimensions[0])],
+                    }];
+                    return Response.json(profile);
+                }
+                throw new Error("invalid profile must not be forwarded");
+            },
+        });
+        try {
+            await b.editor.start("private-session-credential");
+            assert.equal(b.elements.get("handwriting-save").disabled, true);
+            assert.equal(b.elements.get("handwriting-glyph").children.length,
+                0, "untrusted response cannot populate editable overrides");
+            assert.match(b.elements.get("handwriting-status").textContent,
+                /unavailable|unsupported/);
+        } finally {
+            b.restore();
+        }
+    }
+});
+
 test("handwriting retains exact NFD glyph edits", async () => {
     const b = mountBackend();
     try {
