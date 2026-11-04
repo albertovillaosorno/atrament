@@ -62,6 +62,70 @@ test('notebook CLI help advertises real Markdown task shapes', () => {
     assert.match(help.stdout, /# through ###### headings/);
 });
 
+test('trailing invisible rows never create extra native PDF or PNG pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-trailing-blank-'));
+        try {
+            for (const [flag, source] of [
+                ['--flow-text', `a\n${'\n'.repeat(55)}`],
+                ['--flow-markdown',
+                    `a\n~~~txt\n${'\n'.repeat(55)}~~~`],
+            ]) {
+                for (const format of ['pdf', 'png']) {
+                    const pageLimit = format === 'pdf'
+                        ? ['--pages', '1'] : [];
+                    const clean = render(dir, 'a', format,
+                        pageLimit, flag);
+                    assert.equal(clean.result.status, 0,
+                        clean.result.stderr);
+                    const expected = readFileSync(clean.output);
+                    const trailing = render(dir, source, format,
+                        pageLimit, flag);
+                    assert.equal(trailing.result.status, 0,
+                        trailing.result.stderr);
+                    assert.deepEqual(readFileSync(trailing.output), expected,
+                        `trailing blank ${flag} must not export empty pages`);
+                    if (format === 'png') {
+                        const pageTwo = render(dir, source, format,
+                            [], flag, 2);
+                        assert.notEqual(pageTwo.result.status, 0,
+                            'page two must not exist without printable ink');
+                        assert.deepEqual(readFileSync(pageTwo.output),
+                            expected, 'refusal preserves selected PNG');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('blank-only fenced block cannot orphan the final Markdown heading',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-last-heading-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '100000', '23000'];
+            const clean = 'a\n# a';
+            const trailing = `${clean}\n~~~txt\n${'\n'.repeat(55)}~~~`;
+            for (const format of ['pdf', 'png']) {
+                const options = format === 'pdf'
+                    ? [...region, '--pages', '1'] : region;
+                const expected = render(dir, clean, format, options);
+                assert.equal(expected.result.status, 0,
+                    expected.result.stderr);
+                const bytes = readFileSync(expected.output);
+                const actual = render(dir, trailing, format, options);
+                assert.equal(actual.result.status, 0,
+                    actual.result.stderr);
+                assert.deepEqual(readFileSync(actual.output), bytes,
+                    'fenced blank rows cannot move the last heading');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('saved BOM/CRLF Markdown task file exports like inline PDF and PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-file-'));

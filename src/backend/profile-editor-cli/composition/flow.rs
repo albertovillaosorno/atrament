@@ -447,6 +447,7 @@ struct Layout<'model> {
     lines: Vec<TextRun>,
     ornaments: Vec<NotebookInkLine>,
     page: usize,
+    pending_blank_rows: usize,
     pitch: u32,
     right: u32,
     row_count: usize,
@@ -457,6 +458,7 @@ struct Layout<'model> {
 
 impl Layout<'_> {
     fn add_gap(&mut self) -> Result<(), String> {
+        self.flush_blank_rows()?;
         self.y = self
             .y
             .checked_add(PARAGRAPH_GAP_UM)
@@ -465,6 +467,17 @@ impl Layout<'_> {
     }
 
     fn begin_row(&mut self) -> Result<u32, String> {
+        self.flush_blank_rows()?;
+        self.consume_row()
+    }
+
+    fn blank_row(&mut self) -> Result<(), String> {
+        self.pending_blank_rows = self.pending_blank_rows
+            .checked_add(1).ok_or("flow blank-row count overflow")?;
+        Ok(())
+    }
+
+    fn consume_row(&mut self) -> Result<u32, String> {
         if self.row_count == MAX_FLOW_LINES {
             return Err("flow exceeds 128 measured lines".into());
         }
@@ -499,16 +512,23 @@ impl Layout<'_> {
         Ok(self.y)
     }
 
-    fn blank_row(&mut self) -> Result<(), String> {
-        let y = self.begin_row()?;
-        self.y = y.checked_add(self.pitch)
-            .ok_or("flow blank-row advance overflow")?;
+    // Delay empty physical rows until real ink follows them. This keeps
+    // deliberate interior spacing without exporting blank trailing pages
+    // or exhausting line/page budgets on invisible end-of-source rows.
+    fn flush_blank_rows(&mut self) -> Result<(), String> {
+        let pending = take(&mut self.pending_blank_rows);
+        for _ in 0..pending {
+            let y = self.consume_row()?;
+            self.y = y.checked_add(self.pitch)
+                .ok_or("flow blank-row advance overflow")?;
+        }
         Ok(())
     }
 
     fn keep_heading_with_next(
         &mut self, separated: bool,
     ) -> Result<(), String> {
+        self.flush_blank_rows()?;
         let top = self.top.checked_add(INSET_UM)
             .ok_or("heading top inset overflow")?;
         let bottom = self.bottom.checked_sub(INSET_UM)
@@ -1231,7 +1251,12 @@ fn following_heading_gap<'text>(
             continue;
         }
         if fence.is_some() {
-            // An empty code line still consumes a real physical row.
+            // Empty code rows reserve height only when later ink follows.
+            // A final all-blank fenced block cannot move its last heading.
+            if line.trim_matches(' ').is_empty() {
+                separated = true;
+                continue;
+            }
             return Some(separated);
         }
         if line.trim_end_matches(' ').is_empty() {
@@ -1456,6 +1481,7 @@ fn initialize_layout<'model>(
         lines: Vec::new(),
         ornaments: Vec::new(),
         page: 1,
+        pending_blank_rows: 0,
         y: top.checked_add(INSET_UM)
             .ok_or("flow top margin overflow")?,
         top,
@@ -1480,7 +1506,13 @@ fn finish_layout(
     if layout.lines.is_empty() {
         return Err("flow requires at least one visible text block".into());
     }
-    Ok((layout.lines, layout.ornaments, layout.page))
+    // Explicit blank rows can reserve space before later ink, but trailing
+    // rows must not introduce a physical page with no printable content.
+    // Include terminal rules as they are real ink without a text run.
+    let last_ink_page = layout.lines.iter().map(|run| run.page)
+        .chain(layout.ornaments.iter().map(|mark| mark.page))
+        .max().ok_or("flow has no printable page")?;
+    Ok((layout.lines, layout.ornaments, last_ink_page))
 }
 
 /// Compile bounded visible text on the caller-selected native page profile.

@@ -903,3 +903,43 @@ All 21 bilingual integration tests pass after this addition.
 This is **saved source text plus an external glyph library**, not one native
 saved semantic notebook, stored styles, or image overlays. ATR-P2-011 and
 the complete notebook-to-PDF acceptance criteria remain open.
+
+## Do not export trailing ink-free pages (partial) — 2026-11-04
+
+The native plain-text and fenced Markdown paths now defer explicit empty
+physical rows until printable content follows. Previously 55 final blank rows
+could increase the exported physical PDF page count even when all ink stayed
+on page one; 130 trailing rows could reject a visible one-line source solely
+because invisible end-of-source rows exceeded the measured-line budget.
+Neither source now creates those empty pages or consumes that row budget.
+
+A red-before/green-after native Rust regression checks both text modes,
+interior row spacing, the retained terminal horizontal rule and refusal of
+130 **interior** blank rows that would exceed the real measured-line limit.
+The actual CLI PDF and transparent PNG regression also confirms exact
+one-page output parity with no trailing rows, rejects a nonexistent second
+PNG page and preserves the prior PNG on refusal. A narrow-region heading
+regression catches another invisible-page effect: an all-blank final fenced
+block must not move the last visible heading to a later page. This only
+fixes export pagination and invisible trailing whitespace; it does not
+persist Markdown blocks or implement the complete semantic notebook editor.
+
+## Do not export trailing ink-free pages (partial) — 2026-11-04
+
+The native plain-text and fenced Markdown paths now defer explicit empty
+physical rows until printable content follows. Previously 55 final blank rows
+could increase the exported physical PDF page count even when all ink stayed
+on page one; 130 trailing rows could reject a visible one-line source solely
+because invisible end-of-source rows exceeded the measured-line budget.
+Neither source now creates those empty pages or consumes that row budget.
+
+A red-before/green-after native Rust regression checks both text modes,
+interior row spacing, the retained terminal horizontal rule and refusal of
+130 **interior** blank rows that would exceed the real measured-line limit.
+The actual CLI PDF and transparent PNG regression also confirms exact
+one-page output parity with no trailing rows, rejects a nonexistent second
+PNG page and preserves the prior PNG on refusal. A narrow-region heading
+regression catches another invisible-page effect: an all-blank final fenced
+block must not move the last visible heading to a later page. This only
+fixes export pagination and invisible trailing whitespace; it does not
+persist Markdown blocks or implement the complete semantic notebook editor.

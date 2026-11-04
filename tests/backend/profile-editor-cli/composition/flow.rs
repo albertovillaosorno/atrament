@@ -137,3 +137,104 @@ fn literal_indent_before_setext_mark_keeps_its_glyph_pitch() {
             29_000, "list continuation must not arm Setext syntax");
     }
 }
+
+#[test]
+fn trailing_blank_rows_do_not_create_invisible_pages() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let heading = super::HeadingDecoration::default();
+    for (format, trailing) in [
+        (FlowFormat::Plain, format!("a\n{}", "\n".repeat(130))),
+        (FlowFormat::Markdown,
+            format!("a\n~~~txt\n{}~~~", "\n".repeat(130))),
+    ] {
+        let clean = FlowSource::new(format, "a")
+            .expect("short visible source");
+        let (clean_runs, clean_marks, clean_pages) = super::layout_flow(
+            &clean, &paper, None, heading,
+        ).expect("single visible line");
+        let source = FlowSource::new(format, &trailing)
+            .expect("bounded source with trailing blank lines");
+        let (runs, marks, pages) = super::layout_flow(
+            &source, &paper, None, heading,
+        ).expect("trailing blank rows cannot demand empty pages");
+        assert_eq!(clean_pages, 1);
+        assert_eq!(pages, clean_pages, "no ink-free final pages");
+        assert_eq!(runs.len(), clean_runs.len());
+        assert_eq!(runs[0].page, clean_runs[0].page);
+        assert_eq!(runs[0].origin_um, clean_runs[0].origin_um);
+        assert_eq!(runs[0].text, clean_runs[0].text);
+        assert_eq!(marks, clean_marks);
+    }
+}
+
+#[test]
+fn interior_blank_rows_remain_measured_before_printable_ink() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    for (format, source) in [
+        (FlowFormat::Plain, "a\n\nb"),
+        (FlowFormat::Markdown, "a\n~~~txt\n\nb\n~~~"),
+    ] {
+        let source = FlowSource::new(format, source)
+            .expect("visible rows with an interior blank row");
+        let (runs, marks, pages) = super::layout_flow(
+            &source, &paper, None, super::HeadingDecoration::default(),
+        ).expect("interior blank spacing must remain physical");
+        assert_eq!(pages, 1);
+        assert_eq!(runs.iter().map(|run| run.text.as_str())
+            .collect::<Vec<_>>(), ["a", "b"]);
+        assert_eq!(runs[1].origin_um.1 - runs[0].origin_um.1,
+            18_000, "blank row reserves an actual writing row");
+        assert!(marks.is_empty());
+    }
+
+    let rule = FlowSource::new(
+        FlowFormat::Markdown, "a\n~~~txt\n\n~~~\n---",
+    ).expect("terminal rule after blank code row");
+    let (runs, marks, pages) = super::layout_flow(
+        &rule, &paper, None, super::HeadingDecoration::default(),
+    ).expect("terminal rule counts as physical ink");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.len(), 1);
+    assert_eq!(marks.len(), 1);
+    assert!(marks[0].start_um.1 > runs[0].origin_um.1 + 9_000);
+
+    let oversized = FlowSource::new(
+        FlowFormat::Plain, &format!("{}a", "\n".repeat(130)),
+    ).expect("bounded source that needs 130 interior blank rows");
+    assert!(super::layout_flow(
+        &oversized, &paper, None, super::HeadingDecoration::default(),
+    ).is_err(), "interior spacing still obeys the measured row budget");
+}
+
+#[test]
+fn heading_does_not_move_for_empty_trailing_fenced_rows() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 23_000,
+    };
+    let expected = FlowSource::new(FlowFormat::Markdown, "a\n# a")
+        .expect("visible heading at last physical row");
+    let with_blanks = FlowSource::new(FlowFormat::Markdown,
+        &format!("a\n# a\n~~~txt\n{}~~~", "\n".repeat(55)))
+        .expect("trailing fenced whitespace source");
+    let layout = |source: &FlowSource| super::layout_flow_with_region(
+        source, &paper, None, super::HeadingDecoration::default(),
+        Some(region),
+    ).expect("the same two visible rows must fit on one page");
+    let (clean_runs, clean_marks, clean_pages) = layout(&expected);
+    let (runs, marks, pages) = layout(&with_blanks);
+    assert_eq!(clean_pages, 1);
+    assert_eq!(pages, clean_pages);
+    assert_eq!(runs.iter().map(|run| (run.page, run.origin_um))
+        .collect::<Vec<_>>(), clean_runs.iter()
+        .map(|run| (run.page, run.origin_um)).collect::<Vec<_>>());
+    assert_eq!(marks, clean_marks);
+}
