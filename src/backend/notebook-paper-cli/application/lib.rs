@@ -75,7 +75,7 @@ use atrament_profile_json_syntax::{
 };
 
 /// Maximum caller-authored pen segments per document export.
-pub const MAX_NOTEBOOK_INK_LINES: usize = 512;
+pub const MAX_NOTEBOOK_INK_LINES: usize = 4_096;
 
 const MAX_MARKS: u64 = 10_000;
 /// Maximum admitted versioned paper-profile JSON bytes.
@@ -1465,7 +1465,7 @@ pub fn paper_profile_pdf_pages_with_ink(
     if ink.len() > MAX_NOTEBOOK_INK_LINES
         || ink.iter().any(|line| line.page == 0 || line.page > pages)
     {
-        return Err("ink exceeds 512 segments or declared PDF pages".into());
+        return Err("ink exceeds 4096 segments or declared PDF pages".into());
     }
     let mut base = if include_marks {
         paper_paths(options)?
@@ -1657,7 +1657,7 @@ pub fn paper_profile_png_page_with_ink(
     if ink.len() > MAX_NOTEBOOK_INK_LINES
         || ink.iter().any(|line| !(1..=MAX_PAGES).contains(&line.page))
     {
-        return Err("ink exceeds 512 segments or valid PNG pages".into());
+        return Err("ink exceeds 4096 segments or valid PNG pages".into());
     }
     if date.is_none() && date_text.is_some_and(|text| !text.is_empty()) {
         return Err("printed date text needs a date placeholder".into());

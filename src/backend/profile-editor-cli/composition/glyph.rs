@@ -360,7 +360,9 @@ impl GlyphOverlay {
                     .ok_or("glyph vertical origin overflow")?;
                 for shape in &selected {
                     if expanded.len() == MAX_NOTEBOOK_INK_LINES {
-                        return Err("text exceeds 512 total pen strokes".into());
+                        return Err(
+                            "text exceeds 4096 total pen strokes".into()
+                        );
                     }
                     let translate = |point| {
                         glyph_point(glyph_x, glyph_y, point, metrics)

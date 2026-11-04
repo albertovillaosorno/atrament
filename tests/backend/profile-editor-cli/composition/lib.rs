@@ -1452,7 +1452,7 @@ fn glyph_overlay_budgets_and_nonselected_page_clearance_refuse() {
     let mut excessive = args(&[
         "--export-paper", "pdf", "--printed-sheet", "true",
     ]);
-    for _ in 0..6 {
+    for _ in 0..43 {
         excessive.extend(args(&[
             "--glyph-stroke", "ñ", "0", "0", "3000", "3000",
             "250", "#123456",
@@ -1462,8 +1462,8 @@ fn glyph_overlay_budgets_and_nonselected_page_clearance_refuse() {
         "--place-text", "1", "25000", "30000", &"ñ".repeat(96),
         "--output", name, "--replace",
     ]));
-    let error = execute_notebook(&excessive).expect_err("more than 512");
-    assert!(error.contains("512"), "{error}");
+    let error = execute_notebook(&excessive).expect_err("more than 4096");
+    assert!(error.contains("4096"), "{error}");
     assert_eq!(fs::read(&sentinel).expect("not overwritten"), b"original");
 
     // Physical clearance is checked for every supplied page, even when the
@@ -4256,17 +4256,22 @@ fn marker_and_seeded_handwriting_share_two_measured_pdf_png_pages() {
 
 #[test]
 fn marker_headings_refuse_bounded_ink_overflow_atomically() {
-    // A normal underline uses 110 heading/glyph pairs (220 strokes),
-    // while the four-band marker requires 550 physical strokes and
-    // must refuse the existing 512-line native compositor bound.
+    // With 49 caller-authored pen segments per letter, 80 normal
+    // headings need 4000 ink segments including their underlines.
+    // Four-band marker ink requires 4240 and must refuse atomically.
     let target = test_path();
     let filename = target.to_str().expect("test-owned PDF path");
-    let markdown = "# a\n".repeat(110);
+    let markdown = "# a\n".repeat(80);
     let mut command = args(&[
         "--printed-sheet", "true", "--export-paper", "pdf",
-        "--glyph-stroke", "a", "900", "1200", "2400", "3200",
-        "250", "#123456", "--flow-markdown", &markdown,
+        "--flow-markdown", &markdown,
     ]);
+    for _ in 0..49 {
+        command.extend(args(&[
+            "--glyph-stroke", "a", "900", "1200", "2400", "3200",
+            "250", "#123456",
+        ]));
+    }
     assert!(execute_notebook(&command).expect("original underline fits")
         .expect("native PDF bytes").starts_with(b"%PDF-1.4"));
     fs::write(&target, b"keep-previous-notebook")
@@ -4275,7 +4280,7 @@ fn marker_headings_refuse_bounded_ink_overflow_atomically() {
         "--heading-style", "marker", "--output", filename, "--replace",
     ]));
     let error = execute_notebook(&command).expect_err("marker ink budget");
-    assert!(error.contains("512 total pen strokes"), "{error}");
+    assert!(error.contains("4096 total pen strokes"), "{error}");
     assert_eq!(fs::read(&target).expect("unchanged saved file"),
         b"keep-previous-notebook");
     fs::remove_file(target).expect("remove test-owned sentinel");
@@ -4394,4 +4399,56 @@ fn fixed_flow_region_refuses_invalid_bounds_and_overflow_atomically() {
     assert_eq!(fs::read(&target).expect("unchanged PDF"),
         b"previous valid notebook");
     fs::remove_file(target).expect("remove only test-owned PDF");
+}
+
+#[test]
+fn large_authored_glyph_flow_renders_exact_4096_segments_and_refuses_extra() {
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--flow-text", &"a".repeat(128),
+    ]);
+    // One deliberately authored 32-segment glyph repeated 128 times.
+    // This tests real text expansion rather than only a manual-ink vector.
+    for index in 0..32u32 {
+        let x = 850 + index * 40;
+        command.extend(args(&[
+            "--glyph-stroke", "a", &x.to_string(), "1000",
+            &(x + 250).to_string(), "3500", "250", "#243647",
+        ]));
+    }
+    let pdf = execute_notebook(&command)
+        .expect("expanded 4096-stroke glyph PDF")
+        .expect("real PDF bytes");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    assert!(pdf.len() < MAX_PAPER_OUTPUT_BYTES);
+    assert_eq!(pdf, execute_notebook(&command)
+        .expect("exact replay of large glyph layout")
+        .expect("PDF bytes"));
+    let mut png_command = command.clone();
+    let format = png_command.iter().position(|value| value == "pdf")
+        .expect("PDF output selection");
+    *png_command.get_mut(format).expect("format value") = "png".into();
+    png_command.extend(args(&["--dpi", "72"]));
+    let png = execute_notebook(&png_command)
+        .expect("real large transparent PNG").expect("PNG bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(png, execute_notebook(&png_command)
+        .expect("exact large PNG replay").expect("PNG bytes"));
+
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"previous complete PDF")
+        .expect("owned existing output");
+    let mut over_limit = command;
+    let source = over_limit.iter_mut().find(|item| item.len() == 128)
+        .expect("flow text with 128 a glyphs");
+    source.push('a');
+    over_limit.extend(args(&[
+        "--output", target.to_str().expect("owned path"), "--replace",
+    ]));
+    let error = execute_notebook(&over_limit)
+        .expect_err("4097th requested segment refuses");
+    assert!(error.contains("4096 total pen strokes"), "{error}");
+    assert_eq!(fs::read(&target).expect("original output preserved"),
+        b"previous complete PDF");
+    fs::remove_file(target).expect("remove only owned output");
 }

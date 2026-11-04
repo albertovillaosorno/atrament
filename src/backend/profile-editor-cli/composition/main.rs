@@ -122,7 +122,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--output FILE [--replace]]\n\
     Paper-layer export uses nested Rust paper settings and skips ruling \
     on preprinted sheets. The optional date prints in its selected box \
-    or line; rounded borders render. Repeated --ink-line (max 512) draws \
+    or line; rounded borders render. Repeated --ink-line (max 4096) draws \
     explicit, unsaved physical pen segments. --glyph-stroke supplies exact \
     author-drawn segments in a 4 x 5 mm cell and --place-text repeats them; \
     missing shapes refuse; --glyph-file loads a reusable library. \
@@ -982,7 +982,7 @@ fn parse_notebook_export_option(
         }
         "--ink-line" => {
             if ink.len() == MAX_NOTEBOOK_INK_LINES {
-                return Err("ink exceeds 512 explicit line segments".into());
+                return Err("ink exceeds 4096 explicit line segments".into());
             }
             ink.push(parse_ink_line(iter)?);
         }

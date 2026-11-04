@@ -439,7 +439,7 @@ the underline color. Select `--heading-style double-underline` to add a
 second level-weighted ink line 0.9 mm above the original, optionally with
 `--heading-color '#64A3C5'`; `--heading-style none` removes ornaments.
 These levels change ink decoration, **not** the authored glyph sizes or
-shape. The 512-ink-segment cap and physical margin checks still apply to
+shape. The 4096-ink-segment cap and physical margin checks still apply to
 heading ink. These are simple pen decorations, **not** full title fonts,
 translucent highlighters or arbitrary image layers. They work with the
 opt-in `--glyph-variation` ink sampler described below.
@@ -506,7 +506,7 @@ The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.
 An initial UTF-8 byte-order mark is accepted as file metadata (still within
 the 4,096-byte cap), not a required glyph. Interior or repeated byte-order
 marks remain literal; their missing authored shapes refuse before export.
-The same 512 total exported pen-segment limit still applies.
+The same 4096 total exported pen-segment limit still applies.
 
 In the authenticated localhost workspace, paste Markdown into **Source
 material**, then choose **Download source as Markdown (.md)**. The explicit
@@ -709,12 +709,26 @@ the combined library with **zero missing baseline glyphs**, read the TSV
 back byte-identically, and produced real A4 PDF and transparent 72-DPI
 PNG for the eleven text punctuation forms.
 
+The high-capacity **cross-language integration regression** generates all
+119 geometric forms directly from the browser constructor, verifies native
+114/114 text-baseline coverage, and composes their 2,738 pen segments into
+one physically bounded PDF and a transparent 72-DPI PNG. It also tests
+explicit Unicode fallback, refusal of unapproved substitution, and atomic
+refusal above the 4,096-segment export ceiling. To reproduce:
+
+```sh
+pnpm run build:frontend
+node --test tests/integration/bilingual-handwriting-export.mjs
+```
+
+This test uses the Rust CLI through Cargo and temporary test-owned files.
+The sample is a geometric inventory sheet, not a real writer's handwriting.
+
 Full baseline starter coverage does not imply native analytic curves,
 calibrated handwriting, italic/cursive connections or Unicode-wide font
 support. Semantic Markdown is not yet connected to the browser glyph
-editor. The native renderer
-still caps output at 512 physical
-ink strokes per export. The shapes are editable geometric starters, not
+editor. The native renderer now caps output at 4,096 physical ink
+strokes per export. The shapes are editable geometric starters, not
 personal handwriting or retained analytic PDF curves.
 
 The **Rust glyph-library CLI** can now save and reopen those exact authored

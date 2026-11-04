@@ -1025,3 +1025,41 @@ fn manual_ink_refuses_overflow_and_missing_printable_clearance() {
         paper.as_bytes(), 72, false, None, false, 1, 0, None, &oversized,
     ).is_err());
 }
+
+#[test]
+fn multilingual_sized_ink_batch_renders_pdf_and_selected_png() {
+    let paper = default_paper_profile_json();
+    let ink = (0..2738usize).map(|index| {
+        let page = 1 + index % 3;
+        let cell = index / 3;
+        let x = 25_000 + u32::try_from(page)
+            .expect("bounded page") * 1_500
+            + u32::try_from(cell % 32)
+                .expect("bounded column") * 4_300;
+        let y = 25_000 + u32::try_from(cell / 32)
+            .expect("bounded row") * 7_000;
+        NotebookInkLine {
+            page, start_um: (x, y), end_um: (x + 600, y + 1100),
+            width_um: 250, rgb: [25, 45, 100],
+        }
+    }).collect::<Vec<_>>();
+    assert_eq!(ink.len(), 2738);
+    let pdf = paper_profile_pdf_pages_with_ink(
+        paper.as_bytes(), 3, false, None, false, 0, None, &ink,
+    ).expect("bilingual-sized multisegment PDF");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    assert_eq!(pdf, paper_profile_pdf_pages_with_ink(
+        paper.as_bytes(), 3, false, None, false, 0, None, &ink,
+    ).expect("repeated PDF exact bytes"));
+    let png = paper_profile_png_page_with_ink(
+        paper.as_bytes(), 72, false, None, false, 2, 0, None, &ink,
+    ).expect("selected transparent PNG of larger export");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(png, paper_profile_png_page_with_ink(
+        paper.as_bytes(), 72, false, None, false, 2, 0, None, &ink,
+    ).expect("selected PNG replay"));
+    let other = paper_profile_png_page_with_ink(
+        paper.as_bytes(), 72, false, None, false, 1, 0, None, &ink,
+    ).expect("different selected PNG page");
+    assert_ne!(png, other, "distinct physical pages isolate authored ink");
+}

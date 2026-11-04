@@ -152,8 +152,9 @@ The editor can explicitly copy a source glyph's authored strokes into a
 separate exact Unicode target, then independently edit those segments.
 Browser and Rust CLI glyph library caps are now 4096 authored strokes and
 512 KiB; a real 600-stroke mixed composed/decomposed Unicode library passes
-byte-identical Rust readback. Rendered text still has its distinct bound
-of 512 physical ink lines, and no baseline outlines are auto-generated.
+byte-identical Rust readback. At this stage, rendered text still had a
+separate 512-line bound, later raised to 4,096 physical ink lines. No
+baseline outlines are automatically generated.
 
 Not yet implemented: automatically generating the entire required 114-glyph
 baseline, browser-native notebook ink composition, and learned writer
@@ -644,6 +645,27 @@ acceptance. Analytic primitives do not persist in native TSV/PDF, the
 saved notebook does not contain a handwriting editor's authored library,
 full user-controlled cursive joining is unavailable, and the fixed
 multilingual educational page with fallback remains to be verified.
+
+## Expanded native multilingual ink capacity (partial) — 2026-11-03
+
+The native notebook PDF and transparent PNG compositor now admits at most
+**4,096 physical ink segments per export**, rather than 512. This matches
+the existing bounded authored-stroke-library cap without changing its
+versioned TSV format, Unicode identity or source-authored shape policy.
+Page-local printable clearance, 32-page pagination, PDF per-page path and
+command budgets, 24-MB maximum output and per-page PNG raster budgets still
+apply. The fixed 119-glyph browser starter library uses 2,738 segments,
+which now fits one export when rendered once per glyph on bounded pages.
+The high-capacity tests exercise real PDF/PNG output, deterministic replay
+and failure-before-replacement above the new ceiling. An independent
+Node-to-Rust integration regression creates the browser's complete 119-form
+starter library, audits all 114 text-baseline graphemes without gaps, then
+renders all 2,738 ordered physical ink strokes in one actual A4 PDF and one
+transparent RGBA PNG at 72 DPI. It also verifies explicit missing-Unicode
+fallback refusal/acceptance and preserved output on 4,096-stroke overflow.
+This increases capacity but does **not** establish native analytic circles,
+automatic
+cursive joins, or persistently saved notebook text and glyph geometry.
 
 ## Acceptance decision
 
