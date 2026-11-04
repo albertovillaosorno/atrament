@@ -681,8 +681,9 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∧", "∨",
     "∩", "∪", "∈", "∉", "∋", "∌", "⊂", "⊆", "⊃", "⊇",
     "⊄", "⊈", "⊅", "⊉", "∑", "∫",
-    "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝"] as const;
-// Extra manually selected marks do not change the 44-glyph math fill.
+    "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
+    "∅", "∇", "≡", "≢"] as const;
+// Extra manual marks do not change the 48-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -706,6 +707,14 @@ function mathParts(
     if (glyph === "-" || glyph === "−") return [horizontal(0)];
     if (glyph === "+") return [horizontal(0), vertical()];
     if (glyph === "=") return [horizontal(-0.3), horizontal(0.3)];
+    // Identity and negated identity have three independent horizontal
+    // strokes. Negation adds its own separately lifted diagonal ink;
+    // neither key is inferred from an authored '=' or '≠'.
+    if (glyph === "≡" || glyph === "≢") return [
+        horizontal(-0.65), horizontal(0), horizontal(0.65),
+        ...(glyph === "≢" ? [{ from: point(-0.75, 0.8),
+            to: point(0.75, -0.8) }] : []),
+    ];
     if (glyph === "×") return [
         { from: point(-0.6, -0.6), to: point(0.6, 0.6) },
         { from: point(0.6, -0.6), to: point(-0.6, 0.6) },
@@ -839,6 +848,13 @@ function mathParts(
         line(-0.35, 0, 0.75, 0.85),
         line(0.75, 0.85, -0.75, 0.85),
     ];
+    // Nabla is a continuously drawn inverted triangle and stays a
+    // separate exact Unicode identity from the upward delta.
+    if (glyph === "∇") return [
+        line(-0.8, -0.9, 0.8, -0.9),
+        line(0.8, -0.9, 0, 0.9),
+        line(0, 0.9, -0.8, -0.9),
+    ];
     if (glyph === "Δ") return [
         line(0, -0.9, -0.8, 0.9),
         line(-0.8, 0.9, 0.8, 0.9),
@@ -890,6 +906,16 @@ function mathParts(
         handle: [number, number], end: [number, number]): MarkPiece => ({
         from: point(...start), control: point(...handle), to: point(...end),
     });
+    // The empty set uses four connected quadratic ellipse guides, each
+    // sampled into sixteen native chords, and a separately lifted slash.
+    // It is not an automatic replacement for Latin Ø or digit zero.
+    if (glyph === "∅") return [
+        curve([0, -0.8], [0.65, -0.8], [0.65, 0]),
+        curve([0.65, 0], [0.65, 0.8], [0, 0.8]),
+        curve([0, 0.8], [-0.65, 0.8], [-0.65, 0]),
+        curve([-0.65, 0], [-0.65, -0.8], [0, -0.8]),
+        line(-0.8, 0.9, 0.8, -0.9),
+    ];
     if (glyph === "∫") return [
         curve([0.75, -0.82], [0.4, -1], [0.12, -0.52]),
         curve([0.12, -0.52], [-0.12, -0.1], [-0.2, 0.5]),

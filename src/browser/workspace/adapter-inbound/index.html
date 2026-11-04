@@ -685,6 +685,11 @@
                 <option value="↓">Down arrow ↓ (shaft and bottom head)</option>
                 <option value="↕">Vertical both ways ↕ (two heads)</option>
                 <option value="∝">Proportional ∝ (open curved loop)</option>
+                <option value="∅">Empty set ∅ (ellipse and slash)</option>
+                <option value="∇">Nabla ∇ (inverted triangle)</option>
+                <option value="≡">Identical ≡ (three bars)</option>
+                <option value="≢">Not identical ≢
+                  (three bars and slash)</option>
                 <option value="°">Degree ° (one exact ring)</option>
                 <option value="%">Percent % (two rings and slash)</option>
                 <option value="$">Peso/dollar $ (S and vertical stem)</option>
@@ -802,7 +807,7 @@
               Fill missing quotation marks (unsaved)
             </button>
             <button id="glyph-seed-math" type="button" disabled>
-              Fill missing math symbols (34 forms, unsaved)
+              Fill missing math symbols (48 forms, unsaved)
             </button>
             <button id="glyph-seed-digits" type="button" disabled>
               Fill missing digits 0–9 (unsaved)
@@ -877,7 +882,7 @@
             Fill missing math adds +, ASCII -, Unicode −, ±, ∓, =, ×, ÷,
             √, π, ∞, ≠, &lt;, &gt;, ≤, ≥, ∧, ∨, ∩, ∪, ∈, ∉, ∋, ∌,
             ⊂, ⊆, ⊃, ⊇, ⊄, ⊈, ⊅, ⊉, ∑, ∫, ∂, Δ, ≈, →, ←,
-            ↔, ↑, ↓, ↕ and ∝. Each direction arrow has its own
+            ↔, ↑, ↓, ↕, ∝, ∅, ∇, ≡ and ≢. Each direction arrow has its own
             shaft and separately lifted arrowhead paths. AND and OR
             wedges are independent Unicode ink, never Latin-v aliases.
             Set intersection/union use their own smooth quadratic curves.
@@ -894,8 +899,12 @@
             infinity, integral, partial-derivative, proportionality and
             approximate SVG guides use ideal quadratic curves; native TSV
             samples them into directed pen chords. The other
-            marks use straight paths. Division dots stay separated, and
-            all exact Unicode keys and existing ink remain distinct.
+            marks use straight paths. The empty set combines four
+            smooth ellipse quadratics with a lifted slash, nabla closes an
+            inverted triangular path, and ≡/≢ retain three independent
+            bars with an optional fourth slash. Division dots stay
+            separated. All exact Unicode keys and existing ink remain
+            distinct.
             Numeral 0 is an exact SVG ellipse (distinct from circular o),
             8 uses two ellipses, and 1–7/9 combine ordered lines, arcs or
             loops. The separate digit fill preserves authored shapes and

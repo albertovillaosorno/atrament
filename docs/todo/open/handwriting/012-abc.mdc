@@ -1622,8 +1622,9 @@ The math glyph editor now includes `∋` (contains as member) and `∌`
 (does not contain as member) as exact independent Unicode keys. The
 opposite-facing two-quadratic E bow keeps the original ideal SVG controls
 reflected around the selected center, followed by a separately lifted
-crossbar. Nonmembership additionally lifts for its diagonal slash. Each
-reverse-membership TSV uses 33 or 34 directed integer strokes; sampling
+crossbar. Nonmembership additionally lifts for its diagonal slash.
+
+Each reverse-membership TSV uses 33 or 34 directed integer strokes; sampling
 may round a mirrored chord by one unit without changing the ideal curve.
 The opt-in math fill now covers 44 forms and preserves earlier ink.
 
@@ -1635,6 +1636,27 @@ an absent `∈`, `∉` or `⊂` without replacing accepted output. Real Firefox
 roundtrips its complete 44-key math fill through the Rust exporter with no
 implicit backend write. This is manual glyph construction, not semantic
 set reasoning or analytic glyph persistence.
+
+## Empty-set, nabla and identity pen ink (partial) — 2026-11-04
+
+The opt-in geometric math editor now authors four more independent exact
+Unicode keys: empty set `∅`, nabla `∇`, identity `≡` and nonidentity `≢`.
+The empty-set contour is four connected SVG quadratics sampled into 64
+native TSV chords, followed by a separately lifted slash. Nabla uses one
+closed three-segment inverted triangle, distinct from the existing `Δ`.
+
+Identity has three separate horizontal pen bars; nonidentity keeps the same
+bars and adds its own lifted strike. The optional math fill reaches 48
+symbols, never reauthoring existing strokes or substituting Latin `Ø`,
+plain equality, or another exact code point.
+
+Browser red-before/green-after tests check endpoint geometry, pen paths,
+Unicode TSV roundtrip, SVG guides, strict cell clipping and atomic fill.
+The native Rust CLI reopens all four authored keys and renders two rows of
+real PDF and transparent PNG, while absent `Ø` and `⊕` refuse replacement.
+A live Firefox roundtrip checks the 48 exact keys and their Rust PDF/PNG
+replay without an implicit backend write. These are manual sampled pen
+paths, not native analytic PDF curves or semantic math parsing.
 
 ## Acceptance decision
 
