@@ -12,6 +12,7 @@ import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
     reverseCandidatePath, moveCandidatePath, translateCandidatePath,
+    candidatePenPaths,
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -596,6 +597,131 @@ test('browser whole-path translation has native PDF/PNG ink parity', () => {
             }
         }
         assert.equal(encodeGlyphLibrary(original), originalBytes);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+
+test('combined pen-path edit script matches native and browser ink', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-path-script-'));
+    try {
+        const nfd = 'n\u0303';
+        const line = (glyph, x1, y1, x2, y2, width, color) => ({
+            grapheme: glyph, x1, y1, x2, y2, width, color,
+        });
+        const a = [
+            line(nfd, 500, 700, 800, 1100, 250, '#243647'),
+            line(nfd, 800, 1100, 1200, 1500, 250, '#243647'),
+            line(nfd, 1200, 1500, 1500, 1900, 250, '#243647'),
+        ];
+        const b = [
+            line(nfd, 1600, 2400, 1900, 2700, 300, '#334455'),
+            line(nfd, 1900, 2700, 2300, 3000, 300, '#334455'),
+        ];
+        const c = line(nfd, 2500, 3500, 3000, 3900, 350, '#667788');
+        const original = [
+            a[0], line('ñ', 200, 300, 400, 500, 250, '#121212'),
+            a[1], line('∞', 300, 500, 600, 800, 250, '#121212'),
+            a[2], b[0], line('n', 400, 500, 700, 900,
+                250, '#121212'), b[1], c,
+        ];
+        const sourceBytes = encodeGlyphLibrary(original);
+        const steps = [
+            ['reverse', 1],
+            ['translate', 1, 250, -100],
+            ['move', 1, 2],
+            ['translate', 1, -100, 150],
+            ['reverse', 2],
+            ['move', 2, 3],
+            ['translate', 3, 100, 200],
+            ['move', 1, 2],
+            ['reverse', 2],
+            ['translate', 2, 50, -100],
+            ['move', 2, 1],
+            ['reverse', 3],
+        ];
+        let state = original.slice();
+        const cli = [];
+        for (const [verb, number, other, y] of steps) {
+            const positions = state.flatMap((stroke, index) =>
+                stroke.grapheme === nfd ? [index] : []);
+            const paths = candidatePenPaths(state, nfd);
+            assert.equal(paths.length, 3);
+            const path = paths[number - 1];
+            assert.ok(path);
+            const selected = positions[path.first - 1];
+            assert.notEqual(selected, undefined);
+            let next;
+            if (verb === 'reverse') {
+                next = reverseCandidatePath(state, nfd, selected);
+                cli.push('--reverse-path', nfd, String(number));
+            } else if (verb === 'move') {
+                const direction = Math.sign(other - number);
+                assert.ok(direction === -1 || direction === 1);
+                next = moveCandidatePath(state, nfd, selected, direction);
+                cli.push('--move-path', nfd, String(number), String(other));
+            } else {
+                next = translateCandidatePath(
+                    state, nfd, selected, other, y);
+                cli.push('--translate-path', nfd,
+                    String(number), String(other), String(y));
+            }
+            state = next.strokes;
+            assert.equal(candidatePenPaths(state, nfd).length, 3,
+                'whole paths stay pen-separated through each operation');
+        }
+        const browserTsv = encodeGlyphLibrary(state);
+        assert.notEqual(browserTsv, sourceBytes);
+        assert.equal(encodeGlyphLibrary(original), sourceBytes);
+        for (const [position, stroke] of original.entries()) {
+            if (stroke.grapheme !== nfd) {
+                assert.deepEqual(state[position], stroke,
+                    'non-target exact Unicode slot stays immutable');
+            }
+        }
+        const source = join(dir, 'original.tsv');
+        const nativeOutput = join(dir, 'native.tsv');
+        writeFileSync(source, sourceBytes);
+        const generated = native('glyphs', '--profile', source, ...cli,
+            '--output', nativeOutput);
+        assert.equal(generated.status, 0, generated.stderr);
+        assert.equal(readFileSync(nativeOutput, 'utf8'), browserTsv,
+            'twelve native operations exactly match the browser');
+        assert.equal(readFileSync(source, 'utf8'), sourceBytes);
+        const report = native('glyphs', '--profile', nativeOutput,
+            '--inspect-paths', nfd);
+        assert.equal(report.status, 0, report.stderr);
+        assert.match(report.stdout,
+            /Strokes: 6\nPaths: 3\nPen lifts: 2/);
+
+        for (const format of ['pdf', 'png']) {
+            const flags = ['--export-paper', format];
+            if (format === 'png') flags.push('--dpi', '72');
+            const actual = join(dir, 'script.' + format);
+            const reference = join(dir, 'manual.' + format);
+            const run = (args, target) => native('notebook',
+                '--printed-sheet', 'true', ...args,
+                '--place-text', '1', '30000', '45000', nfd,
+                ...flags, '--output', target);
+            const selected = state.filter((stroke) =>
+                stroke.grapheme === nfd);
+            const manual = selected.flatMap((shape) => [
+                '--glyph-stroke', nfd,
+                String(shape.x1), String(shape.y1),
+                String(shape.x2), String(shape.y2),
+                String(shape.width), shape.color,
+            ]);
+            const output = run(['--glyph-file', nativeOutput], actual);
+            const expected = run(manual, reference);
+            assert.equal(output.status, 0, output.stderr);
+            assert.equal(expected.status, 0, expected.stderr);
+            assert.deepEqual(readFileSync(actual), readFileSync(reference),
+                'scripted ink has physical ' + format + ' parity');
+            if (format === 'png') {
+                pngHasTransparentCorner(readFileSync(actual));
+            }
+        }
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

@@ -468,6 +468,21 @@ edited libraries byte-for-byte and exercises native refusal cases.
 No persistent path identity, cursive model or analytic curves are
 introduced. ATR-P4-014 remains open.
 
+## Mixed native/browser whole-path edit script parity — 2026-11-03
+
+A deterministic twelve-operation integration script interleaves
+continuous-path reversal, adjacent path movement and signed
+translation on three distinct exact NFD glyph pen paths. The browser
+and native Rust CLI independently apply each operation to their
+own library, producing byte-identical v1 TSV while preserving
+interleaved NFC, math and base-letter rows.
+
+The resulting native path inspector reports three intended directed
+pen paths, and physical vector PDF and transparent PNG output match
+independent ordered pen segments byte-for-byte. This protects
+composition of authored operations without implying persistent
+pen lifts or mathematical curve support.
+
  The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.
