@@ -6,7 +6,7 @@ publish = false
 license-file = "../../../LICENSE"
 
 [dependencies]
-atrament_paper_mark_geometry = { path = "../paper-mark-geometry" }
+atrament_paper_mark_geometry = { workspace = true }
 atrament_profile_entry_sha256 = { workspace = true }
 atrament_pdf_composition_plan = { workspace = true }
 atrament_pdf_vector_serializer = { workspace = true }

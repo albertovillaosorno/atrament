@@ -1054,7 +1054,9 @@ atomic batch capacity and a 15,120-case pen-clearance grid. A separate
 Rust CLI acceptance reopens explicitly selected `∂∫` TSV unchanged, audits
 two exact Unicode glyphs without missing ink and emits two physical
 handwriting rows (224 vector pen moves) in a real PDF and transparent
-72-DPI PNG. Missing `∑` refuses before replacing an accepted PDF; the
+72-DPI PNG.
+
+Missing `∑` refuses before replacing an accepted PDF; the
 original authored TSV stays unchanged. The earlier ten-symbol test still
 intentionally refuses unauthored `∂`, proving that a newly available
 starter is never a silent fallback.
