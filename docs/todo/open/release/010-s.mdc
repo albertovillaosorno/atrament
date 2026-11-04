@@ -82,6 +82,13 @@ byte-identical. An explicit `..` path also refuses; the original five input
 files remain untouched. Run
 `node --test tests/backend/profile-editor-cli/composition/main.mjs`.
 
+The separate `atrament-paper --profile` entrypoint now uses the same
+symlink-refusing selected-file opener; its crate already linked this adapter
+for explicit printing. A new native Rust regression reloads real saved
+paper, compares genuine PDF and PNG output, then refuses a linked leaf,
+linked parent and a `..` path before a chosen output can change. Source
+bytes also remain identical, and existing FIFO refusals remain in force.
+
 This is path-resolution hardening, not a filesystem snapshot or a complete
 legacy migration. A regular file can still be modified by another process
 after opening, and the local runtime and print adapters have independent

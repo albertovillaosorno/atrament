@@ -41,7 +41,6 @@ pub use date::validate_printed_date_text;
 
 use std::env;
 use std::error::Error;
-use std::fs::{File, metadata};
 use std::io::{self, Write as _};
 use std::mem::swap;
 use std::path::Path;
@@ -69,8 +68,7 @@ use atrament_profile_file_commit::{
     ProfileFileCommitDisposition, commit_profile_file,
 };
 use atrament_profile_file_reader::read_bounded_profile_file;
-// The separate print binary owns safe selected-file opening.
-use atrament_profile_selected_file_open as _;
+use atrament_profile_selected_file_open::open_selected_profile_file;
 use atrament_profile_json_syntax::{
     ProfileJsonSyntaxLimits, ValidatedProfileJsonObject,
     validate_profile_json_object,
@@ -398,15 +396,11 @@ fn encode_profile(options: Options) -> String {
 }
 
 fn read_profile(path: &str) -> Result<Options, String> {
-    // Preflight avoids blocking on a caller-named FIFO before File::open.
-    // The shared reader still checks the actual opened descriptor.
-    let source = metadata(path)
-        .map_err(|error| format!("cannot inspect paper profile: {error}"))?;
-    if !source.is_file() {
-        return Err("paper profile file refused: NotRegularFile".into());
-    }
-    let file = File::open(path)
-        .map_err(|error| format!("cannot open paper profile: {error}"))?;
+    // The selected file opener checks file type on its opened descriptor,
+    // refusing symlink components and path swaps rather than trusting a
+    // separate metadata preflight before File::open.
+    let file = open_selected_profile_file(Path::new(path))
+        .map_err(|error| format!("paper profile file refused: {error:?}"))?;
     let bytes = read_bounded_profile_file(file, MAX_PROFILE_BYTES)
         .map_err(|error| format!("paper profile file refused: {error:?}"))?;
     decode_profile(bytes.bytes())

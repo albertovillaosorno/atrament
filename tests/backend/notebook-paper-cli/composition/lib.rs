@@ -495,6 +495,77 @@ fn selected_pdf_refuses_invalid_edition_and_existing_symlink() {
     fs::remove_dir_all(&dir).expect("remove owned directory");
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn paper_cli_refuses_linked_source_and_parent_traversal_before_export() {
+    use std::fs;
+    use std::os::unix::fs::symlink;
+    use std::process;
+
+    let dir = env::temp_dir().join(format!(
+        "atrament-paper-source-links-{}", process::id(),
+    ));
+    fs::create_dir_all(&dir).expect("test-owned directory");
+    let source_dir = dir.join("real");
+    fs::create_dir_all(&source_dir).expect("test-owned real directory");
+    let source = source_dir.join("paper.json");
+    let options = Options {
+        style: Style::Ruled,
+        ..Options::default()
+    };
+    let canonical = encode_profile(options);
+    fs::write(&source, &canonical).expect("canonical paper input");
+    let name = source.to_str().expect("source path");
+    assert_eq!(encode_profile(read_profile(name).expect("real file")),
+        canonical);
+    for (flags, expected) in [
+        (vec!["--profile", name], OutputFormat::Pdf),
+        (vec!["--profile", name, "--format", "png", "--dpi", "72"],
+            OutputFormat::Png),
+    ] {
+        let request = parse_options(&flags.iter().map(ToString::to_string)
+            .collect::<Vec<_>>()).expect("real source options")
+            .expect("not help");
+        let actual = execute(request).expect("real native export")
+            .expect("in-memory output");
+        let reference = match expected {
+            OutputFormat::Pdf => render_pages(options, 1),
+            OutputFormat::Png => render_png(options, 72),
+        }.expect("independent page renderer");
+        assert_eq!(actual, reference, "source preserves PDF/PNG output");
+    }
+
+    let leaf_link = dir.join("leaf.json");
+    let parent_link = dir.join("parent-link");
+    symlink(&source, &leaf_link).expect("test-owned linked leaf");
+    symlink(&source_dir, &parent_link).expect("test-owned linked parent");
+    let destination = dir.join("accepted.pdf");
+    let sentinel = b"previous accepted printable PDF";
+    fs::write(&destination, sentinel).expect("accepted target sentinel");
+    let refused = [
+        leaf_link,
+        parent_link.join("paper.json"),
+        dir.join("real/../real/paper.json"),
+    ];
+    for (index, path) in refused.iter().enumerate() {
+        let input = path.to_str().expect("selected file path");
+        let error = read_profile(input).expect_err("unsafe input refuses");
+        if index == 2 {
+            assert!(error.contains("ParentTraversal"), "{error}");
+        } else {
+            assert!(error.contains("SymlinkForbidden"), "{error}");
+        }
+        let args = ["--profile", input, "--output",
+            destination.to_str().expect("destination path"), "--replace"];
+        assert!(parse_options(&args.map(str::to_owned)).is_err(),
+            "unsafe source cannot reach render or file commit");
+        assert_eq!(fs::read(&destination).expect("existing target"), sentinel);
+        assert_eq!(fs::read(&source).expect("original source"),
+            canonical.as_bytes());
+    }
+    fs::remove_dir_all(&dir).expect("remove owned source fixtures");
+}
+
 #[cfg(unix)]
 #[test]
 fn paper_profile_named_pipe_refuses_without_blocking() {
