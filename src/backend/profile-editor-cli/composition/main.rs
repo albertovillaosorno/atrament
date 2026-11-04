@@ -147,6 +147,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--printed-sheet true|false] [--inspect] \
     [--export-paper pdf|png] [--pages 1..32 (PDF only)] \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
+    [--quality preview|final (PNG only, exclusive with --dpi)] \
     [--ink-line PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM '#RRGGBB'] \
     [--glyph-file strokes.tsv] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
@@ -277,6 +278,7 @@ struct NotebookExportOptions {
     format: Option<NotebookPaperFormat>,
     pages: Option<usize>,
     png_page: Option<usize>,
+    quality_dpi: Option<u32>,
 }
 
 fn read_handwriting_profile(
@@ -1040,6 +1042,16 @@ fn parse_notebook_export_option(
                 iter.next().map(String::as_str), "--dpi", 72, 300,
             )?);
         }
+        "--quality" => {
+            if export.quality_dpi.is_some() {
+                return Err("--quality may appear only once".into());
+            }
+            export.quality_dpi = Some(match iter.next().map(String::as_str) {
+                Some("preview") => 72,
+                Some("final") => 150,
+                _ => return Err("--quality requires preview or final".into()),
+            });
+        }
         "--png-page" => {
             if export.png_page.is_some() {
                 return Err("--png-page may appear only once".into());
@@ -1094,10 +1106,16 @@ fn validate_notebook_export_flags(
     {
         return Err("--pages requires --export-paper pdf".into());
     }
-    if (export.dpi.is_some() || export.png_page.is_some())
+    if (export.dpi.is_some() || export.png_page.is_some()
+        || export.quality_dpi.is_some())
         && export.format != Some(NotebookPaperFormat::Png)
     {
-        return Err("--dpi and --png-page require --export-paper png".into());
+        return Err(
+            "--dpi, --quality and --png-page require --export-paper png".into()
+        );
+    }
+    if export.dpi.is_some() && export.quality_dpi.is_some() {
+        return Err("--quality and --dpi are mutually exclusive".into());
     }
     if (glyphs.has_any() || !ink.is_empty()) && export.format.is_none() {
         return Err(concat!(
@@ -1257,9 +1275,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" =>
                 parse_notebook_flow(&mut iter, option, &mut flow)?,
-            "--export-paper" | "--pages" | "--dpi" | "--png-page"
-            | "--ink-line" | "--glyph-stroke" | "--glyph-file"
-            | "--place-text" | "--fallback-glyph"
+            "--export-paper" | "--pages" | "--dpi" | "--quality"
+            | "--png-page" | "--ink-line" | "--glyph-stroke"
+            | "--glyph-file" | "--place-text" | "--fallback-glyph"
             | "--glyph-variation" | "--join-text-pair" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
@@ -1292,7 +1310,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         pages_explicit: export.pages.is_some(),
         glyphs,
         heading,
-        dpi: export.dpi.unwrap_or(150),
+        dpi: export.dpi.or(export.quality_dpi).unwrap_or(150),
         export_paper: export.format,
         ink,
         inspect,

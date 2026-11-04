@@ -57,6 +57,18 @@ still enforce the 5-megapixel raster limit and 24 MB output cap. A native
 regression compares each named output byte-for-byte to its already-tested
 explicit-DPI equivalent and checks invalid/oversized requests.
 
+The `atrament-profiles notebook` authored-ink exporter also accepts these
+same PNG-only `--quality preview|final` choices, with its prior 150-DPI
+default and explicit 72..300 DPI range unchanged. Selected page-two native
+RGBA PNG with an actual user-authored stroke is byte-identical to the
+matching `--dpi 72` and `--dpi 150` output. Unknown, repeated, PDF-only and
+DPI-conflicting quality selections refuse before replacing existing output.
+
+Both paths still enforce the same physical page and raster budgets. A
+real CLI subprocess additionally exports exact saved glyph-library ink in
+both quality modes and checks the selected output remains unchanged for
+conflicting quality/DPI and non-PNG requests.
+
 Preview and final are bounded CPU raster resolutions, not independently
 calibrated paper/pigment looks. The accepted feature still needs CPU time
 and memory measurements, line-art extraction with a loss report and print

@@ -122,3 +122,39 @@ test('native CLI reads selected regular files but never traverses input links',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('native notebook PNG quality presets match exact authored glyph ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/notebook-quality-'));
+        try {
+            const glyph = join(dir, 'glyph.tsv');
+            const output = join(dir, 'prior.png');
+            accepted('glyphs', '--glyph-stroke', 'a', '500', '500',
+                '1800', '3000', '250', '#123456', '--output', glyph);
+            const base = [
+                'notebook', '--printed-sheet', 'true',
+                '--export-paper', 'png', '--glyph-file', glyph,
+                '--place-text', '1', '30000', '40000', 'a',
+            ];
+            for (const [quality, dpi] of [
+                ['preview', '72'], ['final', '150'],
+            ]) {
+                const named = accepted(...base, '--quality', quality);
+                const numeric = accepted(...base, '--dpi', dpi);
+                assert.deepEqual(named, numeric,
+                    `${quality} must preserve native glyph pixels`);
+                assert.deepEqual(named.subarray(0, 8),
+                    Buffer.from('89504e470d0a1a0a', 'hex'));
+                assert.equal(named[25], 6, 'transparent RGBA PNG');
+            }
+            writeFileSync(output, 'existing reviewed bytes');
+            refused([...base, '--quality', 'preview', '--dpi', '72',
+                '--output', output, '--replace'],
+            /mutually exclusive/, output);
+            refused(['notebook', '--export-paper', 'pdf',
+                '--quality', 'final', '--output', output, '--replace'],
+            /require --export-paper png/, output);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

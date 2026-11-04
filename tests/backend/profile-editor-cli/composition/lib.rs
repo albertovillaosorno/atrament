@@ -914,6 +914,51 @@ fn notebook_printed_sheet_suppresses_marks_without_editing_profile() {
 }
 
 #[test]
+fn named_notebook_png_quality_preserves_ink_and_atomic_refusal() {
+    let output = test_path();
+    let filename = output.to_str().expect("test-owned output name");
+    let ink = args(&[
+        "--printed-sheet", "true", "--export-paper", "png",
+        "--png-page", "2", "--ink-line", "2", "25000", "30000",
+        "50000", "40000", "300", "#123456",
+    ]);
+    for (quality, dpi) in [("preview", "72"), ("final", "150")] {
+        let mut named = ink.clone();
+        named.extend(args(&["--quality", quality]));
+        let mut numeric = ink.clone();
+        numeric.extend(args(&["--dpi", dpi]));
+        let selected = execute_notebook(&named)
+            .expect("named authored-ink preview").expect("PNG bytes");
+        let expected = execute_notebook(&numeric)
+            .expect("numeric authored-ink preview").expect("PNG bytes");
+        assert_eq!(selected, expected,
+            "named quality never changes authored marks or paper geometry");
+        assert!(selected.starts_with(b"\x89PNG\r\n\x1a\n"));
+        assert_eq!(selected.get(25), Some(&6), "transparent RGBA");
+    }
+    fs::write(&output, b"existing export").expect("output sentinel");
+    for invalid in [
+        args(&["--quality", "preview"]),
+        args(&["--export-paper", "pdf", "--quality", "final"]),
+        args(&["--export-paper", "png", "--quality", "unknown"]),
+        args(&["--export-paper", "png", "--quality", ""]),
+        args(&["--export-paper", "png", "--quality", "preview",
+            "--quality", "final"]),
+        args(&["--export-paper", "png", "--quality", "preview",
+            "--dpi", "72"]),
+        args(&["--export-paper", "png", "--dpi", "150",
+            "--quality", "final"]),
+    ] {
+        let mut attempt = invalid;
+        attempt.extend(args(&["--output", filename, "--replace"]));
+        assert!(execute_notebook(&attempt).is_err(), "{attempt:?}");
+        assert_eq!(fs::read(&output).expect("existing PNG unchanged"),
+            b"existing export");
+    }
+    fs::remove_file(output).expect("remove test-owned sentinel");
+}
+
+#[test]
 fn invalid_notebook_export_flags_refuse_without_file_changes() {
     let output = test_path();
     let filename = output.to_str().expect("output path");

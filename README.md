@@ -402,9 +402,15 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --output notebook-paper.pdf
 cargo run -q -p atrament_profile_editor_cli -- \
   notebook --profile notebook.json --page-numbers true \
-  --export-paper png --dpi 150 --png-page 10 \
+  --export-paper png --quality final --png-page 10 \
   --output notebook-page-10.png
 ```
+
+For rasterized notebook pages, `--quality preview` renders at 72 DPI;
+`--quality final` renders at 150 DPI. Both use the same physical paper
+and authored ink as `--dpi 72` or `--dpi 150`, respectively. Choose one:
+`--quality` and explicit `--dpi` are mutually exclusive and PNG-only.
+The original 150-DPI default and `--dpi 72..300` remain supported.
 
 ### CLI text and Markdown flow onto notebook pages
 
