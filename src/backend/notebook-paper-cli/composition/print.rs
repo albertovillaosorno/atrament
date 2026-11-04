@@ -274,6 +274,7 @@ fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
     }
     let mut seen_entry = false;
     let mut minimum_size = 0usize;
+    let mut previous_subsection_end = 0usize;
     loop {
         let Some(first) = xref_word(bytes, &mut at) else {
             return false;
@@ -298,9 +299,16 @@ fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
             .is_none_or(|minimum| minimum > bytes.len()) {
             return false;
         }
+        // One terminal table cannot redefine an earlier object's record.
+        // Require disjoint increasing subsection ranges, without allocation;
+        // sparse gaps remain supported.
+        if count == 0 || first_index < previous_subsection_end {
+            return false;
+        }
         let Some(last_exclusive) = first_index.checked_add(count) else {
             return false;
         };
+        previous_subsection_end = last_exclusive;
         minimum_size = minimum_size.max(last_exclusive);
         for index in first_index..last_exclusive {
             let Some(offset) = xref_word(bytes, &mut at) else {

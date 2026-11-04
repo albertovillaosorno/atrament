@@ -186,6 +186,11 @@ object and native two-page Rust PDF still pass; no real printer was used.
 Another two fake-spool refusals cover an out-of-range free-list object
 index and a generation value greater than 65535, while a valid two-entry
 free-list chain remains eligible.
+Two more fake-CUPS refusals cover duplicate or overlapping object-index
+subsections in one terminal xref table. Subsection ranges must advance in
+object-number order and contain at least one record. Sparse gaps remain
+accepted, as verified by a positive disjoint-section fixture. This does
+not traverse incremental-update `/Prev` chains or parse all PDF objects.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

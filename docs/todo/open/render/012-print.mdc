@@ -191,6 +191,14 @@ Two malformed tables refuse before fake CUPS contact; a two-entry free
 chain and native exported pages still pass. This is not a verification of
 complete free-list topology or an arbitrary PDF object grammar.
 
+A further red-before fake-CUPS test admitted duplicate and overlapping
+xref subsection object indices within one terminal table. The bounded,
+allocation-free table gate now requires nonempty disjoint subsections in
+increasing object-number order; sparse gaps remain eligible. Two
+malformed subsection layouts refuse without CUPS side effects or source
+mutations, and real native output retains its exact bytes. No claim is
+made about incremental `/Prev` chains or full PDF reference validation.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

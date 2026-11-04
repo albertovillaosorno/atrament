@@ -564,6 +564,62 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
     fs::remove_dir_all(&directory).expect("remove owned fixture directory");
 }
 
+#[cfg(unix)]
+#[test]
+fn overlapping_xref_subsections_refuse_before_cups() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("overlap.pdf");
+    let spooled = directory.join("unexpected-spool.pdf");
+    let script = directory.join("fake-lp.sh");
+    fs::write(&script, format!(
+        "#!/bin/sh\nprintf contact > '{}'\n", spooled.display(),
+    )).expect("write fake local spooler");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o700))
+        .expect("make fake local spooler executable");
+    for body in [
+        concat!(
+            "xref\n0 1\n0000000000 65535 f \n",
+            "0 1\n0000000000 65535 f \n",
+            "trailer\n<< /Size 1 >>\n",
+        ),
+        concat!(
+            "xref\n0 2\n0000000000 65535 f \n",
+            "0000000000 00001 f \n",
+            "1 1\n0000000000 00001 f \n",
+            "trailer\n<< /Size 2 >>\n",
+        ),
+    ] {
+        let malformed = format!(
+            "%PDF-1.7\n{body}startxref\n9\n%%EOF\n",
+        ).into_bytes();
+        assert!(!supported_pdf_cross_reference(&malformed),
+            "duplicate subsection object indices must refuse");
+        fs::write(&pdf, &malformed).expect("save malformed PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(submit_selected(&request, &script).is_err(),
+            "overlapping PDF cannot reach spooler");
+        assert!(!spooled.exists(), "fake CUPS never contacted");
+        assert_eq!(fs::read(&pdf).expect("source intact"), malformed);
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[test]
+fn xref_disjoint_subsections_can_leave_sparse_gaps() {
+    let sections = concat!(
+        "%PDF-1.4\nxref\n0 1\n0000000000 65535 f \n",
+        "3 1\n0000000000 00000 f \n",
+        "trailer\n<< /Size 4 >>\nstartxref\n9\n%%EOF\n",
+    );
+    assert!(supported_pdf_cross_reference(sections.as_bytes()),
+        "ordered disjoint table subsections may skip object numbers");
+}
+
 #[test]
 fn xref_free_chain_within_declared_size_is_admissible() {
     let free_chain = concat!(
