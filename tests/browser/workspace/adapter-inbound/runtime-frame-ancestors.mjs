@@ -10087,6 +10087,81 @@ test(
             assert.equal(data.status, "Markdown download requested.");
             assert.deepEqual(requests, baseline,
                 "user-requested Blob download issues no network request");
+            // The live UI must not treat exact, independently authored
+            // Unicode space glyphs as an empty source. Exercise the actual
+            // input handler, enabled download control and browser Blob.
+            const spacing = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `(async () => {
+                    const source = document.getElementById("source-input");
+                    const button = document.getElementById(
+                        "source-markdown-export");
+                    const status = document.getElementById(
+                        "source-markdown-status");
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    const results = [];
+                    let captured = null;
+                    let filename = null;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            captured = blob;
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            filename = this.download;
+                        };
+                        for (const value of ["\u00A0", "\u2003", "\u2009",
+                            "\u202F", "\uFEFF\u00A0", "\uFEFF",
+                            String.fromCharCode(32, 9, 10)]) {
+                            source.value = value;
+                            source.dispatchEvent(new Event("input"));
+                            const enabled = !button.disabled;
+                            captured = null;
+                            filename = null;
+                            button.click();
+                            results.push({
+                                value, enabled, filename,
+                                text: captured ? await captured.text() : null,
+                                bytes: captured?.size ?? null,
+                                octets: captured ? Array.from(
+                                    new Uint8Array(await captured.arrayBuffer())
+                                ) : null,
+                                status: status.textContent,
+                            });
+                        }
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                    return JSON.stringify(results);
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(spacing.type, "success");
+            assert.equal(spacing.result.type, "string");
+            const variants = JSON.parse(spacing.result.value);
+            for (const sample of variants.slice(0, 5)) {
+                assert.equal(sample.enabled, true);
+                assert.equal(sample.filename, "atrament-source.md");
+                // Blob.text() consumes the leading UTF-8 BOM, but its
+                // downloaded binary bytes must retain that exact prefix.
+                assert.equal(sample.text,
+                    sample.value.replace(/^\uFEFF/u, ""));
+                assert.deepEqual(sample.octets,
+                    [...Buffer.from(sample.value, "utf8")]);
+                assert.equal(sample.bytes,
+                    Buffer.byteLength(sample.value, "utf8"));
+                assert.equal(sample.status, "Markdown download requested.");
+            }
+            for (const blank of variants.slice(5)) {
+                assert.equal(blank.enabled, false);
+                assert.equal(blank.filename, null);
+                assert.equal(blank.text, null);
+                assert.equal(blank.octets, null);
+                assert.equal(blank.status, "Paste source text to download.");
+            }
         } finally {
             bidi?.close();
             await closeFixtureServer(server);

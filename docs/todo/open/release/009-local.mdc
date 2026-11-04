@@ -140,6 +140,19 @@ PNG, including the existing atomic missing-glyph and print-review checks.
 The other profile and ink edits in this regression remain scripted rather
 than an entirely keyboard-only end-to-end notebook editor journey.
 
+## Real Firefox Unicode-space Markdown source download (partial)
+
+A live Firefox/BiDi localhost regression now edits the authenticated source
+field to each of four Unicode-only spacing glyphs: NBSP, em space, thin space
+and narrow NBSP. The actual download control enables and emits an exact UTF-8
+Blob for each, without inventing a font or a fallback glyph. The same test
+checks BOM-prefixed NBSP and refuses both BOM-only and ASCII-only spacing.
+
+The regression compares raw Blob octets, not just decoded `Blob.text()`,
+which drops the initial UTF-8 BOM on readback even when the file preserves it.
+The native Rust CLI continues to require separately authored glyph strokes.
+This does not supply a saved semantic notebook or in-browser PDF compilation.
+
 ## Unambiguous default native paper command (partial) — 2026-11-04
 
 The documented `cargo run -p atrament_notebook_paper_cli -- ...` paper
