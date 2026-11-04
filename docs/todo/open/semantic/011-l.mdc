@@ -357,6 +357,13 @@ and delimiter glyph strokes. They also prove four-space list/quote source
 without authored punctuation refuses before overwriting an existing PDF.
 This is still a flat, restricted Markdown compiler, not nested list parsing.
 
+## Repeatable native Markdown flow checks
+
+The root workspace now exposes `pnpm run test:flow`, which runs the bounded
+native Rust PDF/PNG Markdown parser regressions from the mirrored backend
+test tree. It is separate from `test:frontend` so the Node tests do not
+silently require a browser. The Rust CLI must remain available locally.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
