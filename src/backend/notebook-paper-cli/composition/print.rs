@@ -272,6 +272,28 @@ fn in_use_object_header(
         && xref_word(tail, &mut at) == Some(b"obj".as_slice())
 }
 
+// Table records have three fields on one terminated physical line.
+// Word-by-word trivia skipping would otherwise splice a forged record from
+// multiple rows or admit unrelated tokens after its status byte.
+fn xref_table_entry<'bytes>(
+    bytes: &'bytes [u8], at: &mut usize,
+) -> Option<(&'bytes [u8], &'bytes [u8], &'bytes [u8])> {
+    let start = pdf_trivia_end(bytes, *at);
+    let tail = bytes.get(start..)?;
+    let end = tail.iter().position(|byte| matches!(byte, b'\r' | b'\n'))?;
+    let line = tail.get(..end)?;
+    let mut words = line.split(|byte| matches!(byte, b' ' | b'\t'))
+        .filter(|word| !word.is_empty());
+    let offset = words.next()?;
+    let generation = words.next()?;
+    let status = words.next()?;
+    if words.next().is_some() {
+        return None;
+    }
+    *at = start.checked_add(end)?;
+    Some((offset, generation, status))
+}
+
 fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
     let mut at = 0usize;
     if xref_word(bytes, &mut at) != Some(b"xref".as_slice()) {
@@ -318,15 +340,9 @@ fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
         previous_subsection_end = last_exclusive;
         minimum_size = minimum_size.max(last_exclusive);
         for index in first_index..last_exclusive {
-            let Some(offset) = xref_word(bytes, &mut at) else {
-                return false;
-            };
-            let Some(generation) = xref_word(bytes, &mut at) else {
-                return false;
-            };
-            let Some(status) = xref_word(bytes, &mut at) else {
-                return false;
-            };
+            let Some((offset, generation, status)) =
+                xref_table_entry(bytes, &mut at)
+            else { return false; };
             if offset.len() != 10 || !offset.iter().all(u8::is_ascii_digit)
                 || generation.len() != 5
                 || !generation.iter().all(u8::is_ascii_digit)

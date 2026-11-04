@@ -122,6 +122,12 @@ as their first object indices already do. Signed tokens such as `+1` and
 `+0001` refuse before CUPS, even though the Rust integer parser could
 otherwise convert them to valid record counts.
 
+Traditional table entries now require the offset, generation and `f`/`n`
+status to appear on one complete CR- or LF-terminated physical line with
+horizontal whitespace between them. The preflight no longer splices a record
+from successive lines or ignores stray trailing words. This does not require
+one exact 20-byte PDF entry layout or parse earlier incremental sections.
+
 The reserved object-zero table record is always a free-list head with
 generation 65535, even when another table record has that same generation.
 An in-use record zero or a free record zero with any other generation
@@ -254,6 +260,10 @@ The valid head-to-free-object chain and native pages remain admitted.
 
 Two additional fake-CUPS cases refuse signed traditional xref subsection
 counts and keep the source unchanged; an ordinary numeric count still passes.
+
+Five fake-spool refusals cover split-line offset/generation/status and
+trailing extra tokens. Valid LF and CRLF record lines remain admissible;
+source bytes are never changed during refused print admission.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

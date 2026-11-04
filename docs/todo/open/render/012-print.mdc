@@ -261,6 +261,17 @@ Both forged count forms refuse unchanged before contacting the spooler.
 Canonical unsigned counts, sparse sections and real native output remain
 eligible. This does not check every aspect of PDF record line layout.
 
+The traditional xref parser also previously combined a record's
+offset, generation and `f`/`n` status from arbitrary separate lines,
+or accepted unrelated tokens after the status. A red-before fake CUPS
+regression proved both could be admitted by the word-oriented scanner.
+
+Each xref record must now have exactly three horizontal-space-delimited
+fields on one CR/LF-terminated line. Five malformed records refuse without
+spooling or replacing a selected PDF; both LF and CRLF valid records and
+native exported pages remain accepted. This is lexical line framing, not
+cross-reference graph reconstruction or full fixed-width PDF parsing.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

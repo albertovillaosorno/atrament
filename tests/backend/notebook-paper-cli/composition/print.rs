@@ -834,6 +834,55 @@ fn xref_subsection_count_is_unsigned_decimal_digits_only() {
     fs::remove_dir_all(&directory).expect("remove owned fixtures");
 }
 
+#[cfg(unix)]
+#[test]
+fn xref_table_entries_require_one_complete_record_line() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("unexpected-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS executable");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake CUPS executable");
+    let framed = |record: &str| format!(
+        "%PDF-1.7\nxref\n0 1\n{record}\
+         trailer\n<< /Size 1 >>\nstartxref\n9\n%%EOF\n",
+    ).into_bytes();
+    for valid in [
+        "0000000000 65535 f \n",
+        "0000000000 65535 f \r\n",
+    ] {
+        assert!(supported_pdf_cross_reference(&framed(valid)),
+            "a complete record with one line ending remains eligible");
+    }
+    for record in [
+        "0000000000\n65535 f \n",
+        "0000000000 65535\nf \n",
+        "0000000000 65535 f trailer\n",
+        "0000000000 65535 f ",
+        "0000000000 65535 f extra\n",
+    ] {
+        let invalid = framed(record);
+        assert!(!supported_pdf_cross_reference(&invalid),
+            "xref record fields must remain on one line: {record:?}");
+        fs::write(&pdf, &invalid).expect("save malformed table");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(), "broken xref record refused");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "broken record cannot contact CUPS");
+        assert!(!spooled.exists(), "no fake spool side effect");
+        assert_eq!(fs::read(&pdf).expect("source unchanged"), invalid);
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
 #[test]
 fn xref_size_below_resource_ceiling_remains_admissible() {
     let sparse = format!(
