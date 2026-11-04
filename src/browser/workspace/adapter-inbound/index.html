@@ -608,6 +608,13 @@
                 <option value="Ú">Uppercase acute Ú (U + accent)</option>
                 <option value="Ñ">Uppercase tilde Ñ (N + wave)</option>
                 <option value="Ü">Uppercase diaeresis Ü (U + dots)</option>
+                <option value="A&#x0301;">NFD uppercase A + acute</option>
+                <option value="E&#x0301;">NFD uppercase E + acute</option>
+                <option value="I&#x0301;">NFD uppercase I + acute</option>
+                <option value="O&#x0301;">NFD uppercase O + acute</option>
+                <option value="U&#x0301;">NFD uppercase U + acute</option>
+                <option value="N&#x0303;">NFD uppercase N + tilde</option>
+                <option value="U&#x0308;">NFD uppercase U + diaeresis</option>
                 <option value=";">Semicolon ;</option>
                 <option value=":">Colon :</option>
                 <option value="&quot;">ASCII double quote &quot;</option>
@@ -684,6 +691,13 @@
                 <option value="ú">Acute ú (rounded bowl and accent)</option>
                 <option value="ü">Diaeresis ü (rounded bowl, two dots)</option>
                 <option value="ñ">Tilde ñ (rounded n and wave)</option>
+                <option value="a&#x0301;">NFD lowercase a + acute</option>
+                <option value="e&#x0301;">NFD lowercase e + acute</option>
+                <option value="i&#x0301;">NFD lowercase i + acute</option>
+                <option value="o&#x0301;">NFD lowercase o + acute</option>
+                <option value="u&#x0301;">NFD lowercase u + acute</option>
+                <option value="n&#x0303;">NFD lowercase n + tilde</option>
+                <option value="u&#x0308;">NFD lowercase u + diaeresis</option>
                 <option value="h">Ascender h (upper hump)</option>
                 <option value="m">Double-hump m (two arches)</option>
                 <option value="a">Simple a (circle + stem)</option>
@@ -762,6 +776,12 @@
               Fill missing text punctuation (11 forms, unsaved)
             </button>
           </div>
+          <p class="field-help">The 14 NFD geometric choices keep the
+            selected base-plus-combining-mark Unicode key in TSV, even
+            when their read-only SVG guide shares an NFC shape. These
+            starters never overwrite an independently authored NFC glyph.
+            A composed/decomposed text mismatch still requires its own
+            exact shape; there is no automatic Unicode fallback.</p>
           <p class="field-help">The additional é, ú, ü, ñ and
             uppercase Spanish starters reuse the manual accent composer
             on exact Latin base geometry. Editable lift/shift and pen

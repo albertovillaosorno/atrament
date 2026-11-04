@@ -3641,6 +3641,92 @@ test("uppercase fill preserves ink and refuses over-cap", async () => {
     }
 });
 
+test("14 direct NFD accents keep exact keys and canonical starter ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const composed = ["á", "é", "í", "ó", "ú", "ñ", "ü",
+        "Á", "É", "Í", "Ó", "Ú", "Ñ", "Ü"];
+    const all = [];
+    for (const nfc of composed) {
+        const nfd = nfc.normalize("NFD");
+        assert.notEqual(nfd, nfc);
+        const canonical = geometricStarter(nfc, ...args);
+        const authored = geometricStarter(nfd, ...args);
+        assert.deepEqual(authored, canonical.map((line) =>
+            ({ ...line, grapheme: nfd })), `${nfd} geometry`);
+        assert.ok(authored.every((line) => line.grapheme === nfd));
+        all.push(...canonical, ...authored);
+        assert.deepEqual(candidatePenPaths(authored, nfc), []);
+        assert.notEqual(candidatePenPaths(authored, nfd).length, 0);
+    }
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(all)), all);
+    for (const [nfc, variant] of [["á", "two-storey"],
+        ["á", "two-storey-italic"], ["ó", "italic"],
+        ["ó", "cursive"]]) {
+        const nfd = nfc.normalize("NFD");
+        const chosen = variant.startsWith("two-storey")
+            ? [1550, 2450, 700, 250, "#243647"] : args;
+        assert.deepEqual(geometricStarter(nfd, ...chosen, undefined, variant),
+            geometricStarter(nfc, ...chosen, undefined, variant)
+                .map((line) => ({ ...line, grapheme: nfd })));
+    }
+    assert.throws(() => geometricStarter("o\u0308", ...args),
+        /supported exact geometric/);
+    assert.throws(() => geometricStarter("a\u0301", 200, 2450,
+        1100, 250, "#243647"), /fit inside glyph cell/);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(all)), all,
+        "refused construction cannot mutate previously authored geometry");
+});
+
+test("NFD geometric choices preview canonical shape but save exact ink",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        for (const [nfd, guide] of [["o\u0301", "ideal-circle"],
+            ["n\u0303", "ideal-diacritic"],
+            ["N\u0303", "ideal-diacritic"]]) {
+            get("form").value = nfd;
+            get("character").value = nfd;
+            get("form").dispatch("input");
+            assert.equal(get(guide).attributes.get("visibility"),
+                "visible", `NFD guide for ${nfd}`);
+            assert.match(get("ideal-preview").attributes.get("aria-label"),
+                /Analytic geometric/);
+            get("construct").dispatch("click");
+            assert.match(get("status").textContent, /Constructed .*segments/);
+        }
+        get("save").dispatch("click");
+        const first = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(first, ["o\u0301", "n\u0303", "N\u0303"]
+            .flatMap((glyph) => geometricStarter(glyph, 1550, 2450,
+                1100, 250, "#243647")));
+        get("form").value = "Ñ";
+        get("character").value = "Ñ";
+        get("form").dispatch("input");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        const withNfc = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(withNfc.slice(0, first.length), first);
+        assert.deepEqual(withNfc.slice(first.length),
+            geometricStarter("Ñ", 1550, 2450,
+                1100, 250, "#243647"));
+        get("form").value = "N\u0303";
+        get("character").value = "N\u0303";
+        get("circle-x").value = "200";
+        get("circle-x").dispatch("input");
+        assert.equal(get("ideal-diacritic").attributes.get("visibility"),
+            "hidden", "invalid guide does not show stale marks");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /fit inside glyph cell/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            withNfc, "rejected NFD change preserves both NFC and NFD ink");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("uppercase NFC and NFD preserve authored ink", async () => {
     const ui = mountEditor();
     try {

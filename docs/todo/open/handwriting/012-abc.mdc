@@ -1196,6 +1196,25 @@ transparent PNG and refuses an unsupported `ß` without replacing the PDF.
 These opt-in forms do not fill other missing accented Unicode identities;
 P4-012 remains open.
 
+## Direct decomposed Spanish geometry selection (partial) — 2026-11-04
+
+The explicit glyph form chooser now admits 14 NFD base-plus-mark forms:
+acute vowels, n tilde and u diaeresis in both cases. The browser's ideal
+SVG guide displays the matching NFC circle, arc, upper-case outline and
+accent strokes, but the authored TSV retains the caller's exact decomposed
+grapheme. No NFC glyph is overwritten or silently substituted in the
+native flow. Existing NFD batch composition remains a separate opt-in edit.
+
+Focused browser tests compare every NFD sampled segment with its NFC
+geometry, separately verify italic, printed two-storey and connected-pen
+variants, construct and download exact NFD/NFC drafts, and reject clipped
+edits without losing accepted ink. An independent Rust CLI regression reads
+all 28 distinct Unicode glyph keys, audits them, and exports two physical
+text rows to PDF and transparent PNG. An unsupported A plus combining grave
+refuses without changing the accepted PDF or TSV. This is a manual starter,
+not a Unicode normalization fallback, a saved analytic circle or a full
+Spanish/English handwriting font; P4-012 remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

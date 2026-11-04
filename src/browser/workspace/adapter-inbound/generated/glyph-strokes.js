@@ -1307,7 +1307,17 @@ const ACCENTED_STARTERS = {
     "Á": "A", "É": "E", "Í": "I", "Ó": "O",
     "Ú": "U", "Ñ": "N", "Ü": "U",
 };
+// One-click NFD ink is opt-in and retains its exact Unicode TSV key.
+// Its sampled geometry is identical to the caller-selected NFC starter.
+const NFD_STARTERS = ["á", "é", "í", "ó", "ú", "ñ", "ü",
+    "Á", "É", "Í", "Ó", "Ú", "Ñ", "Ü"]
+    .map((glyph) => glyph.normalize("NFD"));
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
+    if (NFD_STARTERS.includes(g)) {
+        const composed = g.normalize("NFC");
+        return geometricStarter(composed, x, y, r, w, color, pos, kind)
+            .map((stroke) => ({ ...stroke, grapheme: g }));
+    }
     if (!["o", "a", "ó", "á", "é", "ú", "ü", "ñ",
         "Á", "É", "Í", "Ó", "Ú", "Ñ", "Ü",
         "b", "d", "p", "q",
@@ -2182,7 +2192,11 @@ export function createGlyphStrokeEditor() {
             idealCircle.setAttribute("stroke-width", numeric.width.value);
             idealCircle.setAttribute("stroke", color.value);
             const shown = active ? "visible" : "hidden";
-            const chosen = selectedForm();
+            const selectedGlyph = selectedForm();
+            // Use canonical geometry only for the read-only SVG guide;
+            // starterFromInputs still saves the caller's exact NFD key.
+            const chosen = { ...selectedGlyph,
+                grapheme: selectedGlyph.grapheme.normalize("NFC") };
             const isItalic = chosen.variant.endsWith("italic");
             italicAngle.disabled = !active || !isItalic;
             const slope = isItalic

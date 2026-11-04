@@ -50,6 +50,60 @@ function actualPngInk(bytes) {
     return raw;
 }
 
+test('14 direct NFD accent starters render exact Rust PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/nfd-ink-'));
+        try {
+            const library = join(dir, 'accents.tsv');
+            const output = join(dir, 'accents.pdf');
+            const nfc = ['á', 'é', 'í', 'ó', 'ú', 'ñ', 'ü',
+                'Á', 'É', 'Í', 'Ó', 'Ú', 'Ñ', 'Ü'];
+            const nfd = nfc.map((glyph) => glyph.normalize('NFD'));
+            const glyphs = [...nfc, ...nfd];
+            const rows = glyphs.flatMap((glyph) => geometricStarter(
+                glyph, 1550, 2450, 1100, 250, '#243647'));
+            const expected = Buffer.from(encodeGlyphLibrary(rows));
+            writeFileSync(library, expected);
+            const reopened = cli('glyphs', ['--profile', library]);
+            assert.equal(reopened.status, 0, reopened.stderr.toString());
+            assert.deepEqual(reopened.stdout, expected);
+            const audit = cli('glyphs', ['--profile', library,
+                '--audit-text', glyphs.join('')]);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 28/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', library,
+                '--flow-text', `${nfc.join('')}\n${nfd.join('')}`];
+            const pdf = cli('notebook', [...flags,
+                '--export-paper', 'pdf', '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+                .length, rows.length,
+            'two rows retain exact NFC and NFD directed pen segments');
+            const png = cli('notebook', [...flags,
+                '--export-paper', 'png', '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const unsupported = cli('notebook', [
+                '--printed-sheet', 'true', '--glyph-file', library,
+                '--flow-text', `A\u0300${nfd.join('')}`,
+                '--export-paper', 'pdf', '--output', output, '--replace']);
+            assert.notEqual(unsupported.status, 0);
+            assert.match(unsupported.stderr.toString(),
+                /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted,
+                'unknown exact NFD target cannot replace accepted PDF');
+            assert.deepEqual(readFileSync(library), expected,
+                'native admission and export never normalize TSV identities');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('seven selected uppercase accents render real native PDF/PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/uppercase-ink-'));
