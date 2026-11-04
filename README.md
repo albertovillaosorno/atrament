@@ -1122,6 +1122,21 @@ not a full geometric alphabet, analytic accent persistence or automatic
 script joining. The source is never modified; the user can still reorder
 or reverse each target pen segment after composition.
 
+The browser **Reverse selected continuous path** and **Move selected path**
+controls now have exact native CLI equivalents. Inspect candidate paths via
+`glyphs --profile ink.tsv --inspect-paths 'ñ'`, then use one-based
+`--reverse-path 'ñ' INDEX` for a path of two or more connected segments.
+`--move-path 'ñ' FROM TO` swaps adjacent whole paths without changing
+their internal pen directions. Both preserve other Unicode keys and TSV
+row slots, and require an explicit `--output FILE` to save.
+
+For example, `glyphs --profile ink.tsv --move-path 'ñ' 1 2
+--reverse-path 'ñ' 2 --output revised.tsv` edits a loaded library
+without overwriting its source. Paths are determined from exact endpoint
+continuity, RGB and pen width at the moment of each edit; indices can
+change after an edit. These controls do not persist explicit pen lifts,
+curve primitives, or a cursive model.
+
 **Load stroke TSV** reads an explicit existing glyph file into an in-memory
 draft. **Download stroke TSV** saves the canonical native-compatible file;
 there is no automatic saving or new server-side file endpoint. The Rust CLI

@@ -404,6 +404,29 @@ The native file format, statistical settings and export pipeline do not
 change. Paths remain a derived editor view, not persisted pen-down groups,
 curves or automatic cursive; this P1 task remains open.
 
+## Native bounded path reversal and reordering (partial) — 2026-11-03
+
+Rust `glyphs --reverse-path GRAPHEME PATH_INDEX` now reverses one
+multi-segment candidate continuous path in both physical direction and
+stroke order. `--move-path GRAPHEME FROM TO` swaps two adjacent complete
+paths, with one-based indices from `--inspect-paths`. The inspector and
+the two mutations use the same exact endpoint, width and RGB grouping.
+
+Two native regressions cover an interleaved NFD/NFC/math library, real
+PDF/transparent PNG parity against separately authored lines, exact
+TSV save/reopen and restoring the original bytes by reversing both
+edits. Invalid path indices, singleton reversal and nonadjacent swaps
+refuse before replacement of an existing output file.
+
+A browser-to-Rust regression independently performs the same two path
+edits on an authored browser TSV. It checks byte-identical native output,
+preserved Unicode slots, inspection boundaries, a nonadjacent refusal,
+and actual PDF/transparent PNG parity of the two encoded libraries.
+
+This is deterministic editing of candidate line groups inside v1, not
+persistent path identifiers, authored Bézier curves, an explicit pen-up
+event stream, or inferred multi-letter cursive. The P1 task stays open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

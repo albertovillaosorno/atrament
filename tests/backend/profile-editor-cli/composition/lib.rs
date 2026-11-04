@@ -2113,6 +2113,183 @@ fn explicit_join_and_reversal_change_candidate_path_boundaries() {
 }
 
 #[test]
+fn native_path_edits_reorder_and_reverse_full_exact_unicode_groups() {
+    let source = test_path().with_extension("tsv");
+    let revised = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("test source");
+    let revised_name = revised.to_str().expect("test output");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "100", "100", "400", "300",
+        "250", "#102030",
+        "--glyph-stroke", "ñ", "500", "600", "700", "800",
+        "350", "#AABBCC",
+        "--glyph-stroke", "n\u{303}", "400", "300", "700", "500",
+        "250", "#102030",
+        "--glyph-stroke", "∞", "500", "1000", "900", "1200",
+        "250", "#223344",
+        "--glyph-stroke", "n\u{303}", "900", "800", "1100", "1200",
+        "300", "#334455",
+        "--glyph-stroke", "n\u{303}", "1100", "1200", "1300", "1600",
+        "300", "#334455",
+        "--glyph-stroke", "n\u{303}", "1300", "1600", "1500", "1800",
+        "300", "#334455",
+        "--glyph-stroke", "ñ", "900", "1000", "1200", "1300",
+        "350", "#AABBCC",
+        "--glyph-stroke", "n\u{303}", "2000", "2000", "2300", "2400",
+        "400", "#667788",
+    ])).expect("initial glyph library").expect("canonical TSV");
+    fs::write(&source, &original).expect("source file");
+    let mut edited = args(&[
+        "--profile", source_name, "--move-path", "n\u{303}", "1", "2",
+        "--reverse-path", "n\u{303}", "2",
+    ]);
+    let actual = execute_glyph_library(&edited)
+        .expect("complete path edit").expect("new TSV");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ñ\t900\t800\t1100\t1200\t300\t#334455\n",
+        "ñ\t500\t600\t700\t800\t350\t#AABBCC\n",
+        "ñ\t1100\t1200\t1300\t1600\t300\t#334455\n",
+        "∞\t500\t1000\t900\t1200\t250\t#223344\n",
+        "ñ\t1300\t1600\t1500\t1800\t300\t#334455\n",
+        "ñ\t700\t500\t400\t300\t250\t#102030\n",
+        "ñ\t400\t300\t100\t100\t250\t#102030\n",
+        "ñ\t900\t1000\t1200\t1300\t350\t#AABBCC\n",
+        "ñ\t2000\t2000\t2300\t2400\t400\t#667788\n",
+    );
+    assert_eq!(actual, expected.as_bytes(),
+        "all interleaved NFC/math slots and complete path interiors remain");
+    let mut inspected = edited.clone();
+    inspected.extend(args(&["--inspect-paths", "n\u{303}"]));
+    let report = String::from_utf8(execute_glyph_library(&inspected)
+        .expect("inspector after edit").expect("report"))
+        .expect("UTF-8 report");
+    assert!(report.contains("Strokes: 6\nPaths: 3\nPen lifts: 2"),
+        "{report}");
+    assert!(report.contains(
+        "Path 1: strokes 1..3 (3 segments) (900, 800) -> (1500, 1800)"
+    ), "{report}");
+    assert!(report.contains(
+        "Path 2: strokes 4..5 (2 segments) (700, 500) -> (100, 100)"
+    ), "{report}");
+    let mut restored = edited.clone();
+    restored.extend(args(&[
+        "--reverse-path", "n\u{303}", "2",
+        "--move-path", "n\u{303}", "2", "1",
+    ]));
+    assert_eq!(execute_glyph_library(&restored)
+        .expect("reversible path edits").expect("TSV"), original);
+
+    edited.extend(args(&["--output", revised_name]));
+    assert!(execute_glyph_library(&edited)
+        .expect("save edited library").is_none());
+    assert_eq!(fs::read(&revised).expect("read revised"), actual);
+    assert_eq!(fs::read(&source).expect("original remains"), original);
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", revised_name,
+    ])).expect("reload").expect("bytes"), actual);
+
+    for format in ["pdf", "png"] {
+        let mut selected = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", revised_name,
+            "--place-text", "1", "30000", "45000", "n\u{303}ñ∞",
+        ]);
+        let mut independent = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", "n\u{303}", "900", "800", "1100",
+            "1200", "300", "#334455",
+            "--glyph-stroke", "n\u{303}", "1100", "1200", "1300",
+            "1600", "300", "#334455",
+            "--glyph-stroke", "n\u{303}", "1300", "1600", "1500",
+            "1800", "300", "#334455",
+            "--glyph-stroke", "n\u{303}", "700", "500", "400",
+            "300", "250", "#102030",
+            "--glyph-stroke", "n\u{303}", "400", "300", "100",
+            "100", "250", "#102030",
+            "--glyph-stroke", "n\u{303}", "2000", "2000", "2300",
+            "2400", "400", "#667788",
+            "--glyph-stroke", "ñ", "500", "600", "700",
+            "800", "350", "#AABBCC",
+            "--glyph-stroke", "ñ", "900", "1000", "1200",
+            "1300", "350", "#AABBCC",
+            "--glyph-stroke", "∞", "500", "1000", "900",
+            "1200", "250", "#223344",
+            "--place-text", "1", "30000", "45000", "n\u{303}ñ∞",
+        ]);
+        if format == "png" {
+            selected.extend(args(&["--dpi", "72"]));
+            independent.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&selected)
+            .expect("saved path render").expect("bytes"),
+            execute_notebook(&independent)
+            .expect("independent pen lines").expect("bytes"),
+            "ordered path edits produce the same physical {format} ink");
+    }
+    fs::remove_file(source).expect("remove test source");
+    fs::remove_file(revised).expect("remove test output");
+}
+
+#[test]
+fn native_path_edits_refuse_invalid_or_nonadjacent_paths_atomically() {
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let target_name = target.to_str().expect("destination path");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "100", "100", "200", "200",
+        "250", "#112233",
+        "--glyph-stroke", "ñ", "100", "100", "200", "200",
+        "250", "#112233",
+        "--glyph-stroke", "n\u{303}", "200", "200", "300", "300",
+        "250", "#112233",
+        "--glyph-stroke", "n\u{303}", "500", "500", "600", "600",
+        "300", "#223344",
+        "--glyph-stroke", "n\u{303}", "800", "800", "900", "900",
+        "400", "#334455",
+    ])).expect("source").expect("TSV");
+    fs::write(&source, &original).expect("source file");
+    fs::write(&target, b"preserved destination").expect("sentinel");
+    for invalid in [
+        args(&["--reverse-path"]),
+        args(&["--reverse-path", "n\u{303}"]),
+        args(&["--reverse-path", "n\u{303}", "0"]),
+        args(&["--reverse-path", "n\u{303}", "-1"]),
+        args(&["--reverse-path", "n\u{303}", "1.0"]),
+        args(&["--reverse-path", "n\u{303}", "4097"]),
+        args(&["--reverse-path", "n\u{303}", "4"]),
+        args(&["--reverse-path", "n\u{303}", "2"]),
+        args(&["--reverse-path", "ñ", "1"]),
+        args(&["--reverse-path", "n", "1"]),
+        args(&["--reverse-path", "ab", "1"]),
+        args(&["--move-path"]),
+        args(&["--move-path", "n\u{303}"]),
+        args(&["--move-path", "n\u{303}", "1"]),
+        args(&["--move-path", "n\u{303}", "1", "1"]),
+        args(&["--move-path", "n\u{303}", "1", "3"]),
+        args(&["--move-path", "n\u{303}", "0", "1"]),
+        args(&["--move-path", "n\u{303}", "1", "4"]),
+        args(&["--move-path", "ñ", "1", "2"]),
+        args(&["--move-path", "n", "1", "2"]),
+        args(&["--move-path", "n\u{303}", "2", "4097"]),
+        args(&["--reverse-path", "n\u{303}", "1",
+            "--move-path", "n\u{303}", "1", "3"]),
+    ] {
+        let mut command = args(&["--profile", source_name]);
+        command.extend(invalid);
+        command.extend(args(&["--output", target_name, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid path edits must refuse: {command:?}");
+        assert_eq!(fs::read(&source).expect("source unchanged"), original);
+        assert_eq!(fs::read(&target).expect("target unchanged"),
+            b"preserved destination");
+    }
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(target).expect("remove target");
+}
+
+#[test]
 fn path_inspection_can_report_the_full_bounded_library() {
     let mut source = String::from("atrament.glyph-strokes.v1\n");
     for index in 0..4096 {

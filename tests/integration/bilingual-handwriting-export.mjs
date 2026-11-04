@@ -413,3 +413,87 @@ test('moved complete browser paths preserve native PDF/PNG stroke order',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('Rust path-level edits exactly match browser-authored candidate paths',
+    () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-native-path-'));
+    try {
+        const nfd = 'n\u0303';
+        const line = (grapheme, x1, y1, x2, y2, color) => ({
+            grapheme, x1, y1, x2, y2, width: 250, color,
+        });
+        const first = [
+            line(nfd, 500, 600, 900, 1000, '#243647'),
+            line(nfd, 900, 1000, 1300, 1500, '#243647'),
+        ];
+        const second = [
+            line(nfd, 1800, 1800, 2200, 2400, '#B03040'),
+            line(nfd, 2200, 2400, 2500, 3000, '#B03040'),
+        ];
+        const original = [
+            first[0], line('ñ', 100, 100, 200, 200, '#101010'),
+            first[1], second[0],
+            line('∞', 100, 100, 200, 200, '#101010'),
+            second[1], line(nfd, 1000, 3500, 1500, 4000, '#303030'),
+        ];
+        const originalTsv = encodeGlyphLibrary(original);
+        const source = join(dir, 'original.tsv');
+        const rustOutput = join(dir, 'edited.tsv');
+        const browserOutput = join(dir, 'browser.tsv');
+        writeFileSync(source, originalTsv);
+        const moved = moveCandidatePath(original, nfd, 0, 1);
+        const reversed = reverseCandidatePath(
+            moved.strokes, nfd, moved.selectedIndex);
+        const expected = encodeGlyphLibrary(reversed.strokes);
+        writeFileSync(browserOutput, expected);
+        const nativeEdit = native('glyphs', '--profile', source,
+            '--move-path', nfd, '1', '2',
+            '--reverse-path', nfd, '2',
+            '--output', rustOutput);
+        assert.equal(nativeEdit.status, 0, nativeEdit.stderr);
+        assert.deepEqual(readFileSync(rustOutput), readFileSync(browserOutput),
+            'native and browser use identical candidate path semantics');
+        assert.equal(readFileSync(source, 'utf8'), originalTsv);
+        const inspected = native('glyphs', '--profile', rustOutput,
+            '--inspect-paths', nfd);
+        assert.equal(inspected.status, 0, inspected.stderr);
+        assert.match(inspected.stdout,
+            /Strokes: 5\nPaths: 3\nPen lifts: 2/);
+        assert.ok(inspected.stdout.includes(
+            'Path 2: strokes 3..4 (2 segments) (1300, 1500) '
+            + '-> (500, 600) width 250 um color #243647'));
+
+        const sentinel = join(dir, 'sentinel.tsv');
+        writeFileSync(sentinel, 'preserve');
+        const refused = native('glyphs', '--profile', source,
+            '--move-path', nfd, '1', '3',
+            '--output', sentinel, '--replace');
+        assert.notEqual(refused.status, 0,
+            'nonadjacent paths require explicitly bounded moves');
+        assert.equal(readFileSync(sentinel, 'utf8'), 'preserve');
+        assert.equal(readFileSync(source, 'utf8'), originalTsv);
+
+        for (const format of ['pdf', 'png']) {
+            const flags = ['--export-paper', format];
+            if (format === 'png') flags.push('--dpi', '72');
+            const expectedPath = join(dir, 'browser.' + format);
+            const actualPath = join(dir, 'rust.' + format);
+            const render = (library, output) => native('notebook',
+                '--printed-sheet', 'true', '--glyph-file', library,
+                '--place-text', '1', '30000', '45000', nfd,
+                ...flags, '--output', output);
+            const browser = render(browserOutput, expectedPath);
+            const rust = render(rustOutput, actualPath);
+            assert.equal(browser.status, 0, browser.stderr);
+            assert.equal(rust.status, 0, rust.stderr);
+            assert.deepEqual(readFileSync(actualPath),
+                readFileSync(expectedPath),
+                'physical ' + format + ' matches browser exact pen-path order');
+            if (format === 'png') {
+                pngHasTransparentCorner(readFileSync(actualPath));
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

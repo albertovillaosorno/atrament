@@ -86,6 +86,8 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--remove-glyph GRAPHEME] \
     [--reverse-stroke GRAPHEME INDEX] \
     [--move-stroke GRAPHEME FROM TO] \
+    [--reverse-path GRAPHEME PATH_INDEX] \
+    [--move-path GRAPHEME FROM_PATH TO_PATH] \
     [--join-strokes GRAPHEME FIRST_INDEX] \
     [--set-stroke GRAPHEME INDEX X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--remove-stroke GRAPHEME INDEX] \
@@ -107,6 +109,8 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     Glyph stroke indices are one-based within one exact Unicode glyph;\n\
     --reverse-stroke flips pen direction and --move-stroke shifts order.\n\
     --set-stroke updates ink geometry; --remove-stroke deletes one segment.\n\
+    --reverse-path flips a multi-stroke path; --move-path swaps adjacent\n\
+    paths using the current pen-continuity inspection order.\n\
     --join-strokes inserts a short same-pen connector to the next segment.\n\
     --copy-glyph clones explicit source ink under an unoccupied target.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
@@ -762,17 +766,17 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     while let Some(option) = iter.next() {
         match option.as_str() {
             "--profile" => {
-                let selected = iter
-                    .next()
+                let selected = iter.next()
                     .ok_or("--profile requires a glyph library path")?;
                 glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
             }
             "--copy-glyph" => glyphs.copy_glyph_option(&mut iter)?,
             "--glyph-stroke" => glyphs.parse(option, &mut iter)?,
             "--reverse-stroke" | "--move-stroke" | "--join-strokes"
-            | "--set-stroke" | "--remove-stroke" => {
-                glyphs.edit_stroke(option, &mut iter)?;
-            }
+            | "--set-stroke" | "--remove-stroke" =>
+                glyphs.edit_stroke(option, &mut iter)?,
+            "--reverse-path" | "--move-path" =>
+                glyphs.edit_path(option, &mut iter)?,
             "--remove-glyph" => {
                 let grapheme = iter.next()
                     .ok_or("--remove-glyph requires an exact grapheme")?;

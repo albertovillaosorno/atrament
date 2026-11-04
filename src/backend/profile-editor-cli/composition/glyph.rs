@@ -35,6 +35,7 @@
 
 use std::fmt::Write as _;
 use std::mem::swap;
+use std::ops::Range;
 use std::slice::Iter;
 use std::str::from_utf8;
 
@@ -368,6 +369,24 @@ impl GlyphOverlay {
         self.copy_glyph(source, target)
     }
 
+    /// Path numbers are derived from the same exact adjacent-pen test as
+    /// --inspect-paths. Edits never introduce v1 path identity metadata.
+    pub(super) fn edit_path(
+        &mut self, flag: &str, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let grapheme = iter.next()
+            .ok_or("path edit requires an exact grapheme")?;
+        let from = next_integer(iter, "path index", 1, 4096)?;
+        match flag {
+            "--reverse-path" => self.reverse_path(grapheme, from),
+            "--move-path" => {
+                let to = next_integer(iter, "path index", 1, 4096)?;
+                self.move_path(grapheme, from, to)
+            }
+            _ => Err("unknown path edit".into()),
+        }
+    }
+
     /// Apply a requested native index edit to the in-memory authored library.
     pub(super) fn edit_stroke(
         &mut self, flag: &str, iter: &mut Iter<'_, String>,
@@ -572,38 +591,21 @@ impl GlyphOverlay {
             .map(|ch| format!("U+{:04X}", u32::from(ch)))
             .collect::<Vec<_>>().join(" ");
         let mut details = String::new();
-        let mut start = 0usize;
-        let mut paths = 0usize;
-        for index in 1..selected.len() {
-            let before = selected.get(index.saturating_sub(1))
-                .ok_or("missing previous glyph segment")?;
-            let after = selected.get(index)
-                .ok_or("missing next glyph segment")?;
-            let prior_end = before.end_um;
-            let next_start = after.start_um;
-            if prior_end != next_start
-                || before.rgb != after.rgb
-                || before.width_um != after.width_um
-            {
-                paths = paths.saturating_add(1);
-                append_path_summary(
-                    &mut details, &selected, paths, start, index,
-                )?;
-                start = index;
-            }
+        let paths = candidate_path_ranges(&selected);
+        for (number, path) in paths.iter().enumerate() {
+            append_path_summary(
+                &mut details, &selected, number.saturating_add(1),
+                path.start, path.end,
+            )?;
         }
-        paths = paths.saturating_add(1);
-        append_path_summary(
-            &mut details, &selected, paths, start, selected.len(),
-        )?;
         Ok(format!(
             concat!(
                 "Candidate continuous pen paths (exact authored order)\n",
                 "Glyph: \"{}\" [{}]\n",
                 "Strokes: {}\nPaths: {}\nPen lifts: {}\n{}",
             ),
-            grapheme.escape_debug(), codepoints, selected.len(), paths,
-            paths.saturating_sub(1), details,
+            grapheme.escape_debug(), codepoints, selected.len(), paths.len(),
+            paths.len().saturating_sub(1), details,
         ).into_bytes())
     }
 
@@ -760,6 +762,44 @@ impl GlyphOverlay {
             return Err("no authored strokes for exact glyph edit".into());
         }
         Ok(positions)
+    }
+
+    /// Swap two adjacent complete path ranges, retaining each constituent
+    /// segment direction, pen settings, and unrelated interleaved records.
+    pub(super) fn move_path(
+        &mut self, grapheme: &str, from: u32, to: u32,
+    ) -> Result<(), String> {
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let first = checked_path_position(&paths, from)?;
+        let second = checked_path_position(&paths, to)?;
+        if first.abs_diff(second) != 1 {
+            return Err(
+                "path movement requires adjacent different paths".into()
+            );
+        }
+        let lower = paths.get(first.min(second))
+            .ok_or("lower path outside bounds")?;
+        let upper = paths.get(first.max(second))
+            .ok_or("upper path outside bounds")?;
+        let selected = |range: Range<usize>|
+            -> Result<Vec<GlyphStroke>, String> {
+            positions.get(range).ok_or("path range outside glyph")?
+                .iter().map(|position| {
+                    self.strokes.get(*position).cloned()
+                        .ok_or_else(|| {
+                            "path segment outside library".to_owned()
+                        })
+                }).collect()
+        };
+        let mut reordered = selected(upper.clone())?;
+        reordered.extend(selected(lower.clone())?);
+        let slots = positions.get(lower.start..upper.end)
+            .ok_or("path range outside glyph")?;
+        for (position, stroke) in slots.iter().zip(reordered) {
+            *self.strokes.get_mut(*position)
+                .ok_or("path segment outside library")? = stroke;
+        }
+        Ok(())
     }
 
     /// Move one segment to its new one-based ordinal within the *same* exact
@@ -946,6 +986,34 @@ impl GlyphOverlay {
         Ok(())
     }
 
+    /// Reverse all segments of one continuous pen-down candidate path.
+    /// A one-segment path remains the domain of --reverse-stroke.
+    pub(super) fn reverse_path(
+        &mut self, grapheme: &str, ordinal: u32,
+    ) -> Result<(), String> {
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("path index outside bounds")?;
+        if path.len() < 2 {
+            return Err("path reversal needs at least two segments".into());
+        }
+        let slots = positions.get(path.clone())
+            .ok_or("path range outside glyph")?;
+        let mut reversed = slots.iter().map(|position| {
+            self.strokes.get(*position).cloned()
+                .ok_or("path segment outside library")
+        }).collect::<Result<Vec<_>, _>>()?;
+        reversed.reverse();
+        for stroke in &mut reversed {
+            swap(&mut stroke.start_um, &mut stroke.end_um);
+        }
+        for (position, stroke) in slots.iter().zip(reversed) {
+            *self.strokes.get_mut(*position)
+                .ok_or("path segment outside library")? = stroke;
+        }
+        Ok(())
+    }
+
     /// Reverse the physical pen travel of one segment without changing its
     /// position in the original TSV or its thickness/pigment.
     pub(super) fn reverse_stroke(
@@ -959,6 +1027,19 @@ impl GlyphOverlay {
             .ok_or("stroke index outside library")?;
         swap(&mut shape.start_um, &mut shape.end_um);
         Ok(())
+    }
+
+    /// Match the inspection view without folding NFC/NFD or allowing
+    /// unrelated interleaved TSV rows to move.
+    fn selected_candidate_paths(
+        &self, grapheme: &str,
+    ) -> Result<(Vec<usize>, Vec<Range<usize>>), String> {
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let selected = positions.iter().map(|index| {
+            self.strokes.get(*index).ok_or("path segment outside library")
+        }).collect::<Result<Vec<_>, _>>()?;
+        let paths = candidate_path_ranges(&selected);
+        Ok((positions, paths))
     }
 
     /// Replace exactly one authored segment with newly validated geometry.
@@ -1025,6 +1106,46 @@ impl GlyphOverlay {
         }
         Ok(())
     }
+}
+
+/// Consecutive matching pen segments form a candidate path; only the
+/// concrete segment order is persisted in the current TSV v1.
+fn candidate_path_ranges(strokes: &[&GlyphStroke]) -> Vec<Range<usize>> {
+    if strokes.is_empty() {
+        return Vec::new();
+    }
+    let mut paths = Vec::new();
+    let mut start = 0usize;
+    for (index, pair) in strokes.windows(2).enumerate() {
+        let [before, after] = pair else { continue };
+        // A directed pen path continues at the next segment's START.
+        let endpoint = before.end_um;
+        let next_start = after.start_um;
+        if endpoint != next_start
+            || before.width_um != after.width_um
+            || before.rgb != after.rgb
+        {
+            let end = index.saturating_add(1);
+            paths.push(start..end);
+            start = end;
+        }
+    }
+    paths.push(start..strokes.len());
+    paths
+}
+
+fn checked_path_position(
+    paths: &[Range<usize>], ordinal: u32,
+) -> Result<usize, String> {
+    let index = usize::try_from(ordinal.checked_sub(1)
+        .ok_or("path indices start at 1")?)
+        .map_err(|_error| "path index outside bounds")?;
+    if index >= paths.len() {
+        return Err(format!(
+            "path index {ordinal} exceeds glyph's {} paths", paths.len(),
+        ));
+    }
+    Ok(index)
 }
 
 fn append_path_summary(
