@@ -1518,14 +1518,20 @@ fn xref_table_prev_must_point_back_to_a_prior_xref() {
         assert_eq!(fs::read(&pdf).expect("selected bytes intact"),
             candidate);
     }
-    // An earlier bare "xref" token is not an xref section. These appended
-    // pretexts previously passed /Prev even though no first entry existed.
+    // A prior /Prev table must contain its complete first subsection,
+    // not merely an xref keyword and one plausible first record. Forged
+    // counts can otherwise consume the current revision as missing rows.
     for fragment in [
         b"xref\nnot-a-subsection\n".as_slice(),
         b"xref\n0 1\n".as_slice(),
         b"xref\n0 1\n0000000000 65535 z \n".as_slice(),
         b"xref\n0\n1\n0000000000 65535 f \n".as_slice(),
         b"xref 0 1\n0000000000 65535 f \n".as_slice(),
+        b"xref\n0 2\n0000000000 65535 f \n".as_slice(),
+        concat!("xref\n0 2\n0000000000 65535 f \n",
+            "0000000000 00000 z \n").as_bytes(),
+        concat!("xref\n0 2\n0000000000 65535 f \n",
+            "0000000000 00000 n \n").as_bytes(),
     ] {
         let fake_previous = native.len();
         let terminal = fake_previous + fragment.len();
@@ -1539,7 +1545,7 @@ fn xref_table_prev_must_point_back_to_a_prior_xref() {
             ).as_bytes(),
         ].concat();
         assert!(!supported_pdf_cross_reference(&candidate),
-            "fake predecessor must not be accepted");
+            "fake predecessor must not be accepted: {fragment:?}");
         fs::write(&pdf, &candidate).expect("write forged PDF");
         let request = PrintRequest {
             pdf: pdf.clone(), printer: "Queue_1".into(),

@@ -430,6 +430,23 @@ a split index/count in an earlier table no longer impersonates a valid
 cross-reference section. Neither earlier revisions nor full PDF syntax
 are recursively parsed; no physical queue was contacted.
 
+## Complete first prior xref-table subsection (partial) — 2026-11-04
+
+The opt-in print preflight now checks every declared record in the first
+subsection of a traditional cross-reference table named by a terminal
+`/Prev`. A forged earlier table could previously claim two objects, supply
+one free entry and still qualify as the predecessor. Existing in-use records
+in that subsection must also point to their exact earlier indirect object
+headers, rather than zero or the terminal table.
+
+Three red-before/green-after fake-CUPS refusals cover the missing second
+entry, a malformed second status and a bogus second in-use object offset.
+The selected bytes remain unchanged and no spool process is contacted.
+A genuine native multipage table remains an admissible predecessor to
+both a terminal xref table and an appended PDF 1.5+ xref stream. Older
+trailer dictionaries, further subsections and revision chains are not
+recursively validated; physical printing is unverified.
+
 ## Native-table to terminal-stream compatibility (partial) — 2026-11-04
 
 A direct, opt-in fake-CUPS regression now verifies a real two-page native

@@ -446,11 +446,13 @@ fn bounded_xref_size(
     Some(number)
 }
 
-// A prior traditional xref pointer must at least identify a bounded
-// subsection with a complete first record. A bare "xref" token in a
-// string/comment or an unfinished subsection is not a predecessor header.
-// This does not validate all prior records, trailers or revision chains.
-fn previous_xref_table_header(bytes: &[u8]) -> bool {
+// A prior traditional xref pointer must identify a complete bounded first
+// subsection, not a bare `xref` token or one record from a truncated range.
+// This remains a nonrecursive probe: it does not validate older trailers
+// or the remaining sections of an earlier revision.
+fn previous_xref_table_header(
+    bytes: &[u8], document: &[u8], table_start: usize,
+) -> bool {
     let mut at = 0usize;
     if !xref_table_keyword(bytes, &mut at) {
         return false;
@@ -461,19 +463,41 @@ fn previous_xref_table_header(bytes: &[u8]) -> bool {
     let Some((first, count)) =
         xref_subsection_header(bytes, &mut at, first_word)
     else { return false; };
-    if count == 0 || first.checked_add(count)
-        .is_none_or(|end| end > MAX_SUPPORTED_XREF_OBJECTS) {
+    let Some(last) = first.checked_add(count) else {
+        return false;
+    };
+    if count == 0 || last > MAX_SUPPORTED_XREF_OBJECTS
+        || count.checked_mul(18).is_none_or(|size| size > bytes.len()) {
         return false;
     }
-    let Some((offset, generation, status)) = xref_table_entry(bytes, &mut at)
-    else { return false; };
-    offset.len() == 10 && offset.iter().all(u8::is_ascii_digit)
-        && generation.len() == 5
-        && generation.iter().all(u8::is_ascii_digit)
-        && str::from_utf8(generation).ok()
-            .and_then(|digits| digits.parse::<u16>().ok()).is_some()
-        && matches!(status, b"f" | b"n")
-        && (first != 0 || (status == b"f" && generation == b"65535"))
+    for index in first..last {
+        let Some((offset, generation, status)) =
+            xref_table_entry(bytes, &mut at)
+        else { return false; };
+        if offset.len() != 10 || !offset.iter().all(u8::is_ascii_digit)
+            || generation.len() != 5
+            || !matches!(status, b"f" | b"n") {
+            return false;
+        }
+        let Some(generation_number) = str::from_utf8(generation).ok()
+            .and_then(|digits| digits.parse::<u16>().ok())
+        else { return false; };
+        if index == 0 && (status != b"f"
+            || generation_number != u16::MAX) {
+            return false;
+        }
+        if status == b"n" {
+            let Some(object_offset) = str::from_utf8(offset).ok()
+                .and_then(|digits| digits.parse::<usize>().ok())
+            else { return false; };
+            if object_offset < 9 || object_offset >= table_start
+                || !in_use_object_header(document, object_offset, index,
+                    usize::from(generation_number)) {
+                return false;
+            }
+        }
+    }
+    true
 }
 
 // /Prev, when present on a terminal traditional table, must lead back to
@@ -504,7 +528,7 @@ fn bounded_previous_xref(
     };
     if earlier.starts_with(b"xref")
         && earlier.get(4).is_some_and(u8::is_ascii_whitespace) {
-        return previous_xref_table_header(earlier);
+        return previous_xref_table_header(earlier, document, offset);
     }
     // A PDF 1.5+ incremental revision may refer back to an xref stream.
     let stream_edition = matches!(document.get(5..8),
