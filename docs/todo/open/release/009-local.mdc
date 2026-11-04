@@ -89,6 +89,20 @@ notebook profile, and no browser canvas, photo layers, actual printer or
 complete saved notebook document is proven here. The executable P8-009
 task remains open pending the full requested CLI/localhost flow.
 
+## Reviewed-bytes print-ready acceptance — 2026-11-04
+
+The real native two-page Markdown journey now verifies that `atrament-print`
+`--dry-run` emits the SHA-256 of the exact exported PDF as independently
+calculated by Node. Uppercase `--expect-sha256` confirms the immutable PDF
+snapshot without submitting a job. A separately exported, still-valid PDF
+with a different heading-marker color replaces the reviewed path; requesting
+physical print with the stale checksum refuses before any printer access and
+leaves the altered file intact. The accepted PDF is restored and remains
+unchanged through subsequent invalid marker, pagination and glyph refusals.
+
+This uses real native Rust PDF/PNG/print CLIs but no physical printer. The
+complete saved notebook content and localhost visual journey are still open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

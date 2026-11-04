@@ -3,6 +3,7 @@
 // Runs real Rust CLIs; no printer or localhost server is contacted.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +34,46 @@ function glyphs(...args) {
 function printer(...args) {
     return command('atrament_notebook_paper_cli',
         'atrament-print', args);
+}
+
+function assertReviewedPdfPrintLock(pdfPath, pdf, base, dir) {
+    const expected = createHash('sha256').update(pdf).digest('hex');
+    const dryRun = printer('--pdf', pdfPath, '--printer',
+        'Unconnected_Test_Queue', '--dry-run');
+    assert.equal(dryRun.status, 0, dryRun.stderr);
+    assert.match(dryRun.stdout, new RegExp(`SHA-256 ${expected}`));
+    assert.match(dryRun.stdout, /no job submitted/);
+
+    const confirmed = printer('--pdf', pdfPath,
+        '--printer', 'Unconnected_Test_Queue', '--dry-run',
+        '--expect-sha256', expected.toUpperCase());
+    assert.equal(confirmed.status, 0, confirmed.stderr);
+    assert.match(confirmed.stdout, new RegExp(`SHA-256 ${expected}`));
+    assert.deepEqual(readFileSync(pdfPath), pdf,
+        'reviewed PDF bytes remain untouched by either dry-run');
+
+    const changedPath = join(dir, 'alternate-heading.pdf');
+    const changedStyle = [...base];
+    changedStyle[changedStyle.indexOf('#F8DE91')] = '#F8DE92';
+    const changedRun = notebook(...changedStyle, '--export-paper', 'pdf',
+        '--output', changedPath);
+    assert.equal(changedRun.status, 0, changedRun.stderr);
+    const changed = readFileSync(changedPath);
+    assert.match(changed.toString('latin1'), /\/Count 2\b/);
+    assert.notDeepEqual(changed, pdf, 'valid revised PDF has changed bytes');
+    writeFileSync(pdfPath, changed);
+    try {
+        const rejected = printer('--pdf', pdfPath,
+            '--printer', 'Unconnected_Test_Queue',
+            '--expect-sha256', expected);
+        assert.notEqual(rejected.status, 0,
+            'changed accepted PDF must refuse before real printer access');
+        assert.match(rejected.stderr, /SHA-256 differs from reviewed bytes/);
+        assert.deepEqual(readFileSync(pdfPath), changed,
+            'refusing the print job never overwrites the changed source');
+    } finally {
+        writeFileSync(pdfPath, pdf);
+    }
 }
 
 function pngPixels(bytes) {
@@ -111,12 +152,7 @@ test('authored Markdown exports physical PDF and PNG before print dry-run',
             assert.equal(raw[4], 0, 'transparent page has no backdrop');
             assert.ok(raw.includes(Buffer.from([18, 52, 86, 255])),
                 'selected second page contains the same authored ink');
-            const dryRun = printer('--pdf', pdfPath,
-                '--printer', 'Unconnected_Test_Queue', '--dry-run');
-            assert.equal(dryRun.status, 0, dryRun.stderr);
-            assert.match(dryRun.stdout, /no job submitted/);
-            assert.deepEqual(readFileSync(pdfPath), pdf,
-                'print validation must not alter the selected PDF');
+            assertReviewedPdfPrintLock(pdfPath, pdf, base, dir);
             const overScale = [...base];
             overScale[overScale.indexOf('105')] = '106';
             const invalidMarker = notebook(...overScale,
