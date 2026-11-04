@@ -2758,6 +2758,151 @@ fn markdown_backslash_control_does_not_inflate_statistical_pitch() {
 }
 
 #[test]
+fn markdown_thematic_separators_have_identical_native_page_ink() {
+    let mut reference = Vec::new();
+    for marker in ["---", "***", "___", "-----"] {
+        let markdown = format!("a\n{marker}\na");
+        let source = FlowSource::new(FlowFormat::Markdown, &markdown)
+            .expect("standalone Markdown separator syntax");
+        let (runs, marks, pages) = layout_flow(
+            &source, &NotebookProfile::default(), None,
+            HeadingDecoration::default(),
+        ).expect("rule consumes one physical row");
+        assert_eq!(pages, 1);
+        assert_eq!(runs.iter().map(|run| run.text.as_str())
+            .collect::<Vec<_>>(), ["a", "a"]);
+        assert_eq!(runs[0].origin_um, (22_500, 24_500));
+        assert_eq!(runs[1].origin_um, (22_500, 42_500));
+        assert_eq!(marks.len(), 1, "one ink line, no delimiter glyphs");
+        assert_eq!(marks[0].page, 1);
+        assert_eq!(marks[0].start_um, (22_500, 38_000));
+        assert_eq!(marks[0].end_um, (82_500, 38_000));
+        assert_eq!(marks[0].width_um, 400);
+        assert_eq!(marks[0].rgb, [30, 48, 74]);
+
+        let mut rendered = Vec::new();
+        for format in ["pdf", "png"] {
+            let mut cli = args(&[
+                "--export-paper", format, "--printed-sheet", "true",
+                "--glyph-stroke", "a", "0", "0", "3500", "4500",
+                "250", "#204060", "--flow-markdown", &markdown,
+            ]);
+            if format == "png" {
+                cli.extend(args(&["--dpi", "72"]));
+            }
+            let bytes = execute_notebook(&cli)
+                .expect("real native Markdown separator")
+                .expect("PDF/PNG bytes");
+            if format == "pdf" {
+                assert!(bytes.starts_with(b"%PDF-1.4"));
+            } else {
+                assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+            }
+            rendered.push(bytes);
+        }
+        if reference.is_empty() {
+            reference = rendered;
+        } else {
+            assert_eq!(rendered, reference,
+                "three thematic spellings and length must replay same ink");
+        }
+    }
+    let plain = execute_notebook(&args(&[
+        "--export-paper", "pdf", "--glyph-stroke", "a", "0",
+        "0", "3500", "4500", "250", "#204060",
+        "--flow-text", "---",
+    ])).expect_err("plain hyphens still need authored shapes");
+    assert!(plain.contains("U+002D"), "{plain}");
+}
+
+#[test]
+fn markdown_thematic_rule_follows_page_and_blank_paragraph_budgets() {
+    let source = FlowSource::new(FlowFormat::Markdown, "a\n\n---\n\na")
+        .expect("blank lines surrounding a thematic rule");
+    let (runs, rules, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("blank-line paragraph spacing on either side");
+    assert_eq!(pages, 1);
+    assert_eq!(rules.len(), 1);
+    assert_eq!(rules[0].start_um.1, 42_000);
+    assert_eq!(runs[1].origin_um.1 - runs[0].origin_um.1, 26_000);
+
+    let markdown = format!("{}---\na", "a  \n".repeat(28));
+    let source = FlowSource::new(FlowFormat::Markdown, &markdown)
+        .expect("two-page mixed text and separator");
+    let (runs, separators, pages) = layout_flow(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(),
+    ).expect("separator spans physical page boundary");
+    assert_eq!(pages, 2);
+    assert_eq!(runs.len(), 29);
+    assert_eq!(separators.len(), 1);
+    assert_eq!(separators[0].page, 2);
+    assert_eq!(separators[0].start_um, (22_500, 29_000));
+    assert_eq!(runs[28].page, 2);
+    assert_eq!(runs[28].origin_um.1, 33_500);
+
+    let mut cli = args(&[
+        "--export-paper", "pdf", "--printed-sheet", "true",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060", "--flow-markdown", &markdown,
+    ]);
+    let pdf = execute_notebook(&cli)
+        .expect("two-page native PDF").expect("PDF bytes");
+    assert_eq!(String::from_utf8_lossy(&pdf)
+        .matches("\nstream\n").count(), 2);
+    cli[1] = "png".into();
+    cli.extend(args(&["--dpi", "72", "--png-page", "2"]));
+    let png = execute_notebook(&cli)
+        .expect("second-page separator PNG").expect("PNG bytes");
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_ne!(png, {
+        let mut first = cli.clone();
+        let page = first.last_mut().expect("PNG selected page");
+        *page = "1".into();
+        execute_notebook(&first).expect("page 1")
+            .expect("page 1 native ink")
+    });
+}
+
+#[test]
+fn markdown_thematic_rule_refusals_preserve_selected_pdf() {
+    let alone = FlowSource::new(FlowFormat::Markdown, "---")
+        .expect("standalone rule syntax");
+    let error = layout_flow(&alone, &NotebookProfile::default(), None,
+        HeadingDecoration::default())
+        .expect_err("notebook text flow needs at least one text block");
+    assert!(error.contains("one visible text block"), "{error}");
+
+    let destination = test_path().with_extension("pdf");
+    fs::write(&destination, b"existing native PDF")
+        .expect("test-owned PDF sentinel");
+    let filename = destination.to_str().expect("test PDF path");
+    for (markdown, message) in [
+        ("---", "one visible text block"),
+        (&format!("{}---", "a  \n".repeat(128)),
+            "128 measured lines"),
+        ("a\n--", "U+002D"),
+        ("a\n**", "U+002A"),
+        ("a\n__", "U+005F"),
+        (&format!("{}---\na", "a  \n".repeat(28)),
+            "requires 2 physical pages"),
+    ] {
+        let error = execute_notebook(&args(&[
+            "--export-paper", "pdf", "--glyph-stroke", "a",
+            "0", "0", "3500", "4500", "250", "#204060",
+            "--flow-markdown", markdown, "--pages", "1",
+            "--output", filename, "--replace",
+        ])).expect_err("unsupported or over-budget rule must refuse");
+        assert!(error.contains(message), "{error}");
+        assert_eq!(fs::read(&destination).expect("sentinel persists"),
+            b"existing native PDF");
+    }
+    fs::remove_file(destination).expect("remove test-owned PDF");
+}
+
+#[test]
 fn markdown_soft_and_hard_breaks_change_measured_page_count() {
     let soft = FlowSource::new(FlowFormat::Markdown, &"a\n".repeat(40))
         .expect("soft-wrapped paragraph");

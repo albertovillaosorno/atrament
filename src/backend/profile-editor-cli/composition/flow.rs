@@ -217,6 +217,7 @@ enum LineStyle {
     Heading(HeadingLevel),
     Ordered,
     Quote,
+    Separator,
 }
 
 struct Layout<'model> {
@@ -536,6 +537,26 @@ impl Layout<'_> {
             .ok_or("flow row advance overflow")?;
         Ok(())
     }
+
+    fn write_separator(&mut self) -> Result<(), String> {
+        let (start_x, cap) = self.line_measurements(LineStyle::Body)?;
+        let y = self.begin_row()?;
+        let rule_y = y.checked_add(4_500)
+            .ok_or("separator center overflow")?;
+        let end_x = start_x.checked_add(cap.min(60_000))
+            .ok_or("separator horizontal overflow")?;
+        self.ornaments.push(NotebookInkLine {
+            page: self.page,
+            start_um: (start_x, rule_y),
+            end_um: (end_x, rule_y),
+            width_um: 400,
+            rgb: [30, 48, 74],
+        });
+        self.y = y.checked_add(self.pitch)
+            .ok_or("separator row advance overflow")?;
+        Ok(())
+    }
+
 }
 
 type MeasuredGrapheme<'text> = (&'text str, u32, u32);
@@ -644,6 +665,12 @@ fn measured_word<'text>(
 // only unordered bullets receive a synthetic short line ornament.
 fn markdown_line(line: &str) -> (LineStyle, &str) {
     let raw = line.trim_end_matches(' ');
+    if raw.len() >= 3
+        && let Some(&marker) = raw.as_bytes().first()
+        && matches!(marker, b'-' | b'*' | b'_')
+        && raw.bytes().all(|mark| mark == marker) {
+        return (LineStyle::Separator, "");
+    }
     for (prefix, level) in [
         ("### ", HeadingLevel::Tertiary),
         ("## ", HeadingLevel::Secondary),
@@ -803,7 +830,7 @@ pub(super) fn layout_flow(
                 layout.blank_row()?;
             } else {
                 flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
-                pending_gap = !layout.lines.is_empty();
+                pending_gap = layout.row_count > 0;
             }
             continue;
         }
@@ -821,6 +848,11 @@ pub(super) fn layout_flow(
         } else {
             (parsed_body, false)
         };
+        if matches!(style, LineStyle::Separator) {
+            flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
+            layout.write_separator()?;
+            continue;
+        }
         if body.trim().is_empty() {
             return Err("empty Markdown block refused".into());
         }
@@ -854,7 +886,7 @@ pub(super) fn layout_flow(
     }
     flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
     if layout.lines.is_empty() {
-        return Err("flow has no renderable text".into());
+        return Err("flow requires at least one visible text block".into());
     }
     Ok((layout.lines, layout.ornaments, layout.page))
 }

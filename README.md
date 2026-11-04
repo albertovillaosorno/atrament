@@ -469,7 +469,11 @@ The Markdown subset supports single-line `#`, `##`, `###` headings,
 numbered items such as `1. text` or `2) text`
 (with one to nine ASCII digits). Numbered items use your **authored** digit
 and `.` or `)` glyph ink; unlike unordered bullets, there is no automatic
-number shape. Each list item starts on its own row; wrapped continuations
+number shape. Standalone `---`, `***` or `___` lines (three or more
+matching ASCII marks, without interior spaces) draw the same thin horizontal
+rule up to 60 mm wide in one physical row, without authored punctuation.
+A source containing only separators refuses until it includes visible text.
+Each list item starts on its own row; wrapped continuations
 align beneath the first item glyph after the *measured* numeral, separator
 and any authored spaces. A label too wide to leave room for its first item
 glyph refuses rather than creating an orphan numeral row. Quote text is

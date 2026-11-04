@@ -198,6 +198,19 @@ plain-text missing-glyph refusal, and row-pitch parity even with an extreme
 custom backslash glyph-height override. This remains limited Markdown
 grammar, not a general inline escaping implementation.
 
+One further bounded aesthetic separator syntax recognizes at least three
+contiguous `-`, `*` or `_` marks on an otherwise empty Markdown line.
+Each variant emits the same single 0.4-mm native horizontal pen rule, up to
+60 mm wide, and consumes exactly one measured row. Paragraph gaps, physical
+page placement and the 128-row budget remain authoritative. Separator
+syntax does not need authored marker glyphs, but the CLI flow requires at
+least one visible text block; separator-only flow refuses explicitly.
+Three Rust integration regressions verify exact micrometre geometry and
+byte-identical PDF/PNG across spellings, blank-paragraph spacing, page-two
+placement, and failure without replacing an existing selected PDF for
+unsupported near-miss syntax or exceeded row/page budgets. No claim of
+persistent semantic separator identity or a full Markdown compiler is made.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
