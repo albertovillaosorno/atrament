@@ -411,6 +411,19 @@ body text and two-space fenced code preserve exactly the same physical
 position as plain text. Neither changes authored glyph shapes, fixed-region
 refusals or persisted notebook structure.
 
+## Heading keep-with-next skips non-printing fences — 2026-11-04
+
+The native orphan guard now scans past code fence delimiters instead of
+mistaking the opening marker for a following writing row. A terminal
+heading followed by an empty fenced block therefore remains on the
+last available physical row without manufacturing a second sheet.
+When actual code text or a later paragraph follows, the guard still keeps
+that first physical row with the heading across a page boundary.
+
+Two native PDF/transparent-PNG regressions cover an exact last-row title
+with an empty fence, equivalent visible code/text after syntax delimiters,
+and page-two physical ink with preserved heading decoration.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

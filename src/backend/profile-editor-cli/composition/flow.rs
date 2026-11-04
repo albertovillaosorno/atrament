@@ -963,7 +963,17 @@ fn following_heading_gap<'text>(
     lines: impl Iterator<Item = &'text str>,
 ) -> Option<bool> {
     let mut separated = false;
+    let mut fence = None;
     for line in lines {
+        if markdown_fence_transition(&mut fence, line) {
+            // Delimiters have no physical row; an empty code block cannot
+            // justify relocating an otherwise final heading.
+            continue;
+        }
+        if fence.is_some() {
+            // An empty code line still consumes a real physical row.
+            return Some(separated);
+        }
         if line.trim_end_matches(' ').is_empty() {
             separated = true;
         } else {

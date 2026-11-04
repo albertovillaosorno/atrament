@@ -161,6 +161,58 @@ test('unclosed, unapproved and unsupported code fences refuse atomically',
         }
     });
 
+test('empty fenced syntax after final heading does not force blank page',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-fence-orphan-'));
+        try {
+            const heading = 'a  \n'.repeat(27) + '# a';
+            const emptyFence = `${heading}\n\`\`\`\n\`\`\``;
+            for (const format of ['pdf', 'png']) {
+                const baseline = render(dir, heading, format);
+                assert.equal(baseline.result.status, 0,
+                    baseline.result.stderr);
+                const expected = readFileSync(baseline.output);
+                const candidate = render(dir, emptyFence, format);
+                assert.equal(candidate.result.status, 0,
+                    candidate.result.stderr);
+                assert.ok(readFileSync(candidate.output).equals(expected),
+                    `an empty fence after the heading cannot move ${format}`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('heading keeps first actual code row after fence syntax',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-fence-orphan-'));
+        try {
+            const prefix = 'a  \n'.repeat(27);
+            const baseline = `${prefix}# a\na`;
+            const alternatives = [
+                `${prefix}# a\n\`\`\`\na\n\`\`\``,
+                `${prefix}# a\n~~~\n~~~\na`,
+            ];
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, baseline, format, [],
+                    '--flow-markdown', 2);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                for (const candidate of alternatives) {
+                    const result = render(dir, candidate, format, [],
+                        '--flow-markdown', 2);
+                    assert.equal(result.result.status, 0,
+                        result.result.stderr);
+                    assert.ok(readFileSync(result.output).equals(expected),
+                        `heading+next actual row needs page-two ${format}`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('ordinary Markdown paragraphs ignore up to three indentation spaces',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-body-indent-'));
