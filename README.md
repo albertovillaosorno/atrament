@@ -1131,6 +1131,28 @@ A real headless Firefox/localhost test also verifies X-anchor previews,
 accepted and rejected width actions, exact NFC/NFD TSV bytes and no extra
 backend requests.
 
+**Resize selected glyph pen thickness (unsaved)** adjusts the physical width
+of every authored pen segment in one exact Unicode glyph, from 50–150% of
+its current pen thickness. Stroke endpoints, direction, color and order are
+unchanged. A read-only 128-segment SVG preview shows the proposed round-cap
+ink before Apply; a refused preview or edit does not change the draft.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile regular.tsv --scale-glyph-ink 'ó' 110 \
+  --output thicker.tsv
+```
+
+Both browser and Rust use half-up micrometre rounding, enforce the native
+80–1500 µm pen range, and reject round caps that would extend past the
+3.5 × 4.5 mm glyph cell. Existing NFC/NFD, mathematical and other sibling
+glyph TSV rows are preserved byte-for-byte. A 100% change is an identity;
+other percentages may lose precision when rounded. New regression tests
+prove exact TSV and real vector PDF/transparent PNG parity, including after
+an independent height edit. This is an explicit destructive edit of an
+unsaved sampled-line glyph, not a new persistent width variant or a
+calibrated variable-pressure stroke. Download a copy before changing it.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each

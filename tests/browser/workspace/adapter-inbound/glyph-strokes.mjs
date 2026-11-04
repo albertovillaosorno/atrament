@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
+    scaleGlyphInk,
     composeAccentedGlyph, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
@@ -386,6 +387,8 @@ function mountEditor() {
         "glyph-width-percent", "glyph-width-anchor",
         "glyph-scale-width", "glyph-width-preview",
         "glyph-width-preview-status",
+        "glyph-ink-percent", "glyph-scale-ink", "glyph-ink-preview",
+        "glyph-ink-preview-status",
         "glyph-ideal-preview", "glyph-ideal-geometry",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
@@ -422,6 +425,7 @@ function mountEditor() {
     get("height-baseline").value = "2250";
     get("width-percent").value = "110";
     get("width-anchor").value = "1750";
+    get("ink-percent").value = "110";
     get("path-dx").value = "0";
     get("path-dy").value = "0";
     get("variation-sample").value = "1";
@@ -4842,6 +4846,100 @@ test("width guide is read-only and accepted TSV is explicit", async () => {
         editor.reset();
         assert.equal(guide.children.length, 0);
         assert.equal(get("scale-width").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("ink thickness changes only the exact glyph pen", () => {
+    const nfd = "o\u0301";
+    const source = [
+        { grapheme: nfd, x1: 500, y1: 800, x2: 850,
+            y2: 1200, width: 251, color: "#243647" },
+        { grapheme: "ó", x1: 300, y1: 1000, x2: 500,
+            y2: 1500, width: 250, color: "#112233" },
+        { grapheme: nfd, x1: 850, y1: 1200, x2: 1100,
+            y2: 1700, width: 251, color: "#243647" },
+    ];
+    const before = encodeGlyphLibrary(source);
+    const thicker = scaleGlyphInk(source, nfd, 110);
+    assert.deepEqual(thicker, source.map((line) => line.grapheme === nfd
+        ? { ...line, width: 276 } : line));
+    assert.equal(thicker[1], source[1]);
+    assert.deepEqual(candidatePenPaths(thicker, nfd).map((path) =>
+        [path.first, path.last]), [[1, 2]]);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(thicker)),
+        thicker);
+    assert.deepEqual(scaleGlyphInk(source, nfd, 100), source);
+    assert.equal(scaleGlyphInk([source[0]], nfd, 50)[0].width, 126,
+        "half-up ink thickness rounding matches native Rust");
+    for (const percent of [49, 151, 110.5, NaN]) {
+        assert.throws(() => scaleGlyphInk(source, nfd, percent),
+            /Ink percent/);
+    }
+    assert.throws(() => scaleGlyphInk(source, "ab", 110),
+        /exact visible/);
+    assert.throws(() => scaleGlyphInk(source, "ñ", 110),
+        /no authored ink/);
+    assert.throws(() => scaleGlyphInk([
+        { ...source[0], width: 80 },
+    ], nfd, 50), /Scaled pen width/);
+    assert.throws(() => scaleGlyphInk([
+        { ...source[0], width: 1500 },
+    ], nfd, 150), /Scaled pen width/);
+    assert.throws(() => scaleGlyphInk([
+        { ...source[0], x1: 125 },
+    ], nfd, 110), /Scaled ink and pen clip/);
+    assert.throws(() => scaleGlyphInk([
+        { ...source[0], y2: 4400 },
+    ], nfd, 110), /Scaled ink and pen clip/);
+    assert.equal(encodeGlyphLibrary(source), before,
+        "every refusal preserves the original bytes");
+    const full = Array.from({ length: 4096 }, (_, i) => ({
+        ...source[0], x1: 500 + i % 100, x2: 850 + i % 100,
+    }));
+    assert.equal(scaleGlyphInk(full, nfd, 110).length, 4096);
+});
+
+test("ink preview stays read-only until explicit safe draft edit", async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const nfd = "o\u0301";
+        editor.start();
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        assert.equal(get("scale-ink").disabled, true);
+        for (const [key, value] of Object.entries({
+            x1: 500, y1: 800, x2: 850, y2: 1200, width: 251,
+        })) get(key).value = String(value);
+        get("add").dispatch("click");
+        const original = [{ grapheme: nfd, x1: 500, y1: 800,
+            x2: 850, y2: 1200, width: 251, color: "#243647" }];
+        assert.equal(get("scale-ink").disabled, false);
+        assert.equal(get("ink-preview").children.length, 1);
+        assert.equal(Number(get("ink-preview").children[0]
+            .attributes.get("stroke-width")), 276);
+        assert.equal(downloads.length, 0);
+        get("ink-percent").value = "151";
+        get("ink-percent").dispatch("input");
+        assert.equal(get("ink-preview").children.length, 0);
+        get("scale-ink").dispatch("click");
+        assert.match(get("status").textContent, /Ink percent/);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(original));
+        get("ink-percent").value = "110";
+        get("ink-percent").dispatch("input");
+        get("scale-ink").dispatch("click");
+        assert.match(get("status").textContent,
+            /Resized all authored ó pen thickness; unsaved/);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(scaleGlyphInk(original, nfd, 110)));
+        editor.reset();
+        assert.equal(get("ink-preview").children.length, 0);
+        assert.equal(get("scale-ink").disabled, true);
     } finally {
         ui.restore();
     }

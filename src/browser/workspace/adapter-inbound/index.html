@@ -957,6 +957,29 @@
               explicit edit and download. Previews show at most 128
               segments; clipped pens or collapsed lines are refused.
               Save an original before destructive resizing.</p>
+            <label>Authored glyph pen thickness (50–150% of current)
+              <input id="glyph-ink-percent" type="number" min="50"
+                max="150" step="1" value="110" disabled>
+            </label>
+            <button id="glyph-scale-ink" type="button" disabled>
+              Resize selected glyph pen thickness (unsaved)
+            </button>
+            <div class="glyph-slant-preview-region">
+              <svg id="glyph-ink-preview"
+                class="glyph-stroke-preview glyph-stroke-slant-preview"
+                viewBox="0 0 3500 4500" role="img"
+                aria-label="Proposed glyph pen thickness preview"></svg>
+              <p id="glyph-ink-preview-status" class="field-help"
+                role="status" aria-live="polite">
+                Author a glyph to preview its adjusted pen thickness.
+              </p>
+            </div>
+            <p class="field-help">Ink adjustment changes only the pen
+              thickness of the selected exact Unicode glyph; positions,
+              directions, stroke order and colors remain unchanged. The
+              preview does not edit your draft. A width outside 80–1500 µm
+              or any clipped round pen cap refuses atomically. Download the
+              TSV explicitly after applying the adjustment.</p>
             <p class="field-help">Apply a whole-glyph italic tilt to
               existing hand-authored segments without rebuilding any letter.
               The selected exact Unicode glyph changes only on an explicit

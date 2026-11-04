@@ -6778,3 +6778,74 @@ fn native_glyph_width_preserves_exact_unicode_and_refuses_clipped_ink() {
     fs::remove_file(source).expect("remove source");
     fs::remove_file(output).expect("remove output");
 }
+
+#[test]
+fn native_glyph_ink_scales_one_exact_unicode_pen_and_refuses_atomically() {
+    let nfd = "o\u{301}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "500", "800", "850", "1200",
+        "251", "#243647",
+        "--glyph-stroke", "ó", "300", "1000", "500", "1500",
+        "250", "#112233",
+        "--glyph-stroke", nfd, "850", "1200", "1100", "1700",
+        "251", "#243647",
+    ])).expect("original admitted").expect("TSV");
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    fs::write(&source, &original).expect("source written");
+    fs::write(&output, b"preserved destination").expect("existing output");
+    let source_name = source.to_str().expect("path");
+    let output_name = output.to_str().expect("path");
+    let edited = execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-ink", nfd, "110",
+    ])).expect("edit admitted").expect("TSV");
+    assert_eq!(edited, concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ó\t500\t800\t850\t1200\t276\t#243647\n",
+        "ó\t300\t1000\t500\t1500\t250\t#112233\n",
+        "ó\t850\t1200\t1100\t1700\t276\t#243647\n",
+    ).as_bytes());
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-ink", nfd, "100",
+    ])).expect("identity").expect("TSV"), original);
+    let half = execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-ink", nfd, "50",
+    ])).expect("half-up tie").expect("TSV");
+    assert!(String::from_utf8_lossy(&half)
+        .contains("ó\t500\t800\t850\t1200\t126\t#243647"));
+    let paths = execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-ink", nfd, "110",
+        "--inspect-paths", nfd,
+    ])).expect("inspect revised paths").expect("report");
+    assert!(String::from_utf8_lossy(&paths)
+        .contains("Strokes: 2\nPaths: 1\nPen lifts: 0"));
+    for (glyph, percent) in [
+        (nfd, "49"), (nfd, "151"), (nfd, "110.5"),
+        (nfd, "+110"), ("ñ", "110"), ("ab", "110"),
+    ] {
+        assert!(execute_glyph_library(&args(&[
+            "--profile", source_name, "--scale-glyph-ink", glyph,
+            percent, "--output", output_name, "--replace",
+        ])).is_err());
+        assert_eq!(fs::read(&output).expect("existing output"),
+            b"preserved destination");
+    }
+    for (x, y, width, percent) in [
+        ("125", "800", "251", "110"),
+        ("500", "4400", "251", "110"),
+        ("500", "800", "80", "50"),
+        ("1000", "800", "1500", "150"),
+    ] {
+        let refusal = execute_glyph_library(&args(&[
+            "--glyph-stroke", "o", x, y, "850", "1200", width,
+            "#102030", "--scale-glyph-ink", "o", percent,
+            "--output", output_name, "--replace",
+        ]));
+        assert!(refusal.is_err(), "invalid ink must refuse: {x} {y}");
+        assert_eq!(fs::read(&output).expect("existing output"),
+            b"preserved destination");
+    }
+    assert_eq!(fs::read(&source).expect("original source"), original);
+    fs::remove_file(source).expect("remove owned source");
+    fs::remove_file(output).expect("remove owned output");
+}

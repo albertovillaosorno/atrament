@@ -893,6 +893,7 @@ impl GlyphOverlay {
             "--shear-glyph" => self.shear_glyph_option(iter)?,
             "--scale-glyph-height" => self.scale_glyph_height_option(iter)?,
             "--scale-glyph-width" => self.scale_glyph_width_option(iter)?,
+            "--scale-glyph-ink" => self.scale_glyph_ink_option(iter)?,
             "--glyph-stroke" => {
                 if self.strokes.len() == MAX_STROKES {
                     return Err("more than 4096 glyph strokes refused".into());
@@ -1185,6 +1186,55 @@ impl GlyphOverlay {
         let percent = next_integer(iter, "glyph height percent", 50, 150)?;
         let baseline = next_integer(iter, "glyph height baseline", 0, 4500)?;
         self.scale_glyph_height(grapheme, percent, baseline)
+    }
+
+    /// Rescale the physical pen thickness of one exact authored grapheme.
+    /// Endpoint positions, drawing order, colors and other glyphs do not move.
+    /// Refuse the entire candidate if a thicker cap would clip the cell.
+    pub(super) fn scale_glyph_ink(
+        &mut self, grapheme: &str, percent: u32,
+    ) -> Result<(), String> {
+        if !(50..=150).contains(&percent) {
+            return Err("ink percent outside native bounds".into());
+        }
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let mut revised = self.strokes.clone();
+        for position in positions {
+            let stroke = revised.get_mut(position)
+                .ok_or("glyph stroke outside library")?;
+            let width = u32::try_from(GlyphVariation::round_js(
+                f64::from(stroke.width_um) * f64::from(percent) / 100.0,
+            )?).map_err(|_error| "scaled pen width out of bounds")?;
+            if !(80..=1_500).contains(&width) {
+                return Err("scaled pen width outside 80..1500 um".into());
+            }
+            let pen = i64::from(width);
+            for (x, y) in [stroke.start_um, stroke.end_um] {
+                let twice_x = i64::from(x).saturating_mul(2);
+                let twice_y = i64::from(y).saturating_mul(2);
+                if twice_x < pen || twice_x > 7000i64.saturating_sub(pen)
+                    || twice_y < pen
+                    || twice_y > 9000i64.saturating_sub(pen) {
+                    return Err("scaled ink and pen clip glyph cell".into());
+                }
+            }
+            stroke.width_um = width;
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(super) fn scale_glyph_ink_option(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let grapheme = iter.next()
+            .ok_or("--scale-glyph-ink requires an exact grapheme")?;
+        let percent = next_integer(iter, "glyph ink percent", 50, 150)?;
+        self.scale_glyph_ink(grapheme, percent)
     }
 
     /// Horizontally resize exactly one authored grapheme about an X anchor.

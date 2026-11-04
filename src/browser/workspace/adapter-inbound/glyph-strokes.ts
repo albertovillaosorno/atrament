@@ -1145,6 +1145,39 @@ export function scaleGlyphWidth(
     return candidate;
 }
 
+// Scale pen thickness, not the glyph contour. Unlike seeded variation,
+// this is an explicit reversible-by-reload edit of the unsaved TSV draft.
+export function scaleGlyphInk(
+    source: Stroke[], grapheme: string, percent: number,
+): Stroke[] {
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Ink edit requires one exact visible glyph");
+    }
+    if (!Number.isSafeInteger(percent) || percent < 50 || percent > 150) {
+        throw new Error("Ink percent must be 50..150 whole percent");
+    }
+    let found = false;
+    const candidate = source.map((line) => {
+        if (line.grapheme !== grapheme) return line;
+        found = true;
+        const stroke = validateStroke(line);
+        const width = Math.round(stroke.width * percent / 100);
+        if (width < 80 || width > 1500) {
+            throw new Error("Scaled pen width outside 80..1500 um");
+        }
+        if ([stroke.x1, stroke.x2].some((x) => x * 2 < width
+            || x * 2 > 7000 - width)
+            || [stroke.y1, stroke.y2].some((y) => y * 2 < width
+                || y * 2 > 9000 - width)) {
+            throw new Error("Scaled ink and pen clip glyph cell");
+        }
+        return validateStroke({ ...stroke, width });
+    });
+    if (!found) throw new Error("Selected glyph has no authored ink");
+    encodeGlyphLibrary(candidate);
+    return candidate;
+}
+
 export function geometricStarter(
     g: string, x: number, y: number, r: number, w: number,
     color: string, pos?: { dx: number; lift: number;
@@ -1856,6 +1889,11 @@ export function createGlyphStrokeEditor(): {
     const widthPreview = required<SVGSVGElement>("glyph-width-preview");
     const widthPreviewStatus =
         required<HTMLElement>("glyph-width-preview-status");
+    const inkPercent = required<HTMLInputElement>("glyph-ink-percent");
+    const scaleInk = required<HTMLButtonElement>("glyph-scale-ink");
+    const inkPreview = required<SVGSVGElement>("glyph-ink-preview");
+    const inkPreviewStatus =
+        required<HTMLElement>("glyph-ink-preview-status");
     const idealGeometry = required<SVGGElement>("glyph-ideal-geometry");
     const ideal = required<SVGSVGElement>("glyph-ideal-preview");
     const idealCircle = required<SVGCircleElement>("glyph-ideal-circle");
@@ -1921,6 +1959,7 @@ export function createGlyphStrokeEditor(): {
         authoredAngle, authoredBaseline, slantAuthored,
         heightPercent, heightBaseline, scaleHeight,
         widthPercent, widthAnchor, scaleWidth,
+        inkPercent, scaleInk,
         undoSlant, redoSlant, variationSeed,
         variationSample, variationDownload,
         ...Object.values(variationControls),
@@ -2485,6 +2524,48 @@ export function createGlyphStrokeEditor(): {
             widthPreviewStatus.textContent = String(error);
         }
     };
+    const renderInkPreview = (): void => {
+        inkPreview.replaceChildren();
+        if (!active) {
+            inkPreviewStatus.textContent =
+                "Requires a compatible backend session";
+            return;
+        }
+        const target = character.value;
+        const authored = strokes.filter((item) =>
+            item.grapheme === target);
+        if (authored.length === 0) {
+            inkPreviewStatus.textContent =
+                "Author this exact glyph before previewing ink thickness";
+            return;
+        }
+        try {
+            if (inkPercent.value === "") {
+                throw new Error("Choose an ink percent");
+            }
+            if (authored.length > 128) {
+                throw new Error("Preview limited to 128 authored segments");
+            }
+            const candidate = scaleGlyphInk(strokes, target,
+                Number(inkPercent.value));
+            const lines = candidate.filter((item) =>
+                item.grapheme === target).map((item) => {
+                const line = document.createElementNS(SVG_NS, "line");
+                for (const axis of ["x1", "y1", "x2", "y2"] as const) {
+                    line.setAttribute(axis, String(item[axis]));
+                }
+                line.setAttribute("stroke", item.color);
+                line.setAttribute("stroke-width", String(item.width));
+                line.setAttribute("stroke-linecap", "round");
+                return line;
+            });
+            inkPreview.replaceChildren(...lines);
+            inkPreviewStatus.textContent = `${lines.length} proposed `
+                + "thickness-scaled segments; preview only, draft unchanged";
+        } catch (error) {
+            inkPreviewStatus.textContent = String(error);
+        }
+    };
     const render = (): void => {
         if (slantHistory !== null) {
             const expected = slantHistory[slantHistory.side];
@@ -2559,6 +2640,8 @@ export function createGlyphStrokeEditor(): {
         scaleHeight.disabled = !active || shown.length === 0
             || drawing !== null;
         scaleWidth.disabled = !active || shown.length === 0
+            || drawing !== null;
+        scaleInk.disabled = !active || shown.length === 0
             || drawing !== null;
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
@@ -2639,6 +2722,7 @@ export function createGlyphStrokeEditor(): {
         renderSlantPreview();
         renderHeightPreview();
         renderWidthPreview();
+        renderInkPreview();
         const label = `${shown.length} strokes for selected glyph`;
         preview.setAttribute("aria-label", label);
         renderVariation();
@@ -2675,6 +2759,8 @@ export function createGlyphStrokeEditor(): {
         control.addEventListener("input", renderWidthPreview);
         control.addEventListener("change", renderWidthPreview);
     }
+    inkPercent.addEventListener("input", renderInkPreview);
+    inkPercent.addEventListener("change", renderInkPreview);
     for (const control of [
         form, centerX, centerY, radius, color, accentShift, accentLift,
         italicAngle,
@@ -2911,6 +2997,27 @@ export function createGlyphStrokeEditor(): {
             selectedIndex = null;
             render();
             message(`Resized all authored ${target} width; unsaved`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    scaleInk.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the pen trace before ink edit");
+            }
+            if (inkPercent.value === "") {
+                throw new Error("Choose an ink percent");
+            }
+            const target = character.value;
+            const next = scaleGlyphInk(strokes, target,
+                Number(inkPercent.value));
+            strokes = next;
+            slantHistory = null;
+            selectedIndex = null;
+            render();
+            message(`Resized all authored ${target} pen thickness; unsaved`);
         } catch (error) {
             message(String(error));
         }

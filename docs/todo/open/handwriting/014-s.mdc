@@ -541,6 +541,29 @@ the exact TSV and makes no additional backend requests.
 Closure remains an opt-in straight line, not saved semantic pen lifts,
 analytic circle geometry or automatic cursive. P1-014 remains open.
 
+## Exact authored pen thickness adjustment (partial) — 2026-11-04
+
+The browser glyph editor now previews and explicitly scales all stroke
+thicknesses of one exact authored Unicode grapheme by 50–150%. The native
+`glyphs --scale-glyph-ink GRAPHEME PERCENT` applies the same per-segment
+half-up integer micrometre rounding without changing endpoints, stroke
+order, RGB or interleaved NFC/NFD/math rows. Pen widths must remain between
+80 and 1500 µm, and every round pen cap must fit the 3.5 × 4.5 mm cell.
+The browser SVG preview is read-only and limited to 128 sampled segments;
+the actual edit supports the full 4096-line native library limit.
+
+Focused Rust and browser regressions cover rounding, exact Unicode identity,
+neighboring glyph isolation, candidate pen paths, identity at 100%, pen
+clipping and size-limit refusals. A separate browser-to-Rust integration
+reopens the edited TSV and compares actual vector PDF/transparent PNG ink
+byte-for-byte, both alone and following a height edit. Invalid native
+edits preserve the source file and existing output; invalid browser edits
+preserve the in-memory draft. Neither engine autosaves.
+
+This is a sampled-pen-width edit, not authored continuous pressure,
+persistent path identity, analytic curves or automatic joined cursive.
+The larger P1-014 acceptance remains open.
+
  The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.
