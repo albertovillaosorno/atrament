@@ -802,7 +802,33 @@ micrometres. `ñ` and `ñ` remain different exact Unicode identities, and
 only recorded segments are reported; no cursive joins, pen lifts or stroke
 groups are inferred. Inspection is stdout-only and refuses missing or
 invalid glyphs, conflicting audits and all `--output` selections.
- The versioned format
+
+The same native CLI now edits **actual pen order and direction** on the
+explicitly loaded exact Unicode glyph, using the inspector's **one-based**
+indices:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyphs.tsv --reverse-stroke 'ñ' 1 \
+  --inspect-glyph 'ñ'
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyphs.tsv --reverse-stroke 'ñ' 1 \
+  --output revised-glyphs.tsv
+```
+
+`--reverse-stroke` swaps one segment's pen endpoints but not its pigment,
+thickness or TSV position. `--move-stroke` shifts one segment to the selected
+position within that exact grapheme, retaining all other glyphs' record slots;
+NFC/NFD identities are not merged. For a three-stroke glyph,
+`--move-stroke 'ñ' 3 1` places its third stroke first. Edits happen in option
+order. Invalid indices, absent shapes, empty operations and same-position
+moves refuse.
+Without `--output`, the revised TSV or inspection report is stdout-only;
+the source never changes. Use `--output my-glyphs.tsv --replace` deliberately
+for an in-place atomic replacement after checking the new order. These are
+straight sampled strokes, not spline pen paths or joined cursive.
+
+The versioned format
 starts with `atrament.glyph-strokes.v1`, followed by one **tab-separated**
 `GRAPHEME X1 Y1 X2 Y2 WIDTH_UM #RRGGBB` record per line (UTF-8, LF).
 It supports 4096 strokes and up to 512 KiB, checks exact grapheme identity

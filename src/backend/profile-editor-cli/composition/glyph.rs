@@ -34,6 +34,7 @@
 //! Exact, explicitly authored glyph contours for a bounded CLI text overlay.
 
 use std::fmt::Write as _;
+use std::mem::swap;
 use std::slice::Iter;
 use std::str::from_utf8;
 
@@ -277,6 +278,38 @@ impl GlyphOverlay {
         ).into_bytes())
     }
 
+    fn checked_stroke_position(
+        positions: &[usize], ordinal: u32,
+    ) -> Result<usize, String> {
+        let index = usize::try_from(ordinal.checked_sub(1)
+            .ok_or("stroke indices start at 1")?)
+            .map_err(|_error| "stroke index outside bounds")?;
+        if index >= positions.len() {
+            return Err(format!(
+                "stroke index {ordinal} exceeds glyph's {} strokes",
+                positions.len(),
+            ));
+        }
+        Ok(index)
+    }
+
+    /// Apply a requested native index edit to the in-memory authored library.
+    pub(super) fn edit_stroke(
+        &mut self, flag: &str, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let grapheme = iter.next()
+            .ok_or("stroke edit requires an exact grapheme")?;
+        let from = next_stroke_index(iter)?;
+        match flag {
+            "--reverse-stroke" => self.reverse_stroke(grapheme, from),
+            "--move-stroke" => {
+                let to = next_stroke_index(iter)?;
+                self.move_stroke(grapheme, from, to)
+            }
+            _ => Err("unknown stroke edit".into()),
+        }
+    }
+
     /// Canonical portable glyph geometry, not placed text or sampled ink.
     pub(super) fn encode_file(&self) -> Result<Vec<u8>, String> {
         if self.strokes.is_empty() {
@@ -510,6 +543,53 @@ impl GlyphOverlay {
         Ok(())
     }
 
+    /// Select one-based authored stroke positions without normalizing the
+    /// grapheme or disturbing interleaved records for other glyphs.
+    fn matching_stroke_positions(&self, grapheme: &str)
+        -> Result<Vec<usize>, String> {
+        if !is_exact_visible_grapheme(grapheme, UnicodeGraphemeSegmentation) {
+            return Err(
+                "stroke edit requires one exact visible grapheme".into()
+            );
+        }
+        let positions = self.strokes.iter().enumerate()
+            .filter_map(|(index, stroke)| {
+                (stroke.grapheme == grapheme).then_some(index)
+            }).collect::<Vec<_>>();
+        if positions.is_empty() {
+            return Err("no authored strokes for exact glyph edit".into());
+        }
+        Ok(positions)
+    }
+
+    /// Move one segment to its new one-based ordinal within the *same* exact
+    /// glyph, shifting intermediate glyph strokes and leaving other glyph
+    /// records in their original TSV slots.
+    pub(super) fn move_stroke(
+        &mut self, grapheme: &str, from: u32, to: u32,
+    ) -> Result<(), String> {
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let first = Self::checked_stroke_position(&positions, from)?;
+        let last = Self::checked_stroke_position(&positions, to)?;
+        if first == last {
+            return Err("stroke move requires different positions".into());
+        }
+        let steps = if first < last {
+            (first..last).collect::<Vec<_>>()
+        } else {
+            (last..first).rev().collect::<Vec<_>>()
+        };
+        for index in steps {
+            let next = index.checked_add(1).ok_or("stroke index overflow")?;
+            let left = *positions.get(index)
+                .ok_or("stroke move index outside bounds")?;
+            let right = *positions.get(next)
+                .ok_or("stroke move index outside bounds")?;
+            self.strokes.swap(left, right);
+        }
+        Ok(())
+    }
+
     pub(super) fn parse(
         &mut self, flag: &str, iter: &mut Iter<'_, String>,
     ) -> Result<(), String> {
@@ -641,6 +721,21 @@ impl GlyphOverlay {
         if self.strokes.len() == before {
             return Err("no authored strokes for exact glyph".into());
         }
+        Ok(())
+    }
+
+    /// Reverse the physical pen travel of one segment without changing its
+    /// position in the original TSV or its thickness/pigment.
+    pub(super) fn reverse_stroke(
+        &mut self, grapheme: &str, ordinal: u32,
+    ) -> Result<(), String> {
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let index = Self::checked_stroke_position(&positions, ordinal)?;
+        let selected = *positions.get(index)
+            .ok_or("stroke index outside bounds")?;
+        let shape = self.strokes.get_mut(selected)
+            .ok_or("stroke index outside library")?;
+        swap(&mut shape.start_um, &mut shape.end_um);
         Ok(())
     }
 
@@ -789,6 +884,13 @@ fn missing_shapes_error(missing: &[&str]) -> String {
         );
     }
     message
+}
+
+/// A visible glyph can have at most the entire bounded library of strokes.
+fn next_stroke_index(
+    iter: &mut Iter<'_, String>,
+) -> Result<u32, String> {
+    next_integer(iter, "stroke index", 1, 4096)
 }
 
 fn next_integer(
