@@ -256,6 +256,27 @@ remains byte-identical. This meets a limited fixed-text-region subcase,
 **not** image-aware page obstacles, independently positioned regions,
 persisted semantic block identities or end-to-end browser rendering.
 
+## Fixed-region post-transform ink clearance (partial) — 2026-11-03
+
+The CLI now revalidates **actual expanded** glyph and Markdown ornament
+strokes against the explicitly selected `--flow-region` after all opt-in
+mean-profile slant, per-occurrence variation and pen-thickness changes.
+A line that fit nominal text advances but crosses the physical region
+boundary (including half the actual pen width) refuses before writing
+PDF or transparent PNG. All flow-generated page strokes are checked even
+when the caller selects a PNG from another page. Explicit `--ink-line`
+overlays remain independent annotations and keep the native paper-wide
+printable-region checks. Without a selected fixed region, prior output
+behavior remains unchanged.
+
+A failing-before-fix native test reproduced 50-degree slanted lettering
+escaping a 25-mm-wide admitted region while staying inside the A4 paper.
+Three direct accepted/refused paths check real PDF, page-one PNG refusal
+for page-two overflow, immutable selected output files, and independent
+manual ink outside the flow area. Existing two-page region PDF/PNG and
+full CLI suites pass. This is bounded geometry admission, not semantic
+block persistence, image-aware flow or arbitrary page regions.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

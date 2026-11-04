@@ -117,6 +117,34 @@ impl FlowRegion {
         }
         Ok(Self { height, left, top, width })
     }
+
+    /// Layout measures nominal advances. Validate the actual expanded ink
+    /// after slant, seeded variation and pen width transforms as well.
+    pub(super) fn validate_ink(
+        self, printable: (u32, u32, u32, u32),
+        ink: &[NotebookInkLine],
+    ) -> Result<(), String> {
+        let (left, top, right, bottom) = self.bounds_within(printable)?;
+        for line in ink {
+            let clearance = line.width_um.div_ceil(2);
+            let inside = |(x, y): (u32, u32)| {
+                x.checked_sub(clearance).is_some_and(|edge| edge >= left)
+                    && y.checked_sub(clearance)
+                        .is_some_and(|edge| edge >= top)
+                    && x.checked_add(clearance)
+                        .is_some_and(|edge| edge <= right)
+                    && y.checked_add(clearance)
+                        .is_some_and(|edge| edge <= bottom)
+            };
+            if !inside(line.start_um) || !inside(line.end_um) {
+                return Err(format!(
+                    "flow region ink exceeds selected rectangle on page {}",
+                    line.page,
+                ));
+            }
+        }
+        Ok(())
+    }
 }
 
 impl FlowSource {

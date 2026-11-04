@@ -4469,6 +4469,92 @@ fn selected_flow_region_repeats_on_real_pdf_and_transparent_png_pages() {
 }
 
 #[test]
+fn selected_flow_region_refuses_slanted_ink_outside_bounds_atomically() {
+    let stats_path = test_path();
+    let output = test_path().with_extension("pdf");
+    let stats_name = stats_path.to_str().expect("statistics filename");
+    let output_name = output.to_str().expect("output filename");
+    let statistics = execute_handwriting(&args(&[
+        "--set-global", "slant", "-85000", "85000", "50000",
+        "50000", "0",
+    ])).expect("bounded high-slant statistics")
+        .expect("canonical statistics bytes");
+    fs::write(&stats_path, statistics).expect("test-only statistics file");
+    fs::write(&output, b"preserve bounded page")
+        .expect("test-only original PDF");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "3000", "1000", "3500", "500",
+        "250", "#204060", "--handwriting-profile", stats_name,
+        "--flow-markdown", "aaaaaaaa",
+    ]);
+    let unrestricted = execute_notebook(&command)
+        .expect("same slanted ink remains within normal paper margins")
+        .expect("genuine PDF");
+    assert!(unrestricted.starts_with(b"%PDF-1.4"));
+    command.extend(args(&[
+        "--flow-region", "30000", "40000", "25000", "30000",
+        "--output", output_name, "--replace",
+    ]));
+    let error = execute_notebook(&command)
+        .expect_err("slanted glyph outside chosen flow rectangle must refuse");
+    assert!(error.contains("flow region"), "{error}");
+    assert_eq!(fs::read(&output).expect("original PDF preserved"),
+        b"preserve bounded page");
+    fs::remove_file(stats_path).expect("remove owned statistics file");
+    fs::remove_file(output).expect("remove owned PDF");
+}
+
+#[test]
+fn fixed_region_checks_unselected_png_pages_and_leaves_manual_ink_free() {
+    let stats_path = test_path();
+    let output = test_path().with_extension("png");
+    let stats_name = stats_path.to_str().expect("statistics path");
+    let output_name = output.to_str().expect("owned PNG output path");
+    let statistics = execute_handwriting(&args(&[
+        "--set-global", "slant", "-85000", "85000", "50000",
+        "50000", "0",
+    ])).expect("slanted statistics profile").expect("stats JSON");
+    fs::write(&stats_path, statistics).expect("owned statistics fixture");
+    fs::write(&output, b"preserve preceding page one PNG")
+        .expect("owned PNG sentinel");
+    let command = args(&[
+        "--printed-sheet", "true", "--export-paper", "png",
+        "--dpi", "72", "--png-page", "1",
+        "--glyph-stroke", "a", "3000", "1000", "3500", "500",
+        "250", "#204060", "--handwriting-profile", stats_name,
+        "--flow-markdown", "a  \na  \naaaaaaaa",
+        "--flow-region", "30000", "40000", "25000", "30000",
+        "--output", output_name, "--replace",
+    ]);
+    let error = execute_notebook(&command)
+        .expect_err("page-two overflow must refuse page-one PNG export");
+    assert!(error.contains("flow region"), "{error}");
+    assert!(error.contains("page 2"), "{error}");
+    assert_eq!(fs::read(&output).expect("PNG output preserved"),
+        b"preserve preceding page one PNG");
+    fs::remove_file(stats_path).expect("remove owned statistics fixture");
+    fs::remove_file(output).expect("remove owned PNG sentinel");
+
+    // A caller's manual page annotation is not the typed flow region;
+    // validate only the generated heading, bullet and glyph ink.
+    let manual = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "1100", "2400", "3500",
+        "250", "#204060", "--flow-markdown", "a",
+        "--flow-region", "30000", "40000", "25000", "30000",
+        "--ink-line", "1", "70000", "45000", "72000", "45000",
+        "250", "#112233",
+    ]);
+    let pdf = execute_notebook(&manual)
+        .expect("manual annotation outside flow remains permitted")
+        .expect("native PDF ink");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    assert!(String::from_utf8_lossy(&pdf).contains("0.067 0.133 0.200 RG"),
+        "manual annotation remains in physical PDF, not ignored");
+}
+
+#[test]
 fn fixed_flow_region_refuses_invalid_bounds_and_overflow_atomically() {
     let target = test_path().with_extension("pdf");
     fs::write(&target, b"previous valid notebook")

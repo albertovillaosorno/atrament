@@ -476,9 +476,15 @@ have enough space for the measured handwritten glyphs and row pitch.
 The CLI continues content on the next physical page when needed;
 `--pages` and `--png-page` still refuse impossible selections. Invalid,
 overlapping-margins or too-small areas refuse before any selected file
-is replaced. Omitting the flag retains full-printable-area composition.
-This first bounded region is **one repeated page-local text rectangle**,
-not arbitrary per-block fixed placements, image avoidance or persisted
+is replaced. The final glyph and decorative ink is checked again after
+statistical slant, seeded variation, and heading pen-width changes; an
+overshooting stroke refuses even if the original line measurements fit.
+This applies across all PDF pages and separately selected PNG pages.
+Explicit caller-authored `--ink-line` annotations stay independent of the
+flow rectangle (but still must fit the physical printable sheet).
+Omitting the flag retains full-printable-area composition. This first
+bounded region is **one repeated page-local text rectangle**, not
+arbitrary per-block fixed placements, image avoidance or persisted
 semantic region identities.
 
 Use `--flow-text-file` for plain text, or `--flow-text` and
