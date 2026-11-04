@@ -566,6 +566,18 @@ This is a sampled-pen-width edit, not authored continuous pressure,
 persistent path identity, analytic curves or automatic joined cursive.
 The larger P1-014 acceptance remains open.
 
+## Session-only whole-glyph transform undo/redo (partial) — 2026-11-04
+
+One exact browser TSV snapshot pair now recovers the latest slant, height,
+width or pen-thickness adjustment. Undo and redo restore byte-identical
+interleaved Unicode glyph rows, even when integer rounding would otherwise
+lose the original geometry. The controls require the same exact glyph,
+make no backend request and write no file until the user downloads TSV.
+A later accepted transform replaces history; any separate authored edit,
+TSV load or session reset invalidates it. A refused edit keeps the previous
+recovery step. This does not add persistent named variants or multi-step
+history; P1-014 remains open.
+
  The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.

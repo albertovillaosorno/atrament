@@ -1046,19 +1046,19 @@ A clipped pen edge or invalid input refuses before writing an output file;
 0 degrees is a valid identity edit. Saving overwrites sampled coordinates,
 not a retained analytic or named italic variant.
 
-The browser editor also exposes **Undo last glyph slant** and **Redo last
-glyph slant** immediately after a successful nonzero authored-glyph shear.
-One in-memory step saves exact original and resulting TSV bytes; undo
-restores the original pen strokes and redo reapplies the accepted shear.
-Neither action downloads a file or changes a Rust profile. Only the exact
-selected Unicode grapheme that was slanted may invoke these controls.
+The browser editor exposes **Undo last glyph transform** and **Redo last
+glyph transform** after a successful non-identity slant, height, width or
+pen-thickness edit. One in-memory step holds exact previous and resulting
+TSV bytes; undo restores the previous coordinates and pen properties,
+including rounding losses, and redo reapplies the exact accepted change.
+No automatic download or Rust profile write occurs. Recovery is available
+only while the same exact Unicode grapheme is selected.
 
-A subsequent authored ink edit, successful TSV import, or session reset
-invalidates the history, preventing stale undo from erasing later strokes.
-Applying another slant replaces the previous undo step. Download regular
-and italic TSV files separately for long-lived named variants or recovery.
-This is **one-level slant undo/redo**, not a general edit history or
-persistent reversible curve model.
+A later successful transform replaces the one-step history. A separate
+manual ink edit, TSV import or session reset invalidates it, and an invalid
+transform does not discard valid history. Download independent TSV copies
+for long-term recovery or named style variants. This is **not a general
+multi-step history** or persistent reversible curve model.
 
 Beside these controls, **Proposed slanted glyph preview** shows the exact
 sampled pen coordinates before changing any authored ink. Changing the
@@ -1097,7 +1097,7 @@ without changing source or prior output. A 100% operation is an identity.
 
 Browser and CLI produce byte-identical TSV, including after a separate
 italic shear; actual PDF/transparent PNG ink also matches. Height edits
-invalidate the browser's previous one-step slant undo, and a percentage
+replace the one-step transform undo, and a percentage
 change is not guaranteed to be invertible after integer rounding. Download
 an original TSV before destructive editing. This is not a persistent
 regular/tall glyph variant or a calibrated continuous curve.
@@ -1124,7 +1124,7 @@ The Rust and browser controls use the same micrometre rounding and require
 an explicit save, with 100% as identity. A dedicated browser and native
 regression plus export integration prove exact TSV parity and matching
 PDF/transparent PNG after combining width with italic shear. Width edits
-also invalidate any earlier in-memory one-step slant recovery. A sampled
+replace the earlier in-memory one-step recovery. A sampled
 width change is not a persistent geometric or named glyph variant.
 
 A real headless Firefox/localhost test also verifies X-anchor previews,
@@ -1152,6 +1152,8 @@ prove exact TSV and real vector PDF/transparent PNG parity, including after
 an independent height edit. This is an explicit destructive edit of an
 unsaved sampled-line glyph, not a new persistent width variant or a
 calibrated variable-pressure stroke. Download a copy before changing it.
+The same one-step recovery buttons restore exact previous widths after an
+accepted pen-thickness edit, even when rounded scaling is not invertible.
 
 A real Firefox/localhost session independently exercises the live pen-width
 SVG preview, accepted and rejected edits, exact Unicode TSV downloads, and

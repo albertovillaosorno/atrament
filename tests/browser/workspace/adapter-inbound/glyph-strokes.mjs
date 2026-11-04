@@ -4735,8 +4735,15 @@ test("height preview is exact and invalid edits keep the unsaved library",
         get("slant-authored").dispatch("click");
         assert.equal(get("slant-undo").disabled, false);
         get("scale-height").dispatch("click");
-        assert.equal(get("slant-undo").disabled, true,
-            "height edit must invalidate the previous slant undo");
+        assert.equal(get("slant-undo").disabled, false,
+            "height edit offers a new byte-exact recovery step");
+        get("slant-undo").dispatch("click");
+        assert.match(get("status").textContent,
+            /Undid last glyph height; unsaved/);
+        assert.equal(get("slant-redo").disabled, false);
+        get("slant-redo").dispatch("click");
+        assert.match(get("status").textContent,
+            /Redid last glyph height; unsaved/);
         get("character").value = "á";
         get("character").dispatch("input");
         assert.equal(get("scale-height").disabled, true);
@@ -4944,3 +4951,104 @@ test("ink preview stays read-only until explicit safe draft edit", async () => {
         ui.restore();
     }
 });
+
+
+test("exact one-step transform undo restores slant height width and ink",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const nfd = "o\u0301";
+            const undo = get("slant-undo");
+            const redo = get("slant-redo");
+            const add = (grapheme, coordinates, width) => {
+                get("character").value = grapheme;
+                get("character").dispatch("input");
+                for (const [key, value] of Object.entries({
+                    x1: coordinates[0], y1: coordinates[1],
+                    x2: coordinates[2], y2: coordinates[3], width,
+                })) get(key).value = String(value);
+                get("add").dispatch("click");
+            };
+            const recoverBytes = async (button, expected, label) => {
+                button.dispatch("click");
+                get("save").dispatch("click");
+                assert.equal(await downloads.at(-1).text(),
+                    encodeGlyphLibrary(expected), label);
+            };
+            editor.start();
+            add(nfd, [500, 800, 850, 1200], 251);
+            add("ó", [300, 1000, 500, 1500], 250);
+            add(nfd, [850, 1200, 1100, 1700], 251);
+            add("∞", [1500, 2000, 1600, 2200], 251);
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            const source = [
+                { grapheme: nfd, x1: 500, y1: 800, x2: 850,
+                    y2: 1200, width: 251, color: "#243647" },
+                { grapheme: "ó", x1: 300, y1: 1000, x2: 500,
+                    y2: 1500, width: 250, color: "#243647" },
+                { grapheme: nfd, x1: 850, y1: 1200, x2: 1100,
+                    y2: 1700, width: 251, color: "#243647" },
+                { grapheme: "∞", x1: 1500, y1: 2000, x2: 1600,
+                    y2: 2200, width: 251, color: "#243647" },
+            ];
+            const slanted = italicizeGlyphStrokes(source, nfd, 12, 3550);
+            get("slant-authored").dispatch("click");
+            assert.equal(undo.disabled, false);
+            const tall = scaleGlyphHeight(slanted, nfd, 110, 2250);
+            get("scale-height").dispatch("click");
+            assert.equal(undo.disabled, false,
+                "a new transform replaces rather than clears recovery");
+            await recoverBytes(undo, slanted,
+                "undo height restores slanted original exact bytes");
+            assert.match(get("status").textContent,
+                /Glyph TSV downloaded/);
+            assert.equal(redo.disabled, false);
+            await recoverBytes(redo, tall,
+                "redo height restores revised bytes");
+            const wider = scaleGlyphWidth(tall, nfd, 110, 1750);
+            get("scale-width").dispatch("click");
+            await recoverBytes(undo, tall, "undo width restores exact height");
+            await recoverBytes(redo, wider, "redo width restores exact bytes");
+            const thicker = scaleGlyphInk(wider, nfd, 110);
+            get("scale-ink").dispatch("click");
+            assert.equal(undo.disabled, false);
+            assert.equal(redo.disabled, true);
+            assert.equal(downloads.length, 4,
+                "transforms never download files automatically");
+            get("ink-percent").value = "151";
+            get("scale-ink").dispatch("click");
+            assert.match(get("status").textContent, /Ink percent/);
+            assert.equal(undo.disabled, false,
+                "invalid transform must preserve valid undo history");
+            await recoverBytes(undo, wider,
+                "undo thickness restores pre-rounded pen widths");
+            assert.equal(redo.disabled, false);
+            get("character").value = "ó";
+            get("character").dispatch("input");
+            assert.equal(redo.disabled, true,
+                "other exact glyph cannot invoke an earlier recovery");
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            await recoverBytes(redo, thicker, "redo thickness exact bytes");
+            // Ordinary edits invalidate stale recovery, even on a sibling.
+            add("∞", [1650, 2300, 1750, 2400], 251);
+            assert.equal(undo.disabled, true);
+            assert.equal(redo.disabled, true);
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            undo.dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), encodeGlyphLibrary([
+                ...thicker,
+                { grapheme: "∞", x1: 1650, y1: 2300, x2: 1750,
+                    y2: 2400, width: 251, color: "#243647" },
+            ]));
+            editor.reset();
+            assert.equal(undo.disabled, true);
+            assert.equal(redo.disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });

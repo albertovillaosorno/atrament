@@ -12122,6 +12122,16 @@ test(
                         const afterPreview = guide.querySelector("line")
                             ?.getAttribute("stroke-width");
                         get("save").click();
+                        const undoReady = !get("slant-undo").disabled;
+                        get("slant-undo").click();
+                        const undoStatus = get("status").textContent;
+                        const undoneWidth = guide.querySelector("line")
+                            ?.getAttribute("stroke-width");
+                        get("save").click();
+                        const redoReady = !get("slant-redo").disabled;
+                        get("slant-redo").click();
+                        const redoStatus = get("status").textContent;
+                        get("save").click();
                         change("ink-percent", 150);
                         const clippedGuide = guide.childElementCount;
                         const clippedStatus = get("ink-preview-status")
@@ -12135,7 +12145,9 @@ test(
                             initiallyDisabled, enabled, guideCount,
                             guideWidth, guideStatus, invalidGuide,
                             invalidStatus,
-                            refused, accepted, afterPreview, clippedGuide,
+                            refused, accepted, afterPreview,
+                            undoReady, undoStatus, undoneWidth,
+                            redoReady, redoStatus, clippedGuide,
                             clippedStatus, clipped, missingDisabled,
                             names, types: blobs.map((blob) => blob.type),
                             files: await Promise.all(blobs.map((blob) =>
@@ -12166,13 +12178,20 @@ test(
                 /Resized all authored ó pen thickness; unsaved/);
             assert.equal(result.afterPreview, "304",
                 "read-only guide recomputes after a valid ink edit");
+            assert.equal(result.undoReady, true);
+            assert.equal(result.redoReady, true);
+            assert.match(result.undoStatus,
+                /Undid last glyph pen thickness; unsaved/);
+            assert.equal(result.undoneWidth, "276");
+            assert.match(result.redoStatus,
+                /Redid last glyph pen thickness; unsaved/);
             assert.equal(result.clippedGuide, 0);
             assert.match(result.clippedStatus, /Scaled ink and pen clip/);
             assert.match(result.clipped, /Scaled ink and pen clip/);
             assert.deepEqual(result.names,
-                Array(4).fill("my-glyph-strokes.tsv"));
+                Array(6).fill("my-glyph-strokes.tsv"));
             assert.deepEqual(result.types,
-                Array(4).fill("text/tab-separated-values"));
+                Array(6).fill("text/tab-separated-values"));
             const nfd = "o\u0301";
             const source = [
                 { grapheme: nfd, x1: 175, y1: 800,
@@ -12188,7 +12207,8 @@ test(
             const transformed = encodeGlyphLibrary(
                 scaleGlyphInk(source, nfd, 110));
             assert.deepEqual(result.files,
-                [original, original, transformed, transformed],
+                [original, original, transformed,
+                    original, transformed, transformed],
                 "refused browser edits cannot overwrite accepted ink");
             assert.deepEqual(requests, baseline,
                 "ink edits and downloads make no extra backend requests");

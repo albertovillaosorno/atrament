@@ -887,10 +887,10 @@
               Slant all selected glyph strokes (unsaved)
             </button>
             <button id="glyph-slant-undo" type="button" disabled>
-              Undo last glyph slant
+              Undo last glyph transform
             </button>
             <button id="glyph-slant-redo" type="button" disabled>
-              Redo last glyph slant
+              Redo last glyph transform
             </button>
             <div class="glyph-slant-preview-region">
               <svg id="glyph-slant-preview"
@@ -928,7 +928,7 @@
               X, pen widths, stroke order, and other Unicode glyphs remain
               unchanged. Every preview is read-only. Scaling that clips a
               pen edge or collapses a line refuses without altering ink.
-              Height changes invalidate the previous slant undo step.
+              Each accepted transform replaces the one-step undo history.
               Save the original TSV before transforming.</p>
             <label>Authored glyph width (50–150% of current size)
               <input id="glyph-width-percent" type="number" min="50"
@@ -980,6 +980,11 @@
               preview does not edit your draft. A width outside 80–1500 µm
               or any clipped round pen cap refuses atomically. Download the
               TSV explicitly after applying the adjustment.</p>
+            <p class="field-help">Undo and redo recover only the latest
+              accepted whole-glyph slant, height, width or ink adjustment.
+              Exact TSV snapshots keep rounding loss reversible until a
+              later edit, import or session reset. This is one step, not
+              persistent revision history.</p>
             <p class="field-help">Apply a whole-glyph italic tilt to
               existing hand-authored segments without rebuilding any letter.
               The selected exact Unicode glyph changes only on an explicit
@@ -988,9 +993,9 @@
               the TSV separately.
               Refused angles, clipping or missing glyph ink leave the
               current unsaved draft untouched. Applying twice compounds the
-              tilt. One undo/redo step is available for the last slant
-              while no other ink edit has occurred; loading a file or
-              ending the session clears that history. Save an original
+              tilt. One undo/redo step tracks the latest accepted glyph
+              transform; other ink edits, a TSV load or a session reset
+              clear that step. Save an original
               TSV before transforming.</p>
           </div>
           <div class="paper-actions">
