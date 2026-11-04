@@ -1144,6 +1144,14 @@ connected contour without breaking endpoint joins or moving another
 Unicode glyph. The browser validates the entire path, including
 the pen's half-width clearance from the 3.5 × 4.5 mm cell edges.
 
+The native CLI also supports signed
+`glyphs --profile ink.tsv --translate-path 'ñ' 1 150 -200
+--output revised.tsv` with the same one-based path numbers
+reported by `--inspect-paths`. Multiple translations are applied
+in command order, with the same cell and pen-radius clearance
+checks. Existing unrelated Unicode TSV rows and the source file
+remain unchanged.
+
 A zero shift, out-of-range integer, clipped ink or TSV overflow
 refuses without changing the unsaved draft. An isolated accent
 stroke can also be translated as its own one-segment path.

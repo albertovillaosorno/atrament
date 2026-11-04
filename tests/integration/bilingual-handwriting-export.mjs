@@ -532,6 +532,32 @@ test('browser whole-path translation has native PDF/PNG ink parity', () => {
             independentlyAuthored[2],
         ]);
         assert.equal(encodeGlyphLibrary(original), originalBytes);
+        const source = join(dir, 'source.tsv');
+        const nativeOutput = join(dir, 'native.tsv');
+        writeFileSync(source, originalBytes);
+        const nativeEdit = native('glyphs', '--profile', source,
+            '--translate-path', nfd, '1', '300', '-250',
+            '--translate-path', nfd, '2', '-100', '200',
+            '--output', nativeOutput);
+        assert.equal(nativeEdit.status, 0, nativeEdit.stderr);
+        assert.deepEqual(readFileSync(nativeOutput), readFileSync(library),
+            'native and browser signed offsets produce byte-exact TSV');
+        assert.equal(readFileSync(source, 'utf8'), originalBytes);
+        const sentinel = join(dir, 'sentinel.tsv');
+        writeFileSync(sentinel, 'preserve');
+        for (const offset of [
+            ['1', '0', '0'], ['1', '-500', '0'],
+            ['1', '1.5', '0'], ['1', '3501', '0'],
+            ['3', '100', '0'], ['1', '+1', '0'],
+        ]) {
+            const refused = native('glyphs', '--profile', source,
+                '--translate-path', nfd, ...offset,
+                '--output', sentinel, '--replace');
+            assert.notEqual(refused.status, 0,
+                'invalid native offsets must refuse');
+            assert.equal(readFileSync(sentinel, 'utf8'), 'preserve');
+        }
+        assert.equal(readFileSync(source, 'utf8'), originalBytes);
         const inspection = native('glyphs', '--profile', library,
             '--inspect-paths', nfd);
         assert.equal(inspection.status, 0, inspection.stderr);

@@ -449,8 +449,25 @@ byte-for-byte with manually authored physical pen segments.
 This remains a sampled-line edit with no saved path identity,
 anchor, analytic curve or automatic cursive movement. P1-014 stays open.
 
-## Acceptance decision
+## Native signed whole-path translation parity (partial) — 2026-11-03
 
-Open. The finite implementation described above is not established by
+Rust `glyphs --translate-path GRAPHEME PATH_INDEX DX_UM DY_UM`
+now translates all segments of one exact authored candidate path,
+including an isolated accent. Its signed integer parser rejects
+malformed offsets, zero movement and out-of-range translations.
+It checks the entire pen-radius contour, including odd micrometre
+widths, before replacing an in-memory library or writing explicit TSV.
+
+Two Rust regressions cover sequential path translation, exact NFD
+and NFC plus math row separation, inverse byte-identical recovery,
+inspector correctness, explicit save/reopen, PDF/transparent PNG parity,
+and twenty invalid attempts that cannot overwrite existing files.
+
+The browser-to-Rust integration further compares both independently
+edited libraries byte-for-byte and exercises native refusal cases.
+No persistent path identity, cursive model or analytic curves are
+introduced. ATR-P4-014 remains open.
+
+ The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.

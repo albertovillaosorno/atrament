@@ -34,7 +34,7 @@
 //! Exact, explicitly authored glyph contours for a bounded CLI text overlay.
 
 use std::fmt::Write as _;
-use std::mem::swap;
+use std::mem::{replace, swap};
 use std::ops::Range;
 use std::slice::Iter;
 use std::str::from_utf8;
@@ -382,6 +382,11 @@ impl GlyphOverlay {
             "--move-path" => {
                 let to = next_integer(iter, "path index", 1, 4096)?;
                 self.move_path(grapheme, from, to)
+            }
+            "--translate-path" => {
+                let dx = next_signed_path_offset(iter, "path dx", 3500)?;
+                let dy = next_signed_path_offset(iter, "path dy", 4500)?;
+                self.translate_path(grapheme, from, dx, dy)
             }
             _ => Err("unknown path edit".into()),
         }
@@ -1062,6 +1067,60 @@ impl GlyphOverlay {
         Ok(())
     }
 
+    /// Shift every directed segment in one exact candidate pen path,
+    /// checking the full contour and explicit v1 output before commit.
+    pub(super) fn translate_path(
+        &mut self, grapheme: &str, ordinal: u32,
+        dx: i32, dy: i32,
+    ) -> Result<(), String> {
+        if dx.unsigned_abs() > 3500 || dy.unsigned_abs() > 4500
+            || (dx == 0i32 && dy == 0i32) {
+            return Err("path shift needs nonzero bounded whole um".into());
+        }
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("path index outside bounds")?;
+        let slots = positions.get(path.clone())
+            .ok_or("path range outside glyph")?;
+        // The pen's radius must be inside every cell edge, including odd
+        // widths: twice the coordinate must be >= ink width.
+        let translate = |value: u32, offset: i32, cell: i64, width: u32|
+            -> Result<u32, String> {
+            let moved = i64::from(value)
+                .checked_add(i64::from(offset))
+                .ok_or("translated coordinate overflow")?;
+            let twice = moved.checked_mul(2)
+                .ok_or("translated pen edge overflow")?;
+            let maximum = cell.checked_mul(2)
+                .and_then(|limit| limit.checked_sub(i64::from(width)))
+                .ok_or("translated pen limit overflow")?;
+            if twice < i64::from(width) || twice > maximum {
+                return Err("translated pen contour clips glyph cell".into());
+            }
+            u32::try_from(moved)
+                .map_err(|_error| "translated coordinate out of bounds".into())
+        };
+        let mut revised = self.strokes.clone();
+        for selected in slots {
+            let stroke = revised.get_mut(*selected)
+                .ok_or("path segment outside library")?;
+            stroke.start_um = (
+                translate(stroke.start_um.0, dx, 3500, stroke.width_um)?,
+                translate(stroke.start_um.1, dy, 4500, stroke.width_um)?,
+            );
+            stroke.end_um = (
+                translate(stroke.end_um.0, dx, 3500, stroke.width_um)?,
+                translate(stroke.end_um.1, dy, 4500, stroke.width_um)?,
+            );
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     pub(super) fn validate_pairing(&self) -> Result<(), String> {
         if self.strokes.is_empty() != self.runs.is_empty() {
             return Err(concat!(
@@ -1340,6 +1399,23 @@ fn missing_shapes_error(missing: &[&str]) -> String {
 }
 
 /// A visible glyph can have at most the entire bounded library of strokes.
+fn next_signed_path_offset(
+    iter: &mut Iter<'_, String>, label: &str, maximum: i32,
+) -> Result<i32, String> {
+    let raw = iter.next()
+        .ok_or_else(|| format!("{label} requires whole micrometres"))?;
+    let digits = raw.strip_prefix('-').unwrap_or(raw);
+    if digits.is_empty() || !digits.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err(format!("{label} needs a signed whole micrometre"));
+    }
+    let offset = raw.parse::<i32>()
+        .map_err(|_error| format!("{label} outside native bounds"))?;
+    if offset.unsigned_abs() > maximum.unsigned_abs() {
+        return Err(format!("{label} outside native bounds"));
+    }
+    Ok(offset)
+}
+
 fn next_stroke_index(
     iter: &mut Iter<'_, String>,
 ) -> Result<u32, String> {

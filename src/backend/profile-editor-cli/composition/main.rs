@@ -88,6 +88,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--move-stroke GRAPHEME FROM TO] \
     [--reverse-path GRAPHEME PATH_INDEX] \
     [--move-path GRAPHEME FROM_PATH TO_PATH] \
+    [--translate-path GRAPHEME PATH_INDEX DX_UM DY_UM] \
     [--join-strokes GRAPHEME FIRST_INDEX] \
     [--set-stroke GRAPHEME INDEX X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--remove-stroke GRAPHEME INDEX] \
@@ -111,6 +112,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --set-stroke updates ink geometry; --remove-stroke deletes one segment.\n\
     --reverse-path flips a multi-stroke path; --move-path swaps adjacent\n\
     paths using the current pen-continuity inspection order.\n\
+    --translate-path moves one path using bounded signed micrometres.\n\
     --join-strokes inserts a short same-pen connector to the next segment.\n\
     --copy-glyph clones explicit source ink under an unoccupied target.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
@@ -775,7 +777,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             "--reverse-stroke" | "--move-stroke" | "--join-strokes"
             | "--set-stroke" | "--remove-stroke" =>
                 glyphs.edit_stroke(option, &mut iter)?,
-            "--reverse-path" | "--move-path" =>
+            "--reverse-path" | "--move-path" | "--translate-path" =>
                 glyphs.edit_path(option, &mut iter)?,
             "--remove-glyph" => {
                 let grapheme = iter.next()

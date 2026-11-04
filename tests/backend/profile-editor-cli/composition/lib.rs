@@ -2290,6 +2290,155 @@ fn native_path_edits_refuse_invalid_or_nonadjacent_paths_atomically() {
 }
 
 #[test]
+fn native_path_translation_round_trips_exact_unicode_pen_geometry() {
+    let source = test_path().with_extension("tsv");
+    let revised = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("test source");
+    let revised_name = revised.to_str().expect("test output");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "500", "650", "850",
+        "950", "250", "#243647",
+        "--glyph-stroke", "ñ", "100", "200", "300",
+        "400", "250", "#121212",
+        "--glyph-stroke", "n\u{303}", "850", "950", "1300",
+        "1400", "250", "#243647",
+        "--glyph-stroke", "∞", "500", "600", "700",
+        "800", "250", "#121212",
+        "--glyph-stroke", "n\u{303}", "1600", "2500", "2000",
+        "2900", "250", "#B03040",
+    ])).expect("source library").expect("original bytes");
+    fs::write(&source, &original).expect("own source");
+    let mut commands = args(&[
+        "--profile", source_name,
+        "--translate-path", "n\u{303}", "1", "300", "-250",
+        "--translate-path", "n\u{303}", "2", "-100", "200",
+    ]);
+    let changed = execute_glyph_library(&commands)
+        .expect("valid path shifts").expect("TSV bytes");
+    assert_eq!(changed, concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ñ\t800\t400\t1150\t700\t250\t#243647\n",
+        "ñ\t100\t200\t300\t400\t250\t#121212\n",
+        "ñ\t1150\t700\t1600\t1150\t250\t#243647\n",
+        "∞\t500\t600\t700\t800\t250\t#121212\n",
+        "ñ\t1500\t2700\t1900\t3100\t250\t#B03040\n",
+    ).as_bytes());
+    assert_eq!(fs::read(&source).expect("source still original"), original);
+    let mut inspected = commands.clone();
+    inspected.extend(args(&["--inspect-paths", "n\u{303}"]));
+    let report = String::from_utf8(execute_glyph_library(&inspected)
+        .expect("path inspector").expect("report")).expect("UTF-8");
+    assert!(report.contains("Strokes: 3\nPaths: 2\nPen lifts: 1"));
+    assert!(report.contains(
+        "Path 1: strokes 1..2 (2 segments) (800, 400) -> (1600, 1150)"
+    ), "{report}");
+    assert!(report.contains(
+        "Path 2: strokes 3..3 (1 segment) (1500, 2700) -> (1900, 3100)"
+    ), "{report}");
+    commands.extend(args(&[
+        "--translate-path", "n\u{303}", "1", "-300", "250",
+        "--translate-path", "n\u{303}", "2", "100", "-200",
+    ]));
+    assert_eq!(execute_glyph_library(&commands)
+        .expect("inverse native shifts").expect("restored"), original);
+    let save = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--translate-path", "n\u{303}", "1", "300", "-250",
+        "--translate-path", "n\u{303}", "2", "-100", "200",
+        "--output", revised_name,
+    ])).expect("explicit saved output");
+    assert!(save.is_none());
+    assert_eq!(fs::read(&revised).expect("saved"), changed);
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", revised_name,
+    ])).expect("reload").expect("bytes"), changed);
+    for format in ["pdf", "png"] {
+        let mut selected = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", revised_name,
+            "--place-text", "1", "30000", "45000", "n\u{303}",
+        ]);
+        let mut independent = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", "n\u{303}", "800", "400", "1150",
+            "700", "250", "#243647",
+            "--glyph-stroke", "n\u{303}", "1150", "700", "1600",
+            "1150", "250", "#243647",
+            "--glyph-stroke", "n\u{303}", "1500", "2700", "1900",
+            "3100", "250", "#B03040",
+            "--place-text", "1", "30000", "45000", "n\u{303}",
+        ]);
+        if format == "png" {
+            selected.extend(args(&["--dpi", "72"]));
+            independent.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&selected)
+            .expect("native saved translated ink").expect("bytes"),
+            execute_notebook(&independent)
+            .expect("independent pen ink").expect("bytes"),
+            "native translated {format} ink order and geometry");
+    }
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(revised).expect("remove output");
+}
+
+#[test]
+fn native_path_translation_refuses_invalid_offsets_atomically() {
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let output_name = output.to_str().expect("output path");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "200", "200", "600",
+        "600", "251", "#112233",
+        "--glyph-stroke", "ñ", "200", "200", "600",
+        "600", "250", "#112233",
+        "--glyph-stroke", "n\u{303}", "600", "600", "800",
+        "800", "251", "#112233",
+        "--glyph-stroke", "n\u{303}", "2000", "3000", "2500",
+        "3500", "250", "#445566",
+    ])).expect("library").expect("original bytes");
+    fs::write(&source, &original).expect("source file");
+    fs::write(&output, b"preserve target").expect("target file");
+    let invalid = [
+        args(&["--translate-path"]),
+        args(&["--translate-path", "n\u{303}"]),
+        args(&["--translate-path", "n\u{303}", "1"]),
+        args(&["--translate-path", "n\u{303}", "1", "100"]),
+        args(&["--translate-path", "n\u{303}", "0", "100", "0"]),
+        args(&["--translate-path", "n\u{303}", "3", "100", "0"]),
+        args(&["--translate-path", "n\u{303}", "1", "0", "0"]),
+        args(&["--translate-path", "n\u{303}", "1", "+1", "0"]),
+        args(&["--translate-path", "n\u{303}", "1", "1.0", "0"]),
+        args(&["--translate-path", "n\u{303}", "1", "3501", "0"]),
+        args(&["--translate-path", "n\u{303}", "1", "-3501", "0"]),
+        args(&["--translate-path", "n\u{303}", "1", "0", "-4501"]),
+        args(&["--translate-path", "n\u{303}", "1", "-100", "0"]),
+        args(&["--translate-path", "n\u{303}", "1", "0", "-100"]),
+        args(&["--translate-path", "n\u{303}", "1", "3200", "0"]),
+        args(&["--translate-path", "n\u{303}", "1", "0", "4000"]),
+        args(&["--translate-path", "ñ", "2", "100", "0"]),
+        args(&["--translate-path", "n", "1", "100", "0"]),
+        args(&["--translate-path", "ab", "1", "100", "0"]),
+        args(&["--translate-path", "n\u{303}", "1",
+            "1", "0", "--translate-path", "n\u{303}", "2",
+            "0", "-4000"]),
+    ];
+    for flags in invalid {
+        let mut command = args(&["--profile", source_name]);
+        command.extend(flags);
+        command.extend(args(&["--output", output_name, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid pen translation must refuse: {command:?}");
+        assert_eq!(fs::read(&source).expect("source untouched"), original);
+        assert_eq!(fs::read(&output).expect("target untouched"),
+            b"preserve target");
+    }
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(output).expect("remove output");
+}
+
+#[test]
 fn path_inspection_can_report_the_full_bounded_library() {
     let mut source = String::from("atrament.glyph-strokes.v1\n");
     for index in 0..4096 {
