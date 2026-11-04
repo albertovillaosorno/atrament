@@ -198,6 +198,17 @@ non-xref indirect objects, unsupported version numbers and truncated headers
 refuse without contacting CUPS. An optional terminal `/Prev` must point
 back to a prior xref section.
 
+An optional `/XRefStm` key in a traditional-table trailer now receives a
+separate hybrid-reference check. Only PDF 1.5+ may use it; the direct decimal
+byte offset must lead back to a complete `/Type /XRef` indirect stream, not
+an arbitrary object, an xref table, a truncated stream or a future offset.
+
+Its bounded dictionary and exact `/Length` data and closing keywords are
+checked without decoding stream records or following older chains. Duplicate
+keys, including escaped-name aliases, refuse before CUPS. A real one-page
+PDF 1.5 hybrid-reference example remains readable by `pdfinfo` and reaches
+the fake spool with exact source bytes.
+
 Prior traditional tables need a bounded, complete first subsection with
 valid record fields; any in-use entries in it must point to matching object
 headers before that earlier table. A forged earlier count that omits an

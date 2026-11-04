@@ -471,6 +471,24 @@ preflight admits the exact selected bytes, and the fake queue receives the
 same SHA-256-verified snapshot without modifying the source. This is a
 compatibility check, not physical output or full revision-chain parsing.
 
+## Framed hybrid-reference xref pointer (partial) — 2026-11-04
+
+An optional top-level `/XRefStm` in a terminal traditional-table trailer
+must now identify a complete earlier indirect xref-stream object. The
+reference requires a direct decimal byte offset before the table, a PDF
+1.5+ header and an admitted `/Type /XRef` dictionary with bounded `/Size`,
+`/W` and `/Length`. Its encoded bytes and standalone `endstream`/`endobj`
+markers must frame exactly. A second `/XRefStm` key, including encoded
+PDF name aliases, refuses rather than overriding the first one.
+
+A red-before/green-after fake-CUPS regression refuses malformed, forward,
+self-referential, duplicated, version-incompatible and unclosed hybrid
+links without touching selected source bytes or invoking a printer.
+Admitted direct and escaped-name links preserve exact spool bytes. An
+independent `pdfinfo` read confirms the one-page PDF 1.5 hybrid fixture.
+This remains a nonrecursive lexical framing check: stream rows, prior
+revisions and physical printer output are not fully validated.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

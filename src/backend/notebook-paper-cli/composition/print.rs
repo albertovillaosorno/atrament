@@ -510,6 +510,51 @@ fn previous_xref_table_header(
     true
 }
 
+// Both revision and hybrid references must contain a direct decimal
+// byte offset to an earlier section, never a forward or self reference.
+fn bounded_xref_pointer(
+    bytes: &[u8], at: &mut usize, table_start: usize,
+) -> Option<usize> {
+    *at = pdf_trivia_end(bytes, *at);
+    let start = *at;
+    while bytes.get(*at).is_some_and(u8::is_ascii_digit) {
+        *at = at.saturating_add(1);
+    }
+    let offset = bytes.get(start..*at)
+        .and_then(|digits| str::from_utf8(digits).ok())
+        .and_then(|digits| digits.parse::<usize>().ok())?;
+    if offset < 9 || offset >= table_start
+        || !bytes.get(*at).is_some_and(|byte| {
+            byte.is_ascii_whitespace()
+                || matches!(byte, b'>' | b'/' | b'%')
+        }) {
+        return None;
+    }
+    Some(offset)
+}
+
+// A traditional table's /XRefStm hybrid reference must name a complete
+// earlier xref stream, not arbitrary bytes or a traditional table. This
+// bounds its exact stream frame without parsing its compressed contents.
+fn bounded_hybrid_xref_stream(
+    bytes: &[u8], at: &mut usize, document: &[u8], table_start: usize,
+) -> bool {
+    if !matches!(document.get(5..8),
+        Some([b'1', b'.', b'5'..=b'7'] | [b'2', b'.', b'0'])) {
+        return false;
+    }
+    let Some(offset) = bounded_xref_pointer(bytes, at, table_start)
+    else { return false; };
+    let Some(stream) = document.get(offset..table_start) else {
+        return false;
+    };
+    stream.get(..stream.len().min(16_384))
+        .and_then(|prefix| xref_stream_header_end(prefix, None))
+        .is_some_and(|(start, length)| {
+            xref_stream_frame_end(stream, start, length).is_some()
+        })
+}
+
 // /Prev, when present on a terminal traditional table, must lead back to
 // an earlier cross-reference record rather than to arbitrary data, a self
 // reference or a forged future byte offset. This is not recursive parsing
@@ -517,22 +562,8 @@ fn previous_xref_table_header(
 fn bounded_previous_xref(
     bytes: &[u8], at: &mut usize, document: &[u8], table_start: usize,
 ) -> bool {
-    *at = pdf_trivia_end(bytes, *at);
-    let start = *at;
-    while bytes.get(*at).is_some_and(u8::is_ascii_digit) {
-        *at = at.saturating_add(1);
-    }
-    let Some(offset) = bytes.get(start..*at)
-        .and_then(|digits| str::from_utf8(digits).ok())
-        .and_then(|digits| digits.parse::<usize>().ok())
+    let Some(offset) = bounded_xref_pointer(bytes, at, table_start)
     else { return false; };
-    if offset < 9 || offset >= table_start
-        || !bytes.get(*at).is_some_and(|byte| {
-            byte.is_ascii_whitespace()
-                || matches!(byte, b'>' | b'/' | b'%')
-        }) {
-        return false;
-    }
     let Some(earlier) = document.get(offset..table_start) else {
         return false;
     };
@@ -568,6 +599,7 @@ fn supported_xref_table_trailer(
     let mut array_depth = 0usize;
     let mut seen_size = false;
     let mut seen_prev = false;
+    let mut seen_hybrid = false;
     while at < bytes.len() {
         at = pdf_trivia_end(bytes, at);
         match bytes.get(at) {
@@ -631,6 +663,14 @@ fn supported_xref_table_trailer(
                         return false;
                     }
                     seen_prev = true;
+                } else if depth == 1 && array_depth == 0
+                    && pdf_name_is(name, b"XRefStm") {
+                    if seen_hybrid || !bounded_hybrid_xref_stream(
+                        bytes, &mut at, document, table_start,
+                    ) {
+                        return false;
+                    }
+                    seen_hybrid = true;
                 }
             }
             Some(_) => at = at.saturating_add(1),

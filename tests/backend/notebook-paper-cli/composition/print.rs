@@ -1470,6 +1470,96 @@ fn previous_xref_free_link_accepts_last_bounded_object_index() {
 
 #[cfg(unix)]
 #[test]
+fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("hybrid.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
+    )).expect("write fake spooler");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+
+    let original = one_page_xref_stream_pdf("1.5", " /Index [0 5]");
+    let prior = original.windows(b"4 0 obj\n".len())
+        .position(|part| part == b"4 0 obj\n")
+        .expect("real xref stream object");
+    let locator = original.windows(b"startxref\n".len())
+        .rposition(|part| part == b"startxref\n")
+        .expect("original terminal locator");
+    let prefix = &original[..locator];
+    let revised = |source: &[u8], trailer: &str| [
+        source,
+        format!(
+            "xref\n0 1\n0000000000 65535 f \n\
+             trailer\n<< /Size 5 /Root 1 0 R {trailer} >>\n\
+             startxref\n{}\n%%EOF\n", source.len(),
+        ).as_bytes(),
+    ].concat();
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    for trailer in [
+        format!("/XRefStm {prior}"),
+        format!("/XR#65fStm {prior}"),
+        format!("/XRefStm {prior} /Meta << /XRefStm 0 >>"),
+    ] {
+        let candidate = revised(prefix, &trailer);
+        assert!(supported_pdf_cross_reference(&candidate),
+            "framed hybrid stream should remain eligible: {trailer}");
+        fs::write(&pdf, &candidate).expect("write reviewed PDF");
+        assert_eq!(submit_selected(&request, &fake_spool)
+            .expect("valid hybrid table reaches fake CUPS"),
+            sha256_profile_bytes(&candidate).bytes());
+        assert_eq!(fs::read(&spooled).expect("spooled bytes"), candidate);
+        fs::remove_file(&spooled).expect("clear test spool");
+    }
+    for trailer in [
+        "/XRefStm 0".into(), "/XRefStm -1".into(),
+        "/XRefStm abc".into(),
+        format!("/XRefStm {}", prior + 1),
+        format!("/XRefStm {}", prefix.len()),
+        format!("/XRefStm {prior} /XRefStm {prior}"),
+        format!("/XRefStm {prior} /XR#65fStm {prior}"),
+    ] {
+        let candidate = revised(prefix, &trailer);
+        assert!(!supported_pdf_cross_reference(&candidate),
+            "invalid hybrid pointer must refuse: {trailer}");
+        fs::write(&pdf, &candidate).expect("write malformed PDF");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "invalid hybrid pointer cannot contact CUPS");
+        assert!(!spooled.exists(), "no spool side effects");
+        assert_eq!(fs::read(&pdf).expect("source unchanged"), candidate);
+    }
+    let last_endobj = prefix.windows(b"endobj\n".len())
+        .rposition(|part| part == b"endobj\n")
+        .expect("prior stream closing object");
+    let missing_endobj = [&prefix[..last_endobj],
+        &prefix[last_endobj + b"endobj\n".len()..]].concat();
+    let forged = revised(&missing_endobj, &format!("/XRefStm {prior}"));
+    assert!(!supported_pdf_cross_reference(&forged),
+        "hybrid pointer cannot name a stream without its endobj");
+    fs::write(&pdf, &forged).expect("write truncated prior stream");
+    assert!(submit_selected(&request, &fake_spool).is_err());
+    assert!(!spooled.exists(), "truncated stream cannot reach CUPS");
+    assert_eq!(fs::read(&pdf).expect("source unchanged"), forged);
+
+    let mut obsolete = revised(prefix, &format!("/XRefStm {prior}"));
+    *obsolete.get_mut(7).expect("PDF minor version") = b'4';
+    assert!(!supported_pdf_cross_reference(&obsolete),
+        "PDF 1.4 cannot declare a hybrid-reference stream");
+    fs::write(&pdf, &obsolete).expect("write version-spoofed PDF");
+    assert!(submit_selected(&request, &fake_spool).is_err());
+    assert!(!spooled.exists());
+    fs::remove_dir_all(&directory).expect("remove test fixtures");
+}
+
+#[cfg(unix)]
+#[test]
 fn xref_table_prev_must_point_back_to_a_prior_xref() {
     use std::os::unix::fs::PermissionsExt as _;
 
