@@ -38,6 +38,7 @@ import { createPaperProfileEditor, createNotebookProfileEditor } from "./paper-p
 import { createHandwritingProfileEditor } from "./handwriting-profile.js";
 import { createGlyphStrokeEditor } from "./glyph-strokes.js";
 import { sessionSecretFromFragment } from "./session-fragment.js";
+import { prepareMarkdownHandoff } from "./markdown-export.js";
 
 function fragmentFreeLocalUrl(): string {
     return `${window.location.pathname}${window.location.search}`;
@@ -182,6 +183,12 @@ function bindCharacterCount(
 
 const taskInput = requireElement<HTMLTextAreaElement>("#task-input");
 const sourceInput = requireElement<HTMLTextAreaElement>("#source-input");
+const sourceMarkdownExport = requireElement<HTMLButtonElement>(
+    "#source-markdown-export",
+);
+const sourceMarkdownStatus = requireElement<HTMLElement>(
+    "#source-markdown-status",
+);
 const candidateInput = requireElement<HTMLTextAreaElement>("#candidate-input");
 const taskCount = requireElement<HTMLElement>("#task-count");
 const sourceCount = requireElement<HTMLElement>("#source-count");
@@ -252,6 +259,63 @@ function getClipboardWrite(): ClipboardWrite | null {
 bindCharacterCount(taskInput, taskCount);
 bindCharacterCount(sourceInput, sourceCount);
 bindCharacterCount(candidateInput, candidateCount);
+
+let sourceMarkdownUrl: string | null = null;
+
+function revokeSourceMarkdownUrl(): void {
+    if (sourceMarkdownUrl !== null) {
+        URL.revokeObjectURL(sourceMarkdownUrl);
+        sourceMarkdownUrl = null;
+    }
+}
+
+function refreshSourceMarkdownExport(): void {
+    const candidate = prepareMarkdownHandoff(sourceInput.value);
+    const editable = !sourceInput.disabled && sessionSecret !== null;
+    sourceMarkdownExport.disabled = !editable || candidate.kind !== "ready";
+    const status = !editable ? "Available after session draft loads."
+        : candidate.kind === "empty" ? "Paste source text to download."
+        : candidate.kind === "too-large"
+            ? "Source exceeds the Rust CLI 4,096-byte limit."
+        : candidate.kind === "invalid-unicode"
+            ? "Source contains invalid Unicode; correct it first."
+        : "Ready for explicit local Markdown download.";
+    setTextIfChanged(sourceMarkdownStatus, status);
+}
+
+sourceInput.addEventListener("input", refreshSourceMarkdownExport);
+sourceMarkdownExport.addEventListener("click", (): void => {
+    const candidate = prepareMarkdownHandoff(sourceInput.value);
+    if (sourceMarkdownExport.disabled || sourceInput.disabled
+        || sessionSecret === null || candidate.kind !== "ready") {
+        return;
+    }
+    try {
+        const blob = new Blob([candidate.text], {
+            type: "text/markdown; charset=utf-8",
+        });
+        if (blob.size !== candidate.bytes) {
+            setTextIfChanged(sourceMarkdownStatus, "Markdown bytes changed.");
+            return;
+        }
+        revokeSourceMarkdownUrl();
+        const url = URL.createObjectURL(blob);
+        sourceMarkdownUrl = url;
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = "atrament-source.md";
+        link.rel = "noopener";
+        link.click();
+        window.setTimeout(() => {
+            if (sourceMarkdownUrl === url) revokeSourceMarkdownUrl();
+        }, 60_000);
+        setTextIfChanged(sourceMarkdownStatus, "Markdown download requested.");
+    } catch {
+        const message = "Markdown download unavailable.";
+        setTextIfChanged(sourceMarkdownStatus, message);
+    }
+});
+refreshSourceMarkdownExport();
 
 function invalidateClipboardRequests(): number {
     copyGeneration += 1;
@@ -492,6 +556,8 @@ function clearSessionText(): void {
     candidateInput.value = "";
     taskInput.disabled = true;
     sourceInput.disabled = true;
+    revokeSourceMarkdownUrl();
+    refreshSourceMarkdownExport();
     promptOutput.disabled = true;
     candidateInput.disabled = true;
     copyPrompt.disabled = true;
@@ -509,6 +575,7 @@ function enableCompatibleEditing(): void {
     endSession.disabled = false;
     taskInput.disabled = false;
     sourceInput.disabled = false;
+    refreshSourceMarkdownExport();
     candidateInput.disabled = false;
 }
 
@@ -682,6 +749,8 @@ function invalidateUnauthorizedSession(): void {
 function disableDraftEditing(): void {
     taskInput.disabled = true;
     sourceInput.disabled = true;
+    revokeSourceMarkdownUrl();
+    refreshSourceMarkdownExport();
     candidateInput.disabled = true;
 }
 

@@ -1967,6 +1967,10 @@ const GLYPH_STROKES_JAVASCRIPT: &[u8] = include_bytes!(concat!(
     "../../../../src/browser/workspace/adapter-inbound/",
     "generated/glyph-strokes.js"
 ));
+const MARKDOWN_EXPORT_JAVASCRIPT: &[u8] = include_bytes!(concat!(
+    "../../../../src/browser/workspace/adapter-inbound/",
+    "generated/markdown-export.js"
+));
 const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(concat!(
     "../../../../src/browser/workspace/adapter-inbound/",
     "generated/session-draft.js"
@@ -2162,6 +2166,11 @@ fn serves_embedded_frontend_resources_without_caching() {
             "/generated/glyph-strokes.js",
             "text/javascript; charset=utf-8",
             GLYPH_STROKES_JAVASCRIPT,
+        ),
+        (
+            "/generated/markdown-export.js",
+            "text/javascript; charset=utf-8",
+            MARKDOWN_EXPORT_JAVASCRIPT,
         ),
         (
             "/generated/session-draft.js",

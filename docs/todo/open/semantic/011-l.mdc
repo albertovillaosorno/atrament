@@ -106,9 +106,21 @@ unsupported list syntax. Missing number glyphs and empty numbered items
 refuse before replacing an existing PDF. Numbering is not computed or
 persisted in a semantic document.
 
+The authenticated browser's existing **Source material** textarea now has
+an explicit `atrament-source.md` download for later `--flow-markdown-file`
+use. JavaScript performs only a UTF-8 byte-bound transport guard (4,096
+bytes), does not parse Markdown, and requires compatible session hydration.
+The Rust localhost server serves one pinned new helper module, not a generic
+file-serving route. Firefox verifies the browser-created Blob exactly matches
+the session's UTF-8 source with no new network request, and an existing
+Firefox session-disposal regression passes with the added module. Four new
+Node assertions cover byte-bound Unicode, NFD/BOM identity, malformed
+surrogates and disabled initial controls. No browser PDF/PNG flow is implied.
+
 The source and resulting ink are export-only CLI state, **not** a
 persisted semantic notebook model.
-Browser paste/edit, stable semantic block identities, complete Markdown,
+Live browser Markdown rendering, stable semantic block identities,
+complete Markdown,
 fixed image regions, true glyph outlines, editable aesthetic title styles
 and persisted notebook body content remain open.
 

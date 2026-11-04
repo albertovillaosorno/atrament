@@ -2998,6 +2998,7 @@ function createStaticWorkspaceServer(requests, serveScripts = false) {
         "paper-profile.js",
         "handwriting-profile.js",
         "glyph-strokes.js",
+        "markdown-export.js",
     ]);
     return http.createServer((request, response) => {
         const pathname = new URL(
@@ -3060,6 +3061,7 @@ function createSessionFixtureServer(
         "paper-profile.js",
         "handwriting-profile.js",
         "glyph-strokes.js",
+        "markdown-export.js",
     ]);
     return http.createServer((request, response) => {
         const pathname = new URL(
@@ -4240,6 +4242,7 @@ test(
                 "/",
                 "/generated/handwriting-profile.js",
                 "/generated/glyph-strokes.js",
+                "/generated/markdown-export.js",
                 "/generated/main.js",
                 "/generated/paper-profile.js",
                 "/generated/session-diagnostic.js",
@@ -9360,6 +9363,98 @@ function firefoxProfileContainsPlaintext(profile, marker) {
 }
 
 test(
+    "Firefox explicit Markdown download preserves session source bytes",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/source-markdown-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/` +
+                    `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const outcome = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `(async () => {
+                    const button = document.getElementById(
+                        "source-markdown-export");
+                    const source = document.getElementById("source-input");
+                    const initial = button.disabled;
+                    let captured = null;
+                    let offered = null;
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            captured = blob;
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            offered = {
+                                filename: this.download, href: this.href,
+                            };
+                        };
+                        button.click();
+                        return JSON.stringify({
+                            initial,
+                            filename: offered?.filename,
+                            local: offered?.href.startsWith("blob:"),
+                            bytes: captured?.size,
+                            mediaType: captured?.type,
+                            text: await captured?.text(),
+                            status: document.getElementById(
+                                "source-markdown-status").textContent,
+                            source: source.value,
+                        });
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(outcome.type, "success");
+            assert.equal(outcome.result.type, "string");
+            const data = JSON.parse(outcome.result.value);
+            assert.equal(data.initial, false);
+            assert.equal(data.filename, "atrament-source.md");
+            assert.equal(data.local, true);
+            assert.equal(data.mediaType, "text/markdown; charset=utf-8");
+            assert.equal(data.text, REFRESH_DRAFT.source);
+            assert.equal(data.source, REFRESH_DRAFT.source);
+            assert.equal(data.bytes,
+                new TextEncoder().encode(REFRESH_DRAFT.source).length);
+            assert.equal(data.status, "Markdown download requested.");
+            assert.deepEqual(requests, baseline,
+                "user-requested Blob download issues no network request");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
     "Firefox draft edits and explicit End leave browser stores empty",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
     async () => {
@@ -9464,6 +9559,7 @@ test(
                 "GET /api/paper/profile",
                 "GET /generated/handwriting-profile.js",
                 "GET /generated/glyph-strokes.js",
+                "GET /generated/markdown-export.js",
                 "GET /generated/main.js",
                 "GET /generated/paper-profile.js",
                 "GET /generated/session-diagnostic.js",

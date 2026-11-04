@@ -141,6 +141,9 @@ const HANDWRITING_PROFILE_JAVASCRIPT: &[u8] = include_bytes!("../../../browser/w
 const GLYPH_STROKES_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/glyph-strokes.js"
 );
+const MARKDOWN_EXPORT_JAVASCRIPT: &[u8] = include_bytes!(
+    "../../../browser/workspace/adapter-inbound/generated/markdown-export.js"
+);
 const SESSION_DRAFT_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/session-draft.js"
 );
@@ -1839,6 +1842,11 @@ fn public_get_response(target: &str) -> Option<Vec<u8>> {
             "200 OK",
             JAVASCRIPT_CONTENT_TYPE,
             GLYPH_STROKES_JAVASCRIPT,
+        )),
+        "/generated/markdown-export.js" => Some(response(
+            "200 OK",
+            JAVASCRIPT_CONTENT_TYPE,
+            MARKDOWN_EXPORT_JAVASCRIPT,
         )),
         "/generated/session-draft.js" => Some(response(
 

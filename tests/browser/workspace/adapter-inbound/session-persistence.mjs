@@ -60,6 +60,7 @@ const REVIEWED_MODULES = [
     "glyph-strokes.js",
     "handwriting-profile.js",
     "main.js",
+    "markdown-export.js",
     "paper-profile.js",
     "session-diagnostic.js",
     "session-draft.js",
@@ -248,6 +249,7 @@ test("static workspace starts session controls disabled", async () => {
         "retry-session",
         "task-input",
         "source-input",
+        "source-markdown-export",
         "profile-select",
         "paper-select",
         "style-select",
@@ -396,6 +398,8 @@ function hasUnreviewedExecutableCode(source, filename) {
         "main": [
             'import { createGlyphStrokeEditor } from ' +
                 '"./glyph-strokes.js";',
+            'import { prepareMarkdownHandoff } from ' +
+                '"./markdown-export.js";',
             'import { parseBoundedJsonResponse } from ' +
                 '"./session-diagnostic.js";',
             'import * as sessionDraft from "./session-draft.js";',
@@ -432,7 +436,8 @@ function hasUnreviewedExecutableCode(source, filename) {
         "window.setTimeout(() => {",
     ]) {
         if (remaining.split(site).length - 1 !==
-            (moduleName === "main" ? 1
+            (moduleName === "main"
+                ? site === "window.setTimeout(() => {" ? 2 : 1
                 : site === "window.setTimeout(() => {"
                     ? moduleName === "paper-profile" ? 2
                         : ["handwriting-profile", "glyph-strokes"].includes(
@@ -498,7 +503,7 @@ function hasUnreviewedBrowserGlobalAuthority(
         ['window.addEventListener("resize"', 1],
         ["window.location.reload()", 1],
         ["window.setTimeout(resetLocalViewportState, 0)", 1],
-        ["window.setTimeout(() => {", 1],
+        ["window.setTimeout(() => {", 2],
         ["window.innerWidth", 1],
     ];
     let remaining = source.replace(/^\s*\/\/[^\n]*$/gmu, "");
@@ -584,7 +589,8 @@ function hasUnreviewedDocumentAuthority(source, main, typed, paper = false,
     // Each editor owns a separately reviewed Blob download anchor.
     for (const [site, count] of [
         ["document.getElementById(id)", paper || glyph ? 1 : 0],
-        ['document.createElement("a")', Number(paper) + Number(glyph)],
+        ['document.createElement("a")',
+            Number(main) + Number(paper) + Number(glyph)],
         ['document.createElementNS(SVG_NS, "line")', glyph ? 2 : 0],
     ]) {
         if (remaining.split(site).length - 1 !== count) {
@@ -1624,7 +1630,7 @@ function usesUnreviewedBrowserNavigation(
     }
     // One anchor click is confined to an explicit local Blob download.
     if (remaining.split("link.click()").length - 1
-        !== Number(paper) + Number(glyph)) {
+        !== Number(main) + Number(paper) + Number(glyph)) {
         return true;
     }
     remaining = remaining.replaceAll("link.click()", "");
@@ -1705,6 +1711,8 @@ test("browser navigation inventory distinguishes reviewed local calls", () => {
         "const otherHash = window.location.hash;",
         "const lastHash = window.location.hash;",
         "const local = window.location.pathname + window.location.search;",
+        // Explicit handoff anchor is permitted only after session gating.
+        "link.click()",
     ].join("\n");
     assert.equal(usesUnreviewedBrowserNavigation(reviewed, true), false);
     assert.equal(usesUnreviewedBrowserNavigation(
@@ -1912,7 +1920,7 @@ function hasUnreviewedDynamicResourceAuthority(source, main, paper = false,
         "link.href = url",
     ]) {
         if (remaining.split(site).length - 1
-            !== Number(paper) + Number(glyph)) {
+            !== Number(main) + Number(paper) + Number(glyph)) {
             return true;
         }
         remaining = remaining.replaceAll(site, "");

@@ -459,6 +459,24 @@ Inline styles, tables and full Markdown are not yet supported.
 The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.
 The same 512 total exported pen-segment limit still applies.
 
+In the authenticated localhost workspace, paste Markdown into **Source
+material**, then choose **Download source as Markdown (.md)**. The explicit
+browser download is `atrament-source.md` and preserves the current draft
+text without a JavaScript Markdown renderer. It refuses empty, invalid
+Unicode or over-4,096-byte source, but **does not** promise the Rust CLI will
+accept unsupported syntax or missing glyphs. To produce real handwritten
+pages, use the downloaded file with your already-authored glyph library:
+
+```sh
+cargo run -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv \
+  --flow-markdown-file atrament-source.md \
+  --export-paper pdf --output notebook.pdf
+```
+
+The source download itself does not render or save a semantic notebook. It
+requires a compatible browser session and never sends a new network request.
+
 If `notes.md` includes an unauthored character (for example `ñ` when
 only `a` was saved), export refuses with its exact Unicode identity;
 no PDF/PNG is created or overwritten. Author more glyphs in the editor

@@ -108,6 +108,20 @@
           ></textarea>
           <span class="field-meta" id="source-count">0 characters</span>
         </label>
+        <div class="copy-toolbar">
+          <button id="source-markdown-export" type="button"
+            autocomplete="off" disabled
+            aria-describedby="source-markdown-help source-markdown-status">
+            Download source as Markdown (.md)
+          </button>
+          <span id="source-markdown-status" class="action-status"
+            role="status" aria-live="polite"></span>
+        </div>
+        <p id="source-markdown-help" class="field-help">
+          Explicit CLI handoff only: saves the current source field as a
+          Markdown file (up to 4,096 UTF-8 bytes). Rust still checks the
+          text, authored glyphs and page layout before PDF/PNG export.
+        </p>
 
         <fieldset class="option-fieldset" aria-describedby="option-help">
           <legend>Notebook options</legend>
