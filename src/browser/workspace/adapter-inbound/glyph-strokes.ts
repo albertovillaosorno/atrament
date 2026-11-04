@@ -1481,6 +1481,7 @@ export function createGlyphStrokeEditor(): {
     const reverse = required<HTMLButtonElement>("glyph-reverse");
     const earlier = required<HTMLButtonElement>("glyph-earlier");
     const later = required<HTMLButtonElement>("glyph-later");
+    const join = required<HTMLButtonElement>("glyph-join");
     const save = required<HTMLButtonElement>("glyph-save");
     const preview = required<SVGSVGElement>("glyph-preview");
     const status = required<HTMLElement>("glyph-status");
@@ -1517,7 +1518,7 @@ export function createGlyphStrokeEditor(): {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, reverse, earlier, later, save,
+        remove, reverse, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
     let generation = 0;
@@ -1941,6 +1942,7 @@ export function createGlyphStrokeEditor(): {
         reverse.disabled = !active || selectedIndex === null;
         earlier.disabled = !active || neighbor(-1) === null;
         later.disabled = !active || neighbor(1) === null;
+        join.disabled = !active || neighbor(1) === null;
         const lines = shown.map(({ stroke, index }) => {
             const line = document.createElementNS(SVG_NS, "line");
             for (const axis of ["x1", "y1", "x2", "y2"] as const) {
@@ -2546,6 +2548,48 @@ export function createGlyphStrokeEditor(): {
     };
     earlier.addEventListener("click", () => move(-1));
     later.addEventListener("click", () => move(1));
+    join.addEventListener("click", () => {
+        if (!active || selectedIndex === null) return;
+        try {
+            const first = strokes[selectedIndex];
+            const target = neighbor(1);
+            const second = target === null ? undefined : strokes[target];
+            if (!first || !second || first.grapheme !== second.grapheme) {
+                throw new Error("Joining needs the next exact glyph stroke");
+            }
+            if (first.width !== second.width
+                || first.color.toUpperCase() !== second.color.toUpperCase()) {
+                throw new Error("Joining needs matching pen width and RGB");
+            }
+            const dx = first.x2 - second.x1;
+            const dy = first.y2 - second.y1;
+            const distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared === 0) {
+                throw new Error("Strokes are already continuous");
+            }
+            if (distanceSquared > 1200 * 1200) {
+                throw new Error("Stroke gap exceeds 1200 µm join limit");
+            }
+            if (strokes.length === MAX_STROKES) {
+                throw new Error("Joining exceeds 4096 authored strokes");
+            }
+            const bridge: Stroke = {
+                grapheme: first.grapheme,
+                x1: first.x2, y1: first.y2,
+                x2: second.x1, y2: second.y1,
+                width: first.width, color: first.color,
+            };
+            const next = strokes.slice();
+            next.splice(selectedIndex + 1, 0, bridge);
+            encodeGlyphLibrary(next);
+            const joinedIndex = selectedIndex + 1;
+            strokes = next;
+            choose(joinedIndex);
+            message("Connected selected pen strokes; unsaved");
+        } catch (error) {
+            message(String(error));
+        }
+    });
     remove.addEventListener("click", () => {
         if (!active || selectedIndex === null) return;
         if (strokes[selectedIndex]?.grapheme !== character.value) return;

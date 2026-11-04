@@ -881,6 +881,13 @@
             <button id="glyph-later" type="button" disabled>
               Move selected stroke later
             </button>
+            <button id="glyph-join" type="button" disabled>
+              Connect selected stroke to next
+            </button>
+            <p class="field-help">Connect adds an explicit short straight
+              stroke to the next segment of the same glyph. It requires the
+              same pen width/color and a gap at most 1200 µm; no automatic
+              cursive or inferred pen lift is created.</p>
             <label class="paper-upload-label" for="glyph-load">
               Load stroke TSV
               <input id="glyph-load" type="file" accept=".tsv,text/plain"

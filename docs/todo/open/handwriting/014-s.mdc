@@ -282,6 +282,13 @@ neighbors, excessive gaps, already touching endpoints, mismatched color or
 width, repeated joins and stroke-budget overflow refuse without modifying
 existing source or destination files.
 
+The browser glyph editor also offers **Connect selected stroke to next**
+with the same bounded gap, matching pen, capacity and exact-grapheme rules.
+It inserts a visible, editable ordered segment into the unsaved draft and
+encodes the same canonical TSV accepted by Rust. Browser regressions cover
+interleaved Unicode identities, accepted 1200 µm geometry and refusal
+without draft mutation.
+
 This is an opt-in **straight bridge**, not a native parametric curve, inferred
 continuous pen-lift model or automatic cursive across adjacent letters.
 Seeded variation and joined word/line output remain separate unfinished

@@ -175,7 +175,7 @@ function mountEditor() {
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
         "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
-        "glyph-earlier", "glyph-later",
+        "glyph-earlier", "glyph-later", "glyph-join",
         "glyph-variation-preview", "glyph-variation-status",
         "glyph-variation-seed", "glyph-variation-sample",
         "glyph-variation-download", ...["width", "height", "thickness",
@@ -745,6 +745,113 @@ test("stroke reversal and reorder affect only the chosen glyph", async () => {
     }
 });
 
+
+test("browser joins preserve Unicode rows and export Rust TSV", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const grapheme = "n\u{303}";
+        const original = [
+            { grapheme, x1: 500, y1: 600, x2: 1100, y2: 1400,
+                width: 250, color: "#102030" },
+            { grapheme: "ñ", x1: 1000, y1: 1000, x2: 1200,
+                y2: 2200, width: 350, color: "#AABBCC" },
+            { grapheme, x1: 1500, y1: 1800, x2: 2200, y2: 2600,
+                width: 250, color: "#102030" },
+        ];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(original));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("character").value = grapheme;
+        get("character").dispatch("input");
+        assert.equal(get("join").disabled, true,
+            "joining requires a deliberate exact-glyph selection");
+        get("selected").value = "0";
+        get("selected").dispatch("change");
+        assert.equal(get("join").disabled, false);
+        get("join").dispatch("click");
+        assert.match(get("status").textContent, /Connected selected/);
+        assert.equal(get("selected").value, "1");
+        const bridge = {
+            grapheme, x1: 1100, y1: 1400, x2: 1500, y2: 1800,
+            width: 250, color: "#102030",
+        };
+        const expected = [original[0], bridge, original[1], original[2]];
+        assert.equal(get("preview").children.length, 3);
+        get("save").dispatch("click");
+        const exported = parseGlyphLibrary(await downloads[0].text());
+        assert.deepEqual(exported, expected);
+        assert.equal(get("selected").value, "1");
+        get("selected").value = "0";
+        get("selected").dispatch("change");
+        get("join").dispatch("click");
+        assert.match(get("status").textContent, /already continuous/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[1].text()),
+            expected, "rejected repeat must not mutate the draft");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("browser refuses unsafe joins without mutating authored ink", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const first = { ...stroke("á"), x1: 500, y1: 500,
+            x2: 1000, y2: 1000, color: "#102030" };
+        const second = { ...stroke("á"), x1: 2200, y1: 1000,
+            x2: 2600, y2: 1600, color: "#102030" };
+        const invalid = [
+            [{ ...first }, { ...second, x1: 2201 }],
+            [{ ...first }, { ...second, width: 350 }],
+            [{ ...first }, { ...second, color: "#AABBCC" }],
+            [{ ...first }, { ...second, x1: 1000, y1: 1000 }],
+        ];
+        for (const source of invalid) {
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(source));
+            get("load").files = [{
+                size: bytes.length, arrayBuffer: async () => bytes.buffer,
+            }];
+            await get("load").dispatch("change");
+            get("character").value = "á";
+            get("character").dispatch("input");
+            get("selected").value = "0";
+            get("selected").dispatch("change");
+            get("join").dispatch("click");
+            assert.match(get("status").textContent,
+                /(?:1200|matching|already continuous)/);
+            get("save").dispatch("click");
+            const last = downloads.at(-1);
+            assert.deepEqual(parseGlyphLibrary(await last.text()), source,
+                "rejected join cannot alter any authored segment");
+        }
+        const valid = new TextEncoder().encode(
+            encodeGlyphLibrary([first, second]));
+        get("load").files = [{
+            size: valid.length, arrayBuffer: async () => valid.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("character").value = "á";
+        get("character").dispatch("input");
+        get("selected").value = "0";
+        get("selected").dispatch("change");
+        get("join").dispatch("click");
+        assert.match(get("status").textContent, /Connected selected/,
+            "inclusive 1200 µm gap remains admissible");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            [first, { ...first, x1: 1000, y1: 1000,
+                x2: 2200, y2: 1000 }, second]);
+    } finally {
+        ui.restore();
+    }
+});
 
 test("geometric starters share loop and validate acute strokes", () => {
     const circle = geometricStarter("o", 1550, 2450, 1100, 250, "#123456");
