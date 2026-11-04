@@ -371,7 +371,8 @@ function mountEditor() {
         "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-compose",
         "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
-        "glyph-seed-baseline", "glyph-baseline-coverage",
+        "glyph-seed-baseline", "glyph-focus-missing",
+        "glyph-baseline-coverage",
         "glyph-seed-spanish", "glyph-seed-spanish-nfd",
         "glyph-seed-upper-spanish", "glyph-seed-upper-spanish-nfd",
         "glyph-seed-punctuation", "glyph-seed-quotes",
@@ -4024,6 +4025,40 @@ test("text marks fill keeps custom ink and rejects over-cap", async () => {
         ui.restore();
     }
 });
+
+test("next-missing navigation cycles exact NFC/NFD and never draws ink",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            assert.equal(get("focus-missing").disabled, true);
+            editor.start();
+            assert.equal(get("focus-missing").disabled, false);
+            get("character").value = "ü";
+            get("character").dispatch("input");
+            get("focus-missing").dispatch("click");
+            assert.equal(get("character").value, "a\u0301");
+            assert.equal(get("form").value, "a\u0301",
+                "selected NFD has its own exact geometry guide");
+            assert.match(get("status").textContent,
+                /Inspecting missing glyph á \(NFD\); draft unchanged/);
+            get("focus-missing").dispatch("click");
+            assert.equal(get("character").value, "e\u0301");
+            get("character").value = "U\u0308";
+            get("character").dispatch("input");
+            get("focus-missing").dispatch("click");
+            assert.equal(get("character").value, "a", "wrap to first key");
+            assert.equal(downloads.length, 0);
+            assert.match(get("baseline-coverage").textContent,
+                /0\/114 exact glyphs; 114 missing/);
+            get("seed-baseline").dispatch("click");
+            assert.equal(get("focus-missing").disabled, true);
+            editor.reset();
+            assert.equal(get("focus-missing").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
 
 test("baseline coverage is read-only and tracks separate Unicode keys",
     () => {

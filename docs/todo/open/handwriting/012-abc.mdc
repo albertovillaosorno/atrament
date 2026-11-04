@@ -1095,7 +1095,11 @@ indicator shows the number of exact authored text keys (0–114) as a
 session-local count, with the first eight missing keys as visible hints;
 NFD keys are labeled separately from visually matching NFC accents. Its
 status updates on import, authoring, refusal, fill and reset without saving,
-normalizing or transmitting the draft. The full P1-012 task stays open.
+normalizing or transmitting the draft. A separate read-only next-missing
+control cycles through the exact 114-key inventory, keeps the chosen NFD
+input and matching geometry guide aligned, and disables itself when all keys
+have ink or the session ends. No stroke or TSV is changed by inspection.
+The full P1-012 task stays open.
 
 ## Explicit connected-pen o/a drafts (partial) — 2026-11-04
 

@@ -13668,6 +13668,12 @@ test(
                         const enabled = !get("seed-baseline").disabled;
                         const coverageBefore =
                             get("baseline-coverage").textContent;
+                        get("character").value = "ü";
+                        get("character").dispatchEvent(new Event("input"));
+                        get("focus-missing").click();
+                        const selectedMissing = get("character").value;
+                        const selectedForm = get("form").value;
+                        const inspectStatus = get("status").textContent;
                         get("circle-x").value = "200";
                         get("seed-baseline").click();
                         const refused = get("status").textContent;
@@ -13688,7 +13694,8 @@ test(
                         return JSON.stringify({ enabled, refused, before,
                             filled, unsaved, already, names,
                             coverageBefore, coverageRefused, coverageFilled,
-                            coverageAlready, files: await Promise.all(
+                            coverageAlready, selectedMissing, selectedForm,
+                            inspectStatus, files: await Promise.all(
                                 blobs.map((blob) => blob.text())) });
                     } finally {
                         URL.createObjectURL = makeURL;
@@ -13705,6 +13712,9 @@ test(
                 "button is available only after admitted session");
             assert.match(actual.refused, /fit inside glyph cell/);
             assert.match(actual.coverageBefore, /0\/114 exact glyphs/);
+            assert.equal(actual.selectedMissing, "a\u0301");
+            assert.equal(actual.selectedForm, actual.selectedMissing);
+            assert.match(actual.inspectStatus, /á \(NFD\); draft unchanged/);
             assert.equal(actual.coverageRefused, actual.coverageBefore,
                 "refused geometry cannot alter the live coverage audit");
             assert.equal(actual.before, 0,

@@ -752,6 +752,9 @@
             <p id="glyph-baseline-coverage" class="field-help" role="status"
               aria-live="polite">Bilingual coverage requires a compatible
               backend session</p>
+            <button id="glyph-focus-missing" type="button" disabled>
+              Inspect next missing text glyph (read-only)
+            </button>
             <button id="glyph-seed-baseline" type="button" disabled>
               Fill missing 114 English/Spanish text glyphs (unsaved)
             </button>
@@ -820,7 +823,9 @@
             an exact, read-only count of 114 text graphemes in the current
             unsaved draft. NFC accents and their NFD forms count separately;
             visually identical keys never substitute for one another.
-            The one-click baseline fill adds only missing text glyphs,
+            Inspect next missing selects an exact key and matching guide
+            without creating any ink. The one-click baseline fill adds only
+            missing text glyphs,
             preserving custom ink and refusing the whole operation if
             any glyph or native TSV limit fails. It excludes optional math
             and currency symbols. Nothing is saved or printed until an

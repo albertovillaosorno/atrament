@@ -2302,6 +2302,8 @@ export function createGlyphStrokeEditor(): {
         required<HTMLButtonElement>("glyph-seed-text-marks");
     const seedBaseline =
         required<HTMLButtonElement>("glyph-seed-baseline");
+    const focusMissing =
+        required<HTMLButtonElement>("glyph-focus-missing");
     const baselineCoverage =
         required<HTMLElement>("glyph-baseline-coverage");
     const centerX = required<HTMLInputElement>("glyph-circle-x");
@@ -2417,7 +2419,7 @@ export function createGlyphStrokeEditor(): {
         form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
         seedUpperSpanish, seedUpperSpanishNfd,
         seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
-        seedTextMarks, seedBaseline,
+        seedTextMarks, seedBaseline, focusMissing,
         centerX, centerY, radius,
         accentShift, accentLift, italicAngle,
         authoredAngle, authoredBaseline, slantAuthored,
@@ -3195,11 +3197,13 @@ export function createGlyphStrokeEditor(): {
         }
     };
     const render = (): void => {
+        const missing = active ? missingBilingualBaseline(strokes) : [];
+        focusMissing.disabled = !active || drawing !== null
+            || missing.length === 0;
         if (!active) {
             baselineCoverage.textContent =
                 "Bilingual coverage requires a compatible backend session";
         } else {
-            const missing = missingBilingualBaseline(strokes);
             const count = BILINGUAL_KEYS.length - missing.length;
             const display = (glyph: string): string =>
                 glyph === glyph.normalize("NFC")
@@ -3782,6 +3786,26 @@ export function createGlyphStrokeEditor(): {
         } catch (error) {
             message(String(error));
         }
+    });
+    focusMissing.addEventListener("click", () => {
+        if (!active || drawing !== null) return;
+        const missing = missingBilingualBaseline(strokes);
+        const previous = BILINGUAL_KEYS.indexOf(character.value);
+        let next = missing[0];
+        for (const glyph of missing) {
+            if (BILINGUAL_KEYS.indexOf(glyph) > previous) {
+                next = glyph;
+                break;
+            }
+        }
+        if (next === undefined) return;
+        character.value = next;
+        form.value = next;
+        selectedIndex = null;
+        render();
+        const display = next.normalize("NFC") === next ? next
+            : `${next.normalize("NFC")} (NFD)`;
+        message(`Inspecting missing glyph ${display}; draft unchanged`);
     });
     seedBaseline.addEventListener("click", () => {
         if (!active) return;
