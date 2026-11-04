@@ -1279,6 +1279,20 @@ ordered pen segments twice as real PDF vectors and transparent PNG ink.
 Both distinct from default geometric forms, their paths remain separately
 authored; an unknown combining-grave still refuses replacement.
 
+## UTF-16 glyph identity before browser TSV download — 2026-11-04
+
+The browser glyph authoring gate now rejects an unpaired high or low UTF-16
+surrogate before accepting a stroke or downloading a TSV. Without this guard,
+`TextEncoder` would silently replace the malformed input with U+FFFD,
+changing the caller's exact glyph identity. Valid supplementary-plane
+Unicode glyphs still roundtrip through UTF-8; accented NFC/NFD glyphs
+remain distinct.
+
+A red-before/green-after parser/encoder regression and a browser editor
+refusal test verify that rejected input preserves the previous valid
+authored TSV. The Rust CLI still owns final admission. This does not imply
+a complete baseline font or automated Unicode fallback.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

@@ -35,6 +35,24 @@ test("exact Unicode shape identity survives TSV", () => {
     }]);
 });
 
+test("invalid UTF-16 glyphs cannot silently become replacement ink", () => {
+    const validAstral = stroke("🖋");
+    const bytes = new TextEncoder().encode(
+        encodeGlyphLibrary([validAstral]),
+    );
+    assert.deepEqual(parseGlyphLibrary(new TextDecoder().decode(bytes)),
+        [validAstral], "valid supplementary Unicode must roundtrip");
+    for (const malformed of ["\uD800", "\uDC00", "\uD800a", "a\uDC00"]) {
+        const bad = stroke(malformed);
+        assert.throws(() => encodeGlyphLibrary([bad]),
+            /Unicode|surrogate/, "invalid UTF-16 must refuse before download");
+        const source = header
+            + `${malformed}\t100\t200\t3000\t4200\t250\t#A1B2C3\n`;
+        assert.throws(() => parseGlyphLibrary(source),
+            /Unicode|surrogate/, "invalid UTF-16 cannot enter the draft");
+    }
+});
+
 test("candidate pen paths respect directed endpoints and exact Unicode", () => {
     const nfd = "n\u{303}";
     const source = [
@@ -631,6 +649,30 @@ test("explicit varied TSV preserves the authored draft", async () => {
             "the canonical TSV is byte-identical after varied exports");
         editor.reset();
         assert.equal(get("variation-download").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("glyph editor refuses surrogate input without replacing valid TSV",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        editor.start();
+        get("add").dispatch("click");
+        get("save").dispatch("click");
+        const accepted = await downloads[0].text();
+        for (const glyph of ["\uD800", "\uDC00"]) {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            get("add").dispatch("click");
+            assert.match(get("status").textContent, /Unicode/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), accepted,
+                "invalid glyph must not mutate the existing ink draft");
+        }
+        editor.reset();
     } finally {
         ui.restore();
     }

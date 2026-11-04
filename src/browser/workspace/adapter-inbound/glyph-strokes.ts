@@ -54,7 +54,11 @@ type Stroke = {
 };
 
 function exactGrapheme(value: string): boolean {
-    if (!value || new TextEncoder().encode(value).length > 64
+    // In Unicode mode an astral scalar is one character; lone UTF-16
+    // surrogates still match. TextEncoder would silently replace them with
+    // U+FFFD on TSV download, changing the caller's authored glyph identity.
+    if (!value || /[\uD800-\uDFFF]/u.test(value)
+        || new TextEncoder().encode(value).length > 64
         || /[\p{Cc}]/u.test(value) || value === " ") return false;
     if (typeof Intl.Segmenter !== "function") return false;
     return [...new Intl.Segmenter(undefined, {

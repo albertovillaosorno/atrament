@@ -40,7 +40,11 @@ const OPEN_ARC_SEGMENTS = 36;
 const ARCH_SEGMENTS = 16;
 const AXES = ["x1", "y1", "x2", "y2", "width"];
 function exactGrapheme(value) {
-    if (!value || new TextEncoder().encode(value).length > 64
+    // In Unicode mode an astral scalar is one character; lone UTF-16
+    // surrogates still match. TextEncoder would silently replace them with
+    // U+FFFD on TSV download, changing the caller's authored glyph identity.
+    if (!value || /[\uD800-\uDFFF]/u.test(value)
+        || new TextEncoder().encode(value).length > 64
         || /[\p{Cc}]/u.test(value) || value === " ")
         return false;
     if (typeof Intl.Segmenter !== "function")
