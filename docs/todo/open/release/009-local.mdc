@@ -125,10 +125,20 @@ unchanged. This is review-only evidence, not physical printing or a workspace
 print action.
 
 This joins explicit source Markdown download with three browser-authored
-profile/ink files in native decorated output. It uses a simulated input event
-rather than trusted keyboard paste and does not persist Markdown in an
-editable notebook model or establish general glyph/photo coverage. The
-full localhost editing journey and P8-009 acceptance remain open.
+profile/ink files in native decorated output. The initial source edit used
+scripted DOM events rather than keyboard input; no editable notebook model
+or general glyph/photo coverage is established. The complete localhost
+editor journey and P8-009 acceptance remain open.
+
+A later real-Firefox refinement exercises the Markdown source portion with
+trusted WebDriver Tab, Ctrl+A, Unicode key entry and Enter. The actual
+textarea bytes are asserted before download; a read-only Blob observer
+checks the application's exact UTF-8 Markdown export. The already-saved
+notebook and handwriting profiles and browser-authored glyph strokes then
+render that selected source as real native decorated PDF and transparent
+PNG, including the existing atomic missing-glyph and print-review checks.
+The other profile and ink edits in this regression remain scripted rather
+than an entirely keyboard-only end-to-end notebook editor journey.
 
 ## Unambiguous default native paper command (partial) — 2026-11-04
 

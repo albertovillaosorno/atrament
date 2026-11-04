@@ -4092,39 +4092,75 @@ test(
                     : bytes.subarray(0, 8).toString("hex"),
                 format === "pdf" ? "%PDF-" : "89504e470d0a1a0a");
             }
-            // Explicitly download the authored source from the same real
-            // browser workspace that saved both profiles and exported ink.
-            // Rust receives exactly this Blob's bytes, not a Node template.
+            // Trusted keyboard input owns the Markdown textarea and Enter
+            // download. The isolated spy observes the app-created Blob and
+            // filename without focusing, editing or clicking any control.
             const decoratedSource = "# óó\n\nó ó  \nóó";
+            await tabToControl(bidi, tab.context, "source-input");
+            await performTrustedKeyChord(
+                bidi, tab.context, "\uE009", "a");
+            const keystrokes = [...decoratedSource].flatMap((char) => {
+                const key = char === "\n" ? "\uE007" : char;
+                return [
+                    { type: "keyDown", value: key },
+                    { type: "keyUp", value: key },
+                ];
+            });
+            await bidi.command("input.performActions", {
+                actions: [{
+                    actions: keystrokes, id: "keyboard", type: "key",
+                }],
+                context: tab.context,
+            });
+            const typedSource = await browserScript(`JSON.stringify({
+                active: document.activeElement?.id,
+                value: document.getElementById("source-input").value,
+                enabled: !document.getElementById(
+                    "source-markdown-export").disabled
+            })`);
+            assert.deepEqual(typedSource, {
+                active: "source-input", value: decoratedSource, enabled: true,
+            });
+            const installed = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: `(() => {
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    window.__trustedMarkdownSpy = {
+                        blob: null, filename: null, create, click
+                    };
+                    URL.createObjectURL = function (blob) {
+                        window.__trustedMarkdownSpy.blob = blob;
+                        return create.call(URL, blob);
+                    };
+                    HTMLAnchorElement.prototype.click = function () {
+                        window.__trustedMarkdownSpy.filename = this.download;
+                    };
+                    return true;
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(installed.type, "success");
+            await tabToControl(bidi, tab.context,
+                "source-markdown-export");
+            await performTrustedKey(bidi, tab.context, "\uE007");
             const markdownResponse = await bidi.command("script.evaluate", {
                 awaitPromise: true,
                 expression: `(async () => {
-                    const source = document.getElementById("source-input");
-                    const button = document.getElementById(
-                        "source-markdown-export");
-                    source.value = ${JSON.stringify(decoratedSource)};
-                    source.dispatchEvent(new Event("input", { bubbles: true }));
-                    const originalCreate = URL.createObjectURL;
-                    const originalClick = HTMLAnchorElement.prototype.click;
-                    let blob = null;
-                    let filename = null;
-                    try {
-                        URL.createObjectURL = (value) => {
-                            blob = value;
-                            return originalCreate.call(URL, value);
-                        };
-                        HTMLAnchorElement.prototype.click = function () {
-                            filename = this.download;
-                        };
-                        const enabled = !button.disabled;
-                        button.click();
-                        return JSON.stringify({ enabled, filename,
-                            text: blob ? await blob.text() : null,
-                            bytes: blob?.size, mediaType: blob?.type });
-                    } finally {
-                        URL.createObjectURL = originalCreate;
-                        HTMLAnchorElement.prototype.click = originalClick;
-                    }
+                    const spy = window.__trustedMarkdownSpy;
+                    const result = {
+                        enabled: !document.getElementById(
+                            "source-markdown-export").disabled,
+                        filename: spy.filename,
+                        text: spy.blob ? await spy.blob.text() : null,
+                        bytes: spy.blob?.size,
+                        mediaType: spy.blob?.type,
+                    };
+                    URL.createObjectURL = spy.create;
+                    HTMLAnchorElement.prototype.click = spy.click;
+                    delete window.__trustedMarkdownSpy;
+                    return JSON.stringify(result);
                 })()`,
                 resultOwnership: "none",
                 target: { context: tab.context },
