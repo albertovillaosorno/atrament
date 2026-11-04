@@ -168,6 +168,12 @@ terminating `endstream` must appear after those exact bytes and a line break.
 The scanner does not look for an arbitrary last `endstream` inside content.
 Indirect length references may refuse under this conservative print policy.
 
+A cross-reference stream must advertise one top-level direct `/W` array
+of exactly three unsigned decimal byte widths, each from 0 to 8 inclusive.
+At least one field must occupy bytes. Missing, nested-only, duplicated,
+negative, noninteger, oversized and extra array fields refuse before CUPS.
+This local preflight does not decode compressed or uncompressed stream rows.
+
 A typed cross-reference stream must also
 end with standalone `endstream` and `endobj` keywords, allowing whitespace
 and comments before its final `startxref` locator. Missing, fused or
@@ -266,6 +272,11 @@ Six fake-spool refusals cover split-line offset/generation/status, a count
 and record sharing one line, and trailing extra tokens. Valid LF and CRLF
 record lines remain admissible;
 source bytes are never changed during refused print admission.
+
+Thirteen additional fake-CUPS refusal cases prove malformed terminal
+xref-stream `/W` arrays cannot be submitted or modify source bytes.
+Three valid direct arrays preserve conservative admission, including a
+nested decoy and a PDF comment between widths.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

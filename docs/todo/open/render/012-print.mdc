@@ -273,6 +273,16 @@ a selected PDF; both LF and CRLF valid records and native exported pages
 remain accepted. This is lexical line framing, not cross-reference graph
 reconstruction or full fixed-width PDF parsing.
 
+A further stream admission gap allowed a typed xref stream without the
+mandatory `/W` field-width array to reach fake CUPS. One red-before Rust
+test now checks 13 absent, malformed, duplicate, nested-only and oversized
+width declarations; all refuse unchanged before invoking the spooler.
+
+Three direct width-triplet forms, including comments and a nested decoy,
+remain eligible. Each width is an unsigned decimal from 0 to 8 bytes,
+with at least one nonzero field; this is conservative local print framing.
+It does not decompress or validate actual cross-reference stream entries.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

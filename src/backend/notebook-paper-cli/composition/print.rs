@@ -571,6 +571,41 @@ fn bounded_stream_length(bytes: &[u8], at: &mut usize) -> Option<usize> {
     Some(length)
 }
 
+// A cross-reference stream cannot be decoded without its /W triplet.
+// Require three bounded, direct, unsigned integer field widths. This is a
+// structural preflight only: compressed data and /Index rows are not decoded.
+fn xref_stream_field_widths(bytes: &[u8], at: &mut usize) -> Option<()> {
+    *at = pdf_trivia_end(bytes, *at);
+    if bytes.get(*at) != Some(&b'[') {
+        return None;
+    }
+    *at = at.checked_add(1)?;
+    let mut widths = [0usize; 3];
+    for width in &mut widths {
+        *at = pdf_trivia_end(bytes, *at);
+        let start = *at;
+        while bytes.get(*at).is_some_and(u8::is_ascii_digit) {
+            *at = at.checked_add(1)?;
+        }
+        let digits = bytes.get(start..*at)?;
+        *width = str::from_utf8(digits).ok()?.parse::<usize>().ok()?;
+        // The scanner admits at most eight bytes for any object field.
+        // Larger values require a reviewed re-export under local policy.
+        if *width > 8 || !bytes.get(*at).is_some_and(|byte| {
+            byte.is_ascii_whitespace() || matches!(byte, b']' | b'%')
+        }) {
+            return None;
+        }
+    }
+    *at = pdf_trivia_end(bytes, *at);
+    if bytes.get(*at) != Some(&b']')
+        || widths.iter().all(|width| *width == 0) {
+        return None;
+    }
+    *at = at.checked_add(1)?;
+    Some(())
+}
+
 // The indirect xref-stream object must use a real nonzero object number
 // and a 16-bit generation; its number is compared against declared /Size.
 fn xref_stream_object_header(prefix: &[u8]) -> Option<(usize, usize)> {
@@ -616,6 +651,7 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<(usize, usize)> {
     let mut found_type = false;
     let mut declared_size = None;
     let mut declared_length = None;
+    let mut found_widths = false;
     while at < prefix.len() {
         match prefix.get(at) {
             Some(&b'%') => at = pdf_trivia_end(prefix, at),
@@ -672,6 +708,13 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<(usize, usize)> {
                         bounded_xref_size(prefix, &mut at, 1)?,
                     );
                 } else if depth == 1 && array_depth == 0
+                    && name == b"W" {
+                    if found_widths {
+                        return None;
+                    }
+                    xref_stream_field_widths(prefix, &mut at)?;
+                    found_widths = true;
+                } else if depth == 1 && array_depth == 0
                     && name == b"Length" {
                     if declared_length.is_some() {
                         return None;
@@ -684,7 +727,7 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<(usize, usize)> {
             _ => at = at.saturating_add(1),
         }
     }
-    if depth != 0 || array_depth != 0 || !found_type
+    if depth != 0 || array_depth != 0 || !found_type || !found_widths
         || declared_size.is_none_or(|size| object_number >= size) {
         return None;
     }
