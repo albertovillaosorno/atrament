@@ -1767,6 +1767,26 @@ caller-authored TSV.
 This remains explicit manual geometry, not automatic mathematical notation
 recognition, true analytic glyph persistence or finished handwriting flow.
 
+## Double and negated strict comparison ink (partial) — 2026-11-04
+
+The opt-in editor now offers four independent mathematical comparisons:
+much less `≪`, much greater `≫`, not less `≮`, and not greater `≯`.
+Double comparisons use two separately lifted, connected chevron paths.
+Negations preserve the native `<` or `>` chevron geometry and add a
+separately lifted diagonal slash.
+
+The optional math fill reaches 71 exact Unicode forms. All eleven
+independent fills together keep 184 graphemes and 4027 native pen segments
+below the 4096-stroke cap. Browser geometry tests confirm endpoints,
+continuity, clipping, exact identities and idempotent batch fill.
+
+Native Rust independently reopens the saved exact-key TSV and renders
+physical PDF and transparent PNG with both comparison rows. Missing
+strict and inclusive counterparts refuse without replacing accepted PDF
+or rewriting caller ink. Authenticated Firefox covers the added selectable
+guides and exact full TSV download replayed into Rust PDF/PNG. These remain
+sampled, opt-in user-authored strokes, not automatic math typesetting.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

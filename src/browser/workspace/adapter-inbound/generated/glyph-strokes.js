@@ -585,8 +585,9 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
     "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
     "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",
-    "∠", "∟", "⊬", "⊭", "¬", "⇒", "⇔"];
-// Extra manual marks do not change the 67-glyph math fill.
+    "∠", "∟", "⊬", "⊭", "¬", "⇒", "⇔",
+    "≪", "≫", "≮", "≯"];
+// Extra manual marks do not change the 71-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"];
@@ -761,6 +762,28 @@ function mathParts(cx, cy, radius, glyph) {
             line(-0.55, -0.6, 0.6, 0.05),
             line(0.6, 0.05, -0.55, 0.6),
             ...(glyph === "≥" ? [horizontal(0.88)] : []),
+        ];
+    // Doubled chevrons are two separately lifted, connected comparisons.
+    // Negated strict signs keep their exact positive contour and then lift
+    // the pen for a diagonal slash; no fallback to other Unicode signs.
+    if (glyph === "≪")
+        return [
+            line(-0.12, -0.65, -0.76, 0),
+            line(-0.76, 0, -0.12, 0.65),
+            line(0.72, -0.65, 0.08, 0),
+            line(0.08, 0, 0.72, 0.65),
+        ];
+    if (glyph === "≫")
+        return [
+            line(-0.72, -0.65, -0.08, 0),
+            line(-0.08, 0, -0.72, 0.65),
+            line(0.12, -0.65, 0.76, 0),
+            line(0.76, 0, 0.12, 0.65),
+        ];
+    if (glyph === "≮" || glyph === "≯")
+        return [
+            ...mathParts(cx, cy, radius, glyph === "≮" ? "<" : ">"),
+            line(-0.82, 0.82, 0.82, -0.82),
         ];
     // Logical wedges are exact Unicode ink, never substitutions for the
     // visually similar Latin v or strict-comparison chevrons.
