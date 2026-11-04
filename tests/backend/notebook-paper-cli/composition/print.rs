@@ -415,6 +415,13 @@ fn xref_stream_tokens_cannot_hide_in_comments_or_string_literals() {
     ].concat().into_bytes();
     assert!(supported_pdf_cross_reference(&nested_stream),
         "legitimate nested xref stream dictionary remains admitted");
+    let commented_tail = String::from_utf8(nested_stream.clone())
+        .expect("synthetic xref stream is UTF-8")
+        .replace("endstream\nendobj\n",
+            "endstream\n% accepted comment\nendobj\n% endobj ignored\n")
+        .into_bytes();
+    assert!(supported_pdf_cross_reference(&commented_tail),
+        "comments between stream and object terminators stay eligible");
     // A byte substring is not proof of an xref stream dictionary. Its
     // /Type must be an actual top-level name, and stream an actual keyword.
     for fake_body in [
@@ -425,6 +432,13 @@ fn xref_stream_tokens_cannot_hide_in_comments_or_string_literals() {
         "1 0 obj\n<< /List [/Type /XRef] >>\nstream\n",
         "1 0 obj\n<< /Type /XRef >>\ndownstream\n",
         "1 0 obj\n<< /Type /XRef >>\n%stream\n",
+        // A plausible header alone is not a complete terminal stream.
+        "1 0 obj\n<< /Type /XRef >>\nstream\n",
+        "1 0 obj\n<< /Type /XRef >>\nstream\n\0\nendobj\n",
+        "1 0 obj\n<< /Type /XRef >>\nstream\n\0\nendstream\n",
+        "1 0 obj\n<< /Type /XRef >>\nstream\n\0\nendstreamX\nendobj\n",
+        "1 0 obj\n<< /Type /XRef >>\nstream\n\0\nendstream\nendobjFake\n",
+        "1 0 obj\n<< /Type /XRef >>\nstream\n\0\nendstream\nendobj\njunk\n",
     ] {
         let fake = format!(
             "%PDF-1.7\n{fake_body}startxref\n9\n%%EOF\n"

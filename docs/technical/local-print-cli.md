@@ -101,8 +101,13 @@ The stream type name must be an exact top-level `/Type /XRef` dictionary
 entry; longer names such as `/XRefShadow` and apparent type entries inside
 comments, literal strings, arrays or nested dictionaries are not sufficient.
 The dictionary must be followed by an actual `stream` keyword and line break,
-not an incidental word substring. These are bounded lexical framing checks,
-not PDF stream decoding or a complete syntax parser.
+not an incidental word substring.
+
+A typed cross-reference stream must also
+end with standalone `endstream` and `endobj` keywords, allowing whitespace
+and comments before its final `startxref` locator. Missing, fused or
+junk-trailed terminators refuse before invoking CUPS. These are bounded
+lexical framing checks, not PDF stream decoding or a complete syntax parser.
 
 Missing, malformed, out-of-bounds or repointed locators,
 non-xref indirect objects, unsupported version numbers and truncated headers
@@ -136,6 +141,8 @@ nested stream dictionary with CRLF boundaries.
 A seventh regression refuses empty, truncated and invalid traditional
 `xref` tables before fake-CUPS invocation, while admitting numbered
 multi-subsection framing and the unchanged native two-page output.
+The xref-stream regression also rejects six header-only or malformed
+terminal delimiter cases without spooling, while admitting terminal comments.
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.

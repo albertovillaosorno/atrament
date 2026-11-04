@@ -226,7 +226,9 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     let Some(prefix) = target.get(..target.len().min(16_384)) else {
         return false;
     };
-    supported_xref_stream_dictionary(prefix)
+    xref_stream_header_end(prefix).is_some_and(|start| {
+        supported_xref_stream_tail(target, start)
+    })
 }
 
 // Traditional xref tables have fixed-width decimal entries and a trailer
@@ -337,7 +339,7 @@ fn pdf_literal_end(bytes: &[u8], start: usize) -> Option<usize> {
     None
 }
 
-fn supported_xref_stream_dictionary(prefix: &[u8]) -> bool {
+fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
     let mut at = 0usize;
     for _ in 0u8..2 {
         at = pdf_trivia_end(prefix, at);
@@ -348,7 +350,7 @@ fn supported_xref_stream_dictionary(prefix: &[u8]) -> bool {
         if start == at || !prefix.get(at)
             .is_some_and(u8::is_ascii_whitespace)
         {
-            return false;
+            return None;
         }
     }
     at = pdf_trivia_end(prefix, at);
@@ -356,11 +358,11 @@ fn supported_xref_stream_dictionary(prefix: &[u8]) -> bool {
         || !prefix.get(at.saturating_add(3))
             .is_some_and(u8::is_ascii_whitespace)
     {
-        return false;
+        return None;
     }
     at = pdf_trivia_end(prefix, at.saturating_add(3));
     if !prefix.get(at..).is_some_and(|tail| tail.starts_with(b"<<")) {
-        return false;
+        return None;
     }
     at = at.saturating_add(2);
     let mut depth = 1usize;
@@ -369,20 +371,18 @@ fn supported_xref_stream_dictionary(prefix: &[u8]) -> bool {
     while at < prefix.len() {
         match prefix.get(at) {
             Some(&b'%') => at = pdf_trivia_end(prefix, at),
-            Some(&b'(') => match pdf_literal_end(prefix, at) {
-                Some(end) => at = end,
-                None => return false,
-            },
+            Some(&b'(') => at = pdf_literal_end(prefix, at)?,
             Some(&b'<') if prefix.get(at.saturating_add(1)) == Some(&b'<') => {
                 depth = depth.saturating_add(1);
                 at = at.saturating_add(2);
             }
-            Some(&b'<') => match prefix.get(at.saturating_add(1)..)
-                .and_then(|tail| tail.iter().position(|byte| *byte == b'>'))
-            {
-                Some(end) => at = at.saturating_add(end).saturating_add(2),
-                None => return false,
-            },
+            Some(&b'<') => {
+                let end = prefix.get(at.saturating_add(1)..)
+                    .and_then(|tail| {
+                        tail.iter().position(|byte| *byte == b'>')
+                    })?;
+                at = at.saturating_add(end).saturating_add(2);
+            }
             Some(&b'>') if prefix.get(at.saturating_add(1)) == Some(&b'>') => {
                 depth = depth.saturating_sub(1);
                 at = at.saturating_add(2);
@@ -396,26 +396,22 @@ fn supported_xref_stream_dictionary(prefix: &[u8]) -> bool {
             }
             Some(&b']') => {
                 if array_depth == 0 {
-                    return false;
+                    return None;
                 }
                 array_depth = array_depth.saturating_sub(1);
                 at = at.saturating_add(1);
             }
             Some(&b'/') => {
-                let Some((name, end)) = pdf_name(prefix, at) else {
-                    return false;
-                };
+                let (name, end) = pdf_name(prefix, at)?;
                 at = end;
                 if depth == 1 && array_depth == 0 && name == b"Type" {
                     if found_type {
-                        return false;
+                        return None;
                     }
                     at = pdf_trivia_end(prefix, at);
-                    let Some((value, value_end)) = pdf_name(prefix, at) else {
-                        return false;
-                    };
+                    let (value, value_end) = pdf_name(prefix, at)?;
                     if value != b"XRef" {
-                        return false;
+                        return None;
                     }
                     found_type = true;
                     at = value_end;
@@ -425,13 +421,48 @@ fn supported_xref_stream_dictionary(prefix: &[u8]) -> bool {
         }
     }
     if depth != 0 || array_depth != 0 || !found_type {
-        return false;
+        return None;
     }
     at = pdf_trivia_end(prefix, at);
-    prefix.get(at..).is_some_and(|tail| {
+    if prefix.get(at..).is_some_and(|tail| {
         tail.starts_with(b"stream")
             && matches!(tail.get(6), Some(b'\n' | b'\r'))
-    })
+    }) {
+        at.checked_add(6)
+    } else {
+        None
+    }
+}
+
+// A syntactically plausible xref-stream header is not sufficient: a selected
+// document must also frame its terminal stream and indirect object before
+// startxref. This remains lexical preflight, not PDF stream decoding.
+fn supported_xref_stream_tail(bytes: &[u8], start: usize) -> bool {
+    let Some(tail) = bytes.get(start..) else { return false; };
+    let Some(endstream) = tail.windows(b"endstream".len())
+        .enumerate().rfind(|(at, token)| {
+            *token == b"endstream"
+                && at.checked_sub(1).and_then(|before| tail.get(before))
+                    .is_some_and(|byte| matches!(byte, b'\r' | b'\n'))
+                && tail.get(at.saturating_add(b"endstream".len()))
+                    .is_some_and(u8::is_ascii_whitespace)
+        }).map(|(at, _)| at)
+    else {
+        return false;
+    };
+    let Some(endstream_end) = start.checked_add(endstream)
+        .and_then(|at| at.checked_add(b"endstream".len()))
+    else {
+        return false;
+    };
+    let endobj = pdf_trivia_end(bytes, endstream_end);
+    if !bytes.get(endobj..).is_some_and(|rest| rest.starts_with(b"endobj"))
+        || !bytes.get(endobj.saturating_add(b"endobj".len()))
+            .is_some_and(u8::is_ascii_whitespace) {
+        return false;
+    }
+    pdf_trivia_end(bytes, endobj.saturating_add(b"endobj".len()))
+        == bytes.len()
 }
 
 fn selected_pdf(path: &Path) -> Result<Vec<u8>, String> {

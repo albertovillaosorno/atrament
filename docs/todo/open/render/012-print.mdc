@@ -124,6 +124,15 @@ without CUPS side effects. Native two-page and multi-subsection table framing
 remain admitted. All seven focused print tests and strict all-target Clippy
 pass; this remains a bounded framing check, not a full PDF parser.
 
+The PDF 1.5+ xref-stream path additionally requires a terminal
+`endstream` keyword and `endobj` after the stream data, with only whitespace
+or comments between the closing delimiters and `startxref`. A typed
+xref-stream *header* without its two closing tokens previously passed the
+printer preflight; six red-before/green-after fake-CUPS refusals now block
+missing, fused or trailing-junk delimiters before spool submission. A
+legitimate nested dictionary, CRLF header and terminal comment stay eligible.
+This is still lexical framing, not parsing or decoding the stream payload.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.
