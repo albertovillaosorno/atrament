@@ -1299,10 +1299,10 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
     } else { raw }))
 }
 
-// A single trailing backslash is an explicit Markdown hard line break for
-// paragraphs, quotes and list items. Pairs and longer runs remain literal
-// authored glyphs: this parser does not perform inline Markdown unescaping.
-// Two trailing spaces retain their existing hard-break semantics.
+// A single final backslash is Markdown hard-break syntax, including before
+// two trailing hard-break spaces inserted by a Unicode line separator.
+// Pairs and longer runs remain literal authored glyphs: this parser does
+// not perform inline Markdown unescaping.
 fn markdown_paragraph_break<'text>(
     raw: &str, style: LineStyle, body: &'text str,
 ) -> (&'text str, bool) {
@@ -1313,7 +1313,8 @@ fn markdown_paragraph_break<'text>(
         || raw.starts_with("    ") {
         return (body, false);
     }
-    if raw.ends_with('\\') && !body.ends_with("\\\\")
+    if (raw.ends_with('\\') || raw.ends_with("  "))
+        && !body.ends_with("\\\\")
         && let Some(visible) = body.strip_suffix('\\') {
         return (visible, true);
     }

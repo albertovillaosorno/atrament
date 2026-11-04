@@ -2071,3 +2071,60 @@ test('four-space Markdown row before equals measures literal glyph ink',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('Markdown backslash hard break survives Unicode line separators',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-slash-linesep-'));
+        try {
+            const slash = String.fromCharCode(92);
+            const authoredSlash = [
+                '--glyph-stroke', slash, '650', '700', '1800', '3200',
+                '250', '#123456',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, `a${slash}\na`, format);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const hardBreak = readFileSync(reference.output);
+                for (const alternate of [
+                    `a${slash}\u2028a`, `a${slash}  \na`,
+                ]) {
+                    const replay = render(dir, alternate, format);
+                    assert.equal(replay.result.status, 0,
+                        replay.result.stderr);
+                    assert.deepEqual(readFileSync(replay.output), hardBreak,
+                        'single slash is syntactic before either hard break');
+                }
+                const paired = `a${slash}${slash}\u2028a`;
+                const literal = render(dir, paired, format, authoredSlash);
+                assert.equal(literal.result.status, 0,
+                    literal.result.stderr);
+                const literalBytes = readFileSync(literal.output);
+                const explicitSpaces = render(dir,
+                    `a${slash}${slash}  \na`, format, authoredSlash);
+                assert.equal(explicitSpaces.result.status, 0,
+                    explicitSpaces.result.stderr);
+                assert.deepEqual(readFileSync(explicitSpaces.output),
+                    literalBytes, 'paired slashes remain authored ink');
+                const refused = render(dir, paired, format);
+                assert.notEqual(refused.result.status, 0);
+                assert.match(refused.result.stderr,
+                    /missing authored glyph shapes.*U\+005C/);
+                assert.deepEqual(readFileSync(refused.output),
+                    literalBytes, 'missing slash preserves selected export');
+                const plain = render(dir, `a${slash}\na`, format,
+                    authoredSlash, '--flow-text');
+                assert.equal(plain.result.status, 0, plain.result.stderr);
+                const plainBytes = readFileSync(plain.output);
+                const plainSeparator = render(dir, `a${slash}\u2028a`,
+                    format, authoredSlash, '--flow-text');
+                assert.equal(plainSeparator.result.status, 0,
+                    plainSeparator.result.stderr);
+                assert.deepEqual(readFileSync(plainSeparator.output),
+                    plainBytes, 'plain text preserves its authored slash');
+                assert.notDeepEqual(plainBytes, hardBreak);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

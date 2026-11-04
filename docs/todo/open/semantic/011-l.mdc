@@ -832,3 +832,18 @@ silently require a browser. The Rust CLI must remain available locally.
 Open. The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.
+
+## Combined slash and Unicode hard breaks (partial) — 2026-11-04
+
+A single Markdown line-final backslash is now syntactic even when the source
+also contains two trailing ASCII spaces or a Unicode U+2028 line separator.
+U+2028 is normalized to those two hard-break spaces before native layout;
+previously the added spaces made the slash literal and demanded an authored
+glyph, unlike an otherwise identical LF source. Paired backslashes remain
+literal ink, plain-text slashes are never Markdown syntax, and literal
+four-space-indented rows continue to preserve their trailing slashes.
+
+A red-before/green-after native PDF and transparent PNG regression checks
+byte-identical single-slash hard breaks across LF, U+2028 and explicit
+spaces; paired authored slash strokes still render and missing strokes refuse
+without replacing the selected export. This is not general inline escaping.
