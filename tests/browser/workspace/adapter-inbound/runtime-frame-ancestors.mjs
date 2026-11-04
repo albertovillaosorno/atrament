@@ -224,10 +224,45 @@ process.once("exit", () => {
     }
 });
 
+// A Node worker killed with SIGKILL cannot execute an exit listener. Keep a
+// separate, test-owned watchdog outside the worker's process group. A closed
+// parent pipe reaps exactly the Firefox fixture's detached group. It does not
+// inspect or signal unrelated browser instances or the graphical session.
+function watchFirefoxFixtureGroup(child) {
+    if (process.platform !== "linux" || child.fixtureProcessGroup !== true
+        || !Number.isSafeInteger(child.pid) || child.pid <= 1) return null;
+    const supervisor = [
+        "const pgid = Number(process.argv[1]);",
+        "if (!Number.isSafeInteger(pgid) || pgid <= 1) process.exit(2);",
+        "let stopped = false;",
+        "const reap = () => {",
+        "  if (stopped) return; stopped = true;",
+        "  try { process.kill(-pgid, 'SIGKILL'); } catch {}",
+        "  process.exit(0);",
+        "};",
+        "process.stdin.once('end', reap);",
+        "process.stdin.once('error', reap);",
+        "process.stdin.resume();",
+    ].join("\n");
+    const watcher = spawn(process.execPath, ["-e", supervisor,
+        String(child.pid)], {
+        detached: true,
+        stdio: ["pipe", "ignore", "ignore"],
+    });
+    // Keep a failed watchdog from crashing the test worker; the original
+    // synchronous exit handler remains a best-effort fallback.
+    watcher.once("error", () => {});
+    watcher.stdin.on("error", () => {});
+    watcher.unref();
+    child.once("exit", () => watcher.stdin.end());
+    return watcher;
+}
+
 function trackFirefoxFixtureGroup(child) {
     if (process.platform !== "linux" || child.fixtureProcessGroup !== true
         || !Number.isSafeInteger(child.pid) || child.pid <= 1) return;
     liveFirefoxFixtureGroups.add(child.pid);
+    watchFirefoxFixtureGroup(child);
     // The launcher can exit or crash without its helpers exiting. Reap them
     // immediately instead of waiting for stopChild's normal teardown path.
     child.once("exit", () => {
@@ -236,6 +271,141 @@ function trackFirefoxFixtureGroup(child) {
         finally { liveFirefoxFixtureGroups.delete(child.pid); }
     });
 }
+
+test("Linux Firefox watchdog reaps its fixture after worker pipe loss",
+    { skip: process.platform !== "linux", timeout: 5_000 },
+    async () => {
+        const fixture = spawn(process.execPath,
+            ["-e", "setInterval(() => {}, 1000)"], {
+                detached: true,
+                stdio: "ignore",
+            });
+        fixture.fixtureProcessGroup = true;
+        const exited = once(fixture, "exit");
+        try {
+            const watcher = watchFirefoxFixtureGroup(fixture);
+            assert.ok(watcher, "Linux requires a dedicated fixture watchdog");
+            // Simulate sudden loss of the test worker's open pipe. The
+            // watchdog runs in a separate group and must reap the fixture.
+            watcher.stdin.end();
+            await Promise.race([
+                exited,
+                new Promise((_resolve, reject) => setTimeout(() => reject(
+                    new Error("Firefox fixture survived worker pipe closure")),
+                1_000)),
+            ]);
+        } finally {
+            try { process.kill(-fixture.pid, "SIGKILL"); } catch {}
+        }
+    },
+);
+
+test("Linux Firefox watchdog refuses unowned process groups", () => {
+    assert.equal(watchFirefoxFixtureGroup({
+        pid: process.pid,
+        fixtureProcessGroup: false,
+    }), null);
+    assert.equal(watchFirefoxFixtureGroup({
+        pid: 0,
+        fixtureProcessGroup: true,
+    }), null);
+});
+
+// The watcher must survive a worker SIGKILL, not merely an orderly pipe end.
+// Spawn only disposable Node fixtures so the test never touches user Firefox.
+test("Linux Firefox watchdog reaps fixture after abrupt worker SIGKILL",
+    { skip: process.platform !== "linux", timeout: 8_000 },
+    async () => {
+        const workerSource = [
+            "const { spawn } = require('node:child_process');",
+            `const watchFirefoxFixtureGroup = ${watchFirefoxFixtureGroup};`,
+            "const fixture = spawn(process.execPath,",
+            "  ['-e', 'setInterval(() => {}, 1000)'],",
+            "  { detached: true, stdio: 'ignore' });",
+            "fixture.fixtureProcessGroup = true;",
+            "watchFirefoxFixtureGroup(fixture);",
+            "process.stdout.write(String(fixture.pid) + '\\n');",
+            "setInterval(() => {}, 1000);",
+        ].join("\n");
+        const worker = spawn(process.execPath, ["-e", workerSource], {
+            stdio: ["ignore", "pipe", "ignore"],
+        });
+        let fixturePid;
+        try {
+            fixturePid = Number(await waitForLine(worker.stdout,
+                (line) => /^\d+$/u.test(line) ? line : null,
+                2_000, worker));
+            assert.ok(Number.isSafeInteger(fixturePid) && fixturePid > 1);
+            assert.equal(worker.kill("SIGKILL"), true);
+            await once(worker, "exit");
+            const deadline = Date.now() + 2_000;
+            let running = true;
+            while (Date.now() < deadline) {
+                try {
+                    const stat = fs.readFileSync(
+                        `/proc/${fixturePid}/stat`, "utf8");
+                    const state = stat[stat.lastIndexOf(") ") + 2];
+                    running = !["Z", "X", "x"].includes(state);
+                } catch (error) {
+                    if (error.code !== "ENOENT") throw error;
+                    running = false;
+                }
+                if (!running) break;
+                await new Promise((resolve) => setTimeout(resolve, 25));
+            }
+            assert.equal(running, false,
+                "worker SIGKILL must trigger its independent group watchdog");
+        } finally {
+            try { worker.kill("SIGKILL"); } catch {}
+            if (Number.isSafeInteger(fixturePid) && fixturePid > 1) {
+                try { process.kill(-fixturePid, "SIGKILL"); } catch {}
+            }
+        }
+    },
+);
+
+// Detached fixture supervision must not keep a finished worker alive. A
+// child-process handle is unref'd here so only the watchdog pipe remains.
+test("Linux Firefox watchdog permits normal worker exit without a child exit",
+    { skip: process.platform !== "linux", timeout: 5_000 },
+    async () => {
+        const source = [
+            "const { spawn } = require('node:child_process');",
+            `const watchFirefoxFixtureGroup = ${watchFirefoxFixtureGroup};`,
+            "const fixture = spawn(process.execPath,",
+            "  ['-e', 'setInterval(() => {}, 1000)'],",
+            "  { detached: true, stdio: 'ignore' });",
+            "fixture.fixtureProcessGroup = true;",
+            "fixture.unref();",
+            "watchFirefoxFixtureGroup(fixture);",
+            "process.stdout.write(String(fixture.pid) + '\\n');",
+        ].join("\n");
+        const worker = spawn(process.execPath, ["-e", source], {
+            stdio: ["ignore", "pipe", "ignore"],
+        });
+        let fixturePid;
+        let timer;
+        try {
+            fixturePid = Number(await waitForLine(worker.stdout,
+                (line) => /^\d+$/u.test(line) ? line : null,
+                2_000, worker));
+            assert.ok(Number.isSafeInteger(fixturePid) && fixturePid > 1);
+            await Promise.race([
+                once(worker, "exit"),
+                new Promise((_resolve, reject) => {
+                    timer = setTimeout(() => reject(new Error(
+                        "watchdog kept its exited worker alive")), 1_000);
+                }),
+            ]);
+        } finally {
+            clearTimeout(timer);
+            try { worker.kill("SIGKILL"); } catch {}
+            if (Number.isSafeInteger(fixturePid) && fixturePid > 1) {
+                try { process.kill(-fixturePid, "SIGKILL"); } catch {}
+            }
+        }
+    },
+);
 
 // Linux Firefox runs in a dedicated process group. Its helpers can survive
 // the leader, including an abrupt browser crash; reap the owned group even if

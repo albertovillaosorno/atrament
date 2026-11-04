@@ -77,11 +77,24 @@ two actual BiDi journeys passed.
 `pnpm run test:frontend` now uses one test-file worker at a time so multiple
 resource-intensive Firefox journeys do not contend on the workstation.
 This is fixture/test-runner reliability evidence, not an approved PNG/PDF
-golden or proof of every keyboard-only control. Abrupt SIGKILL of the test worker remains outside the committed
-normal-exit cleanup. The subsequent source-authority review restored 70/70
-browser privacy and 43/43 native authority tests, including checks that
-reject an extra subprocess in the opt-in print CLI. These audits do not
-substitute for the still-open visual goldens and full keyboard journeys.
+golden or proof of every keyboard-only control. The subsequent
+source-authority review restored 70/70 browser privacy and 43/43 native
+authority tests, including checks that reject an extra subprocess in the
+opt-in print CLI. These audits do not substitute for the still-open visual
+goldens and full keyboard journeys.
+
+## Abrupt worker termination fixture cleanup (partial) — 2026-11-04
+
+An independent Linux watchdog now observes each test-owned detached Firefox
+fixture over a private pipe. When its test worker is killed with SIGKILL,
+the watchdog sees pipe closure and kills only that fixture process group;
+normal launcher exit retains the existing cleanup observer. Isolated Node
+fixtures test both pipe closure and a real SIGKILL of the parent worker,
+including the detached child reaching an exited or zombie state, without
+signalling an unrelated browser session. A real BiDi browser journey remains
+necessary alongside these synthetic process fixtures. This does not change
+production browser lifecycle guarantees or complete the still-open visual
+goldens and keyboard-only control coverage.
 
 ## Acceptance decision
 
