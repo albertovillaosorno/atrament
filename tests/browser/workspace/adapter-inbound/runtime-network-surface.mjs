@@ -53,9 +53,19 @@ const LOOPBACK_RUNTIME = path.join(
     "lib.rs",
 );
 
-// One native paper authority is used by the CLI and authenticated localhost.
-const PAPER_CLI = path.join(
+// Paper rendering remains in application; only composition owns argv,
+// stdout and caller-selected file effects. Inventory both audited roots.
+const PAPER_APPLICATION = path.join(
     BACKEND_ROOT, "notebook-paper-cli", "application", "lib.rs",
+);
+const PAPER_CRATE_ROOT = path.join(
+    BACKEND_ROOT, "notebook-paper-cli", "composition", "lib.rs",
+);
+const PAPER_CLI = path.join(
+    BACKEND_ROOT, "notebook-paper-cli", "composition", "cli.rs",
+);
+const PROFILE_FLOW = path.join(
+    BACKEND_ROOT, "profile-editor-cli", "composition", "flow.rs",
 );
 // This separate opt-in CLI is the only non-browser process-launch authority.
 const PRINT_CLI = path.join(
@@ -2339,27 +2349,42 @@ test("backend source inclusion requires explicit review", () => {
 
 test("backend Rust sources cannot redirect compilation out of inventory",
     async () => {
+    const auditedPaths = new Map([
+        [PAPER_APPLICATION, '#[cfg(test)]\n' +
+            '#[path = "../../../../tests/backend/' +
+            'notebook-paper-cli/composition/lib.rs"]\nmod tests;'],
+        [PAPER_CRATE_ROOT,
+            '#[path = "../application/lib.rs"]\npub mod application;'],
+        [NOTEBOOK_PROFILE, '#[cfg(test)]\n' +
+            '#[path = "../../../../tests/backend/' +
+            'notebook-profile/composition/lib.rs"]\nmod tests;'],
+        [PROFILE_FLOW, '#[cfg(test)]\n' +
+            '#[path = "../../../../tests/backend/' +
+            'profile-editor-cli/composition/flow.rs"]\nmod source_tests;'],
+        [PROFILE_EDITOR_CLI, '#[cfg(test)]\n' +
+            '#[path = "../../../../tests/backend/' +
+            'profile-editor-cli/composition/lib.rs"]\nmod tests;'],
+        [PRINT_CLI, '#[cfg(test)]\n' +
+            '#[path = "../../../../tests/backend/' +
+            'notebook-paper-cli/composition/print.rs"]\nmod tests;'],
+    ]);
     const redirectFiles = [];
     for (const sourcePath of await rustSources(BACKEND_ROOT)) {
         const source = await readFile(sourcePath, "utf8");
+        const site = auditedPaths.get(sourcePath);
         let reviewed = source;
-        if (sourcePath === PRINT_CLI) {
-            // One test-only path points to the explicitly inventoried Rust
-            // print fixture; other source redirections remain forbidden.
-            const site = '#[cfg(test)]\n' +
-                '#[path = "../../../../tests/backend/' +
-                'notebook-paper-cli/composition/print.rs"]\nmod tests;';
-            assert.equal(source.split(site).length - 1, 1);
+        if (site !== undefined) {
+            // Each approved source may select only its exact reviewed module;
+            // a changed path or extra source inclusion must fail closed.
+            assert.equal(source.split(site).length - 1, 1,
+                `reviewed Rust inclusion changed: ${sourcePath}`);
             reviewed = source.replace(site, "");
         }
         if (redirectsBackendRustSource(reviewed)) {
             redirectFiles.push(sourcePath);
         }
     }
-    // Both audited native CLIs and the notebook codec bind test modules
-    // under cfg(test). No unreviewed backend Rust source may redirect them.
-    assert.deepEqual(
-        redirectFiles, [PAPER_CLI, NOTEBOOK_PROFILE, PROFILE_EDITOR_CLI],
+    assert.deepEqual(redirectFiles, [],
         "extra included Rust code needs source-level privacy review");
 });
 
