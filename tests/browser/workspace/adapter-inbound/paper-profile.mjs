@@ -159,6 +159,16 @@ test("paper editor exports Rust PDF and PNG", async () => {
             "invalid UTF-8 must not reach the Rust paper endpoint");
         assert.equal(elements.get("paper-pattern").value, "grid",
             "failed upload preserves the previously admitted paper");
+        const prefixed = Uint8Array.of(0xEF, 0xBB, 0xBF,
+            ...new TextEncoder().encode(fileText));
+        elements.get("paper-load").files = {
+            item: () => new Blob([prefixed]),
+        };
+        elements.get("paper-load").dispatch("change");
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(requests.length, beforeCorrupt,
+            "native paper header refuses an initial UTF-8 BOM");
+        assert.equal(elements.get("paper-pattern").value, "grid");
         elements.get("paper-load").files = {
             item: () => new Blob([new TextEncoder().encode(fileText)]),
         };

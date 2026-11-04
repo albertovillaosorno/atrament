@@ -108,6 +108,12 @@ form. A valid UTF-8 file still imports, including accented characters;
 file byte limits are checked again after reading. This is partial input
 hardening, not completion of the migration and localhost privacy criteria.
 
+The pickers also refuse a leading UTF-8 BOM before contacting Rust.
+Unlike the native JSON root-object grammar, the browser's default UTF-8
+decoder previously stripped that prefix and admitted an altered file.
+Three red-before/green-after regressions preserve the current draft while
+refusing the BOM; canonical unprefixed JSON remains importable.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

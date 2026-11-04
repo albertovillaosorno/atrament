@@ -883,8 +883,12 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
                 throw new Error("Handwriting JSON exceeds 1 MiB");
             }
             // Reject invalid input bytes; File.text() silently substitutes.
-            const text = new TextDecoder("utf-8", { fatal: true })
-                .decode(bytes);
+            const text = new TextDecoder("utf-8", {
+                fatal: true, ignoreBOM: true,
+            }).decode(bytes);
+            if (text.startsWith("\uFEFF")) {
+                throw new Error("Handwriting JSON forbids an initial BOM");
+            }
             if (!isCurrent(secret, observed)) return;
             const endpoint = "/api/handwriting/profile";
             const json = await fetchJson(secret, endpoint, text);

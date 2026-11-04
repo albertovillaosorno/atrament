@@ -315,6 +315,16 @@ test("notebook form validates page metadata and downloads native JSON", async ()
             "invalid UTF-8 must not be forwarded as replacement text");
         assert.equal(elements.get("notebook-date-text").value, "03/11/2026",
             "invalid file leaves the prior notebook form untouched");
+        const prefixed = Uint8Array.of(0xEF, 0xBB, 0xBF,
+            ...new TextEncoder().encode(validImport));
+        elements.get("notebook-load").files = {
+            item: () => new Blob([prefixed]),
+        };
+        elements.get("notebook-load").dispatch("change");
+        await settle();
+        assert.equal(requests.length, beforeCorrupt,
+            "native notebook JSON disallows a stripped initial BOM");
+        assert.equal(elements.get("notebook-date-text").value, "03/11/2026");
         elements.get("notebook-load").files = {
             item: () => new Blob([new TextEncoder().encode(validImport)]),
         };

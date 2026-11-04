@@ -428,8 +428,12 @@ export function createPaperProfileEditor(context) {
                 throw new Error("Paper JSON exceeds the 4096-byte limit");
             }
             // File.text() replaces bad UTF-8 with U+FFFD before Rust sees it.
-            const json = new TextDecoder("utf-8", { fatal: true })
-                .decode(bytes);
+            const json = new TextDecoder("utf-8", {
+                fatal: true, ignoreBOM: true,
+            }).decode(bytes);
+            if (json.startsWith("\uFEFF")) {
+                throw new Error("Paper JSON forbids an initial UTF-8 BOM");
+            }
             if (!isCurrent(secret, observed)) {
                 return;
             }
@@ -876,8 +880,12 @@ export function createNotebookProfileEditor(context) {
             if (bytes.byteLength > 8192) {
                 throw new Error("Notebook JSON exceeds 8192 bytes");
             }
-            const proposed = new TextDecoder("utf-8", { fatal: true })
-                .decode(bytes);
+            const proposed = new TextDecoder("utf-8", {
+                fatal: true, ignoreBOM: true,
+            }).decode(bytes);
+            if (proposed.startsWith("\uFEFF")) {
+                throw new Error("Notebook JSON forbids an initial UTF-8 BOM");
+            }
             if (!active(secret, observed))
                 return;
             const result = await canonical(secret, proposed);

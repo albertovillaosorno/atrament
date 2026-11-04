@@ -410,6 +410,16 @@ test("handwriting import refuses invalid UTF-8 before Rust admission",
             "corrupt bytes cannot become replacement glyph in Rust POST");
         assert.equal(b.elements.get("handwriting-glyph").children.length, 0,
             "rejected bytes cannot replace the current ink statistics");
+        const prefixed = Uint8Array.of(0xEF, 0xBB, 0xBF,
+            ...new TextEncoder().encode(source));
+        b.elements.get("handwriting-load").files = {
+            item: () => new Blob([prefixed]),
+        };
+        b.elements.get("handwriting-load").dispatch("change");
+        await tick();
+        assert.equal(b.requests.length, before,
+            "native handwriting JSON refuses an initial UTF-8 BOM");
+        assert.equal(b.elements.get("handwriting-glyph").children.length, 0);
         b.elements.get("handwriting-load").files = {
             item: () => new Blob([new TextEncoder().encode(source)]),
         };
