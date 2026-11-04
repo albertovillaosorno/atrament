@@ -2477,7 +2477,7 @@ fn markdown_invalid_structural_block_preserves_existing_output() {
     let target = test_path();
     let filename = target.to_str().expect("test-owned output path");
     fs::write(&target, b"existing PDF").expect("sentinel");
-    for source in ["a\n- ", "a\n* ", "a\n# ", "a\n## ", "a\n### "] {
+    for source in ["a\n- ", "a\n* ", "a\n+ ", "a\n# ", "a\n## ", "a\n### "] {
         let error = execute_notebook(&args(&[
             "--export-paper", "pdf", "--glyph-stroke", "a", "0", "0",
             "3500", "4500", "250", "#123456", "--flow-markdown",
@@ -2488,6 +2488,60 @@ fn markdown_invalid_structural_block_preserves_existing_output() {
             b"existing PDF");
     }
     fs::remove_file(target).expect("remove test-owned output");
+}
+
+#[test]
+fn plus_markdown_bullets_reuse_existing_real_ink_in_pdf_and_png() {
+    let profile = NotebookProfile::default();
+    let sources = ["- a a\na", "* a a\na", "+ a a\na"];
+    let mut reference = Vec::new();
+    for source in sources {
+        let admitted = FlowSource::new(FlowFormat::Markdown, source)
+            .expect("Markdown source accepted");
+        let (runs, marks, pages) = layout_flow(
+            &admitted, &profile, None, HeadingDecoration::default(),
+        ).expect("uniform unordered list ink");
+        assert_eq!(pages, 1);
+        assert_eq!(runs.iter().map(|run| run.text.as_str())
+            .collect::<Vec<_>>(), ["a a", "a"],
+            "following body paragraph must not join a bullet item");
+        assert_eq!(marks.len(), 1, "one synthetic bullet, not a + glyph");
+        assert_eq!(marks[0].width_um, 450);
+        assert_eq!(marks[0].start_um.0 + 1_700,
+            marks[0].end_um.0);
+        assert_eq!(runs[0].origin_um.0, runs[1].origin_um.0 + 6_000);
+        let mut png_bytes = Vec::new();
+        for format in ["pdf", "png"] {
+            let mut command = args(&[
+                "--export-paper", format, "--printed-sheet", "true",
+                "--glyph-stroke", "a", "0", "0", "3500", "4500",
+                "250", "#204060", "--flow-markdown", source,
+            ]);
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            let bytes = execute_notebook(&command)
+                .expect("native plus bullet export").expect("output bytes");
+            if format == "png" {
+                assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+            } else {
+                assert!(bytes.starts_with(b"%PDF-1.4"));
+            }
+            png_bytes.push(bytes);
+        }
+        if reference.is_empty() {
+            reference = png_bytes;
+        } else {
+            assert_eq!(png_bytes, reference,
+                "all three Markdown bullet spellings render identical ink");
+        }
+    }
+    let plain = execute_notebook(&args(&[
+        "--export-paper", "pdf", "--glyph-stroke", "a", "0", "0",
+        "3500", "4500", "250", "#204060",
+        "--flow-text", "+ a a",
+    ])).expect_err("plus is ordinary text in plain mode");
+    assert!(plain.contains("U+002B"), "{plain}");
 }
 
 #[test]

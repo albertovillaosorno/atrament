@@ -454,14 +454,17 @@ soft-wrapped paragraph, while two spaces before a newline request a hard
 row break. Blank lines add spacing and headings/lists end a paragraph.
 Long text wraps and paginates automatically (up to 32 physical pages).
 The Markdown subset supports single-line `#`, `##`, `###` headings,
-`-`/`*` bullets, and numbered list items such as `1. text` or `2) text`
+`-`/`*`/`+` bullets, and numbered items such as `1. text` or `2) text`
 (with one to nine ASCII digits). Numbered items use your **authored** digit
 and `.` or `)` glyph ink; unlike unordered bullets, there is no automatic
 number shape. Each list item starts on its own row; wrapped continuations
 align beneath the first item glyph after the *measured* numeral, separator
 and any authored spaces. A label too wide to leave room for its first item
 glyph refuses rather than creating an orphan numeral row. Inline styles,
-tables and full Markdown are not yet supported.
+tables and full Markdown are not yet supported. In Markdown, all three
+unordered bullet markers produce the same physical ink dash; the `+` marker
+does not require a separately authored `+` glyph. In plain text it remains
+literal and still needs an authored shape.
 The source limit is 4,096 UTF-8 bytes, with up to 128 laid-out lines.
 The same 512 total exported pen-segment limit still applies.
 

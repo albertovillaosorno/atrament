@@ -60,7 +60,7 @@ minimum row pitch is 9 mm. Page breaks are automatic, up to 32 pages and
 An explicit `--pages` smaller than the measured PDF count refuses.
 
 The limited Markdown subset recognizes `#`, `##`, and `###` single-line
-headings and `-` or `*` list items. Headings default to an explicit ink
+headings and `-`, `*` or `+` list items. Headings default to an explicit ink
 underline, while `--heading-style marker` places an opaque colored highlight
 **behind** authored heading ink; `none` suppresses the ornament without
 changing text. The physical decorations now distinguish heading hierarchy:
@@ -71,6 +71,12 @@ coordinates and ink weights, actual PDF/PNG output, color and deterministic
 replay; first-level styling remains byte-compatible. List items keep their
 physical marks and indentation. This is still CLI-only decoration, not
 semantic styles or persistent title identities.
+
+The unordered-list slice also accepts `+ ` alongside `- ` and `* `, with
+identical synthetic pen dash ink and indentation for all three Markdown
+markers; `+` remains literal in plain-text mode. A native Rust regression
+checks exact PDF/PNG byte parity across all three spellings, preserved
+paragraph boundaries, and refusal of empty `+ ` without replacing output.
 
 Plain-text lines wrap independently at word or grapheme boundaries;
 Markdown ordinary lines now combine as soft-wrapped paragraphs, with two

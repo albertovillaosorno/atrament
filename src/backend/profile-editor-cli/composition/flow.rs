@@ -599,6 +599,7 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
     }
     if let Some(bullet) = line.strip_prefix("- ")
         .or_else(|| line.strip_prefix("* "))
+        .or_else(|| line.strip_prefix("+ "))
     {
         return (LineStyle::Bullet, bullet.trim_end_matches(' '));
     }
