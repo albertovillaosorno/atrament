@@ -1164,8 +1164,9 @@ not a new native TSV field or an automatically inferred anchor.
 **Start closed pen loop at selected stroke** changes the start of an
 existing closed, same-pen path without changing any segment's geometry
 or direction. Select a later stroke inside the loop. Open contours,
-single strokes, and a no-op first-stroke choice refuse. The native
-CLI equivalent is `glyphs --profile ink.tsv --rotate-path 'o' 1 3
+single strokes, and a no-op first-stroke choice refuse.
+
+The native CLI equivalent is `glyphs --profile ink.tsv --rotate-path 'o' 1 3
 --output loop.tsv`: path 1 begins at its third stroke, counting within
 that path, while unrelated Unicode rows retain their TSV slots.
 This changes pen travel order, not its mathematical outline; TSV v1
