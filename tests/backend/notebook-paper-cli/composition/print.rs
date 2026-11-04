@@ -1586,6 +1586,65 @@ fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
 
 #[cfg(unix)]
 #[test]
+fn hybrid_xref_stream_admits_a_genuine_backward_revision_chain() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("revised-hybrid.pdf");
+    let spooled = directory.join("spooled.pdf");
+    let script = directory.join("lp.sh");
+    fs::write(&script, format!(
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
+    )).expect("write fake spooler");
+    fs::set_permissions(&script, fs::Permissions::from_mode(0o700))
+        .expect("make fake spooler executable");
+
+    let original = one_page_xref_stream_pdf("1.5", " /Index [0 5]");
+    let previous = original.windows(b"4 0 obj\n".len())
+        .position(|part| part == b"4 0 obj\n")
+        .expect("real first xref stream");
+    let new_stream = original.len();
+    let mut row = vec![1];
+    row.extend_from_slice(&u32::try_from(new_stream)
+        .expect("bounded xref byte offset").to_be_bytes());
+    row.extend_from_slice(&0u16.to_be_bytes());
+    let prefix = [
+        original.as_slice(),
+        format!(
+            "5 0 obj\n<< /Type /XRef /Size 6 /Index [5 1] \
+             /W [1 4 2] /Prev {previous} /Root 1 0 R \
+             /Length 7 >>\nstream\n",
+        ).as_bytes(),
+        row.as_slice(),
+        b"\nendstream\nendobj\n".as_slice(),
+    ].concat();
+    let candidate = [
+        prefix.as_slice(),
+        format!(
+            "xref\n0 1\n0000000000 65535 f \n\
+             5 1\n{new_stream:010} 00000 n \n\
+             trailer\n<< /Size 6 /Root 1 0 R \
+             /Prev {previous} /XRefStm {new_stream} >>\n\
+             startxref\n{}\n%%EOF\n", prefix.len(),
+        ).as_bytes(),
+    ].concat();
+    assert!(supported_pdf_cross_reference(&candidate),
+        "valid two-stream hybrid incremental PDF stays admissible");
+    fs::write(&pdf, &candidate).expect("write reviewed hybrid PDF");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert_eq!(submit_selected(&request, &script)
+        .expect("hybrid revision reaches fake CUPS"),
+        sha256_profile_bytes(&candidate).bytes());
+    assert_eq!(fs::read(&spooled).expect("spooled PDF"), candidate);
+    assert_eq!(fs::read(&pdf).expect("selected PDF"), candidate);
+    fs::remove_dir_all(&directory).expect("remove owned fixtures");
+}
+
+#[cfg(unix)]
+#[test]
 fn xref_table_prev_must_point_back_to_a_prior_xref() {
     use std::os::unix::fs::PermissionsExt as _;
 

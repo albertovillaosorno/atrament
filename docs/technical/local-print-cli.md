@@ -214,6 +214,11 @@ be a direct positive decimal byte offset before that stream. The older
 target is not followed: terminal `/Prev` and hybrid `/XRefStm` receive
 immediate predecessor framing, not recursive revision-chain validation.
 
+A PDF 1.5 incremental hybrid regression includes two framed xref streams
+and a terminal traditional table with valid backward `/Prev` and `/XRefStm`
+links. The local fake CUPS receives the selected source byte-for-byte; an
+independently generated equivalent PDF is readable by `pdfinfo` as one page.
+
 Prior traditional tables need a bounded, complete first subsection with
 valid record fields; any in-use entries in it must point to matching object
 headers before that earlier table. A forged earlier count that omits an

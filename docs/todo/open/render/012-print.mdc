@@ -503,6 +503,19 @@ Real one-page hybrid PDF and native table-to-stream fixtures still pass.
 This checks only the older pointer's lexical form, not its target's xref
 dictionary, indirect-object graph or complete revision chain.
 
+## Backward hybrid xref-stream compatibility (partial) — 2026-11-04
+
+An additional native fake-CUPS regression constructs an incremental PDF
+1.5 with an initial xref stream, a second sparse xref stream whose `/Prev`
+points to the first, and a terminal traditional hybrid table. The table's
+`/XRefStm` points at the second stream while its `/Prev` names the first.
+
+The bounded preflight admits this valid backward chain and sends identical
+selected bytes and SHA-256 evidence to the fake spool without changing the
+source. An independently generated equivalent 605-byte PDF opens in
+`pdfinfo` as a one-page Letter document without a repair warning. This is
+a compatibility check, not recursive verification or physical printing.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
