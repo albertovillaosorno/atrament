@@ -4092,16 +4092,65 @@ test(
                     : bytes.subarray(0, 8).toString("hex"),
                 format === "pdf" ? "%PDF-" : "89504e470d0a1a0a");
             }
-            // Reuse all three actual browser-selected artifacts in one
-            // native decorated Markdown export, not synthetic Node profiles.
+            // Explicitly download the authored source from the same real
+            // browser workspace that saved both profiles and exported ink.
+            // Rust receives exactly this Blob's bytes, not a Node template.
             const decoratedSource = "# óó\n\nó ó  \nóó";
+            const markdownResponse = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: `(async () => {
+                    const source = document.getElementById("source-input");
+                    const button = document.getElementById(
+                        "source-markdown-export");
+                    source.value = ${JSON.stringify(decoratedSource)};
+                    source.dispatchEvent(new Event("input", { bubbles: true }));
+                    const originalCreate = URL.createObjectURL;
+                    const originalClick = HTMLAnchorElement.prototype.click;
+                    let blob = null;
+                    let filename = null;
+                    try {
+                        URL.createObjectURL = (value) => {
+                            blob = value;
+                            return originalCreate.call(URL, value);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            filename = this.download;
+                        };
+                        const enabled = !button.disabled;
+                        button.click();
+                        return JSON.stringify({ enabled, filename,
+                            text: blob ? await blob.text() : null,
+                            bytes: blob?.size, mediaType: blob?.type });
+                    } finally {
+                        URL.createObjectURL = originalCreate;
+                        HTMLAnchorElement.prototype.click = originalClick;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(markdownResponse.type, "success");
+            assert.equal(markdownResponse.result.type, "string");
+            const downloadedSource = JSON.parse(markdownResponse.result.value);
+            assert.equal(downloadedSource.enabled, true);
+            assert.equal(downloadedSource.filename, "atrament-source.md");
+            assert.equal(downloadedSource.mediaType,
+                "text/markdown; charset=utf-8");
+            assert.equal(downloadedSource.text, decoratedSource);
+            const markdownFile = path.join(root, "browser-source.md");
+            fs.writeFileSync(markdownFile, downloadedSource.text);
+            assert.equal(downloadedSource.bytes,
+                fs.readFileSync(markdownFile).length);
+            assert.deepEqual(fs.readFileSync(markdownFile),
+                Buffer.from(decoratedSource, "utf8"),
+                "source must pass through the browser Blob byte-for-byte");
             const decoratedBase = [
                 "notebook", "--profile", notebookFile,
                 "--handwriting-profile", handwritingFile,
                 "--glyph-file", variationFile,
                 "--heading-style", "marker",
                 "--heading-color", "#F8DE91",
-                "--flow-markdown", decoratedSource,
+                "--flow-markdown-file", markdownFile,
             ];
             const decoratedPdf = path.join(root,
                 "browser-saved-markdown.pdf");
@@ -4157,6 +4206,9 @@ test(
                 "failed Markdown export must preserve approved PDF bytes");
             assert.equal(fs.readFileSync(variationFile, "utf8"),
                 variationText, "native export never rewrites browser ink");
+            assert.deepEqual(fs.readFileSync(markdownFile),
+                Buffer.from(decoratedSource, "utf8"),
+                "native rejection cannot rewrite downloaded source");
 
             // Printer intent remains separate from the Firefox save and
             // native export. Review its exact PDF bytes without CUPS access.

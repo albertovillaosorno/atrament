@@ -108,11 +108,13 @@ complete saved notebook content and localhost visual journey are still open.
 The real headless Firefox/localhost save-and-reopen journey now passes its
 actual native notebook JSON, saved handwriting statistics and explicitly
 browser-downloaded varied `ó` glyph strokes to one Rust CLI invocation.
-A caller-provided Markdown heading and body render as a single physical PDF
-page with an authored pastel marker band and as a transparent RGBA PNG with
-the same actual marker pigment. An unsupported authored `z` shape refuses
-replacement of the approved PDF, preserving its exact bytes and the
-browser-selected glyph library. The real Firefox-to-native regression passes.
+The browser source field explicitly downloads an exact UTF-8 Markdown Blob;
+Rust reopens that same selected `.md` file and renders its heading and body
+as a single physical PDF page with an authored pastel marker band and as a
+transparent RGBA PNG with the same pigment. An unsupported authored `z`
+shape refuses replacement of the approved PDF. Its exact bytes and the
+browser-selected glyph library remain unchanged. The real Firefox-to-native
+regression passes.
 
 The same browser-backed PDF is independently hashed with Node SHA-256, then
 reviewed with the opt-in native `atrament-print --dry-run` and an explicit
@@ -121,9 +123,10 @@ uppercase input form, and reports no job submission. The PDF bytes remain
 unchanged. This is review-only evidence, not physical printing or a workspace
 print action.
 
-This joins three browser-authored files to native decorated Markdown output.
-It does not persist Markdown in an editable notebook model, paste source into
-the browser workspace, or establish general glyph and photo coverage. The
+This joins explicit source Markdown download with three browser-authored
+profile/ink files in native decorated output. It uses a simulated input event
+rather than trusted keyboard paste and does not persist Markdown in an
+editable notebook model or establish general glyph/photo coverage. The
 full localhost editing journey and P8-009 acceptance remain open.
 
 ## Acceptance decision
