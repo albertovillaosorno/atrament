@@ -165,6 +165,15 @@ did a subsection beginning at object 100 with `/Size 100`. Both failed the
 new red-before fake-spool tests and now refuse without modifying the PDF;
 a valid `/Size 101` high-numbered subsection and real native pages still pass.
 
+A fourth red-before printer admission regression showed that in-use
+traditional xref table records with byte offsets of zero or 9,999,999,999
+were accepted even for a tiny selected PDF. The bounded scanner now rejects
+both outside-version-header and outside-file offsets for `n` records,
+without constraining `f` records' free-object pointers. Two fake-CUPS
+cases refuse without changing the selected PDF; real native two-page
+export and ordinary synthetic table framing remain admitted. This check
+does not validate object syntax at a claimed in-range byte offset.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

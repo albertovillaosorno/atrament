@@ -538,6 +538,8 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
             "0000000000 00000 n \ntrailer\n<< /Size 1 >>\n",
         ),
         "xref\n100 1\n0000000044 00000 n \ntrailer\n<< /Size 100 >>\n",
+        "xref\n0 1\n9999999999 00000 n \ntrailer\n<< /Size 1 >>\n",
+        "xref\n0 1\n0000000000 00000 n \ntrailer\n<< /Size 1 >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 > >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 ] >>\n",
     ] {

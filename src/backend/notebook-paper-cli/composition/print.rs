@@ -210,7 +210,7 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     if target.starts_with(b"xref")
         && target.get(4).is_some_and(u8::is_ascii_whitespace)
     {
-        return supported_xref_table(target);
+        return supported_xref_table(target, bytes.len());
     }
     // Cross-reference streams entered the PDF standard in version 1.5.
     // Old-format headers cannot authorize a stream even if it appears to
@@ -246,7 +246,7 @@ fn xref_word<'bytes>(bytes: &'bytes [u8], at: &mut usize)
     bytes.get(start..*at).filter(|word| !word.is_empty())
 }
 
-fn supported_xref_table(bytes: &[u8]) -> bool {
+fn supported_xref_table(bytes: &[u8], document_len: usize) -> bool {
     let mut at = 0usize;
     if xref_word(bytes, &mut at) != Some(b"xref".as_slice()) {
         return false;
@@ -297,6 +297,17 @@ fn supported_xref_table(bytes: &[u8]) -> bool {
                 || !matches!(status, b"f" | b"n")
             {
                 return false;
+            }
+            // In-use offsets are absolute from the start of the selected
+            // PDF. They cannot name the header or a byte beyond the file.
+            // Free-table values are object indices, not byte offsets.
+            if status == b"n" {
+                let Some(object_offset) = str::from_utf8(offset).ok()
+                    .and_then(|digits| digits.parse::<usize>().ok())
+                else { return false; };
+                if object_offset < 9 || object_offset >= document_len {
+                    return false;
+                }
             }
             seen_entry = true;
         }

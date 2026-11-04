@@ -104,6 +104,12 @@ The declared
 `/Size` must be at least each subsection's first object number plus its
 record count; otherwise a table claims objects outside its own extent.
 
+Each in-use `n` record also needs an absolute decimal byte offset within
+the selected PDF, after its version header. An offset of zero or past the
+file refuses before CUPS; free `f` entries use object indices, not document
+byte offsets, and are not subject to that check. This does not confirm that
+an in-use offset actually points to an indirect object.
+
 The trailer scanner now balances nested dictionaries and arrays, skipping
 literal/hex strings and comments when locating the one top-level `/Size`.
 Only whitespace and PDF comments may follow the complete outer `>>` before
@@ -167,6 +173,9 @@ A further four fake-CUPS cases reject unmatched single `>` and `]` tokens
 inside the stream header or table trailer; ordinary nested maps still pass.
 Two more refuse impossible `/Size` totals for complete xref subsections,
 while a high-numbered valid subsection remains admissible.
+
+Another two fake-spool refusals cover zero and out-of-file in-use object
+offsets.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
