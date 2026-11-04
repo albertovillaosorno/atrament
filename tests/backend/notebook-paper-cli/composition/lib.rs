@@ -766,8 +766,12 @@ fn transparent_png_grid_has_real_ink_and_physical_resolution() {
 #[test]
 fn ruled_and_grid_page_candidate_golden_bytes_and_pixels_are_stable() {
     use atrament_profile_entry_sha256::sha256_profile_bytes;
+    use std::fs;
     use std::fmt::Write as _;
+    use std::path::Path;
 
+    let reference_dir = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../tests/backend/notebook-paper-cli/composition");
     let hex_digest = |source: &[u8]| -> String {
         let mut hex = String::with_capacity(64);
         for byte in sha256_profile_bytes(source).bytes() {
@@ -776,24 +780,33 @@ fn ruled_and_grid_page_candidate_golden_bytes_and_pixels_are_stable() {
         hex
     };
     let cases = [
-        (Style::Ruled,
+        (Style::Ruled, "ruled",
             "fa59a88a53ffba9a11b8f7dd1416101bf3cd9b6d63693fed6b5692b5899bad8e",
             "d775db518f8cba371e5af6cf1608aef7ad38c33d1ec8d37ab6bda71700c50aaf",
             "27b9e33ced9c7b89e27a768ea30dc127bc82368ac4535a29856c46418bb81254",
             34_500),
-        (Style::Grid,
+        (Style::Grid, "grid",
             "6bbf7d74ded9f62210b45f04fb1b5c48a51422cc4f315019de1b45c16e10b773",
             "46e2ff82bda2db65a685836a6a3fa96f8b73e883aabc0571e28127308f270631",
             "db38766c7658e9179277585b5e982a61a61660939fc607afe4a83f3bf902c4be",
             66_468),
     ];
-    for (style, pdf_golden, png_golden, rgba_golden, ink_golden) in cases {
+    for (style, name, pdf_golden, png_golden, rgba_golden, ink_golden)
+        in cases {
+        let reference_pdf = fs::read(reference_dir.join(
+            format!("a4-{name}-72dpi.pdf"))).expect("PDF candidate on disk");
+        let reference_png = fs::read(reference_dir.join(
+            format!("a4-{name}-72dpi.png"))).expect("PNG candidate on disk");
         let options = Options { style, ..Options::default() };
         let pdf = render_pages(options, 1).expect("real A4 vector paper");
         assert!(pdf.starts_with(b"%PDF-1.4"));
         assert_eq!(hex_digest(&pdf), pdf_golden, "vector page golden");
+        assert!(pdf == reference_pdf,
+            "native PDF differs from inspectable vector candidate");
         let png = render_png(options, 72).expect("real transparent paper");
         assert_eq!(hex_digest(&png), png_golden, "encoded PNG golden");
+        assert!(png == reference_png,
+            "native PNG differs from inspectable raster candidate");
         let (width, height, raw) = stored_png_pixels(&png);
         assert_eq!((width, height), (596, 842), "A4 at 72 DPI");
         let mut rgba = Vec::with_capacity(width * height * 4);

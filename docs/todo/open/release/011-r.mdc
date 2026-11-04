@@ -88,10 +88,12 @@ goldens and full keyboard journeys.
 An independent Linux watchdog now observes each test-owned detached Firefox
 fixture over a private pipe. When its test worker is killed with SIGKILL,
 the watchdog sees pipe closure and kills only that fixture process group;
-normal launcher exit retains the existing cleanup observer. Isolated Node
-fixtures test both pipe closure and a real SIGKILL of the parent worker,
-including the detached child reaching an exited or zombie state, without
-signalling an unrelated browser session. A real BiDi browser journey remains
+normal launcher exit retains the existing cleanup observer.
+
+Isolated Node fixtures test both pipe closure and a real SIGKILL
+of the parent worker, including the detached child reaching an
+exited or zombie state, without signalling an unrelated browser
+session. A real BiDi browser journey remains
 necessary alongside these synthetic process fixtures. This does not change
 production browser lifecycle guarantees or complete the still-open visual
 goldens and keyboard-only control coverage.
@@ -117,6 +119,32 @@ or owner-approved visual reference images. The test freezes encoding as well
 as painted pixels, so intentional renderer/serializer changes will require
 an explicit candidate update and visual approval. Keyboard-only coverage
 of every editor control and approved image-file goldens remain open.
+
+## Viewable native paper reference candidates — 2026-11-04
+
+The original A4 ruled and grid golden hashes now have checked-in PDF and PNG
+reference files in `tests/backend/notebook-paper-cli/composition/`.
+They are produced by the actual native `atrament-paper` CLI using
+default paper options with only `--style ruled|grid`, and
+`--format png --dpi 72` for the raster. Each
+596×842 transparent image and one-page vector PDF is independently viewable.
+
+The existing Rust golden test now compares the real renderer's PDF and PNG
+bytes against these fixtures as well as the separately pinned SHA-256 hashes,
+decoded RGBA digests, and exact painted-pixel counts. A forged fixture cannot
+silently become a new baseline just by changing its bytes. The test also
+continues to refuse a falsely matching recolored page.
+
+Reproduce with `cargo run --offline -q -p atrament_notebook_paper_cli
+--bin atrament-paper -- --style ruled --format png --dpi 72 --output FILE`
+(or `--style grid`, or omit `--format png --dpi 72` for the PDF); inspect
+the images before any deliberate fixture update. Run
+`cargo test --offline -p atrament_notebook_paper_cli --lib
+ruled_and_grid_page_candidate_golden_bytes_and_pixels_are_stable`.
+
+These remain candidate visuals, not owner-approved references. They do not
+close the required keyboard-only complete editor journey or the final
+visual-approval gate.
 
 ## Acceptance decision
 
