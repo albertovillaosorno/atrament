@@ -252,6 +252,15 @@ An exact free-list head with a valid successor remains eligible, as do
 native exported pages and sparse subsection tables. This does not build
 or verify a complete free-list graph.
 
+One more signed-count loophole in traditional xref subsection headers
+allowed `+1` or `+0001` as a record count. A red-before fake-CUPS test
+reproduced this admission; subsection counts now require nonempty ASCII
+decimal digits, matching the already strict first-index parser.
+
+Both forged count forms refuse unchanged before contacting the spooler.
+Canonical unsigned counts, sparse sections and real native output remain
+eligible. This does not check every aspect of PDF record line layout.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

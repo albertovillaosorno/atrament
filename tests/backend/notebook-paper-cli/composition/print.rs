@@ -796,6 +796,44 @@ fn xref_object_zero_is_always_the_permanent_free_head() {
     fs::remove_dir_all(&directory).expect("remove owned fixtures");
 }
 
+#[cfg(unix)]
+#[test]
+fn xref_subsection_count_is_unsigned_decimal_digits_only() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("unexpected-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS executable");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake CUPS executable");
+    let framed = |count: &str| format!(
+        "%PDF-1.7\nxref\n0 {count}\n0000000000 65535 f \n\
+         trailer\n<< /Size 1 >>\nstartxref\n9\n%%EOF\n",
+    ).into_bytes();
+    assert!(supported_pdf_cross_reference(&framed("1")),
+        "canonical decimal xref count remains eligible");
+    for count in ["+1", "+0001"] {
+        let invalid = framed(count);
+        assert!(!supported_pdf_cross_reference(&invalid),
+            "prefixed xref subsection count must refuse: {count}");
+        fs::write(&pdf, &invalid).expect("write forged table count");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(), "signed count refused");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "signed count cannot contact CUPS");
+        assert!(!spooled.exists(), "no fake CUPS contact");
+        assert_eq!(fs::read(&pdf).expect("source intact"), invalid);
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixtures");
+}
+
 #[test]
 fn xref_size_below_resource_ceiling_remains_admissible() {
     let sparse = format!(

@@ -117,6 +117,11 @@ on both `f` and `n` records must fit an unsigned 16-bit PDF generation
 number. This does not parse the referenced object body or prove
 cross-reference completeness.
 
+Traditional xref subsection counts now use ASCII decimal digits only,
+as their first object indices already do. Signed tokens such as `+1` and
+`+0001` refuse before CUPS, even though the Rust integer parser could
+otherwise convert them to valid record counts.
+
 The reserved object-zero table record is always a free-list head with
 generation 65535, even when another table record has that same generation.
 An in-use record zero or a free record zero with any other generation
@@ -246,6 +251,9 @@ inside encoded data; no stream payload is decoded or printed on a real queue.
 Two fake-spool cases refuse an in-use xref-table entry for object zero
 and a free object-zero record with generation other than 65535.
 The valid head-to-free-object chain and native pages remain admitted.
+
+Two additional fake-CUPS cases refuse signed traditional xref subsection
+counts and keep the source unchanged; an ordinary numeric count still passes.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

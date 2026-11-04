@@ -296,6 +296,8 @@ fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
         else { return false; };
         let Some(count) = xref_word(bytes, &mut at)
             .and_then(|value| str::from_utf8(value).ok())
+            .filter(|digits| !digits.is_empty()
+                && digits.bytes().all(|byte| byte.is_ascii_digit()))
             .and_then(|digits| digits.parse::<usize>().ok())
         else {
             return false;
