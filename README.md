@@ -593,6 +593,31 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --place-text 2 25400 30000 'ñ ∞ ñ' --output glyphs.pdf
 ```
 
+To connect carefully authored neighboring letters without editing the
+original glyphs, add `--join-text-pair LEFT RIGHT` to a native notebook
+PDF/PNG export. For example, after authoring both exact Unicode shapes:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --printed-sheet true --export-paper pdf \
+  --glyph-file my-glyph-strokes.tsv \
+  --place-text 1 25400 30000 'ñó' \
+  --join-text-pair 'ñ' 'ó' --output connected.pdf
+```
+
+The opt-in pair (up to 32 distinct pairs) must actually occur adjacent
+within one text run. On each occurrence, Rust connects the previous glyph's
+**last authored pen endpoint** to the next glyph's **first** only when the
+physically transformed ink has identical RGB and width and a gap of at most
+1200 µm. A wrong direction, long gap or unmatched pair refuses the whole
+export, leaving existing output unchanged.
+
+Spaces, line/page breaks and
+separate placed runs prevent unintended joins. Seeded variation and saved
+mean transforms affect the measured physical bridge, not the source TSV.
+This is explicit straight connector ink, **not** a saved joined cursive
+path, parametric pen primitive or automatic letter joining.
+
 Graphemes need authored strokes. Without an explicitly selected fallback,
 missing ones refuse with every exact UTF-8 grapheme and Unicode code-point
 sequence, rather than disappearing. Composed `ñ` and decomposed `ñ` are
@@ -601,8 +626,9 @@ transparent PNG using `--export-paper png --png-page 2 --dpi 72`; page 1
 remains unmarked by page-2 ink.
 
 There are at most 4096 authored template
-segments, 16 text runs of up to 96 graphemes each, and 512 final pen
-segments combined with `--ink-line`. Physical placement and ink width are
+segments, 16 text runs of up to 96 graphemes each, and 4096 final pen
+segments combined with `--ink-line` or the selected letter bridges. Physical
+placement and ink width are
 checked by the existing PDF/PNG compositor before the selected output changes.
 
 To start a complete **lowercase-only geometric draft** without drawing

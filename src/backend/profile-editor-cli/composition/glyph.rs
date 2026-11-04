@@ -57,6 +57,7 @@ const MAX_STROKES: usize = 4096;
 const MAX_RUNS: usize = 16;
 const MAX_RUN_GRAPHEMES: usize = 96;
 const MAX_FALLBACKS: usize = 64;
+const MAX_TEXT_JOIN_PAIRS: usize = 32;
 // An explicit short pen bridge must not silently cross a wide glyph gap.
 const MAX_JOIN_GAP_UM: u64 = 1_200;
 const GLYPH_LIBRARY_HEADER: &str = "atrament.glyph-strokes.v1";
@@ -236,6 +237,35 @@ impl GlyphMetrics {
 }
 
 impl GlyphOverlay {
+    /// Select exactly which adjacent Unicode letters may receive physical
+    /// pen bridges on output; the canonical glyph TSV remains unchanged.
+    pub(super) fn add_text_join_pair(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let left = iter.next()
+            .ok_or("--join-text-pair needs two exact graphemes")?;
+        let right = iter.next()
+            .ok_or("--join-text-pair needs two exact graphemes")?;
+        let boundaries = UnicodeGraphemeSegmentation;
+        if !is_exact_visible_grapheme(left, boundaries)
+            || !is_exact_visible_grapheme(right, boundaries) {
+            return Err(concat!(
+                "text join pair needs two visible ",
+                "exact graphemes",
+            ).into());
+        }
+        if self.text_joins.iter().any(|(first, second)| {
+            first == left && second == right
+        }) {
+            return Err("duplicate text join pair refused".into());
+        }
+        if self.text_joins.len() == MAX_TEXT_JOIN_PAIRS {
+            return Err("text joins limited to 32 selected pairs".into());
+        }
+        self.text_joins.push((left.clone(), right.clone()));
+        Ok(())
+    }
+
     /// Inspect the actual authored-shape inventory for one bounded text run.
     /// An English/Spanish statistics baseline alone never implies ink.
     pub(super) fn audit_text(&self, text: &str)
@@ -399,11 +429,15 @@ impl GlyphOverlay {
         let mut expanded = manual.to_vec();
         let mut missing = Vec::new();
         let mut occurrence = 0u32;
+        let mut joined_pairs = vec![false; self.text_joins.len()];
         for run in &self.runs {
             let mut offset_um = 0i64;
+            // A pen lift is implicit at every run/row or authored space.
+            let mut previous: Option<(&str, NotebookInkLine)> = None;
             for index in 0..boundaries.grapheme_count(&run.text) {
                 let grapheme = segment_at(boundaries, &run.text, index)?;
                 if grapheme == " " {
+                    previous = None;
                     offset_um = offset_um.checked_add(i64::from(ADVANCE_UM))
                         .ok_or("space advance overflow")?;
                     continue;
@@ -415,6 +449,7 @@ impl GlyphOverlay {
                     .filter(|shape| shape.grapheme == authored)
                     .collect::<Vec<_>>();
                 if matches.is_empty() {
+                    previous = None;
                     if !missing.contains(&grapheme) {
                         missing.push(grapheme);
                     }
@@ -442,16 +477,15 @@ impl GlyphOverlay {
                         0i32, |values| values.baseline_offset,
                     )))
                     .ok_or("glyph vertical origin overflow")?;
-                for shape in &selected {
-                    if expanded.len() == MAX_NOTEBOOK_INK_LINES {
-                        return Err(
-                            "text exceeds 4096 total pen strokes".into()
-                        );
-                    }
-                    expanded.push(placed_ink(
-                        shape, run, (glyph_x, glyph_y), metrics,
-                    )?);
-                }
+                let rendered = selected.iter().map(|shape| {
+                    placed_ink(shape, run, (glyph_x, glyph_y), metrics)
+                }).collect::<Result<Vec<_>, _>>()?;
+                append_text_ink(
+                    &mut expanded, &rendered, previous, grapheme,
+                    &self.text_joins, &mut joined_pairs,
+                )?;
+                previous = rendered.last().copied()
+                    .map(|line| (grapheme, line));
                 let advance = if let Some(values) = metrics {
                     i64::from(values.width)
                         .checked_add(i64::from(values.letter_spacing))
@@ -473,6 +507,19 @@ impl GlyphOverlay {
         }
         if !missing.is_empty() {
             return Err(missing_shapes_error(&missing));
+        }
+        for ((left, right), seen) in self.text_joins.iter()
+            .zip(joined_pairs)
+        {
+            if !seen {
+                return Err(format!(
+                    concat!(
+                        "selected text join pair not adjacent in a run: ",
+                        "\"{}\" \"{}\"",
+                    ),
+                    left, right,
+                ));
+            }
         }
         Ok(expanded)
     }
@@ -504,6 +551,7 @@ impl GlyphOverlay {
     pub(super) const fn has_any(&self) -> bool {
         !self.runs.is_empty() || !self.strokes.is_empty()
             || !self.fallbacks.is_empty() || self.variation.is_some()
+            || !self.text_joins.is_empty()
     }
 
     /// Show the exact caller-authored order and direction without writing
@@ -890,6 +938,9 @@ impl GlyphOverlay {
         if self.variation.is_some() && self.runs.is_empty() {
             return Err("--glyph-variation requires placed text".into());
         }
+        if !self.text_joins.is_empty() && self.runs.is_empty() {
+            return Err("--join-text-pair requires placed text".into());
+        }
         if !self.fallbacks.is_empty() && self.runs.is_empty() {
             return Err(concat!(
                 "--fallback-glyph requires authored glyphs ",
@@ -1012,6 +1063,70 @@ fn placed_ink(
         rgb: run.heading_ink.and_then(|style| style.color)
             .unwrap_or(shape.rgb),
     })
+}
+
+// Respect the shared physical-ink budget even for newly added connectors.
+fn append_text_ink(
+    expanded: &mut Vec<NotebookInkLine>,
+    rendered: &[NotebookInkLine],
+    previous: Option<(&str, NotebookInkLine)>,
+    grapheme: &str,
+    text_joins: &[(String, String)],
+    joined_pairs: &mut [bool],
+) -> Result<(), String> {
+    if let Some((left, prior)) = previous
+        && let Some(pair_index) = text_joins.iter()
+            .position(|(first, second)| {
+                first == left && second == grapheme
+            })
+    {
+        let first = rendered.first()
+            .ok_or("text join needs an authored first stroke")?;
+        if let Some(bridge) = text_join_bridge(prior, *first)? {
+            if expanded.len() == MAX_NOTEBOOK_INK_LINES {
+                return Err("text exceeds 4096 total pen strokes".into());
+            }
+            expanded.push(bridge);
+        }
+        let observed = joined_pairs.get_mut(pair_index)
+            .ok_or("text join pair index outside bounds")?;
+        *observed = true;
+    }
+    for line in rendered {
+        if expanded.len() == MAX_NOTEBOOK_INK_LINES {
+            return Err("text exceeds 4096 total pen strokes".into());
+        }
+        expanded.push(*line);
+    }
+    Ok(())
+}
+
+// Bridges use the actual final placed endpoints, after seeded variation,
+// statistics, slant, heading weights and colors. No source stroke is edited.
+fn text_join_bridge(
+    before: NotebookInkLine, after: NotebookInkLine,
+) -> Result<Option<NotebookInkLine>, String> {
+    if before.page != after.page {
+        return Err("text join cannot cross physical pages".into());
+    }
+    if before.rgb != after.rgb || before.width_um != after.width_um {
+        return Err("text join requires matching physical pen and RGB".into());
+    }
+    let (start, end) = (before.end_um, after.start_um);
+    if start == end {
+        return Ok(None);
+    }
+    let dx = i64::from(start.0).saturating_sub(i64::from(end.0));
+    let dy = i64::from(start.1).saturating_sub(i64::from(end.1));
+    if dx.unsigned_abs().pow(2).saturating_add(dy.unsigned_abs().pow(2))
+        > MAX_JOIN_GAP_UM.pow(2)
+    {
+        return Err("text join gap exceeds 1200 um".into());
+    }
+    Ok(Some(NotebookInkLine {
+        page: before.page, start_um: start, end_um: end,
+        width_um: before.width_um, rgb: before.rgb,
+    }))
 }
 
 fn missing_shapes_error(missing: &[&str]) -> String {

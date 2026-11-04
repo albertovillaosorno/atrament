@@ -126,6 +126,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--fallback-glyph MISSING AUTHORED] \
     [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
+    [--join-text-pair LEFT RIGHT (repeatable, max 32)] \
     [--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY] \
     [--heading-style underline|double-underline|marker|none] \
     [--heading-color '#RRGGBB'] \
@@ -141,6 +142,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     explicit, unsaved physical pen segments. --glyph-stroke supplies exact \
     author-drawn segments in a 4 x 5 mm cell and --place-text repeats them; \
     missing shapes refuse; --glyph-file loads a reusable library. \
+    --join-text-pair opt-in bridges selected adjacent glyph pen endpoints \
+    within one row; matching physical ink and <=1200 um gap required. \
     --fallback-glyph borrows a caller-selected existing authored shape \
     for one missing exact grapheme; no implicit or chained mappings. \
     --flow-text keeps explicit lines; --flow-markdown joins plain lines \
@@ -199,6 +202,7 @@ struct GlyphOverlay {
     loaded_file: bool,
     runs: Vec<TextRun>,
     strokes: Vec<GlyphStroke>,
+    text_joins: Vec<(String, String)>,
     variation: Option<GlyphVariation>,
 }
 
@@ -1031,6 +1035,7 @@ fn parse_notebook_export_option(
         | "--glyph-variation" => {
             glyphs.parse(option, iter)?;
         }
+        "--join-text-pair" => glyphs.add_text_join_pair(iter)?,
         "--glyph-file" => {
             let selected = iter.next()
                 .ok_or("--glyph-file requires a library path")?;
@@ -1236,7 +1241,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--export-paper" | "--pages" | "--dpi" | "--png-page"
             | "--ink-line" | "--glyph-stroke" | "--glyph-file"
             | "--place-text" | "--fallback-glyph"
-            | "--glyph-variation" => {
+            | "--glyph-variation" | "--join-text-pair" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
                     &mut glyphs,

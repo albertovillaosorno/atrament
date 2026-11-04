@@ -2529,6 +2529,309 @@ fn targeted_stroke_geometry_and_deletion_round_trip_into_native_exports() {
 }
 
 #[test]
+fn selected_text_join_matches_explicit_page_ink_in_pdf_and_png() {
+    // Two independently authored NFC/NFD shapes: their physically placed
+    // pen endpoints are 1000 um apart on the selected output row.
+    let library = test_path().with_extension("tsv");
+    let name = library.to_str().expect("owned TSV path");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "500", "1000", "3200", "2200",
+        "250", "#102030",
+        "--glyph-stroke", "ó", "200", "2200", "1200", "1000",
+        "250", "#102030",
+    ])).expect("authored exact ink").expect("TSV bytes");
+    fs::write(&library, &original).expect("own canonical library");
+    for format in ["pdf", "png"] {
+        let mut connected = args(&[
+            "--printed-sheet", "true", "--export-paper", format,
+            "--glyph-file", name,
+            "--place-text", "1", "30000", "45000", "n\u{303}ó",
+            "--join-text-pair", "n\u{303}", "ó",
+        ]);
+        let mut manual = args(&[
+            "--printed-sheet", "true", "--export-paper", format,
+            "--ink-line", "1", "30500", "46000", "33200",
+            "47200", "250", "#102030",
+            "--ink-line", "1", "33200", "47200", "34200",
+            "47200", "250", "#102030",
+            "--ink-line", "1", "34200", "47200", "35200",
+            "46000", "250", "#102030",
+        ]);
+        let mut independent = args(&[
+            "--printed-sheet", "true", "--export-paper", format,
+            "--glyph-file", name,
+            "--place-text", "1", "30000", "45000", "n\u{303}ó",
+        ]);
+        if format == "png" {
+            for flags in [&mut connected, &mut manual, &mut independent] {
+                flags.extend(args(&["--dpi", "72"]));
+            }
+        }
+        let actual = execute_notebook(&connected).expect("joined export")
+            .expect("export bytes");
+        assert_eq!(actual, execute_notebook(&manual)
+            .expect("authored independent connector")
+            .expect("export bytes"),
+            "real {format} must draw connector in pen stroke order");
+        assert_ne!(actual, execute_notebook(&independent)
+            .expect("ordinary glyphs")
+            .expect("export bytes"),
+            "join is not silently present without opt-in");
+        if format == "pdf" {
+            assert!(actual.starts_with(b"%PDF-"));
+        } else {
+            assert!(actual.starts_with(b"\x89PNG\r\n\x1a\n"));
+        }
+    }
+    assert_eq!(fs::read(&library).expect("canonical source"), original);
+    fs::remove_file(library).expect("remove owned TSV");
+}
+
+#[test]
+fn selected_text_joins_reset_at_spaces_runs_and_page_boundaries() {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "n\u{303}", "500", "1000", "3200", "2200",
+        "250", "#102030",
+    ]).iter()).expect("source glyph");
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "ó", "200", "2200", "1200", "1000",
+        "250", "#102030",
+    ]).iter()).expect("next glyph");
+    overlay.add_text_join_pair(&mut args(&["n\u{303}", "ó"]).iter())
+        .expect("selected Unicode join");
+    overlay.parse("--place-text", &mut args(&[
+        "1", "30000", "45000", "n\u{303}ó n\u{303}ó",
+    ]).iter()).expect("same page repeated pair with space");
+    overlay.parse("--place-text", &mut args(&[
+        "2", "30000", "45000", "n\u{303}ó",
+    ]).iter()).expect("second page");
+    let expanded = overlay.expand(&[], None).expect("both pages rendered");
+    assert_eq!(expanded.len(), 9,
+        "three pairs of authored glyphs plus three explicit bridges");
+    let bridges = expanded.iter().filter(|line| {
+        line.start_um == (33_200, 47_200)
+            && line.end_um == (34_200, 47_200)
+    }).collect::<Vec<_>>();
+    assert_eq!(bridges.len(), 2,
+        "same row bridges on both pages, with no cross-run connector");
+    assert_eq!(bridges[0].page, 1);
+    assert_eq!(bridges[1].page, 2);
+    assert!(expanded.iter().any(|line| {
+        line.page == 1 && line.start_um == (45_200, 47_200)
+            && line.end_um == (46_200, 47_200)
+    }), "the second same-row pair is connected at its actual advance");
+    assert!(expanded.iter().all(|line| line.width_um == 250));
+
+    // A single selected pair split by a space or by a run must refuse,
+    // not silently claim a connected word or connect two physical pages.
+    for runs in [
+        args(&["--place-text", "1", "30000", "45000", "n\u{303} ó"]),
+        args(&["--place-text", "1", "30000", "45000", "n\u{303}",
+            "--place-text", "1", "34000", "45000", "ó"]),
+        args(&["--place-text", "1", "30000", "45000", "n\u{303}",
+            "--place-text", "2", "34000", "45000", "ó"]),
+    ] {
+        let mut command = args(&[
+            "--export-paper", "pdf",
+            "--glyph-stroke", "n\u{303}", "500", "1000", "3200",
+            "2200", "250", "#102030",
+            "--glyph-stroke", "ó", "200", "2200", "1200",
+            "1000", "250", "#102030",
+            "--join-text-pair", "n\u{303}", "ó",
+        ]);
+        command.extend(runs);
+        assert!(execute_notebook(&command).is_err(),
+            "no adjacent glyphs within a single authored run: {command:?}");
+    }
+}
+
+#[test]
+fn selected_text_join_uses_seeded_physical_pen_not_nominal_geometry() {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "n\u{303}", "500", "1000", "3200", "2200",
+        "250", "#102030",
+    ]).iter()).expect("authored left letter");
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "ó", "200", "2200", "1200", "1000",
+        "250", "#102030",
+    ]).iter()).expect("authored right letter");
+    overlay.parse("--place-text", &mut args(&[
+        "1", "30000", "45000", "n\u{303}ó",
+    ]).iter()).expect("one physical text run");
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "2", "2", "0", "1", "10", "10",
+    ]).iter()).expect("bounded seeded variation");
+    let canonical = overlay.encode_file().expect("authored TSV");
+    let original = overlay.expand(&[], None).expect("unjoined varied ink");
+    assert_eq!(original.len(), 2);
+    overlay.add_text_join_pair(&mut args(&["n\u{303}", "ó"]).iter())
+        .expect("explicit join pair");
+    let connected = overlay.expand(&[], None).expect("connected varied ink");
+    assert_eq!(connected.len(), 3);
+    assert_eq!(connected[0], original[0]);
+    assert_eq!(connected[2], original[1]);
+    assert_eq!(connected[1].start_um, connected[0].end_um);
+    assert_eq!(connected[1].end_um, connected[2].start_um);
+    assert_eq!(connected[1].width_um, connected[0].width_um);
+    assert_eq!(connected[1].rgb, connected[2].rgb);
+    assert_ne!(connected[1].start_um, (33_200, 47_200),
+        "connector follows real seeded endpoints, not ideal coordinates");
+    assert_eq!(connected, overlay.expand(&[], None)
+        .expect("bit-identical seeded replay"));
+    assert_eq!(overlay.encode_file().expect("unmodified source"), canonical,
+        "text-level joins must never insert new strokes into glyph TSV");
+}
+
+#[test]
+fn selected_text_join_supports_native_measured_two_row_flow() {
+    for format in ["pdf", "png"] {
+        let mut connected = args(&[
+            "--printed-sheet", "true", "--export-paper", format,
+            "--glyph-stroke", "n\u{303}", "500", "1000", "3200",
+            "2200", "250", "#102030",
+            "--glyph-stroke", "ó", "200", "2200", "1200",
+            "1000", "250", "#102030",
+            "--flow-text", "n\u{303}ó\nn\u{303}ó",
+            "--join-text-pair", "n\u{303}", "ó",
+        ]);
+        if format == "png" {
+            connected.extend(args(&["--dpi", "72"]));
+        }
+        let joined = execute_notebook(&connected).expect("measured native flow")
+            .expect("real output");
+        assert!(if format == "pdf" {
+            joined.starts_with(b"%PDF-")
+        } else {
+            joined.starts_with(b"\x89PNG\r\n\x1a\n")
+        });
+        let mut unjoined = connected.clone();
+        let position = unjoined.iter().position(|flag| {
+            flag == "--join-text-pair"
+        }).expect("explicit join option");
+        let _removed = unjoined.drain(position..position + 3)
+            .collect::<Vec<_>>();
+        assert_ne!(joined, execute_notebook(&unjoined)
+            .expect("original unjoined flow").expect("real output"));
+    }
+    // A forced newline creates a new physical run, not a cursive link.
+    let refused = execute_notebook(&args(&[
+        "--export-paper", "pdf",
+        "--glyph-stroke", "n\u{303}", "500", "1000", "3200",
+        "2200", "250", "#102030",
+        "--glyph-stroke", "ó", "200", "2200", "1200",
+        "1000", "250", "#102030",
+        "--flow-text", "n\u{303}\nó",
+        "--join-text-pair", "n\u{303}", "ó",
+    ])).expect_err("explicit line boundary must not silently connect");
+    assert!(refused.contains("not adjacent"), "{refused}");
+}
+
+#[test]
+fn selected_text_pair_accepts_exact_gap_limit_and_refuses_mismatched_pen() {
+    let output = test_path().with_extension("pdf");
+    let name = output.to_str().expect("owned output path");
+    fs::write(&output, b"preserve original PDF")
+        .expect("test sentinel");
+    let compose = |last_x: &str, next_width: &str, next_rgb: &str| {
+        args(&[
+            "--printed-sheet", "true", "--export-paper", "pdf",
+            "--glyph-stroke", "a", "200", "1000", last_x,
+            "2200", "250", "#102030",
+            "--glyph-stroke", "o", "200", "2200", "1200",
+            "1000", next_width, next_rgb,
+            "--place-text", "1", "30000", "45000", "ao",
+            "--join-text-pair", "a", "o",
+        ])
+    };
+    let allowed = execute_notebook(&compose("3000", "250", "#102030"))
+        .expect("exact 1200 um gap must be allowed").expect("real PDF");
+    assert!(allowed.starts_with(b"%PDF-"));
+    for (last_x, width, rgb, problem) in [
+        ("2999", "250", "#102030", "text join gap exceeds 1200"),
+        ("3000", "251", "#102030", "matching physical pen"),
+        ("3000", "250", "#304050", "matching physical pen"),
+    ] {
+        let mut command = compose(last_x, width, rgb);
+        command.extend(args(&["--output", name, "--replace"]));
+        let error = execute_notebook(&command).expect_err("unsafe join");
+        assert!(error.contains(problem), "{error}");
+        assert_eq!(fs::read(&output).expect("selected PDF unchanged"),
+            b"preserve original PDF");
+    }
+    fs::remove_file(output).expect("remove owned sentinel");
+}
+
+#[test]
+fn selected_text_pair_budget_is_bounded_before_any_export() {
+    let mut overlay = GlyphOverlay::default();
+    for target in "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345".chars() {
+        let right = target.to_string();
+        overlay.add_text_join_pair(&mut args(&["a", &right]).iter())
+            .expect("up to 32 distinct Unicode pairs");
+    }
+    assert_eq!(overlay.text_joins.len(), 32);
+    let error = overlay.add_text_join_pair(&mut args(&["a", "6"]).iter())
+        .expect_err("33rd pair refuses before export");
+    assert!(error.contains("32 selected pairs"), "{error}");
+    assert_eq!(overlay.text_joins.len(), 32,
+        "invalid pair never partially changes the selection");
+}
+
+#[test]
+fn selected_text_join_refusals_preserve_prior_pdf_and_glyph_source() {
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("pdf");
+    let source_name = source.to_str().expect("owned source");
+    let output_name = output.to_str().expect("owned output");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "a", "200", "1000", "2000", "2200",
+        "250", "#102030",
+        "--glyph-stroke", "o", "200", "2200", "1200", "1000",
+        "250", "#102030",
+    ])).expect("canonical glyphs").expect("TSV");
+    fs::write(&source, &original).expect("test source");
+    fs::write(&output, b"retain original PDF sentinel")
+        .expect("test output");
+    let base = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-file", source_name,
+        "--place-text", "1", "30000", "45000", "ao",
+    ]);
+    let variants = [
+        args(&["--join-text-pair"]),
+        args(&["--join-text-pair", "a"]),
+        args(&["--join-text-pair", "ab", "o"]),
+        args(&["--join-text-pair", "a", "o o"]),
+        args(&["--join-text-pair", "a", " "]),
+        args(&["--join-text-pair", "a", "\n"]),
+        args(&["--join-text-pair", "a", "o",
+            "--join-text-pair", "a", "o"]),
+        args(&["--join-text-pair", "o", "a"]),
+        args(&["--join-text-pair", "a", "o"]),
+    ];
+    for flags in variants {
+        let mut command = base.clone();
+        command.extend(flags);
+        command.extend(args(&["--output", output_name, "--replace"]));
+        assert!(execute_notebook(&command).is_err(),
+            "invalid or unsafe text join must refuse: {command:?}");
+        assert_eq!(fs::read(&source).expect("unchanged glyph source"),
+            original);
+        assert_eq!(fs::read(&output).expect("output sentinel"),
+            b"retain original PDF sentinel");
+    }
+    // This 2200-um pen gap refuses only opted-in joins: plain
+    // independent glyph placement must remain valid and unchanged.
+    let plain = execute_notebook(&base).expect("ordinary unjoined output")
+        .expect("printable PDF");
+    assert!(plain.starts_with(b"%PDF-"));
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(output).expect("remove sentinel");
+}
+
+#[test]
 fn explicit_joins_connect_one_exact_glyph_in_ink_and_native_exports() {
     let source = test_path().with_extension("tsv");
     let target = test_path().with_extension("tsv");

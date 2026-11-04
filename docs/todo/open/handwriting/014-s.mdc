@@ -294,6 +294,33 @@ continuous pen-lift model or automatic cursive across adjacent letters.
 Seeded variation and joined word/line output remain separate unfinished
 requirements; the full P1-014 acceptance remains open.
 
+## Explicit native adjacent-letter connectors (partial) — 2026-11-03
+
+`atrament-profiles notebook --join-text-pair LEFT RIGHT` now selects up to
+32 distinct exact Unicode grapheme pairs to connect only when neighboring
+within a single `--place-text` or measured-flow row. After seeded sampling,
+statistical mean transforms, slant and title ink styling, it connects the
+prior glyph's last authored physical pen endpoint to the next glyph's
+first, preserving the pen direction and original authored TSV. The selected
+physical pen width/RGB must match; gaps over 1200 µm refuse atomically.
+
+Spaces, manual runs and physical flow row/page boundaries reset the eligible
+pen sequence. No implicit joins are inferred, and unobserved requested
+pairs refuse rather than silently changing the expected script.
+
+Seven focused Rust regressions verify exact NFD-to-NFC selection, real native
+PDF and transparent PNG parity with independently authored physical pen
+segments, unchanged source TSV, two-page boundary isolation, byte-stable
+seeded physical-endpoint joins, two-row measured flow, the inclusive
+1200-µm join limit, RGB/width mismatch and 32-pair budget refusals without
+changing an existing output.
+
+These are **opt-in straight output bridges** with the existing 4096
+physical line budget, not persisted multi-segment pen-down groups or
+curve/native motion paths. Browser authored
+stroke connectivity remains per glyph; native parametric curves and
+word-level cursive are still open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
