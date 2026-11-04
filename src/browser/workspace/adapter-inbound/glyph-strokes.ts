@@ -2105,6 +2105,50 @@ export function composeAccentedGlyph(
         ...accent];
 }
 
+// The frozen 114-grapheme English/Spanish text baseline is distinct from
+// optional math and notation symbols. Compose on a disposable candidate so
+// one clipped mark, ambiguous custom i, or native TSV cap refuses *all* fills.
+const BILINGUAL_DIRECT = [
+    ..."abcdefghijklmnopqrstuvwxyz", ".", ",", "!", "¡", "?", "¿",
+    "«", "»", "‘", "’", "“", "”", "-", ..."0123456789",
+    ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", ...TEXT_MARKS,
+];
+const BILINGUAL_ACCENTS = [
+    ["a", "á"], ["e", "é"], ["i", "í"], ["o", "ó"],
+    ["u", "ú"], ["n", "ñ"], ["u", "ü"],
+] as const;
+
+export function fillMissingBilingualBaseline(
+    existing: Stroke[], x: number, y: number, r: number, pen: number,
+    color: string, pos: { dx: number; lift: number },
+): Stroke[] {
+    const authored = new Set(existing.map((stroke) => stroke.grapheme));
+    const next = existing.slice();
+    for (const glyph of BILINGUAL_DIRECT) {
+        if (!authored.has(glyph)) {
+            next.push(...geometricStarter(glyph, x, y, r, pen, color));
+            authored.add(glyph);
+        }
+    }
+    for (const uppercase of [false, true]) {
+        for (const normalization of ["NFC", "NFD"] as const) {
+            for (const [base, target] of BILINGUAL_ACCENTS) {
+                const source = uppercase ? base.toUpperCase() : base;
+                const exact = (uppercase ? target.toUpperCase() : target)
+                    .normalize(normalization);
+                if (!authored.has(exact)) {
+                    next.push(...composeAccentedGlyph(
+                        next, source, exact, color, pos));
+                    authored.add(exact);
+                }
+            }
+        }
+    }
+    if (next.length === existing.length) return existing;
+    encodeGlyphLibrary(next);
+    return next;
+}
+
 // Deterministic, bounded variation of one occurrence. These shared glyph-level
 // transforms make height, width, slant and ink thickness correlated across its
 // strokes; matching endpoints receive identical local irregularity. Nothing
@@ -2238,6 +2282,8 @@ export function createGlyphStrokeEditor(): {
         required<HTMLButtonElement>("glyph-seed-capitals");
     const seedTextMarks =
         required<HTMLButtonElement>("glyph-seed-text-marks");
+    const seedBaseline =
+        required<HTMLButtonElement>("glyph-seed-baseline");
     const centerX = required<HTMLInputElement>("glyph-circle-x");
     const centerY = required<HTMLInputElement>("glyph-circle-y");
     const radius = required<HTMLInputElement>("glyph-circle-radius");
@@ -2351,7 +2397,7 @@ export function createGlyphStrokeEditor(): {
         form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
         seedUpperSpanish, seedUpperSpanishNfd,
         seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
-        seedTextMarks,
+        seedTextMarks, seedBaseline,
         centerX, centerY, radius,
         accentShift, accentLift, italicAngle,
         authoredAngle, authoredBaseline, slantAuthored,
@@ -3697,6 +3743,33 @@ export function createGlyphStrokeEditor(): {
             render();
             message(`Filled ${missing.length} missing lowercase templates (`
                 + `${added.length} sampled strokes); unsaved draft`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    seedBaseline.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before seeding");
+            }
+            const next = fillMissingBilingualBaseline(strokes,
+                Number(centerX.value), Number(centerY.value),
+                Number(radius.value), Number(numeric.width.value),
+                color.value, { dx: Number(accentShift.value),
+                    lift: Number(accentLift.value) });
+            if (next === strokes) {
+                message("All 114 bilingual text glyphs already have ink");
+                return;
+            }
+            const count = new Set(next.map((line) => line.grapheme)).size
+                - new Set(strokes.map((line) => line.grapheme)).size;
+            const added = next.length - strokes.length;
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${count} missing bilingual baseline glyphs (`
+                + `${added} sampled strokes); unsaved draft`);
         } catch (error) {
             message(String(error));
         }

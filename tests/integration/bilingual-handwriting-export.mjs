@@ -11,6 +11,7 @@ import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
+    fillMissingBilingualBaseline,
     italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
     scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
     reverseCandidatePath, moveCandidatePath, translateCandidatePath,
@@ -91,6 +92,62 @@ function pngHasTransparentCorner(png) {
 const flowRegion = [
     '--flow-region', '30000', '40000', '140000', '120000',
 ];
+
+test('one-click 114-glyph text baseline reaches native PDF and PNG', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-one-click-'));
+    try {
+        const shapes = fillMissingBilingualBaseline([],
+            ...starter, { dx: 0, lift: 0 });
+        assert.equal(shapes.length, 2728);
+        assert.equal(new Set(shapes.map((line) => line.grapheme)).size, 114);
+        const library = join(dir, 'one-click.tsv');
+        const paper = join(dir, 'one-click.pdf');
+        const bytes = Buffer.from(encodeGlyphLibrary(shapes));
+        writeFileSync(library, bytes);
+        const report = native('glyphs', '--profile', library,
+            '--audit-baseline');
+        assert.equal(report.status, 0, report.stderr);
+        assert.match(report.stdout, /Distinct visible graphemes: 114/);
+        assert.match(report.stdout, /Missing authored glyphs: 0/);
+        const readback = native('glyphs', '--profile', library);
+        assert.equal(readback.status, 0, readback.stderr);
+        assert.equal(readback.stdout, bytes.toString(),
+            'native Rust retains the exact browser-generated Unicode TSV');
+        const text = [
+            '¿Qué? ¡Pingüino! «año»',
+            '“Árbol” ‘Único’ — 42',
+            'a\u0301 e\u0301 i\u0301 o\u0301 u\u0301 n\u0303 u\u0308',
+        ].join('\n');
+        const sample = [...new Intl.Segmenter('es', {
+            granularity: 'grapheme',
+        }).segment(text)].map((part) => part.segment);
+        const strokeCounts = new Map();
+        for (const ink of shapes) {
+            strokeCounts.set(ink.grapheme,
+                (strokeCounts.get(ink.grapheme) ?? 0) + 1);
+        }
+        const expected = sample.reduce((sum, glyph) =>
+            sum + (strokeCounts.get(glyph) ?? 0), 0);
+        const flags = ['--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', text, ...flowRegion];
+        const pdfResult = native('notebook', ...flags,
+            '--export-paper', 'pdf', '--output', paper);
+        assert.equal(pdfResult.status, 0, pdfResult.stderr);
+        const pdf = readFileSync(paper);
+        assert.ok(pdf.subarray(0, 8).toString().startsWith('%PDF-1.4'));
+        assert.equal(pdf.toString('latin1').split(' m\n').length - 1,
+            expected, 'all NFC and NFD glyphs retain their directed ink');
+        const pngPath = join(dir, 'one-click.png');
+        const pngResult = native('notebook', ...flags,
+            '--export-paper', 'png', '--dpi', '72', '--output', pngPath);
+        assert.equal(pngResult.status, 0, pngResult.stderr);
+        pngHasTransparentCorner(readFileSync(pngPath));
+        assert.deepEqual(readFileSync(library), bytes,
+            'native rendering never changes the authored library');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
 
 test('entire bilingual starter library renders and fails closed', () => {
     const dir = mkdtempSync(join(tmpdir(), 'atrament-bilingual-'));

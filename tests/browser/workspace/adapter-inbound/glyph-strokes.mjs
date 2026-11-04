@@ -5,7 +5,7 @@ import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
     scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
-    composeAccentedGlyph, varyGlyphStrokes,
+    composeAccentedGlyph, fillMissingBilingualBaseline, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
     translateCandidatePath } =
@@ -370,6 +370,7 @@ function mountEditor() {
         "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-compose",
         "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
+        "glyph-seed-baseline",
         "glyph-seed-spanish", "glyph-seed-spanish-nfd",
         "glyph-seed-upper-spanish", "glyph-seed-upper-spanish-nfd",
         "glyph-seed-punctuation", "glyph-seed-quotes",
@@ -4018,6 +4019,116 @@ test("text marks fill keeps custom ink and rejects over-cap", async () => {
             full);
         editor.reset();
         assert.equal(get("seed-text-marks").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("one atomic fill authors only the 114 exact bilingual baseline", () => {
+    const existing = [
+        { ...stroke("ó"), color: "#102030" },
+        { ...stroke("o\u0301"), color: "#405060" },
+        stroke("∞"),
+    ];
+    const original = encodeGlyphLibrary(existing);
+    const filled = fillMissingBilingualBaseline(existing,
+        1550, 2450, 1100, 250, "#243647", { dx: 0, lift: 0 });
+    assert.equal(new Set(filled.map((line) => line.grapheme)).size, 115,
+        "the 114 text glyphs and one separate custom math glyph");
+    assert.deepEqual(filled.slice(0, existing.length), existing,
+        "custom Unicode stroke sequence and colors retain original order");
+    assert.equal(encodeGlyphLibrary(existing), original,
+        "the batch never mutates the source library");
+    const authored = new Set(filled.map((line) => line.grapheme));
+    for (const glyph of ["-", "¿", "¡", "«", "»", "‘", "’", "“", "”",
+        "Á", "ü", "n\u0303", "U\u0308", "a\u0301", "0"]) {
+        assert.ok(authored.has(glyph), `exact baseline glyph ${glyph}`);
+    }
+    for (const optional of ["+", "∂", "€", "%"]) {
+        assert.ok(!authored.has(optional), `${optional} is not added`);
+    }
+    assert.equal(filled.filter((line) => line.grapheme === "ó").length, 1);
+    assert.equal(filled.filter((line) => line.grapheme === "o\u0301").length,
+        1, "existing NFD has independent authored ink");
+    assert.strictEqual(fillMissingBilingualBaseline(filled,
+        1550, 2450, 1100, 250, "#243647", { dx: 0, lift: 0 }), filled,
+    "complete baseline is a no-op, including unchanged object identity");
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(filled)), filled);
+});
+
+test("atomic bilingual fill refuses ambiguous i, clipped marks and caps",
+    () => {
+        const customI = [stroke("i"), stroke("∞")];
+        const original = encodeGlyphLibrary(customI);
+        assert.throws(() => fillMissingBilingualBaseline(customI,
+            1550, 2450, 1100, 250, "#243647", { dx: 0, lift: 0 }),
+        /Acute i requires one stem and a clear upper dot/);
+        assert.equal(encodeGlyphLibrary(customI), original);
+        const custom = [stroke("∞")];
+        const before = encodeGlyphLibrary(custom);
+        assert.throws(() => fillMissingBilingualBaseline(custom,
+            1550, 2450, 1100, 250, "#243647", { dx: 0, lift: 500 }),
+        /must fit inside glyph cell/);
+        assert.equal(encodeGlyphLibrary(custom), before);
+        const nearlyFull = Array.from({ length: 4090 }, () => stroke("∞"));
+        const source = encodeGlyphLibrary(nearlyFull);
+        assert.throws(() => fillMissingBilingualBaseline(nearlyFull,
+            1550, 2450, 1100, 250, "#243647", { dx: 0, lift: 0 }),
+        /Save requires 1..4096/);
+        assert.equal(encodeGlyphLibrary(nearlyFull), source);
+    });
+
+test("baseline browser button is explicit, idempotent and session-gated",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            assert.equal(get("seed-baseline").disabled, true);
+            get("seed-baseline").dispatch("click");
+            assert.equal(downloads.length, 0);
+            editor.start();
+            get("seed-baseline").dispatch("click");
+            assert.match(get("status").textContent,
+                /Filled 114 missing bilingual baseline glyphs/);
+            assert.equal(downloads.length, 0, "fill is an unsaved draft");
+            get("save").dispatch("click");
+            const original = await downloads.at(-1).text();
+            const filled = parseGlyphLibrary(original);
+            assert.equal(filled.length, 2728);
+            assert.equal(new Set(filled.map((line) => line.grapheme)).size,
+                114);
+            get("seed-baseline").dispatch("click");
+            assert.match(get("status").textContent,
+                /All 114 bilingual text glyphs already have ink/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), original);
+            editor.reset();
+            assert.equal(get("seed-baseline").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("refused baseline browser fill preserves an imported custom i", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const strokes = [stroke("i"), stroke("∞")];
+        const saved = encodeGlyphLibrary(strokes);
+        const bytes = new TextEncoder().encode(saved);
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("seed-baseline").dispatch("click");
+        assert.match(get("status").textContent,
+            /Acute i requires one stem and a clear upper dot/);
+        assert.equal(downloads.length, 0,
+            "refusal does not automatically download an incomplete draft");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), saved,
+            "refusal never replaces caller-authored i or custom math ink");
     } finally {
         ui.restore();
     }

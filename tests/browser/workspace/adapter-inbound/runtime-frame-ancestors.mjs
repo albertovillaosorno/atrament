@@ -49,7 +49,7 @@ import { PassThrough } from "node:stream";
 import test from "node:test";
 import { inflateSync } from "node:zlib";
 const { geometricStarter, encodeGlyphLibrary,
-    italicizeGlyphStrokes, scaleGlyphHeight,
+    fillMissingBilingualBaseline, italicizeGlyphStrokes, scaleGlyphHeight,
     scaleGlyphWidth, scaleGlyphInk,
     translateGlyphStrokes } = await import(new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/"
@@ -13608,6 +13608,170 @@ test(
             assert.match(refused.stderr.toString(), /missing authored glyph/i);
             assert.deepEqual(fs.readFileSync(output), approved);
             assert.equal(fs.readFileSync(library, "utf8"), expected);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+// Real Firefox exercises the new button rather than a surrogate encoder.
+// The browser only emits the TSV after explicit Download; Rust independently
+// reopens those exact bytes and renders physical PDF/transparent PNG ink.
+test(
+    "Firefox one-click 114 bilingual glyphs download native PDF/PNG ink",
+    { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/baseline-firefox-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const get = (name) =>
+                        document.getElementById("glyph-" + name);
+                    const names = [];
+                    const blobs = [];
+                    const makeURL = URL.createObjectURL;
+                    const anchorClick = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return makeURL.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            names.push(this.download);
+                        };
+                        const enabled = !get("seed-baseline").disabled;
+                        get("circle-x").value = "200";
+                        get("seed-baseline").click();
+                        const refused = get("status").textContent;
+                        const before = blobs.length;
+                        get("circle-x").value = "1550";
+                        get("seed-baseline").click();
+                        const filled = get("status").textContent;
+                        const unsaved = blobs.length;
+                        get("seed-baseline").click();
+                        const already = get("status").textContent;
+                        get("save").click();
+                        return JSON.stringify({ enabled, refused, before,
+                            filled, unsaved, already, names,
+                            files: await Promise.all(blobs.map((blob) =>
+                                blob.text())) });
+                    } finally {
+                        URL.createObjectURL = makeURL;
+                        HTMLAnchorElement.prototype.click = anchorClick;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const actual = JSON.parse(response.result.value);
+            assert.equal(actual.enabled, true,
+                "button is available only after admitted session");
+            assert.match(actual.refused, /fit inside glyph cell/);
+            assert.equal(actual.before, 0,
+                "refused candidate cannot trigger a download");
+            assert.match(actual.filled,
+                /Filled 114 missing bilingual baseline glyphs/);
+            assert.equal(actual.unsaved, 0, "fill is a local unsaved draft");
+            assert.match(actual.already,
+                /All 114 bilingual text glyphs already have ink/);
+            assert.deepEqual(actual.names, ["my-glyph-strokes.tsv"]);
+            const expectedRows = fillMissingBilingualBaseline([], 1550,
+                2450, 1100, 250, "#243647", { dx: 0, lift: 0 });
+            const exactTsv = encodeGlyphLibrary(expectedRows);
+            assert.deepEqual(actual.files, [exactTsv],
+                "real Firefox button emits exact 2728-line baseline ink");
+            assert.deepEqual(requests, baseline,
+                "all browser glyph generation stays local");
+
+            const library = path.join(profile, "bilingual-browser.tsv");
+            fs.writeFileSync(library, actual.files[0]);
+            const build = spawnSync(PINNED_CARGO, [
+                "build", "--offline", "--quiet",
+                "-p", "atrament_profile_editor_cli",
+                "--bin", "atrament-profiles",
+            ], { timeout: 90_000, stdio: "pipe",
+                env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR } });
+            assert.equal(build.status, 0,
+                "native CLI builds offline for real Firefox baseline ink");
+            const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            const invoke = (...flags) => spawnSync(cli, flags, {
+                timeout: 20_000, maxBuffer: 16 * 1024 * 1024,
+            });
+            const reopened = invoke("glyphs", "--profile", library);
+            assert.equal(reopened.status, 0, reopened.stderr.toString());
+            assert.equal(reopened.stdout.toString(), exactTsv);
+            const audit = invoke("glyphs", "--profile", library,
+                "--audit-baseline");
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 114/);
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            const inkText = "¿Qué? o\u0301 Ñ¡";
+            const counts = new Map();
+            for (const line of expectedRows) counts.set(line.grapheme,
+                (counts.get(line.grapheme) ?? 0) + 1);
+            const expectedInk = [...new Intl.Segmenter("es", {
+                granularity: "grapheme",
+            }).segment(inkText)].reduce((count, item) =>
+                count + (counts.get(item.segment) ?? 0), 0);
+            const flags = ["notebook", "--printed-sheet", "true",
+                "--glyph-file", library, "--flow-text", inkText];
+            const pdfPath = path.join(profile, "bilingual.pdf");
+            const pdf = invoke(...flags, "--export-paper", "pdf",
+                "--output", pdfPath);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = fs.readFileSync(pdfPath);
+            assert.match(accepted.toString("latin1"), /^%PDF-1\.4/);
+            assert.equal((accepted.toString("latin1").match(/ m\n/g) ?? [])
+                .length, expectedInk,
+            "the native page draws exactly the selected bilingual pen ink");
+            const pngPath = path.join(profile, "bilingual.png");
+            const png = invoke(...flags, "--export-paper", "png",
+                "--dpi", "72", "--output", pngPath);
+            assert.equal(png.status, 0, png.stderr.toString());
+            const rgba = fs.readFileSync(pngPath);
+            assert.deepEqual(rgba.subarray(0, 8),
+                Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+            assert.equal(rgba.readUInt32BE(16), 596);
+            assert.equal(rgba.readUInt32BE(20), 842);
+            assert.equal(rgba[25], 6, "actual transparent RGBA ink");
+            const unknown = invoke("notebook", "--printed-sheet", "true",
+                "--glyph-file", library, "--flow-text", "☃",
+                "--export-paper", "pdf", "--output", pdfPath,
+                "--replace");
+            assert.notEqual(unknown.status, 0);
+            assert.match(unknown.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(fs.readFileSync(pdfPath), accepted,
+                "missing nonbaseline shape cannot replace an accepted PDF");
+            assert.equal(fs.readFileSync(library, "utf8"), exactTsv);
         } finally {
             bidi?.close();
             await closeFixtureServer(server);

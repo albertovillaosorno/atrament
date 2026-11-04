@@ -1064,6 +1064,34 @@ starter is never a silent fallback.
 The additional math form does not solve symbolic mathematics layout,
 calibrated handwriting or the full Unicode inventory. P4-012 remains open.
 
+## Atomic full bilingual baseline fill (partial) — 2026-11-04
+
+One explicit **Fill missing 114 English/Spanish text glyphs** action now
+creates a single unsaved browser draft from the manual geometric starters.
+It includes 26 lowercase and 26 uppercase letters, 28 independent NFC/NFD
+Spanish accents, punctuation, quotes, ten digits and the exact hyphen-minus.
+Optional math/currency glyphs are not silently included. Previously authored
+Unicode keys, including custom composed/decomposed accents, preserve their
+stroke directions, order and colors. The batch first builds an isolated
+candidate, then checks the entire native TSV stroke/byte limits before it
+can replace any draft. A custom ambiguous dotted `i`, clipped mark or
+4,096-stroke overflow refuses the whole action, not just the bad glyph.
+A second click is an exact no-op; only explicit TSV download saves bytes.
+
+Focused tests verify 114 exact Unicode keys and 2,728 sampled strokes,
+custom NFC/NFD preservation, atomic refusal, idempotence and disabled
+session controls. A separate native Rust integration reopens that exact
+browser-generated TSV, audits all 114 glyphs with zero missing, and renders
+an accented, bilingual three-row page with decomposed marks to a genuine
+vector PDF and transparent physical RGBA PNG. The ink remains sampled TSV
+geometry, not automatically persisted notebook content, personalized
+handwriting, parametric native curves or general Unicode coverage. A real
+Firefox WebDriver BiDi test now exercises the visible button, verifies a
+clipped attempt cannot save, confirms the subsequent successful unsaved fill
+and idempotence, captures the explicitly downloaded TSV without extra HTTP
+requests, and reopens its exact bytes in Rust PDF/PNG with an unknown glyph
+refusal preserving the accepted PDF. The full P1-012 task stays open.
+
 ## Explicit connected-pen o/a drafts (partial) — 2026-11-04
 
 The localhost stroke editor now exposes separately selected manual

@@ -1901,6 +1901,45 @@ export function composeAccentedGlyph(strokes, source, target, color, pos = { dx:
     return [...base.map((stroke) => ({ ...stroke, grapheme: target })),
         ...accent];
 }
+// The frozen 114-grapheme English/Spanish text baseline is distinct from
+// optional math and notation symbols. Compose on a disposable candidate so
+// one clipped mark, ambiguous custom i, or native TSV cap refuses *all* fills.
+const BILINGUAL_DIRECT = [
+    ..."abcdefghijklmnopqrstuvwxyz", ".", ",", "!", "¡", "?", "¿",
+    "«", "»", "‘", "’", "“", "”", "-", ..."0123456789",
+    ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ", ...TEXT_MARKS,
+];
+const BILINGUAL_ACCENTS = [
+    ["a", "á"], ["e", "é"], ["i", "í"], ["o", "ó"],
+    ["u", "ú"], ["n", "ñ"], ["u", "ü"],
+];
+export function fillMissingBilingualBaseline(existing, x, y, r, pen, color, pos) {
+    const authored = new Set(existing.map((stroke) => stroke.grapheme));
+    const next = existing.slice();
+    for (const glyph of BILINGUAL_DIRECT) {
+        if (!authored.has(glyph)) {
+            next.push(...geometricStarter(glyph, x, y, r, pen, color));
+            authored.add(glyph);
+        }
+    }
+    for (const uppercase of [false, true]) {
+        for (const normalization of ["NFC", "NFD"]) {
+            for (const [base, target] of BILINGUAL_ACCENTS) {
+                const source = uppercase ? base.toUpperCase() : base;
+                const exact = (uppercase ? target.toUpperCase() : target)
+                    .normalize(normalization);
+                if (!authored.has(exact)) {
+                    next.push(...composeAccentedGlyph(next, source, exact, color, pos));
+                    authored.add(exact);
+                }
+            }
+        }
+    }
+    if (next.length === existing.length)
+        return existing;
+    encodeGlyphLibrary(next);
+    return next;
+}
 function seededUnit(seed) {
     let state = seed >>> 0 || 0x6D2B79F5;
     return () => {
@@ -2002,6 +2041,7 @@ export function createGlyphStrokeEditor() {
     const seedDigits = required("glyph-seed-digits");
     const seedCapitals = required("glyph-seed-capitals");
     const seedTextMarks = required("glyph-seed-text-marks");
+    const seedBaseline = required("glyph-seed-baseline");
     const centerX = required("glyph-circle-x");
     const centerY = required("glyph-circle-y");
     const radius = required("glyph-circle-radius");
@@ -2096,7 +2136,7 @@ export function createGlyphStrokeEditor() {
         form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
         seedUpperSpanish, seedUpperSpanishNfd,
         seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
-        seedTextMarks,
+        seedTextMarks, seedBaseline,
         centerX, centerY, radius,
         accentShift, accentLift, italicAngle,
         authoredAngle, authoredBaseline, slantAuthored,
@@ -3419,6 +3459,32 @@ export function createGlyphStrokeEditor() {
             render();
             message(`Filled ${missing.length} missing lowercase templates (`
                 + `${added.length} sampled strokes); unsaved draft`);
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    seedBaseline.addEventListener("click", () => {
+        if (!active)
+            return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before seeding");
+            }
+            const next = fillMissingBilingualBaseline(strokes, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value, { dx: Number(accentShift.value),
+                lift: Number(accentLift.value) });
+            if (next === strokes) {
+                message("All 114 bilingual text glyphs already have ink");
+                return;
+            }
+            const count = new Set(next.map((line) => line.grapheme)).size
+                - new Set(strokes.map((line) => line.grapheme)).size;
+            const added = next.length - strokes.length;
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${count} missing bilingual baseline glyphs (`
+                + `${added} sampled strokes); unsaved draft`);
         }
         catch (error) {
             message(String(error));
