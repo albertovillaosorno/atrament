@@ -1179,6 +1179,59 @@ export function scaleGlyphInk(source, grapheme, percent) {
     encodeGlyphLibrary(candidate);
     return candidate;
 }
+// Explicit connected-pen o/a draft. The first 48 circle chords are the
+// unmodified ideal-o sample, entered from its leftmost point. A repeated
+// lower half-circle carries the still-down pen to the right exit; an a
+// continues through the authored stem before exiting. Only the optional
+// acute is a separate pen lift. Adjacent letters are not auto-joined.
+function cursiveLoop(base, radius) {
+    const loop = base.slice(0, CIRCLE_SEGMENTS);
+    const left = loop.at(CIRCLE_SEGMENTS / 2);
+    const right = loop.at(0);
+    if (left === undefined || right === undefined) {
+        throw new Error("Cursive loop requires a complete authored circle");
+    }
+    const glyph = left.grapheme;
+    const stem = glyph === "a" || glyph === "á"
+        ? base.at(CIRCLE_SEGMENTS) : undefined;
+    const accent = glyph === "ó" || glyph === "á"
+        ? base.at(-1) : undefined;
+    const lead = Math.min(200, Math.round(radius / 5));
+    const pen = left.width;
+    const draw = (from, to) => {
+        for (const point of [from, to]) {
+            if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
+                || point.y - pen / 2 < 0
+                || point.y + pen / 2 > 4500) {
+                throw new Error("Cursive connector and pen clip glyph cell");
+            }
+        }
+        return validateStroke({ grapheme: glyph,
+            x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+            width: pen, color: left.color });
+    };
+    const start = { x: left.x1, y: left.y1 };
+    const rightPoint = { x: right.x1, y: right.y1 };
+    const entry = draw({ x: start.x - lead, y: start.y + lead }, start);
+    const fullCircle = [
+        ...loop.slice(CIRCLE_SEGMENTS / 2),
+        ...loop.slice(0, CIRCLE_SEGMENTS / 2),
+    ];
+    const carry = loop.slice(CIRCLE_SEGMENTS / 2);
+    const ink = [entry, ...fullCircle, ...carry];
+    let exitStart = rightPoint;
+    if (stem !== undefined) {
+        ink.push(draw(rightPoint, { x: stem.x1, y: stem.y1 }));
+        ink.push(stem);
+        exitStart = { x: stem.x2, y: stem.y2 };
+    }
+    ink.push(draw(exitStart, {
+        x: exitStart.x + lead, y: exitStart.y - lead,
+    }));
+    if (accent !== undefined)
+        ink.push(accent);
+    return ink;
+}
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
@@ -1196,10 +1249,17 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     if (twoStorey && !["a", "á"].includes(g)) {
         throw new Error("Two-storey construction requires a or á");
     }
-    if (!["single", "two-storey", "italic", "two-storey-italic"]
-        .includes(kind) || (italic && !["o", "a", "ó", "á"]
-        .includes(g))) {
+    if (!["single", "two-storey", "italic", "two-storey-italic",
+        "cursive"].includes(kind) || (italic
+        && !["o", "a", "ó", "á"].includes(g))) {
         throw new Error("Italic variant requires matching o/a glyph");
+    }
+    if (kind === "cursive" && !["o", "a", "ó", "á"].includes(g)) {
+        throw new Error("Cursive variant requires o/a circle glyph");
+    }
+    if (kind === "cursive") {
+        const base = geometricStarter(g, x, y, r, w, color, pos, "single");
+        return cursiveLoop(base, r);
     }
     if (italic) {
         const angle = pos?.italicDegrees ?? 12;
@@ -1837,6 +1897,9 @@ export function createGlyphStrokeEditor() {
     const ideal = required("glyph-ideal-preview");
     const idealCircle = required("glyph-ideal-circle");
     const idealStem = required("glyph-ideal-stem");
+    const idealEntry = required("glyph-ideal-entry");
+    const idealExit = required("glyph-ideal-exit");
+    const idealApproach = required("glyph-ideal-approach");
     const idealAccent = required("glyph-ideal-accent");
     const idealArch = required("glyph-ideal-arch");
     const roundedPath = required("glyph-ideal-rounded");
@@ -1941,14 +2004,17 @@ export function createGlyphStrokeEditor() {
     };
     const selectedForm = () => {
         const italic = form.value.endsWith("-italic");
-        const raw = italic ? form.value.slice(0, -7) : form.value;
+        const cursive = form.value.endsWith("-cursive");
+        const raw = italic ? form.value.slice(0, -7)
+            : cursive ? form.value.slice(0, -8) : form.value;
         const twoStorey = raw.endsWith("-two");
         return {
             grapheme: twoStorey ? raw.slice(0, -4) : raw,
             variant: twoStorey
                 ? italic ? "two-storey-italic"
                     : "two-storey"
-                : italic ? "italic" : "single",
+                : italic ? "italic"
+                    : cursive ? "cursive" : "single",
         };
     };
     const starterFromInputs = () => {
@@ -2007,6 +2073,32 @@ export function createGlyphStrokeEditor() {
                 .includes(chosen.grapheme);
             const stemState = stemVisible ? "visible" : "hidden";
             idealStem.setAttribute("visibility", stemState);
+            const connected = chosen.variant === "cursive";
+            const lead = Math.min(200, Math.round(r / 5));
+            const endY = ["a", "á"].includes(chosen.grapheme)
+                ? cy + r : cy;
+            const connectors = [
+                [idealEntry,
+                    { x: cx - r - lead, y: cy + lead },
+                    { x: cx - r, y: cy }],
+                [idealApproach,
+                    { x: cx + r, y: cy },
+                    { x: cx + r, y: cy - r }],
+                [idealExit,
+                    { x: cx + r, y: endY },
+                    { x: cx + r + lead, y: endY - lead }],
+            ];
+            for (const [guide, from, to] of connectors) {
+                for (const [axis, value] of [
+                    ["x1", from.x], ["y1", from.y],
+                    ["x2", to.x], ["y2", to.y],
+                ])
+                    guide.setAttribute(axis, String(value));
+                guide.setAttribute("stroke-width", numeric.width.value);
+                guide.setAttribute("stroke", color.value);
+                guide.setAttribute("visibility", connected &&
+                    (guide !== idealApproach || ["a", "á"].includes(chosen.grapheme)) ? shown : "hidden");
+            }
             const { start, peak, end, left, right } = upperStory(cx, cy, r);
             const beginning = ["M", start.x, start.y].join(" ");
             const firstArc = ["Q", left.x, left.y, peak.x, peak.y].join(" ");
@@ -2191,19 +2283,21 @@ export function createGlyphStrokeEditor() {
             const hasAcute = ["ó", "á", "í"].includes(chosen.grapheme);
             const accentState = active && hasAcute ? "visible" : "hidden";
             idealAccent.setAttribute("visibility", accentState);
-            const guideLabel = isMath
-                ? `Exact mathematical ${form.value} ink guide`
-                : isQuote
-                    ? (["«", "»"].includes(chosen.grapheme)
-                        ? `Exact geometric ${form.value} chevrons`
-                        : `Analytic ${form.value} curls sampled to TSV`)
-                    : isPunctuation
-                        ? (["?", "¿"].includes(chosen.grapheme)
-                            ? `Analytic ${form.value} guide, sampled to TSV`
-                            : `Exact straight ${form.value} punctuation ink`)
-                        : isStraight
-                            ? `Exact straight ${form.value} guide, retained in TSV`
-                            : `Analytic geometric ${form.value} guide, not retained in TSV`;
+            const guideLabel = connected
+                ? `Manual connected-pen ${form.value} draft, no adjacent joining`
+                : isMath
+                    ? `Exact mathematical ${form.value} ink guide`
+                    : isQuote
+                        ? (["«", "»"].includes(chosen.grapheme)
+                            ? `Exact geometric ${form.value} chevrons`
+                            : `Analytic ${form.value} curls sampled to TSV`)
+                        : isPunctuation
+                            ? (["?", "¿"].includes(chosen.grapheme)
+                                ? `Analytic ${form.value} guide, sampled to TSV`
+                                : `Exact straight ${form.value} punctuation ink`)
+                            : isStraight
+                                ? `Exact straight ${form.value} guide, retained in TSV`
+                                : `Analytic geometric ${form.value} guide, not retained in TSV`;
             ideal.setAttribute("aria-label", guideLabel);
         }
         catch {
@@ -2212,6 +2306,9 @@ export function createGlyphStrokeEditor() {
             idealGeometry.setAttribute("transform", "");
             idealCircle.setAttribute("visibility", "hidden");
             idealStem.setAttribute("visibility", "hidden");
+            for (const guide of [idealEntry, idealApproach, idealExit]) {
+                guide.setAttribute("visibility", "hidden");
+            }
             idealArch.setAttribute("visibility", "hidden");
             roundedPath.setAttribute("visibility", "hidden");
             roundedLeft.setAttribute("visibility", "hidden");

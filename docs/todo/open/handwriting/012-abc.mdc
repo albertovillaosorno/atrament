@@ -1064,6 +1064,26 @@ starter is never a silent fallback.
 The additional math form does not solve symbolic mathematics layout,
 calibrated handwriting or the full Unicode inventory. P4-012 remains open.
 
+## Explicit connected-pen o/a drafts (partial) — 2026-11-04
+
+The localhost stroke editor now exposes separately selected manual
+connected-pen `o`, `a`, `ó` and `á` forms, without replacing their original
+analytic-circle or printed/italic variants. Each starts with an in-cell
+entry, traverses the same 48 sampled ideal-circle chords and repeats the
+lower semicircle to reach an outward exit without lifting the pen.
+The a form traverses its right stem before exiting; only the optional acute
+accent is separate ink. All source geometry stays independently editable.
+
+A bounded connector that would clip the 3.5 × 4.5 mm cell refuses before
+changing the draft. Browser tests check exact 74/76/75/77 stroke inventories,
+continuous directed paths, unchanged regular circle, native TSV roundtrip,
+SVG visibility and invalid-edit preservation. A separate Rust CLI test
+reopens the generated exact TSV byte-for-byte, exports two rows with 302
+colored vector pen segments to PDF and real transparent PNG, and verifies a
+missing neighbor refuses without replacing accepted ink or changing TSV.
+Real adjacent-word cursive joining, stored variant names and analytic curves
+in Rust PDF remain open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

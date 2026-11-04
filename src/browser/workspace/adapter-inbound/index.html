@@ -641,6 +641,7 @@
                 <option value="≈">Approximately equal ≈ (two waves)</option>
                 <option value="o">Circle o</option>
                 <option value="o-italic">Italic o (sheared circle)</option>
+                <option value="o-cursive">Manual connected-pen o</option>
                 <option value="b">Ascender b (left stem)</option>
                 <option value="d">Ascender d (right stem)</option>
                 <option value="p">Descender p (left stem)</option>
@@ -668,12 +669,15 @@
                 <option value="m">Double-hump m (two arches)</option>
                 <option value="a">Simple a (circle + stem)</option>
                 <option value="a-italic">Italic simple a (slanted)</option>
+                <option value="a-cursive">Manual connected-pen a</option>
                 <option value="a-two">Printed two-storey a (upper arch)</option>
                 <option value="a-two-italic">Italic printed two-storey a</option>
                 <option value="ó">Acute ó (circle + accent)</option>
                 <option value="ó-italic">Italic acute ó</option>
+                <option value="ó-cursive">Manual connected-pen ó</option>
                 <option value="á">Acute á (simple a + accent)</option>
                 <option value="á-italic">Italic acute simple á</option>
+                <option value="á-cursive">Manual connected-pen á</option>
                 <option value="á-two">Acute printed two-storey á</option>
                 <option value="á-two-italic">Italic two-storey á</option>
               </select>
@@ -746,7 +750,11 @@
             original circle, stem and optional accent around the lower
             baseline without editing the regular form; the angle is bounded
             and any clipping refuses the entire replacement. If any ink
-            cannot fit, no glyph is replaced.</p>
+            cannot fit, no glyph is replaced. Connected-pen o/a drafts
+            explicitly add entry and exit tails to the exact circle and
+            preserve a directed native pen path through a repeated half-loop;
+            accented versions lift only for the acute. These are editable
+            manual variant choices, not automatic joins between letters.</p>
           <p class="field-help">Fill missing lowercase adds only letters
             without authored strokes using the currently selected center,
             radius, ink color and pen width. Existing letters remain as
@@ -796,6 +804,15 @@
               visibility="hidden"></circle>
             <line id="glyph-ideal-stem" x1="2650" y1="1350"
               x2="2650" y2="3550" stroke="#243647" stroke-width="250"
+              stroke-linecap="round" visibility="hidden"></line>
+            <line id="glyph-ideal-entry" x1="250" y1="2650"
+              x2="450" y2="2450" stroke="#243647" stroke-width="250"
+              stroke-linecap="round" visibility="hidden"></line>
+            <line id="glyph-ideal-approach" x1="2650" y1="2450"
+              x2="2650" y2="1350" stroke="#243647" stroke-width="250"
+              stroke-linecap="round" visibility="hidden"></line>
+            <line id="glyph-ideal-exit" x1="2650" y1="2450"
+              x2="2850" y2="2250" stroke="#243647" stroke-width="250"
               stroke-linecap="round" visibility="hidden"></line>
             <path id="glyph-ideal-arch" d="" fill="none"
               stroke="#243647" stroke-width="250" stroke-linecap="round"

@@ -396,6 +396,7 @@ function mountEditor() {
         "glyph-move-preview", "glyph-move-preview-status",
         "glyph-ideal-preview", "glyph-ideal-geometry",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
+        "glyph-ideal-entry", "glyph-ideal-approach", "glyph-ideal-exit",
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
         "glyph-ideal-rounded-right", "glyph-ideal-c-loop",
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
@@ -4264,6 +4265,79 @@ test("exact SVG circle guide tracks parameters without saving", async () => {
         assert.equal(get("ideal-stem").attributes.get("visibility"),
             "hidden");
         assert.equal(get("ideal-accent").attributes.get("visibility"),
+            "hidden");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("cursive o/a starters keep directed entry, loop and exit", () => {
+    const values = [1550, 2450, 700, 250, "#123456"];
+    for (const [glyph, count, paths] of [
+        ["o", 74, 1], ["a", 76, 1],
+        ["ó", 75, 2], ["á", 77, 2],
+    ]) {
+        const base = geometricStarter(glyph, ...values);
+        const cursive = geometricStarter(glyph, ...values,
+            undefined, "cursive");
+        assert.equal(cursive.length, count, `exact ${glyph} pen segments`);
+        assert.equal(candidatePenPaths(cursive, glyph).length, paths,
+            `${glyph} loop and connectors share one directed pen path`);
+        const loop = [...base.slice(24, 48), ...base.slice(0, 24)];
+        assert.deepEqual(cursive.slice(1, 49), loop,
+            "cursive first loop preserves all 48 exact base circle chords");
+        assert.deepEqual(cursive.slice(49, 73), base.slice(24, 48),
+            "second half-loop carries connected pen from left to right");
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(cursive)),
+            cursive, `native exact Unicode TSV for ${glyph}`);
+        assert.deepEqual(geometricStarter(glyph, ...values), base,
+            "choosing cursive cannot mutate its regular form");
+    }
+    for (const invalid of ["b", "n", "A", "∞"]) {
+        assert.throws(() => geometricStarter(invalid, ...values,
+            undefined, "cursive"), /Cursive variant/);
+    }
+    assert.throws(() => geometricStarter("o", 1550, 2450,
+        1300, 250, "#123456", undefined, "cursive"),
+    /Cursive connector and pen clip/);
+});
+
+test("browser cursive o/a guide and replacement stay deliberate", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("form").value = "o-cursive";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-exit").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-approach").attributes.get("visibility"),
+            "hidden");
+        assert.match(get("ideal-preview").attributes.get("aria-label"),
+            /no adjacent joining/);
+        get("character").value = "o";
+        get("character").dispatch("input");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            geometricStarter("o", 1550, 2450, 1100, 250, "#243647",
+                undefined, "cursive"));
+        get("form").value = "a-cursive";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-approach").attributes.get("visibility"),
+            "visible");
+        get("circle-radius").value = "1300";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "hidden", "invalid geometry hides stale connector guides");
+        get("circle-radius").value = "700";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "visible");
+        editor.reset();
+        assert.equal(get("ideal-exit").attributes.get("visibility"),
             "hidden");
     } finally {
         ui.restore();

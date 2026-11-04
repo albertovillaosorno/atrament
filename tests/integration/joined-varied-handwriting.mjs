@@ -3,11 +3,14 @@
 // Real Rust glyph + notebook subprocess acceptance, without a printer.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { inflateSync } from 'node:zlib';
+import {
+    candidatePenPaths, encodeGlyphLibrary, geometricStarter,
+} from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const nfd = 'a\u0301';
@@ -170,6 +173,64 @@ test('real two-line accented handwriting joins and varies seeded pen paths',
                 assert.deepEqual(readFileSync(pdfPath), preserved);
                 assert.deepEqual(readFileSync(library), source);
             }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+
+test('manually selected cursive o/a accents render exact physical native ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/cursive-native-'));
+        try {
+            const file = join(dir, 'cursive.tsv');
+            const output = join(dir, 'cursive.pdf');
+            const variants = ['ó', 'a'].flatMap((glyph) =>
+                geometricStarter(glyph, 1550, 2450, 700,
+                    250, '#102030', undefined, 'cursive'));
+            assert.deepEqual(variants.map(({ grapheme }) => grapheme)
+                .filter((value, i, all) => i === 0 || value !== all[i - 1]),
+            ['ó', 'a']);
+            assert.equal(candidatePenPaths(variants, 'ó').length, 2,
+                'cursive acute still lifts for an explicit accent');
+            assert.equal(candidatePenPaths(variants, 'a').length, 1,
+                'cursive a connects entry, circle, stem and exit');
+            const saved = Buffer.from(encodeGlyphLibrary(variants));
+            writeFileSync(file, saved);
+            const opened = cli('glyphs', ['--profile', file]);
+            assert.equal(opened.status, 0, opened.stderr.toString());
+            assert.deepEqual(opened.stdout, saved,
+                'native Rust preserves every exact TSV stroke and pen order');
+            const flags = ['--printed-sheet', 'false', '--glyph-file', file,
+                '--flow-text', 'óa\nóa'];
+            const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+                '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            const vector = accepted.toString('latin1');
+            assert.match(vector, /^%PDF-1\.4/);
+            assert.equal((vector.match(/0\.063 0\.125 0\.188 RG/g)
+                ?? []).length, 302,
+            'two rows of 75+76 exact colored pen segments');
+            const png = cli('notebook', [...flags, '--export-paper', 'png',
+                '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            assert.equal(pngPigment(png.stdout), true,
+                'native transparent PNG contains the selected cursive ink');
+            const repeated = cli('notebook', [...flags, '--export-paper', 'pdf']);
+            assert.equal(repeated.status, 0, repeated.stderr.toString());
+            assert.deepEqual(repeated.stdout, accepted,
+                'manual variant exports deterministically without changes');
+            const missing = cli('notebook', ['--printed-sheet', 'false',
+                '--glyph-file', file, '--flow-text', 'óñ',
+                '--export-paper', 'pdf', '--output', output, '--replace']);
+            assert.notEqual(missing.status, 0,
+                'unwritten neighbor cannot become an implicit cursive join');
+            assert.match(missing.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted,
+                'missing glyph refuses without replacing selected export');
+            assert.deepEqual(readFileSync(file), saved,
+                'native export cannot mutate the browser stroke draft');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
