@@ -246,6 +246,24 @@ edited draft, and 20 refusal variants that cannot overwrite existing files.
 No parametric curves, joined cursive, connected pen lifts or grouped stroke
 identities are inferred. These remaining requirements keep ATR-P4-014 open.
 
+## Native per-segment geometry and deletion (partial) — 2026-11-03
+
+The same Rust glyph CLI now accepts
+`--set-stroke GRAPHEME INDEX X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'` to replace the
+specified segment and `--remove-stroke GRAPHEME INDEX` to delete it. The
+shared append/replacement parser validates one exact visible Unicode
+identity, nonzero line geometry, bounded physical endpoints and pen width,
+and hex RGB. All edits use the inspector's one-based, sequential indices;
+NFC/NFD accents and unrelated interleaved glyph records stay independent.
+
+Two focused regressions verify edited TSV byte equality, retained unrelated
+strokes, sequential replace/delete/move/reverse operations, stdout inspection,
+explicit save and reopen, real vector PDF and transparent PNG parity with
+inline authored strokes, 20 invalid shape/index cases that preserve existing
+source/target files, and refusal to save an empty library. No authored
+curve grouping, connected cursive pen paths, or persistent semantic model
+is inferred; ATR-P4-014 remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

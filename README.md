@@ -828,6 +828,29 @@ the source never changes. Use `--output my-glyphs.tsv --replace` deliberately
 for an in-place atomic replacement after checking the new order. These are
 straight sampled strokes, not spline pen paths or joined cursive.
 
+The CLI also supports per-segment **geometry editing and deletion**, without
+redrawing a whole glyph. For example, change the first `ñ` segment's endpoints,
+pen width and color, then inspect or explicitly save the draft:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyphs.tsv \
+  --set-stroke 'ñ' 1 600 800 1000 1400 300 '#223344' \
+  --inspect-glyph 'ñ'
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyphs.tsv --remove-stroke 'ñ' 1 \
+  --output revised-glyphs.tsv
+```
+
+`--set-stroke GRAPHEME INDEX X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'`
+uses the exact bounded input validation of `--glyph-stroke`; it replaces only
+one existing segment, preserving neighboring strokes and glyphs.
+`--remove-stroke GRAPHEME INDEX` deletes only the selected segment. Both
+operate in the same sequential, one-based exact Unicode index space as
+reordering. A missing glyph or stroke, invalid geometry or empty resulting
+library refuses before saving. An explicit `--output` is required for a
+disk write; add `--replace` only to overwrite an existing regular file.
+
 The versioned format
 starts with `atrament.glyph-strokes.v1`, followed by one **tab-separated**
 `GRAPHEME X1 Y1 X2 Y2 WIDTH_UM #RRGGBB` record per line (UTF-8, LF).

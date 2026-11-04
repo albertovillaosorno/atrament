@@ -306,6 +306,11 @@ impl GlyphOverlay {
                 let to = next_stroke_index(iter)?;
                 self.move_stroke(grapheme, from, to)
             }
+            "--remove-stroke" => self.remove_stroke(grapheme, from),
+            "--set-stroke" => {
+                let replacement = Self::parse_stroke(grapheme, iter)?;
+                self.set_stroke(grapheme, from, replacement)
+            }
             _ => Err("unknown stroke edit".into()),
         }
     }
@@ -600,43 +605,7 @@ impl GlyphOverlay {
                 }
                 let grapheme = iter.next()
                     .ok_or("--glyph-stroke requires one grapheme")?;
-                let boundaries = UnicodeGraphemeSegmentation;
-                if !is_exact_visible_grapheme(grapheme, boundaries) {
-                    return Err(
-                        "glyph shape requires one exact visible grapheme".into()
-                    );
-                }
-                let x1 = next_integer(iter, "glyph x1", 0, 3_500)?;
-                let y1 = next_integer(iter, "glyph y1", 0, 4_500)?;
-                let x2 = next_integer(iter, "glyph x2", 0, 3_500)?;
-                let y2 = next_integer(iter, "glyph y2", 0, 4_500)?;
-                if x1 == x2 && y1 == y2 {
-                    return Err(concat!(
-                        "glyph stroke must have two ",
-                        "distinct points",
-                    ).into());
-                }
-                let width_um = next_integer(
-                    iter, "glyph ink width", 80, 1_500,
-                )?;
-                let color = iter.next().ok_or("glyph color requires #RRGGBB")?;
-                if color.len() != 7 || !color.starts_with('#') {
-                    return Err("glyph color requires #RRGGBB".into());
-                }
-                let channel = |index: usize| -> Result<u8, String> {
-                    u8::from_str_radix(
-                        color.get(index..index.saturating_add(2))
-                            .ok_or("glyph color requires #RRGGBB")?,
-                        16,
-                    ).map_err(|_error| "glyph color requires #RRGGBB".into())
-                };
-                self.strokes.push(GlyphStroke {
-                    grapheme: grapheme.clone(),
-                    start_um: (x1, y1),
-                    end_um: (x2, y2),
-                    width_um,
-                    rgb: [channel(1)?, channel(3)?, channel(5)?],
-                });
+                self.strokes.push(Self::parse_stroke(grapheme, iter)?);
             }
             "--place-text" => {
                 if self.runs.len() == MAX_RUNS {
@@ -712,6 +681,49 @@ impl GlyphOverlay {
         Ok(())
     }
 
+    /// Parse the same exact bounded shape for append or targeted replacement.
+    fn parse_stroke(
+        grapheme: &str, iter: &mut Iter<'_, String>,
+    ) -> Result<GlyphStroke, String> {
+        let boundaries = UnicodeGraphemeSegmentation;
+        if !is_exact_visible_grapheme(grapheme, boundaries) {
+            return Err(
+                "glyph shape requires one exact visible grapheme".into()
+            );
+        }
+        let x1 = next_integer(iter, "glyph x1", 0, 3_500)?;
+        let y1 = next_integer(iter, "glyph y1", 0, 4_500)?;
+        let x2 = next_integer(iter, "glyph x2", 0, 3_500)?;
+        let y2 = next_integer(iter, "glyph y2", 0, 4_500)?;
+        if x1 == x2 && y1 == y2 {
+            return Err(concat!(
+                "glyph stroke must have two ",
+                "distinct points",
+            ).into());
+        }
+        let width_um = next_integer(
+            iter, "glyph ink width", 80, 1_500,
+        )?;
+        let color = iter.next().ok_or("glyph color requires #RRGGBB")?;
+        if color.len() != 7 || !color.starts_with('#') {
+            return Err("glyph color requires #RRGGBB".into());
+        }
+        let channel = |index: usize| -> Result<u8, String> {
+            u8::from_str_radix(
+                color.get(index..index.saturating_add(2))
+                    .ok_or("glyph color requires #RRGGBB")?,
+                16,
+            ).map_err(|_error| "glyph color requires #RRGGBB".into())
+        };
+        Ok(GlyphStroke {
+            grapheme: grapheme.to_owned(),
+            start_um: (x1, y1),
+            end_um: (x2, y2),
+            width_um,
+            rgb: [channel(1)?, channel(3)?, channel(5)?],
+        })
+    }
+
     /// Remove every exact template segment for one grapheme in the library.
     /// A missing exact match is a refusal, not a normalization or fallback.
     pub(super) fn remove_glyph(&mut self, grapheme: &str)
@@ -721,6 +733,21 @@ impl GlyphOverlay {
         if self.strokes.len() == before {
             return Err("no authored strokes for exact glyph".into());
         }
+        Ok(())
+    }
+
+    /// Delete one selected segment without disturbing any other glyph rows.
+    pub(super) fn remove_stroke(
+        &mut self, grapheme: &str, ordinal: u32,
+    ) -> Result<(), String> {
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let index = Self::checked_stroke_position(&positions, ordinal)?;
+        let selected = *positions.get(index)
+            .ok_or("stroke index outside bounds")?;
+        if self.strokes.get(selected).is_none() {
+            return Err("stroke index outside library".into());
+        }
+        let _removed = self.strokes.remove(selected);
         Ok(())
     }
 
@@ -736,6 +763,26 @@ impl GlyphOverlay {
         let shape = self.strokes.get_mut(selected)
             .ok_or("stroke index outside library")?;
         swap(&mut shape.start_um, &mut shape.end_um);
+        Ok(())
+    }
+
+    /// Replace exactly one authored segment with newly validated geometry.
+    pub(super) fn set_stroke(
+        &mut self, grapheme: &str, ordinal: u32,
+        replacement: GlyphStroke,
+    ) -> Result<(), String> {
+        if replacement.grapheme != grapheme {
+            return Err(
+                "replacement glyph identity must match selection".into()
+            );
+        }
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let index = Self::checked_stroke_position(&positions, ordinal)?;
+        let selected = *positions.get(index)
+            .ok_or("stroke index outside bounds")?;
+        let shape = self.strokes.get_mut(selected)
+            .ok_or("stroke index outside library")?;
+        *shape = replacement;
         Ok(())
     }
 

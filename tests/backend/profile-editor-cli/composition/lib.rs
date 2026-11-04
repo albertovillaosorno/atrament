@@ -2268,6 +2268,169 @@ fn glyph_stroke_edits_refuse_invalid_indices_without_touching_files() {
 }
 
 #[test]
+fn targeted_stroke_geometry_and_deletion_round_trip_into_native_exports() {
+    let source = test_path().with_extension("tsv");
+    let revised = test_path().with_extension("tsv");
+    let original_name = source.to_str().expect("test source");
+    let revised_name = revised.to_str().expect("test revision");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "500", "700", "900", "1300",
+        "250", "#102030",
+        "--glyph-stroke", "ñ", "1100", "900", "2200", "2700",
+        "300", "#445566",
+        "--glyph-stroke", "n\u{303}", "900", "1300", "1800",
+        "2600", "350", "#708090",
+        "--glyph-stroke", "∞", "1200", "600", "2300", "1700",
+        "400", "#AA5500",
+        "--glyph-stroke", "n\u{303}", "1800", "2600", "3000",
+        "3900", "450", "#BBCCDD",
+    ])).expect("initial canonical TSV").expect("bytes");
+    fs::write(&source, &original).expect("test source saved");
+    let mut changes = args(&[
+        "--profile", original_name,
+        "--set-stroke", "n\u{303}", "2", "1000", "500", "2900",
+        "3300", "500", "#123456",
+        "--remove-stroke", "n\u{303}", "1",
+        "--move-stroke", "n\u{303}", "2", "1",
+        "--reverse-stroke", "n\u{303}", "2",
+    ]);
+    let updated = execute_glyph_library(&changes)
+        .expect("native geometry edit").expect("updated TSV");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ñ\t1100\t900\t2200\t2700\t300\t#445566\n",
+        "ñ\t1800\t2600\t3000\t3900\t450\t#BBCCDD\n",
+        "∞\t1200\t600\t2300\t1700\t400\t#AA5500\n",
+        "ñ\t2900\t3300\t1000\t500\t500\t#123456\n",
+    );
+    assert_eq!(updated, expected.as_bytes());
+    assert_eq!(fs::read(&source).expect("no implicit write"), original);
+    changes.extend(args(&["--inspect-glyph", "n\u{303}"]));
+    let report = String::from_utf8(execute_glyph_library(&changes)
+        .expect("inspect changed draft").expect("report"))
+        .expect("UTF-8 inspection");
+    assert!(report.contains("Strokes: 2"), "{report}");
+    assert!(report.contains("1: (1800, 2600) -> (3000, 3900)"),
+        "{report}");
+    assert!(report.contains(
+        "2: (2900, 3300) -> (1000, 500) width 500 um color #123456"
+    ), "{report}");
+
+    assert!(execute_glyph_library(&args(&[
+        "--profile", original_name,
+        "--set-stroke", "n\u{303}", "2", "1000", "500", "2900",
+        "3300", "500", "#123456",
+        "--remove-stroke", "n\u{303}", "1",
+        "--move-stroke", "n\u{303}", "2", "1",
+        "--reverse-stroke", "n\u{303}", "2",
+        "--output", revised_name,
+    ])).expect("explicit save").is_none());
+    assert_eq!(fs::read(&revised).expect("saved native library"), updated);
+
+    for format in ["pdf", "png"] {
+        let mut stored = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", revised_name, "--place-text", "1",
+            "30000", "45000", "n\u{303}ñ∞",
+        ]);
+        let mut inline = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", "ñ", "1100", "900", "2200", "2700",
+            "300", "#445566",
+            "--glyph-stroke", "n\u{303}", "1800", "2600", "3000",
+            "3900", "450", "#BBCCDD",
+            "--glyph-stroke", "n\u{303}", "2900", "3300", "1000",
+            "500", "500", "#123456",
+            "--glyph-stroke", "∞", "1200", "600", "2300", "1700",
+            "400", "#AA5500",
+            "--place-text", "1", "30000", "45000", "n\u{303}ñ∞",
+        ]);
+        if format == "png" {
+            stored.extend(args(&["--dpi", "72"]));
+            inline.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&stored).expect("saved authored ink")
+            .expect("native bytes"), execute_notebook(&inline)
+            .expect("inline authored ink").expect("native bytes"),
+            "edited segment's order and direction must reach {format}");
+    }
+    fs::remove_file(source).expect("remove test source");
+    fs::remove_file(revised).expect("remove test revision");
+}
+
+#[test]
+fn targeted_stroke_edits_refuse_bad_shapes_and_leave_files_untouched() {
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("test source");
+    let output_name = target.to_str().expect("test output");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "500", "700", "900", "1300",
+        "250", "#102030",
+        "--glyph-stroke", "n\u{303}", "500", "700", "900",
+        "1300", "250", "#708090",
+    ])).expect("valid original").expect("TSV");
+    fs::write(&source, &original).expect("test input");
+    fs::write(&target, b"preserve already accepted output")
+        .expect("test sentinel");
+    let invalid = [
+        args(&["--set-stroke"]),
+        args(&["--set-stroke", "ñ"]),
+        args(&["--set-stroke", "ñ", "0"]),
+        args(&["--set-stroke", "n\u{303}", "2"]),
+        args(&["--set-stroke", "n", "1", "500", "700", "900",
+            "1300", "250", "#102030"]),
+        args(&["--set-stroke", "ñ", "1", "500", "700", "500",
+            "700", "250", "#102030"]),
+        args(&["--set-stroke", "ñ", "1", "500", "700", "900",
+            "1300", "79", "#102030"]),
+        args(&["--set-stroke", "ñ", "1", "500", "700", "900",
+            "1300", "1501", "#102030"]),
+        args(&["--set-stroke", "ñ", "1", "3501", "700", "900",
+            "1300", "250", "#102030"]),
+        args(&["--set-stroke", "ñ", "1", "500", "4501", "900",
+            "1300", "250", "#102030"]),
+        args(&["--set-stroke", "ñ", "1", "500", "700", "900",
+            "1300", "250", "#GGGGGG"]),
+        args(&["--set-stroke", "ñ", "1", "500", "700", "900",
+            "1300", "250"]),
+        args(&["--remove-stroke"]),
+        args(&["--remove-stroke", "ñ"]),
+        args(&["--remove-stroke", "ñ", "0"]),
+        args(&["--remove-stroke", "ñ", "2"]),
+        args(&["--remove-stroke", "n", "1"]),
+        args(&["--remove-stroke", "ñ", "4097"]),
+        args(&["--remove-stroke", "ñ", "1",
+            "--remove-stroke", "ñ", "1"]),
+        args(&["--remove-stroke", "ñ", "1",
+            "--set-stroke", "ñ", "1", "500", "700", "900",
+            "1300", "250", "#102030"]),
+    ];
+    for flags in invalid {
+        let mut command = args(&["--profile", source_name]);
+        command.extend(flags);
+        command.extend(args(&["--output", output_name, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid shape edits must refuse: {command:?}");
+        assert_eq!(fs::read(&source).expect("source untouched"), original);
+        assert_eq!(fs::read(&target).expect("target untouched"),
+            b"preserve already accepted output");
+    }
+    // Removing a library's only stroke also refuses without saving anything.
+    let last = test_path().with_extension("tsv");
+    let last_name = last.to_str().expect("owned empty-library target");
+    let error = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "500", "700", "900", "1300",
+        "250", "#102030", "--remove-stroke", "ñ", "1",
+        "--output", last_name,
+    ])).expect_err("library cannot be saved without any strokes");
+    assert!(error.contains("at least one authored stroke"), "{error}");
+    assert!(!last.exists(), "no target committed after last stroke removal");
+    fs::remove_file(source).expect("remove test source");
+    fs::remove_file(target).expect("remove test target");
+}
+
+#[test]
 fn glyph_library_removal_and_reauthoring_updates_pdf_and_png() {
     let library = test_path().with_extension("tsv");
     let path = library.to_str().expect("test library");

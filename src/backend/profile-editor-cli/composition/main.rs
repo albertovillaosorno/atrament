@@ -85,6 +85,8 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--remove-glyph GRAPHEME] \
     [--reverse-stroke GRAPHEME INDEX] \
     [--move-stroke GRAPHEME FROM TO] \
+    [--set-stroke GRAPHEME INDEX X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
+    [--remove-stroke GRAPHEME INDEX] \
     [--audit-text UTF8_TEXT|--audit-baseline|--inspect-glyph GRAPHEME] \
     [--output strokes.tsv [--replace]] \
     | handwriting [--profile ink.json] [--seed U64] \
@@ -99,6 +101,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     output is stdout-only and never an inferred cursive pen path.\n\
     Glyph stroke indices are one-based within one exact Unicode glyph;\n\
     --reverse-stroke flips pen direction and --move-stroke shifts order.\n\
+    --set-stroke updates ink geometry; --remove-stroke deletes one segment.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
     not glyph outlines, available ink shapes, or renderability.\n\
     --preview-glyph reports bounded seeded numerical estimates only; \
@@ -754,7 +757,8 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
             }
             "--glyph-stroke" => glyphs.parse(option, &mut iter)?,
-            "--reverse-stroke" | "--move-stroke" => {
+            "--reverse-stroke" | "--move-stroke"
+            | "--set-stroke" | "--remove-stroke" => {
                 glyphs.edit_stroke(option, &mut iter)?;
             }
             "--remove-glyph" => {
