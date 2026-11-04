@@ -762,6 +762,21 @@ Unicode hard breaks, prove a soft continuation is still distinct, and
 preserve an existing export on paired-backslash refusal. No general inline
 Markdown escaping, nested lists or saved semantic identities are claimed.
 
+## Four-space Markdown rows keep line boundaries — 2026-11-04
+
+The native Markdown subset now treats ordinary source lines starting with
+four or more ASCII spaces as individual literal physical rows. Previously,
+a preceding ordinary paragraph or another indented line could soft-join
+that line, inventing an extra space and silently moving ink and even page
+selection. One to three leading spaces remain Markdown paragraph syntax;
+one-level two/three-space list continuations are unchanged. The new boundary
+does not infer a code block or strip any of the four authored spaces.
+
+A real native regression compares exact two-page PDF and page-two transparent
+PNG bytes with plain-text literal rows and explicit Markdown hard breaks,
+including adjacent four-space lines and NFC/NFD ink. This is CLI-only
+physical placement, not persisted Markdown semantics or nested lists.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

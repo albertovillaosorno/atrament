@@ -1320,6 +1320,21 @@ fn flush_paragraph(
     Ok(())
 }
 
+// Four or more leading ASCII spaces are literal physical placement, not
+// Markdown soft continuation. They neither absorb a pending paragraph nor
+// gain a synthetic joining space before their first authored glyph.
+fn layout_literal_indented_row(
+    layout: &mut Layout<'_>, paragraph: &mut String,
+    previous: LineStyle, raw: &str, style: LineStyle, body: &str,
+) -> Result<bool, String> {
+    if !matches!(style, LineStyle::Body) || !raw.starts_with("    ") {
+        return Ok(false);
+    }
+    flush_paragraph(layout, paragraph, previous)?;
+    layout.layout_line(body, style)?;
+    Ok(true)
+}
+
 // Join an ordinary 2..3-space-indented line to the prior one-level list
 // item, preserving the native hanging indent and a single initial marker.
 // A new block or four-space literal line flushes the previous item instead.
@@ -1480,6 +1495,22 @@ fn initialize_layout<'model>(
     })
 }
 
+// Finalize only after checking fence closure and remaining authored ink.
+// No output bytes are written until the entire layout has been admitted.
+fn finish_layout(
+    mut layout: Layout<'_>, mut paragraph: String,
+    paragraph_style: LineStyle, fence: Option<(u8, usize)>,
+) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
+    if fence.is_some() {
+        return Err("unclosed Markdown code fence refused".into());
+    }
+    flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
+    if layout.lines.is_empty() {
+        return Err("flow requires at least one visible text block".into());
+    }
+    Ok((layout.lines, layout.ornaments, layout.page))
+}
+
 /// Compile bounded visible text on the caller-selected native page profile.
 /// This does not create persistent notebook semantic state.
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
@@ -1559,6 +1590,11 @@ pub(super) fn layout_flow_with_region(
             return Err("empty Markdown block refused".into());
         }
         if source.format == FlowFormat::Markdown
+            && layout_literal_indented_row(&mut layout, &mut paragraph,
+                paragraph_style, input_line, style, body)? {
+            continue;
+        }
+        if source.format == FlowFormat::Markdown
             && continue_list_item(&mut layout, &mut paragraph,
                 paragraph_style, input_line, style, body, hard_break)? {
             continue;
@@ -1599,12 +1635,5 @@ pub(super) fn layout_flow_with_region(
             }
         }
     }
-    if fence.is_some() {
-        return Err("unclosed Markdown code fence refused".into());
-    }
-    flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
-    if layout.lines.is_empty() {
-        return Err("flow requires at least one visible text block".into());
-    }
-    Ok((layout.lines, layout.ornaments, layout.page))
+    finish_layout(layout, paragraph, paragraph_style, fence)
 }

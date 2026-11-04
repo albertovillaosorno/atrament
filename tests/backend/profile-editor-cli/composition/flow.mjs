@@ -544,6 +544,50 @@ test('four-space paragraphs and fenced code retain literal indentation',
         }
     });
 
+test('four-space literal Markdown rows preserve source line placement',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-literal-rows-'));
+        try {
+            const region = [
+                '--flow-region', '30000', '40000', '50000', '30000',
+            ];
+            for (const source of [
+                'a\n    ó\n    o\u0301',
+                '    a\n    ó\n    o\u0301',
+            ]) {
+                const explicit = source.replaceAll('\n', '  \n');
+                for (const format of ['pdf', 'png']) {
+                    const plain = render(dir, source, format, region,
+                        '--flow-text', 2);
+                    assert.equal(plain.result.status, 0,
+                        plain.result.stderr);
+                    const reference = readFileSync(plain.output);
+                    const literal = render(dir, source, format, region,
+                        '--flow-markdown', 2);
+                    assert.equal(literal.result.status, 0,
+                        literal.result.stderr);
+                    assert.deepEqual(readFileSync(literal.output), reference,
+                        `literal source indentation stays on its row in ${format}`);
+                    const broken = render(dir, explicit, format, region,
+                        '--flow-markdown', 2);
+                    assert.equal(broken.result.status, 0,
+                        broken.result.stderr);
+                    assert.deepEqual(readFileSync(broken.output), reference,
+                        `explicit hard breaks agree with literal ${format}`);
+                    if (format === 'pdf') {
+                        assert.match(reference.toString('latin1'),
+                            /\/Count 2\b/, 'three rows occupy two sheets');
+                    } else {
+                        assert.deepEqual(reference.subarray(0, 8),
+                            Buffer.from('89504e470d0a1a0a', 'hex'));
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('heading marker stroke weight is selectable in native PDF and PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/heading-weight-'));
