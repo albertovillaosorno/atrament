@@ -50,6 +50,55 @@ function actualPngInk(bytes) {
     return raw;
 }
 
+test('one-click Spanish accented ink reaches real native PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/accented-ink-'));
+        try {
+            const library = join(dir, 'accents.tsv');
+            const output = join(dir, 'accents.pdf');
+            const symbols = ['é', 'ú', 'ü', 'ñ'];
+            const rows = symbols.flatMap((symbol) => geometricStarter(
+                symbol, 1550, 2450, 1100, 250, '#243647'));
+            assert.equal(rows.length, 146);
+            assert.deepEqual(symbols.map((symbol) =>
+                candidatePenPaths(rows, symbol).at(-1)?.last),
+            [38, 35, 36, 37]);
+            const canonical = Buffer.from(encodeGlyphLibrary(rows));
+            writeFileSync(library, canonical);
+            const opened = cli('glyphs', ['--profile', library]);
+            assert.equal(opened.status, 0, opened.stderr.toString());
+            assert.deepEqual(opened.stdout, canonical);
+            const audit = cli('glyphs', ['--profile', library,
+                '--audit-text', 'éúüñ']);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', library, '--flow-text', 'éúüñ\néúüñ'];
+            const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+                '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const bytes = readFileSync(output);
+            assert.match(bytes.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((bytes.toString('latin1').match(/ m\n/g) ?? [])
+                .length, 292, 'two authored rows preserve every pen segment');
+            const png = cli('notebook', [...flags, '--export-paper', 'png',
+                '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const refused = cli('notebook', ['--printed-sheet', 'true',
+                '--glyph-file', library, '--flow-text', 'éúüñß',
+                '--export-paper', 'pdf', '--output', output, '--replace']);
+            assert.notEqual(refused.status, 0);
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), bytes,
+                'unknown Unicode source never overwrites accepted PDF');
+            assert.deepEqual(readFileSync(library), canonical,
+                'native export never rewrites the browser-authored library');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('peso/dollar and euro manual stroke ink reaches real Rust PDF/PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/currency-ink-'));

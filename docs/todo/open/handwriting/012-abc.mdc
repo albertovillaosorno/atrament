@@ -1149,6 +1149,27 @@ into Rust PDF and transparent PNG output. It verifies 286 vector ink
 segments for `∑∫∂Δ≈$€` without extra backend calls. The full glyph/font,
 persisted analytic primitives and joined-cursive work remain open.
 
+## Manual acute and diaeresis/tilde starters (partial) — 2026-11-04
+
+The browser geometric starter menu additionally offers selectable `é`, `ú`,
+`ü` and `ñ`, using the existing exact Unicode accent composer on native
+single-glyph `e`, `u` and `n` drafts. All base pen segments, stroke order
+and colors remain unchanged except for the selected grapheme identity;
+manual shift/lift only changes the explicit accent. The `é` SVG retains
+an ideal open-circle guide plus straight bar, `ú`/`ü` retain a pair of
+quadratic bowl arcs, and `ñ` retains the pair of upper-hump arcs. The acute
+is one line, diaeresis has two separate short strokes and tilde has three
+joined segments, shown as distinct SVG guides.
+
+Tests compare all four full TSV drafts against the existing accent composer,
+exercise exact glyph and pen-path identity, accent bounds, clipped-preview
+hiding, and immutable previously authored ink. Independent Rust CLI
+acceptance reopens 146 caller-authored segments, renders two rows with 292
+real PDF vector moves and transparent RGBA PNG ink, and refuses a missing
+`ß` before replacing an accepted PDF. SVG curves still compile into native
+straight micrometre chords, not persisted analytic contours or a complete
+Spanish/English glyph set. P4-012 remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

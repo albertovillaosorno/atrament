@@ -1456,6 +1456,12 @@ function cursiveLoop(base: Stroke[], radius: number): Stroke[] {
     return ink;
 }
 
+// Optional one-click starters reuse the same accent composer as the manual
+// Spanish fill. They never normalize or overwrite an existing Unicode key.
+const ACCENTED_STARTERS: Readonly<Record<string, string>> = {
+    "é": "e", "ú": "u", "ü": "u", "ñ": "n",
+};
+
 export function geometricStarter(
     g: string, x: number, y: number, r: number, w: number,
     color: string, pos?: { dx: number; lift: number;
@@ -1463,7 +1469,8 @@ export function geometricStarter(
     kind: "single" | "two-storey" | "italic" | "cursive"
         | "two-storey-italic" = "single",
 ): Stroke[] {
-    if (!["o", "a", "ó", "á", "b", "d", "p", "q",
+    if (!["o", "a", "ó", "á", "é", "ú", "ü", "ñ",
+        "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
         "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s",
         ".", ",", "!", "¡", "?", "¿",
@@ -1486,6 +1493,13 @@ export function geometricStarter(
     }
     if (kind === "cursive" && !["o", "a", "ó", "á"].includes(g)) {
         throw new Error("Cursive variant requires o/a circle glyph");
+    }
+    const accentBase = ACCENTED_STARTERS[g];
+    if (accentBase !== undefined) {
+        const base = geometricStarter(accentBase, x, y, r, w, color, pos);
+        return composeAccentedGlyph(base, accentBase, g, color, {
+            dx: pos?.dx ?? 0, lift: pos?.lift ?? 0,
+        });
     }
     if (kind === "cursive") {
         const base = geometricStarter(g, x, y, r, w, color, pos, "single");
@@ -2267,6 +2281,8 @@ export function createGlyphStrokeEditor(): {
     const idealExit = required<SVGLineElement>("glyph-ideal-exit");
     const idealApproach = required<SVGLineElement>("glyph-ideal-approach");
     const idealAccent = required<SVGLineElement>("glyph-ideal-accent");
+    const idealDiacritic =
+        required<SVGPathElement>("glyph-ideal-diacritic");
     const idealArch = required<SVGPathElement>("glyph-ideal-arch");
     const roundedPath = required<SVGPathElement>("glyph-ideal-rounded");
     const roundedLeft = required<SVGLineElement>("glyph-ideal-rounded-left");
@@ -2421,7 +2437,7 @@ export function createGlyphStrokeEditor(): {
         try {
             // The SVG circle remains mathematically circular. Exporting the
             // v1 library explicitly samples it into straight ink segments.
-            starterFromInputs();
+            const drafted = starterFromInputs();
             const cx = Number(centerX.value);
             const cy = Number(centerY.value);
             const r = Number(radius.value);
@@ -2499,7 +2515,7 @@ export function createGlyphStrokeEditor(): {
             const archState = archVisible ? "visible" : "hidden";
             idealArch.setAttribute("visibility", archState);
             const roundedKind: "n" | "u" | "h" =
-                chosen.grapheme === "u" ? "u"
+                ["u", "ú", "ü"].includes(chosen.grapheme) ? "u"
                     : chosen.grapheme === "h" ? "h" : "n";
             const rounded = roundedStory(cx, cy, r, roundedKind);
             const doubled = doubleHump(cx, cy, r);
@@ -2614,7 +2630,8 @@ export function createGlyphStrokeEditor(): {
                 element.setAttribute("stroke", color.value);
             }
             const roundedVisible = active
-                && ["n", "u", "h", "m", "r", "j", "g", "s",
+                && ["n", "u", "ñ", "ú", "ü", "h", "m", "r",
+                    "j", "g", "s",
                     "v", "w", "k", "x", "y", "z",
                     ".", ",", "!", "¡", "?", "¿",
                     "«", "»", "‘", "’", "“", "”",
@@ -2643,7 +2660,7 @@ export function createGlyphStrokeEditor(): {
             openPath.setAttribute("d", openD);
             openPath.setAttribute("stroke-width", numeric.width.value);
             openPath.setAttribute("stroke", color.value);
-            const openVisible = active && ["c", "e", "C", "G", "€"]
+            const openVisible = active && ["c", "e", "é", "C", "G", "€"]
                 .includes(chosen.grapheme);
             const openState = openVisible ? "visible" : "hidden";
             openPath.setAttribute("visibility", openState);
@@ -2653,7 +2670,7 @@ export function createGlyphStrokeEditor(): {
             eBar.setAttribute("y2", String(cy));
             eBar.setAttribute("stroke-width", numeric.width.value);
             eBar.setAttribute("stroke", color.value);
-            const barState = active && ["e", "t", "f"]
+            const barState = active && ["e", "é", "t", "f"]
                 .includes(chosen.grapheme) ? "visible" : "hidden";
             eBar.setAttribute("visibility", barState);
             const pen = Number(numeric.width.value);
@@ -2688,15 +2705,30 @@ export function createGlyphStrokeEditor(): {
             const lift = Number(accentLift.value);
             const top = chosen.variant.startsWith("two-storey")
                 ? 2 * r : r;
-            const accent = acuteAccent(cx, cy, r, pen, dx, lift, top);
+            const composedAcute = ["é", "ú"].includes(chosen.grapheme);
+            const accent = composedAcute ? drafted.at(-1)!
+                : acuteAccent(cx, cy, r, pen, dx, lift, top);
             for (const axis of ["x1", "y1", "x2", "y2"] as const) {
                 idealAccent.setAttribute(axis, String(accent[axis]));
             }
             idealAccent.setAttribute("stroke-width", numeric.width.value);
             idealAccent.setAttribute("stroke", color.value);
-            const hasAcute = ["ó", "á", "í"].includes(chosen.grapheme);
-            const accentState = active && hasAcute ? "visible" : "hidden";
-            idealAccent.setAttribute("visibility", accentState);
+            const hasAcute = ["ó", "á", "í", "é", "ú"]
+                .includes(chosen.grapheme);
+            idealAccent.setAttribute("visibility", active && hasAcute
+                ? "visible" : "hidden");
+            const composedMarks = chosen.grapheme === "ñ" ? 3
+                : chosen.grapheme === "ü" ? 2 : 0;
+            const markLines = composedMarks > 0
+                ? drafted.slice(-composedMarks) : [];
+            const diacriticD = markLines.map((line) =>
+                `M ${line.x1} ${line.y1} L ${line.x2} ${line.y2}`)
+                .join(" ");
+            idealDiacritic.setAttribute("d", diacriticD);
+            idealDiacritic.setAttribute("stroke-width", numeric.width.value);
+            idealDiacritic.setAttribute("stroke", color.value);
+            idealDiacritic.setAttribute("visibility", active && composedMarks
+                ? "visible" : "hidden");
             const guideLabel = connected
                 ? `Manual connected-pen ${form.value} draft, no adjacent joining`
                 : isMath
@@ -2733,6 +2765,7 @@ export function createGlyphStrokeEditor(): {
             iStem.setAttribute("visibility", "hidden");
             iDot.setAttribute("visibility", "hidden");
             idealAccent.setAttribute("visibility", "hidden");
+            idealDiacritic.setAttribute("visibility", "hidden");
             ideal.setAttribute("aria-label", "Invalid geometric settings");
         }
     };

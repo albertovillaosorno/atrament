@@ -400,7 +400,7 @@ function mountEditor() {
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
         "glyph-ideal-rounded-right", "glyph-ideal-c-loop",
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
-        "glyph-ideal-accent",
+        "glyph-ideal-accent", "glyph-ideal-diacritic",
         "glyph-update", "glyph-remove", "glyph-reverse",
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
         "glyph-path-earlier", "glyph-path-later",
@@ -1588,7 +1588,7 @@ test("geometric starters share loop and validate acute strokes", () => {
         "ó", 1550, 1600, 1100, 250, "#123456",
     ), /Acute accent/);
     for (const bad of [
-        ["ñ", 1550, 2450, 1100, 250, "#123456"],
+        ["ß", 1550, 2450, 1100, 250, "#123456"],
         ["o", -1, 2450, 1100, 250, "#123456"],
         ["o", 200, 2450, 1100, 250, "#123456"],
         ["a", 1550, 2450, 0, 250, "#123456"],
@@ -1597,6 +1597,86 @@ test("geometric starters share loop and validate acute strokes", () => {
         ["o", 1550, 2450, 1100, 250, "red"],
     ]) assert.throws(() => geometricStarter(...bad));
 });
+
+test("one-click Spanish accents reuse exact bases and honest SVG guides",
+    async () => {
+        const args = [1550, 2450, 1100, 250, "#243647"];
+        const forms = [
+            ["é", "e", 38, 1], ["ú", "u", 35, 1],
+            ["ü", "u", 36, 2], ["ñ", "n", 37, 3],
+        ];
+        for (const [glyph, base, count, marks] of forms) {
+            const source = geometricStarter(base, ...args);
+            const proposed = geometricStarter(glyph, ...args);
+            assert.equal(proposed.length, count);
+            assert.deepEqual(proposed, composeAccentedGlyph(source, base,
+                glyph, "#243647"), "same one-source accent geometry");
+            assert.deepEqual(proposed.slice(0, source.length),
+                source.map((line) => ({ ...line, grapheme: glyph })));
+            assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(proposed)),
+                proposed, "exact precomposed Unicode survives native TSV");
+            assert.equal(proposed.slice(-marks).length, marks);
+            const shifted = geometricStarter(glyph, ...args,
+                { dx: -200, lift: 100 });
+            assert.deepEqual(shifted.slice(0, source.length),
+                proposed.slice(0, source.length),
+                "shift and lift never alter the base ink");
+            assert.notDeepEqual(shifted.slice(-marks), proposed.slice(-marks));
+            for (const position of [
+                { dx: 501, lift: 0 }, { dx: 0, lift: 501 },
+                { dx: 0.5, lift: 0 },
+            ]) assert.throws(() => geometricStarter(glyph,
+                ...args, position));
+            assert.throws(() => geometricStarter(glyph,
+                1550, 1350, 1100, 250, "#243647"),
+            /Accent and pen must fit inside glyph cell/);
+            assert.throws(() => geometricStarter(glyph,
+                ...args, undefined, "italic"),
+            /Italic variant requires matching o\/a glyph/);
+        }
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            for (const [glyph, , count, marks] of forms) {
+                get("form").value = glyph;
+                get("character").value = glyph;
+                get("form").dispatch("input");
+                assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                    glyph === "é" ? "hidden" : "visible");
+                assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+                    glyph === "é" ? "visible" : "hidden");
+                assert.equal(get("ideal-accent").attributes.get("visibility"),
+                    marks === 1 ? "visible" : "hidden");
+                const diacritic = get("ideal-diacritic");
+                assert.equal(diacritic.attributes.get("visibility"),
+                    marks > 1 ? "visible" : "hidden");
+                assert.equal((diacritic.attributes.get("d")
+                    .match(/ L /g) ?? []).length, marks > 1 ? marks : 0);
+                get("construct").dispatch("click");
+                assert.match(get("status").textContent, /Constructed/);
+                get("save").dispatch("click");
+                const saved = parseGlyphLibrary(
+                    await downloads.at(-1).text());
+                assert.equal(saved.filter((line) => line.grapheme === glyph)
+                    .length, count);
+            }
+            const accepted = await downloads.at(-1).text();
+            get("circle-y").value = "1350";
+            get("circle-y").dispatch("input");
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "hidden", "invalid accent must hide the entire guide");
+            assert.equal(get("ideal-diacritic").attributes.get("visibility"),
+                "hidden", "never display stale accepted tilde ink");
+            get("construct").dispatch("click");
+            assert.match(get("status").textContent, /Accent and pen/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), accepted,
+                "refusal cannot replace previously authored Unicode ink");
+        } finally {
+            ui.restore();
+        }
+    });
 
 test("printed two-storey a samples a continuous analytic upper story", () => {
     const args = [1550, 2450, 1100, 250, "#123456"];

@@ -657,6 +657,7 @@
                 <option value="g">Loop g (circle and quadratic hook)</option>
                 <option value="c">Open circle c</option>
                 <option value="e">Open loop e (with bar)</option>
+                <option value="é">Acute é (open loop and accent)</option>
                 <option value="i">Dotted i (stem and dot)</option>
                 <option value="í">Acute í (stem, no dot)</option>
                 <option value="j">Dotted j (curved descender)</option>
@@ -673,6 +674,9 @@
                 <option value="z">Angular z (three straight strokes)</option>
                 <option value="n">Rounded n (upper hump)</option>
                 <option value="u">Rounded u (lower bowl)</option>
+                <option value="ú">Acute ú (rounded bowl and accent)</option>
+                <option value="ü">Diaeresis ü (rounded bowl, two dots)</option>
+                <option value="ñ">Tilde ñ (rounded n and wave)</option>
                 <option value="h">Ascender h (upper hump)</option>
                 <option value="m">Double-hump m (two arches)</option>
                 <option value="a">Simple a (circle + stem)</option>
@@ -751,6 +755,11 @@
               Fill missing text punctuation (11 forms, unsaved)
             </button>
           </div>
+          <p class="field-help">The additional é, ú, ü and ñ starters
+            reuse the manual accent composer on the exact e, u and n
+            geometry; editable lift/shift and pen clearance are checked
+            before replacing the target. Their SVG guide preserves the
+            base curves, whereas native TSV stores straight ink chords.</p>
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the highest story, positioned from geometry
             and pen width. A two-storey á may require reducing the radius.
@@ -855,6 +864,9 @@
             <line id="glyph-ideal-accent" x1="1165" y1="980"
               x2="1825" y2="485" stroke="#243647" stroke-width="250"
               stroke-linecap="round" visibility="hidden"></line>
+            <path id="glyph-ideal-diacritic" d="" fill="none"
+              stroke="#243647" stroke-width="250" stroke-linecap="round"
+              stroke-linejoin="round" visibility="hidden"></path>
             </g>
           </svg>
           <div class="handwriting-controls">
