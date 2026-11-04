@@ -926,6 +926,9 @@ always a separate action. Focused tests cover signed angles, boundary
 refusals, exact NFC/NFD separation, pen connections, identity, 4,096-stroke
 libraries and complete TSV undo/redo. An independent physical integration
 compares Rust-authored and browser-authored TSV/PDF/transparent PNG output.
+A separate real Firefox BiDi/localhost regression checks session-gated
+controls, read-only geometry, rejected angles and pen clipping, an accepted
+rotated SVG, exact visible undo/redo, and unchanged backend requests.
 
 Rotation persists the rounded stroke coordinates, not an editable parametric
 rotation object or independent cursive style. P1-012 remains open.

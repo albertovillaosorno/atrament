@@ -12432,3 +12432,124 @@ test(
         }
     },
 );
+
+test(
+    "Firefox whole-glyph rotation previews and recovers real SVG ink",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/authored-rotate-browser-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: false,
+                expression: String.raw`(() => {
+                    const get = (id) => document.getElementById("glyph-" + id);
+                    const set = (id, value) => {
+                        get(id).value = String(value);
+                        get(id).dispatchEvent(new Event("input", {
+                            bubbles: true,
+                        }));
+                    };
+                    const initialDisabled = get("rotate-all").disabled;
+                    set("character", "o\u0301");
+                    for (const [key, value] of Object.entries({
+                        x1: 450, y1: 1000, x2: 850, y2: 1600,
+                        width: 251,
+                    })) set(key, value);
+                    get("add").click();
+                    const enabled = !get("rotate-all").disabled;
+                    set("rotate-angle", 10);
+                    const guide = get("rotate-preview");
+                    const proposedX = guide.querySelector("line")
+                        ?.getAttribute("x1");
+                    const proposedY = guide.querySelector("line")
+                        ?.getAttribute("y1");
+                    const guideCount = guide.childElementCount;
+                    const guideStatus = get("rotate-preview-status")
+                        .textContent;
+                    set("rotate-angle", 21);
+                    const invalidGuide = guide.childElementCount;
+                    get("rotate-all").click();
+                    const invalid = get("status").textContent;
+                    set("rotate-angle", 20);
+                    set("rotate-pivot-x", 0);
+                    set("rotate-pivot-y", 0);
+                    const clippedGuide = guide.childElementCount;
+                    get("rotate-all").click();
+                    const clipped = get("status").textContent;
+                    set("rotate-pivot-x", 1750);
+                    set("rotate-pivot-y", 2250);
+                    set("rotate-angle", 10);
+                    get("rotate-all").click();
+                    const appliedX = get("preview").querySelector("line")
+                        ?.getAttribute("x1");
+                    const accepted = get("status").textContent;
+                    const undoLabel = get("slant-undo").textContent;
+                    get("slant-undo").click();
+                    const undoneX = get("preview").querySelector("line")
+                        ?.getAttribute("x1");
+                    const redoLabel = get("slant-redo").textContent;
+                    get("slant-redo").click();
+                    const redoneX = get("preview").querySelector("line")
+                        ?.getAttribute("x1");
+                    set("character", "ñ");
+                    const missingDisabled = get("rotate-all").disabled;
+                    return JSON.stringify({ initialDisabled, enabled,
+                        proposedX, proposedY, guideCount, guideStatus,
+                        invalidGuide, invalid, clippedGuide, clipped,
+                        appliedX, accepted, undoLabel, undoneX,
+                        redoLabel, redoneX, missingDisabled });
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const result = JSON.parse(response.result.value);
+            assert.equal(result.initialDisabled, true);
+            assert.equal(result.enabled, true);
+            assert.equal(result.guideCount, 1);
+            assert.match(result.guideStatus, /preview only, draft unchanged/);
+            assert.equal(result.invalidGuide, 0);
+            assert.match(result.invalid, /Rotation requires/);
+            assert.equal(result.clippedGuide, 0);
+            assert.match(result.clipped, /clips glyph cell/);
+            assert.match(result.accepted, /Rotated all authored/);
+            assert.equal(result.undoLabel, "Undo last glyph rotation");
+            assert.equal(result.redoLabel, "Redo last glyph rotation");
+            assert.equal(result.missingDisabled, true);
+            assert.equal(result.undoneX, "450");
+            assert.equal(result.appliedX, result.redoneX);
+            assert.equal(result.proposedX, result.appliedX);
+            assert.notEqual(result.proposedX, result.undoneX);
+            assert.deepEqual(requests, baseline,
+                "local rotation and recovery do not call the Rust backend");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
