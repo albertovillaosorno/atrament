@@ -1415,6 +1415,22 @@ ink and explicit missing-glyph refusal without replacing an accepted PDF.
 This partial feature does not substitute unknown mathematical symbols or
 claim full mathematical typesetting.
 
+## Standalone invisible glyph admission parity — 2026-11-04
+
+The native and browser exact-glyph validators now refuse seven isolated
+Unicode formatting scalars as physical ink keys: U+200B, U+200C, U+200D,
+U+2060, U+FE0E, U+FE0F and U+FEFF. These are zero-width/format controls,
+not visible pen shapes when selected alone. Previously both engines accepted
+them as authored TSV glyph identities despite the visible-ink contract.
+
+Red-before/green-after browser regressions verify TSV import/export and
+editor refusal preserve earlier valid downloaded strokes. A native Rust
+regression checks direct authoring, imported TSV and PDF replacement refusal
+for each scalar without modifying the accepted destination. Joined ZWJ emoji,
+visible variation-selector glyphs and separately authored no-break spaces
+retain their exact UTF-8 identities. This is a deliberately bounded guard,
+not a full Unicode general-category classification or baseline font.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

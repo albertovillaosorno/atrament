@@ -1717,6 +1717,12 @@ fn is_exact_visible_grapheme(
         && !grapheme.chars().any(|ch| ch.is_control()
             || matches!(ch, '\u{2028}' | '\u{2029}'))
         && grapheme != " "
+        // These standalone default-ignorable format scalars are not
+        // physical ink. In joined emoji or a presentation sequence,
+        // the same scalar remains part of an otherwise visible grapheme.
+        && !matches!(grapheme,
+            "\u{200b}" | "\u{200c}" | "\u{200d}" | "\u{2060}"
+                | "\u{fe0e}" | "\u{fe0f}" | "\u{feff}")
         && boundaries.grapheme_count(grapheme) == 1
 }
 

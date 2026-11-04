@@ -2438,6 +2438,61 @@ fn saved_glyph_library_rejects_structural_separators_before_pdf_replacement() {
 }
 
 #[test]
+fn standalone_zero_width_scalars_cannot_name_physical_glyph_ink() {
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("pdf");
+    let filename = source.to_str().expect("selected TSV path");
+    let destination = target.to_str().expect("selected PDF path");
+    fs::write(&target, b"existing selected PDF")
+        .expect("write test-owned PDF sentinel");
+    for invisible in [
+        "\u{200b}", "\u{200c}", "\u{200d}", "\u{2060}",
+        "\u{fe0e}", "\u{fe0f}", "\u{feff}",
+    ] {
+        let ink = [
+            "--glyph-stroke", invisible, "500", "500", "1800",
+            "3000", "250", "#123456",
+        ];
+        let error = execute_glyph_library(&args(&ink))
+            .expect_err("a bare zero-width format scalar cannot draw ink");
+        assert!(error.contains("visible grapheme"), "{error}");
+        let bytes = format!(
+            concat!(
+                "atrament.glyph-strokes.v1\n",
+                "{}\t500\t500\t1800\t3000\t250\t#123456\n",
+            ),
+            invisible
+        );
+        fs::write(&source, bytes.as_bytes())
+            .expect("write test-owned invalid glyph library");
+        let error = execute_glyph_library(&args(&[
+            "--profile", filename,
+        ])).expect_err("native TSV import must refuse hidden glyph keys");
+        assert!(error.contains("visible grapheme"), "{error}");
+        let error = execute_notebook(&args(&[
+            "--export-paper", "pdf", "--printed-sheet", "false",
+            "--glyph-file", filename, "--place-text", "1",
+            "30000", "40000", "a", "--output", destination,
+            "--replace",
+        ])).expect_err("invalid TSV must not replace selected PDF");
+        assert!(error.contains("visible grapheme"), "{error}");
+        assert_eq!(fs::read(&target).expect("unchanged PDF"),
+            b"existing selected PDF");
+        assert_eq!(fs::read(&source).expect("unchanged TSV"),
+            bytes.as_bytes());
+    }
+    for visible in ["👩\u{200d}💻", "❤\u{fe0f}", "\u{a0}"] {
+        let text = execute_glyph_library(&args(&[
+            "--glyph-stroke", visible, "500", "500", "1800",
+            "3000", "250", "#123456",
+        ]));
+        assert!(text.is_ok(), "visible grapheme refused: {visible:?}");
+    }
+    fs::remove_file(&source).expect("remove own TSV");
+    fs::remove_file(&target).expect("remove own PDF");
+}
+
+#[test]
 fn glyph_audit_reports_unicode_whitespace_requiring_authored_ink() {
     let sample = "a\u{a0}a\u{2009}a\u{202f}a";
     let base = args(&[

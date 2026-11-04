@@ -72,6 +72,26 @@ test("Unicode row separators cannot become authored browser TSV ink", () => {
     }
 });
 
+test("standalone zero-width controls are not authorable glyph ink", () => {
+    const invisible = ["\u200B", "\u200C", "\u200D", "\u2060",
+        "\uFE0E", "\uFE0F", "\uFEFF"];
+    for (const glyph of invisible) {
+        assert.throws(() => encodeGlyphLibrary([stroke(glyph)]),
+            /visible Unicode grapheme/,
+            "default-ignorable standalone scalar is not a visible glyph");
+        const source = header
+            + `${glyph}\t100\t200\t3000\t4200\t250\t#A1B2C3\n`;
+        assert.throws(() => parseGlyphLibrary(source),
+            /visible Unicode grapheme/,
+            "native must refuse the same unrenderable exact key");
+    }
+    for (const visible of ["👩\u200D💻", "❤\uFE0F", "\u00A0"]) {
+        const original = [stroke(visible)];
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(original)),
+            original, "joiners and selectors inside real glyphs survive");
+    }
+});
+
 test("candidate pen paths respect directed endpoints and exact Unicode", () => {
     const nfd = "n\u{303}";
     const source = [
@@ -716,6 +736,29 @@ test("glyph editor refuses structural separators without replacing TSV",
                 "invalid row structure must not mutate authored ink");
         }
         editor.reset();
+    } finally {
+        ui.restore();
+    }
+});
+
+test("zero-width glyph refusal preserves browser-authored draft", async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        editor.start();
+        get("add").dispatch("click");
+        get("save").dispatch("click");
+        const accepted = await downloads[0].text();
+        for (const hidden of ["\u200B", "\u200C", "\u200D",
+            "\u2060", "\uFE0E", "\uFE0F", "\uFEFF"]) {
+            get("character").value = hidden;
+            get("character").dispatch("input");
+            get("add").dispatch("click");
+            assert.match(get("status").textContent, /visible Unicode/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), accepted,
+                "refused invisible identity never replaces exact glyph ink");
+        }
     } finally {
         ui.restore();
     }

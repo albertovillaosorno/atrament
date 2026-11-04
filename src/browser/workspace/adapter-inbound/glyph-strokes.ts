@@ -61,7 +61,11 @@ function exactGrapheme(value: string): boolean {
         || new TextEncoder().encode(value).length > 64
         // Native flow and coverage audits reserve these two Unicode row
         // separators as structure; they can never name explicit pen ink.
-        || /[\p{Cc}\u2028\u2029]/u.test(value) || value === " ") {
+        || /[\p{Cc}\u2028\u2029]/u.test(value) || value === " "
+        // Only standalone default-ignorable scalars are refused; a ZWJ
+        // emoji or a visible glyph with variation selector is still exact.
+        || /^[\u200B-\u200D\u2060\uFE0E\uFE0F\uFEFF]$/u
+            .test(value)) {
         return false;
     }
     if (typeof Intl.Segmenter !== "function") return false;
