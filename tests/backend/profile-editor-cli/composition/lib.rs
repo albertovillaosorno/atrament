@@ -6964,6 +6964,11 @@ fn native_whole_glyph_rotation_is_bounded_and_preserves_exact_identity() {
         assert_eq!(fs::read(&output).expect("sentinel remains"),
             b"prior approved TSV");
     }
+    assert!(execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "1300", "1626", "1301", "1626",
+        "250", "#243647",
+        "--rotate-glyph", nfd, "20", "1750", "2250",
+    ])).is_err(), "rounded rotation must reject a collapsed pen line");
     assert_eq!(fs::read(&source).expect("original stays"), original);
     fs::remove_file(source).expect("cleanup source");
     fs::remove_file(output).expect("cleanup destination");

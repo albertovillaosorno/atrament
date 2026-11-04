@@ -5213,6 +5213,10 @@ test("whole-glyph rotation preserves directed exact Unicode ink", () => {
             glyph, angle, x, y));
     }
     assert.deepEqual(source, original);
+    assert.throws(() => rotateGlyphStrokes([{
+        grapheme: nfd, x1: 1300, y1: 1626,
+        x2: 1301, y2: 1626, width: 250, color: "#243647",
+    }], nfd, 20, 1750, 2250), /collapses a pen segment/);
     const full = Array.from({ length: 4096 }, (_, i) => ({
         ...stroke(nfd), x1: 1200, y1: 1600,
         x2: 1300 + i % 100, y2: 1700,
