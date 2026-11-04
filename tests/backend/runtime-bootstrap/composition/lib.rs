@@ -2931,7 +2931,7 @@ fn cli_refuses_sha_valid_but_invalid_section_json_atomically() {
 
 
 #[test]
-fn native_handwriting_preview_replays_seeded_exact_glyph_and_refuses_bad_input() {
+fn native_handwriting_preview_replays_seeded_glyph_and_refuses_bad_input() {
     use atrament_session_runtime::HandwritingProfileGateway;
     use atrament_handwriting_statistics::{
         Dimension, DimensionStatistics, HandwritingStatisticsProfile,
@@ -2952,7 +2952,10 @@ fn native_handwriting_preview_replays_seeded_exact_glyph_and_refuses_bad_input()
         &profile, &UnicodeGraphemeSegmentation,
     ).expect("canonical handwriting")).expect("UTF8");
     let request = |glyph: &str, dimension: &str, occurrence: &str| {
-        format!("{{\"profile\":{json},\"grapheme\":\"{glyph}\",\"dimension\":\"{dimension}\",\"occurrence\":{occurrence}}}")
+        format!(
+            "{{\"profile\":{json},\"grapheme\":\"{glyph}\",\
+             \"dimension\":\"{dimension}\",\"occurrence\":{occurrence}}}"
+        )
     };
     let gateway = bootstrap::HandwritingGateway;
     let first = gateway.numeric_preview_json(
@@ -2990,7 +2993,9 @@ fn native_handwriting_preview_replays_seeded_exact_glyph_and_refuses_bad_input()
 #[test]
 fn localhost_file_store_roundtrips_two_native_profiles_and_refuses_stale() {
     use atrament_notebook_profile::NotebookProfile;
-    use atrament_session_runtime::{ProfileFileError, ProfileFileGateway, ProfileFileKind};
+    use atrament_session_runtime::{
+        ProfileFileError, ProfileFileGateway, ProfileFileKind,
+    };
     use atrament_handwriting_statistics::HandwritingStatisticsProfile;
     use atrament_handwriting_statistics_json::encode_statistics_json;
     use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
@@ -3027,7 +3032,10 @@ fn localhost_file_store_roundtrips_two_native_profiles_and_refuses_stale() {
     assert_eq!(store.save(ProfileFileKind::Notebook, "paper.json",
         br#"{"bad":true}"#, &revision), Err(ProfileFileError::InvalidInput));
     assert_eq!(store.save(ProfileFileKind::Notebook, "paper.json",
-        notebook.as_bytes(), "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+        notebook.as_bytes(), concat!(
+            "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        )),
         Err(ProfileFileError::Conflict));
     let mut updated = NotebookProfile::default();
     updated.page_numbers = true;
@@ -3062,7 +3070,8 @@ fn localhost_file_store_roundtrips_two_native_profiles_and_refuses_stale() {
         host, &origin, &secret, &handshake,
         &bootstrap::HandwritingGateway, &bootstrap::NotebookGateway,
     ).with_profile_file_gateway(&store);
-    let mut application = atrament_session_application::SessionApplication::default();
+    let mut application =
+        atrament_session_application::SessionApplication::default();
     let request = |method: &str, endpoint: &str, revision: &str,
         authenticated: bool, body: &str| -> Vec<u8> {
         let authorization = if authenticated {
@@ -3070,11 +3079,13 @@ fn localhost_file_store_roundtrips_two_native_profiles_and_refuses_stale() {
         } else { String::new() };
         let mutation = if method == "POST" {
             format!("Origin: {origin}\r\nContent-Type: application/json\r\n\
-                X-Atrament-Profile-Revision: {revision}\r\nContent-Length: {}\r\n",
+                X-Atrament-Profile-Revision: {revision}\r\n\
+                Content-Length: {}\r\n",
                 body.len())
         } else { String::new() };
         format!("{method} {endpoint} HTTP/1.1\r\nHost: {host}\r\n\
-            {authorization}{mutation}X-Atrament-Profile-Name: paper.json\r\n\r\n{body}")
+            {authorization}{mutation}\
+            X-Atrament-Profile-Name: paper.json\r\n\r\n{body}")
             .into_bytes()
     };
     let snapshot = fs::read(directory.0.join("notebook-paper.json"))
@@ -3105,10 +3116,14 @@ fn localhost_file_store_roundtrips_two_native_profiles_and_refuses_stale() {
     assert!(String::from_utf8_lossy(&ink_read).contains(&ink_revision));
 
     let outside = OwnedProfileFile::new(notebook.as_bytes());
-    std::os::unix::fs::symlink(&outside.0, directory.0.join("notebook-link.json"))
+    std::os::unix::fs::symlink(
+        &outside.0, directory.0.join("notebook-link.json"),
+    )
         .expect("test-owned symlink");
     assert_eq!(store.load(ProfileFileKind::Notebook, "link.json")
-        .expect_err("symlink cannot leak outside file"), ProfileFileError::InvalidInput);
+        .expect_err("symlink cannot leak outside file"),
+        ProfileFileError::InvalidInput,
+    );
     assert_eq!(store.save(ProfileFileKind::Notebook, "link.json",
         edited.as_bytes(), "new"), Err(ProfileFileError::InvalidInput));
     fs::remove_file(directory.0.join("notebook-link.json"))
