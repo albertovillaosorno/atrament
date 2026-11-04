@@ -719,6 +719,24 @@ of missing Unicode shapes before an existing selected export can be
 replaced. This is not whitespace-font synthesis, implicit fallback or
 completion of the bilingual language/glyph inventory.
 
+## One-level Markdown list soft continuations (partial) — 2026-11-04
+
+The native Rust flow compiler joins a two- or three-ASCII-space-indented
+ordinary source line with the immediately preceding unordered, numbered or
+checkbox list item. It lays out the joined content using the existing
+hanging indent and exactly one bullet or task-box ornament. New list markers,
+headings, quotes, blank lines and code fences remain structural boundaries;
+unindented lines still start an ordinary paragraph and four-space lines stay
+literal handwriting. No nested list semantics or persisted list blocks are
+claimed.
+
+Three native regressions compare exact real PDF/transparent PNG bytes for
+seven canonical versus continued list spellings, distinguish unindented and
+four-space following lines, check a checkbox item spanning multiple physical
+pages, and preserve heading/quote/fence and blank-line boundaries. Missing
+continuation glyphs still refuse without replacing an accepted export.
+This remains CLI-only layout, not a saved semantic notebook.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

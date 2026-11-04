@@ -1774,3 +1774,119 @@ test('unapproved Unicode spaces refuse before replacing real PDF/PNG',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('two/three-space Markdown list continuations keep one native marker',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-list-continue-'));
+        try {
+            const cases = [
+                ['- a\n  ó\n   o\u0301', '- a ó o\u0301'],
+                ['* a\n   ó', '* a ó'],
+                ['+ a\n  ó', '+ a ó'],
+                ['- [x] a\n  ó', '- [x] a ó'],
+                ['- [ ] a\n   o\u0301', '- [ ] a o\u0301'],
+                ['1. a\n   ó\n  o\u0301', '1. a ó o\u0301'],
+                ['2) a\n  ó', '2) a ó'],
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const [source, singleLine] of cases) {
+                    const one = render(dir, singleLine, format, numberedInk);
+                    assert.equal(one.result.status, 0, one.result.stderr);
+                    const expected = readFileSync(one.output);
+                    const continued = render(dir, source, format, numberedInk);
+                    assert.equal(continued.result.status, 0,
+                        JSON.stringify(source) + ': '
+                            + continued.result.stderr);
+                    assert.deepEqual(readFileSync(continued.output), expected,
+                        `one ${format} list marker and same authored glyphs`);
+                }
+                const separate = render(dir, '- a\nó', format);
+                assert.equal(separate.result.status, 0,
+                    separate.result.stderr);
+                const distinct = readFileSync(separate.output);
+                const hanging = render(dir, '- a\n  ó', format);
+                assert.equal(hanging.result.status, 0,
+                    hanging.result.stderr);
+                const hangingBytes = readFileSync(hanging.output);
+                assert.notDeepEqual(hangingBytes, distinct,
+                    'unindented row remains a separate list/body block');
+                const literal = render(dir, '- a\n    ó', format);
+                assert.equal(literal.result.status, 0,
+                    literal.result.stderr);
+                assert.notDeepEqual(readFileSync(literal.output),
+                    hangingBytes,
+                    'four-space indentation remains physically authored');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('continued list wraps across sheets and missing glyph refuses atomically',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-list-pages-'));
+        try {
+            const region = [
+                '--flow-region', '30000', '40000', '50000', '30000',
+            ];
+            const longWords = Array(34).fill('a');
+            const continued = '- [x] a\n  ' + longWords.slice(1).join('\n  ');
+            const single = '- [x] ' + longWords.join(' ');
+            for (const format of ['pdf', 'png']) {
+                const page = format === 'pdf' ? 1 : 2;
+                const expected = render(dir, single, format, region,
+                    '--flow-markdown', page);
+                assert.equal(expected.result.status, 0,
+                    expected.result.stderr);
+                const bytes = readFileSync(expected.output);
+                const result = render(dir, continued, format, region,
+                    '--flow-markdown', page);
+                assert.equal(result.result.status, 0,
+                    result.result.stderr);
+                assert.deepEqual(readFileSync(result.output), bytes,
+                    `continuation keeps identical physical ${format} pages`);
+                if (format === 'pdf') {
+                    assert.match(bytes.toString('latin1'), /\/Count [2-9]\b/);
+                    assert.equal(bytes.toString('latin1')
+                        .split('0.118 0.188 0.290 RG').length - 1,
+                        6, 'one checked-box ornament despite many rows');
+                }
+                const missing = render(dir, '- a\n  x', format);
+                assert.notEqual(missing.result.status, 0);
+                assert.match(missing.result.stderr,
+                    /missing authored glyph shapes/);
+                assert.deepEqual(readFileSync(missing.output), bytes,
+                    'refusal preserves existing complete native export');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('continued list stops at heading quote fence and paragraph boundaries',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-list-boundary-'));
+        try {
+            const cases = [
+                ['- a\n  ó\n# a', '- a ó\n# a'],
+                ['1. a\n   ó\n- o\u0301', '1. a ó\n- o\u0301'],
+                ['- [x] a\n  ó\n> o\u0301', '- [x] a ó\n> o\u0301'],
+                ['- a\n  ó\n\na', '- a ó\n\na'],
+                ['- a\n  ó\n~~~\na\n~~~', '- a ó\n~~~\na\n~~~'],
+                ['- a\n  ó  \n   o\u0301', '- a ó\no\u0301'],
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const [continued, canonical] of cases) {
+                    const one = render(dir, canonical, format, numberedInk);
+                    assert.equal(one.result.status, 0, one.result.stderr);
+                    const expected = readFileSync(one.output);
+                    const actual = render(dir, continued, format, numberedInk);
+                    assert.equal(actual.result.status, 0, actual.result.stderr);
+                    assert.deepEqual(readFileSync(actual.output), expected,
+                        `list boundary remains canonical in ${format}`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

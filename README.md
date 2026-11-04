@@ -503,9 +503,12 @@ Paired trailing backslashes remain literal and need authored glyphs.
 Consecutive Markdown blank lines collapse to one 4-mm paragraph gap, with
 leading/trailing blanks ignored. Plain-text blank lines instead
 reserve full physical writing rows; they count toward the 128-row limit and
-can create a new page. Headings/lists end a paragraph; adjacent `>` quote
-lines form one soft-wrapped quoted paragraph, with the same two-space hard
-break and blank-paragraph rules. A Markdown
+can create a new page. Headings and lists end ordinary paragraphs.
+A list item may soft-continue with a two- or three-space-indented ordinary
+line, preserving one bullet, checkbox or numbered hanging indent after
+wrapping; four-space indentation remains literal and nested lists are not
+supported. Adjacent `>` quote lines form one soft-wrapped quoted paragraph,
+with the same two-space hard-break and blank-paragraph rules. A Markdown
 heading keeps its first following visible row on the same physical page when
 there is room for both (including an optional 4-mm paragraph gap); an
 ending heading and a sheet too short for two rows remain valid. Long text

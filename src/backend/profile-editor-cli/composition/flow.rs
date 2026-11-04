@@ -1319,6 +1319,30 @@ fn flush_paragraph(
     Ok(())
 }
 
+// Join an ordinary 2..3-space-indented line to the prior one-level list
+// item, preserving the native hanging indent and a single initial marker.
+// A new block or four-space literal line flushes the previous item instead.
+fn continue_list_item(
+    layout: &mut Layout<'_>, paragraph: &mut String, previous: LineStyle,
+    line: &str, style: LineStyle, body: &str, hard_break: bool,
+) -> Result<bool, String> {
+    if paragraph.is_empty() || !matches!(previous,
+        LineStyle::Bullet | LineStyle::Ordered | LineStyle::Task(_)) {
+        return Ok(false);
+    }
+    let indent = line.bytes().take_while(|byte| *byte == b' ').count();
+    if (2..=3).contains(&indent) && matches!(style, LineStyle::Body) {
+        paragraph.push(' ');
+        paragraph.push_str(body);
+        if hard_break {
+            flush_paragraph(layout, paragraph, previous)?;
+        }
+        return Ok(true);
+    }
+    flush_paragraph(layout, paragraph, previous)?;
+    Ok(false)
+}
+
 // A fenced row is literal handwriting with physical hard breaks. Only
 // the fence delimiter is syntax: no invented code font, glyph, or style.
 fn handle_markdown_code_line(
@@ -1518,6 +1542,11 @@ pub(super) fn layout_flow_with_region(
             return Err("empty Markdown block refused".into());
         }
         if source.format == FlowFormat::Markdown
+            && continue_list_item(&mut layout, &mut paragraph,
+                paragraph_style, input_line, style, body, hard_break)? {
+            continue;
+        }
+        if source.format == FlowFormat::Markdown
             && matches!(style, LineStyle::Body | LineStyle::Quote)
         {
             // A quoted paragraph merges adjacent quoted soft lines, but
@@ -1542,7 +1571,15 @@ pub(super) fn layout_flow_with_region(
                 && let Some(gap) = following_heading_gap(source_lines.clone()) {
                 layout.keep_heading_with_next(gap)?;
             }
-            layout.layout_line(body, style)?;
+            if source.format == FlowFormat::Markdown
+                && matches!(style,
+                    LineStyle::Bullet | LineStyle::Ordered | LineStyle::Task(_))
+            {
+                paragraph_style = style;
+                paragraph.push_str(body);
+            } else {
+                layout.layout_line(body, style)?;
+            }
         }
     }
     if fence.is_some() {
