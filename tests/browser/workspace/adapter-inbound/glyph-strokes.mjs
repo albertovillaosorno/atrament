@@ -5,7 +5,8 @@ import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
     scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
-    composeAccentedGlyph, fillMissingBilingualBaseline, varyGlyphStrokes,
+    composeAccentedGlyph, fillMissingBilingualBaseline,
+    missingBilingualBaseline, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
     translateCandidatePath } =
@@ -370,7 +371,7 @@ function mountEditor() {
         "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-compose",
         "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
-        "glyph-seed-baseline",
+        "glyph-seed-baseline", "glyph-baseline-coverage",
         "glyph-seed-spanish", "glyph-seed-spanish-nfd",
         "glyph-seed-upper-spanish", "glyph-seed-upper-spanish-nfd",
         "glyph-seed-punctuation", "glyph-seed-quotes",
@@ -4024,6 +4025,25 @@ test("text marks fill keeps custom ink and rejects over-cap", async () => {
     }
 });
 
+test("baseline coverage is read-only and tracks separate Unicode keys",
+    () => {
+        const source = [stroke("á"), stroke("n\u0303"), stroke("∞"),
+            stroke("á")];
+        const saved = encodeGlyphLibrary(source);
+        const missing = missingBilingualBaseline(source);
+        assert.equal(missing.length, 112);
+        assert.equal(new Set(missing).size, 112);
+        assert.equal(missing.includes("á"), false);
+        assert.equal(missing.includes("a\u0301"), true);
+        assert.equal(missing.includes("n\u0303"), false);
+        assert.equal(missing.includes("ñ"), true);
+        assert.ok(missing.includes("-"));
+        assert.equal(encodeGlyphLibrary(source), saved);
+        assert.equal(missingBilingualBaseline(fillMissingBilingualBaseline(
+            source, 1550, 2450, 1100, 250, "#243647",
+            { dx: 0, lift: 0 })).length, 0);
+    });
+
 test("one atomic fill authors only the 114 exact bilingual baseline", () => {
     const existing = [
         { ...stroke("ó"), color: "#102030" },
@@ -4084,13 +4104,19 @@ test("baseline browser button is explicit, idempotent and session-gated",
         try {
             const { editor, get, downloads } = ui;
             assert.equal(get("seed-baseline").disabled, true);
+            assert.match(get("baseline-coverage").textContent,
+                /requires a compatible backend session/);
             get("seed-baseline").dispatch("click");
             assert.equal(downloads.length, 0);
             editor.start();
+            assert.match(get("baseline-coverage").textContent,
+                /0\/114 exact glyphs; 114 missing/);
             get("seed-baseline").dispatch("click");
             assert.match(get("status").textContent,
                 /Filled 114 missing bilingual baseline glyphs/);
             assert.equal(downloads.length, 0, "fill is an unsaved draft");
+            assert.match(get("baseline-coverage").textContent,
+                /114\/114 exact glyphs; complete/);
             get("save").dispatch("click");
             const original = await downloads.at(-1).text();
             const filled = parseGlyphLibrary(original);
@@ -4104,6 +4130,8 @@ test("baseline browser button is explicit, idempotent and session-gated",
             assert.equal(await downloads.at(-1).text(), original);
             editor.reset();
             assert.equal(get("seed-baseline").disabled, true);
+            assert.match(get("baseline-coverage").textContent,
+                /requires a compatible backend session/);
         } finally {
             ui.restore();
         }
@@ -4121,9 +4149,13 @@ test("refused baseline browser fill preserves an imported custom i", async () =>
             size: bytes.length, arrayBuffer: async () => bytes.buffer,
         }];
         await get("load").dispatch("change");
+        assert.match(get("baseline-coverage").textContent,
+            /1\/114 exact glyphs; 113 missing/);
         get("seed-baseline").dispatch("click");
         assert.match(get("status").textContent,
             /Acute i requires one stem and a clear upper dot/);
+        assert.match(get("baseline-coverage").textContent,
+            /1\/114 exact glyphs; 113 missing/);
         assert.equal(downloads.length, 0,
             "refusal does not automatically download an incomplete draft");
         get("save").dispatch("click");

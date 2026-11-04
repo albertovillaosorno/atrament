@@ -1090,7 +1090,12 @@ Firefox WebDriver BiDi test now exercises the visible button, verifies a
 clipped attempt cannot save, confirms the subsequent successful unsaved fill
 and idempotence, captures the explicitly downloaded TSV without extra HTTP
 requests, and reopens its exact bytes in Rust PDF/PNG with an unknown glyph
-refusal preserving the accepted PDF. The full P1-012 task stays open.
+refusal preserving the accepted PDF. A subsequent read-only coverage
+indicator shows the number of exact authored text keys (0–114) as a
+session-local count, with the first eight missing keys as visible hints;
+NFD keys are labeled separately from visually matching NFC accents. Its
+status updates on import, authoring, refusal, fill and reset without saving,
+normalizing or transmitting the draft. The full P1-012 task stays open.
 
 ## Explicit connected-pen o/a drafts (partial) — 2026-11-04
 

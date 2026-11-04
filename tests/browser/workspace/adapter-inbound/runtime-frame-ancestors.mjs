@@ -13666,21 +13666,30 @@ test(
                             names.push(this.download);
                         };
                         const enabled = !get("seed-baseline").disabled;
+                        const coverageBefore =
+                            get("baseline-coverage").textContent;
                         get("circle-x").value = "200";
                         get("seed-baseline").click();
                         const refused = get("status").textContent;
+                        const coverageRefused =
+                            get("baseline-coverage").textContent;
                         const before = blobs.length;
                         get("circle-x").value = "1550";
                         get("seed-baseline").click();
                         const filled = get("status").textContent;
+                        const coverageFilled =
+                            get("baseline-coverage").textContent;
                         const unsaved = blobs.length;
                         get("seed-baseline").click();
                         const already = get("status").textContent;
+                        const coverageAlready =
+                            get("baseline-coverage").textContent;
                         get("save").click();
                         return JSON.stringify({ enabled, refused, before,
                             filled, unsaved, already, names,
-                            files: await Promise.all(blobs.map((blob) =>
-                                blob.text())) });
+                            coverageBefore, coverageRefused, coverageFilled,
+                            coverageAlready, files: await Promise.all(
+                                blobs.map((blob) => blob.text())) });
                     } finally {
                         URL.createObjectURL = makeURL;
                         HTMLAnchorElement.prototype.click = anchorClick;
@@ -13695,6 +13704,9 @@ test(
             assert.equal(actual.enabled, true,
                 "button is available only after admitted session");
             assert.match(actual.refused, /fit inside glyph cell/);
+            assert.match(actual.coverageBefore, /0\/114 exact glyphs/);
+            assert.equal(actual.coverageRefused, actual.coverageBefore,
+                "refused geometry cannot alter the live coverage audit");
             assert.equal(actual.before, 0,
                 "refused candidate cannot trigger a download");
             assert.match(actual.filled,
@@ -13702,6 +13714,9 @@ test(
             assert.equal(actual.unsaved, 0, "fill is a local unsaved draft");
             assert.match(actual.already,
                 /All 114 bilingual text glyphs already have ink/);
+            assert.match(actual.coverageFilled,
+                /114\/114 exact glyphs; complete/);
+            assert.equal(actual.coverageAlready, actual.coverageFilled);
             assert.deepEqual(actual.names, ["my-glyph-strokes.tsv"]);
             const expectedRows = fillMissingBilingualBaseline([], 1550,
                 2450, 1100, 250, "#243647", { dx: 0, lift: 0 });

@@ -1913,6 +1913,28 @@ const BILINGUAL_ACCENTS = [
     ["a", "á"], ["e", "é"], ["i", "í"], ["o", "ó"],
     ["u", "ú"], ["n", "ñ"], ["u", "ü"],
 ];
+function bilingualAccentVariants(uppercase, normalization) {
+    return BILINGUAL_ACCENTS.map(([base, target]) => ({
+        source: uppercase ? base.toUpperCase() : base,
+        exact: (uppercase ? target.toUpperCase() : target)
+            .normalize(normalization),
+    }));
+}
+const BILINGUAL_VARIANTS = [
+    ...bilingualAccentVariants(false, "NFC"),
+    ...bilingualAccentVariants(false, "NFD"),
+    ...bilingualAccentVariants(true, "NFC"),
+    ...bilingualAccentVariants(true, "NFD"),
+];
+const BILINGUAL_KEYS = [
+    ...BILINGUAL_DIRECT, ...BILINGUAL_VARIANTS.map(({ exact }) => exact),
+];
+// Reporting is read-only, with independent NFC and NFD keys. No implicit
+// normalization, inferred glyph shape, or persistent state is involved.
+export function missingBilingualBaseline(strokes) {
+    const authored = new Set(strokes.map((stroke) => stroke.grapheme));
+    return BILINGUAL_KEYS.filter((glyph) => !authored.has(glyph));
+}
 export function fillMissingBilingualBaseline(existing, x, y, r, pen, color, pos) {
     const authored = new Set(existing.map((stroke) => stroke.grapheme));
     const next = existing.slice();
@@ -1922,17 +1944,10 @@ export function fillMissingBilingualBaseline(existing, x, y, r, pen, color, pos)
             authored.add(glyph);
         }
     }
-    for (const uppercase of [false, true]) {
-        for (const normalization of ["NFC", "NFD"]) {
-            for (const [base, target] of BILINGUAL_ACCENTS) {
-                const source = uppercase ? base.toUpperCase() : base;
-                const exact = (uppercase ? target.toUpperCase() : target)
-                    .normalize(normalization);
-                if (!authored.has(exact)) {
-                    next.push(...composeAccentedGlyph(next, source, exact, color, pos));
-                    authored.add(exact);
-                }
-            }
+    for (const { source, exact } of BILINGUAL_VARIANTS) {
+        if (!authored.has(exact)) {
+            next.push(...composeAccentedGlyph(next, source, exact, color, pos));
+            authored.add(exact);
         }
     }
     if (next.length === existing.length)
@@ -2042,6 +2057,7 @@ export function createGlyphStrokeEditor() {
     const seedCapitals = required("glyph-seed-capitals");
     const seedTextMarks = required("glyph-seed-text-marks");
     const seedBaseline = required("glyph-seed-baseline");
+    const baselineCoverage = required("glyph-baseline-coverage");
     const centerX = required("glyph-circle-x");
     const centerY = required("glyph-circle-y");
     const radius = required("glyph-circle-radius");
@@ -2867,6 +2883,22 @@ export function createGlyphStrokeEditor() {
         }
     };
     const render = () => {
+        if (!active) {
+            baselineCoverage.textContent =
+                "Bilingual coverage requires a compatible backend session";
+        }
+        else {
+            const missing = missingBilingualBaseline(strokes);
+            const count = BILINGUAL_KEYS.length - missing.length;
+            const display = (glyph) => glyph === glyph.normalize("NFC")
+                ? glyph : `${glyph.normalize("NFC")} (NFD)`;
+            baselineCoverage.textContent = `Bilingual text baseline: `
+                + `${count}/${BILINGUAL_KEYS.length} exact glyphs; `
+                + (missing.length === 0 ? "complete" :
+                    `${missing.length} missing; first: `
+                        + missing.slice(0, 8).map(display).join(", ")
+                        + (missing.length > 8 ? ", …" : ""));
+        }
         if (transformHistory !== null) {
             const expected = transformHistory[transformHistory.side];
             if (strokes.length === 0
