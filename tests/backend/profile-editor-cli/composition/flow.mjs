@@ -779,6 +779,43 @@ test('escaped ordered prefixes stay ordinary native handwriting in PDF and PNG',
         }
     });
 
+test('escaped 9-digit labels remain authored and 10-digit escapes refuse',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-number-limit-'));
+        try {
+            const numberInk = [...'0123456789.'].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '700', '800', '2350', '3100',
+                '250', '#112233',
+            ]);
+            for (const format of ['pdf', 'png']) {
+                const plain = render(dir, '123456789. a', format,
+                    numberInk, '--flow-text');
+                assert.equal(plain.result.status, 0, plain.result.stderr);
+                const expected = readFileSync(plain.output);
+                const escaped = render(dir, '123456789\\. a', format,
+                    numberInk);
+                assert.equal(escaped.result.status, 0,
+                    escaped.result.stderr);
+                assert.deepEqual(readFileSync(escaped.output), expected,
+                    'maximum admitted list label escape is ordinary ink');
+            }
+            const output = join(dir, 'flow-pdf.output');
+            const sentinel = Buffer.from('retain previously exported ink');
+            writeFileSync(output, sentinel);
+            const rejected = render(dir, '1234567890\\. a', 'pdf',
+                numberInk);
+            assert.notEqual(rejected.result.status, 0,
+                'a 10-digit prefix is not admitted as an ordered escape');
+            assert.match(rejected.result.stderr,
+                /missing authored glyph shapes/);
+            assert.match(rejected.result.stderr, /U\+005C/);
+            assert.deepEqual(readFileSync(output), sentinel,
+                'an unsupported escape cannot replace the selected PDF');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('malformed and unauthored number escapes preserve selected PDFs',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-number-escape-'));

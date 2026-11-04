@@ -561,7 +561,10 @@ list/non-list distinction, and indentation neutrality. A missing numeral or
 delimiter shape, unsupported punctuation escape and four-space indent refuse
 without overwriting an existing selected PDF. The compiler still requires
 caller-authored numeral and punctuation strokes and does not persist a
-semantic paragraph/list identity.
+semantic paragraph/list identity. A separate limit regression compares actual
+nine-digit escaped labels against plain handwritten PDF/PNG bytes; a
+10-digit escape stays literal and refuses when its backslash was not
+explicitly authored, without replacing the selected PDF.
 
 ## Repeatable native Markdown flow checks
 
