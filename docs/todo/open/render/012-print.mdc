@@ -133,6 +133,14 @@ missing, fused or trailing-junk delimiters before spool submission. A
 legitimate nested dictionary, CRLF header and terminal comment stay eligible.
 This is still lexical framing, not parsing or decoding the stream payload.
 
+The traditional xref-table trailer also now requires a lexical `/Size`
+entry with a positive, unsigned decimal value. A valid native or compact
+`<< /Size 1>>` spelling remains eligible, while absent, zero, signed,
+non-decimal or duplicated size entries refuse before fake-CUPS invocation.
+Five bad-trailer regressions first demonstrated previous acceptance, then
+verified refusal without mutating the selected PDF. This does not inspect
+all trailer entries, trust arbitrary PDF comments or parse full PDF syntax.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

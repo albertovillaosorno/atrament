@@ -415,7 +415,7 @@ fn xref_stream_tokens_cannot_hide_in_comments_or_string_literals() {
     ].concat().into_bytes();
     assert!(supported_pdf_cross_reference(&nested_stream),
         "legitimate nested xref stream dictionary remains admitted");
-    let commented_tail = String::from_utf8(nested_stream.clone())
+    let commented_tail = String::from_utf8(nested_stream)
         .expect("synthetic xref stream is UTF-8")
         .replace("endstream\nendobj\n",
             "endstream\n% accepted comment\nendobj\n% endobj ignored\n")
@@ -486,6 +486,19 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
         "multiple table subsections with numbered entries remain eligible");
     assert!(supported_pdf_cross_reference(&real_pdf()),
         "native physical-page PDF xref table remains eligible");
+    let compact_size = b"%PDF-1.4\nxref\n0 1\n0000000000 65535 f \n\
+        trailer\n<< /Size 1>>\nstartxref\n9\n%%EOF\n";
+    assert!(supported_pdf_cross_reference(compact_size),
+        "compact numeric Size stays a valid trailer value");
+    let compact_name = compact_size.windows(b"<< /Size".len())
+        .position(|word| word == b"<< /Size")
+        .expect("compact Size fixture has named trailer");
+    let compact_name_bytes = [
+        compact_size.get(..compact_name + 2).expect("first delimiter"),
+        compact_size.get(compact_name + 3..).expect("remaining name"),
+    ].concat();
+    assert!(supported_pdf_cross_reference(&compact_name_bytes),
+        "a trailer dictionary may attach its first name to <<");
     for fake_body in [
         "xref\n",
         "xref\ntrailer\n<< /Size 1 >>\n",
@@ -494,6 +507,11 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
         "xref\n0 1\n0000000000 65535 z \ntrailer\n<< >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1\n",
         "xref\n0 1\n0000000000 65535 f \n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Root 1 0 R >>\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size x >>\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size -1 >>\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 0 >>\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 /Size 2 >>\n",
     ] {
         let fake = format!(
             "%PDF-1.7\n{fake_body}startxref\n9\n%%EOF\n"

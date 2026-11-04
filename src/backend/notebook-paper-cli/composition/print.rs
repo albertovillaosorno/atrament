@@ -246,10 +246,7 @@ fn supported_xref_table(bytes: &[u8]) -> bool {
             return false;
         };
         if first == b"trailer" {
-            return seen_entry && words.next().is_some_and(|word| {
-                word.starts_with(b"<<")
-            }) && words.any(|word| word.windows(2)
-                .any(|pair| pair == b">>"));
+            return seen_entry && supported_xref_table_trailer(words);
         }
         let valid_first = !first.is_empty()
             && first.iter().all(u8::is_ascii_digit);
@@ -277,6 +274,46 @@ fn supported_xref_table(bytes: &[u8]) -> bool {
             seen_entry = true;
         }
     }
+}
+
+// The required trailer /Size is one positive direct decimal, never a
+// missing, duplicate, signed or symbolic value. This is lexical framing;
+// other PDF dictionary entries remain outside the preflight's authority.
+fn supported_xref_table_trailer<'bytes>(
+    mut words: impl Iterator<Item = &'bytes [u8]>,
+) -> bool {
+    let Some(open) = words.next() else { return false; };
+    let Some(attached) = open.strip_prefix(b"<<") else {
+        return false;
+    };
+    // The opening delimiter may touch the first PDF name without a space.
+    let mut pending = (!attached.is_empty()).then_some(attached);
+    let mut seen_size = false;
+    while let Some(token) = pending.take().or_else(|| words.next()) {
+        if token == b">>" {
+            return seen_size;
+        }
+        if token == b"/Size" {
+            if seen_size {
+                return false;
+            }
+            let Some(value) = words.next() else { return false; };
+            let (digits, closes) = value.strip_suffix(b">>")
+                .map_or((value, false), |digits| (digits, true));
+            if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit)
+                || str::from_utf8(digits).ok()
+                    .and_then(|number| number.parse::<usize>().ok())
+                    .is_none_or(|number| number == 0)
+            {
+                return false;
+            }
+            seen_size = true;
+            if closes {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 // These small lexical checks intentionally do not parse PDF object contents

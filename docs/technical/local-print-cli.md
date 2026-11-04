@@ -95,7 +95,10 @@ older PDF 1.0–1.4 headers require the traditional `xref` table form.
 The table form also requires at least one numbered subsection with
 fixed-width decimal offset/generation and `n`/`f` state records, followed by
 a `trailer` dictionary. An `xref` keyword alone or an empty or malformed
-table no longer qualifies for print admission.
+table no longer qualifies for print admission. Its trailer also needs a
+lexically recognizable `/Size` entry with a positive direct ASCII decimal;
+missing, zero, signed, non-decimal or duplicate size tokens refuse. Numeric
+values immediately adjacent to the closing `>>` remain eligible.
 
 The stream type name must be an exact top-level `/Type /XRef` dictionary
 entry; longer names such as `/XRefShadow` and apparent type entries inside
@@ -143,6 +146,9 @@ A seventh regression refuses empty, truncated and invalid traditional
 multi-subsection framing and the unchanged native two-page output.
 The xref-stream regression also rejects six header-only or malformed
 terminal delimiter cases without spooling, while admitting terminal comments.
+
+Five more fake-table cases refuse missing, nonnumeric, zero, negative and
+duplicate `/Size` entries. A valid compact trailer remains eligible.
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.
