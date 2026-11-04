@@ -14,7 +14,9 @@
     "test:print-ready":
       "node --test tests/integration/print-ready-workflow.mjs",
     "test:joined-ink":
-      "node --test tests/integration/joined-varied-handwriting.mjs"
+      "node --test tests/integration/joined-varied-handwriting.mjs",
+    "test:handwriting":
+      "node --test --test-concurrency=1 tests/integration/*handwriting*.mjs"
   },
   "devDependencies": {
     "typescript": "7.0.2"
