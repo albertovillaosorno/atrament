@@ -4758,6 +4758,212 @@ test(
     },
 );
 
+// Keyboard paths use WebDriver's trusted key actions only. Read-only DOM
+// inspection may locate the current focus but must never focus or click a
+// control on behalf of the user.
+async function tabToControl(client, context, target, reverse = false) {
+    for (let step = 0; step < 180; step += 1) {
+        if ((await activeElementIdentity(client, context)).id === target) {
+            return;
+        }
+        if (reverse) {
+            await performTrustedKeyChord(
+                client, context, "\uE008", "\uE004",
+            );
+        } else {
+            await performTrustedKey(client, context, "\uE004");
+        }
+    }
+    throw new Error(`Trusted Tab traversal did not reach ${target}`);
+}
+
+async function replaceWithTrustedKeys(client, context, value) {
+    await performTrustedKeyChord(client, context, "\uE009", "a");
+    await client.command("input.performActions", {
+        actions: [{
+            actions: [...value].flatMap((character) => [
+                { type: "keyDown", value: character },
+                { type: "keyUp", value: character },
+            ]),
+            id: "keyboard",
+            type: "key",
+        }],
+        context,
+    });
+}
+
+test(
+    "Firefox trusted keyboard saves and reopens Rust notebook and ink profiles",
+    { skip: !FIREFOX_AVAILABLE, timeout: 110_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const root = fs.mkdtempSync(".temp/keyboard-profile-journey-");
+        const browserProfile = path.join(root, "firefox");
+        const profiles = path.join(root, "profiles");
+        const bin = path.join(root, "bin");
+        const capturedUrlFile = path.join(root, "test-launch-url");
+        for (const dir of [browserProfile, profiles, bin]) {
+            fs.mkdirSync(dir, { mode: 0o700 });
+        }
+        fs.writeFileSync(path.join(bin, "xdg-open"),
+            '#!/bin/sh\numask 077\nprintf "%s\\n" "$1" > '
+            + '"$ATRAMENT_TEST_LAUNCH_URL_FILE"\n', { mode: 0o700 });
+        const children = [];
+        let bidi;
+        try {
+            const build = spawnSync(PINNED_CARGO, [
+                "build", "--offline", "--quiet", "-p",
+                "atrament_runtime_bootstrap", "--bin", "atrament",
+            ], {
+                env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR },
+                stdio: "inherit",
+            });
+            assert.equal(build.status, 0, "native localhost binary builds");
+            const runtimeEnv = {
+                ...process.env,
+                DISPLAY: ":atrament-keyboard-test",
+                PATH: `${bin}:${process.env.PATH ?? ""}`,
+                ATRAMENT_TEST_LAUNCH_URL_FILE: capturedUrlFile,
+            };
+            delete runtimeEnv.WAYLAND_DISPLAY;
+            const runtime = spawn(RUNTIME_BINARY,
+                ["--profiles-dir", profiles], {
+                    env: runtimeEnv,
+                    stdio: ["ignore", "pipe", "pipe"],
+                });
+            children.push(runtime);
+            const origin = await waitForLine(runtime.stdout, (line) => {
+                try {
+                    const item = JSON.parse(line);
+                    return item.state === "ready" ? item.origin : null;
+                } catch { return null; }
+            }, 15_000, runtime);
+            const launchUrl = fs.readFileSync(capturedUrlFile, "utf8").trim();
+            fs.unlinkSync(capturedUrlFile);
+            assert.match(launchUrl,
+                new RegExp(`^${origin.replaceAll(".", "\\.")}`
+                    + "#session=[a-f0-9]{64}$"));
+            bidi = await startBidiFirefox(browserProfile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context, url: launchUrl, wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+
+            async function read(id, property = "value") {
+                const reply = await bidi.command("script.evaluate", {
+                    expression: `JSON.stringify(document.getElementById(`
+                        + `${JSON.stringify(id)})[`
+                        + `${JSON.stringify(property)}])`,
+                    awaitPromise: false,
+                    resultOwnership: "none",
+                    target: { context: tab.context },
+                });
+                assert.equal(reply.type, "success");
+                assert.equal(reply.result.type, "string");
+                return JSON.parse(reply.result.value);
+            }
+            async function waitStatus(id, expected) {
+                for (let attempt = 0; attempt < 100; attempt += 1) {
+                    if (await read(id, "textContent") === expected) return;
+                    await new Promise((resolve) => setTimeout(resolve, 50));
+                }
+                throw new Error(`Local profile action did not settle: ${id}`);
+            }
+            const context = tab.context;
+            await waitStatus("notebook-status",
+                "Edit metadata, then save JSON.");
+            await waitStatus("handwriting-status",
+                "Native statistics loaded · edit, validate, "
+                + "and download JSON. No glyph rendering yet.");
+
+            await tabToControl(bidi, context, "notebook-date-style");
+            await performTrustedKey(bidi, context, "\uE015");
+            assert.equal(await read("notebook-date-style"), "line");
+            await tabToControl(bidi, context, "notebook-date-placement");
+            await performTrustedKey(bidi, context, "\uE015");
+            assert.equal(await read("notebook-date-placement"), "top-left");
+            await tabToControl(bidi, context, "notebook-date-text");
+            await replaceWithTrustedKeys(bidi, context, "2026-11-03");
+            await tabToControl(bidi, context, "notebook-local-name");
+            await replaceWithTrustedKeys(bidi, context, "keyboard.json");
+            await tabToControl(bidi, context, "notebook-local-save");
+            await performTrustedKey(bidi, context, "\uE007");
+            await waitStatus("notebook-status",
+                "Native notebook saved in selected local directory.");
+            const notebookFile = path.join(profiles, "notebook-keyboard.json");
+            const savedNotebook = fs.readFileSync(notebookFile, "utf8");
+            const notebook = JSON.parse(savedNotebook);
+            assert.deepEqual((({ date_style, date_placement, date_text }) => ({
+                date_style, date_placement, date_text,
+            }))(notebook), {
+                date_style: "line", date_placement: "top-left",
+                date_text: "2026-11-03",
+            });
+
+            await tabToControl(bidi, context, "notebook-date-text", true);
+            await replaceWithTrustedKeys(bidi, context, "2026-11-04");
+            assert.equal(await read("notebook-date-text"), "2026-11-04");
+            await tabToControl(bidi, context, "notebook-local-load");
+            await performTrustedKey(bidi, context, "\uE007");
+            await waitStatus("notebook-status",
+                "Notebook reopened from local Rust profile file.");
+            assert.equal(await read("notebook-date-text"), "2026-11-03");
+            assert.equal(fs.readFileSync(notebookFile, "utf8"), savedNotebook);
+
+            // Invalid calendar text must also refuse from an actual
+            // keyboard-triggered Save, preserving the prior native file.
+            await tabToControl(bidi, context, "notebook-date-text", true);
+            await replaceWithTrustedKeys(bidi, context, "2026-02-30");
+            await tabToControl(bidi, context, "notebook-local-save");
+            await performTrustedKey(bidi, context, "\uE007");
+            await waitStatus("notebook-status",
+                "Notebook refused; nothing saved.");
+            assert.equal(fs.readFileSync(notebookFile, "utf8"), savedNotebook);
+
+            await tabToControl(bidi, context, "handwriting-seed");
+            await replaceWithTrustedKeys(bidi, context, "12345");
+            await tabToControl(bidi, context, "handwriting-local-name");
+            await replaceWithTrustedKeys(bidi, context, "keyboard.json");
+            await tabToControl(bidi, context, "handwriting-local-save");
+            await performTrustedKey(bidi, context, "\uE007");
+            await waitStatus("handwriting-status",
+                "Native handwriting saved in local directory.");
+            const inkFile = path.join(profiles, "handwriting-keyboard.json");
+            const savedInk = fs.readFileSync(inkFile, "utf8");
+            assert.equal(JSON.parse(savedInk).seed, 12345);
+
+            await tabToControl(bidi, context, "handwriting-seed", true);
+            await replaceWithTrustedKeys(bidi, context, "54321");
+            assert.equal(await read("handwriting-seed"), "54321");
+            await tabToControl(bidi, context, "handwriting-local-load");
+            await performTrustedKey(bidi, context, "\uE007");
+            await waitStatus("handwriting-status",
+                "Handwriting reopened from local Rust file.");
+            assert.equal(await read("handwriting-seed"), "12345");
+            assert.equal(fs.readFileSync(inkFile, "utf8"), savedInk);
+
+            // The maximum unsigned seed is exact. One unit above it is
+            // refused by Rust rather than overwriting the saved profile.
+            await tabToControl(bidi, context, "handwriting-seed", true);
+            await replaceWithTrustedKeys(bidi, context,
+                "18446744073709551616");
+            await tabToControl(bidi, context, "handwriting-local-save");
+            await performTrustedKey(bidi, context, "\uE007");
+            await waitStatus("handwriting-status",
+                "Invalid statistics or unavailable Rust backend; "
+                + "no file saved.");
+            assert.equal(fs.readFileSync(inkFile, "utf8"), savedInk);
+        } finally {
+            bidi?.close();
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    },
+);
+
 test(
     "Firefox trusted keyboard activates native skip links without workspace JS",
     { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },

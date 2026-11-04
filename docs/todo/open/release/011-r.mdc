@@ -39,6 +39,31 @@ records remain accepted theoretical deliverables and are not reopened:
 - ATR-P8-003 — archived release design
 - ATR-P8-004 — archived release design
 
+## Trusted keyboard-only native profile journey (partial) — 2026-11-03
+
+A real headless Firefox/WebDriver BiDi test uses only trusted Tab, Shift+Tab,
+ArrowDown, Enter, Ctrl+A and character keys to edit two live localhost
+profiles. It does not invoke DOM click, focus, value assignment or synthetic
+input events to make the profile changes. The browser persists a selected
+date style, placement and numeric date in a native notebook JSON file and
+an exact handwriting seed in a separate native Rust handwriting JSON file.
+
+After unsaved keyboard edits, the test reopens each file and checks the
+original values and unchanged disk bytes. Invalid February 30 and a seed
+above unsigned 64-bit range trigger visible refusal and preserve both files.
+
+Focused regression:
+
+```sh
+node --test \
+  --test-name-pattern='Firefox trusted keyboard saves and reopens' \
+  tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs
+```
+
+This establishes a real keyboard-only save/reopen subset. It does not provide
+approved ruled/squared raster goldens or verify every currently implemented
+page-editor control, so this record remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
