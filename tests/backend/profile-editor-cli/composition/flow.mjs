@@ -44,6 +44,46 @@ function render(dir, source, format, extra = [],
     return { result, output };
 }
 
+test('notebook CLI help advertises real Markdown task shapes', () => {
+    const help = spawnSync('cargo', [
+        'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+        'notebook', '--help',
+    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+    assert.equal(help.status, 0, help.stderr);
+    assert.match(help.stdout, /\[ \]\/\[x\]\/\[X\] checkbox tasks/);
+    assert.match(help.stdout, /--heading-marker-scale 50\.\.105/);
+});
+
+test('saved BOM/CRLF Markdown task file exports like inline PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-file-'));
+        try {
+            const source = '- [ ] a\n* [x] ó\n+ [X] o\u0301';
+            const path = join(dir, 'tasks.md');
+            const saved = Buffer.concat([
+                Buffer.from([0xef, 0xbb, 0xbf]),
+                Buffer.from(source.replaceAll('\n', '\r\n'), 'utf8'),
+            ]);
+            writeFileSync(path, saved);
+            for (const format of ['pdf', 'png']) {
+                const inline = render(dir, source, format);
+                assert.equal(inline.result.status, 0,
+                    inline.result.stderr);
+                const expected = readFileSync(inline.output);
+                const reopened = render(dir, path, format, [],
+                    '--flow-markdown-file');
+                assert.equal(reopened.result.status, 0,
+                    reopened.result.stderr);
+                assert.deepEqual(readFileSync(reopened.output), expected,
+                    `${format} same task syntax from saved Markdown`);
+            }
+            assert.deepEqual(readFileSync(path), saved,
+                'source Markdown file remains exactly unchanged');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('code fences keep literal Unicode ink and physical hard line breaks',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));

@@ -475,6 +475,12 @@ several spaces. A bare task marker now refuses as an empty item even when
 literal bracket and checkmark glyph shapes have been authored, avoiding
 accidental conversion into an ordinary bulleted handwriting line.
 
+The public native CLI `notebook --help` now names checkbox syntax, and a
+saved UTF-8 `.md` file with an initial BOM and CRLF line endings produces
+the same checked/unchecked NFC/NFD task ink as inline Markdown in both
+PDF and transparent PNG. No file contents are written or modified by
+this read-only source admission path.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

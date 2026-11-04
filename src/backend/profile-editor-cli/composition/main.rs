@@ -174,8 +174,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --flow-text keeps explicit lines; --flow-markdown joins plain lines \
     into paragraphs. Two trailing spaces or one trailing backslash force \
     a hard row break. Markdown supports #/##/### headings, -/*/+ bullets, \
-    > quotes, 1./1) numbered lists (authored digits/punctuation), and \
-    standalone ---/***/___ horizontal ink rules. -file reads bounded UTF-8. \
+    [ ]/[x]/[X] checkbox tasks after bullets, > quotes, 1./1) numbered \
+    lists (authored digits/punctuation), and standalone ---/***/___ \
+    horizontal ink rules. -file reads bounded UTF-8. \
     An initial UTF-8 BOM is ignored but counts toward the 4096-byte cap. \
     Both use physical printable regions and exact authored ink; \
     optional --flow-region repeats a fixed rectangle within margins on \
