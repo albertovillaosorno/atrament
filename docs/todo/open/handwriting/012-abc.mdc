@@ -1596,6 +1596,26 @@ fill, selectable independent SVG guides, and actual Rust PDF/PNG replay.
 These manual sampled paths do not provide native analytic glyph shapes or
 infer symbolic set relationships in text.
 
+## Exact negated set relations (partial) — 2026-11-04
+
+The opt-in math editor now authors `⊄`, `⊈`, `⊅` and `⊉` as four
+independent Unicode glyph keys. Each preserves the corresponding subset
+or superset four-quadratic guide and adds a separately lifted diagonal
+negation stroke; the inclusive forms also keep their independently lifted
+equality bars. Browser-native v1 TSV encodes strict negations with 65
+strokes and inclusive negations with 66. The fill grows to 42 exact math
+symbols without normalizing existing caller-owned ink or automatically
+creating an absent positive or negative relation.
+
+Browser red-before/green-after tests cover unique identities, ordered pen
+lifts, exact base-curve agreement, slash endpoints, SVG preview, clipped
+construction refusal, TSV roundtrip, and atomic batch limits. The Rust
+CLI reopens the four glyphs, verifies audit coverage and physical PDF/PNG
+ink, and refuses an absent plain relation without replacing the previously
+accepted PDF. Real Firefox checks all 42 math forms in its own exported
+TSV and physical Rust PDF/PNG with no implicit backend save. These remain
+manually authored sampled strokes, not formal set-notation parsing.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

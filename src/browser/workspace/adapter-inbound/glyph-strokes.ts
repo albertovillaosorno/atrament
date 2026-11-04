@@ -679,9 +679,9 @@ function quoteMirror(
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∧", "∨",
-    "∩", "∪", "∈", "∉", "⊂", "⊆", "⊃", "⊇", "∑", "∫",
+    "∩", "∪", "∈", "∉", "⊂", "⊆", "⊃", "⊇", "⊄", "⊈", "⊅", "⊉", "∑", "∫",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝"] as const;
-// Extra manually selected marks do not change the 38-glyph math fill.
+// Extra manually selected marks do not change the 42-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -778,13 +778,15 @@ function mathParts(
         if (glyph === "∉") parts.push(line(-0.85, 0.85, 0.85, -0.85));
         return parts;
     }
-    // Set inclusion uses open four-quadratic contours facing left (⊂,⊆)
-    // or right (⊃,⊇). Reflect *control points*, not the sampled chords,
-    // so the SVG ideal guide and Rust TSV retain the same pen geometry.
-    // Inclusive marks add a separately lifted equality bar, never a glyph
-    // alias of membership, intersection, or the opposite direction.
-    if (["⊂", "⊆", "⊃", "⊇"].includes(glyph)) {
-        const facing = glyph === "⊃" || glyph === "⊇" ? -1 : 1;
+    // Set inclusion uses four-quadratic contours facing left or right.
+    // Reflect ideal control points, not sampled chords, preserving the
+    // true SVG guide and exact Rust TSV for each independent Unicode key.
+    // Inclusive signs lift for a lower equality bar; the negated forms
+    // additionally lift for a distinct crossing slash without inferring
+    // the plain counterpart from a saved library.
+    if (["⊂", "⊆", "⊃", "⊇", "⊄", "⊈", "⊅", "⊉"]
+        .includes(glyph)) {
+        const facing = ["⊃", "⊇", "⊅", "⊉"].includes(glyph) ? -1 : 1;
         const facingPoint = (x: number, y: number): Point =>
             point(facing * x, y);
         const contour: MarkPiece[] = [
@@ -801,8 +803,11 @@ function mathParts(
                 control: facingPoint(-0.1, 0.72),
                 to: facingPoint(0.65, 0.6) },
         ];
-        if (glyph === "⊆" || glyph === "⊇") {
+        if (["⊆", "⊇", "⊈", "⊉"].includes(glyph)) {
             contour.push(horizontal(0.9));
+        }
+        if (["⊄", "⊈", "⊅", "⊉"].includes(glyph)) {
+            contour.push(line(-0.85, 0.85, 0.85, -0.85));
         }
         return contour;
     }
