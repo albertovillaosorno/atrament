@@ -14,7 +14,7 @@ import {
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const symbols = ['√', 'π', '∞', '≠', '≤', '≥'];
+const symbols = ['√', 'π', '∞', '≠', '≤', '≥', '∑', '∫', 'Δ', '≈'];
 const text = symbols.join('');
 const ink = symbols.flatMap((symbol) => geometricStarter(symbol,
     1550, 2450, 1100, 250, '#243647'));
@@ -49,12 +49,12 @@ function actualPngInk(bytes) {
         'physical PNG contains caller-authored mathematical ink');
 }
 
-test('six math symbols roundtrip TSV and render two real ink rows', () => {
+test('ten math symbols roundtrip TSV and render two real ink rows', () => {
     const dir = mkdtempSync(join(root, '.temp/math-native-'));
     try {
         const library = join(dir, 'math.tsv');
         const output = join(dir, 'math.pdf');
-        assert.equal(ink.length, 81, 'four quadratic lobes are 64 lines');
+        assert.equal(ink.length, 200, 'directed curves and straight paths');
         const canonical = Buffer.from(encodeGlyphLibrary(ink));
         writeFileSync(library, canonical);
         const reopen = cli('glyphs', ['--profile', library]);
@@ -66,7 +66,7 @@ test('six math symbols roundtrip TSV and render two real ink rows', () => {
         ]);
         assert.equal(audit.status, 0, audit.stderr.toString());
         assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
-        assert.match(audit.stdout.toString(), /Distinct visible graphemes: 6/);
+        assert.match(audit.stdout.toString(), /Distinct visible graphemes: 10/);
         const flags = [
             '--printed-sheet', 'true', '--glyph-file', library,
             '--flow-text', `${text}\n${text}`,
@@ -77,8 +77,8 @@ test('six math symbols roundtrip TSV and render two real ink rows', () => {
         const bytes = readFileSync(output);
         const vector = bytes.toString('latin1');
         assert.ok(vector.startsWith('%PDF-1.4'));
-        assert.equal((vector.match(/ m\n/g) ?? []).length, 162,
-            'each of two physical rows uses 81 exact authored pen strokes');
+        assert.equal((vector.match(/ m\n/g) ?? []).length, 400,
+            'each of two physical rows uses 200 authored pen strokes');
         assert.match(vector, /0\.141 0\.212 0\.278 RG/,
             'vector PDF uses the explicit authored RGB pigment');
         const png = cli('notebook', [
@@ -87,7 +87,7 @@ test('six math symbols roundtrip TSV and render two real ink rows', () => {
         assert.equal(png.status, 0, png.stderr.toString());
         actualPngInk(png.stdout);
         for (const invalid of [
-            [...flags, '--flow-text', `${text}∑`],
+            [...flags, '--flow-text', `${text}∂`],
             [...flags, '--flow-text', '√∞', '--pages', '0'],
         ]) {
             const refused = cli('notebook', [

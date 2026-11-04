@@ -663,10 +663,10 @@ function quoteMirror(
         ? { x: 2 * cx - p.x, y: p.y } : p;
 }
 
-// Math starters use exact SVG paths; quadratic infinity lobes sample to
-// native integer pen chords. ASCII hyphen and Unicode minus stay distinct.
+// Math starters retain ideal SVG lines/quadratics; native v1 samples curves
+// into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "=", "×", "÷",
-    "√", "π", "∞", "≠", "≤", "≥"] as const;
+    "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "Δ", "≈"] as const;
 type MathGlyph = typeof MATH_GLYPHS[number];
 
 function mathParts(
@@ -715,11 +715,31 @@ function mathParts(
         line(0.5, -0.6, 0.5, 0.55),
         line(0.5, 0.55, 0.7, 0.75),
     ];
+    if (glyph === "∑") return [
+        line(-0.75, -0.85, 0.75, -0.85),
+        line(0.75, -0.85, -0.35, 0),
+        line(-0.35, 0, 0.75, 0.85),
+        line(0.75, 0.85, -0.75, 0.85),
+    ];
+    if (glyph === "Δ") return [
+        line(0, -0.9, -0.8, 0.9),
+        line(-0.8, 0.9, 0.8, 0.9),
+        line(0.8, 0.9, 0, -0.9),
+    ];
+    const curve = (start: [number, number],
+        handle: [number, number], end: [number, number]): MarkPiece => ({
+        from: point(...start), control: point(...handle), to: point(...end),
+    });
+    if (glyph === "∫") return [
+        curve([0.75, -0.82], [0.4, -1], [0.12, -0.52]),
+        curve([0.12, -0.52], [-0.12, -0.1], [-0.2, 0.5]),
+        curve([-0.2, 0.5], [-0.4, 1], [-0.78, 0.78]),
+    ];
+    if (glyph === "≈") return [-0.45, 0.45].flatMap((row) => [
+        curve([-0.8, row + 0.2], [-0.35, row - 0.35], [0, row]),
+        curve([0, row], [0.35, row + 0.35], [0.8, row - 0.2]),
+    ]);
     if (glyph === "∞") {
-        const curve = (start: [number, number],
-            handle: [number, number], end: [number, number]): MarkPiece => ({
-            from: point(...start), control: point(...handle), to: point(...end),
-        });
         return [
             curve([0, 0], [-0.55, -0.85], [-0.8, 0]),
             curve([-0.8, 0], [-0.55, 0.85], [0, 0]),
@@ -3438,7 +3458,8 @@ export function createGlyphStrokeEditor(): {
             const authored = new Set(strokes.map((stroke) => stroke.grapheme));
             const missing = glyphs.filter((g) => !authored.has(g));
             if (missing.length === 0) {
-                message("All twelve math glyphs have authored ink");
+                message(`All ${MATH_GLYPHS.length} math glyphs`
+                    + " have authored ink");
                 return;
             }
             const added = missing.flatMap((g) => geometricStarter(g,

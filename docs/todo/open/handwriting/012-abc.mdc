@@ -994,6 +994,31 @@ complete bilingual export, joined accented variation and mathematical
 pen-path/browser-to-Rust suites. It does not depend on a live browser,
 printer or network, but does require built frontend JS and local Rust.
 
+## Additional calculus and comparison math ink (partial) — 2026-11-04
+
+Four more exact mathematical starter keys now join the browser geometry
+editor: summation `∑`, integral `∫`, delta `Δ` and approximately equal `≈`.
+Summation is an ordered four-line angular path; delta is one continuous
+three-line closed triangle. Integral is three connected ideal quadratic
+SVG curves sampled into 48 native strokes. Approximate equality uses two
+separate two-quadratic waves sampled into 64 strokes, preserving the pen
+lift between them. They are explicit distinct Unicode grapheme identities,
+not substitutions for Greek letters or an equation layout engine.
+
+The fill-missing math action now preserves 16 independently authored forms;
+all eleven bounded browser fills together yield 129 exact glyphs and 2,938
+ordered pen segments. Browser checks cover exact SVG guide controls, directed
+pen-path count, cell-boundary refusal, unchanged draft on a failed edit and
+a 14,976-case geometry margin grid. The original twelve forms retain their
+existing stroke order and identity.
+
+The independent native regression reopens a ten-symbol, 200-stroke browser
+TSV unchanged and audits zero missing ink. It renders two real text rows as
+400 separate physical PDF pen moves and transparent 72-DPI PNG ink. An
+unauthored `∂` or invalid page count refuses without replacing the accepted
+PDF. Analytic SVG curves are still sampled for native PDF/PNG and are not
+persisted as native vector splines. Full P1-012 coverage remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
