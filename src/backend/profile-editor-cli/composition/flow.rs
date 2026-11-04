@@ -819,6 +819,18 @@ fn heading_body(body: &str) -> &str {
 // only unordered bullets receive a synthetic short line ornament.
 fn markdown_line(line: &str) -> (LineStyle, &str) {
     let raw = line.trim_end_matches(' ');
+    let indent = line.bytes().take_while(|byte| *byte == b' ').count();
+    // A single leading backslash escapes a syntactic first-line marker.
+    // Keep the marker as actual authored ink, but not the escape itself.
+    if indent <= 3
+        && let Some(escaped) = line.trim_start_matches(' ')
+            .strip_prefix('\\')
+        && escaped.bytes().next().is_some_and(|mark| {
+            matches!(mark, b'#' | b'>' | b'-' | b'*' | b'+' | b'_')
+        })
+    {
+        return (LineStyle::Body, escaped.trim_end_matches(' '));
+    }
     if raw.len() >= 3
         && let Some(&marker) = raw.as_bytes().first()
         && matches!(marker, b'-' | b'*' | b'_')
@@ -827,7 +839,6 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
     }
     // Standard ATX headings admit up to three indentation spaces. Four
     // spaces remain literal text (not an inferred fenced/code block).
-    let indent = line.bytes().take_while(|byte| *byte == b' ').count();
     if indent <= 3 {
         for (prefix, level) in [
             ("### ", HeadingLevel::Tertiary),

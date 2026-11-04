@@ -294,6 +294,20 @@ without overwriting an existing PDF. Heading levels, glyph inks and marker
 ornaments remain identical to the existing limited compiler. This is not a
 full Markdown parser or a persisted semantic notebook identity.
 
+## Literal Markdown line-prefix escapes (partial) — 2026-11-04
+
+The native CLI's restricted Markdown subset now accepts a single backslash
+before a line-leading `#`, `>`, `-`, `*`, `+` or `_` (after zero to three
+indentation spaces). The backslash is syntax; the escaped mark remains
+visible user-authored handwriting, not a heading, quote, bullet or rule.
+Unsupported escapes and four-space-indented lines remain literal.
+
+Native PDF and transparent PNG regressions compare indented and unindented
+escaped marks using six distinct authored punctuation shapes plus accented
+text. An unapproved literal mark or other backslash still refuses before
+replacing an existing output. This is a deliberately limited line-prefix
+escape, not complete CommonMark inline escaping or a saved notebook model.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

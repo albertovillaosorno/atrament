@@ -25,9 +25,9 @@ const base = [
     '--heading-style', 'marker', '--heading-color', '#F8DE91',
 ];
 
-function render(dir, markdown, format) {
+function render(dir, markdown, format, extra = []) {
     const output = join(dir, `flow-${format}.output`);
-    const args = [...base, '--flow-markdown', markdown,
+    const args = [...base, ...extra, '--flow-markdown', markdown,
         '--export-paper', format, '--output', output, '--replace'];
     if (format === 'png') {
         args.push('--png-page', '1', '--dpi', '72');
@@ -91,6 +91,66 @@ test('literal hashes and empty headings refuse without replacing output',
                 }
                 assert.deepEqual(readFileSync(rendered.output), sentinel,
                     `failed source must not replace PDF: ${source}`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+const punctuation = ['#', '>', '-', '*', '+', '_'];
+const punctuationInk = punctuation.flatMap((glyph) => [
+    '--glyph-stroke', glyph, '650', '800', '2400', '3100',
+    '250', '#112233',
+]);
+
+test('escaped Markdown structural marks stay literal on physical pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-escape-'));
+        try {
+            const source = punctuation.map((mark) =>
+                `\\${mark} ó`).join('\n');
+            const indented = punctuation.map((mark, index) =>
+                `${' '.repeat(index % 4)}\\${mark} ó`).join('\n');
+            for (const format of ['pdf', 'png']) {
+                const ordinary = render(dir, source, format,
+                    punctuationInk);
+                assert.equal(ordinary.result.status, 0,
+                    ordinary.result.stderr);
+                const expected = readFileSync(ordinary.output);
+                if (format === 'pdf') {
+                    const pdf = expected.toString('latin1');
+                    assert.equal(pdf.split('0.067 0.133 0.200 RG').length - 1,
+                        6, 'six caller-authored punctuation glyphs');
+                    assert.equal(pdf.split('0.071 0.204 0.337 RG').length - 1,
+                        6, 'six exact accented handwriting glyphs');
+                } else {
+                    assert.deepEqual(expected.subarray(0, 8),
+                        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+                }
+                const alternative = render(dir, indented, format,
+                    punctuationInk);
+                assert.equal(alternative.result.status, 0,
+                    alternative.result.stderr);
+                assert.deepEqual(readFileSync(alternative.output), expected);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('unsupported backslashes and unauthored literal marks refuse atomically',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-escape-'));
+        try {
+            const sentinel = Buffer.from('preexisting PDF remains immutable');
+            const output = join(dir, 'flow-pdf.output');
+            for (const source of ['\\a', '\\# ó', '    \\# ó']) {
+                writeFileSync(output, sentinel);
+                const rendered = render(dir, source, 'pdf');
+                assert.notEqual(rendered.result.status, 0, source);
+                assert.match(rendered.result.stderr,
+                    /missing authored glyph shapes/);
+                assert.deepEqual(readFileSync(output), sentinel);
             }
         } finally {
             rmSync(dir, { recursive: true, force: true });
