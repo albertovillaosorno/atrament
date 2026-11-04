@@ -122,10 +122,12 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     missing shapes refuse; --glyph-file loads a reusable library. \
     --fallback-glyph borrows a caller-selected existing authored shape \
     for one missing exact grapheme; no implicit or chained mappings. \
-    --flow-text keeps explicit lines; --flow-markdown joins ordinary lines \
-    into paragraphs (two trailing spaces force a new row), and recognizes \
-    # headings, -/* bullets and numbered 1./1) list items (digits and \
-    separators need authored ink); -file reads a bounded local UTF-8 file. \
+    --flow-text keeps explicit lines; --flow-markdown joins plain lines \
+    into paragraphs. Two trailing spaces or one trailing backslash force \
+    a hard row break. Markdown supports #/##/### headings, -/*/+ bullets, \
+    > quotes, 1./1) numbered lists (authored digits/punctuation), and \
+    standalone ---/***/___ horizontal ink rules. -file reads bounded UTF-8. \
+    An initial UTF-8 BOM is ignored but counts toward the 4096-byte cap. \
     Both use physical printable regions and exact authored ink; \
     it auto-selects PDF page count unless --pages is explicit. \
     Markdown headings default to dark underlines; select a user-colored \
