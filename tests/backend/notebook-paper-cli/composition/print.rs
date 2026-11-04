@@ -34,12 +34,12 @@
 
 #![expect(
     clippy::expect_used,
-    clippy::panic,
     reason = "test-only fail-fast printer admission fixtures"
 )]
 
 use super::*;
 use std::fs;
+use std::process;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
@@ -48,20 +48,35 @@ fn fixture_dir() -> PathBuf {
     let number = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
     let dir = env::temp_dir().join(format!(
         "atrament-print-fixture-{}-{number}",
-        std::process::id(),
+        process::id(),
     ));
-    fs::create_dir(&dir).expect("create owned fixture directory");
+    fs::create_dir_all(&dir).expect("create owned fixture directory");
     dir
 }
 
-fn real_pdf() -> Vec<u8> {
+fn real_pdf_with_marks(include_marks: bool) -> Vec<u8> {
+    use atrament_notebook_paper_cli::{
+        NotebookInkLine, PaperDatePlaceholder,
+        paper_profile_pdf_pages_with_ink,
+    };
+
     let paper = atrament_notebook_paper_cli::default_paper_profile_json();
-    atrament_notebook_paper_cli::paper_profile_pdf_pages(
-        paper.as_bytes(),
-        2,
-        false,
-    )
-    .expect("native two-page preprinted PDF")
+    let ink = [NotebookInkLine {
+        page: 2,
+        start_um: (25_400, 25_400),
+        end_um: (50_800, 50_800),
+        width_um: 700,
+        rgb: [0xde, 0x11, 0x44],
+    }];
+    paper_profile_pdf_pages_with_ink(
+        paper.as_bytes(), 2, include_marks,
+        Some(PaperDatePlaceholder::LeftLine), true,
+        5_000, Some("2026-11-04"), &ink,
+    ).expect("native two-page printed-sheet PDF with ink and date")
+}
+
+fn real_pdf() -> Vec<u8> {
+    real_pdf_with_marks(false)
 }
 
 #[test]
@@ -96,7 +111,7 @@ fn printing_requires_exact_file_and_named_queue() {
         vec!["--pdf", "notebook.pdf", "--printer", "-bad"],
         vec!["--pdf", "notebook.pdf", "--printer", "local;touch"],
         vec!["--pdf", "notebook.pdf", "--printer", "bad queue"],
-        vec!["--pdf", "notebook.pdf", "--printer", "é"],
+        vec!["--pdf", "notebook.pdf", "--printer", "\u{e9}"],
         vec![
             "--pdf",
             "notebook.pdf",
@@ -143,6 +158,18 @@ fn print_admits_real_two_page_pdf_and_refuses_bad_sources() {
     let directory = fixture_dir();
     let pdf = directory.join("two-pages.pdf");
     let bytes = real_pdf();
+    let vector = String::from_utf8_lossy(&bytes);
+    assert!(vector.contains("/Count 2"));
+    assert_eq!(vector.matches("0.871 0.067 0.267 RG").count(), 1,
+        "page-specific colored pen ink must survive preprinted export");
+    assert!(vector.contains("0.188 0.259 0.345 rg"),
+        "printed Gregorian date uses its own filled vector digits");
+    let ruled = real_pdf_with_marks(true);
+    let ruled_vector = String::from_utf8_lossy(&ruled);
+    let paper_color = "0.773 0.831 0.906 RG";
+    assert!(ruled_vector.matches(paper_color).count()
+        > vector.matches(paper_color).count(),
+        "preprinted PDF suppresses existing page rules, retaining borders");
     fs::write(&pdf, &bytes).expect("write source PDF");
     assert_eq!(selected_pdf(&pdf).expect("real PDF accepted"), bytes);
 

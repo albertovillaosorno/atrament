@@ -34,6 +34,21 @@ records. This record is **open executable integration work**. It must not be
 closed merely because a prior design was accepted or a different
 implementation was proposed.
 
+## Colored ink, date and preprinted two-page spool parity — 2026-11-04
+
+The independent fake-CUPS print test now submits exact native Rust bytes
+from a two-page preprinted PDF with a validated 2026-11-04 date, page
+numbers, rounded border and one colored diagonal pen segment on page two.
+It verifies that suppressing existing ruling reduces paper-mark strokes
+while retaining those printed annotations and page-specific ink, and that
+`--dry-run` cannot contact the fake spool. Explicit submission reproduces
+the PDF bytes unchanged through the fixed CUPS argument contract.
+
+All three print tests pass, and the full notebook-paper crate now passes
+strict all-target Clippy, including the previously failing test fixture.
+No real local print queue was contacted; physical alignment, saved image
+layers and complete notebook acceptance remain open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
