@@ -881,6 +881,9 @@
             <button id="glyph-path-start" type="button" disabled>
               Start closed pen loop at selected stroke
             </button>
+            <button id="glyph-path-close" type="button" disabled>
+              Close selected open pen path (short bridge)
+            </button>
             <label>Selected path horizontal shift (µm)
               <input id="glyph-path-dx" type="number" min="-3500"
                 max="3500" step="10" value="0" disabled>
@@ -902,6 +905,11 @@
               segments together in micrometres. Enter a signed offset
               for either axis. A zero shift or any clipped pen contour
               is refused without changing the unsaved ink.</p>
+            <p class="field-help">Close adds a straight segment from an
+              open continuous path's last endpoint to its first. Both ends
+              must be within 1200 µm and the path must have two strokes.
+              The authored contour is preserved; it is not an analytic
+              curve.</p>
             <p class="field-help">For a closed continuous loop, select a
               stroke after its current first stroke, then choose Start closed
               pen loop to change where the pen begins without moving ink.

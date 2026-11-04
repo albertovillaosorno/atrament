@@ -2385,6 +2385,119 @@ fn native_closed_path_start_rotation_preserves_exact_glyph_slots() {
 }
 
 #[test]
+fn native_explicit_path_closure_preserves_unicode_and_refuses_atomically() {
+    let nfd = "o\u{301}";
+    let geometry = args(&[
+        "--glyph-stroke", nfd, "1500", "2200", "1600", "2300",
+        "300", "#112233",
+        "--glyph-stroke", "ó", "500", "600", "800", "900",
+        "250", "#556677",
+        "--glyph-stroke", nfd, "400", "500", "1400", "500",
+        "250", "#243647",
+        "--glyph-stroke", "∞", "900", "1000", "1200", "1400",
+        "250", "#111111",
+        "--glyph-stroke", nfd, "1400", "500", "1400", "1500",
+        "250", "#243647",
+        "--glyph-stroke", nfd, "1400", "1500", "600", "1500",
+        "250", "#243647",
+    ]);
+    let original = execute_glyph_library(&geometry)
+        .expect("open source accepted").expect("TSV");
+    let mut close = geometry.clone();
+    close.extend(args(&["--close-path", nfd, "2"]));
+    let result = execute_glyph_library(&close)
+        .expect("explicit closure accepted").expect("TSV");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ó\t1500\t2200\t1600\t2300\t300\t#112233\n",
+        "ó\t500\t600\t800\t900\t250\t#556677\n",
+        "ó\t400\t500\t1400\t500\t250\t#243647\n",
+        "∞\t900\t1000\t1200\t1400\t250\t#111111\n",
+        "ó\t1400\t500\t1400\t1500\t250\t#243647\n",
+        "ó\t1400\t1500\t600\t1500\t250\t#243647\n",
+        "ó\t600\t1500\t400\t500\t250\t#243647\n",
+    );
+    assert_eq!(result, expected.as_bytes(),
+        "only a terminal same-pen bridge is inserted");
+    assert_eq!(execute_glyph_library(&geometry)
+        .expect("unchanged source").expect("source TSV"), original);
+    let mut report = close.clone();
+    report.extend(args(&["--inspect-paths", nfd]));
+    let text = String::from_utf8(execute_glyph_library(&report)
+        .expect("path inspection").expect("inspection bytes"))
+        .expect("UTF-8 report");
+    assert!(text.contains("Strokes: 5\nPaths: 2\nPen lifts: 1"),
+        "{text}");
+    assert!(text.contains(
+        "Path 2: strokes 2..5 (4 segments) (400, 500) -> (400, 500)"
+    ), "{text}");
+    assert!(text.contains("width 250 um color #243647 [closed loop]"),
+        "{text}");
+
+    let source_path = test_path().with_extension("tsv");
+    let destination_path = test_path().with_extension("tsv");
+    fs::write(&source_path, &original).expect("test-owned source");
+    fs::write(&destination_path, b"preserved output")
+        .expect("test-owned destination");
+    let source = source_path.to_str().expect("source path");
+    let destination = destination_path.to_str().expect("output path");
+    let mut save = args(&["--profile", source]);
+    save.extend(args(&["--close-path", nfd, "2",
+        "--output", destination, "--replace"]));
+    assert_eq!(execute_glyph_library(&save)
+        .expect("save closure"), None);
+    assert_eq!(fs::read(&destination_path)
+        .expect("read saved bridge"), result);
+    assert_eq!(fs::read(&source_path)
+        .expect("read unmodified source"), original);
+
+    fs::write(&destination_path, b"preserved output")
+        .expect("reset sentinel");
+    let invalid = [
+        args(&["--close-path"]),
+        args(&["--close-path", nfd]),
+        args(&["--close-path", nfd, "0"]),
+        args(&["--close-path", nfd, "4"]),
+        args(&["--close-path", nfd, "1"]),
+        args(&["--close-path", "ó", "1"]),
+        args(&["--close-path", "o", "1"]),
+        args(&["--close-path", "oo", "1"]),
+        args(&["--close-path", nfd, "2.5"]),
+        args(&["--close-path", nfd, "4097"]),
+        args(&["--close-path", nfd, "2",
+            "--close-path", nfd, "2"]),
+    ];
+    for edit in invalid {
+        let mut command = args(&["--profile", source]);
+        command.extend(edit);
+        command.extend(args(&["--output", destination, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid closure must refuse: {command:?}");
+        assert_eq!(fs::read(&source_path).expect("input"), original);
+        assert_eq!(fs::read(&destination_path).expect("output"),
+            b"preserved output");
+    }
+    for end_x in [1700, 1701] {
+        let mut test = args(&[
+            "--glyph-stroke", "o", "500", "800", "900", "1200",
+            "250", "#243647",
+            "--glyph-stroke", "o", "900", "1200",
+            &end_x.to_string(), "800", "250", "#243647",
+            "--close-path", "o", "1",
+        ]);
+        let result = execute_glyph_library(&test);
+        if end_x == 1700 {
+            assert!(result.is_ok(), "exactly 1200 um gap is permitted");
+        } else {
+            assert!(result.is_err(), "1201 um gap refuses");
+        }
+        test.clear();
+    }
+    fs::remove_file(source_path).expect("remove test input");
+    fs::remove_file(destination_path).expect("remove test output");
+}
+
+#[test]
 fn native_path_translation_round_trips_exact_unicode_pen_geometry() {
     let source = test_path().with_extension("tsv");
     let revised = test_path().with_extension("tsv");

@@ -1172,6 +1172,21 @@ that path, while unrelated Unicode rows retain their TSV slots.
 This changes pen travel order, not its mathematical outline; TSV v1
 still stores ordered line samples rather than analytic circles.
 
+**Close selected open pen path** appends one straight line from an
+existing same-pen candidate path's final directed endpoint to its first.
+The path must already contain at least two continuous strokes. Its
+closing gap must be nonzero and at most 1200 µm; fully closed loops,
+single strokes and exhausted 4096-segment libraries refuse without
+changing the local draft. The added segment follows the last path stroke,
+leaving interleaved NFC/NFD and unrelated Unicode ink in order.
+
+Use `glyphs --profile ink.tsv --close-path 'o' 1 --output closed.tsv`
+for the same explicit operation in the native Rust CLI, with path numbers
+from `--inspect-paths`. The exact new v1 TSV can then be reopened and
+rendered to native PDF or transparent PNG. This is a manually requested
+straight connector, not mathematical closure of an analytic circle,
+a new curve primitive, or an inferred pen-up/cursive model.
+
 **Load stroke TSV** reads an explicit existing glyph file into an in-memory
 draft. **Download stroke TSV** saves the canonical native-compatible file;
 there is no automatic saving or new server-side file endpoint. The Rust CLI

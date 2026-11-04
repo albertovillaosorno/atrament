@@ -326,6 +326,50 @@ impl GlyphOverlay {
         Ok(index)
     }
 
+    /// Explicitly finish one open, same-pen candidate path with a short
+    /// straight segment from its directed end to its original start.
+    /// The closing line follows the path's last glyph slot, never rewrites
+    /// existing lines or folds Unicode identities.
+    pub(super) fn close_path(
+        &mut self, grapheme: &str, ordinal: u32,
+    ) -> Result<(), String> {
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("path index outside bounds")?;
+        if path.len() < 2 {
+            return Err("path closure requires two continuous strokes".into());
+        }
+        let first_index = *positions.get(path.start)
+            .ok_or("first path segment outside library")?;
+        let last_index = *positions.get(path.end.saturating_sub(1))
+            .ok_or("last path segment outside library")?;
+        let first = self.strokes.get(first_index)
+            .ok_or("first path segment outside library")?;
+        let last = self.strokes.get(last_index)
+            .ok_or("last path segment outside library")?;
+        let start = last.end_um;
+        let end = first.start_um;
+        if start == end {
+            return Err("path is already closed".into());
+        }
+        let dx = i64::from(start.0).saturating_sub(i64::from(end.0));
+        let dy = i64::from(start.1).saturating_sub(i64::from(end.1));
+        let squared = dx.unsigned_abs().pow(2)
+            .saturating_add(dy.unsigned_abs().pow(2));
+        if squared > MAX_JOIN_GAP_UM.pow(2) {
+            return Err("path closure exceeds 1200 um gap limit".into());
+        }
+        if self.strokes.len() == MAX_STROKES {
+            return Err("path closure exceeds 4096 authored strokes".into());
+        }
+        let closure = GlyphStroke {
+            grapheme: grapheme.to_owned(), start_um: start, end_um: end,
+            width_um: last.width_um, rgb: last.rgb,
+        };
+        self.strokes.insert(last_index.saturating_add(1), closure);
+        Ok(())
+    }
+
     /// Copy exact authored pen geometry to a new independent Unicode key.
     /// The source remains untouched; no live dependency is established.
     pub(super) fn copy_glyph(
@@ -379,6 +423,7 @@ impl GlyphOverlay {
         let from = next_integer(iter, "path index", 1, 4096)?;
         match flag {
             "--reverse-path" => self.reverse_path(grapheme, from),
+            "--close-path" => self.close_path(grapheme, from),
             "--rotate-path" => {
                 let start = next_integer(iter, "path start stroke", 1, 4096)?;
                 self.rotate_path(grapheme, from, start)

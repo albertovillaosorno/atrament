@@ -12,7 +12,7 @@ import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
     reverseCandidatePath, moveCandidatePath, translateCandidatePath,
-    rotateClosedCandidatePath, candidatePenPaths,
+    rotateClosedCandidatePath, closeCandidatePath, candidatePenPaths,
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -708,6 +708,85 @@ test('browser chosen closed-loop entry matches native TSV and PDF/PNG', () => {
                 + ' parity');
             if (format === 'png') pngHasTransparentCorner(readFileSync(actual));
         }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('explicit browser path closure matches native TSV and printed ink', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-path-close-'));
+    try {
+        const nfd = 'o\u0301';
+        const ink = (grapheme, x1, y1, x2, y2,
+            color = '#243647') => ({
+            grapheme, x1, y1, x2, y2, color, width: 250,
+        });
+        const accent = ink(nfd, 2000, 2200, 2200, 2400,
+            '#112233');
+        const a = ink(nfd, 400, 500, 1400, 500);
+        const b = ink(nfd, 1400, 500, 1400, 1500);
+        const c = ink(nfd, 1400, 1500, 600, 1500);
+        const source = [accent, ink('ó', 800, 900, 1000, 1200), a,
+            ink('∞', 700, 900, 900, 1000), b, c];
+        const before = encodeGlyphLibrary(source);
+        const browser = closeCandidatePath(source, nfd, 4);
+        const browserBytes = encodeGlyphLibrary(browser.strokes);
+        const original = join(dir, 'original.tsv');
+        const nativeFile = join(dir, 'native.tsv');
+        const refusal = join(dir, 'refusal.tsv');
+        writeFileSync(original, before);
+        writeFileSync(refusal, 'existing output is retained');
+        const close = native('glyphs', '--profile', original,
+            '--close-path', nfd, '2', '--output', nativeFile);
+        assert.equal(close.status, 0, close.stderr);
+        assert.equal(readFileSync(nativeFile, 'utf8'), browserBytes,
+            'native and browser preserve Unicode while inserting closure');
+        assert.equal(readFileSync(original, 'utf8'), before);
+        assert.deepEqual(browser.strokes, [accent, source[1], a,
+            source[3], b, c, ink(nfd, 600, 1500, 400, 500)]);
+        const report = native('glyphs', '--profile', nativeFile,
+            '--inspect-paths', nfd);
+        assert.equal(report.status, 0, report.stderr);
+        assert.match(report.stdout,
+            /Strokes: 5\nPaths: 2\nPen lifts: 1/);
+        assert.match(report.stdout,
+            /Path 2: strokes 2\.\.5 \(4 segments\)/);
+        assert.match(report.stdout, /\[closed loop\]/);
+        const notAgain = native('glyphs', '--profile', nativeFile,
+            '--close-path', nfd, '2', '--output', refusal, '--replace');
+        assert.notEqual(notAgain.status, 0);
+        assert.match(notAgain.stderr, /already closed/);
+        assert.equal(readFileSync(refusal, 'utf8'),
+            'existing output is retained');
+
+        const inline = browser.strokes.filter((item) =>
+            item.grapheme === nfd).flatMap((item) => [
+            '--glyph-stroke', nfd, String(item.x1), String(item.y1),
+            String(item.x2), String(item.y2),
+            String(item.width), item.color,
+        ]);
+        for (const format of ['pdf', 'png']) {
+            const options = ['--export-paper', format];
+            if (format === 'png') options.push('--dpi', '72');
+            const actual = join(dir, 'actual.' + format);
+            const expected = join(dir, 'independent.' + format);
+            const output = native('notebook', '--printed-sheet', 'true',
+                '--glyph-file', nativeFile,
+                '--place-text', '1', '30000', '45000', nfd,
+                ...options, '--output', actual);
+            const reference = native('notebook', '--printed-sheet', 'true',
+                ...inline, '--place-text', '1', '30000', '45000', nfd,
+                ...options, '--output', expected);
+            assert.equal(output.status, 0, output.stderr);
+            assert.equal(reference.status, 0, reference.stderr);
+            assert.deepEqual(readFileSync(actual), readFileSync(expected),
+                'closed authored pen path has real native ' + format
+                + ' pixel/vector parity');
+            if (format === 'png') {
+                pngHasTransparentCorner(readFileSync(actual));
+            }
+        }
+        assert.equal(encodeGlyphLibrary(source), before);
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

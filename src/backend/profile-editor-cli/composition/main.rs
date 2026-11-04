@@ -87,6 +87,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--reverse-stroke GRAPHEME INDEX] \
     [--move-stroke GRAPHEME FROM TO] \
     [--reverse-path GRAPHEME PATH_INDEX] \
+    [--close-path GRAPHEME PATH_INDEX] \
     [--rotate-path GRAPHEME PATH_INDEX START_STROKE] \
     [--move-path GRAPHEME FROM_PATH TO_PATH] \
     [--translate-path GRAPHEME PATH_INDEX DX_UM DY_UM] \
@@ -114,6 +115,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --reverse-path flips a multi-stroke path; --move-path swaps adjacent\n\
     paths using the current pen-continuity inspection order.\n\
     --rotate-path changes the first stroke of a closed loop (one-based).\n\
+    --close-path inserts a short closing segment on a selected open path.\n\
     --translate-path moves one path using bounded signed micrometres.\n\
     --join-strokes inserts a short same-pen connector to the next segment.\n\
     --copy-glyph clones explicit source ink under an unoccupied target.\n\
@@ -779,7 +781,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             "--reverse-stroke" | "--move-stroke" | "--join-strokes"
             | "--set-stroke" | "--remove-stroke" =>
                 glyphs.edit_stroke(option, &mut iter)?,
-            "--reverse-path" | "--rotate-path" | "--move-path"
+            "--reverse-path" | "--rotate-path" | "--close-path" | "--move-path"
             | "--translate-path" => glyphs.edit_path(option, &mut iter)?,
             "--remove-glyph" => {
                 let grapheme = iter.next()
@@ -799,7 +801,6 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                     .collect::<Vec<_>>().join(" "));
             }
             "--audit-text" => {
-
                 if audit_text.is_some() {
                     return Err("--audit-text may appear only once".into());
                 }
@@ -808,7 +809,6 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 validate_glyph_audit_text(selected)?;
                 audit_text = Some(selected.clone());
             }
-
             "--inspect-paths" | "--inspect-glyph" => {
                 if inspection.is_some() {
                     return Err("glyph inspection may appear only once".into());

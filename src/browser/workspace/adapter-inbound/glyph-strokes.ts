@@ -218,6 +218,49 @@ export function rotateClosedCandidatePath(
     return { strokes: next, selectedIndex: slots[0]! };
 }
 
+// Close one selected open path by an explicit short straight pen line.
+// Reuse native 1200 µm join bounds, preserve interleaved exact Unicode rows,
+// and validate the entire proposed v1 TSV before touching the local draft.
+export function closeCandidatePath(
+    strokes: readonly Stroke[], grapheme: string, selectedIndex: number,
+): { strokes: Stroke[]; selectedIndex: number } {
+    if (!Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path closure needs a selected exact glyph stroke");
+    }
+    const indices = strokes.flatMap((stroke, index) => {
+        return stroke.grapheme === grapheme ? [index] : [];
+    });
+    const position = indices.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) => {
+        return position >= candidate.first && position <= candidate.last;
+    });
+    if (!path || path.first === path.last) {
+        throw new Error("Path closure requires two continuous strokes");
+    }
+    const dx = path.end.x - path.start.x;
+    const dy = path.end.y - path.start.y;
+    const squared = dx * dx + dy * dy;
+    if (squared === 0) throw new Error("Path is already closed");
+    if (squared > 1200 * 1200) {
+        throw new Error("Path closure exceeds 1200 µm gap limit");
+    }
+    if (strokes.length === MAX_STROKES) {
+        throw new Error("Path closure exceeds 4096 authored strokes");
+    }
+    const endSlot = indices[path.last - 1]!;
+    const closure: Stroke = {
+        grapheme,
+        x1: path.end.x, y1: path.end.y,
+        x2: path.start.x, y2: path.start.y,
+        width: path.width, color: path.color,
+    };
+    const next = strokes.slice();
+    next.splice(endSlot + 1, 0, closure);
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex: endSlot + 1 };
+}
+
 // Reverse every directed segment in one touching path AND its sequence.
 // Interleaved glyph rows stay in their original v1 TSV positions.
 export function reverseCandidatePath(
@@ -1677,6 +1720,7 @@ export function createGlyphStrokeEditor(): {
     const reverse = required<HTMLButtonElement>("glyph-reverse");
     const reversePath = required<HTMLButtonElement>("glyph-reverse-path");
     const startPath = required<HTMLButtonElement>("glyph-path-start");
+    const closePath = required<HTMLButtonElement>("glyph-path-close");
     const translatePath = required<HTMLButtonElement>("glyph-path-translate");
     const pathDx = required<HTMLInputElement>("glyph-path-dx");
     const pathDy = required<HTMLInputElement>("glyph-path-dy");
@@ -1722,7 +1766,8 @@ export function createGlyphStrokeEditor(): {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, reverse, reversePath, startPath, translatePath, pathDx, pathDy,
+        remove, reverse, reversePath, startPath, closePath, translatePath,
+        pathDx, pathDy,
         earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
@@ -2193,6 +2238,12 @@ export function createGlyphStrokeEditor(): {
             || chosenPosition === chosenPath.first
             || chosenPath.start.x !== chosenPath.end.x
             || chosenPath.start.y !== chosenPath.end.y;
+        const closureGap = chosenPath ?
+            (chosenPath.end.x - chosenPath.start.x) ** 2
+            + (chosenPath.end.y - chosenPath.start.y) ** 2 : 0;
+        closePath.disabled = !active || !chosenPath
+            || chosenPath.first === chosenPath.last || closureGap === 0
+            || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
         translatePath.disabled = !active || !chosenPath;
         const pathIndex = paths.indexOf(chosenPath!);
         earlierPath.disabled = !active || pathIndex <= 0;
@@ -2814,6 +2865,18 @@ export function createGlyphStrokeEditor(): {
             strokes = changed.strokes;
             choose(changed.selectedIndex);
             message("Changed closed pen loop starting stroke; unsaved");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    closePath.addEventListener("click", () => {
+        if (!active || selectedIndex === null) return;
+        try {
+            const glyph = character.value;
+            const changed = closeCandidatePath(strokes, glyph, selectedIndex);
+            strokes = changed.strokes;
+            choose(changed.selectedIndex);
+            message("Closed selected pen path with a short bridge; unsaved");
         } catch (error) {
             message(String(error));
         }

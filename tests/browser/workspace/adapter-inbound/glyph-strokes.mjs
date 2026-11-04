@@ -5,7 +5,8 @@ import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, composeAccentedGlyph, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
-    rotateClosedCandidatePath, translateCandidatePath } =
+    rotateClosedCandidatePath, closeCandidatePath,
+    translateCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -381,7 +382,7 @@ function mountEditor() {
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
         "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
-        "glyph-reverse-path", "glyph-path-start",
+        "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
         "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
         "glyph-earlier", "glyph-later", "glyph-join",
@@ -1071,6 +1072,107 @@ test("browser chooses closed-loop start using explicit UI", async () => {
             "one isolated stroke is not a closed multi-stroke loop");
         editor.reset();
         assert.equal(get("path-start").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("explicit path closure preserves Unicode rows and refuses gaps", () => {
+    const nfd = "o\u{301}";
+    const ink = (grapheme, x1, y1, x2, y2, color = "#243647") =>
+        ({ grapheme, x1, y1, x2, y2, width: 250, color });
+    const accent = ink(nfd, 2000, 2000, 2200, 2300, "#112233");
+    const a = ink(nfd, 400, 500, 1400, 500);
+    const b = ink(nfd, 1400, 500, 1400, 1500);
+    const c = ink(nfd, 1400, 1500, 600, 1500);
+    const other = ink("ó", 900, 800, 1000, 1100);
+    const math = ink("∞", 900, 1000, 1100, 1300);
+    const original = [accent, other, a, math, b, c];
+    const originalBytes = encodeGlyphLibrary(original);
+    const closed = closeCandidatePath(original, nfd, 4);
+    const bridge = ink(nfd, 600, 1500, 400, 500);
+    assert.deepEqual(closed.strokes,
+        [accent, other, a, math, b, c, bridge]);
+    assert.equal(closed.selectedIndex, 6);
+    assert.deepEqual(candidatePenPaths(closed.strokes, nfd)
+        .map((path) => [path.first, path.last, path.start, path.end]), [
+        [1, 1, { x: 2000, y: 2000 }, { x: 2200, y: 2300 }],
+        [2, 5, { x: 400, y: 500 }, { x: 400, y: 500 }],
+    ]);
+    assert.equal(encodeGlyphLibrary(original), originalBytes,
+        "browser source remains byte-identical after closure");
+    for (const [glyph, index] of [[nfd, 0], [nfd, 1],
+        [nfd, 40], ["ó", 1], ["oo", 2], [nfd, -1]]) {
+        assert.throws(() => closeCandidatePath(original, glyph, index));
+    }
+    assert.throws(() => closeCandidatePath(closed.strokes, nfd, 6),
+        /already closed/);
+    const wide = original.slice();
+    wide[5] = { ...c, x2: 2000, y2: 2000 };
+    assert.throws(() => closeCandidatePath(wide, nfd, 4),
+        /1200 µm/);
+    const edge = [ink("o", 500, 800, 900, 1200),
+        ink("o", 900, 1200, 1700, 800)];
+    assert.deepEqual(closeCandidatePath(edge, "o", 0).strokes.at(-1),
+        ink("o", 1700, 800, 500, 800),
+        "inclusive 1200 µm edge matches native behavior");
+    assert.throws(() => closeCandidatePath([
+        edge[0], { ...edge[1], x2: 1701 },
+    ], "o", 0), /1200 µm/);
+    const full = Array.from({ length: 4096 }, (_, i) =>
+        ink("o", 500 + i % 2, 800 + Math.floor(i / 4),
+            500 + (i + 1) % 2, 800 + Math.floor((i + 1) / 4)));
+    assert.throws(() => closeCandidatePath(full, "o", 0),
+        /4096 authored strokes/);
+    assert.equal(encodeGlyphLibrary(original), originalBytes);
+});
+
+test("browser UI closes path and offers loop entry", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const nfd = "o\u{301}";
+        const ink = (grapheme, x1, y1, x2, y2) =>
+            ({ grapheme, x1, y1, x2, y2, width: 250,
+                color: "#243647" });
+        const a = ink(nfd, 400, 500, 1400, 500);
+        const b = ink(nfd, 1400, 500, 1400, 1500);
+        const c = ink(nfd, 1400, 1500, 600, 1500);
+        const other = ink("ó", 700, 800, 800, 900);
+        const source = [a, other, b, c];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(source));
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        assert.equal(get("path-close").disabled, true,
+            "no selected path is not actionable");
+        get("selected").value = "2";
+        get("selected").dispatch("change");
+        assert.equal(get("path-close").disabled, false);
+        assert.equal(get("path-start").disabled, true);
+        get("path-close").dispatch("click");
+        assert.equal(get("selected").value, "4",
+            "the newly added connector is selected");
+        assert.equal(get("path-close").disabled, true,
+            "closed paths cannot be closed again");
+        assert.equal(get("path-start").disabled, false,
+            "after closure the selected later entry can rotate");
+        assert.match(get("paths").textContent, /\[closed loop\]/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()), [
+            a, other, b, c, ink(nfd, 600, 1500, 400, 500),
+        ]);
+        get("character").value = "ó";
+        get("character").dispatch("input");
+        get("selected").value = "1";
+        get("selected").dispatch("change");
+        assert.equal(get("path-close").disabled, true);
+        editor.reset();
+        assert.equal(get("path-close").disabled, true);
     } finally {
         ui.restore();
     }

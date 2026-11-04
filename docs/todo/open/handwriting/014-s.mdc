@@ -510,6 +510,31 @@ interleaved Unicode rows, and proves inverse rotation restores every
 input byte. An analytic circle and persistent pen-lift identity remain
 unfinished.
 
+## Explicit short closure of authored pen paths (partial) — 2026-11-03
+
+The browser editor now offers **Close selected open pen path** on any
+selected segment inside a candidate path of at least two continuous
+same-pen strokes. It inserts one straight, directed closing segment
+from the path's final endpoint back to its first. The Rust `glyphs`
+CLI accepts `--close-path GRAPHEME PATH_INDEX` using current one-based
+`--inspect-paths` numbering. Both keep all existing stroke coordinates,
+colors and widths, and leave interleaved NFC/NFD/math glyph rows intact.
+
+Exact zero-gap/already-closed loops, single strokes, larger-than-1200 µm
+gaps, invalid glyph/index selection and the 4096-line limit refuse.
+The browser does not change its unsaved draft after a refusal. The native
+CLI validates before replacing an existing output and keeps the input TSV
+unchanged. Focused native and browser regressions check the inclusive
+1200 µm threshold, later path after a separate accent, rendered loop
+inspection, native saved TSV and explicit browser control availability.
+
+A browser-to-Rust integration proves byte-identical edited TSV for an
+interleaved NFD/NFC/math fixture, atomic duplicate-closure refusal and
+real native vector PDF/transparent PNG parity with independently authored
+physical pen lines. Closure remains an opt-in straight line, not saved
+semantic pen lifts, analytic circle geometry or automatic cursive.
+P1-014 remains open.
+
  The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.
