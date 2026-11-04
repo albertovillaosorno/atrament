@@ -231,9 +231,10 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     let Some(prefix) = target.get(..target.len().min(16_384)) else {
         return false;
     };
-    xref_stream_header_end(prefix).is_some_and(|(start, length)| {
-        supported_xref_stream_tail(target, start, length)
-    })
+    xref_stream_header_end(prefix, Some((bytes, offset)))
+        .is_some_and(|(start, length)| {
+            supported_xref_stream_tail(target, start, length)
+        })
 }
 
 // Traditional xref tables have fixed-width decimal entries and a trailer
@@ -453,7 +454,7 @@ fn bounded_previous_xref(
     let stream_edition = matches!(document.get(5..8),
         Some([b'1', b'.', b'5'..=b'7'] | [b'2', b'.', b'0']));
     stream_edition && earlier.get(..earlier.len().min(16_384))
-        .is_some_and(|prefix| xref_stream_header_end(prefix).is_some())
+        .is_some_and(|prefix| xref_stream_header_end(prefix, None).is_some())
 }
 
 // The required trailer /Size is one positive top-level direct decimal.
@@ -773,7 +774,12 @@ fn xref_stream_object_header(prefix: &[u8]) -> Option<(usize, usize)> {
     Some((at, object_numbers[0]))
 }
 
-fn xref_stream_header_end(prefix: &[u8]) -> Option<(usize, usize)> {
+// A terminal stream may carry /Prev just like a traditional trailer.
+// Only its immediate earlier header is checked; older chains are outside
+// this bounded lexical preflight and are never parsed recursively.
+fn xref_stream_header_end(
+    prefix: &[u8], previous: Option<(&[u8], usize)>,
+) -> Option<(usize, usize)> {
     let (mut at, object_number) = xref_stream_object_header(prefix)?;
     if !prefix.get(at..).is_some_and(|tail| tail.starts_with(b"<<")) {
         return None;
@@ -785,6 +791,7 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<(usize, usize)> {
     let mut declared_size = None;
     let mut declared_length = None;
     let mut found_widths = false;
+    let mut seen_prev = false;
     let mut index_end = None;
     while at < prefix.len() {
         match prefix.get(at) {
@@ -795,10 +802,8 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<(usize, usize)> {
                 at = at.saturating_add(2);
             }
             Some(&b'<') => {
-                let end = prefix.get(at.saturating_add(1)..)
-                    .and_then(|tail| {
-                        tail.iter().position(|byte| *byte == b'>')
-                    })?;
+                let tail = prefix.get(at.saturating_add(1)..)?;
+                let end = tail.iter().position(|byte| *byte == b'>')?;
                 at = at.saturating_add(end).saturating_add(2);
             }
             Some(&b'>') if prefix.get(at.saturating_add(1)) == Some(&b'>') => {
@@ -838,22 +843,26 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<(usize, usize)> {
                         Some(bounded_xref_size(prefix, &mut at, 1)?);
                 } else if depth == 1 && array_depth == 0
                     && pdf_name_is(name, b"W") {
-                    if found_widths {
-                        return None;
-                    }
+                    if found_widths { return None; }
                     xref_stream_field_widths(prefix, &mut at)?;
                     found_widths = true;
                 } else if depth == 1 && array_depth == 0
                     && pdf_name_is(name, b"Index") {
-                    if index_end.is_some() {
-                        return None;
-                    }
+                    if index_end.is_some() { return None; }
                     index_end = Some(xref_stream_index_end(prefix, &mut at)?);
                 } else if depth == 1 && array_depth == 0
                     && pdf_name_is(name, b"Length") {
                     if declared_length.is_some() { return None; }
                     declared_length =
                         Some(bounded_stream_length(prefix, &mut at)?);
+                } else if depth == 1 && array_depth == 0
+                    && pdf_name_is(name, b"Prev") {
+                    if seen_prev || previous.is_some_and(|(document, start)| {
+                        !bounded_previous_xref(prefix, &mut at, document, start)
+                    }) {
+                        return None;
+                    }
+                    seen_prev = true;
                 }
             }
             _ => at = at.saturating_add(1),
@@ -865,14 +874,12 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<(usize, usize)> {
         return None;
     }
     at = pdf_trivia_end(prefix, at);
-    if prefix.get(at..).is_some_and(|tail| {
-        tail.starts_with(b"stream")
-            && matches!(tail.get(6), Some(b'\n' | b'\r'))
-    }) {
-        Some((at.checked_add(6)?, declared_length?))
-    } else {
-        None
+    let tail = prefix.get(at..)?;
+    if !tail.starts_with(b"stream")
+        || !matches!(tail.get(6), Some(b'\n' | b'\r')) {
+        return None;
     }
+    Some((at.checked_add(6)?, declared_length?))
 }
 
 // A syntactically plausible xref-stream header is not sufficient: a selected

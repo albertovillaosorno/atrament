@@ -1529,6 +1529,90 @@ fn xref_table_prev_accepts_earlier_xref_stream_on_pdf_15() {
 
 #[cfg(unix)]
 #[test]
+fn terminal_xref_stream_prev_must_point_back_to_a_prior_xref() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("unexpected-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
+    )).expect("write fake spooler");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+
+    let original = one_page_xref_stream_pdf("1.5", " /Index [0 5]");
+    let previous = original.windows(b"4 0 obj\n".len())
+        .position(|part| part == b"4 0 obj\n")
+        .expect("original xref stream header");
+    let terminal = original.len();
+    let mut row = vec![1u8];
+    row.extend_from_slice(&u32::try_from(terminal)
+        .expect("small fixture offset fits u32").to_be_bytes());
+    row.extend_from_slice(&0u16.to_be_bytes());
+    let revised = |prev: &str| [
+        original.as_slice(),
+        format!(
+            "5 0 obj\n<< /Type /XRef /Size 6 /Index [5 1] \
+             /W [1 4 2] /Root 1 0 R {prev} /Length 7 >>\nstream\n",
+        ).as_bytes(),
+        row.as_slice(),
+        format!(
+            "\nendstream\nendobj\nstartxref\n{terminal}\n%%EOF\n",
+        ).as_bytes(),
+    ].concat();
+    for valid in [
+        format!("/Prev {previous}"),
+        format!("/P#72ev {previous}"),
+        format!("/Prev {previous} /Meta << /Prev 0 >>"),
+    ] {
+        let candidate = revised(&valid);
+        assert!(supported_pdf_cross_reference(&candidate),
+            "earlier xref stream should remain eligible: {valid}");
+        fs::write(&pdf, &candidate).expect("write incremental PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert_eq!(
+            submit_selected(&request, &fake_spool)
+                .expect("valid stream revision reaches fake CUPS"),
+            sha256_profile_bytes(&candidate).bytes(),
+        );
+        assert_eq!(fs::read(&spooled).expect("exact spool bytes"),
+            candidate);
+        fs::remove_file(&spooled).expect("clear fake spool output");
+    }
+    for invalid in [
+        "/Prev 0".into(), "/Prev -1".into(),
+        "/Prev +1".into(), "/Prev abc".into(),
+        "/Prev 9999999999".into(),
+        format!("/Prev {}", previous + 1),
+        format!("/Prev {terminal}"),
+        format!("/Prev {previous} /Prev {previous}"),
+        format!("/Prev {previous} /P#72ev {previous}"),
+    ] {
+        let candidate = revised(&invalid);
+        assert!(!supported_pdf_cross_reference(&candidate),
+            "malformed stream predecessor must refuse: {invalid}");
+        fs::write(&pdf, &candidate).expect("write invalid PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(), "invalid Prev refused");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "invalid Prev must not contact CUPS");
+        assert!(!spooled.exists(), "no fake spool contact");
+        assert_eq!(fs::read(&pdf).expect("selected bytes intact"),
+            candidate);
+    }
+    fs::remove_dir_all(&directory).expect("remove fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
     use std::os::unix::fs::{PermissionsExt as _, symlink};
 

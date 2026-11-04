@@ -367,6 +367,23 @@ This inspects only the immediate prior xref header, not a complete chain of
 PDF revisions, object references or contents; no real CUPS device or
 physical alignment is verified. The broader printed-page task stays open.
 
+## Terminal cross-reference stream predecessor check (partial) — 2026-11-04
+
+The optional `/Prev` pointer in a terminal PDF 1.5+ xref stream now receives
+its own bounded admission check, matching the traditional trailer policy.
+Previously a stream could name offset zero, a forward offset, a forged
+object interior or duplicate encoded and unencoded `/Prev` names, and still
+reach the selected local CUPS spooler. A red-before/green-after fake-CUPS
+test now proves each is refused without opening the spooler or mutating the
+selected PDF.
+
+A genuine PDF 1.5 one-page xref-stream PDF with an appended stream revision
+remains admissible with correct direct or PDF-name-escaped previous offsets,
+including nested metadata decoys. Accepted jobs retain their exact input
+bytes and reviewed SHA-256 digest. This checks the immediate predecessor
+header only; it does not recursively validate prior revisions, decode xref
+stream rows, or demonstrate physical printing.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
