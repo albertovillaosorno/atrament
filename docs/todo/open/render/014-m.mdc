@@ -50,7 +50,9 @@ The existing Rust `atrament-profiles notebook --flow-markdown` compiler now
 accepts opt-in `--heading-ink-color '#RRGGBB'` and
 `--heading-ink-scale 100..250`. These style the **authored glyph ink** in
 `#`/`##`/`###` heading rows, independently of the ordinary underline,
-double underline or `--heading-style marker` backdrop color. The original
+double underline or `--heading-style marker` backdrop color.
+
+The original
 canonical glyph TSV, geometry, seeded per-occurrence variation and all
 non-heading content remain unchanged. Stroke thickness is multiplied after
 optional mean-profile scaling; a physical pen width above 1500 µm or
@@ -72,6 +74,7 @@ P5-014 remains open.
 `--heading-style marker --heading-marker-scale 50..105` to alter the
 **underlay** pen width for the #/##/### marker hierarchy without touching
 caller-authored lettering, plain body ink, or the underlying stroke TSV.
+
 The previous default remains exactly 100%. The upper bound reflects the
 native 1500-µm maximum pen width: a primary 1400-µm marker cannot safely
 be enlarged further, and invalid, repeated or non-marker options refuse

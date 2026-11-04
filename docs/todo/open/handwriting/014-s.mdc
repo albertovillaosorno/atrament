@@ -89,7 +89,9 @@ seeded correlated handwriting remain open.
 
 After the caller explicitly authors the lowercase bases, the localhost
 editor can fill only missing NFC `á é í ó ú ñ ü` with one admitted-session
-click. Existing custom accented ink is never replaced. The complete batch
+click. Existing custom accented ink is never replaced.
+
+The complete batch
 is checked before changing the in-memory draft, and still requires an
 explicit TSV download. A missing source, ambiguous dotted `i`, clipped
 accent or out-of-cap library refuses all pending changes. NFD targets
@@ -117,7 +119,9 @@ seeded correlated handwriting variation remains unfinished.
 The authenticated glyph editor now provides a six-copy SVG comparison of
 one exact user-authored Unicode grapheme, including authored accents. The
 first row has three ideal repetitions; the second independently varies each
-repetition using a caller-specified uint32 seed. Six bounded spread controls
+repetition using a caller-specified uint32 seed.
+
+Six bounded spread controls
 apply glyph-correlated width, height, thickness and slant, plus per-occurrence
 horizontal spacing and endpoint regularity. Shared stroke endpoints derive
 jitter from their physical coordinates and seed, so they remain connected
@@ -128,12 +132,15 @@ refuse the varied preview instead of changing any authored ink.
 Three additional focused regressions cover exact NFC `á` geometry, pen-order
 invariance, replay and distinct occurrence seeds, a real browser two-row
 accented `ó` preview, spacing-only changes and invalid input refusal.
+
 The TSV downloaded before and after changing the preview seed is byte-for-byte
 identical; session end clears the preview. All **75 focused glyph tests**
 and the TypeScript check/build pass. An existing real-Firefox/Rust localhost
 journey now verifies that authored `ó` produces a 294-line six-copy preview,
 seed changes alter only the lower row, and invalid width spread refuses
-without deleting the 49 original glyph strokes. This is not a native page
+without deleting the 49 original glyph strokes.
+
+This is not a native page
 or PDF/PNG handwriting variation renderer: the seeded samples are
 preview-only until individually exported (see below). There is no joined
 cursive or persisted correlation across lines or words. The task remains
@@ -183,6 +190,7 @@ shared-endpoint regularity at **each visible grapheme occurrence** rather
 than replacing its canonical glyph source. Samples continue in text-run
 order across physical pages, with the same exact NFC/NFD glyph identities;
 flow uses the original nominal advances and physical overshoot refuses.
+
 The 128-stroke-per-glyph browser sample bound and pen/cell clearance still
 apply, before native output is committed. The existing `--handwriting-profile`
 mean transforms apply only after the optional local perturbation.
@@ -196,6 +204,7 @@ separate shapes across pages; a third rejects invalid seeds/spreads,
 duplicate settings and shape-free requests without replacing an existing
 file. A separate regression verifies decomposed Unicode `n` plus tilde
 using explicit authored fallback ink and selected per-grapheme means.
+
 Native Rust CLI tests cover these cases, PDF/PNG and error refusals;
 strict production-binary Clippy passes. No derived sample
 is written back into the authored library.
@@ -556,7 +565,9 @@ Focused Rust and browser regressions cover rounding, exact Unicode identity,
 neighboring glyph isolation, candidate pen paths, identity at 100%, pen
 clipping and size-limit refusals. A separate browser-to-Rust integration
 reopens the edited TSV and compares actual vector PDF/transparent PNG ink
-byte-for-byte, both alone and following a height edit. Invalid native
+byte-for-byte, both alone and following a height edit.
+
+Invalid native
 edits preserve the source file and existing output; invalid browser edits
 preserve the in-memory draft. Neither engine autosaves. A real localhost
 Firefox/BiDi session checks the live control, preview after edits, exact
@@ -573,6 +584,7 @@ width or pen-thickness adjustment. Undo and redo restore byte-identical
 interleaved Unicode glyph rows, even when integer rounding would otherwise
 lose the original geometry. The controls require the same exact glyph,
 make no backend request and write no file until the user downloads TSV.
+
 A later non-identity transform replaces history; a zero-change transform
 or refused edit preserves earlier undo/redo. Any separate authored edit,
 TSV load or session reset invalidates the snapshot. This does not add
@@ -583,6 +595,7 @@ persistent named variants or multi-step history; P1-014 remains open.
 The repeatable `pnpm run test:joined-ink` subprocess journey now saves
 independent exact NFD `a` plus combining acute and NFC `ó` glyphs as a
 canonical six-segment Rust TSV library, then flows two authored text rows.
+
 It renders real PDF and transparent PNG with seeded per-occurrence width,
 height, slant and endpoint regularity. The PDF has 24 authored segments
 plus four explicit physical connectors, two per row; without the selected

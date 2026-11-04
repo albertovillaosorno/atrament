@@ -102,7 +102,9 @@ not a completed P5-011 end-to-end notebook renderer.
 The Rust `atrament-profiles notebook --flow-markdown` path can now select
 `--heading-style underline|marker|none` and an optional validated
 `--heading-color '#RRGGBB'`. Default behavior remains the existing navy
-single-stroke underline. The marker option uses four parallel, overlapping
+single-stroke underline.
+
+The marker option uses four parallel, overlapping
 1.4-mm **opaque** pastel strokes on the heading text baseline region,
 drawn **before** the caller-authored glyph ink by the existing physical
 PDF and transparent PNG compositor; it does not synthesize letterforms or
@@ -120,6 +122,7 @@ both PDF/PNG page-2 replay. The independent native CLI produced a genuine
 two-page A4 PDF and 596×842 transparent RGBA page-2 PNG; direct pixel
 inspection of an additional one-page PNG found 208 exact selected marker
 pixels and 25 original authored-ink pixels against transparent background.
+
 A separate bound regression admits 110 one-stroke default-underlined
 headings but refuses the same 110 headings with a four-stroke marker before
 replacing an existing file: 550 candidate strokes exceed the unchanged
