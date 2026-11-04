@@ -902,6 +902,12 @@ identity and does not overwrite earlier recovery history. Native and browser
 regressions exercise signed offsets, clip refusal, pen-path preservation,
 exact UTF-8 rows, previous-file immutability, and 4,096-stroke editing.
 
+A real Firefox BiDi/localhost regression exercises the visible X/Y SVG
+proposal, accepted and refused controls, six exact downloaded TSV snapshots,
+undo/redo and identity recovery, and unchanged backend request counts.
+This complements the native PDF/PNG physical-parity checks without using a
+mock browser UI.
+
 Position control does not persist an analytic primitive, named variant,
 auto-diacritic anchors or joined cursive. Full P1 coverage remains open.
 

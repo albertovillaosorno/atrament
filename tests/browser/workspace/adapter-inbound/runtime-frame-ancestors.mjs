@@ -49,7 +49,8 @@ import { PassThrough } from "node:stream";
 import test from "node:test";
 const { geometricStarter, encodeGlyphLibrary,
     italicizeGlyphStrokes, scaleGlyphHeight,
-    scaleGlyphWidth, scaleGlyphInk } = await import(new URL(
+    scaleGlyphWidth, scaleGlyphInk,
+    translateGlyphStrokes } = await import(new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/"
         + "glyph-strokes.js", import.meta.url,
 ).href);
@@ -12232,6 +12233,197 @@ test(
                 "refused browser edits cannot overwrite accepted ink");
             assert.deepEqual(requests, baseline,
                 "ink edits and downloads make no extra backend requests");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+
+test(
+    "Firefox whole-glyph positioning previews and exports exact Unicode ink",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/authored-move-browser-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const get = (id) => document.getElementById("glyph-" + id);
+                    const change = (id, value) => {
+                        get(id).value = String(value);
+                        get(id).dispatchEvent(new Event("input", {
+                            bubbles: true,
+                        }));
+                    };
+                    const add = (glyph, coords, width) => {
+                        change("character", glyph);
+                        for (const [key, value] of Object.entries({
+                            x1: coords[0], y1: coords[1],
+                            x2: coords[2], y2: coords[3], width,
+                        })) change(key, value);
+                        get("add").click();
+                    };
+                    const nfd = "o\u0301";
+                    const initiallyDisabled = get("move-all").disabled;
+                    add(nfd, [450, 1000, 850, 1600], 251);
+                    add("ó", [300, 1000, 500, 1500], 250);
+                    add(nfd, [850, 1600, 1300, 2200], 251);
+                    add("∞", [500, 900, 700, 1100], 250);
+                    change("character", nfd);
+                    const enabled = !get("move-all").disabled;
+                    const guide = get("move-preview");
+                    change("move-x", -200);
+                    change("move-y", 175);
+                    const guideCount = guide.childElementCount;
+                    const guideX1 = guide.querySelector("line")
+                        ?.getAttribute("x1");
+                    const guideY1 = guide.querySelector("line")
+                        ?.getAttribute("y1");
+                    const guideStatus = get("move-preview-status")
+                        .textContent;
+                    const blobs = [];
+                    const names = [];
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            names.push(this.download);
+                        };
+                        get("save").click();
+                        change("move-x", 1.5);
+                        const invalidGuide = guide.childElementCount;
+                        const invalidStatus = get("move-preview-status")
+                            .textContent;
+                        get("move-all").click();
+                        const refused = get("status").textContent;
+                        get("save").click();
+                        change("move-x", -200);
+                        get("move-all").click();
+                        const accepted = get("status").textContent;
+                        const undoReady = !get("slant-undo").disabled;
+                        const undoLabel = get("slant-undo").textContent;
+                        get("save").click();
+                        change("move-x", 0);
+                        change("move-y", 0);
+                        get("move-all").click();
+                        const undoAfterIdentity =
+                            !get("slant-undo").disabled;
+                        get("slant-undo").click();
+                        const undone = get("status").textContent;
+                        const redoReady = !get("slant-redo").disabled;
+                        const redoLabel = get("slant-redo").textContent;
+                        get("save").click();
+                        get("slant-redo").click();
+                        const redone = get("status").textContent;
+                        get("save").click();
+                        change("move-x", -326);
+                        const clippedGuide = guide.childElementCount;
+                        const clippedStatus = get("move-preview-status")
+                            .textContent;
+                        get("move-all").click();
+                        const clipped = get("status").textContent;
+                        get("save").click();
+                        change("character", "ñ");
+                        const missingDisabled = get("move-all").disabled;
+                        return JSON.stringify({
+                            initiallyDisabled, enabled, guideCount,
+                            guideX1, guideY1, guideStatus,
+                            invalidGuide, invalidStatus, refused,
+                            accepted, undoReady, undoLabel,
+                            undoAfterIdentity, undone, redoReady,
+                            redoLabel, redone, clippedGuide,
+                            clippedStatus, clipped, missingDisabled,
+                            names, types: blobs.map((blob) => blob.type),
+                            files: await Promise.all(blobs.map((blob) =>
+                                blob.text())),
+                        });
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const result = JSON.parse(response.result.value);
+            assert.equal(result.initiallyDisabled, true);
+            assert.equal(result.enabled, true);
+            assert.equal(result.missingDisabled, true);
+            assert.equal(result.guideCount, 2);
+            assert.equal(result.guideX1, "250");
+            assert.equal(result.guideY1, "1175");
+            assert.match(result.guideStatus,
+                /preview only, draft unchanged/);
+            assert.equal(result.invalidGuide, 0);
+            assert.match(result.invalidStatus, /offsets require signed whole/);
+            assert.match(result.refused, /offsets require signed whole/);
+            assert.match(result.accepted,
+                /Moved all authored ó strokes; unsaved/);
+            assert.equal(result.undoReady, true);
+            assert.equal(result.undoAfterIdentity, true);
+            assert.equal(result.undoLabel, "Undo last glyph move");
+            assert.equal(result.redoReady, true);
+            assert.equal(result.redoLabel, "Redo last glyph move");
+            assert.match(result.undone, /Undid last glyph move; unsaved/);
+            assert.match(result.redone, /Redid last glyph move; unsaved/);
+            assert.equal(result.clippedGuide, 0);
+            assert.match(result.clippedStatus, /clips glyph cell/);
+            assert.match(result.clipped, /clips glyph cell/);
+            assert.deepEqual(result.names,
+                Array(6).fill("my-glyph-strokes.tsv"));
+            assert.deepEqual(result.types,
+                Array(6).fill("text/tab-separated-values"));
+            const nfd = "o\u0301";
+            const original = [
+                { grapheme: nfd, x1: 450, y1: 1000,
+                    x2: 850, y2: 1600, width: 251, color: "#243647" },
+                { grapheme: "ó", x1: 300, y1: 1000,
+                    x2: 500, y2: 1500, width: 250, color: "#243647" },
+                { grapheme: nfd, x1: 850, y1: 1600,
+                    x2: 1300, y2: 2200, width: 251, color: "#243647" },
+                { grapheme: "∞", x1: 500, y1: 900,
+                    x2: 700, y2: 1100, width: 250, color: "#243647" },
+            ];
+            const initial = encodeGlyphLibrary(original);
+            const moved = encodeGlyphLibrary(
+                translateGlyphStrokes(original, nfd, -200, 175));
+            assert.deepEqual(result.files,
+                [initial, initial, moved, initial, moved, moved],
+                "real browser downloads track exact accepted/undone ink");
+            assert.deepEqual(requests, baseline,
+                "browser-only positioning never calls backend again");
         } finally {
             bidi?.close();
             await closeFixtureServer(server);
