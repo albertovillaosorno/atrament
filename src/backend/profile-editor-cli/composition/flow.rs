@@ -820,6 +820,13 @@ fn heading_body(body: &str) -> &str {
 fn markdown_line(line: &str) -> (LineStyle, &str) {
     let raw = line.trim_end_matches(' ');
     let indent = line.bytes().take_while(|byte| *byte == b' ').count();
+    // Indented block syntax does not consume a visible handwriting space.
+    // At four spaces, keep the entire source as literal authored text.
+    let block = if indent <= 3 {
+        line.get(indent..).unwrap_or(line)
+    } else {
+        line
+    };
     // A single leading backslash escapes a syntactic first-line marker.
     // Keep the marker as actual authored ink, but not the escape itself.
     if indent <= 3
@@ -848,32 +855,32 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
             ("## ", HeadingLevel::Secondary),
             ("# ", HeadingLevel::Primary),
         ] {
-            if let Some(body) = line.get(indent..)
-                .and_then(|part| part.strip_prefix(prefix)) {
+            if let Some(body) = block.strip_prefix(prefix) {
                 return (LineStyle::Heading(level), heading_body(body));
             }
         }
     }
-    if let Some(bullet) = line.strip_prefix("- ")
-        .or_else(|| line.strip_prefix("* "))
-        .or_else(|| line.strip_prefix("+ "))
+    if let Some(bullet) = block.strip_prefix("- ")
+        .or_else(|| block.strip_prefix("* "))
+        .or_else(|| block.strip_prefix("+ "))
     {
         return (LineStyle::Bullet, bullet.trim_end_matches(' '));
     }
-    if let Some(quote) = line.strip_prefix('>') {
+    if let Some(quote) = block.strip_prefix('>') {
         // One level of Markdown quote syntax, optionally followed by one
         // separator space. Nested > markers remain literal authored text.
         return (LineStyle::Quote, quote.strip_prefix(' ')
             .unwrap_or(quote).trim_end_matches(' '));
     }
-    if let Some((marker, item)) = line.split_once(' ')
+    if let Some((marker, item)) = block.split_once(' ')
         && let Some(digits) = marker.strip_suffix('.')
             .or_else(|| marker.strip_suffix(')'))
         && (1..=9).contains(&digits.len())
         && digits.bytes().all(|digit| digit.is_ascii_digit())
     {
         return (LineStyle::Ordered,
-            if item.trim().is_empty() { "" } else { raw });
+            if item.trim().is_empty() { "" }
+            else { block.trim_end_matches(' ') });
     }
     (LineStyle::Body, raw)
 }

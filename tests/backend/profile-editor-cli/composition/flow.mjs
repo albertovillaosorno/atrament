@@ -206,3 +206,56 @@ test('four-space and separator-only Markdown refuse replacement',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+const numberedInk = ['1', '2', '.', ')'].flatMap((grapheme) => [
+    '--glyph-stroke', grapheme, '550', '850', '2000', '2750',
+    '250', '#2277AA',
+]);
+
+test('indented bullet quote and ordered blocks preserve actual PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-list-'));
+        try {
+            const source = '- ó\n* o\u0301\n+ a\n> ó\n> o\u0301\n1. a\n2) ó';
+            const indented = ' - ó\n  * o\u0301\n   + a\n > ó\n  > o\u0301'
+                + '\n   1. a\n  2) ó';
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, source, format, numberedInk);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                if (format === 'pdf') {
+                    assert.equal(expected.toString('latin1')
+                        .split('0.133 0.467 0.667 RG').length - 1,
+                        4, 'authored numerals and punctuation remain visible');
+                }
+                const candidate = render(dir, indented, format,
+                    numberedInk);
+                assert.equal(candidate.result.status, 0,
+                    candidate.result.stderr);
+                assert.deepEqual(readFileSync(candidate.output), expected,
+                    `physical ${format} must ignore structural indentation`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('four-space list and quote marks remain literal refused glyphs',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-list-'));
+        try {
+            const sentinel = Buffer.from('original physical output');
+            const output = join(dir, 'flow-pdf.output');
+            for (const prefix of ['- ó', '* ó', '+ ó', '> ó']) {
+                writeFileSync(output, sentinel);
+                const candidate = render(dir, `    ${prefix}`, 'pdf');
+                assert.notEqual(candidate.result.status, 0, prefix);
+                assert.match(candidate.result.stderr,
+                    /missing authored glyph shapes/);
+                assert.deepEqual(readFileSync(output), sentinel);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

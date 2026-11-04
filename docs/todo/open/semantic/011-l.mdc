@@ -322,6 +322,22 @@ three actual vector ink rules. Four-space indents and separator-only sources
 refuse without changing a selected PDF. This does not add fenced code blocks,
 full thematic-rule grammar or persistent decorative block identities.
 
+## Indented Markdown bullets, quotes and numbered items (partial)
+
+The bounded native CLI accepts zero to three leading ASCII spaces before
+single-level `>` quotes, `-`/`*`/`+` bullets and one-to-nine-digit ordered
+markers such as `1.` or `2)`. Syntax indentation adds no authored ink or
+margin shift. Numbered labels remain exact handwriting glyphs, not inferred
+numbering; quotes and unordered bullets retain their physical pen marks.
+Four-space indents remain literal source and are not parsed as code blocks.
+
+Two native PDF/transparent-PNG regressions check byte-for-byte equality
+between ordinary and independently indented mixed quoted, bulleted and
+ordered blocks using NFC and NFD accented ink plus four explicit numeral
+and delimiter glyph strokes. They also prove four-space list/quote source
+without authored punctuation refuses before overwriting an existing PDF.
+This is still a flat, restricted Markdown compiler, not nested list parsing.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
