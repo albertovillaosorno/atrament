@@ -122,7 +122,9 @@ type PaperEditor = {
     adoptJson?: (json: string) => Promise<boolean>;
 };
 
-export function createPaperProfileEditor(context: PaperEditorContext): PaperEditor {
+export function createPaperProfileEditor(
+    context: PaperEditorContext,
+): PaperEditor {
     const preset = required<HTMLSelectElement>("paper-preset");
     const pattern = required<HTMLSelectElement>("paper-pattern");
     const color = required<HTMLInputElement>("paper-color");
@@ -300,7 +302,9 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
             await work(secret, observed);
         } catch {
             if (isCurrent(secret, observed)) {
-                setStatus("Paper action rejected or unavailable; no file saved.");
+                setStatus(
+                    "Paper action rejected or unavailable; no file saved.",
+                );
             }
         } finally {
             if (isCurrent(secret, observed)) {
@@ -339,10 +343,14 @@ export function createPaperProfileEditor(context: PaperEditorContext): PaperEdit
                 throw new Error("Oversized default paper profile");
             }
             showProfile(readCanonicalProfile(json));
-            setStatus("Paper profile loaded · edit fields, then save or export.");
+            setStatus(
+                "Paper profile loaded · edit fields, then save or export.",
+            );
         } catch {
             if (isCurrent(secret, observed)) {
-                setStatus("Paper profile unavailable; check the local backend.");
+                setStatus(
+                    "Paper profile unavailable; check the local backend.",
+                );
             }
         } finally {
             if (isCurrent(secret, observed)) {
@@ -641,9 +649,12 @@ export function createNotebookProfileEditor(
 
     function selectedName(): string {
         const value = localName.value;
-        if (value.length > 64 || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.json$/.test(value)
+        if (value.length > 64
+            || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.json$/.test(value)
             || value.includes("..")) {
-            throw new Error("Choose a simple .json filename (max 64 characters)");
+            throw new Error(
+                "Choose a simple .json filename (max 64 characters)",
+            );
         }
         return value;
     }
@@ -782,7 +793,8 @@ export function createNotebookProfileEditor(
         return {
             ...admitted,
             date_style: style.value as NotebookProfile["date_style"],
-            date_placement: placement.value as NotebookProfile["date_placement"],
+            date_placement: placement.value as
+                NotebookProfile["date_placement"],
             date_text: dateText.value,
             border_radius_um: Math.round(millimetres * 1000),
             page_numbers: numbers.checked,
@@ -863,11 +875,17 @@ export function createNotebookProfileEditor(
             await work(secret, observed);
         } catch (error) {
             if (active(secret, observed)) {
+                const staleMessage =
+                    "Local notebook changed; reopen before saving. " +
+                    "No overwrite.";
+                const disabledMessage =
+                    "Local files disabled; launch Rust with --profiles-dir.";
                 status.textContent = error instanceof Error
                     && error.message === "stale-file"
-                    ? "Local notebook changed; reopen before saving. No overwrite."
-                    : error instanceof Error && error.message === "disabled-file"
-                        ? "Local files disabled; launch Rust with --profiles-dir."
+                    ? staleMessage
+                    : error instanceof Error
+                        && error.message === "disabled-file"
+                        ? disabledMessage
                         : "Notebook refused; nothing saved.";
             }
         } finally {
@@ -969,7 +987,8 @@ export function createNotebookProfileEditor(
             display(canonicalProfile.profile);
             trackedName = name;
             trackedRevision = result.revision;
-            status.textContent = "Notebook reopened from local Rust profile file.";
+            status.textContent =
+                "Notebook reopened from local Rust profile file.";
         });
     });
     localSave.addEventListener("click", (): void => {
@@ -987,7 +1006,8 @@ export function createNotebookProfileEditor(
             display(canonicalProfile.profile);
             trackedName = name;
             trackedRevision = result.revision;
-            status.textContent = "Native notebook saved in selected local directory.";
+            status.textContent =
+                "Native notebook saved in selected local directory.";
         });
     });
     defaults.addEventListener("click", (): void => {

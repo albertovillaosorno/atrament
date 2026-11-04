@@ -529,7 +529,8 @@ export function createNotebookProfileEditor(context) {
     }
     function selectedName() {
         const value = localName.value;
-        if (value.length > 64 || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.json$/.test(value)
+        if (value.length > 64
+            || !/^[A-Za-z0-9_-][A-Za-z0-9_.-]*\.json$/.test(value)
             || value.includes("..")) {
             throw new Error("Choose a simple .json filename (max 64 characters)");
         }
@@ -730,11 +731,15 @@ export function createNotebookProfileEditor(context) {
         }
         catch (error) {
             if (active(secret, observed)) {
+                const staleMessage = "Local notebook changed; reopen before saving. " +
+                    "No overwrite.";
+                const disabledMessage = "Local files disabled; launch Rust with --profiles-dir.";
                 status.textContent = error instanceof Error
                     && error.message === "stale-file"
-                    ? "Local notebook changed; reopen before saving. No overwrite."
-                    : error instanceof Error && error.message === "disabled-file"
-                        ? "Local files disabled; launch Rust with --profiles-dir."
+                    ? staleMessage
+                    : error instanceof Error
+                        && error.message === "disabled-file"
+                        ? disabledMessage
                         : "Notebook refused; nothing saved.";
             }
         }
@@ -837,7 +842,8 @@ export function createNotebookProfileEditor(context) {
             display(canonicalProfile.profile);
             trackedName = name;
             trackedRevision = result.revision;
-            status.textContent = "Notebook reopened from local Rust profile file.";
+            status.textContent =
+                "Notebook reopened from local Rust profile file.";
         });
     });
     localSave.addEventListener("click", () => {
@@ -853,7 +859,8 @@ export function createNotebookProfileEditor(context) {
             display(canonicalProfile.profile);
             trackedName = name;
             trackedRevision = result.revision;
-            status.textContent = "Native notebook saved in selected local directory.";
+            status.textContent =
+                "Native notebook saved in selected local directory.";
         });
     });
     defaults.addEventListener("click", () => {
