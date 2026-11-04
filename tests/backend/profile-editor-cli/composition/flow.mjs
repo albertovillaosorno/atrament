@@ -554,6 +554,48 @@ test('heading keeps first actual code row after fence syntax',
         }
     });
 
+test('fenced blank rows keep heading and following ink on page two',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-heading-blank-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '100000', '36000'];
+            // Both sources put the same authored ink on the same two
+            // physical pages. The first needs a heading orphan guard;
+            // the second fills page one before the heading naturally.
+            const cases = [
+                ['a\n# a\n~~~txt\n\nó\n~~~',
+                    'a\n~~~txt\n\n\n~~~\n# a\n~~~txt\n\nó\n~~~'],
+                ['a\n# a\n\n~~~txt\n\nó\n~~~',
+                    'a\n~~~txt\n\n\n~~~\n# a\n\n~~~txt\n\nó\n~~~'],
+            ];
+            for (const [candidate, expected] of cases) {
+                for (const format of ['pdf', 'png']) {
+                    for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                        const reference = render(dir, expected, format,
+                            region, '--flow-markdown', page);
+                        assert.equal(reference.result.status, 0,
+                            reference.result.stderr);
+                        const bytes = readFileSync(reference.output);
+                        const actual = render(dir, candidate, format,
+                            region, '--flow-markdown', page);
+                        assert.equal(actual.result.status, 0,
+                            actual.result.stderr);
+                        assert.deepEqual(readFileSync(actual.output), bytes,
+                            `${format} page ${page} must keep physical ink`);
+                        if (format === 'pdf') {
+                            assert.equal((bytes.toString('latin1')
+                                .match(/\/Type \/Page\b/g) || []).length,
+                                2);
+                        }
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('ordinary Markdown paragraphs ignore up to three indentation spaces',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-body-indent-'));

@@ -943,3 +943,21 @@ regression catches another invisible-page effect: an all-blank final fenced
 block must not move the last visible heading to a later page. This only
 fixes export pagination and invisible trailing whitespace; it does not
 persist Markdown blocks or implement the complete semantic notebook editor.
+
+## Keep headings with fenced code ink across blank rows (partial) — 2026-11-04
+
+The native Markdown heading orphan guard now counts empty fenced-code rows
+as full measured writing rows, separately from the optional 4-mm Markdown
+paragraph gap. Previously a title in the penultimate row of a three-row
+fixed page could stay on that page while its first code ink fell onto the
+next sheet, because a blank code row was treated as the smaller gap.
+
+A red-before/green-after Rust test covers ATX and Setext titles, inline
+and closed fences, and combined paragraph and code whitespace. Native CLI
+integration compares actual two-page vector PDF and both transparent PNG
+pages byte-for-byte with independently laid-out equivalent ink. Terminal
+all-blank fences still cannot relocate a final heading; a page too short
+for the whole group retains normal pagination without inventing extra ink.
+
+This changes only the CLI's bounded export layout. The saved semantic
+notebook model, general Markdown grammar and full P1 acceptance stay open.

@@ -238,3 +238,35 @@ fn heading_does_not_move_for_empty_trailing_fenced_rows() {
         .map(|run| (run.page, run.origin_um)).collect::<Vec<_>>());
     assert_eq!(marks, clean_marks);
 }
+
+#[test]
+fn heading_keeps_next_ink_after_interior_fenced_blank_rows() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    // Three 9-mm physical rows fit per sheet. Starting a heading on
+    // the second row cannot fit both a fenced blank row and next ink.
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 36_000,
+    };
+    for (source, distance) in [
+        ("a\n# a\n~~~txt\n\nó\n~~~", 18_000),
+        ("a\n# a\n~~~txt\n\n~~~\nó", 18_000),
+        ("a\n# a\n\n~~~txt\n\nó\n~~~", 22_000),
+        ("a  \na\n===\n~~~txt\n\nó\n~~~", 18_000),
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, source)
+            .expect("valid heading and fenced blank source");
+        let (runs, _, pages) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("three physical rows should fit on the second page");
+        assert_eq!(pages, 2);
+        assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+            [1, 2, 2], "heading must stay with later physical ink");
+        assert_eq!(runs[2].origin_um.1 - runs[1].origin_um.1,
+            distance, "fenced rows and any paragraph gap remain physical");
+    }
+}

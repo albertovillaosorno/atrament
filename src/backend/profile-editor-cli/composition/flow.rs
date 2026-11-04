@@ -526,20 +526,24 @@ impl Layout<'_> {
     }
 
     fn keep_heading_with_next(
-        &mut self, separated: bool,
+        &mut self, following: FollowingInkSpacing,
     ) -> Result<(), String> {
         self.flush_blank_rows()?;
         let top = self.top.checked_add(INSET_UM)
             .ok_or("heading top inset overflow")?;
         let bottom = self.bottom.checked_sub(INSET_UM)
             .ok_or("heading bottom inset overflow")?;
-        let needed = self.pitch.checked_mul(2)
-            .and_then(|value| value.checked_add(if separated {
+        let rows = u32::try_from(following.blank_rows)
+            .map_err(|_error| "heading blank-row budget overflow")?
+            .checked_add(2)
+            .ok_or("heading following-row budget overflow")?;
+        let needed = self.pitch.checked_mul(rows)
+            .and_then(|value| value.checked_add(if following.paragraph_gap {
                 PARAGRAPH_GAP_UM
             } else { 0 }))
             .ok_or("heading following-row budget overflow")?;
-        // Extremely short paper may hold only one row. Do not reject a
-        // valid heading there just because two rows cannot coexist.
+        // If one sheet cannot hold this full span, fall back to normal
+        // pagination instead of refusing valid short paper outright.
         if top.checked_add(needed).is_none_or(|end| end > bottom) {
             return Ok(());
         }
@@ -1236,33 +1240,42 @@ fn markdown_paragraph_break<'text>(
     (body, raw.ends_with("  "))
 }
 
-// A heading needs its first following visible line; multiple Markdown
-// empty lines are one optional paragraph gap. An ending heading has no
-// following line to keep, so it can occupy the last physical row.
+// Paragraph whitespace collapses to one 4-mm gap, but blank fenced
+// lines reserve full physical rows once followed by actual ink. Retain
+// both measurements in the heading orphan guard rather than treating a
+// blank code row as if it were paragraph spacing.
+#[derive(Clone, Copy)]
+struct FollowingInkSpacing {
+    blank_rows: usize,
+    paragraph_gap: bool,
+}
+
+// A heading needs its first following visible line. An ending heading has
+// no following ink to keep, even if an empty code fence follows it.
 fn following_heading_gap<'text>(
     lines: impl Iterator<Item = &'text str>,
-) -> Option<bool> {
-    let mut separated = false;
+) -> Option<FollowingInkSpacing> {
+    let mut following = FollowingInkSpacing {
+        blank_rows: 0,
+        paragraph_gap: false,
+    };
     let mut fence = None;
     for line in lines {
         if markdown_fence_transition(&mut fence, line) {
-            // Delimiters have no physical row; an empty code block cannot
-            // justify relocating an otherwise final heading.
+            // Fence delimiters themselves have no physical row.
             continue;
         }
         if fence.is_some() {
-            // Empty code rows reserve height only when later ink follows.
-            // A final all-blank fenced block cannot move its last heading.
             if line.trim_matches(' ').is_empty() {
-                separated = true;
+                following.blank_rows += 1;
                 continue;
             }
-            return Some(separated);
+            return Some(following);
         }
         if line.trim_end_matches(' ').is_empty() {
-            separated = true;
+            following.paragraph_gap = true;
         } else {
-            return Some(separated);
+            return Some(following);
         }
     }
     None
