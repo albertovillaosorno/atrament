@@ -3,7 +3,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
-    geometricStarter, composeAccentedGlyph, varyGlyphStrokes } =
+    geometricStarter, composeAccentedGlyph, varyGlyphStrokes,
+    candidatePenPaths } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -27,6 +28,59 @@ test("exact Unicode shape identity survives TSV", () => {
         grapheme: "ñ", x1: 1, y1: 2, x2: 3000, y2: 4200,
         width: 250, color: "#A1B2C3",
     }]);
+});
+
+test("candidate pen paths respect directed endpoints and exact Unicode", () => {
+    const nfd = "n\u{303}";
+    const source = [
+        { ...stroke(nfd), x1: 100, y1: 300, x2: 400, y2: 600 },
+        { ...stroke("ñ"), x1: 100, y1: 300, x2: 400, y2: 600 },
+        { ...stroke(nfd), x1: 400, y1: 600, x2: 800, y2: 900,
+            color: "#a1b2c3" },
+        { ...stroke(nfd), x1: 800, y1: 900, x2: 1200, y2: 1200,
+            width: 350 },
+        { ...stroke(nfd), x1: 1200, y1: 1200, x2: 1400, y2: 1600,
+            width: 350 },
+        { ...stroke(nfd), x1: 1400, y1: 1600, x2: 1200, y2: 1200,
+            color: "#123456", width: 350 },
+    ];
+    const before = structuredClone(source);
+    assert.deepEqual(candidatePenPaths(source, nfd), [
+        { first: 1, last: 2, start: { x: 100, y: 300 },
+            end: { x: 800, y: 900 }, width: 250, color: "#A1B2C3" },
+        { first: 3, last: 4, start: { x: 800, y: 900 },
+            end: { x: 1400, y: 1600 }, width: 350, color: "#A1B2C3" },
+        { first: 5, last: 5, start: { x: 1400, y: 1600 },
+            end: { x: 1200, y: 1200 }, width: 350, color: "#123456" },
+    ]);
+    assert.deepEqual(candidatePenPaths(source, "ñ"), [
+        { first: 1, last: 1, start: { x: 100, y: 300 },
+            end: { x: 400, y: 600 }, width: 250, color: "#A1B2C3" },
+    ]);
+    assert.deepEqual(candidatePenPaths(source, "∞"), []);
+    assert.throws(() => candidatePenPaths(source, "nn"), /exact visible/);
+    assert.throws(() => candidatePenPaths(source, " "), /exact visible/);
+    assert.deepEqual(source, before, "inspection never edits a source");
+    const reversed = source.slice();
+    reversed[2] = { ...reversed[2], x1: 800, y1: 900,
+        x2: 400, y2: 600 };
+    assert.equal(candidatePenPaths(reversed, nfd).length, 4,
+        "reversing a line breaks its previously directed joint");
+});
+
+test("candidate pen-path inspector handles full native stroke budget", () => {
+    const source = Array.from({ length: 4096 }, (_, i) => ({
+        ...stroke("ó"), x1: 100, y1: 100,
+        x2: 100 + i % 100, y2: 200 + i % 100,
+    }));
+    assert.equal(candidatePenPaths(source, "ó").length, 4096);
+    const chain = Array.from({ length: 4096 }, (_, i) => ({
+        ...stroke("ó"), x1: 100, y1: i, x2: 100, y2: i + 1,
+    }));
+    assert.deepEqual(candidatePenPaths(chain, "ó"), [
+        { first: 1, last: 4096, start: { x: 100, y: 0 },
+            end: { x: 100, y: 4096 }, width: 250, color: "#A1B2C3" },
+    ]);
 });
 
 test("untrusted glyph TSV and edited numeric fields fail closed", () => {
@@ -176,7 +230,7 @@ function mountEditor() {
         "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
         "glyph-earlier", "glyph-later", "glyph-join",
-        "glyph-variation-preview", "glyph-variation-status",
+        "glyph-paths", "glyph-variation-preview", "glyph-variation-status",
         "glyph-variation-seed", "glyph-variation-sample",
         "glyph-variation-download", ...["width", "height", "thickness",
             "slant", "spacing", "regularity"].map((key) =>
@@ -737,6 +791,8 @@ test("stroke reversal and reorder affect only the chosen glyph", async () => {
             original[3], original[4],
         ]);
         editor.reset();
+        assert.equal(get("paths").textContent,
+            "Requires a compatible backend session");
         assert.equal(get("reverse").disabled, true);
         assert.equal(get("earlier").disabled, true);
         assert.equal(get("later").disabled, true);
@@ -767,6 +823,12 @@ test("browser joins preserve Unicode rows and export Rust TSV", async () => {
         await get("load").dispatch("change");
         get("character").value = grapheme;
         get("character").dispatch("input");
+        assert.match(get("paths").textContent,
+            /2 directed strokes, 2 candidate pen paths, 1 apparent pen lift/);
+        assert.match(get("paths").textContent,
+            /Path 1: strokes 1–1.*Path 2: strokes 2–2/);
+        assert.equal(get("selected").children[1].textContent,
+            "Stroke 1 of 2 (path 1)");
         assert.equal(get("join").disabled, true,
             "joining requires a deliberate exact-glyph selection");
         get("selected").value = "0";
@@ -781,6 +843,12 @@ test("browser joins preserve Unicode rows and export Rust TSV", async () => {
         };
         const expected = [original[0], bridge, original[1], original[2]];
         assert.equal(get("preview").children.length, 3);
+        assert.match(get("paths").textContent,
+            /3 directed strokes, 1 candidate pen path, 0 apparent pen lifts/);
+        assert.match(get("paths").textContent,
+            /Path 1: strokes 1–3, \(500, 600\) → \(2200, 2600\)/);
+        assert.equal(get("selected").children[2].textContent,
+            "Stroke 2 of 3 (path 1)");
         get("save").dispatch("click");
         const exported = parseGlyphLibrary(await downloads[0].text());
         assert.deepEqual(exported, expected);

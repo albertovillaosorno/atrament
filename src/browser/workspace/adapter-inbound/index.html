@@ -888,6 +888,12 @@
               stroke to the next segment of the same glyph. It requires the
               same pen width/color and a gap at most 1200 µm; no automatic
               cursive or inferred pen lift is created.</p>
+            <p id="glyph-paths" class="field-help" role="status"
+              aria-live="polite">Requires a compatible backend session.</p>
+            <p class="field-help">Candidate pen paths follow the visible
+              directed stroke order. Only exact touching endpoints and equal
+              pen width/color are continuous; lifts are estimates, not saved
+              pen commands. The first eight paths are shown here.</p>
             <label class="paper-upload-label" for="glyph-load">
               Load stroke TSV
               <input id="glyph-load" type="file" accept=".tsv,text/plain"

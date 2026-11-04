@@ -338,6 +338,27 @@ This is a read-only view of v1 line segments, not a persisted grouping or
 an explicit physical plotter pen-lift command. The remaining P1-014 goals
 of authored continuous paths, analytic curves and genuine cursive stay open.
 
+## Live browser pen-path inspection (partial) — 2026-11-03
+
+The localhost glyph editor now reports candidate continuous paths for the
+selected exact Unicode glyph, using the native CLI inspector's same rule:
+consecutive authored strokes must have identical directed endpoints, width
+and RGB. An accessible live readout reports path-index ranges, coordinates,
+pen settings and the number of apparent lifts, with the first eight paths
+expanded. Stroke selection lists each segment's path number; changing pen
+direction, ordering, geometry, glyph or explicit connectors refreshes the
+readout without altering the authored library or downloading files.
+
+Two new browser tests cover interleaved NFC/NFD graphemes, pen settings,
+reversed direction, preserved source bytes, empty or invalid glyphs and both
+4096-segment limits (all connected versus all disconnected). Existing
+browser connector tests now verify live path/lift counts, path labels,
+original TSV export and session-reset clearing; native TSV v1 is unchanged.
+
+These path boundaries are inferred solely for inspection. No plotter pen-up
+commands, grouped curve geometry, persisted path identity or automatic
+cursive is claimed. The P1 joined-strokes task remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

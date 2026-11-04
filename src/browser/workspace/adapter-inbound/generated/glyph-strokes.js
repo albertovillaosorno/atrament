@@ -122,6 +122,38 @@ export function encodeGlyphLibrary(strokes) {
     }
     return result;
 }
+export function candidatePenPaths(strokes, grapheme) {
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Path inspection requires one exact visible glyph");
+    }
+    const chosen = strokes.filter((stroke) => stroke.grapheme === grapheme);
+    if (chosen.length === 0)
+        return [];
+    const paths = [];
+    const record = (first, endExclusive) => {
+        const start = chosen[first];
+        const end = chosen[endExclusive - 1];
+        paths.push({
+            first: first + 1, last: endExclusive,
+            start: { x: start.x1, y: start.y1 },
+            end: { x: end.x2, y: end.y2 },
+            width: start.width, color: start.color.toUpperCase(),
+        });
+    };
+    let first = 0;
+    for (let index = 1; index < chosen.length; index += 1) {
+        const before = chosen[index - 1];
+        const after = chosen[index];
+        if (before.x2 !== after.x1 || before.y2 !== after.y1
+            || before.width !== after.width
+            || before.color.toUpperCase() !== after.color.toUpperCase()) {
+            record(first, index);
+            first = index;
+        }
+    }
+    record(first, chosen.length);
+    return paths;
+}
 // The construction is defined by an analytic circle; v1 TSV can only
 // preserve its rounded line-segment approximation, not that ideal primitive.
 function acuteAccent(cx, cy, radius, pen, dx, lift, topOffset = radius) {
@@ -1306,6 +1338,7 @@ export function createGlyphStrokeEditor() {
     const save = required("glyph-save");
     const preview = required("glyph-preview");
     const status = required("glyph-status");
+    const pathsStatus = required("glyph-paths");
     const variationPreview = required("glyph-variation-preview");
     const variationStatus = required("glyph-variation-status");
     const variationSeed = required("glyph-variation-seed");
@@ -1713,11 +1746,43 @@ export function createGlyphStrokeEditor() {
         if (!shown.some(({ index }) => index === selectedIndex)) {
             selectedIndex = null;
         }
+        const paths = exactGrapheme(character.value)
+            ? candidatePenPaths(strokes, character.value) : [];
+        const pathNumbers = new Array(shown.length);
+        for (const [pathIndex, path] of paths.entries()) {
+            for (let i = path.first - 1; i < path.last; i += 1) {
+                pathNumbers[i] = pathIndex + 1;
+            }
+        }
+        if (!active) {
+            pathsStatus.textContent = "Requires a compatible backend session";
+        }
+        else if (paths.length === 0) {
+            pathsStatus.textContent = "No authored pen paths for this glyph";
+        }
+        else {
+            const details = paths.slice(0, 8).map((path, index) => {
+                return `Path ${index + 1}: strokes `
+                    + `${path.first}–${path.last}, `
+                    + `(${path.start.x}, ${path.start.y}) → `
+                    + `(${path.end.x}, ${path.end.y}), `
+                    + `${path.width} µm ${path.color}`;
+            });
+            const more = paths.length > 8
+                ? `; ${paths.length - 8} more (inspect with Rust CLI)` : "";
+            const pathWord = paths.length === 1 ? "path" : "paths";
+            const lifts = paths.length - 1;
+            const liftWord = lifts === 1 ? "lift" : "lifts";
+            pathsStatus.textContent = `${shown.length} directed strokes, `
+                + `${paths.length} candidate pen ${pathWord}, `
+                + `${lifts} apparent pen ${liftWord}. `
+                + details.join("; ") + more;
+        }
         const options = shown.map(({ index }, position) => {
             const option = document.createElement("option");
             option.value = String(index);
             option.textContent = "Stroke " + (position + 1)
-                + " of " + shown.length;
+                + " of " + shown.length + ` (path ${pathNumbers[position]})`;
             return option;
         });
         const placeholder = document.createElement("option");
