@@ -821,6 +821,21 @@ A focused browser regression proves refusal of the invalid controls and
 bare-CR positions without silently repairing the text. The Rust importer
 continues rejecting the same inputs and does not accept new Markdown syntax.
 
+## Browser Markdown tab-budget preflight (partial) — 2026-11-04
+
+The explicit Markdown handoff now checks the native flow compiler's
+4,096-byte limit *after* tab expansion as well as before transport.
+Previously a source below the raw limit could download successfully but
+be refused by Rust solely because physical four-column tabs grew past the
+limit. This read-only estimate follows CRLF, U+2028/U+2029 source
+separator normalization and counts Unicode grapheme columns without
+changing downloaded source bytes.
+
+When browser grapheme segmentation is unavailable, the handoff defers
+this check to the authoritative Rust importer rather than refusing
+otherwise valid Unicode. Focused tests cover exact cap boundaries,
+CRLF, the initial BOM, NFD accents and joined emoji graphemes.
+
 ## Literal indented trailing backslashes (partial) — 2026-11-04
 
 Four-or-more-space-indented Markdown rows already preserve their exact

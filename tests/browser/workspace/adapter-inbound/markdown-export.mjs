@@ -74,6 +74,33 @@ test("CLI file transport accepts exactly 4096 bytes", () => {
         "too-large");
 });
 
+test("native four-column tab expansion cannot overrun Markdown handoff",
+    () => {
+    for (const [source, expected] of [
+        ["a\t".repeat(1024), "ready"],
+        ["a\t".repeat(1025), "too-large"],
+        ["o\u0301\t".repeat(682), "ready"],
+        ["o\u0301\t".repeat(683), "too-large"],
+        ["a\r\n\t".repeat(682), "ready"],
+        ["a\r\n\t".repeat(683), "too-large"],
+        ["\uFEFF" + "a\t".repeat(1024), "ready"],
+        ["\uFEFF" + "a\t".repeat(1025), "too-large"],
+        ["👩\u200d🏫\t".repeat(300), "too-large"],
+        ["a\u2028\t".repeat(512), "ready"],
+        ["a\u2028\t".repeat(513), "too-large"],
+        ["a\u2029\t".repeat(585), "ready"],
+        ["a\u2029\t".repeat(586), "too-large"],
+    ]) {
+        const candidate = prepareMarkdownHandoff(source);
+        assert.equal(candidate.kind, expected, source.slice(0, 20));
+        if (candidate.kind === "ready") {
+            assert.equal(candidate.text, source, "exact Unicode source");
+            assert.equal(candidate.bytes,
+                new TextEncoder().encode(source).byteLength);
+        }
+    }
+});
+
 test("blank or lossy Unicode handoff refuses without fallback", () => {
     for (const source of ["", "\n \t", "\uFEFF",
         "\uFEFF \t\n\r\u2028\u2029"]) {

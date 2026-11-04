@@ -1,3 +1,34 @@
+// Native flow expands tabs to physical four-grapheme columns after
+// normalizing source line separators. This read-only estimate only blocks
+// known size overflow; unsupported segmenters defer to the Rust CLI.
+function expandsBeyondNativeFlowLimit(text, encoder) {
+    if (!text.includes("\t") || typeof Intl.Segmenter !== "function") {
+        return false;
+    }
+    const normalized = text.replace(/\r\n/g, "\n")
+        .replace(/\u2028/g, "  \n").replace(/\u2029/g, "\n\n");
+    let expandedBytes = encoder.encode(normalized).byteLength;
+    let column = 0;
+    const segments = new Intl.Segmenter(undefined, {
+        granularity: "grapheme",
+    });
+    for (const { segment } of segments.segment(normalized)) {
+        if (segment === "\n") {
+            column = 0;
+        }
+        else if (segment === "\t") {
+            const spaces = 4 - column % 4;
+            expandedBytes += spaces - 1;
+            column += spaces;
+        }
+        else {
+            column += 1;
+        }
+        if (expandedBytes > 4_096)
+            return true;
+    }
+    return false;
+}
 // This is an early transport guard, not an admission of Markdown syntax.
 // Rust --flow-markdown-file independently validates all file content.
 export function prepareMarkdownHandoff(text) {
@@ -5,7 +36,8 @@ export function prepareMarkdownHandoff(text) {
     // byte cap includes the BOM, even for structural-only whitespace.
     if (text.length > 4_096)
         return { kind: "too-large" };
-    const utf8 = new TextEncoder().encode(text);
+    const encoder = new TextEncoder();
+    const utf8 = encoder.encode(text);
     if (utf8.length > 4_096)
         return { kind: "too-large" };
     // Match Rust's structural blank check, not JS trim(): non-ASCII
@@ -26,6 +58,9 @@ export function prepareMarkdownHandoff(text) {
     if (new TextDecoder("utf-8", { ignoreBOM: true })
         .decode(utf8) !== text) {
         return { kind: "invalid-unicode" };
+    }
+    if (expandsBeyondNativeFlowLimit(admitted, encoder)) {
+        return { kind: "too-large" };
     }
     return { kind: "ready", text, bytes: utf8.length };
 }
