@@ -1019,6 +1019,15 @@ unauthored `∂` or invalid page count refuses without replacing the accepted
 PDF. Analytic SVG curves are still sampled for native PDF/PNG and are not
 persisted as native vector splines. Full P1-012 coverage remains open.
 
+A real Firefox/WebDriver BiDi session separately proves the local editor can
+fill all 16 math glyphs, display the actual ideal curve controls, and save
+the exact 211-stroke math-only TSV download without contacting the backend.
+A refused clipped integral replacement preserves identical subsequent
+download bytes. Rust reopens that captured Firefox TSV verbatim and renders
+all four new symbols in a 119-stroke vector PDF and transparent RGBA PNG;
+the PNG contains the intended dark mathematical ink. This acceptance
+requires Firefox and the existing local Rust CLI, but no network or printer.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

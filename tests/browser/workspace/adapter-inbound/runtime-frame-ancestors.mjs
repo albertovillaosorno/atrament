@@ -47,6 +47,7 @@ import net from "node:net";
 import path from "node:path";
 import { PassThrough } from "node:stream";
 import test from "node:test";
+import { inflateSync } from "node:zlib";
 const { geometricStarter, encodeGlyphLibrary,
     italicizeGlyphStrokes, scaleGlyphHeight,
     scaleGlyphWidth, scaleGlyphInk,
@@ -12545,6 +12546,191 @@ test(
             assert.notEqual(result.proposedX, result.undoneX);
             assert.deepEqual(requests, baseline,
                 "local rotation and recovery do not call the Rust backend");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+test(
+    "Firefox authors exact calculus symbols for native PDF and PNG",
+    // A fresh checkout may need one bounded offline Rust compilation.
+    { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/calculus-firefox-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const get = (id) => document.getElementById("glyph-" + id);
+                    const change = (id, value) => {
+                        get(id).value = String(value);
+                        get(id).dispatchEvent(new Event("input", {
+                            bubbles: true,
+                        }));
+                    };
+                    const before = get("seed-math").disabled;
+                    get("seed-math").click();
+                    const filled = get("status").textContent;
+                    get("seed-math").click();
+                    const complete = get("status").textContent;
+                    const guides = [];
+                    for (const glyph of ["∑", "∫", "Δ", "≈"]) {
+                        change("form", glyph);
+                        change("character", glyph);
+                        const guide = get("ideal-rounded");
+                        const d = guide.getAttribute("d");
+                        guides.push({ glyph, d,
+                            visible: guide.getAttribute("visibility") });
+                    }
+                    const names = [];
+                    const blobs = [];
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            names.push(this.download);
+                        };
+                        get("save").click();
+                        change("form", "∫");
+                        change("character", "∫");
+                        change("circle-x", 150);
+                        const hidden = get("ideal-rounded")
+                            .getAttribute("visibility");
+                        get("construct").click();
+                        const refused = get("status").textContent;
+                        get("save").click();
+                        return JSON.stringify({ before, filled, complete,
+                            guides, hidden, refused, names,
+                            media: blobs.map((blob) => blob.type),
+                            files: await Promise.all(blobs.map((blob) =>
+                                blob.text())) });
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const actual = JSON.parse(response.result.value);
+            assert.equal(actual.before, false);
+            assert.match(actual.filled, /Filled 16 missing math glyphs/);
+            assert.match(actual.complete, /All 16 math glyphs/);
+            for (const [index, count, lifts] of [
+                [0, 0, 1], [1, 3, 1], [2, 0, 1], [3, 4, 2],
+            ]) {
+                const guide = actual.guides[index];
+                assert.equal(guide.visible, "visible");
+                assert.equal((guide.d.match(/ Q /g) ?? []).length, count);
+                assert.equal((guide.d.match(/M /g) ?? []).length, lifts);
+            }
+            assert.equal(actual.hidden, "hidden");
+            assert.match(actual.refused, /fit inside glyph cell/);
+            assert.deepEqual(actual.names,
+                Array(2).fill("my-glyph-strokes.tsv"));
+            assert.deepEqual(actual.media,
+                Array(2).fill("text/tab-separated-values"));
+            const symbols = ["+", "-", "−", "=", "×", "÷",
+                "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "Δ", "≈"];
+            const ink = symbols.flatMap((glyph) => geometricStarter(
+                glyph, 1550, 2450, 1100, 250, "#243647"));
+            assert.equal(ink.length, 211);
+            const expected = encodeGlyphLibrary(ink);
+            assert.deepEqual(actual.files, [expected, expected],
+                "real browser fill and refusal preserve exact pen order");
+            assert.deepEqual(requests, baseline,
+                "unsaved geometry and downloads never access backend");
+
+            const library = path.join(profile, "math.tsv");
+            fs.writeFileSync(library, actual.files[0]);
+            const build = spawnSync(PINNED_CARGO, [
+                "build", "--offline", "--quiet",
+                "-p", "atrament_profile_editor_cli",
+                "--bin", "atrament-profiles",
+            ], {
+                timeout: 90_000, stdio: "pipe",
+                env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR },
+            });
+            assert.equal(build.status, 0,
+                "native CLI must build offline for Firefox TSV replay");
+            const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            const invoke = (...flags) => spawnSync(cli, flags, {
+                timeout: 20_000,
+                maxBuffer: 16 * 1024 * 1024,
+            });
+            const reopen = invoke("glyphs", "--profile", library);
+            assert.equal(reopen.status, 0, reopen.stderr.toString());
+            assert.equal(reopen.stdout.toString(), expected,
+                "Rust reopens the actual Firefox TSV without rewriting ink");
+            for (const format of ["pdf", "png"]) {
+                const rendered = invoke("notebook", "--printed-sheet",
+                    "true", "--glyph-file", library, "--flow-text",
+                    "∑∫Δ≈", "--export-paper", format,
+                    ...(format === "png" ? ["--dpi", "72"] : []));
+                assert.equal(rendered.status, 0,
+                    rendered.stderr.toString());
+                assert.ok(rendered.stdout.length > 1000);
+                if (format === "pdf") {
+                    const vector = rendered.stdout.toString("latin1");
+                    assert.match(vector, /^%PDF-1\.4/);
+                    assert.equal((vector.match(/ m\n/g) ?? []).length, 119,
+                        "four calculus forms draw 119 real pen strokes");
+                } else {
+                    const bytes = rendered.stdout;
+                    assert.deepEqual(bytes.subarray(0, 8),
+                        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+                    assert.equal(bytes.readUInt32BE(16), 596);
+                    assert.equal(bytes.readUInt32BE(20), 842);
+                    assert.equal(bytes[25], 6, "transparent RGBA page");
+                    const chunks = [];
+                    for (let offset = 8; offset + 12 <= bytes.length;) {
+                        const length = bytes.readUInt32BE(offset);
+                        if (bytes.toString("ascii", offset + 4,
+                            offset + 8) === "IDAT") {
+                            chunks.push(bytes.subarray(offset + 8,
+                                offset + 8 + length));
+                        }
+                        offset += length + 12;
+                    }
+                    assert.ok(chunks.length);
+                    assert.ok(inflateSync(Buffer.concat(chunks)).includes(
+                        Buffer.from([36, 54, 71, 255])),
+                    "native PNG contains real authored mathematical ink");
+                }
+            }
+            assert.equal(fs.readFileSync(library, "utf8"), expected);
         } finally {
             bidi?.close();
             await closeFixtureServer(server);
