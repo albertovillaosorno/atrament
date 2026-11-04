@@ -88,19 +88,6 @@ fn printing_requires_exact_file_and_named_queue() {
     assert_eq!(request.printer, "Local_Printer-2");
     assert!(!request.dry_run);
     assert_eq!(request.expected_sha256, None);
-    let checksum = sha256_hex(sha256_profile_bytes(b"abc").bytes())
-        .expect("hex encoder");
-    assert_eq!(checksum,
-        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-    assert_eq!(parse_sha256(&checksum).expect("valid lowercase digest"),
-        parse_sha256(&checksum.to_uppercase()).expect("valid upper digest"));
-    let checksum_args = [
-        "--pdf", "notebook.pdf", "--printer", "Local_Printer-2",
-        "--expect-sha256", &checksum,
-    ].map(str::to_owned);
-    assert_eq!(parse_args(&checksum_args).expect("digest option")
-        .expect("request").expected_sha256,
-        Some(parse_sha256(&checksum).expect("hex digest")));
     let dry_args = [
         "--pdf",
         "notebook.pdf",
@@ -170,13 +157,31 @@ fn printing_requires_exact_file_and_named_queue() {
         let args = flags.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert!(parse_args(&args).is_err(), "refused {flags:?}");
     }
+    assert!(!valid_printer(&"a".repeat(81)));
+
+}
+
+#[test]
+fn reviewed_pdf_hash_requires_an_exact_valid_digest() {
+    let checksum = sha256_hex(sha256_profile_bytes(b"abc").bytes())
+        .expect("hex encoder");
+    assert_eq!(checksum,
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    assert_eq!(parse_sha256(&checksum).expect("valid lowercase digest"),
+        parse_sha256(&checksum.to_uppercase()).expect("valid upper digest"));
+    let checksum_args = [
+        "--pdf", "notebook.pdf", "--printer", "Local_Printer-2",
+        "--expect-sha256", &checksum,
+    ].map(str::to_owned);
+    assert_eq!(parse_args(&checksum_args).expect("digest option")
+        .expect("request").expected_sha256,
+        Some(parse_sha256(&checksum).expect("hex digest")));
     let twice = [
         "--pdf", "file.pdf", "--printer", "q",
         "--expect-sha256", &checksum,
         "--expect-sha256", &checksum,
     ].map(str::to_owned);
     assert!(parse_args(&twice).is_err(), "duplicate valid digest refused");
-    assert!(!valid_printer(&"a".repeat(81)));
     for digest in [
         "0".repeat(63),
         "0".repeat(65),
