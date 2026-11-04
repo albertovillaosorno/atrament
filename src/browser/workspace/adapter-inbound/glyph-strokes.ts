@@ -674,8 +674,9 @@ function quoteMirror(
 // Math starters retain ideal SVG lines/quadratics; native v1 samples curves
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
-    "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈"] as const;
-// Extra manually selected marks do not change the 19-glyph math fill.
+    "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈",
+    "→", "∝"] as const;
+// Extra manually selected marks do not change the 21-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -750,6 +751,13 @@ function mathParts(
         line(-0.8, 0.9, 0.8, 0.9),
         line(0.8, 0.9, 0, -0.9),
     ];
+    // The shaft lifts before an independently directed arrowhead;
+    // its two arrowhead segments meet at the same physical tip.
+    if (glyph === "→") return [
+        line(-0.8, 0, 0.8, 0),
+        line(0.2, -0.55, 0.8, 0),
+        line(0.8, 0, 0.2, 0.55),
+    ];
     const curve = (start: [number, number],
         handle: [number, number], end: [number, number]): MarkPiece => ({
         from: point(...start), control: point(...handle), to: point(...end),
@@ -766,6 +774,14 @@ function mathParts(
         curve([-0.35, -0.2], [-0.95, 0], [-0.7, 0.6]),
         curve([-0.7, 0.6], [-0.15, 1.05], [0.45, 0.55]),
         curve([0.45, 0.55], [1, -0.15], [-0.35, -0.2]),
+    ];
+    // Proportionality is a single open, directed curve: incoming upper
+    // arm, rounded left loop and outgoing lower arm. It is not infinity.
+    if (glyph === "∝") return [
+        curve([0.75, -0.65], [0.05, -0.6], [-0.12, 0]),
+        curve([-0.12, 0], [-0.62, 0.9], [-0.85, 0]),
+        curve([-0.85, 0], [-0.62, -0.9], [-0.12, 0]),
+        curve([-0.12, 0], [0.05, 0.6], [0.75, 0.65]),
     ];
     if (glyph === "≈") return [-0.45, 0.45].flatMap((row) => [
         curve([-0.8, row + 0.2], [-0.35, row - 0.35], [0, row]),

@@ -434,6 +434,66 @@ test('distinct ± and ∓ ink reach native PDF/PNG and refuse ∔', () => {
     }
 });
 
+test('arrow and proportionality render independent native PDF/PNG ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/math-arrow-'));
+        try {
+            const library = join(dir, 'symbols.tsv');
+            const output = join(dir, 'symbols.pdf');
+            const strokes = ['→', '∝'].flatMap((symbol) =>
+                geometricStarter(symbol, 1550, 2450, 1100,
+                    250, '#243647'));
+            assert.equal(strokes.length, 67,
+                'arrow has three marks; proportionality has 64 chords');
+            const canonical = Buffer.from(encodeGlyphLibrary(strokes));
+            writeFileSync(library, canonical);
+            const opened = cli('glyphs', ['--profile', library]);
+            assert.equal(opened.status, 0, opened.stderr.toString());
+            assert.deepEqual(opened.stdout, canonical);
+            const audit = cli('glyphs', ['--profile', library,
+                '--audit-text', '→∝']);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 2/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', library, '--flow-text', '→∝\n∝→'];
+            const pdf = cli('notebook', [...flags,
+                '--export-paper', 'pdf', '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+                .length, 134, 'each physical row has 67 directed strokes');
+            const png = cli('notebook', [...flags,
+                '--export-paper', 'png', '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const onlyArrow = join(dir, 'arrow.tsv');
+            writeFileSync(onlyArrow, Buffer.from(encodeGlyphLibrary(
+                strokes.filter((line) => line.grapheme === '→'))));
+            for (const [source, ink] of [
+                [onlyArrow, '→∝'],
+                [library, '→∝↔'],
+            ]) {
+                const refused = cli('notebook', [
+                    '--printed-sheet', 'true', '--glyph-file', source,
+                    '--flow-text', ink, '--export-paper', 'pdf',
+                    '--output', output, '--replace']);
+                assert.notEqual(refused.status, 0);
+                assert.match(refused.stderr.toString(),
+                    /missing authored glyph/i,
+                    'no implicit proportional or bidirectional fallback');
+                assert.deepEqual(readFileSync(output), accepted,
+                    'refusal preserves the accepted physical PDF');
+            }
+            assert.deepEqual(readFileSync(library), canonical,
+                'the native codec never mutates exact Unicode source ink');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('ten math symbols roundtrip TSV and render two real ink rows', () => {
     const dir = mkdtempSync(join(root, '.temp/math-native-'));
     try {

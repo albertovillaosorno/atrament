@@ -1365,6 +1365,25 @@ session checks the saved 19-symbol math library and real native export.
 This remains an explicit stroke library, not a mathematical typesetter or
 fully automated handwriting profile.
 
+## Proportionality curve and right-arrow ink (partial) — 2026-11-04
+
+Two additional explicitly selected mathematical symbols now have
+independent Unicode identities in the opt-in 21-form fill. The right arrow
+`→` has a shaft and two connected arrowhead marks, with one pen lift.
+
+Proportionality `∝` follows four analytic quadratic SVG curves from an
+upper open arm through a rounded left loop to a lower open arm. Its native
+v1 TSV samples 64 directed chords into one continuous editable pen path.
+
+Red-before/green-after browser tests cover precise arrow endpoints, ideal
+curve controls, ordered continuity, UTF-8 TSV and clipped geometry refusal.
+The real Firefox browser reopens the resulting 451-stroke math/currency
+library in Rust and renders both signs through true PDF vectors and RGBA PNG.
+A separate native CLI regression verifies two rows of arrow/proportional
+ink and explicit missing-glyph refusal without replacing an accepted PDF.
+This partial feature does not substitute unknown mathematical symbols or
+claim full mathematical typesetting.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
