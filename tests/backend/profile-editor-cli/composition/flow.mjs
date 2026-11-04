@@ -30,7 +30,8 @@ const headingOptions = [
 function render(dir, source, format, extra = [],
     flowFlag = '--flow-markdown', pngPage = 1) {
     const output = join(dir, `flow-${format}.output`);
-    const heading = flowFlag === '--flow-markdown' ? headingOptions : [];
+    const heading = flowFlag === '--flow-markdown'
+        && !extra.includes('--heading-style') ? headingOptions : [];
     const args = [...base, ...heading, ...extra, flowFlag, source,
         '--export-paper', format, '--output', output, '--replace'];
     if (format === 'png') {
@@ -44,6 +45,12 @@ function render(dir, source, format, extra = [],
     return { result, output };
 }
 
+function coloredHeadingWidths(bytes) {
+    return [...bytes.toString('latin1').matchAll(
+        /0\.973 0\.871 0\.569 RG\n([0-9.]+) w/g,
+    )].map((match) => match[1]);
+}
+
 test('notebook CLI help advertises real Markdown task shapes', () => {
     const help = spawnSync('cargo', [
         'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
@@ -52,6 +59,7 @@ test('notebook CLI help advertises real Markdown task shapes', () => {
     assert.equal(help.status, 0, help.stderr);
     assert.match(help.stdout, /\[ \]\/\[x\]\/\[X\] checkbox tasks/);
     assert.match(help.stdout, /--heading-marker-scale 50\.\.105/);
+    assert.match(help.stdout, /# through ###### headings/);
 });
 
 test('saved BOM/CRLF Markdown task file exports like inline PDF and PNG',
@@ -615,6 +623,95 @@ test('closing ATX markers and up-to-three-space headings emit identical ink',
                     alternative.result.stderr);
                 assert.deepEqual(readFileSync(alternative.output), expected,
                     `real ${format} ink must ignore heading syntax`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('ATX H4 through H6 retain tiered marker strokes in PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-h4-h6-'));
+        try {
+            const canonical = '#### ó\n##### a\n###### o\u0301\na';
+            const indented = '   #### ó ##  \n ##### a #\n'
+                + '  ###### o\u0301 ###\na';
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, canonical, format);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                const decorated = render(dir, indented, format);
+                assert.equal(decorated.result.status, 0,
+                    decorated.result.stderr);
+                assert.deepEqual(readFileSync(decorated.output), expected,
+                    `${format} H4/H5/H6 closing syntax is not ink`);
+                if (format === 'pdf') {
+                    const content = expected.toString('latin1');
+                    assert.ok(content.startsWith('%PDF-'));
+                    assert.equal(content.split('0.973 0.871 0.569 RG')
+                        .length - 1, 4,
+                    'H4 two marker strokes, H5 and H6 one each');
+                    assert.equal(content.split('0.071 0.204 0.337 RG')
+                        .length - 1, 4,
+                    'only four caller-authored text glyphs remain');
+                    assert.deepEqual(coloredHeadingWidths(expected), [
+                        '2.154', '2.154', '1.757', '1.417',
+                    ], 'H4/H5/H6 marker widths are physically distinct');
+                } else {
+                    assert.deepEqual(expected.subarray(0, 8),
+                        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('deeper headings stay styled and reject unapproved shapes atomically',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-h4-styles-'));
+        try {
+            const source = '#### ó\n##### a\n###### o\u0301';
+            for (const format of ['pdf', 'png']) {
+                const marker = render(dir, source, format);
+                assert.equal(marker.result.status, 0, marker.result.stderr);
+                const markerBytes = readFileSync(marker.output);
+                for (const style of ['underline', 'double-underline',
+                    'none']) {
+                    const options = ['--heading-style', style];
+                    if (style !== 'none') {
+                        options.push('--heading-color', '#F8DE91');
+                    }
+                    const result = render(dir, source, format, options);
+                    assert.equal(result.result.status, 0,
+                        result.result.stderr);
+                    const ink = readFileSync(result.output);
+                    assert.notDeepEqual(ink, markerBytes,
+                        `${format} ${style} not marker`);
+                    if (format === 'pdf') {
+                        const descending = ['0.680', '0.510', '0.340'];
+                        const widths = style === 'none' ? []
+                            : style === 'underline' ? descending
+                                : descending.flatMap((value) => [value, value]);
+                        assert.deepEqual(coloredHeadingWidths(ink), widths,
+                            `${style} has precise per-level underline widths`);
+                    }
+                }
+            }
+            const output = join(dir, 'flow-pdf.output');
+            const sentinel = Buffer.from('keep accepted native PDF');
+            for (const source of [
+                '####### a', '    #### a', '#### ', '##### ###',
+                '###### ',
+            ]) {
+                writeFileSync(output, sentinel);
+                const result = render(dir, source, 'pdf');
+                assert.notEqual(result.result.status, 0, source);
+                assert.match(result.result.stderr,
+                    /missing authored glyph shapes|empty Markdown block/);
+                assert.deepEqual(readFileSync(output), sentinel,
+                    'unsupported or empty heading cannot replace PDF');
             }
         } finally {
             rmSync(dir, { recursive: true, force: true });

@@ -403,7 +403,10 @@ impl HeadingDecoration {
 #[derive(Clone, Copy)]
 enum HeadingLevel {
     Primary,
+    Quaternary,
+    Quinary,
     Secondary,
+    Senary,
     Tertiary,
 }
 
@@ -413,6 +416,9 @@ impl HeadingLevel {
             Self::Primary => &[900, 1_900, 2_900, 3_900],
             Self::Secondary => &[1_000, 2_000, 3_000],
             Self::Tertiary => &[1_400, 2_400],
+            Self::Quaternary => &[1_600, 2_500],
+            Self::Quinary => &[2_000],
+            Self::Senary => &[2_800],
         }
     }
 
@@ -421,6 +427,9 @@ impl HeadingLevel {
             Self::Primary => 1_400,
             Self::Secondary => 1_150,
             Self::Tertiary => 950,
+            Self::Quaternary => 760,
+            Self::Quinary => 620,
+            Self::Senary => 500,
         }
     }
 
@@ -429,6 +438,9 @@ impl HeadingLevel {
             Self::Primary => 550,
             Self::Secondary => 420,
             Self::Tertiary => 300,
+            Self::Quaternary => 240,
+            Self::Quinary => 180,
+            Self::Senary => 120,
         }
     }
 }
@@ -743,8 +755,8 @@ impl Layout<'_> {
                     });
                 }
                 HeadingStyle::Marker => {
-                    // Fewer, finer strokes give #, ## and ### a modest
-                    // visual hierarchy without altering authored glyphs.
+                    // Successively finer strokes distinguish all six ATX
+                    // levels without altering the authored glyph shapes.
                     // Existing compositor width/clearance bounds still apply.
                     let width = level.marker_width_um()
                         .checked_mul(self.heading.marker_scale.unwrap_or(100))
@@ -1072,6 +1084,9 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
     // spaces remain literal text (not an inferred fenced/code block).
     if indent <= 3 {
         for (prefix, level) in [
+            ("###### ", HeadingLevel::Senary),
+            ("##### ", HeadingLevel::Quinary),
+            ("#### ", HeadingLevel::Quaternary),
             ("### ", HeadingLevel::Tertiary),
             ("## ", HeadingLevel::Secondary),
             ("# ", HeadingLevel::Primary),

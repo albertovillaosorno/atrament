@@ -299,7 +299,7 @@ block persistence, image-aware flow or arbitrary page regions.
 ## Indented and closed ATX headings (partial) — 2026-11-04
 
 The native Markdown flow now admits zero to three leading ASCII spaces on
-`#`, `##`, and `###` headings, and ignores optional closing `#` sequences
+`#` through `######` headings, and ignores optional closing `#` sequences
 preceded by a separator space. These are source syntax rather than glyphs.
 A hash attached directly to the title or followed by non-hash text remains
 literal and requires its own authored shape; four-space indents stay literal.
@@ -565,6 +565,28 @@ semantic paragraph/list identity. A separate limit regression compares actual
 nine-digit escaped labels against plain handwritten PDF/PNG bytes; a
 10-digit escape stays literal and refuses when its backslash was not
 explicitly authored, without replacing the selected PDF.
+
+## Six-level aesthetic Markdown headings (partial) — 2026-11-04
+
+The bounded native CLI now parses ATX heading levels `####`, `#####` and
+`######` as well as the existing `#`, `##` and `###`. It retains the
+previous zero-to-three-space indentation, optional space-delimited closing
+hashes, one-line fixed-region refusal and heading/first-row page keep.
+None of the syntax hashes require authored glyphs; seven hashes remain
+literal and require their own strokes.
+
+Deeper levels use progressively lighter native highlights: level 4 gets
+two 0.76-mm marker strokes, level 5 one 0.62-mm stroke, and level 6 one
+0.50-mm stroke. Single/double-underline width falls to 0.24, 0.18 and
+0.12 mm, respectively. Title text still uses caller-authored shapes, and
+marker scale and separate heading-ink controls retain their normal limits.
+
+Two native integration tests compare real PDF and transparent PNG from
+ordinary versus indented/closed headings, assert exact marker counts and
+unchanged ink, exercise underline/double-underline/none output, and refuse
+unsupported seven-hash and unapproved empty/indented forms without changing
+an existing PDF. This extends CLI-only rendering: it does not create
+persistent semantic title identities, inline styling or a general parser.
 
 ## Repeatable native Markdown flow checks
 

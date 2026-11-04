@@ -433,8 +433,10 @@ To highlight a title with a **colored marker band behind the handwritten
 strokes**, add `--heading-style marker --heading-color '#F8DE91'` to either
 export. Marker weight follows the Markdown heading level: `#` uses four
 **opaque** 1.4-mm pen lines, `##` uses three 1.15-mm strokes, and `###` uses
-two 0.95-mm strokes. Underlines likewise step down from 0.55 to 0.42 to
-0.30 mm. `--heading-style underline --heading-color '#A462D0'` changes only
+two 0.95-mm strokes. Deeper `####`, `#####`, `######` headings use
+respectively two 0.76-mm, one 0.62-mm and one 0.50-mm strokes.
+Underline widths step down through 0.55, 0.42, 0.30, 0.24, 0.18 and
+0.12 mm. `--heading-style underline --heading-color '#A462D0'` changes only
 the underline color. Select `--heading-style double-underline` to add a
 second level-weighted ink line 0.9 mm above the original, optionally with
 `--heading-color '#64A3C5'`; `--heading-style none` removes ornaments.
@@ -506,7 +508,7 @@ heading keeps its first following visible row on the same physical page when
 there is room for both (including an optional 4-mm paragraph gap); an
 ending heading and a sheet too short for two rows remain valid. Long text
 wraps and paginates automatically (up to 32 physical pages).
-The Markdown subset supports single-line `#`, `##`, `###` headings,
+The Markdown subset supports single-line `#` through `######` headings,
 `-`/`*`/`+` bullets, single-level `> text` or `>text` blockquotes, and
 numbered items such as `1. text` or `2) text`
 (with one to nine ASCII digits). Numbered items use your **authored** digit

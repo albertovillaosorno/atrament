@@ -173,7 +173,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     for one missing exact grapheme; no implicit or chained mappings. \
     --flow-text keeps explicit lines; --flow-markdown joins plain lines \
     into paragraphs. Two trailing spaces or one trailing backslash force \
-    a hard row break. Markdown supports #/##/### headings, -/*/+ bullets, \
+    a hard row break. Markdown supports # through ###### headings, \
+    -/*/+ bullets, \
     [ ]/[x]/[X] checkbox tasks after bullets, > quotes, 1./1) numbered \
     lists (authored digits/punctuation), and standalone ---/***/___ \
     horizontal ink rules. -file reads bounded UTF-8. \
