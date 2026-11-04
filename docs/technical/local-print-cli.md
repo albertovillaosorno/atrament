@@ -138,6 +138,11 @@ Cross-reference streams now also need a single direct, top-level decimal
 and comments when finding that value and refuses missing, duplicate,
 nondecimal, signed or oversized entries without launching the spooler.
 
+The stream's own indirect object header must use a nonzero object number
+below its declared `/Size` and a generation from 0 through 65535.
+An object outside that range cannot identify its own cross-reference data;
+these are framing constraints, not a complete object graph check.
+
 A typed cross-reference stream must also
 end with standalone `endstream` and `endobj` keywords, allowing whitespace
 and comments before its final `startxref` locator. Missing, fused or
@@ -214,6 +219,11 @@ stream `/Size` declarations, including missing and nested-only values.
 The tests began red on the prior stream framing gate, then passed after
 sharing the numeric bound with tables. Plausible bounded stream framing
 and the exact inclusive size ceiling remain accepted.
+
+Six fake-spool refusal cases cover stream object zero, number at or above
+`/Size`, and out-of-range generation. Three positive headers cover distinct
+bounded object IDs and the inclusive 65535 generation limit. All refused
+files remain unchanged and no real CUPS queue is contacted.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

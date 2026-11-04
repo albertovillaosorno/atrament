@@ -364,25 +364,25 @@ fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
 
 // A declared cross-reference object count must fit the bounded local PDF
 // input policy. Both tables and streams use this lexical numeric boundary.
-fn bounded_xref_size(bytes: &[u8], at: &mut usize, minimum_size: usize)
-    -> bool {
+fn bounded_xref_size(
+    bytes: &[u8], at: &mut usize, minimum_size: usize,
+) -> Option<usize> {
     *at = pdf_trivia_end(bytes, *at);
     let start = *at;
     while bytes.get(*at).is_some_and(u8::is_ascii_digit) {
         *at = at.saturating_add(1);
     }
-    let value = bytes.get(start..*at).unwrap_or_default();
-    !value.is_empty()
-        && str::from_utf8(value).ok()
-            .and_then(|digits| digits.parse::<usize>().ok())
-            .is_some_and(|number| {
-                number > 0 && number >= minimum_size
-                    && number <= MAX_SUPPORTED_XREF_OBJECTS
-            })
-        && bytes.get(*at).is_some_and(|byte| {
+    let value = bytes.get(start..*at)?;
+    let number = str::from_utf8(value).ok()?.parse::<usize>().ok()?;
+    if number == 0 || number < minimum_size
+        || number > MAX_SUPPORTED_XREF_OBJECTS
+        || !bytes.get(*at).is_some_and(|byte| {
             byte.is_ascii_whitespace()
                 || matches!(byte, b'>' | b'/' | b'%')
-        })
+        }) {
+        return None;
+    }
+    Some(number)
 }
 
 // The required trailer /Size is one positive top-level direct decimal.
@@ -447,7 +447,9 @@ fn supported_xref_table_trailer(bytes: &[u8], minimum_size: usize) -> bool {
                     if seen_size {
                         return false;
                     }
-                    if !bounded_xref_size(bytes, &mut at, minimum_size) {
+                    if bounded_xref_size(
+                        bytes, &mut at, minimum_size,
+                    ).is_none() {
                         return false;
                     }
                     seen_size = true;
@@ -520,9 +522,12 @@ fn pdf_literal_end(bytes: &[u8], start: usize) -> Option<usize> {
     None
 }
 
-fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
+// The indirect xref-stream object must use a real nonzero object number
+// and a 16-bit generation; its number is compared against declared /Size.
+fn xref_stream_object_header(prefix: &[u8]) -> Option<(usize, usize)> {
     let mut at = 0usize;
-    for _ in 0u8..2 {
+    let mut object_numbers = [0usize; 2];
+    for number in &mut object_numbers {
         at = pdf_trivia_end(prefix, at);
         let start = at;
         while prefix.get(at).is_some_and(u8::is_ascii_digit) {
@@ -533,6 +538,12 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
         {
             return None;
         }
+        *number = str::from_utf8(prefix.get(start..at)?)
+            .ok()?.parse::<usize>().ok()?;
+    }
+    // Object zero is the free-list head. Generation is a PDF u16 value.
+    if object_numbers[0] == 0 || object_numbers[1] > u16::MAX.into() {
+        return None;
     }
     at = pdf_trivia_end(prefix, at);
     if !prefix.get(at..).is_some_and(|tail| tail.starts_with(b"obj"))
@@ -542,6 +553,11 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
         return None;
     }
     at = pdf_trivia_end(prefix, at.saturating_add(3));
+    Some((at, object_numbers[0]))
+}
+
+fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
+    let (mut at, object_number) = xref_stream_object_header(prefix)?;
     if !prefix.get(at..).is_some_and(|tail| tail.starts_with(b"<<")) {
         return None;
     }
@@ -549,7 +565,7 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
     let mut depth = 1usize;
     let mut array_depth = 0usize;
     let mut found_type = false;
-    let mut found_size = false;
+    let mut declared_size = None;
     while at < prefix.len() {
         match prefix.get(at) {
             Some(&b'%') => at = pdf_trivia_end(prefix, at),
@@ -599,16 +615,19 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
                     found_type = true;
                     at = value_end;
                 } else if depth == 1 && array_depth == 0 && name == b"Size" {
-                    if found_size || !bounded_xref_size(prefix, &mut at, 1) {
+                    if declared_size.is_some() {
                         return None;
                     }
-                    found_size = true;
+                    declared_size = Some(
+                        bounded_xref_size(prefix, &mut at, 1)?,
+                    );
                 }
             }
             _ => at = at.saturating_add(1),
         }
     }
-    if depth != 0 || array_depth != 0 || !found_type || !found_size {
+    if depth != 0 || array_depth != 0 || !found_type
+        || declared_size.is_none_or(|size| object_number >= size) {
         return None;
     }
     at = pdf_trivia_end(prefix, at);

@@ -626,6 +626,60 @@ fn xref_stream_advertised_size_must_be_bounded_and_unique() {
     fs::remove_dir_all(&directory).expect("remove owned fixture directory");
 }
 
+#[cfg(unix)]
+#[test]
+fn xref_stream_object_identity_must_fit_declared_size() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("unexpected-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS script");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake CUPS executable");
+    let framed = |object: &str, generation: &str, size: usize| {
+        format!(
+            "%PDF-1.7\n{object} {generation} obj\n\
+             << /Type /XRef /Size {size} >>\nstream\n\0\n\
+             endstream\nendobj\nstartxref\n9\n%%EOF\n",
+        ).into_bytes()
+    };
+    for valid in [
+        framed("1", "0", 2),
+        framed("2", "65535", 3),
+        framed("999", "0", 1000),
+    ] {
+        assert!(supported_pdf_cross_reference(&valid),
+            "bounded indirect stream object remains eligible");
+    }
+    for (object, generation, size) in [
+        ("0", "0", 2),
+        ("1", "0", 1),
+        ("2", "0", 2),
+        ("9999999999", "0", 2),
+        ("1", "65536", 2),
+        ("1", "9999999999", 2),
+    ] {
+        let invalid = framed(object, generation, size);
+        assert!(!supported_pdf_cross_reference(&invalid),
+            "cross-reference stream object must fit Size and generation");
+        fs::write(&pdf, &invalid).expect("selected malformed PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(), "invalid stream identity refused");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "invalid stream identity cannot contact CUPS");
+        assert!(!spooled.exists(), "fake CUPS was not contacted");
+        assert_eq!(fs::read(&pdf).expect("source unchanged"), invalid);
+    }
+    fs::remove_dir_all(&directory).expect("remove fixture directory");
+}
+
 #[test]
 fn xref_size_below_resource_ceiling_remains_admissible() {
     let sparse = format!(

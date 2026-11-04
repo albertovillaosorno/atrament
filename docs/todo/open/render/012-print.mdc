@@ -221,6 +221,16 @@ and the inclusive size ceiling while refusing oversized, signed, zero,
 duplicated, malformed or nested-only `/Size` entries. These checks do not
 decode stream records or establish whether PDF objects are complete.
 
+Another red-before fake-CUPS regression found that plausible streams
+could name object zero, an object number outside their own `/Size`, or a
+generation above 65535. The indirect header now requires a positive,
+in-range object identity and an unsigned 16-bit generation; six malformed
+selected PDFs refuse with no spool launch or source-file mutation.
+
+Three positive stream headers confirm legal object numbers, sparse IDs
+and generation 65535 remain eligible. This still does not check object
+cross-reference contents or establish a valid document root.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.
