@@ -499,6 +499,20 @@ Markdown file with decomposed accents; they verify that source bytes remain
 unchanged. Tab stops are logical grapheme columns, not measurements of
 variable handwriting width or full CommonMark indentation semantics.
 
+## Pasted Unicode line and paragraph separators — 2026-11-04
+
+After CRLF handling, native input admission also maps U+2028 line
+separators and U+2029 paragraph separators to actual physical line breaks
+before Markdown parsing. They do not need user-authored glyph ink, but a
+source containing only separators still refuses as non-visible text.
+Other control characters, including U+0085, remain refused.
+
+Two real native PDF/transparent PNG regressions prove exact output parity
+with LF-authored rows for plain text, Markdown heading/task content and a
+BOM-prefixed mixed-CRLF source file. A repeated fixed region also verifies
+the selected second physical page. The original input file stays unchanged.
+This is source-boundary admission, not a full Unicode typography engine.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

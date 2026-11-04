@@ -147,13 +147,79 @@ test('saved BOM/CRLF tabs preserve Unicode and physical export parity',
         }
     });
 
+test('pasted Unicode paragraph separators become physical rows',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-separators-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '50000', '30000'];
+            for (const { flag, pasted, lines } of [
+                {
+                    flag: '--flow-text',
+                    pasted: 'ó\u2028a\u2029o\u0301',
+                    lines: 'ó\na\no\u0301',
+                },
+                {
+                    flag: '--flow-markdown',
+                    pasted: '# a\u2028- [x] ó\u2029o\u0301',
+                    lines: '# a\n- [x] ó\no\u0301',
+                },
+            ]) {
+                for (const format of ['pdf', 'png']) {
+                    const canonical = render(dir, lines, format,
+                        region, flag, 2);
+                    assert.equal(canonical.result.status, 0,
+                        canonical.result.stderr);
+                    const expected = readFileSync(canonical.output);
+                    const separated = render(dir, pasted, format,
+                        region, flag, 2);
+                    assert.equal(separated.result.status, 0,
+                        separated.result.stderr);
+                    assert.deepEqual(readFileSync(separated.output),
+                        expected, 'separator codepoints are physical breaks');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('saved mixed Unicode separators keep physical PDF and PNG parity',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-separators-'));
+        try {
+            const source = 'ó\u2028a\r\no\u0301\u2029a';
+            const canonical = 'ó\na\no\u0301\na';
+            const path = join(dir, 'unicode-lines.txt');
+            const saved = Buffer.from('\uFEFF' + source, 'utf8');
+            writeFileSync(path, saved);
+            for (const format of ['pdf', 'png']) {
+                const inline = render(dir, canonical, format, [],
+                    '--flow-text');
+                assert.equal(inline.result.status, 0, inline.result.stderr);
+                const expected = readFileSync(inline.output);
+                const file = render(dir, path, format, [],
+                    '--flow-text-file');
+                assert.equal(file.result.status, 0, file.result.stderr);
+                assert.deepEqual(readFileSync(file.output), expected);
+            }
+            assert.deepEqual(readFileSync(path), saved,
+                'native source read never rewrites authored bytes');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('expanded tab source stays bounded and refuses atomic replacements',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-tabs-'));
         try {
             const output = join(dir, 'flow-pdf.output');
             const sentinel = Buffer.from('accepted physical PDF');
-            for (const source of ['a\t'.repeat(1025), 'a\vó']) {
+            for (const source of [
+                'a\t'.repeat(1025), 'a\vó', 'a\u0085ó',
+                '\u2028\u2029',
+            ]) {
                 writeFileSync(output, sentinel);
                 const candidate = render(dir, source, 'pdf', [],
                     '--flow-text');

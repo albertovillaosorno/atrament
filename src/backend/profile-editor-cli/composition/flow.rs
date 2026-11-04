@@ -184,7 +184,10 @@ impl FlowSource {
         // inventing a visible glyph. Preserve NFC/NFD identities: one
         // decomposed grapheme occupies one column just like its NFC form.
         // Check the expanded bytes as well as the original source bound.
-        let normalized = admitted.replace("\r\n", "\n");
+        // Unicode line/paragraph separators are layout boundaries in
+        // pasted sources, not missing handwriting glyphs.
+        let normalized = admitted.replace("\r\n", "\n")
+            .replace(['\u{2028}', '\u{2029}'], "\n");
         let boundaries = UnicodeGraphemeSegmentation;
         let mut expanded = String::with_capacity(normalized.len());
         let mut column = 0usize;
