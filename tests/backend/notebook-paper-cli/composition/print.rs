@@ -1446,6 +1446,28 @@ fn xref_escaped_pdf_names_cannot_hide_duplicate_size_keys() {
     fs::remove_dir_all(&directory).expect("remove fixture directory");
 }
 
+#[test]
+fn previous_xref_free_link_accepts_last_bounded_object_index() {
+    // Object indices are zero-based; an earlier /Prev free-list pointer
+    // may name the final admitted object, but never the count itself.
+    let largest_index = MAX_SUPPORTED_XREF_OBJECTS - 1;
+    let head = format!(
+        "xref\n0 1\n{largest_index:010} 65535 f \n",
+    );
+    let prefix = b"%PDF-1.7\n";
+    let document = [prefix.as_slice(), head.as_bytes()].concat();
+    assert!(previous_xref_table_header(
+        head.as_bytes(), &document, prefix.len(),
+    ), "earlier free-list link may use last admitted object index");
+    let out_of_range = format!(
+        "xref\n0 1\n{MAX_SUPPORTED_XREF_OBJECTS:010} 65535 f \n",
+    );
+    let invalid = [prefix.as_slice(), out_of_range.as_bytes()].concat();
+    assert!(!previous_xref_table_header(
+        out_of_range.as_bytes(), &invalid, prefix.len(),
+    ), "an object count is not a valid zero-based free-list index");
+}
+
 #[cfg(unix)]
 #[test]
 fn xref_table_prev_must_point_back_to_a_prior_xref() {
@@ -1532,6 +1554,9 @@ fn xref_table_prev_must_point_back_to_a_prior_xref() {
             "0000000000 00000 z \n").as_bytes(),
         concat!("xref\n0 2\n0000000000 65535 f \n",
             "0000000000 00000 n \n").as_bytes(),
+        b"xref\n0 1\n9999999999 65535 f \n".as_slice(),
+        concat!("xref\n0 2\n0000000000 65535 f \n",
+            "9999999999 00000 f \n").as_bytes(),
     ] {
         let fake_previous = native.len();
         let terminal = fake_previous + fragment.len();

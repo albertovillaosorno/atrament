@@ -447,6 +447,20 @@ both a terminal xref table and an appended PDF 1.5+ xref stream. Older
 trailer dictionaries, further subsections and revision chains are not
 recursively validated; physical printing is unverified.
 
+## Bounded immediate predecessor free-list links (partial) — 2026-11-04
+
+A prior `/Prev` xref table can no longer name an impossible next-free object
+index in its first subsection. Free entries are object-list pointers, not
+byte offsets; the check keeps them below the same 1,333,334-object resource
+ceiling as the terminal trailer, without loading the earlier `/Size` or
+recursively parsing earlier PDF revisions.
+
+Two red-before/green-after fake-CUPS refusals cover oversized free pointers
+in object zero and a later free entry. No print job is spawned and the
+selected PDF bytes remain unchanged. Valid earlier native tables and
+incremental table/stream combinations still pass. Physical printing and
+complete older xref grammar remain unverified.
+
 ## Native-table to terminal-stream compatibility (partial) — 2026-11-04
 
 A direct, opt-in fake-CUPS regression now verifies a real two-page native

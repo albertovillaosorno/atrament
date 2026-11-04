@@ -201,7 +201,10 @@ back to a prior xref section.
 Prior traditional tables need a bounded, complete first subsection with
 valid record fields; any in-use entries in it must point to matching object
 headers before that earlier table. A forged earlier count that omits an
-advertised row refuses. Prior xref streams need an admitted dictionary,
+advertised row refuses. Earlier free-list next-object pointers must remain
+below the same local object-count ceiling as terminal tables.
+
+Prior xref streams need an admitted dictionary,
 their exact encoded data length, and standalone `endstream`/`endobj` markers.
 Further sections, trailers and older revision chains are not recursively
 validated or decoded.

@@ -486,7 +486,17 @@ fn previous_xref_table_header(
             || generation_number != u16::MAX) {
             return false;
         }
-        if status == b"n" {
+        if status == b"f" {
+            // Earlier free-list heads must obey the same global object
+            // budget as terminal xref tables; the older /Size is not read.
+            let Some(next_free_exclusive) = str::from_utf8(offset).ok()
+                .and_then(|digits| digits.parse::<usize>().ok())
+                .and_then(|next| next.checked_add(1))
+            else { return false; };
+            if next_free_exclusive > MAX_SUPPORTED_XREF_OBJECTS {
+                return false;
+            }
+        } else {
             let Some(object_offset) = str::from_utf8(offset).ok()
                 .and_then(|digits| digits.parse::<usize>().ok())
             else { return false; };
