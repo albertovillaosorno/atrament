@@ -1042,8 +1042,8 @@ test("ambient filesystem reads stay in reviewed profile adapters", async () => {
         }
     }
     assert.deepEqual(readingFiles.sort(), [
-        "notebook-paper-cli/application/lib.rs",
-        "profile-editor-cli/composition/main.rs",
+        // Native paper and notebook CLI no longer perform ambient reads:
+        // selected input now goes through symlink-refusing file adapters.
         "profile-export-target-check/composition/lib.rs",
         "profile-export-session/composition/lib.rs",
         "profile-file-commit/adapter-outbound/lib.rs",

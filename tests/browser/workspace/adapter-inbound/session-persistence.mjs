@@ -1822,6 +1822,13 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
     "idealStem.setAttribute(\"stroke-width\", numeric.width.value);",
     "idealStem.setAttribute(\"stroke\", color.value);",
     "idealStem.setAttribute(\"visibility\", stemState);",
+    // Three existing local cursive connectors update fixed numeric SVG
+    // coordinates, paint and visibility, never request-capable attributes.
+    'guide.setAttribute(axis, String(value));',
+    'guide.setAttribute("stroke-width", numeric.width.value);',
+    'guide.setAttribute("stroke", color.value);',
+    'guide.setAttribute("visibility", connected &&',
+    'guide.setAttribute("visibility", "hidden");',
     "idealArch.setAttribute(\"d\", archPath);",
     "idealArch.setAttribute(\"stroke-width\", numeric.width.value);",
     "idealArch.setAttribute(\"stroke\", color.value);",
@@ -1928,6 +1935,12 @@ function stripReviewedGlyphDrawing(source) {
         if (remaining.split(site).length - 1 !== count) return null;
         remaining = remaining.replaceAll(site, "");
     }
+    // The dynamic SVG axis name is safe only with this exact x/y-only
+    // literal array. A future href/src axis must force a new review.
+    const connectorAxes = 'for (const [axis, value] of [ '
+        + '["x1", from.x], ["y1", from.y], '
+        + '["x2", to.x], ["y2", to.y], ]';
+    if (remaining.split(connectorAxes).length - 1 !== 1) return null;
     const createLine = 'document.createElementNS(SVG_NS, "line")';
     if (remaining.split(createLine).length - 1 !== 9) return null;
     return remaining.replaceAll(createLine, "");
@@ -2049,6 +2062,20 @@ test("browser dynamic markup and CSSOM request sinks require review",
         }
     }
 });
+
+test("cursive connector axis edits require a fresh resource review",
+    async () => {
+        for (const { filename, source } of await browserModuleSources()) {
+            if (!isGlyphModule(filename)) continue;
+            const changed = source.replace('["x1", from.x]',
+                '["href", from.x]');
+            assert.notEqual(changed, source,
+                "the reviewed dynamic connector axis must still exist");
+            assert.equal(hasUnreviewedDynamicResourceAuthority(
+                changed, false, 0, false, true), true,
+            `${filename} must refuse adding a resource-bearing SVG axis`);
+        }
+    });
 
 // Logging, browser dialogs, notifications and OS sharing are separate
 // private-data output surfaces from network requests and clipboard copying.
