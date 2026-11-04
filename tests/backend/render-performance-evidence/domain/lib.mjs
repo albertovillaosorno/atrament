@@ -8,6 +8,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { cpus, arch, platform, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
@@ -38,6 +39,21 @@ function builtBinaries() {
         paper: join(target, 'debug', 'atrament-paper'),
         profiles: join(target, 'debug', 'atrament-profiles'),
     };
+}
+
+function pngPixelBytes(png) {
+    const compressed = [];
+    for (let at = 8; at + 12 <= png.length;) {
+        const length = png.readUInt32BE(at);
+        const end = at + 12 + length;
+        assert.ok(end <= png.length, 'PNG chunk remains bounded');
+        if (png.toString('ascii', at + 4, at + 8) === 'IDAT') {
+            compressed.push(png.subarray(at + 8, at + 8 + length));
+        }
+        at = end;
+    }
+    assert.ok(compressed.length > 0, 'PNG contains raster data');
+    return inflateSync(Buffer.concat(compressed));
 }
 
 function measuredPng(binary, args, path, log) {
@@ -97,6 +113,13 @@ test('real CPU Preview/Final ink output has inspectable costs and bounds',
                         [...options, '--quality', quality], output, log));
                 }
                 const [preview, final] = measured;
+                const coloredStroke = Buffer.from([222, 17, 68, 255]);
+                for (const { source } of measured) {
+                    const containsStroke = pngPixelBytes(source)
+                        .includes(coloredStroke);
+                    assert.equal(containsStroke, renderer === 'authored-ink',
+                        'only authored ink must contain the selected color');
+                }
                 assert.ok(final.evidence.widthPixels
                     > preview.evidence.widthPixels);
                 assert.ok(final.evidence.heightPixels

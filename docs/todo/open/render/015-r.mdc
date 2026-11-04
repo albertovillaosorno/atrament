@@ -97,8 +97,9 @@ One local x64 Linux run on an Intel Xeon E5-2690 v3 reported:
 | Authored ink Preview | 596 × 842 | 0.20 | 11,412 |
 | Authored ink Final | 1241 × 1754 | 0.85 | 37,568 |
 
-The test verifies actual transparent PNG bytes, distinct preview/final
-raster dimensions, and preservation of an existing output file when A3 at
+The test verifies actual transparent PNG bytes, exact colored pen pixels
+only in authored-ink exports, distinct preview/final raster dimensions,
+and preservation of an existing output file when A3 at
 300 DPI breaches the native five-megapixel limit. It asserts **no**
 wall-time or memory threshold: these single machine-specific observations
 are not a product performance budget, a GPU-absence audit, or evidence for
