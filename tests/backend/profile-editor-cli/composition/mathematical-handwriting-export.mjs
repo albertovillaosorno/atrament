@@ -369,28 +369,33 @@ test('degree and percent manual rings render native PDF and RGBA PNG',
         }
     });
 
-test('explicit plus-minus ink survives native PDF/PNG and refuses ∓', () => {
+test('distinct ± and ∓ ink reach native PDF/PNG and refuse ∔', () => {
     const dir = mkdtempSync(join(root, '.temp/plus-minus-ink-'));
     try {
         const library = join(dir, 'plus-minus.tsv');
         const output = join(dir, 'plus-minus.pdf');
-        const rows = geometricStarter('±', 1550, 2450, 1100,
-            250, '#243647');
-        assert.equal(rows.length, 3, 'two bars and one central stem');
-        assert.deepEqual(candidatePenPaths(rows, '±').map(
-            ({ first, last }) => [first, last]),
-        [[1, 1], [2, 2], [3, 3]], 'three independent pen lifts');
+        const rows = ['±', '∓'].flatMap((symbol) =>
+            geometricStarter(symbol, 1550, 2450, 1100,
+                250, '#243647'));
+        assert.equal(rows.length, 6,
+            'each symbol has two bars and an independent central stem');
+        for (const symbol of ['±', '∓']) {
+            assert.deepEqual(candidatePenPaths(rows, symbol).map(
+                ({ first, last }) => [first, last]),
+            [[1, 1], [2, 2], [3, 3]],
+            `${symbol} has three independent pen lifts`);
+        }
         const canonical = Buffer.from(encodeGlyphLibrary(rows));
         writeFileSync(library, canonical);
         const reopen = cli('glyphs', ['--profile', library]);
         assert.equal(reopen.status, 0, reopen.stderr.toString());
         assert.deepEqual(reopen.stdout, canonical);
         const audit = cli('glyphs', ['--profile', library,
-            '--audit-text', '±']);
+            '--audit-text', '±∓']);
         assert.equal(audit.status, 0, audit.stderr.toString());
         assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
         const flags = ['--printed-sheet', 'true',
-            '--glyph-file', library, '--flow-text', '±±\n±±'];
+            '--glyph-file', library, '--flow-text', '±∓\n∓±'];
         const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
             '--output', output]);
         assert.equal(pdf.status, 0, pdf.stderr.toString());
@@ -402,14 +407,26 @@ test('explicit plus-minus ink survives native PDF/PNG and refuses ∓', () => {
             '--dpi', '72']);
         assert.equal(png.status, 0, png.stderr.toString());
         actualPngInk(png.stdout);
+        const plusOnly = join(dir, 'plus-only.tsv');
+        writeFileSync(plusOnly, Buffer.from(encodeGlyphLibrary(
+            rows.filter((row) => row.grapheme === '±'))));
+        const missingCounterpart = cli('notebook', [
+            '--printed-sheet', 'true', '--glyph-file', plusOnly,
+            '--flow-text', '±∓', '--export-paper', 'pdf',
+            '--output', output, '--replace']);
+        assert.notEqual(missingCounterpart.status, 0,
+            '∓ cannot borrow ± ink without an explicit fallback');
+        assert.match(missingCounterpart.stderr.toString(),
+            /missing authored glyph/i);
+        assert.deepEqual(readFileSync(output), accepted);
         const missing = cli('notebook', [
             '--printed-sheet', 'true', '--glyph-file', library,
-            '--flow-text', '±∓', '--export-paper', 'pdf',
+            '--flow-text', '±∓∔', '--export-paper', 'pdf',
             '--output', output, '--replace']);
         assert.notEqual(missing.status, 0);
         assert.match(missing.stderr.toString(), /missing authored glyph/i);
         assert.deepEqual(readFileSync(output), accepted,
-            'reverse minus-plus has no fallback or replacement side effect');
+            'unadmitted dot-plus has no fallback or replacement side effect');
         assert.deepEqual(readFileSync(library), canonical,
             'Rust import and export never rewrite authored TSV bytes');
     } finally {

@@ -1349,6 +1349,22 @@ An unsupported `∓` refuses before replacing the previously accepted PDF.
 This partial implementation does not provide general mathematical typesetting
 or automatic handwriting generation.
 
+## Distinct minus-plus ink (partial) — 2026-11-04
+
+The geometric math starter now constructs `∓` as a distinct exact Unicode
+shape: an upper minus bar and a lower plus with its own vertical stem. Each
+is an independent directed pen stroke, not a visual swap or automatic
+fallback for `±`. **Fill missing math** now admits 19 shapes while retaining
+caller-authored ink and refusing a batch that exceeds native TSV limits.
+
+Browser geometry and fill tests check exact endpoints, three pen lifts and
+stable Unicode identities. Native Rust PDF and transparent PNG tests render
+both `±` and `∓` from the same exported TSV, while an unauthored `∔` still
+refuses without replacing a previously accepted PDF. An actual Firefox
+session checks the saved 19-symbol math library and real native export.
+This remains an explicit stroke library, not a mathematical typesetter or
+fully automated handwriting profile.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
