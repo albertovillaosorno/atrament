@@ -231,8 +231,8 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     let Some(prefix) = target.get(..target.len().min(16_384)) else {
         return false;
     };
-    xref_stream_header_end(prefix).is_some_and(|start| {
-        supported_xref_stream_tail(target, start)
+    xref_stream_header_end(prefix).is_some_and(|(start, length)| {
+        supported_xref_stream_tail(target, start, length)
     })
 }
 
@@ -522,6 +522,26 @@ fn pdf_literal_end(bytes: &[u8], start: usize) -> Option<usize> {
     None
 }
 
+// Stream contents have a byte length, not an unbounded endstream scan.
+// Require one direct bounded integer in this conservative print preflight.
+fn bounded_stream_length(bytes: &[u8], at: &mut usize) -> Option<usize> {
+    *at = pdf_trivia_end(bytes, *at);
+    let start = *at;
+    while bytes.get(*at).is_some_and(u8::is_ascii_digit) {
+        *at = at.saturating_add(1);
+    }
+    let length = str::from_utf8(bytes.get(start..*at)?)
+        .ok()?.parse::<usize>().ok()?;
+    if length == 0 || length > MAX_PAPER_OUTPUT_BYTES
+        || !bytes.get(*at).is_some_and(|byte| {
+            byte.is_ascii_whitespace()
+                || matches!(byte, b'>' | b'/' | b'%')
+        }) {
+        return None;
+    }
+    Some(length)
+}
+
 // The indirect xref-stream object must use a real nonzero object number
 // and a 16-bit generation; its number is compared against declared /Size.
 fn xref_stream_object_header(prefix: &[u8]) -> Option<(usize, usize)> {
@@ -556,7 +576,7 @@ fn xref_stream_object_header(prefix: &[u8]) -> Option<(usize, usize)> {
     Some((at, object_numbers[0]))
 }
 
-fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
+fn xref_stream_header_end(prefix: &[u8]) -> Option<(usize, usize)> {
     let (mut at, object_number) = xref_stream_object_header(prefix)?;
     if !prefix.get(at..).is_some_and(|tail| tail.starts_with(b"<<")) {
         return None;
@@ -566,6 +586,7 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
     let mut array_depth = 0usize;
     let mut found_type = false;
     let mut declared_size = None;
+    let mut declared_length = None;
     while at < prefix.len() {
         match prefix.get(at) {
             Some(&b'%') => at = pdf_trivia_end(prefix, at),
@@ -621,6 +642,14 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
                     declared_size = Some(
                         bounded_xref_size(prefix, &mut at, 1)?,
                     );
+                } else if depth == 1 && array_depth == 0
+                    && name == b"Length" {
+                    if declared_length.is_some() {
+                        return None;
+                    }
+                    declared_length = Some(
+                        bounded_stream_length(prefix, &mut at)?,
+                    );
                 }
             }
             _ => at = at.saturating_add(1),
@@ -635,7 +664,7 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
         tail.starts_with(b"stream")
             && matches!(tail.get(6), Some(b'\n' | b'\r'))
     }) {
-        at.checked_add(6)
+        Some((at.checked_add(6)?, declared_length?))
     } else {
         None
     }
@@ -644,24 +673,38 @@ fn xref_stream_header_end(prefix: &[u8]) -> Option<usize> {
 // A syntactically plausible xref-stream header is not sufficient: a selected
 // document must also frame its terminal stream and indirect object before
 // startxref. This remains lexical preflight, not PDF stream decoding.
-fn supported_xref_stream_tail(bytes: &[u8], start: usize) -> bool {
-    let Some(tail) = bytes.get(start..) else { return false; };
-    let Some(endstream) = tail.windows(b"endstream".len())
-        .enumerate().rfind(|(at, token)| {
-            *token == b"endstream"
-                && at.checked_sub(1).and_then(|before| tail.get(before))
-                    .is_some_and(|byte| matches!(byte, b'\r' | b'\n'))
-                && tail.get(at.saturating_add(b"endstream".len()))
-                    .is_some_and(u8::is_ascii_whitespace)
-        }).map(|(at, _)| at)
-    else {
+fn supported_xref_stream_tail(
+    bytes: &[u8], after_stream: usize, length: usize,
+) -> bool {
+    let Some(raw) = bytes.get(after_stream..) else { return false; };
+    let newline = if raw.starts_with(b"\r\n") { 2 }
+        else if raw.starts_with(b"\n") || raw.starts_with(b"\r") {
+            1
+        } else {
+            return false;
+        };
+    let Some(data_end) = after_stream.checked_add(newline)
+        .and_then(|start| start.checked_add(length))
+    else { return false; };
+    // /Length counts encoded stream data bytes, excluding the line break
+    // before endstream. A stray delimiter inside payload is not a terminator.
+    let Some(after_data) = bytes.get(data_end..) else { return false; };
+    let tail_newline = if after_data.starts_with(b"\r\n") { 2 }
+        else if after_data.starts_with(b"\n")
+            || after_data.starts_with(b"\r") { 1 }
+        else { return false; };
+    let Some(endstream) = data_end.checked_add(tail_newline) else {
         return false;
     };
-    let Some(endstream_end) = start.checked_add(endstream)
-        .and_then(|at| at.checked_add(b"endstream".len()))
-    else {
+    if !bytes.get(endstream..).is_some_and(|rest| {
+        rest.starts_with(b"endstream")
+            && rest.get(b"endstream".len())
+                .is_some_and(u8::is_ascii_whitespace)
+    }) {
         return false;
-    };
+    }
+    let Some(endstream_end) = endstream.checked_add(b"endstream".len())
+    else { return false; };
     let endobj = pdf_trivia_end(bytes, endstream_end);
     if !bytes.get(endobj..).is_some_and(|rest| rest.starts_with(b"endobj"))
         || !bytes.get(endobj.saturating_add(b"endobj".len()))

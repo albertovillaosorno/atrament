@@ -143,6 +143,13 @@ below its declared `/Size` and a generation from 0 through 65535.
 An object outside that range cannot identify its own cross-reference data;
 these are framing constraints, not a complete object graph check.
 
+A terminal cross-reference stream now needs exactly one top-level direct
+`/Length` between 1 and 24 MB, bounded by the selected PDF input cap.
+The length counts encoded data bytes after the `stream` line ending; the
+terminating `endstream` must appear after those exact bytes and a line break.
+The scanner does not look for an arbitrary last `endstream` inside content.
+Indirect length references may refuse under this conservative print policy.
+
 A typed cross-reference stream must also
 end with standalone `endstream` and `endobj` keywords, allowing whitespace
 and comments before its final `startxref` locator. Missing, fused or
@@ -224,6 +231,11 @@ Six fake-spool refusal cases cover stream object zero, number at or above
 `/Size`, and out-of-range generation. Three positive headers cover distinct
 bounded object IDs and the inclusive 65535 generation limit. All refused
 files remain unchanged and no real CUPS queue is contacted.
+
+Nine fake-spool refusal cases test missing, zero, nondecimal, duplicate,
+nested-only, oversized and mismatched stream lengths. Four positive framing
+fixtures admit bounded exact lengths including an `endstream` byte sequence
+inside encoded data; no stream payload is decoded or printed on a real queue.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
