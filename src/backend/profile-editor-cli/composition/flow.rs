@@ -188,11 +188,27 @@ impl FlowSource {
         // pasted sources, not missing handwriting glyphs.
         let normalized = admitted.replace("\r\n", "\n")
             .replace(['\u{2028}', '\u{2029}'], "\n");
+        // Sources without tabs cannot grow after newline normalization.
+        // The usual path needs no extra Unicode-boundary traversal.
+        if !normalized.contains('\t') {
+            return Ok(Self { format, text: normalized });
+        }
         let boundaries = UnicodeGraphemeSegmentation;
+        let mut remaining = normalized.as_str();
         let mut expanded = String::with_capacity(normalized.len());
         let mut column = 0usize;
-        for index in 0..boundaries.grapheme_count(&normalized) {
-            match segment_at(boundaries, &normalized, index)? {
+        while !remaining.is_empty() {
+            // Advance one grapheme at a time from the current suffix.
+            // Querying ordinal indices from the full source would
+            // repeatedly rescan its prefix (quadratic on long input).
+            let end = boundaries.byte_offset(remaining, 1)
+                .ok_or("flow source grapheme boundary refused")?;
+            let grapheme = remaining.get(..end)
+                .filter(|span| !span.is_empty())
+                .ok_or("flow source grapheme span refused")?;
+            remaining = remaining.get(end..)
+                .ok_or("flow source grapheme suffix refused")?;
+            match grapheme {
                 "\n" => {
                     expanded.push('\n');
                     column = 0;
@@ -208,8 +224,8 @@ impl FlowSource {
                     column = column.checked_add(spaces)
                         .ok_or("tab column overflow")?;
                 }
-                grapheme => {
-                    expanded.push_str(grapheme);
+                visible => {
+                    expanded.push_str(visible);
                     column = column.checked_add(1)
                         .ok_or("tab column overflow")?;
                 }
@@ -220,6 +236,22 @@ impl FlowSource {
             }
         }
         Ok(Self { format, text: expanded })
+    }
+}
+
+#[cfg(test)]
+mod source_tests {
+    use super::{FlowFormat, FlowSource};
+
+    #[test]
+    fn max_tabbed_source_expands_to_exact_byte_limit() {
+        let source = "a\t".repeat(1_024);
+        let admitted = FlowSource::new(FlowFormat::Plain, &source)
+            .expect("expanded text at the 4096-byte limit");
+        assert_eq!(admitted.text, "a   ".repeat(1_024));
+        let refused = FlowSource::new(FlowFormat::Plain,
+            &"a\t".repeat(1_025));
+        assert!(refused.is_err(), "over-limit expansion must refuse");
     }
 }
 

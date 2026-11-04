@@ -513,6 +513,17 @@ BOM-prefixed mixed-CRLF source file. A repeated fixed region also verifies
 the selected second physical page. The original input file stays unchanged.
 This is source-boundary admission, not a full Unicode typography engine.
 
+## Tab-expansion complexity bound — 2026-11-04
+
+Tab-free sources now skip additional grapheme-boundary traversal entirely.
+Tabbed inputs traverse successive Unicode grapheme suffixes rather than
+repeatedly requesting offsets from the start of the source. The new Rust
+unit regression exercises exactly 4096 expanded UTF-8 bytes from 1024
+tabbed cells, plus refusal for one additional cell. Existing real native
+PDF/PNG cases still cover preserved NFC/NFD pen identities and exported
+spacing. This bounds source expansion to a forward-only scan without
+changing the canonical line or physical output semantics.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded
