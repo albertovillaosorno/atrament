@@ -1230,6 +1230,73 @@ fn pdf_whitespace_in_xref_metadata_and_eof_is_admitted_exactly() {
     fs::remove_dir_all(&directory).expect("remove fixture directory");
 }
 
+#[cfg(unix)]
+#[test]
+fn startxref_decimal_line_uses_pdf_whitespace_not_vertical_tab() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
+    )).expect("write fake spooler");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+
+    let native = real_pdf();
+    let locator = native.windows(b"startxref\n".len())
+        .rposition(|part| part == b"startxref\n")
+        .expect("native PDF has a final startxref locator");
+    let number_start = locator + b"startxref\n".len();
+    let number_end = number_start + native[number_start..].iter()
+        .take_while(|byte| byte.is_ascii_digit()).count();
+    assert_eq!(native[number_end], b'\n', "decimal locator line ending");
+
+    let mut leading_nul = native.clone();
+    leading_nul.insert(number_start, b'\0');
+    let mut trailing_nul = native.clone();
+    trailing_nul.insert(number_end, b'\0');
+    let mut both_nul = native.clone();
+    both_nul.insert(number_end, b'\0');
+    both_nul.insert(number_start, b'\0');
+    for (label, candidate) in [
+        ("NUL before startxref integer", leading_nul),
+        ("NUL after startxref integer", trailing_nul),
+        ("NUL on both sides of integer", both_nul),
+    ] {
+        assert!(supported_pdf_cross_reference(&candidate),
+            "PDF-defined locator whitespace admitted: {label}");
+        fs::write(&pdf, &candidate).expect("save admitted PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert_eq!(submit_selected(&request, &fake_spool)
+            .expect("PDF locator whitespace reaches fake CUPS"),
+            sha256_profile_bytes(&candidate).bytes(), "{label}");
+        assert_eq!(fs::read(&spooled).expect("spooled selected PDF"),
+            candidate, "source bytes unchanged: {label}");
+        fs::remove_file(&spooled).expect("clear fake spool");
+    }
+
+    let mut vertical_tab = native;
+    vertical_tab.insert(number_start, b'\x0b');
+    assert!(!supported_pdf_cross_reference(&vertical_tab),
+        "vertical tab is not legal PDF whitespace before locator number");
+    fs::write(&pdf, &vertical_tab).expect("save malformed locator PDF");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert!(submit_selected(&request, &fake_spool).is_err(),
+        "invalid locator delimiter must not reach CUPS");
+    assert!(!spooled.exists(), "invalid locator cannot contact fake CUPS");
+    assert_eq!(fs::read(&pdf).expect("selected bytes intact"), vertical_tab);
+    fs::remove_dir_all(&directory).expect("remove fixture directory");
+}
+
 #[test]
 fn xref_size_below_resource_ceiling_remains_admissible() {
     let sparse = format!(

@@ -170,6 +170,13 @@ fn trim_pdf_end(bytes: &[u8]) -> &[u8] {
     bytes.get(..end).unwrap_or_default()
 }
 
+// A numeric locator can have PDF whitespace on both sides of its digits.
+fn trim_pdf(bytes: &[u8]) -> &[u8] {
+    let start = bytes.iter().position(|byte| !pdf_whitespace(*byte))
+        .unwrap_or(bytes.len());
+    trim_pdf_end(bytes.get(start..).unwrap_or_default())
+}
+
 // This is deliberately a framing check, not a PDF document parser. Refuse
 // ambiguous version headers before any printer process can be contacted.
 fn supported_pdf_header(bytes: &[u8]) -> bool {
@@ -213,7 +220,7 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
     else {
         return false;
     };
-    let number = number_line.trim_ascii();
+    let number = trim_pdf(number_line);
     if number.is_empty() || !number.iter().all(u8::is_ascii_digit) {
         return false;
     }

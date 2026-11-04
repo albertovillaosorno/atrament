@@ -99,6 +99,10 @@ source to an `xref` table or a plausible PDF 1.5+ indirect `/Type /XRef`
 stream header. The stream form is admitted only for PDF 1.5–1.7 or 2.0;
 older PDF 1.0–1.4 headers require the traditional `xref` table form.
 
+The terminal decimal byte offset allows the same PDF whitespace on either
+side of its digits, while refusing vertical tab. The offset must still be
+an unsigned decimal and point to a framed cross-reference structure.
+
 The table form also requires at least one numbered subsection with
 fixed-width decimal offset/generation and `n`/`f` state records, followed by
 a `trailer` dictionary. An `xref` keyword alone or an empty or malformed

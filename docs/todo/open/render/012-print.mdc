@@ -530,6 +530,19 @@ bytes when sent to an isolated fake spool; a non-PDF vertical-tab control
 refuses before launching the fake queue. This is lexical compatibility and
 refusal, not full PDF interpretation or actual physical print validation.
 
+## PDF-defined startxref number separators (partial) — 2026-11-04
+
+The terminal `startxref` byte offset now trims only the six PDF whitespace
+bytes, matching the trailer and cross-reference checks. The previous ASCII
+trim rejected valid NUL around a decimal locator and could accept vertical
+tab, which PDF does not define as whitespace.
+
+Three red-before/green-after native PDF probes insert NUL before, after,
+and on both sides of the unchanged `startxref` offset. A fake CUPS queue
+receives each source byte-for-byte with an exact SHA-256 match; a vertical
+tab before that number refuses without contact. These are bounded lexical
+checks, not full PDF semantic validation or actual physical printing.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
