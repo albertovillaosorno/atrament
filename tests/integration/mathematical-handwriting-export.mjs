@@ -8,8 +8,10 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateSync } from 'node:zlib';
 import test from 'node:test';
-import { encodeGlyphLibrary, geometricStarter } from
-    '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
+import {
+    candidatePenPaths, encodeGlyphLibrary, geometricStarter,
+    reverseCandidatePath, rotateClosedCandidatePath,
+} from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const symbols = ['√', 'π', '∞', '≠', '≤', '≥'];
@@ -103,3 +105,85 @@ test('six math symbols roundtrip TSV and render two real ink rows', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+
+test('closed infinity pen-loop entry and reversal match native exact edits',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/math-loop-'));
+        try {
+            const sourcePath = join(dir, 'source.tsv');
+            const browserPath = join(dir, 'browser.tsv');
+            const nativePath = join(dir, 'native.tsv');
+            const sentinel = join(dir, 'preserved.tsv');
+            const source = Buffer.from(encodeGlyphLibrary(ink));
+            writeFileSync(sourcePath, source);
+            writeFileSync(sentinel, 'preserve accepted output');
+            const candidate = candidatePenPaths(ink, '∞');
+            assert.equal(candidate.length, 1);
+            assert.equal(candidate[0].first, 1);
+            assert.equal(candidate[0].last, 64);
+            assert.deepEqual(candidate[0].start, candidate[0].end,
+                'infinity is one authored closed pen-down candidate');
+            const inspected = cli('glyphs', [
+                '--profile', sourcePath, '--inspect-paths', '∞',
+            ]);
+            assert.equal(inspected.status, 0, inspected.stderr.toString());
+            assert.match(inspected.stdout.toString(),
+                /Strokes: 64\nPaths: 1\nPen lifts: 0/);
+            assert.match(inspected.stdout.toString(),
+                /Path 1: strokes 1\.\.64 \(64 segments\)/);
+            const firstInfinity = ink.findIndex((line) =>
+                line.grapheme === '∞');
+            const browserRotate = rotateClosedCandidatePath(
+                ink, '∞', firstInfinity + 16);
+            const browserReverse = reverseCandidatePath(
+                browserRotate.strokes, '∞', browserRotate.selectedIndex);
+            const expected = Buffer.from(encodeGlyphLibrary(
+                browserReverse.strokes));
+            writeFileSync(browserPath, expected);
+            const native = cli('glyphs', [
+                '--profile', sourcePath, '--rotate-path', '∞', '1', '17',
+                '--reverse-path', '∞', '1', '--output', nativePath,
+            ]);
+            assert.equal(native.status, 0, native.stderr.toString());
+            assert.deepEqual(readFileSync(nativePath), expected,
+                'independent browser and native path edit scripts match');
+            assert.notDeepEqual(expected, source,
+                'explicit entry and direction actually change pen order');
+            for (const format of ['pdf', 'png']) {
+                const render = (file) => cli('notebook', [
+                    '--printed-sheet', 'true', '--glyph-file', file,
+                    '--place-text', '1', '30000', '45000', '∞',
+                    '--export-paper', format,
+                    ...(format === 'png' ? ['--dpi', '72'] : []),
+                ]);
+                const nativeInk = render(nativePath);
+                const browserInk = render(browserPath);
+                assert.equal(nativeInk.status, 0,
+                    nativeInk.stderr.toString());
+                assert.equal(browserInk.status, 0,
+                    browserInk.stderr.toString());
+                assert.deepEqual(nativeInk.stdout, browserInk.stdout,
+                    `real ${format} ink follows identical rotated pen order`);
+            }
+            const invalid = cli('glyphs', [
+                '--profile', sourcePath, '--rotate-path', '∞', '1', '1',
+                '--output', sentinel, '--replace',
+            ]);
+            assert.notEqual(invalid.status, 0,
+                'identity start edit is explicitly refused');
+            assert.equal(readFileSync(sentinel).toString(),
+                'preserve accepted output');
+            const undone = cli('glyphs', [
+                '--profile', nativePath, '--reverse-path', '∞', '1',
+                '--rotate-path', '∞', '1', '49',
+            ]);
+            assert.equal(undone.status, 0, undone.stderr.toString());
+            assert.deepEqual(undone.stdout, source,
+                'exact inverse edit restores original TSV bytes');
+            assert.deepEqual(readFileSync(sourcePath), source,
+                'editing cannot change the original saved library');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

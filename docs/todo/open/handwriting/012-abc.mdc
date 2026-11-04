@@ -965,6 +965,14 @@ accepted PDF or changing its source ink. This is handcrafted starter
 geometry rather than equation layout, generalized formulas, analytic PDF
 paths or a complete personal style, so P4-012 remains open.
 
+A second independent browser/native script also inspects the infinity
+loop as exactly 64 directed segments, one continuous pen path and zero
+lifts. Choosing its seventeenth segment as the new first stroke, then
+reversing the whole path, produces byte-identical TSV and physical PDF/PNG
+ink in browser and Rust. Reversing those operations restores the untouched
+source bytes; a forbidden first-segment rotation preserves the selected
+output file atomically. Curve controls remain SVG-only in this v1 model.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
