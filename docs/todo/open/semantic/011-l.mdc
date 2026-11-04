@@ -456,6 +456,7 @@ The bounded Rust Markdown flow now recognizes one flat task prefix:
 followed by a separator space and visible authored item text. Zero to three
 leading spaces remain Markdown syntax. A 2.5-mm square of physical pen
 strokes replaces the list bullet; checked tasks add a two-stroke check.
+
 Only the first physical row gets the box, even when the body wraps onto
 another PDF sheet. Caller-authored body glyphs remain exact and unchanged;
 `[`, `]`, `x` and `X` do not require invented handwriting shapes.
@@ -522,8 +523,10 @@ Tab-free sources now skip additional grapheme-boundary traversal entirely.
 Tabbed inputs traverse successive Unicode grapheme suffixes rather than
 repeatedly requesting offsets from the start of the source. The new Rust
 unit regression exercises exactly 4096 expanded UTF-8 bytes from 1024
-tabbed cells, plus refusal for one additional cell. Existing real native
-PDF/PNG cases still cover preserved NFC/NFD pen identities and exported
+tabbed cells, plus refusal for one additional cell.
+
+Existing real native PDF/PNG cases still cover preserved NFC/NFD pen
+identities and exported
 spacing. This bounds source expansion to a forward-only scan without
 changing the canonical line or physical output semantics.
 
@@ -612,7 +615,9 @@ physical placed-text expansion. No independent glyph segmentation remains
 in the native CLI. Two additional native tests audit 1,024 NFD graphemes
 alongside NFC, ASCII and a joined emoji, and compare 28 explicitly authored
 colored pen strokes with the exact PDF/PNG generated from seven repeats of
-mixed Unicode glyphs. The rendered pages match byte-for-byte and remain
+mixed Unicode glyphs.
+
+The rendered pages match byte-for-byte and remain
 bounded by existing 96-grapheme placed-text admission. This is a source
 traversal change, not an asserted speed-up measurement or glyph synthesis.
 
@@ -723,7 +728,9 @@ Unicode line/paragraph separators from other exact Unicode space glyphs.
 U+00A0, U+2009 and U+202F are no longer rejected as empty Markdown blocks
 when the user has authored their pen strokes. The distinction covers plain
 text, Markdown body, ordered/bullet/quote rows, and headings, including a
-Setext title. The physical row-height measurement also retains their
+Setext title.
+
+The physical row-height measurement also retains their
 explicit height/baseline overrides rather than treating them as empty
 ASCII advances. ASCII spaces and source separators remain non-ink syntax.
 
