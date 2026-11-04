@@ -66,6 +66,24 @@ native rendering. It does not yet provide marker-shaped glyph lettering,
 opacity/translucent material, calibrated texture or continuous cursive, so
 P5-014 remains open.
 
+## Bounded native marker-band pen weight (partial) — 2026-11-04
+
+`atrament-profiles notebook --flow-markdown` accepts
+`--heading-style marker --heading-marker-scale 50..105` to alter the
+**underlay** pen width for the #/##/### marker hierarchy without touching
+caller-authored lettering, plain body ink, or the underlying stroke TSV.
+The previous default remains exactly 100%. The upper bound reflects the
+native 1500-µm maximum pen width: a primary 1400-µm marker cannot safely
+be enlarged further, and invalid, repeated or non-marker options refuse
+rather than silently clamping. PDF and transparent PNG reflect the same
+selected physical strokes. The new native subprocess regression checks
+three heading tiers at 50%, 100% and 105% alongside ordinary body ink,
+and verifies that rejected options preserve the existing PDF bytes.
+
+This changes opaque stroke widths, **not** translucent ink material,
+highlighter opacity, digital-only shadows, or the shape of the glyphs.
+The broader P5-014 acceptance remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

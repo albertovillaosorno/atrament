@@ -267,6 +267,97 @@ test('four-space paragraphs and fenced code retain literal indentation',
         }
     });
 
+test('heading marker stroke weight is selectable in native PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/heading-weight-'));
+        try {
+            const source = '# ó\n## a\n### ó\na';
+            for (const format of ['pdf', 'png']) {
+                const defaultRun = render(dir, source, format);
+                assert.equal(defaultRun.result.status, 0,
+                    defaultRun.result.stderr);
+                const standard = readFileSync(defaultRun.output);
+                const hundred = render(dir, source, format,
+                    ['--heading-marker-scale', '100']);
+                assert.equal(hundred.result.status, 0,
+                    hundred.result.stderr);
+                assert.deepEqual(readFileSync(hundred.output), standard,
+                    'default 100% must preserve the original marker output');
+                const narrow = render(dir, source, format,
+                    ['--heading-marker-scale', '50']);
+                assert.equal(narrow.result.status, 0, narrow.result.stderr);
+                const thin = readFileSync(narrow.output);
+                const wide = render(dir, source, format,
+                    ['--heading-marker-scale', '105']);
+                assert.equal(wide.result.status, 0, wide.result.stderr);
+                const thick = readFileSync(wide.output);
+                assert.notDeepEqual(thin, standard, `${format} changes at 50%`);
+                assert.notDeepEqual(thick, standard,
+                    `${format} changes at 105%`);
+                assert.notDeepEqual(thin, thick,
+                    `${format} weight is distinct`);
+                if (format === 'pdf') {
+                    const native = thick.toString('latin1');
+                    assert.equal(native.split('0.973 0.871 0.569 RG')
+                        .length - 1,
+                        9, 'only marker strokes retain pastel highlighter');
+                    assert.equal(native.split('0.071 0.204 0.337 RG')
+                        .length - 1,
+                        4, 'body and heading use unchanged authored ink');
+                } else {
+                    assert.deepEqual(thick.subarray(0, 8),
+                        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('invalid marker weights refuse without replacing accepted PDF',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/heading-weight-'));
+        try {
+            const output = join(dir, 'flow-pdf.output');
+            const saved = Buffer.from('already approved physical notes');
+            for (const values of [
+                ['49'], ['106'], ['-1'], ['0'], ['100.5'],
+                ['9999999999999999999999'], [''], ['80',
+                    '--heading-marker-scale', '110'],
+            ]) {
+                writeFileSync(output, saved);
+                const candidate = render(dir, '# ó', 'pdf',
+                    ['--heading-marker-scale', ...values]);
+                assert.notEqual(candidate.result.status, 0, values.join(' '));
+                assert.match(candidate.result.stderr, /marker scale|heading/);
+                assert.deepEqual(readFileSync(output), saved);
+            }
+            for (const style of [undefined, 'none', 'underline']) {
+                writeFileSync(output, saved);
+                const args = [
+                    ...base, '--heading-marker-scale', '100',
+                    ...(style ? ['--heading-style', style] : []),
+                    '--flow-markdown', '# ó', '--export-paper', 'pdf',
+                    '--output', output, '--replace',
+                ];
+                const refused = spawnSync('cargo', [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...args,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.notEqual(refused.status, 0, String(style));
+                assert.match(refused.stderr, /requires --heading-style marker/);
+                assert.deepEqual(readFileSync(output), saved);
+            }
+            const missing = render(dir, '# ó', 'pdf', [
+                '--heading-marker-scale',
+            ]);
+            assert.notEqual(missing.result.status, 0);
+            assert.deepEqual(readFileSync(output), saved);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('closing ATX markers and up-to-three-space headings emit identical ink',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-flow-'));

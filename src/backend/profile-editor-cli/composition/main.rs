@@ -154,7 +154,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--join-text-pair LEFT RIGHT (repeatable, max 32)] \
     [--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY] \
     [--heading-style underline|double-underline|marker|none] \
-    [--heading-color '#RRGGBB'] \
+    [--heading-color '#RRGGBB'] [--heading-marker-scale 50..105] \
     [--heading-ink-color '#RRGGBB'] [--heading-ink-scale 100..250] \
     [--flow-text TEXT | --flow-markdown MARKDOWN | \
      --flow-text-file FILE | --flow-markdown-file FILE] \
@@ -183,6 +183,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     It auto-selects PDF page count unless --pages is explicit. \
     Markdown headings default to dark underlines; select a user-colored \
     single/double underline, opaque pastel marker band or no ornament. \
+    --heading-marker-scale adjusts the marker underlay pen width (percent) \
+    only with --heading-style marker; the default is 100. \
     --heading-ink-color recolors heading glyph ink, and \
     --heading-ink-scale enlarges only heading pen widths (percent); \
     the authored body strokes and glyph templates remain unchanged. \
@@ -1259,8 +1261,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--inspect" => inspect = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
-            "--heading-style" | "--heading-color"
-            | "--heading-ink-color" | "--heading-ink-scale" =>
+            "--heading-style" | "--heading-color" | "--heading-ink-color"
+            | "--heading-ink-scale" | "--heading-marker-scale" =>
                 heading.parse(option, &mut iter)?,
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),

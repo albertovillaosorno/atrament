@@ -202,6 +202,7 @@ pub(super) struct HeadingDecoration {
     color: Option<[u8; 3]>,
     glyph_color: Option<[u8; 3]>,
     glyph_scale: Option<u32>,
+    marker_scale: Option<u32>,
     style: Option<HeadingStyle>,
 }
 
@@ -223,6 +224,7 @@ impl HeadingDecoration {
     pub(super) const fn is_selected(self) -> bool {
         self.color.is_some() || self.style.is_some()
             || self.glyph_color.is_some() || self.glyph_scale.is_some()
+            || self.marker_scale.is_some()
     }
 
     pub(super) fn parse(
@@ -269,6 +271,22 @@ impl HeadingDecoration {
                 }
                 self.glyph_scale = Some(scale);
             }
+            "--heading-marker-scale" => {
+                if self.marker_scale.is_some() {
+                    return Err("--heading-marker-scale repeated".into());
+                }
+                if selected.is_empty()
+                    || !selected.bytes().all(|byte| byte.is_ascii_digit()) {
+                    return Err("heading marker scale must be 50..105".into());
+                }
+                let scale = selected.parse::<u32>().map_err(|_error| {
+                    "heading marker scale must be 50..105"
+                })?;
+                if !(50..=105).contains(&scale) {
+                    return Err("heading marker scale must be 50..105".into());
+                }
+                self.marker_scale = Some(scale);
+            }
             "--heading-style" => {
                 if self.style.is_some() {
                     return Err("--heading-style may appear only once".into());
@@ -294,6 +312,12 @@ impl HeadingDecoration {
     }
 
     pub(super) const fn validate(self) -> Result<(), &'static str> {
+        if self.marker_scale.is_some()
+            && !matches!(self.style, Some(HeadingStyle::Marker)) {
+            return Err(
+                "--heading-marker-scale requires --heading-style marker",
+            );
+        }
         if matches!(self.style, Some(HeadingStyle::None))
             && self.color.is_some() {
             return Err("--heading-color cannot accompany --heading-style none");
@@ -618,6 +642,10 @@ impl Layout<'_> {
                     // Fewer, finer strokes give #, ## and ### a modest
                     // visual hierarchy without altering authored glyphs.
                     // Existing compositor width/clearance bounds still apply.
+                    let width = level.marker_width_um()
+                        .checked_mul(self.heading.marker_scale.unwrap_or(100))
+                        .and_then(|scaled| scaled.checked_div(100))
+                        .ok_or("heading marker width overflow")?;
                     for &lift in level.marker_lifts_um() {
                         let mark_y = y.checked_add(lift)
                             .ok_or("heading marker position overflow")?;
@@ -625,7 +653,7 @@ impl Layout<'_> {
                             page: self.page,
                             start_um: (start_x, mark_y),
                             end_um: (mark_end, mark_y),
-                            width_um: level.marker_width_um(),
+                            width_um: width,
                             rgb: self.heading.color.unwrap_or([255, 237, 159]),
                         });
                     }
