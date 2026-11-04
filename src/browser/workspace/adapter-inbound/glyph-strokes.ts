@@ -679,9 +679,10 @@ function quoteMirror(
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∧", "∨",
-    "∩", "∪", "∈", "∉", "⊂", "⊆", "⊃", "⊇", "⊄", "⊈", "⊅", "⊉", "∑", "∫",
+    "∩", "∪", "∈", "∉", "∋", "∌", "⊂", "⊆", "⊃", "⊇",
+    "⊄", "⊈", "⊅", "⊉", "∑", "∫",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝"] as const;
-// Extra manually selected marks do not change the 42-glyph math fill.
+// Extra manually selected marks do not change the 44-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -764,18 +765,28 @@ function mathParts(
         { from: point(0, 0.6),
             control: point(0.65, 0.6), to: point(0.65, -0.65) },
     ];
-    // Membership is a continuous sampled E-shaped bow plus a separately
-    // lifted crossbar; nonmembership adds its own diagonal refusal slash.
-    // Neither is inferred from the other exact Unicode identity.
-    if (glyph === "∈" || glyph === "∉") {
+    // Exact membership and reverse-membership keep independent Unicode
+    // identities. Their ideal two-quadratic bows mirror before sampling;
+    // a separately lifted crossbar stays in reading order. Negated forms
+    // lift again for an independent diagonal strike, never an implicit
+    // fallback for an unsaved key.
+    if (["∈", "∉", "∋", "∌"].includes(glyph)) {
+        const reverse = glyph === "∋" || glyph === "∌";
+        const bowPoint = (x: number, y: number): Point =>
+            point(reverse ? -x : x, y);
         const parts: MarkPiece[] = [
-            { from: point(0.65, -0.65),
-                control: point(-0.65, -0.65), to: point(-0.65, 0) },
-            { from: point(-0.65, 0),
-                control: point(-0.65, 0.65), to: point(0.65, 0.65) },
-            line(-0.65, 0, 0.55, 0),
+            { from: bowPoint(0.65, -0.65),
+                control: bowPoint(-0.65, -0.65),
+                to: bowPoint(-0.65, 0) },
+            { from: bowPoint(-0.65, 0),
+                control: bowPoint(-0.65, 0.65),
+                to: bowPoint(0.65, 0.65) },
+            reverse ? line(-0.55, 0, 0.65, 0)
+                : line(-0.65, 0, 0.55, 0),
         ];
-        if (glyph === "∉") parts.push(line(-0.85, 0.85, 0.85, -0.85));
+        if (glyph === "∉" || glyph === "∌") {
+            parts.push(line(-0.85, 0.85, 0.85, -0.85));
+        }
         return parts;
     }
     // Set inclusion uses four-quadratic contours facing left or right.

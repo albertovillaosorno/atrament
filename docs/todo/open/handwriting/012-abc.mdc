@@ -1616,6 +1616,26 @@ accepted PDF. Real Firefox checks all 42 math forms in its own exported
 TSV and physical Rust PDF/PNG with no implicit backend save. These remain
 manually authored sampled strokes, not formal set-notation parsing.
 
+## Reverse membership ink (partial) — 2026-11-04
+
+The math glyph editor now includes `∋` (contains as member) and `∌`
+(does not contain as member) as exact independent Unicode keys. The
+opposite-facing two-quadratic E bow keeps the original ideal SVG controls
+reflected around the selected center, followed by a separately lifted
+crossbar. Nonmembership additionally lifts for its diagonal slash. Each
+reverse-membership TSV uses 33 or 34 directed integer strokes; sampling
+may round a mirrored chord by one unit without changing the ideal curve.
+The opt-in math fill now covers 44 forms and preserves earlier ink.
+
+A red/green browser geometry regression verifies separately lifted paths,
+integer curve endpoints, exact UTF-8 TSV identities, clipped rejection,
+SVG guides and reversible fills. Rust independently reopens the exported
+TSV, audits exact coverage, renders real PDF/transparent PNG, and refuses
+an absent `∈`, `∉` or `⊂` without replacing accepted output. Real Firefox
+roundtrips its complete 44-key math fill through the Rust exporter with no
+implicit backend write. This is manual glyph construction, not semantic
+set reasoning or analytic glyph persistence.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
