@@ -1431,6 +1431,28 @@ visible variation-selector glyphs and separately authored no-break spaces
 retain their exact UTF-8 identities. This is a deliberately bounded guard,
 not a full Unicode general-category classification or baseline font.
 
+## Strict comparison chevrons (partial) — 2026-11-04
+
+The caller-owned geometric math menu now includes separate exact `<` and
+`>` glyphs. Each reuses the corresponding two directed, connected chevron
+segments of `≤` or `≥`, without automatically adding the inclusive sign's
+third horizontal baseline. The opt-in **Fill missing math** action now
+supports 23 independently authored keys; importing a TSV or constructing a
+single symbol does not synthesize an unknown comparison glyph.
+
+A red-before/green-after browser regression verifies exact coordinates,
+continuous pen order, SVG guide visibility, native TSV identity and draft
+preservation on a rejected batch. The Rust CLI reopens the four exact
+`<`, `>`, `≤`, `≥` glyphs, audits their Unicode identity and renders
+physical PDF and transparent PNG ink. An unsupported `≪` refuses before
+replacing an accepted PDF or modifying the glyph source. A live Firefox
+localhost test also replays the complete 23-form math download into Rust
+PDF/PNG rendering without backend writes during local SVG editing.
+
+This is bounded manual math notation, not general mathematical layout,
+a saved font or automatic Unicode fallback. Full P1 glyph coverage and
+analytic native curves remain unfinished.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

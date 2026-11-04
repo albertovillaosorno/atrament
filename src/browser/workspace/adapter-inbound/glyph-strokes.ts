@@ -678,9 +678,9 @@ function quoteMirror(
 // Math starters retain ideal SVG lines/quadratics; native v1 samples curves
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
-    "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈",
-    "→", "∝"] as const;
-// Extra manually selected marks do not change the 21-glyph math fill.
+    "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∑", "∫",
+    "∂", "Δ", "≈", "→", "∝"] as const;
+// Extra manually selected marks do not change the 23-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -725,13 +725,18 @@ function mathParts(
     if (glyph === "≠") return [
         horizontal(-0.3), horizontal(0.3), line(-0.55, 0.75, 0.55, -0.75),
     ];
-    if (glyph === "≤") return [
+    // Strict chevrons are their own exact Unicode keys. Their two
+    // connected strokes also form the respective <= and >= contours;
+    // only the inclusive signs add a separately lifted baseline.
+    if (glyph === "<" || glyph === "≤") return [
         line(0.55, -0.6, -0.6, 0.05),
-        line(-0.6, 0.05, 0.55, 0.6), horizontal(0.88),
+        line(-0.6, 0.05, 0.55, 0.6),
+        ...(glyph === "≤" ? [horizontal(0.88)] : []),
     ];
-    if (glyph === "≥") return [
+    if (glyph === ">" || glyph === "≥") return [
         line(-0.55, -0.6, 0.6, 0.05),
-        line(0.6, 0.05, -0.55, 0.6), horizontal(0.88),
+        line(0.6, 0.05, -0.55, 0.6),
+        ...(glyph === "≥" ? [horizontal(0.88)] : []),
     ];
     if (glyph === "√") return [
         line(-0.85, 0.2, -0.5, 0.1), line(-0.5, 0.1, -0.1, 0.8),

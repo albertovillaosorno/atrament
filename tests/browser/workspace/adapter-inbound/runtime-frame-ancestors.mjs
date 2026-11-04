@@ -13174,12 +13174,14 @@ test(
                     get("seed-math").click();
                     const complete = get("status").textContent;
                     const guides = [];
-                    for (const glyph of ["∑", "∫", "∂", "Δ", "≈", "→", "∝"]) {
+                    for (const glyph of ["∑", "∫", "∂", "Δ", "≈", "→", "∝",
+                        "<", ">"]) {
                         change("form", glyph);
                         change("character", glyph);
                         const guide = get("ideal-rounded");
                         const d = guide.getAttribute("d");
                         guides.push({ glyph, d,
+                            selected: get("form").value,
                             visible: guide.getAttribute("visibility") });
                     }
                     const currency = [];
@@ -13231,17 +13233,20 @@ test(
                 resultOwnership: "none",
                 target: { context: tab.context },
             }, FIREFOX_BIDI_READY_TIMEOUT_MS);
-            assert.equal(response.type, "success");
+            assert.equal(response.type, "success", JSON.stringify(response));
             assert.equal(response.result.type, "string");
             const actual = JSON.parse(response.result.value);
             assert.equal(actual.before, false);
-            assert.match(actual.filled, /Filled 21 missing math glyphs/);
-            assert.match(actual.complete, /All 21 math glyphs/);
+            assert.match(actual.filled, /Filled 23 missing math glyphs/);
+            assert.match(actual.complete, /All 23 math glyphs/);
             for (const [index, count, lifts] of [
                 [0, 0, 1], [1, 3, 1], [2, 4, 1], [3, 0, 1], [4, 4, 2],
                 [5, 0, 2], [6, 4, 1],
+                [7, 0, 1], [8, 0, 1],
             ]) {
                 const guide = actual.guides[index];
+                assert.equal(guide.selected, guide.glyph,
+                    "real HTML option decodes the exact math grapheme");
                 assert.equal(guide.visible, "visible");
                 assert.equal((guide.d.match(/ Q /g) ?? []).length, count);
                 assert.equal((guide.d.match(/M /g) ?? []).length, lifts);
@@ -13269,12 +13274,12 @@ test(
             assert.deepEqual(actual.media,
                 Array(2).fill("text/tab-separated-values"));
             const symbols = ["+", "-", "−", "±", "∓", "=", "×", "÷",
-                "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈",
-                "→", "∝"];
+                "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∑", "∫",
+                "∂", "Δ", "≈", "→", "∝"];
             const ink = [...symbols, "$", "€"].flatMap((glyph) =>
                 geometricStarter(glyph, 1550, 2450, 1100,
                     250, "#243647"));
-            assert.equal(ink.length, 451);
+            assert.equal(ink.length, 455);
             const expected = encodeGlyphLibrary(ink);
             assert.deepEqual(actual.files, [expected, expected],
                 "real browser fill and refusal preserve exact pen order");
@@ -13305,7 +13310,7 @@ test(
             for (const format of ["pdf", "png"]) {
                 const rendered = invoke("notebook", "--printed-sheet",
                     "true", "--glyph-file", library, "--flow-text",
-                    "∑∫∂Δ≈$€∓→∝", "--export-paper", format,
+                    "∑∫∂Δ≈$€∓→∝<>", "--export-paper", format,
                     ...(format === "png" ? ["--dpi", "72"] : []));
                 assert.equal(rendered.status, 0,
                     rendered.stderr.toString());
@@ -13313,8 +13318,8 @@ test(
                 if (format === "pdf") {
                     const vector = rendered.stdout.toString("latin1");
                     assert.match(vector, /^%PDF-1\.4/);
-                    assert.equal((vector.match(/ m\n/g) ?? []).length, 356,
-                        "calculus, currency and arrows use 356 strokes");
+                    assert.equal((vector.match(/ m\n/g) ?? []).length, 360,
+                        "calculus, currency, arrows and comparisons ink");
                 } else {
                     const bytes = rendered.stdout;
                     assert.deepEqual(bytes.subarray(0, 8),
