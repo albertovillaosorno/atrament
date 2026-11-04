@@ -47,6 +47,7 @@ function actualPngInk(bytes) {
     assert.equal(raw[4], 0, 'transparent corner has zero alpha');
     assert.ok(raw.includes(Buffer.from([36, 54, 71, 255])),
         'physical PNG contains caller-authored mathematical ink');
+    return raw;
 }
 
 test('ten math symbols roundtrip TSV and render two real ink rows', () => {
@@ -183,6 +184,85 @@ test('closed infinity pen-loop entry and reversal match native exact edits',
                 'exact inverse edit restores original TSV bytes');
             assert.deepEqual(readFileSync(sourcePath), source,
                 'editing cannot change the original saved library');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+
+test('mathematical Markdown paginates with visible marker and atomic refusal',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/math-markdown-'));
+        try {
+            const source = join(dir, 'calculus.md');
+            const library = join(dir, 'math.tsv');
+            const acceptedPdf = join(dir, 'calculus.pdf');
+            const pageOne = join(dir, 'heading.png');
+            const pageTwo = join(dir, 'continuation.png');
+            const canonical = Buffer.from(encodeGlyphLibrary(ink));
+            writeFileSync(library, canonical);
+            const lines = Array.from({ length: 54 }, () => 'Δ≈  ');
+            writeFileSync(source, `# ∑∫\n\n${lines.join('\n')}\n`);
+            const flags = [
+                '--printed-sheet', 'true', '--glyph-file', library,
+                '--flow-markdown-file', source,
+                '--heading-style', 'marker',
+                '--heading-color', '#F8DE91',
+                '--heading-marker-scale', '105',
+            ];
+            const pdf = cli('notebook', [
+                ...flags, '--export-paper', 'pdf', '--output', acceptedPdf,
+            ]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const bytes = readFileSync(acceptedPdf);
+            const vector = bytes.toString('latin1');
+            assert.match(vector, /^%PDF-1\.4/);
+            assert.match(vector, /\/Count 2\b/,
+                'mathematical hard rows must paginate onto two sheets');
+            assert.match(vector, /0\.141 0\.212 0\.278 RG/,
+                'all body formulas preserve authored pigment');
+            assert.match(vector, /0\.973 0\.871 0\.569 RG/,
+                'heading marker preserves its independently selected ink');
+            const exportPage = (page, output) => cli('notebook', [
+                ...flags, '--export-paper', 'png', '--png-page', page,
+                '--dpi', '72', '--output', output,
+            ]);
+            const cover = exportPage('1', pageOne);
+            assert.equal(cover.status, 0, cover.stderr.toString());
+            const first = actualPngInk(readFileSync(pageOne));
+            assert.ok(first.includes(Buffer.from([248, 222, 145, 255])),
+                'first page has authored pastel marker under its heading');
+            const continuation = exportPage('2', pageTwo);
+            assert.equal(continuation.status, 0,
+                continuation.stderr.toString());
+            const second = actualPngInk(readFileSync(pageTwo));
+            assert.ok(!second.includes(Buffer.from([248, 222, 145, 255])),
+                'marker does not silently repeat on page two');
+            const overScale = [...flags];
+            overScale[overScale.indexOf('105')] = '106';
+            for (const [invalid, reason] of [
+                [[...flags, '--pages', '1'], /flow requires 2 physical pages/],
+                [overScale, /marker scale|heading-marker-scale/],
+            ]) {
+                const refused = cli('notebook', [
+                    ...invalid, '--export-paper', 'pdf',
+                    '--output', acceptedPdf, '--replace',
+                ]);
+                assert.notEqual(refused.status, 0);
+                assert.match(refused.stderr.toString(), reason);
+                assert.deepEqual(readFileSync(acceptedPdf), bytes,
+                    'refusal cannot truncate accepted paginated math ink');
+            }
+            writeFileSync(source, '# ∑∫\n\nΔ≈∂  \n');
+            const missing = cli('notebook', [
+                ...flags, '--export-paper', 'pdf',
+                '--output', acceptedPdf, '--replace',
+            ]);
+            assert.notEqual(missing.status, 0,
+                'unauthored differential symbol must not be synthesized');
+            assert.deepEqual(readFileSync(acceptedPdf), bytes);
+            assert.deepEqual(readFileSync(library), canonical,
+                'multi-page Markdown never rewrites source glyph geometry');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

@@ -1028,6 +1028,16 @@ all four new symbols in a 119-stroke vector PDF and transparent RGBA PNG;
 the PNG contains the intended dark mathematical ink. This acceptance
 requires Firefox and the existing local Rust CLI, but no network or printer.
 
+A second native cross-engine journey places `∑∫` beneath a pastel marker
+heading and 54 hard-broken `Δ≈` rows into one source Markdown file.
+Automatic Rust layout produces exactly two physical PDF sheets; separate
+transparent PNG exports verify page-one heading decoration and page-two
+handwriting without leaking the heading marker into the continuation.
+An explicit one-page cap, out-of-range marker scale or missing `∂` refuses
+without replacing an accepted PDF or mutating the authored TSV library.
+It demonstrates finite source-to-page composition, not equation typesetting
+or glyph-perfect analytic PDF paths; P1-012 is still open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
