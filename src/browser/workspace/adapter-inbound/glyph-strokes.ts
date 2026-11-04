@@ -679,9 +679,9 @@ function quoteMirror(
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∧", "∨",
-    "∑", "∫",
+    "∩", "∪", "∑", "∫",
     "∂", "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝"] as const;
-// Extra manually selected marks do not change the 30-glyph math fill.
+// Extra manually selected marks do not change the 32-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -748,6 +748,21 @@ function mathParts(
     if (glyph === "∨") return [
         line(-0.65, -0.6, 0, 0.6),
         line(0, 0.6, 0.65, -0.6),
+    ];
+    // Intersection and union are true paired quadratic guides. Native
+    // TSV uses one continuous 32-chord path per exact Unicode glyph,
+    // never substituting the two-stroke logical AND/OR wedges.
+    if (glyph === "∩") return [
+        { from: point(-0.65, 0.65),
+            control: point(-0.65, -0.6), to: point(0, -0.6) },
+        { from: point(0, -0.6),
+            control: point(0.65, -0.6), to: point(0.65, 0.65) },
+    ];
+    if (glyph === "∪") return [
+        { from: point(-0.65, -0.65),
+            control: point(-0.65, 0.6), to: point(0, 0.6) },
+        { from: point(0, 0.6),
+            control: point(0.65, 0.6), to: point(0.65, -0.65) },
     ];
     if (glyph === "√") return [
         line(-0.85, 0.2, -0.5, 0.1), line(-0.5, 0.1, -0.1, 0.8),

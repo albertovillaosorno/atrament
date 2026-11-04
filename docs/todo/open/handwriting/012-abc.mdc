@@ -1515,6 +1515,26 @@ PDF/PNG without a local editor backend write.
 These are manually selected sampled pen paths, not a formula typesetter,
 Unicode-wide logical-operator font or automatic glyph fallback.
 
+## Distinct set intersection and union ink (partial) — 2026-11-04
+
+The manually selected mathematical glyph editor now offers exact `∩`
+(intersection) and `∪` (union), each with two contiguous analytic SVG
+quadratic guides. The existing Rust v1 glyph TSV encodes each as 32
+rounded micrometre pen segments, while their Unicode keys stay distinct
+from the separately authored logical `∧` and `∨` wedges. The opt-in math
+fill grows to 32 exact symbols and never rewrites existing source ink.
+
+Browser regressions verify the continuous directed pen path, native TSV
+roundtrip, rounded SVG guide controls and clipped-edit refusal. The native
+Rust CLI independently reopens both symbols and renders real two-row PDF
+vectors and transparent PNG. Without explicitly authored shapes, `∧` and
+`∈` refuse a replacement before changing the accepted PDF or glyph file.
+A live Firefox session also selects both new Unicode controls and replays
+its 32-form TSV download as exact Rust PDF/PNG ink without backend writes.
+
+These sampled manual curves do not constitute native analytic PDF paths,
+a complete mathematics font or a semantic notation layout engine.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
