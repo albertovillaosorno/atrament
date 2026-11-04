@@ -74,6 +74,42 @@ calibrated paper/pigment looks. The accepted feature still needs CPU time
 and memory measurements, line-art extraction with a loss report and print
 scan correction before the broader task can close.
 
+## Reproducible native CPU cost evidence (partial) — 2026-11-04
+
+On Linux, the following command runs built native Rust executables directly,
+*outside Cargo startup*, using GNU `/usr/bin/time`:
+
+```sh
+node --test tests/backend/render-performance-evidence/domain/lib.mjs
+```
+It reports four independent `CPU_PNG_MEASUREMENT` JSON observations:
+72-DPI Preview and 150-DPI Final for A4 grid paper, and the same pair for
+preprinted A4 containing one caller-authored colored pen segment. Each
+observation records CPU model/architecture, wall/user/system seconds, peak
+resident memory in KiB, raster dimensions, PNG byte size and SHA-256.
+
+One local x64 Linux run on an Intel Xeon E5-2690 v3 reported:
+
+| Native output | Pixels | Wall seconds | Peak RSS (KiB) |
+| --- | ---: | ---: | ---: |
+| Grid Preview | 596 × 842 | 0.20 | 10,552 |
+| Grid Final | 1241 × 1754 | 0.86 | 36,944 |
+| Authored ink Preview | 596 × 842 | 0.20 | 11,412 |
+| Authored ink Final | 1241 × 1754 | 0.85 | 37,568 |
+
+The test verifies actual transparent PNG bytes, distinct preview/final
+raster dimensions, and preservation of an existing output file when A3 at
+300 DPI breaches the native five-megapixel limit. It asserts **no**
+wall-time or memory threshold: these single machine-specific observations
+are not a product performance budget, a GPU-absence audit, or evidence for
+unimplemented image/mathematics/zoom workloads. The native CPU rendering
+path is measured; build time, JS harness and PNG analysis are excluded from
+the external GNU-time observation.
+
+This is partial measurable-cost evidence only. Transparent line-art
+extraction with an explicit loss report, print/scan correction and broader
+representative workload benchmarks remain unimplemented; P5-015 stays open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
