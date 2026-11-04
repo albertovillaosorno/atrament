@@ -891,6 +891,7 @@ impl GlyphOverlay {
         match flag {
             "--copy-glyph" => self.copy_glyph_option(iter)?,
             "--shear-glyph" => self.shear_glyph_option(iter)?,
+            "--scale-glyph-height" => self.scale_glyph_height_option(iter)?,
             "--glyph-stroke" => {
                 if self.strokes.len() == MAX_STROKES {
                     return Err("more than 4096 glyph strokes refused".into());
@@ -1120,6 +1121,69 @@ impl GlyphOverlay {
                 .ok_or("path segment outside library")? = stroke;
         }
         Ok(())
+    }
+
+    /// Scale authored vertical coordinates around an explicit Y baseline.
+    /// The entire selected glyph is admitted before any TSV row is changed;
+    /// rounding follows the browser, including positive half micrometres.
+    pub(super) fn scale_glyph_height(
+        &mut self, grapheme: &str, percent: u32, baseline: u32,
+    ) -> Result<(), String> {
+        if !(50..=150).contains(&percent) || baseline > 4500 {
+            return Err(
+                "height percent or baseline outside native bounds".into()
+            );
+        }
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let mut revised = self.strokes.clone();
+        for position in positions {
+            let stroke = revised.get_mut(position)
+                .ok_or("glyph stroke outside library")?;
+            let pen = i64::from(stroke.width_um);
+            for x in [stroke.start_um.0, stroke.end_um.0] {
+                let twice = i64::from(x).saturating_mul(2);
+                if twice < pen || twice > 7000i64.saturating_sub(pen) {
+                    return Err("resized ink and pen clip glyph cell".into());
+                }
+            }
+            let resize_y = |y: u32| -> Result<u32, String> {
+                let next = GlyphVariation::round_js(
+                    f64::from(baseline) + (f64::from(y)
+                        - f64::from(baseline)) * f64::from(percent) / 100.0,
+                )?;
+                let twice = i64::from(next).saturating_mul(2);
+                if twice < i64::from(stroke.width_um)
+                    || twice > 9000i64
+                        .saturating_sub(i64::from(stroke.width_um)) {
+                    return Err("resized ink and pen clip glyph cell".into());
+                }
+                u32::try_from(next)
+                    .map_err(|_error| "resized coordinate out of bounds".into())
+            };
+            let start = resize_y(stroke.start_um.1)?;
+            let end = resize_y(stroke.end_um.1)?;
+            if stroke.start_um.0 == stroke.end_um.0 && start == end {
+                return Err("height scaling collapses a pen segment".into());
+            }
+            stroke.start_um.1 = start;
+            stroke.end_um.1 = end;
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(super) fn scale_glyph_height_option(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let grapheme = iter.next()
+            .ok_or("--scale-glyph-height requires an exact grapheme")?;
+        let percent = next_integer(iter, "glyph height percent", 50, 150)?;
+        let baseline = next_integer(iter, "glyph height baseline", 0, 4500)?;
+        self.scale_glyph_height(grapheme, percent, baseline)
     }
 
     /// Match the inspection view without folding NFC/NFD or allowing

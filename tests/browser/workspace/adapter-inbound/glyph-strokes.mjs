@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
-    geometricStarter, italicizeGlyphStrokes,
+    geometricStarter, italicizeGlyphStrokes, scaleGlyphHeight,
     composeAccentedGlyph, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
@@ -380,6 +380,9 @@ function mountEditor() {
         "glyph-authored-angle", "glyph-authored-baseline",
         "glyph-slant-authored", "glyph-slant-undo", "glyph-slant-redo",
         "glyph-slant-preview", "glyph-slant-preview-status",
+        "glyph-height-percent", "glyph-height-baseline",
+        "glyph-scale-height", "glyph-height-preview",
+        "glyph-height-preview-status",
         "glyph-ideal-preview", "glyph-ideal-geometry",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
@@ -412,6 +415,8 @@ function mountEditor() {
     get("italic-angle").value = "12";
     get("authored-angle").value = "12";
     get("authored-baseline").value = "3550";
+    get("height-percent").value = "110";
+    get("height-baseline").value = "2250";
     get("path-dx").value = "0";
     get("path-dy").value = "0";
     get("variation-sample").value = "1";
@@ -4599,6 +4604,138 @@ test("slant preview refuses clipping and its display budget",
         assert.equal(await downloads.at(-1).text(), encodeGlyphLibrary(
             italicizeGlyphStrokes(full, "o", 12, 3550)),
         "read-only preview limit does not lower native edit capacity");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("height scaling preserves exact Unicode rows and pen continuity", () => {
+    const nfd = "a\u0301";
+    const rows = [
+        { grapheme: nfd, x1: 450, y1: 1000, x2: 850, y2: 1600,
+            width: 250, color: "#243647" },
+        { grapheme: "á", x1: 600, y1: 1200, x2: 900, y2: 1550,
+            width: 250, color: "#123456" },
+        { grapheme: nfd, x1: 850, y1: 1600, x2: 1300, y2: 2200,
+            width: 250, color: "#243647" },
+        { grapheme: "∞", x1: 500, y1: 900, x2: 700, y2: 1100,
+            width: 250, color: "#112233" },
+        { grapheme: nfd, x1: 1100, y1: 600, x2: 1700, y2: 1000,
+            width: 250, color: "#334455" },
+    ];
+    const original = encodeGlyphLibrary(rows);
+    const resized = scaleGlyphHeight(rows, nfd, 110, 2250);
+    assert.deepEqual(resized, rows.map((line) => line.grapheme !== nfd
+        ? line : { ...line,
+            y1: Math.round(2250 + (line.y1 - 2250) * 1.1),
+            y2: Math.round(2250 + (line.y2 - 2250) * 1.1),
+        }));
+    assert.equal(resized[1], rows[1]);
+    assert.equal(resized[3], rows[3]);
+    assert.deepEqual(candidatePenPaths(resized, nfd).map((path) =>
+        [path.first, path.last]), [[1, 2], [3, 3]]);
+    assert.equal(encodeGlyphLibrary(rows), original);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(resized)), resized);
+    assert.deepEqual(scaleGlyphHeight(rows, nfd, 100, 2250), rows);
+    // Half-integer values round toward positive infinity in both engines.
+    const half = [{ ...rows[0], y1: 2001, y2: 2003 }];
+    assert.equal(scaleGlyphHeight(half, nfd, 50, 2000)[0].y1, 2001);
+    for (const percent of [49, 151, 110.5, NaN, Infinity]) {
+        assert.throws(() => scaleGlyphHeight(rows, nfd,
+            percent, 2250), /Height percent/);
+    }
+    for (const baseline of [-1, 4501, 0.5, NaN]) {
+        assert.throws(() => scaleGlyphHeight(rows, nfd,
+            110, baseline), /glyph height baseline/);
+    }
+    assert.throws(() => scaleGlyphHeight(rows, "ab", 110,
+        2250), /exact visible/);
+    assert.throws(() => scaleGlyphHeight(rows, "ñ", 110,
+        2250), /no authored ink/);
+    const clipped = [{ ...rows[0], y1: 200, y2: 600 }];
+    assert.throws(() => scaleGlyphHeight(clipped, nfd,
+        150, 2250), /Resized ink and pen clip/);
+    assert.equal(clipped[0].y1, 200);
+    const badX = [{ ...rows[0], x1: 125, x2: 850, width: 251 }];
+    assert.throws(() => scaleGlyphHeight(badX, nfd,
+        100, 2250), /Resized ink and pen clip/);
+    const negativeHalf = [{ ...rows[0], y1: 1999, y2: 2001 }];
+    assert.equal(scaleGlyphHeight(negativeHalf, nfd, 50, 2000)[0].y1,
+        2000, "negative half rounds toward positive infinity");
+    const collapsed = [{ ...rows[0], x1: 450, x2: 450,
+        y1: 2001, y2: 2002 }];
+    assert.throws(() => scaleGlyphHeight(collapsed, nfd,
+        50, 2000), /collapses a pen segment/);
+    const full = Array.from({ length: 4096 }, (_, index) => ({
+        ...rows[0], x1: 450 + index % 100,
+        x2: 850 + index % 100,
+    }));
+    assert.equal(scaleGlyphHeight(full, nfd, 110, 2250).length, 4096);
+});
+
+test("height preview is exact and invalid edits keep the unsaved library",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const nfd = "a\u0301";
+        const guide = get("height-preview");
+        const status = get("height-preview-status");
+        assert.equal(get("scale-height").disabled, true);
+        editor.start();
+        assert.equal(guide.children.length, 0);
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        for (const [key, value] of Object.entries({
+            x1: 450, y1: 1000, x2: 850, y2: 1600, width: 250,
+        })) get(key).value = String(value);
+        get("add").dispatch("click");
+        const authored = [{ grapheme: nfd,
+            x1: 450, y1: 1000, x2: 850, y2: 1600,
+            width: 250, color: "#243647" }];
+        const proposed = scaleGlyphHeight(authored, nfd, 110, 2250)[0];
+        assert.equal(get("scale-height").disabled, false);
+        assert.equal(guide.children.length, 1);
+        assert.equal(Number(guide.children[0].attributes.get("y1")),
+            proposed.y1);
+        assert.equal(Number(guide.children[0].attributes.get("y2")),
+            proposed.y2);
+        assert.match(status.textContent, /preview only, draft unchanged/);
+        assert.equal(downloads.length, 0);
+        get("height-percent").value = "151";
+        get("height-percent").dispatch("input");
+        assert.equal(guide.children.length, 0);
+        assert.match(status.textContent, /Height percent/);
+        get("scale-height").dispatch("click");
+        assert.match(get("status").textContent, /Height percent/);
+        get("height-percent").value = "110";
+        get("height-percent").dispatch("input");
+        get("height-baseline").value = "";
+        get("height-baseline").dispatch("input");
+        assert.equal(guide.children.length, 0);
+        assert.match(status.textContent, /Choose a height/);
+        get("height-baseline").value = "2250";
+        get("height-baseline").dispatch("input");
+        assert.equal(guide.children.length, 1);
+        get("scale-height").dispatch("click");
+        assert.match(get("status").textContent,
+            /Resized all authored á height; unsaved/);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary([proposed]));
+        get("slant-authored").dispatch("click");
+        assert.equal(get("slant-undo").disabled, false);
+        get("scale-height").dispatch("click");
+        assert.equal(get("slant-undo").disabled, true,
+            "height edit must invalidate the previous slant undo");
+        get("character").value = "á";
+        get("character").dispatch("input");
+        assert.equal(get("scale-height").disabled, true);
+        editor.reset();
+        assert.equal(guide.children.length, 0);
+        assert.match(status.textContent,
+            /Requires a compatible backend session/);
+        assert.equal(get("height-percent").disabled, true);
     } finally {
         ui.restore();
     }

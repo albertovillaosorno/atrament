@@ -902,6 +902,34 @@
                 Author a glyph to preview a proposed slant.
               </p>
             </div>
+            <label>Authored glyph height (50–150% of current size)
+              <input id="glyph-height-percent" type="number" min="50"
+                max="150" step="1" value="110" disabled>
+            </label>
+            <label>Height baseline Y (0–4500 µm)
+              <input id="glyph-height-baseline" type="number" min="0"
+                max="4500" step="1" value="3550" disabled>
+            </label>
+            <button id="glyph-scale-height" type="button" disabled>
+              Resize selected glyph height (unsaved)
+            </button>
+            <div class="glyph-slant-preview-region">
+              <svg id="glyph-height-preview"
+                class="glyph-stroke-preview glyph-stroke-slant-preview"
+                viewBox="0 0 3500 4500" role="img"
+                aria-label="Proposed glyph height preview"></svg>
+              <p id="glyph-height-preview-status" class="field-help"
+                role="status" aria-live="polite">
+                Author a glyph to preview a proposed height.
+              </p>
+            </div>
+            <p class="field-help">Height rescales only the selected
+              glyph's vertical pen coordinates about the specified baseline;
+              X, pen widths, stroke order, and other Unicode glyphs remain
+              unchanged. Both previews are read-only. Scaling that clips a
+              pen edge or collapses a line refuses without altering ink.
+              Height changes invalidate the previous slant undo step.
+              Save the original TSV before transforming.</p>
             <p class="field-help">Apply a whole-glyph italic tilt to
               existing hand-authored segments without rebuilding any letter.
               The selected exact Unicode glyph changes only on an explicit

@@ -11,7 +11,7 @@ import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
-    italicizeGlyphStrokes,
+    italicizeGlyphStrokes, scaleGlyphHeight,
     reverseCandidatePath, moveCandidatePath, translateCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath, candidatePenPaths,
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
@@ -1162,6 +1162,86 @@ test('native glyph shear matches browser TSV and physical exports', () => {
                 readFileSync(actual));
         }
         assert.equal(readFileSync(source, 'utf8'), original);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('native glyph height matches browser UTF-8 TSV and PDF/PNG output', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-height-'));
+    try {
+        const nfd = 'a\u0301';
+        const strokes = [
+            { grapheme: nfd, x1: 450, y1: 1000, x2: 850,
+                y2: 1600, width: 250, color: '#243647' },
+            { grapheme: 'á', x1: 600, y1: 1200, x2: 900,
+                y2: 1550, width: 250, color: '#123456' },
+            { grapheme: nfd, x1: 850, y1: 1600, x2: 1300,
+                y2: 2200, width: 250, color: '#243647' },
+            { grapheme: '∞', x1: 500, y1: 900, x2: 700,
+                y2: 1100, width: 250, color: '#112233' },
+            { grapheme: nfd, x1: 1100, y1: 600, x2: 1700,
+                y2: 1000, width: 250, color: '#334455' },
+        ];
+        const source = join(dir, 'regular.tsv');
+        const target = join(dir, 'height.tsv');
+        const browser = join(dir, 'browser.tsv');
+        const original = encodeGlyphLibrary(strokes);
+        writeFileSync(source, original);
+        for (const combineWithItalic of [false, true]) {
+            const resized = scaleGlyphHeight(strokes, nfd, 110, 2250);
+            const expected = encodeGlyphLibrary(combineWithItalic
+                ? italicizeGlyphStrokes(resized, nfd, 12, 3550)
+                : resized);
+            writeFileSync(browser, expected);
+            const edits = ['--scale-glyph-height', nfd, '110', '2250'];
+            if (combineWithItalic) edits.push(
+                '--shear-glyph', nfd, '12', '3550');
+            const run = native('glyphs', '--profile', source, ...edits,
+                '--output', target, '--replace');
+            assert.equal(run.status, 0, run.stderr);
+            assert.deepEqual(readFileSync(target), readFileSync(browser),
+                'browser and Rust use the same Y rounding and Unicode rows');
+            const inspect = native('glyphs', '--profile', target,
+                '--inspect-paths', nfd);
+            assert.equal(inspect.status, 0, inspect.stderr);
+            assert.match(inspect.stdout, /Strokes: 3\nPaths: 2\nPen lifts: 1/);
+            for (const format of ['pdf', 'png']) {
+                const flags = ['--export-paper', format];
+                if (format === 'png') flags.push('--dpi', '72');
+                const actual = join(dir,
+                    `actual-${combineWithItalic}.${format}`);
+                const reference = join(dir,
+                    `browser-${combineWithItalic}.${format}`);
+                const render = (file, output) => native('notebook',
+                    '--printed-sheet', 'true', '--glyph-file', file,
+                    '--place-text', '1', '30000', '45000', nfd + 'á',
+                    ...flags, '--output', output);
+                const physical = render(target, actual);
+                const matched = render(browser, reference);
+                assert.equal(physical.status, 0, physical.stderr);
+                assert.equal(matched.status, 0, matched.stderr);
+                assert.deepEqual(readFileSync(actual), readFileSync(reference),
+                    `height+italic ${format} ink matches independent JS`);
+                if (format === 'png') pngHasTransparentCorner(
+                    readFileSync(actual));
+            }
+        }
+        const refusal = join(dir, 'prior.tsv');
+        writeFileSync(refusal, 'approved existing ink');
+        for (const [percent, pivot] of [
+            ['49', '2250'], ['151', '2250'],
+            ['110', '4501'], ['150', '4500'],
+        ]) {
+            const result = native('glyphs', '--profile', source,
+                '--scale-glyph-height', nfd, percent, pivot,
+                '--output', refusal, '--replace');
+            assert.notEqual(result.status, 0,
+                'invalid height edit must fail before replacement');
+            assert.equal(readFileSync(refusal, 'utf8'),
+                'approved existing ink');
+            assert.equal(readFileSync(source, 'utf8'), original);
+        }
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

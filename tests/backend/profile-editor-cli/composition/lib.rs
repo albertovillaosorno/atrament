@@ -2632,6 +2632,131 @@ fn native_whole_glyph_shear_refuses_clipping_and_invalid_edits_atomically() {
 }
 
 #[test]
+fn native_glyph_height_scales_exact_unicode_pen_paths_without_other_edits() {
+    let source = test_path().with_extension("tsv");
+    let saved = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let saved_name = saved.to_str().expect("destination path");
+    let nfd = "a\u{301}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "450", "1000", "850", "1600",
+        "250", "#243647",
+        "--glyph-stroke", "á", "600", "1200", "900", "1550",
+        "250", "#123456",
+        "--glyph-stroke", nfd, "850", "1600", "1300", "2200",
+        "250", "#243647",
+        "--glyph-stroke", "∞", "500", "900", "700", "1100",
+        "250", "#112233",
+        "--glyph-stroke", nfd, "1100", "600", "1700", "1000",
+        "250", "#334455",
+    ])).expect("valid source").expect("source bytes");
+    fs::write(&source, &original).expect("test source");
+    let edited = execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-height", nfd,
+        "110", "2250",
+    ])).expect("height edit accepted").expect("TSV");
+    assert_eq!(edited, concat!(
+        "atrament.glyph-strokes.v1\n",
+        "á\t450\t875\t850\t1535\t250\t#243647\n",
+        "á\t600\t1200\t900\t1550\t250\t#123456\n",
+        "á\t850\t1535\t1300\t2195\t250\t#243647\n",
+        "∞\t500\t900\t700\t1100\t250\t#112233\n",
+        "á\t1100\t435\t1700\t875\t250\t#334455\n",
+    ).as_bytes());
+    assert_eq!(fs::read(&source).expect("source preserved"), original);
+    let inspector = execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-height", nfd,
+        "110", "2250", "--inspect-paths", nfd,
+    ])).expect("inspect scaled paths").expect("report");
+    assert!(String::from_utf8_lossy(&inspector)
+        .contains("Strokes: 3\nPaths: 2\nPen lifts: 1"));
+    assert!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-height", nfd,
+        "110", "2250", "--output", saved_name,
+    ])).expect("explicit save").is_none());
+    assert_eq!(fs::read(&saved).expect("saved TSV"), edited);
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", saved_name,
+    ])).expect("reopen").expect("bytes"), edited);
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-height", nfd,
+        "100", "2250",
+    ])).expect("identity").expect("TSV"), original);
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(saved).expect("remove saved");
+}
+
+#[test]
+fn native_glyph_height_refuses_clipped_collapsed_and_invalid_edits() {
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let nfd = "a\u{301}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "450", "1000", "850", "1600",
+        "251", "#243647",
+        "--glyph-stroke", "á", "600", "1200", "900", "1550",
+        "250", "#123456",
+        "--glyph-stroke", nfd, "850", "1600", "1300", "2200",
+        "251", "#243647",
+    ])).expect("source admitted").expect("bytes");
+    fs::write(&source, &original).expect("source");
+    fs::write(&output, b"approved prior output").expect("output");
+    let source_name = source.to_str().expect("source path");
+    let output_name = output.to_str().expect("output path");
+    for edit in [
+        args(&["--scale-glyph-height"]),
+        args(&["--scale-glyph-height", nfd]),
+        args(&["--scale-glyph-height", nfd, "110"]),
+        args(&["--scale-glyph-height", nfd, "49", "2250"]),
+        args(&["--scale-glyph-height", nfd, "151", "2250"]),
+        args(&["--scale-glyph-height", nfd, "110.5", "2250"]),
+        args(&["--scale-glyph-height", nfd, "+110", "2250"]),
+        args(&["--scale-glyph-height", nfd, "110", "-1"]),
+        args(&["--scale-glyph-height", nfd, "110", "4501"]),
+        args(&["--scale-glyph-height", "aa", "110", "2250"]),
+        args(&["--scale-glyph-height", "ñ", "110", "2250"]),
+        args(&["--scale-glyph-height", nfd, "150", "4500"]),
+    ] {
+        let mut command = args(&["--profile", source_name]);
+        command.extend(edit);
+        command.extend(args(&["--output", output_name, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid height edit must refuse: {command:?}");
+        assert_eq!(fs::read(&source).expect("source"), original);
+        assert_eq!(fs::read(&output).expect("output"),
+            b"approved prior output");
+    }
+    for (y1, y2, percent, pivot, expected) in [
+        ("125", "300", "100", "2250", "resized ink and pen clip"),
+        ("200", "600", "150", "2250", "resized ink and pen clip"),
+        ("2001", "2002", "50", "2000", "collapses a pen segment"),
+    ] {
+        let result = execute_glyph_library(&args(&[
+            "--glyph-stroke", "o", "450", y1, "450", y2,
+            "251", "#102030", "--scale-glyph-height", "o",
+            percent, pivot,
+        ]));
+        assert!(result.expect_err("must refuse").contains(expected));
+    }
+    let bad_x = execute_glyph_library(&args(&[
+        "--glyph-stroke", "o", "125", "1000", "850", "1600",
+        "251", "#102030", "--scale-glyph-height", "o",
+        "100", "2250",
+    ]));
+    assert!(bad_x.expect_err("odd pen crosses X edge")
+        .contains("resized ink and pen clip"));
+    let negative_half = execute_glyph_library(&args(&[
+        "--glyph-stroke", "o", "450", "1999", "850", "2001",
+        "250", "#102030", "--scale-glyph-height", "o",
+        "50", "2000",
+    ])).expect("negative half rounded").expect("TSV");
+    assert!(String::from_utf8_lossy(&negative_half)
+        .contains("o\t450\t2000\t850\t2001\t250"));
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(output).expect("remove output");
+}
+
+#[test]
 fn native_path_translation_round_trips_exact_unicode_pen_geometry() {
     let source = test_path().with_extension("tsv");
     let revised = test_path().with_extension("tsv");

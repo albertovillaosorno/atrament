@@ -1073,6 +1073,35 @@ segments per selected glyph**; the actual edit keeps the larger native
 not persisted analytic vector curves, and never downloads or saves ink.
 Its touch-safe region permits ordinary scrolling on mobile.
 
+**Resize selected glyph height (unsaved)** adjusts every vertical
+coordinate of one authored exact Unicode glyph by 50–150% about a chosen
+0–4500 µm baseline. A separate **Proposed glyph height preview** shows
+up to 128 sampled pen segments without changing the draft; the actual
+editor and Rust CLI preserve the 4,096-segment library limit. Neither
+horizontal positions nor pen widths, colors, order, and neighboring Unicode
+records change. The current cell's pen half-width clearance is enforced.
+
+The equivalent native CLI edit is:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile regular.tsv --scale-glyph-height 'á' 110 2250 \
+  --output taller.tsv
+```
+
+`--scale-glyph-height GRAPHEME PERCENT BASELINE_Y_UM` accepts integer
+percentages and baselines only. Both engines round to the nearest whole
+micrometre with the same tie behavior. Invalid bounds, clipped pen tips,
+collapsed short vertical segments, and missing exact glyph ink all refuse
+without changing source or prior output. A 100% operation is an identity.
+
+Browser and CLI produce byte-identical TSV, including after a separate
+italic shear; actual PDF/transparent PNG ink also matches. Height edits
+invalidate the browser's previous one-step slant undo, and a percentage
+change is not guaranteed to be invertible after integer rounding. Download
+an original TSV before destructive editing. This is not a persistent
+regular/tall glyph variant or a calibrated continuous curve.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each

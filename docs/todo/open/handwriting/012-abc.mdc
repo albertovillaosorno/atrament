@@ -827,6 +827,34 @@ preserving previous backend-request counts.
 
 The SVG is a view of sampled lines, not persistent analytic geometry.
 
+## Bounded per-glyph height editing (partial) — 2026-11-04
+
+The localhost editor now applies a caller-selected vertical resize to all
+existing strokes of one exact Unicode glyph, keeping other interleaved
+NFC/NFD/math rows, X coordinates, pen settings, stroke order and candidate
+path continuity unchanged. The user chooses an integer 50–150% height and
+0–4500 µm pivot, sees a separate read-only SVG preview of up to 128
+segments, and explicitly applies the unsaved change. The actual transform
+still admits the full 4,096-segment library, not just the preview subset.
+
+The Rust CLI offers the same admission and integer-rounding semantics via
+`glyphs --profile ink.tsv --scale-glyph-height 'á' 110 2250
+--output taller.tsv`. Every pen endpoint must retain half-width clearance
+inside the 3.5 × 4.5 mm cell. Invalid percentages, pivot, Unicode identity,
+missing ink, clipped pen edges or collapsing a vertical segment refuse
+without replacing a prior output or accepted browser draft.
+
+Two native and two browser regressions cover exact NFD glyph rows, nearby
+composed/math keys, stroke continuity, 100% identity, rounding ties,
+4096-stroke edit capacity and atomic refusal. An independent
+browser-to-Rust test checks byte-identical TSV, inspector and actual
+PDF/transparent PNG ink, also for height scaling followed by italic shear.
+The browser display never downloads or writes without the explicit gesture.
+
+Height changes invalidate one-step slant undo, and integer resizing is not
+always reversible. This is not a saved height variant, analytic geometry,
+joined cursive or complete P1 inventory coverage; the task stays open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
