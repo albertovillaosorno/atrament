@@ -744,6 +744,7 @@ flushes that list before a two- or three-space-indented ordinary next row.
 The same rule applies to pasted Unicode U+2028, which the source adapter
 expands into a hard line break. It preserves pre-continuation output rather
 than silently joining two physically separate handwriting rows.
+
 A real PDF/PNG regression first reproduced the wrong joined geometry and
 then checked physical byte parity for bullet, checked-task and numbered
 list forms. This is not a general nested-list line-break engine.
