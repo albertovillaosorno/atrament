@@ -156,3 +156,53 @@ test('unsupported backslashes and unauthored literal marks refuse atomically',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('indented thematic rules preserve PDF and PNG ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-rule-'));
+        try {
+            const canonical = 'a\n---\na\n***\na\n___\na';
+            const indented = 'a\n ---\na\n  ***\na\n   ___\na';
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, canonical, format);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                if (format === 'pdf') {
+                    const pdf = expected.toString('latin1');
+                    assert.equal(pdf.split('0.118 0.188 0.290 RG').length - 1,
+                        3, 'exactly three decorative rules');
+                }
+                const candidate = render(dir, indented, format);
+                assert.equal(candidate.result.status, 0,
+                    candidate.result.stderr);
+                assert.deepEqual(readFileSync(candidate.output), expected,
+                    `syntactic rule indentation must not change ${format}`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('four-space and separator-only Markdown refuse replacement',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-rule-'));
+        try {
+            const output = join(dir, 'flow-pdf.output');
+            const sentinel = Buffer.from('immutable selected PDF');
+            for (const [source, diagnostic] of [
+                ['a\n    ---', /missing authored glyph shapes/],
+                ['   ---', /flow requires at least one visible text block/],
+                ['  ***\n ___',
+                    /flow requires at least one visible text block/],
+            ]) {
+                writeFileSync(output, sentinel);
+                const result = render(dir, source, 'pdf');
+                assert.notEqual(result.result.status, 0, source);
+                assert.match(result.result.stderr, diagnostic);
+                assert.deepEqual(readFileSync(output), sentinel);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

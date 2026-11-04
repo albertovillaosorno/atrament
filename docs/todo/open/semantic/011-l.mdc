@@ -308,6 +308,20 @@ text. An unapproved literal mark or other backslash still refuses before
 replacing an existing output. This is a deliberately limited line-prefix
 escape, not complete CommonMark inline escaping or a saved notebook model.
 
+## Indented Markdown thematic rules (partial) — 2026-11-04
+
+The bounded Markdown CLI now treats `---`, `***`, and `___` thematic rules
+with zero to three leading ASCII spaces as the same single physical rule.
+Indentation does not require punctuation handwriting or change the emitted
+PDF/PNG ink. Four-space indents stay literal, and separator-only documents
+remain invalid without at least one visible authored text block.
+
+Two native CLI regressions compare byte-identical PDFs and transparent PNGs
+for all three spellings and one-to-three-space indentation, including the
+three actual vector ink rules. Four-space indents and separator-only sources
+refuse without changing a selected PDF. This does not add fenced code blocks,
+full thematic-rule grammar or persistent decorative block identities.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

@@ -831,10 +831,13 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
     {
         return (LineStyle::Body, escaped.trim_end_matches(' '));
     }
-    if raw.len() >= 3
-        && let Some(&marker) = raw.as_bytes().first()
+    // Unindented and up-to-three-space thematic rules are the same ink.
+    // Four-space lines remain literal source, not a synthesized divider.
+    let rule = raw.get(indent..).unwrap_or(raw);
+    if indent <= 3 && rule.len() >= 3
+        && let Some(&marker) = rule.as_bytes().first()
         && matches!(marker, b'-' | b'*' | b'_')
-        && raw.bytes().all(|mark| mark == marker) {
+        && rule.bytes().all(|mark| mark == marker) {
         return (LineStyle::Separator, "");
     }
     // Standard ATX headings admit up to three indentation spaces. Four
