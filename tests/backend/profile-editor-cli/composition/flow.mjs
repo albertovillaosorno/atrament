@@ -741,6 +741,70 @@ test('escaped Markdown structural marks stay literal on physical pages',
         }
     });
 
+const orderedLiteralInk = ['1', '2', '.', ')'].flatMap((glyph) => [
+    '--glyph-stroke', glyph, '700', '800', '2350', '3100',
+    '250', '#112233',
+]);
+
+test('escaped ordered prefixes stay ordinary native handwriting in PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-number-escape-'));
+        try {
+            const plain = '1. a\n2) ó';
+            const escaped = '1\\. a  \n2\\) ó';
+            const indented = '   1\\. a  \n  2\\) ó';
+            for (const format of ['pdf', 'png']) {
+                const ordinary = render(dir, plain, format,
+                    orderedLiteralInk, '--flow-text');
+                assert.equal(ordinary.result.status, 0,
+                    ordinary.result.stderr);
+                const expected = readFileSync(ordinary.output);
+                for (const markdown of [escaped, indented]) {
+                    const literal = render(dir, markdown, format,
+                        orderedLiteralInk);
+                    assert.equal(literal.result.status, 0,
+                        literal.result.stderr);
+                    assert.deepEqual(readFileSync(literal.output), expected,
+                        `${format} escaped labels remain ordinary pen ink`);
+                }
+                const numbered = render(dir, plain, format,
+                    orderedLiteralInk);
+                assert.equal(numbered.result.status, 0,
+                    numbered.result.stderr);
+                assert.notDeepEqual(readFileSync(numbered.output), expected,
+                    'unescaped Markdown numbering must still be a list');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('malformed and unauthored number escapes preserve selected PDFs',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-number-escape-'));
+        try {
+            const sentinel = Buffer.from('original approved PDF');
+            const output = join(dir, 'flow-pdf.output');
+            for (const [source, ink, missing] of [
+                ['1\\. a', [], /U\+0031/],
+                ['2\\) ó', [], /U\+0032/],
+                ['    1\\. a', orderedLiteralInk, /U\+005C/],
+                ['1\\; a', orderedLiteralInk, /U\+005C/],
+            ]) {
+                writeFileSync(output, sentinel);
+                const failed = render(dir, source, 'pdf', ink);
+                assert.notEqual(failed.result.status, 0, source);
+                assert.match(failed.result.stderr,
+                    /missing authored glyph shapes/);
+                assert.match(failed.result.stderr, missing);
+                assert.deepEqual(readFileSync(output), sentinel,
+                    'invalid escaped number never changes accepted PDF');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 const fenceLiteralInk = ['`', '~'].flatMap((glyph) => [
     '--glyph-stroke', glyph, '650', '800', '2400', '3100',
     '250', '#112233',

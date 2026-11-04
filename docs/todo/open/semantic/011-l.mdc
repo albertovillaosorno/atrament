@@ -527,6 +527,42 @@ PDF/PNG cases still cover preserved NFC/NFD pen identities and exported
 spacing. This bounds source expansion to a forward-only scan without
 changing the canonical line or physical output semantics.
 
+## Literal escaped ordered labels (partial) — 2026-11-04
+
+The bounded Markdown CLI recognizes an ordered prefix such as `1\. text`
+or `12\) text` after zero to three ASCII indentation spaces. The single
+backslash removes only the list interpretation: digits and delimiter remain
+exact caller-authored handwriting, and the physical text uses the ordinary
+paragraph inset rather than a numbered-list hanging indent. Unescaped
+`1. text` and `2) text` retain their existing ordered layout. This is a
+restricted line-prefix escape, not general inline Markdown formatting.
+
+Two real Rust PDF/transparent-PNG subprocess regressions check byte-identical
+ordinary plain-text and escaped Markdown for both delimiter kinds, physical
+list/non-list distinction, and indentation neutrality. A missing numeral or
+delimiter shape, unsupported punctuation escape and four-space indent refuse
+without overwriting an existing selected PDF. The compiler still requires
+caller-authored numeral and punctuation strokes and does not persist a
+semantic paragraph/list identity.
+
+## Literal escaped ordered labels (partial) — 2026-11-04
+
+The bounded Markdown CLI recognizes an ordered prefix such as `1\. text`
+or `12\) text` after zero to three ASCII indentation spaces. The single
+backslash removes only the list interpretation: digits and delimiter remain
+exact caller-authored handwriting, and the physical text uses the ordinary
+paragraph inset rather than a numbered-list hanging indent. Unescaped
+`1. text` and `2) text` retain their existing ordered layout. This is a
+restricted line-prefix escape, not general inline Markdown formatting.
+
+Two real Rust PDF/transparent-PNG subprocess regressions check byte-identical
+ordinary plain-text and escaped Markdown for both delimiter kinds, physical
+list/non-list distinction, and indentation neutrality. A missing numeral or
+delimiter shape, unsupported punctuation escape and four-space indent refuse
+without overwriting an existing selected PDF. The compiler still requires
+caller-authored numeral and punctuation strokes and does not persist a
+semantic paragraph/list identity.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

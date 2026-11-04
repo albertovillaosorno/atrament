@@ -32,6 +32,7 @@
 
 //! A bounded text-to-physical-page bridge for the native CLI.
 
+use std::borrow::Cow;
 use std::mem::take;
 use std::slice::Iter;
 
@@ -1034,7 +1035,7 @@ fn markdown_fence_transition(
 // Restrict Markdown ordered markers to at most nine ASCII digits followed
 // by ". " or ") ". The number and delimiter remain authored text ink;
 // only unordered bullets receive a synthetic short line ornament.
-fn markdown_line(line: &str) -> (LineStyle, &str) {
+fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
     let raw = line.trim_end_matches(' ');
     let indent = line.bytes().take_while(|byte| *byte == b' ').count();
     // Indented block syntax does not consume a visible handwriting space.
@@ -1054,7 +1055,8 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
                 || matches!(mark, b'`' | b'~')
         })
     {
-        return (LineStyle::Body, escaped.trim_end_matches(' '));
+        return (LineStyle::Body, Cow::Borrowed(
+            escaped.trim_end_matches(' ')));
     }
     // CommonMark thematic rules admit spaces between at least three
     // identical marks. Four-space lines stay literal (not code blocks).
@@ -1064,7 +1066,7 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
         && matches!(marker, b'-' | b'*' | b'_')
         && rule.bytes().filter(|&mark| mark == marker).count() >= 3
         && rule.bytes().all(|mark| mark == marker || mark == b' ') {
-        return (LineStyle::Separator, "");
+        return (LineStyle::Separator, Cow::Borrowed(""));
     }
     // Standard ATX headings admit up to three indentation spaces. Four
     // spaces remain literal text (not an inferred fenced/code block).
@@ -1075,7 +1077,8 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
             ("# ", HeadingLevel::Primary),
         ] {
             if let Some(body) = block.strip_prefix(prefix) {
-                return (LineStyle::Heading(level), heading_body(body));
+                return (LineStyle::Heading(level),
+                    Cow::Borrowed(heading_body(body)));
             }
         }
     }
@@ -1087,16 +1090,18 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
             ("[X]", true)] {
             if let Some(after) = bullet.strip_prefix(marker)
                 && (after.is_empty() || after.starts_with(' ')) {
-                return (LineStyle::Task(checked), after.trim_matches(' '));
+                return (LineStyle::Task(checked),
+                    Cow::Borrowed(after.trim_matches(' ')));
             }
         }
-        return (LineStyle::Bullet, bullet.trim_end_matches(' '));
+        return (LineStyle::Bullet,
+            Cow::Borrowed(bullet.trim_end_matches(' ')));
     }
     if let Some(quote) = block.strip_prefix('>') {
         // One level of Markdown quote syntax, optionally followed by one
         // separator space. Nested > markers remain literal authored text.
-        return (LineStyle::Quote, quote.strip_prefix(' ')
-            .unwrap_or(quote).trim_end_matches(' '));
+        return (LineStyle::Quote, Cow::Borrowed(quote.strip_prefix(' ')
+            .unwrap_or(quote).trim_end_matches(' ')));
     }
     if let Some((marker, item)) = block.split_once(' ')
         && let Some(digits) = marker.strip_suffix('.')
@@ -1104,15 +1109,30 @@ fn markdown_line(line: &str) -> (LineStyle, &str) {
         && (1..=9).contains(&digits.len())
         && digits.bytes().all(|digit| digit.is_ascii_digit())
     {
-        return (LineStyle::Ordered,
+        return (LineStyle::Ordered, Cow::Borrowed(
             if item.trim().is_empty() { "" }
-            else { block.trim_end_matches(' ') });
+            else { block.trim_end_matches(' ') }));
+    }
+    // A backslash before an otherwise syntactic ordered-list delimiter
+    // escapes only that delimiter: 12\. text is ordinary authored text,
+    // not a numbered list. Preserve every digit, punctuation glyph and
+    // following source space; no general inline Markdown unescape is implied.
+    if indent <= 3
+        && let Some((label, item)) = block.split_once(' ')
+        && let Some((digits, escaped_delimiter)) = label.split_once('\\')
+        && (1..=9).contains(&digits.len())
+        && digits.bytes().all(|digit| digit.is_ascii_digit())
+        && matches!(escaped_delimiter, "." | ")")
+    {
+        let literal = format!("{digits}{escaped_delimiter} {item}");
+        return (LineStyle::Body, Cow::Owned(
+            literal.trim_end_matches(' ').to_owned()));
     }
     // Leading 0..3 spaces on a Markdown paragraph are syntax, not ink.
     // Four or more remain literal rather than silently becoming code.
-    (LineStyle::Body, if indent <= 3 {
+    (LineStyle::Body, Cow::Borrowed(if indent <= 3 {
         block.trim_end_matches(' ')
-    } else { raw })
+    } else { raw }))
 }
 
 // A single trailing backslash is an explicit Markdown hard line break for
@@ -1216,16 +1236,17 @@ fn measured_pitch(
                 continue;
             }
             if fence.is_some() {
-                raw
+                Cow::Borrowed(raw)
             } else {
                 let (style, body) = markdown_line(raw);
-                markdown_paragraph_break(raw, style, body).0
+                Cow::Owned(markdown_paragraph_break(
+                    raw, style, body.as_ref()).0.to_owned())
             }
         } else {
-            raw
+            Cow::Borrowed(raw)
         };
-        for index in 0..boundaries.grapheme_count(visible) {
-            let grapheme = segment_at(boundaries, visible, index)?;
+        for index in 0..boundaries.grapheme_count(visible.as_ref()) {
+            let grapheme = segment_at(boundaries, visible.as_ref(), index)?;
             if grapheme.chars().all(char::is_whitespace) {
                 continue;
             }
@@ -1324,12 +1345,12 @@ pub(super) fn layout_flow_with_region(
         let (style, parsed_body) = if source.format == FlowFormat::Markdown {
             markdown_line(input_line)
         } else {
-            (LineStyle::Body, raw)
+            (LineStyle::Body, Cow::Borrowed(raw))
         };
         let (body, hard_break) = if source.format == FlowFormat::Markdown {
-            markdown_paragraph_break(input_line, style, parsed_body)
+            markdown_paragraph_break(input_line, style, parsed_body.as_ref())
         } else {
-            (parsed_body, false)
+            (parsed_body.as_ref(), false)
         };
         if matches!(style, LineStyle::Separator) {
             flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
