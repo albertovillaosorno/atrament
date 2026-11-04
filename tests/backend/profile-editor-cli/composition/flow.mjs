@@ -1335,6 +1335,48 @@ test('task lists draw checked and unchecked page-local pen boxes',
         }
     });
 
+test('bullet and task marker padding up to four spaces is not ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-bullet-padding-'));
+        try {
+            const canonical = '- ó\n* a\n+ o\u0301\n- [x] a'
+                + '\n* [ ] ó\n+ [X] o\u0301\na';
+            const separated = '-   ó\n*    a\n+ \to\u0301'
+                + '\n-   [x] a\n*    [ ] ó\n+  [X] o\u0301\na';
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, canonical, format);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                const padded = render(dir, separated, format);
+                assert.equal(padded.result.status, 0,
+                    padded.result.stderr);
+                assert.deepEqual(readFileSync(padded.output), expected,
+                    `${format} 1..4 list delimiter spaces are syntax only`);
+                const deep = render(dir, '-      a', format);
+                assert.equal(deep.result.status, 0, deep.result.stderr);
+                const indentedInk = readFileSync(deep.output);
+                const shallow = render(dir, '- a', format);
+                assert.equal(shallow.result.status, 0,
+                    shallow.result.stderr);
+                assert.notDeepEqual(indentedInk,
+                    readFileSync(shallow.output),
+                    'spaces beyond fourth separator remain authored ink gap');
+                for (const empty of ['-   [x]   ', '*    [ ]', '+    ']) {
+                    const result = render(dir, empty, format);
+                    assert.notEqual(result.result.status, 0, empty);
+                    assert.match(result.result.stderr,
+                        /empty Markdown block refused/);
+                    assert.deepEqual(readFileSync(result.output),
+                        readFileSync(shallow.output),
+                        'empty bullet/task refuses without output replacement');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('extra checkbox separator spaces do not shift physical handwriting',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-checkbox-gap-'));

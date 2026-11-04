@@ -547,7 +547,9 @@ A mismatched or unclosed fence refuses before writing output.
 Nested quotes, inline styles,
 tables and full Markdown are not yet supported. In Markdown, all three
 unordered bullet markers produce the same physical ink dash; the `+` marker
-does not require a separately authored `+` glyph. In plain text it remains
+does not require a separately authored `+` glyph. Up to four spaces after
+the bullet marker (including expanded tabs) are syntax, including before
+checkboxes; further leading spaces stay in the authored text. In plain text it remains
 literal and still needs an authored shape.
 Only visible handwriting glyphs contribute their selected statistical
 height/baseline to the physical row pitch; Markdown-only `#`, `-`, `*`, `+`,

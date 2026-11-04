@@ -656,6 +656,20 @@ optional closing markers, NFC/NFD text and tab-expanded spacing. It also
 verifies three empty heading variants preserve an existing accepted export.
 This is still CLI-only Markdown structure, not editable semantic headings.
 
+## Unordered marker padding and checkbox parity (partial) — 2026-11-04
+
+The Markdown CLI now treats up to four separator spaces after an unordered
+`-`, `*` or `+` marker as syntax. An expanded tab also counts toward those
+columns; any further initial spaces remain physical text indentation.
+This lets a spaced checkbox (`-   [x] note`) become a native checked task
+instead of requiring unapproved square-bracket glyph shapes.
+
+A real PDF/transparent PNG regression compares all three bullets and three
+checkbox states against the same canonical layout, distinguishes padding
+beyond four spaces and confirms empty padded tasks and bullets refuse
+without replacing an existing export. Ordered item spacing remains authored
+by design, and nested lists are not implemented.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

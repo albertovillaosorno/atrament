@@ -1137,16 +1137,22 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
         .or_else(|| block.strip_prefix("* "))
         .or_else(|| block.strip_prefix("+ "))
     {
+        // The first through fourth spaces after a list marker delimit
+        // its body. Extra spaces retain physical authored indentation.
+        // Tab stops are already expanded at Unicode source admission.
+        let padding = bullet.bytes().take(3)
+            .take_while(|byte| *byte == b' ').count();
+        let content = bullet.get(padding..).unwrap_or(bullet);
         for (marker, checked) in [("[ ]", false), ("[x]", true),
             ("[X]", true)] {
-            if let Some(after) = bullet.strip_prefix(marker)
+            if let Some(after) = content.strip_prefix(marker)
                 && (after.is_empty() || after.starts_with(' ')) {
                 return (LineStyle::Task(checked),
                     Cow::Borrowed(after.trim_matches(' ')));
             }
         }
         return (LineStyle::Bullet,
-            Cow::Borrowed(bullet.trim_end_matches(' ')));
+            Cow::Borrowed(content.trim_end_matches(' ')));
     }
     if let Some(quote) = block.strip_prefix('>') {
         // One level of Markdown quote syntax, optionally followed by one
