@@ -819,10 +819,13 @@ cargo run -q -p atrament_profile_editor_cli -- glyphs \
 `--reverse-stroke` swaps one segment's pen endpoints but not its pigment,
 thickness or TSV position. `--move-stroke` shifts one segment to the selected
 position within that exact grapheme, retaining all other glyphs' record slots;
-NFC/NFD identities are not merged. For a three-stroke glyph,
+NFC/NFD identities are not merged.
+
+For a three-stroke glyph,
 `--move-stroke 'ñ' 3 1` places its third stroke first. Edits happen in option
 order. Invalid indices, absent shapes, empty operations and same-position
 moves refuse.
+
 Without `--output`, the revised TSV or inspection report is stdout-only;
 the source never changes. Use `--output my-glyphs.tsv --replace` deliberately
 for an in-place atomic replacement after checking the new order. These are
@@ -847,7 +850,9 @@ uses the exact bounded input validation of `--glyph-stroke`; it replaces only
 one existing segment, preserving neighboring strokes and glyphs.
 `--remove-stroke GRAPHEME INDEX` deletes only the selected segment. Both
 operate in the same sequential, one-based exact Unicode index space as
-reordering. A missing glyph or stroke, invalid geometry or empty resulting
+reordering.
+
+A missing glyph or stroke, invalid geometry or empty resulting
 library refuses before saving. An explicit `--output` is required for a
 disk write; add `--replace` only to overwrite an existing regular file.
 
@@ -864,10 +869,14 @@ cargo run -q -p atrament_profile_editor_cli -- glyphs \
 
 This example requires an authored `o` and an unoccupied `a`. It copies the
 source loop segments to `a` and explicitly adds a right-hand stem, while
-keeping `o` unchanged. You can then edit the new `a` independently via
+keeping `o` unchanged.
+
+You can then edit the new `a` independently via
 `--set-stroke`, `--reverse-stroke` and `--move-stroke`. Duplicate targets,
 missing source ink, invalid Unicode and exceeding the bounded 4,096-stroke
-library refuse. The operation copies **sampled segments**; an exact analytic
+library refuse.
+
+The operation copies **sampled segments**; an exact analytic
 circle, anchored diacritics and joined cursive still require separate work.
 An integration test also copies the browser's actual sampled `o` to `ö`,
 adds two user-owned diaeresis marks and checks exact native PDF/PNG parity

@@ -234,10 +234,11 @@ The Rust glyph CLI now mirrors the existing browser segment-order control:
 segment's pen endpoints, while `--move-stroke GRAPHEME FROM TO` shifts that
 segment in its exact grapheme sequence. Stroke ordinals are one-based, as
 shown by `--inspect-glyph`; multiple edits apply sequentially. Interleaved
-NFC/NFD/math glyph rows remain in their original TSV slots. Only the
-explicit `--output` transport writes a revised v1 library; the source file
-remains unchanged by stdout edits. The same atomic/no-clobber semantics
-apply to in-place `--replace` after validation.
+NFC/NFD/math glyph rows remain in their original TSV slots.
+
+Only the explicit `--output` transport writes a revised v1 library;
+the source file remains unchanged by stdout edits. The same atomic
+no-clobber semantics apply to in-place `--replace` after validation.
 
 Two native regressions verify forward/backward moves, preserved unrelated
 Unicode rows, reversed endpoints with original widths and colors, actual
