@@ -67,6 +67,58 @@ pub(super) struct FlowSource {
     pub(super) text: String,
 }
 
+/// Optional absolute, page-local rectangle repeated on each physical sheet.
+/// The native saved paper profile is still the authority for usable margins.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+pub(super) struct FlowRegion {
+    pub(super) height: u32,
+    pub(super) left: u32,
+    pub(super) top: u32,
+    pub(super) width: u32,
+}
+
+impl FlowRegion {
+    fn bounds_within(
+        self, printable: (u32, u32, u32, u32),
+    ) -> Result<(u32, u32, u32, u32), String> {
+        let right = self.left.checked_add(self.width)
+            .ok_or("flow region right edge overflows micrometres")?;
+        let bottom = self.top.checked_add(self.height)
+            .ok_or("flow region bottom edge overflows micrometres")?;
+        if self.left < printable.0 || self.top < printable.1
+            || right > printable.2 || bottom > printable.3 {
+            return Err(
+                "flow region must fit within printable paper margins".into()
+            );
+        }
+        Ok((self.left, self.top, right, bottom))
+    }
+
+    pub(super) fn parse(iter: &mut Iter<'_, String>) -> Result<Self, String> {
+        let mut values = [0; 4];
+        for (value, name) in values.iter_mut()
+            .zip(["left", "top", "width", "height"]) {
+            let raw = iter.next().ok_or(
+                "--flow-region requires LEFT TOP WIDTH HEIGHT in um"
+            )?;
+            let digits = !raw.is_empty()
+                && raw.bytes().all(|byte| byte.is_ascii_digit());
+            if !digits {
+                return Err(format!("flow region {name} must be unsigned um"));
+            }
+            *value = raw.parse::<u32>().map_err(|_error| {
+                format!("flow region {name} exceeds u32 micrometres")
+            })?;
+        }
+        let [left, top, width, height] = values;
+        if width == 0 || height == 0 {
+            return Err("flow region width and height must be positive".into());
+        }
+        Ok(Self { height, left, top, width })
+    }
+}
+
 impl FlowSource {
     /// Read a caller-chosen regular text file using the existing bounded
     /// profile file reader, without creating any implicit saved notebook.
@@ -812,13 +864,32 @@ fn measured_pitch(
 /// Compile bounded visible text on the caller-selected native page profile.
 /// This does not create persistent notebook semantic state.
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+#[cfg(test)]
 pub(super) fn layout_flow(
     source: &FlowSource,
     profile: &NotebookProfile,
     statistics: Option<&HandwritingStatisticsProfile>,
     decoration: HeadingDecoration,
 ) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
-    let (left, top, right, bottom) = profile.printable_rect_um()?;
+    layout_flow_with_region(source, profile, statistics, decoration, None)
+}
+
+/// An optional fixed rectangle constrains every page's text and decoration.
+/// The whole printable rectangle remains the default when none is selected.
+#[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+pub(super) fn layout_flow_with_region(
+    source: &FlowSource,
+    profile: &NotebookProfile,
+    statistics: Option<&HandwritingStatisticsProfile>,
+    decoration: HeadingDecoration,
+    region: Option<FlowRegion>,
+) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
+    let printable = profile.printable_rect_um()?;
+    let (left, top, right, bottom) = if let Some(fixed) = region {
+        fixed.bounds_within(printable)?
+    } else {
+        printable
+    };
     let pitch = measured_pitch(source, statistics)?;
     let mut layout = Layout {
         heading: decoration,

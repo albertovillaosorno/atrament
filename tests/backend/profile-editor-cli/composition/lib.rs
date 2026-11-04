@@ -4280,3 +4280,118 @@ fn marker_headings_refuse_bounded_ink_overflow_atomically() {
         b"keep-previous-notebook");
     fs::remove_file(target).expect("remove test-owned sentinel");
 }
+
+#[test]
+fn selected_flow_region_repeats_on_real_pdf_and_transparent_png_pages() {
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 50_000, height: 30_000,
+    };
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "# a\n- a\na  \na",
+    ).expect("bounded heading, list and hard-broken paragraph");
+    let (runs, marks, pages) = layout_flow_with_region(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region),
+    ).expect("selected two-row region repeats on each sheet");
+    assert_eq!(pages, 2);
+    assert_eq!(runs.iter().map(|run| (run.page, run.origin_um))
+        .collect::<Vec<_>>(), [
+            (1, (32_500, 42_500)), (1, (38_500, 51_500)),
+            (2, (32_500, 42_500)), (2, (32_500, 51_500)),
+        ]);
+    assert_eq!(marks.len(), 2, "heading and bullet remain native ink");
+    assert!(marks.iter().all(|mark| mark.page == 1
+        && mark.start_um.0 >= region.left
+        && mark.end_um.0 <= region.left + region.width
+        && mark.start_um.1 >= region.top
+        && mark.end_um.1 <= region.top + region.height));
+    let mut cli = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060", "--flow-markdown", "# a\n- a\na  \na",
+        "--flow-region", "30000", "40000", "50000", "30000",
+    ]);
+    let pdf = execute_notebook(&cli).expect("bounded real PDF")
+        .expect("PDF bytes");
+    assert!(pdf.starts_with(b"%PDF-1.4"));
+    let streams = String::from_utf8_lossy(&pdf)
+        .split("\nstream\n").skip(1)
+        .map(|entry| entry.split("\nendstream").next().unwrap_or("")
+            .to_owned()).collect::<Vec<_>>();
+    assert_eq!(streams.len(), 2);
+    assert!(streams.iter().all(|stream| stream.contains(" m\n")));
+    assert_eq!(pdf, execute_notebook(&cli)
+        .expect("deterministic PDF replay").expect("PDF bytes"));
+    drop(cli.splice(2..4, args(&["--export-paper", "png", "--dpi", "72",
+        "--png-page", "2"])));
+    let second = execute_notebook(&cli).expect("page-two PNG")
+        .expect("PNG bytes");
+    assert!(second.starts_with(b"\x89PNG\r\n\x1a\n"));
+    assert_eq!(second, execute_notebook(&cli)
+        .expect("deterministic transparent page-two PNG")
+        .expect("PNG bytes"));
+    let selected = cli.iter_mut().find(|value| value.as_str() == "2")
+        .expect("PNG page-two selector");
+    *selected = "1".into();
+    assert_ne!(second, execute_notebook(&cli)
+        .expect("page-one PNG").expect("PNG bytes"));
+}
+
+#[test]
+fn fixed_flow_region_refuses_invalid_bounds_and_overflow_atomically() {
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"previous valid notebook")
+        .expect("test-owned original PDF");
+    let name = target.to_str().expect("test output path");
+    let base = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "0", "0", "3500", "4500",
+        "250", "#204060", "--flow-markdown", "a  \na  \na",
+    ]);
+    let cases: [(&[&str], &str); 11] = [
+        (&["10000", "40000", "50000", "30000"], "printable"),
+        (&["30000", "10000", "50000", "30000"], "printable"),
+        (&["180000", "40000", "50000", "30000"], "printable"),
+        (&["30000", "260000", "50000", "30000"], "printable"),
+        (&["30000", "40000", "0", "30000"], "positive"),
+        (&["30000", "40000", "50000", "0"], "positive"),
+        (&["4294967295", "40000", "50000", "30000"], "overflows"),
+        (&["30000", "40000", "50000", "4294967296"], "u32"),
+        (&["-1", "40000", "50000", "30000"], "unsigned"),
+        (&["30000", "40000", "6000", "30000"], "too narrow"),
+        (&["30000", "40000", "50000", "9000"], "vertical"),
+    ];
+    for (region, expected) in cases {
+        let mut cli = base.clone();
+        cli.push("--flow-region".into());
+        cli.extend(args(region));
+        cli.extend(args(&["--output", name, "--replace"]));
+        let error = execute_notebook(&cli).expect_err("region must refuse");
+        assert!(error.contains(expected), "{region:?}: {error}");
+        assert_eq!(fs::read(&target).expect("original PDF preserved"),
+            b"previous valid notebook");
+    }
+    for extra in [
+        args(&["--flow-region", "30000", "40000", "50000"]),
+        args(&["--flow-region", "30000", "40000", "50000", "30000",
+            "--flow-region", "30000", "40000", "50000", "30000"]),
+    ] {
+        let mut cli = base.clone();
+        cli.extend(extra);
+        assert!(execute_notebook(&cli).is_err());
+    }
+    assert!(execute_notebook(&args(&[
+        "--flow-region", "30000", "40000", "50000", "30000",
+    ])).expect_err("region requires text source").contains("requires"));
+    let mut shortage = base;
+    shortage.extend(args(&[
+        "--flow-region", "30000", "40000", "50000", "30000",
+        "--pages", "1", "--output", name, "--replace",
+    ]));
+    assert!(execute_notebook(&shortage)
+        .expect_err("three rows cannot fit on one two-row page")
+        .contains("requires 2 physical pages"));
+    assert_eq!(fs::read(&target).expect("unchanged PDF"),
+        b"previous valid notebook");
+    fs::remove_file(target).expect("remove only test-owned PDF");
+}

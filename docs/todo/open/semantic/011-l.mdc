@@ -241,6 +241,21 @@ byte parity for plain/Markdown, LF/CRLF, and real file import; invalid
 BOM-only/over-limit source and interior unauthored glyphs refuse without
 replacing an existing output. No other Unicode normalization is inferred.
 
+A later opt-in fixed-area CLI slice accepts
+`--flow-region LEFT_UM TOP_UM WIDTH_UM HEIGHT_UM` as positive-width and
+positive-height absolute micrometre geometry, repeated on every physical
+page. It checks overflow and the selected saved paper's actual printable
+rectangle; the same native word/Unicode layout, heading ornaments,
+synthetic bullets, pagination, authored glyph refusals and PDF/PNG ink
+output then operate inside that bounded area. Two native Rust tests
+verify measured heading/list/body coordinates on both pages, native
+PDF streams and separate transparent PNG pages, deterministic replay,
+invalid or too-small area diagnostics and unchanged output on page-budget
+or geometry refusal. Without this flag the original full-margin layout
+remains byte-identical. This meets a limited fixed-text-region subcase,
+**not** image-aware page obstacles, independently positioned regions,
+persisted semantic block identities or end-to-end browser rendering.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

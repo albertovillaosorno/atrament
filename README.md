@@ -448,6 +448,21 @@ For a notebook profile already saved as `notebook.json`, supply
 `--profile notebook.json` before the flow options to use its paper/margins
 instead of defaults.
 
+To constrain the text to a fixed physical area, add
+`--flow-region LEFT_UM TOP_UM WIDTH_UM HEIGHT_UM`, in integer
+micrometres measured from the **top-left of each sheet**. For example,
+`--flow-region 30000 40000 50000 30000` repeats a 50 × 30 mm
+writing area starting 30 mm from the left and 40 mm from the top. It
+must fit entirely inside the selected paper's printable margins and
+have enough space for the measured handwritten glyphs and row pitch.
+The CLI continues content on the next physical page when needed;
+`--pages` and `--png-page` still refuse impossible selections. Invalid,
+overlapping-margins or too-small areas refuse before any selected file
+is replaced. Omitting the flag retains full-printable-area composition.
+This first bounded region is **one repeated page-local text rectangle**,
+not arbitrary per-block fixed placements, image avoidance or persisted
+semantic region identities.
+
 Use `--flow-text-file` for plain text, or `--flow-text` and
 `--flow-markdown` for inline command arguments. Plain-text newlines each
 start a physical row. In Markdown, consecutive ordinary lines form one

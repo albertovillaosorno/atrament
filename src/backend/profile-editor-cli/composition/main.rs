@@ -44,7 +44,12 @@ use std::io::{self, Write as _};
 use std::path::Path;
 use std::slice::Iter;
 
-use flow::{FlowFormat, FlowSource, HeadingDecoration, layout_flow};
+#[cfg(test)]
+use flow::layout_flow;
+use flow::{
+    FlowFormat, FlowRegion, FlowSource, HeadingDecoration,
+    layout_flow_with_region,
+};
 use glyph::GlyphVariation;
 
 use atrament_english_spanish_grapheme_inventory::REQUIRED_TEXT_GRAPHEMES;
@@ -112,6 +117,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--heading-color '#RRGGBB'] \
     [--flow-text TEXT | --flow-markdown MARKDOWN | \
      --flow-text-file FILE | --flow-markdown-file FILE] \
+    [--flow-region LEFT_UM TOP_UM WIDTH_UM HEIGHT_UM] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
     [--output FILE [--replace]]\n\
     Paper-layer export uses nested Rust paper settings and skips ruling \
@@ -129,7 +135,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     standalone ---/***/___ horizontal ink rules. -file reads bounded UTF-8. \
     An initial UTF-8 BOM is ignored but counts toward the 4096-byte cap. \
     Both use physical printable regions and exact authored ink; \
-    it auto-selects PDF page count unless --pages is explicit. \
+    optional --flow-region repeats a fixed rectangle within margins on \
+    every sheet, refusing invalid regions or unfit glyphs/rows. \
+    It auto-selects PDF page count unless --pages is explicit. \
     Markdown headings default to dark underlines; select a user-colored \
     single/double underline, opaque pastel marker band or no ornament. \
     --handwriting-profile applies selected mean dimensions to authored \
@@ -184,6 +192,7 @@ struct NotebookRequest {
     dpi: u32,
     export_paper: Option<NotebookPaperFormat>,
     flow: Option<FlowSource>,
+    flow_region: Option<FlowRegion>,
     glyphs: GlyphOverlay,
     heading: HeadingDecoration,
     ink: Vec<NotebookInkLine>,
@@ -1068,6 +1077,15 @@ fn parse_notebook_flow(
     Ok(())
 }
 
+fn parse_notebook_flow_region(
+    iter: &mut Iter<'_, String>, selected: bool,
+) -> Result<FlowRegion, String> {
+    if selected {
+        return Err("--flow-region may appear only once".into());
+    }
+    FlowRegion::parse(iter)
+}
+
 fn load_notebook_profile_option(
     iter: &mut Iter<'_, String>, loaded: bool, edited: bool,
 ) -> Result<NotebookProfile, String> {
@@ -1082,8 +1100,11 @@ fn load_notebook_profile_option(
 
 fn validate_notebook_flow_selection(
     flow: Option<&FlowSource>, glyphs: &GlyphOverlay,
-    heading: HeadingDecoration,
+    heading: HeadingDecoration, region: Option<FlowRegion>,
 ) -> Result<(), String> {
+    if region.is_some() && flow.is_none() {
+        return Err("--flow-region requires a text or Markdown flow".into());
+    }
     heading.validate().map_err(str::to_owned)?;
     if heading.is_selected() && flow.is_none_or(|source| {
         source.format != FlowFormat::Markdown
@@ -1111,6 +1132,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut glyphs = GlyphOverlay::default();
     let mut statistics = None;
     let mut flow = None;
+    let mut flow_region = None;
     let mut heading = HeadingDecoration::default();
     let mut loaded = false;
     let mut edited = false;
@@ -1147,9 +1169,10 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--inspect" => inspect = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
-            "--heading-style" | "--heading-color" => {
-                heading.parse(option, &mut iter)?;
-            }
+            "--heading-style" | "--heading-color" =>
+                heading.parse(option, &mut iter)?,
+            "--flow-region" => flow_region = Some(parse_notebook_flow_region(
+                &mut iter, flow_region.is_some())?),
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" => {
                 parse_notebook_flow(&mut iter, option, &mut flow)?;
@@ -1163,11 +1186,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                     &mut glyphs,
                 )?;
             }
-            "--output" => {
-                output = Some(parse_selected_output(
-                    &mut iter, output.is_some(),
-                )?);
-            }
+            "--output" => output = Some(parse_selected_output(
+                &mut iter, output.is_some(),
+            )?),
             "--replace" => {
                 if replace {
                     return Err("--replace may appear only once".into());
@@ -1181,10 +1202,13 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         replace, output.as_deref(), inspect, &export, &ink,
         &glyphs, statistics.as_ref(),
     )?;
-    validate_notebook_flow_selection(flow.as_ref(), &glyphs, heading)?;
+    validate_notebook_flow_selection(
+        flow.as_ref(), &glyphs, heading, flow_region,
+    )?;
     profile.validate()?;
     Ok(NotebookRequest {
         flow,
+        flow_region,
         pages_explicit: export.pages.is_some(),
         glyphs,
         heading,
@@ -1226,9 +1250,9 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
         ));
     }
     if let Some(source) = &request.flow {
-        let (runs, ornaments, required_pages) = layout_flow(
+        let (runs, ornaments, required_pages) = layout_flow_with_region(
             source, &request.profile, request.statistics.as_ref(),
-            request.heading,
+            request.heading, request.flow_region,
         )?;
         if request.pages_explicit && request.pages < required_pages {
             return Err(format!(concat!(
