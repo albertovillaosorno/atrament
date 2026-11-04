@@ -395,6 +395,10 @@ tracking, controls, and reversal of the swap to byte-identical v1 TSV.
 A new browser-to-Rust regression also checks native path inspection and
 byte-identical PDF/PNG render output against independently specified
 segments in the moved order, with original interleaved glyphs unchanged.
+A real Firefox WebDriver BiDi regression now runs the glyph editor in an
+admitted localhost session, adds interleaved NFC/NFD pen lines, exercises
+both path movement and reversal via the actual browser buttons, and checks
+exact downloaded TSV bytes without any additional backend request.
 The native file format, statistical settings and export pipeline do not
 change. Paths remain a derived editor view, not persisted pen-down groups,
 curves or automatic cursive; this P1 task remains open.

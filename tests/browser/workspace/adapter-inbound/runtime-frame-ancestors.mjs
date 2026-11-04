@@ -10958,3 +10958,136 @@ test(
         }
     },
 );
+
+test(
+    "Firefox glyph path controls reorder and reverse exact authored TSV",
+    { skip: !FIREFOX_AVAILABLE, timeout: FIREFOX_CASE_TIMEOUT_MS },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/glyph-path-browser-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const find = (id) => document.getElementById(id);
+                    const nfd = "n\u0303";
+                    const ready = !find("glyph-add").disabled;
+                    const add = (glyph, coordinates) => {
+                        find("glyph-character").value = glyph;
+                        find("glyph-character").dispatchEvent(
+                            new Event("input", { bubbles: true }));
+                        for (const [axis, value] of Object.entries({
+                            x1: coordinates[0], y1: coordinates[1],
+                            x2: coordinates[2], y2: coordinates[3],
+                            width: 250,
+                        })) find("glyph-" + axis).value = String(value);
+                        find("glyph-color").value = "#243647";
+                        find("glyph-add").click();
+                    };
+                    add(nfd, [100, 200, 400, 600]);
+                    add("ñ", [200, 300, 500, 700]);
+                    add(nfd, [400, 600, 700, 900]);
+                    add(nfd, [1200, 1500, 1500, 1800]);
+                    find("glyph-selected").value = "2";
+                    find("glyph-selected").dispatchEvent(
+                        new Event("change", { bubbles: true }));
+                    const before = find("glyph-paths").textContent;
+                    const enabled = {
+                        earlier: !find("glyph-path-earlier").disabled,
+                        later: !find("glyph-path-later").disabled,
+                        reverse: !find("glyph-reverse-path").disabled,
+                    };
+                    find("glyph-path-later").click();
+                    const afterMove = {
+                        selected: find("glyph-selected").value,
+                        paths: find("glyph-paths").textContent,
+                    };
+                    find("glyph-reverse-path").click();
+                    const afterReverse = {
+                        selected: find("glyph-selected").value,
+                        paths: find("glyph-paths").textContent,
+                    };
+                    let bytes = null;
+                    let download = null;
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            bytes = blob;
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            download = this.download;
+                        };
+                        find("glyph-save").click();
+                        return JSON.stringify({
+                            ready, before, enabled, afterMove, afterReverse,
+                            download, media: bytes?.type,
+                            tsv: await bytes?.text(),
+                        });
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            });
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const actual = JSON.parse(response.result.value);
+            assert.equal(actual.ready, true);
+            assert.match(actual.before, new RegExp(
+                "3 directed strokes, 2 candidate pen paths, "
+                    + "1 apparent pen lift"));
+            assert.deepEqual(actual.enabled,
+                { earlier: false, later: true, reverse: true });
+            assert.equal(actual.afterMove.selected, "3");
+            assert.match(actual.afterMove.paths,
+                /Path 1: strokes 1–1.*Path 2: strokes 2–3/);
+            assert.equal(actual.afterReverse.selected, "2");
+            assert.match(actual.afterReverse.paths,
+                /Path 2: strokes 2–3, \(700, 900\) → \(100, 200\)/);
+            assert.equal(actual.download, "my-glyph-strokes.tsv");
+            assert.equal(actual.media, "text/tab-separated-values");
+            const expected = [
+                "atrament.glyph-strokes.v1",
+                "n\u0303\t1200\t1500\t1500\t1800\t250\t#243647",
+                "ñ\t200\t300\t500\t700\t250\t#243647",
+                "n\u0303\t700\t900\t400\t600\t250\t#243647",
+                "n\u0303\t400\t600\t100\t200\t250\t#243647",
+                "",
+            ].join("\n");
+            assert.equal(actual.tsv, expected,
+                "real browser exports intact Unicode rows and moved paths");
+            assert.deepEqual(requests, baseline,
+                "path edits and local TSV download never contact the backend");
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
