@@ -74,7 +74,10 @@ const DEFAULT_TEMPLATE_INK_UM: u32 = 300;
 /// Opt-in creative jitter, not an inferred distribution or saved profile.
 /// Units and the seeded xorshift match the browser glyph comparison.
 #[derive(Clone, Copy, Debug)]
-#[expect(clippy::redundant_pub_crate, reason = "CLI sibling module shares this type")]
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "CLI sibling module shares this type",
+)]
 pub(super) struct GlyphVariation {
     height: u32,
     regularity: u32,
@@ -163,7 +166,9 @@ impl GlyphVariation {
             for (x, y) in [start, end] {
                 if x < clearance || x > 3500u32.saturating_sub(clearance)
                     || y < clearance || y > 4500u32.saturating_sub(clearance) {
-                    return Err("varied ink and pen must fit inside glyph cell".into());
+                    return Err(
+                        "varied ink and pen must fit inside glyph cell".into(),
+                    );
                 }
             }
             Ok(GlyphStroke {
@@ -621,7 +626,9 @@ impl GlyphOverlay {
             .checked_add(i64::from(metrics.letter_spacing))
             .ok_or("glyph letter advance overflow")?;
         if advance <= 0 {
-            return Err("glyph width plus letter spacing must be positive".into());
+            return Err(
+                "glyph width plus letter spacing must be positive".into(),
+            );
         }
         Ok((u32::try_from(advance)
             .map_err(|_error| "glyph letter advance overflow")?,
