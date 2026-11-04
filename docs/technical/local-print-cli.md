@@ -82,8 +82,11 @@ refuse before any print submission.
 
 The PDF is read through Atrament's symlink-refusing Linux selected-file
 opener and exact bounded reader. Missing, nonregular, symlinked, changing
-or larger-than-24,000,000-byte inputs refuse. It must have a PDF version
-prefix and a terminal `%%EOF` marker.
+or larger-than-24,000,000-byte inputs refuse. A selected PDF must begin
+with a complete `%PDF-1.0` through `%PDF-1.7` or `%PDF-2.0` version line,
+terminated by LF or CR, and end with `%%EOF` plus optional whitespace.
+Unsupported version numbers, truncated headers and extra characters before
+the first line break refuse without contacting CUPS.
 
 The framing check is intentionally not a full PDF grammar or security
 validator. Operators should print PDFs produced by the native Rust exporter
@@ -100,9 +103,9 @@ cargo clippy --offline -p atrament_notebook_paper_cli --lib --bins -- \
   -D warnings
 ```
 
-Three focused Rust tests use a real two-page, preprinted native PDF,
-including FIPS SHA-256 known-answer, malformed digest and changed-valid-PDF
-refusals before the fake CUPS transport starts.
+Four focused Rust tests use a real two-page, preprinted native PDF,
+including FIPS SHA-256 known-answer, malformed digest, changed-valid-PDF
+and unsupported PDF-version refusals before the fake CUPS transport starts.
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.

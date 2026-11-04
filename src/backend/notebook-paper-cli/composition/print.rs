@@ -152,6 +152,15 @@ fn parse_args(args: &[String]) -> Result<Option<PrintRequest>, String> {
     }))
 }
 
+// This is deliberately a framing check, not a PDF document parser. Refuse
+// ambiguous version headers before any printer process can be contacted.
+fn supported_pdf_header(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"%PDF-")
+        && matches!(bytes.get(5..8),
+            Some([b'1', b'.', b'0'..=b'7'] | [b'2', b'.', b'0']))
+        && matches!(bytes.get(8), Some(b'\r' | b'\n'))
+}
+
 fn selected_pdf(path: &Path) -> Result<Vec<u8>, String> {
     let file = open_selected_profile_file(path)
         .map_err(|error| format!("cannot open selected PDF: {error:?}"))?;
@@ -162,10 +171,11 @@ fn selected_pdf(path: &Path) -> Result<Vec<u8>, String> {
     let has_eof = end
         .and_then(|index| bytes.get(..=index))
         .is_some_and(|prefix| prefix.ends_with(b"%%EOF"));
-    if !has_eof
-        || !(bytes.starts_with(b"%PDF-1.") || bytes.starts_with(b"%PDF-2."))
-    {
-        return Err("selected file is not a complete PDF".into());
+    if !has_eof || !supported_pdf_header(bytes) {
+        return Err(concat!(
+            "selected PDF needs a supported version header ",
+            "and terminal %%EOF",
+        ).into());
     }
     Ok(bytes.to_vec())
 }

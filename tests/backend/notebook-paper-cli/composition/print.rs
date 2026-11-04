@@ -212,11 +212,27 @@ fn print_admits_real_two_page_pdf_and_refuses_bad_sources() {
         "preprinted PDF suppresses existing page rules, retaining borders");
     fs::write(&pdf, &bytes).expect("write source PDF");
     assert_eq!(selected_pdf(&pdf).expect("real PDF accepted"), bytes);
+    // A framing admission check accepts real PDF version labels, but
+    // does not claim to parse the modified document structure.
+    for header in [b"%PDF-1.0", b"%PDF-1.7", b"%PDF-2.0"] {
+        let mut labeled = bytes.clone();
+        labeled[..8].copy_from_slice(header);
+        fs::write(&pdf, &labeled).expect("save version-labeled fixture");
+        assert_eq!(selected_pdf(&pdf).expect("supported PDF header"),
+            labeled);
+    }
 
     for data in [
         b"not a PDF".as_slice(),
         b"%PDF-1.4\nmissing EOF",
         b"%PDF-1.4\n%%EOF\nnonwhitespace",
+        b"%PDF-1.8\n%%EOF",
+        b"%PDF-2.1\n%%EOF",
+        b"%PDF-0.9\n%%EOF",
+        b"%PDF-1.\n%%EOF",
+        b"%PDF-1.4x\n%%EOF",
+        b"%PDF-1.4%%EOF",
+        b"%PDF-1.4 \n%%EOF",
     ] {
         fs::write(&pdf, data).expect("replace bad fixture");
         assert!(selected_pdf(&pdf).is_err(), "refuse invalid PDF");
@@ -263,6 +279,23 @@ fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
 
     let selected = selected_pdf(&pdf).expect("complete input PDF");
     assert!(!copied.exists(), "reading PDF never silently prints");
+    for invalid in [b"%PDF-1.8\n%%EOF".as_slice(),
+        b"%PDF-2.1\n%%EOF", b"%PDF-1.4fake\n%%EOF"] {
+        fs::write(&pdf, invalid).expect("save malformed selected PDF");
+        let request = PrintRequest {
+            pdf: pdf.clone(),
+            printer: "Queue_1".into(),
+            dry_run: false,
+            expected_sha256: None,
+        };
+        assert!(submit_selected(&request, &script).is_err(),
+            "unsupported PDF header cannot reach the spooler");
+        assert!(!copied.exists() && !arguments.exists(),
+            "refused framing cannot launch fake CUPS");
+        assert_eq!(fs::read(&pdf).expect("malformed source retained"),
+            invalid, "refusal must never mutate selected bytes");
+    }
+    fs::write(&pdf, &bytes).expect("restore native PDF");
     let digest = sha256_profile_bytes(&bytes).bytes();
     let dry_request = PrintRequest {
         pdf: pdf.clone(),
