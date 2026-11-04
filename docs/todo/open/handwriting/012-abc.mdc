@@ -1215,6 +1215,16 @@ refuses without changing the accepted PDF or TSV. This is a manual starter,
 not a Unicode normalization fallback, a saved analytic circle or a full
 Spanish/English handwriting font; P4-012 remains open.
 
+A separate real localhost Firefox/BiDi regression selects all 14 NFD
+options through native HTML, verifies matching SVG accent guides, and
+explicitly downloads their 386 sampled ink segments plus a separate NFC
+`Ñ` glyph. Rust independently reopens that exact TSV, audits 15 grapheme
+identities, exports an ink-bearing PDF and RGBA transparent PNG, and refuses
+an unauthored decomposed grave before overwriting a reviewed PDF. Firefox
+also verifies a clipped edit preserves the prior download and makes no
+additional authenticated backend request. This is practical partial
+acceptance only; it does not prove full inventory shape completeness.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

@@ -13361,3 +13361,220 @@ test(
         }
     },
 );
+
+test(
+    "Firefox selects exact NFD accent forms for Rust PDF and PNG ink",
+    { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/nfd-firefox-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const get = (id) => document.getElementById("glyph-" + id);
+                    const change = (id, value) => {
+                        get(id).value = String(value);
+                        get(id).dispatchEvent(new Event("input", {
+                            bubbles: true,
+                        }));
+                    };
+                    const nfc = ["á", "é", "í", "ó", "ú", "ñ", "ü",
+                        "Á", "É", "Í", "Ó", "Ú", "Ñ", "Ü"];
+                    const nfd = nfc.map((glyph) => glyph.normalize("NFD"));
+                    const options = Array.from(get("form").options,
+                        (option) => option.value);
+                    const guides = [];
+                    for (const glyph of nfd) {
+                        change("form", glyph);
+                        change("character", glyph);
+                        const guide = {
+                            glyph, selected: get("form").value,
+                            present: options.includes(glyph),
+                            circle: get("ideal-circle")
+                                .getAttribute("visibility"),
+                            open: get("ideal-c-loop")
+                                .getAttribute("visibility"),
+                            rounded: get("ideal-rounded")
+                                .getAttribute("visibility"),
+                            acute: get("ideal-accent")
+                                .getAttribute("visibility"),
+                            marks: get("ideal-diacritic")
+                                .getAttribute("visibility"),
+                        };
+                        get("construct").click();
+                        guides.push({ ...guide,
+                            status: get("status").textContent });
+                    }
+                    change("form", "Ñ");
+                    change("character", "Ñ");
+                    get("construct").click();
+                    const composed = get("status").textContent;
+                    const names = [];
+                    const blobs = [];
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            names.push(this.download);
+                        };
+                        get("save").click();
+                        change("form", nfd[12]);
+                        change("character", nfd[12]);
+                        change("circle-x", 200);
+                        const hidden = get("ideal-diacritic")
+                            .getAttribute("visibility");
+                        get("construct").click();
+                        const refused = get("status").textContent;
+                        get("save").click();
+                        return JSON.stringify({ nfd, guides, composed,
+                            hidden, refused, names,
+                            files: await Promise.all(blobs.map((blob) =>
+                                blob.text())) });
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const actual = JSON.parse(response.result.value);
+            const composed = ["á", "é", "í", "ó", "ú", "ñ", "ü",
+                "Á", "É", "Í", "Ó", "Ú", "Ñ", "Ü"];
+            const nfd = composed.map((glyph) => glyph.normalize("NFD"));
+            assert.deepEqual(actual.nfd, nfd);
+            for (const [index, glyph] of nfd.entries()) {
+                const guide = actual.guides[index];
+                assert.equal(guide.glyph, glyph);
+                assert.equal(guide.selected, glyph,
+                    "real HTML option retains exact decomposed scalar order");
+                assert.equal(guide.present, true);
+                assert.match(guide.status, /Constructed \d+ sampled segments/);
+                const canonical = composed[index];
+                assert.equal(guide.acute, ["á", "é", "í", "ó", "ú",
+                    "Á", "É", "Í", "Ó", "Ú"].includes(canonical)
+                    ? "visible" : "hidden");
+                assert.equal(guide.marks, ["ñ", "ü", "Ñ", "Ü"]
+                    .includes(canonical) ? "visible" : "hidden");
+                if (canonical === "ó" || canonical === "Ó") {
+                    assert.equal(guide.circle, "visible");
+                }
+                if (canonical === "é") {
+                    assert.equal(guide.open, "visible");
+                }
+            }
+            assert.match(actual.composed, /Constructed \d+ sampled segments/);
+            assert.equal(actual.hidden, "hidden");
+            assert.match(actual.refused, /fit inside glyph cell/);
+            assert.deepEqual(actual.names,
+                ["my-glyph-strokes.tsv", "my-glyph-strokes.tsv"]);
+            const glyphs = [...nfd, "Ñ"];
+            const rows = glyphs.flatMap((glyph) => geometricStarter(
+                glyph, 1550, 2450, 1100, 250, "#243647"));
+            const expected = encodeGlyphLibrary(rows);
+            assert.deepEqual(actual.files, [expected, expected],
+                "real Firefox refusal cannot alter saved NFD and NFC ink");
+            assert.deepEqual(requests, baseline,
+                "local glyph editing and downloads create no backend calls");
+
+            const library = path.join(profile, "exact-nfd.tsv");
+            fs.writeFileSync(library, actual.files[0]);
+            const build = spawnSync(PINNED_CARGO, [
+                "build", "--offline", "--quiet",
+                "-p", "atrament_profile_editor_cli",
+                "--bin", "atrament-profiles",
+            ], { timeout: 90_000, stdio: "pipe",
+                env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR } });
+            assert.equal(build.status, 0,
+                "native Rust CLI must build offline for browser NFD ink");
+            const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            const invoke = (...flags) => spawnSync(cli, flags, {
+                timeout: 20_000, maxBuffer: 16 * 1024 * 1024,
+            });
+            const reopened = invoke("glyphs", "--profile", library);
+            assert.equal(reopened.status, 0, reopened.stderr.toString());
+            assert.equal(reopened.stdout.toString(), expected);
+            const audit = invoke("glyphs", "--profile", library,
+                "--audit-text", glyphs.join(""));
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 15/);
+            const flags = ["notebook", "--printed-sheet", "true",
+                "--glyph-file", library,
+                "--flow-text", nfd.join("") + "\nÑ"];
+            const output = path.join(profile, "exact-nfd.pdf");
+            const pdf = invoke(...flags, "--export-paper", "pdf",
+                "--output", output);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const approved = fs.readFileSync(output);
+            assert.match(approved.toString("latin1"), /^%PDF-1\.4/);
+            assert.equal((approved.toString("latin1").match(/ m\n/g) ?? [])
+                .length, rows.length,
+                "real Firefox NFD and NFC ink stays physical and exact");
+            const png = invoke(...flags, "--export-paper", "png",
+                "--dpi", "72");
+            assert.equal(png.status, 0, png.stderr.toString());
+            assert.deepEqual(png.stdout.subarray(0, 8),
+                Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+            assert.equal(png.stdout.readUInt32BE(16), 596);
+            assert.equal(png.stdout.readUInt32BE(20), 842);
+            assert.equal(png.stdout[25], 6,
+                "printed page PNG has transparent RGBA channels");
+            const chunks = [];
+            for (let offset = 8; offset + 12 <= png.stdout.length;) {
+                const length = png.stdout.readUInt32BE(offset);
+                if (png.stdout.toString("ascii", offset + 4, offset + 8)
+                    === "IDAT") {
+                    chunks.push(png.stdout.subarray(offset + 8,
+                        offset + 8 + length));
+                }
+                offset += length + 12;
+            }
+            const pixels = inflateSync(Buffer.concat(chunks));
+            assert.equal(pixels[4], 0, "page corner is transparent");
+            assert.ok(pixels.includes(Buffer.from([36, 54, 71, 255])),
+                "native PNG contains browser-authored colored pigment");
+            const refused = invoke("notebook", "--printed-sheet", "true",
+                "--glyph-file", library, "--flow-text", "A\u0300",
+                "--export-paper", "pdf", "--output", output, "--replace");
+            assert.notEqual(refused.status, 0);
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(fs.readFileSync(output), approved);
+            assert.equal(fs.readFileSync(library, "utf8"), expected);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
