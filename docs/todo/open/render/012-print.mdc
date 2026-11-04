@@ -180,8 +180,11 @@ a different object number/generation. The print gate now reads the declared
 absolute byte position and requires a matching `number generation obj`
 header before spool admission. Four malformed cases refuse without a CUPS
 launch or source mutation, while exact native PDF pages and one synthetic
-positive header stay admitted. Free `f` entries remain exempt. This still
-does not parse indirect-object bodies, chained updates or entire PDF syntax.
+positive header stay admitted.
+
+Free `f` entries remain exempt from the exact in-use header check. This
+still does not parse indirect-object bodies, chained updates or complete
+PDF syntax.
 
 A follow-up red-before test caught a free `f` record referring to object
 9,999,999,999 despite trailer `/Size 1`. The same bounded table scan now
