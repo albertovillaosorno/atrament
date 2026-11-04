@@ -183,6 +183,14 @@ launch or source mutation, while exact native PDF pages and one synthetic
 positive header stay admitted. Free `f` entries remain exempt. This still
 does not parse indirect-object bodies, chained updates or entire PDF syntax.
 
+A follow-up red-before test caught a free `f` record referring to object
+9,999,999,999 despite trailer `/Size 1`. The same bounded table scan now
+includes every free-list next-object index in its trailer-size minimum,
+and refuses generation counters above the PDF unsigned 16-bit maximum.
+Two malformed tables refuse before fake CUPS contact; a two-entry free
+chain and native exported pages still pass. This is not a verification of
+complete free-list topology or an arbitrary PDF object grammar.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

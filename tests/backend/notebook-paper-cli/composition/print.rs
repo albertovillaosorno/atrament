@@ -540,6 +540,8 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
         "xref\n100 1\n0000000044 00000 n \ntrailer\n<< /Size 100 >>\n",
         "xref\n0 1\n9999999999 00000 n \ntrailer\n<< /Size 1 >>\n",
         "xref\n0 1\n0000000000 00000 n \ntrailer\n<< /Size 1 >>\n",
+        "xref\n0 1\n9999999999 65535 f \ntrailer\n<< /Size 1 >>\n",
+        "xref\n0 1\n0000000000 99999 f \ntrailer\n<< /Size 1 >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 > >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 ] >>\n",
     ] {
@@ -560,6 +562,17 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
         assert_eq!(fs::read(&pdf).expect("source unchanged"), fake);
     }
     fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[test]
+fn xref_free_chain_within_declared_size_is_admissible() {
+    let free_chain = concat!(
+        "%PDF-1.4\nxref\n0 2\n0000000001 65535 f \n",
+        "0000000000 00001 f \ntrailer\n<< /Size 2 >>\n",
+        "startxref\n9\n%%EOF\n",
+    );
+    assert!(supported_pdf_cross_reference(free_chain.as_bytes()),
+        "free-list object indices within Size remain eligible");
 }
 
 #[cfg(unix)]

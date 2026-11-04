@@ -109,8 +109,11 @@ the selected PDF, after its version header. An offset of zero or past the
 file refuses before CUPS. At an in-use offset the gate also requires a
 matching `number generation obj` header; an offset into a body, the xref
 section, or a different numbered/generation object refuses. Free `f` entries
-use object indices, not document byte offsets, and are exempt. This does
-not parse the referenced object body or prove cross-reference completeness.
+use object indices, not document byte offsets, and are exempt from byte
+position checks. Instead their next-free object index must be less than the
+trailer `/Size`; the five-digit generation counter on both `f` and `n`
+records must fit an unsigned 16-bit PDF generation number. This does not
+parse the referenced object body or prove cross-reference completeness.
 
 The trailer scanner now balances nested dictionaries and arrays, skipping
 literal/hex strings and comments when locating the one top-level `/Size`.
@@ -180,6 +183,9 @@ Two fake-spool refusals cover zero and out-of-file in-use object offsets.
 Four more refuse an in-range offset into a table or object body and a
 mismatched object number or generation. A matching synthetic indirect
 object and native two-page Rust PDF still pass; no real printer was used.
+Another two fake-spool refusals cover an out-of-range free-list object
+index and a generation value greater than 65535, while a valid two-entry
+free-list chain remains eligible.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

@@ -319,18 +319,27 @@ fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
             {
                 return false;
             }
-            // Free-table values are object indices rather than byte offsets.
-            // An in-use record must name its own indirect object header.
-            if status == b"n" {
-                let Some(object_offset) = str::from_utf8(offset).ok()
+            // The five-digit generation is a PDF 16-bit counter.
+            let Some(generation_number) = str::from_utf8(generation).ok()
+                .and_then(|digits| digits.parse::<u16>().ok())
+            else { return false; };
+            if status == b"f" {
+                // Free-table offsets name the next free object, not a byte.
+                // The trailer's /Size must also cover this reference.
+                let Some(next_free) = str::from_utf8(offset).ok()
                     .and_then(|digits| digits.parse::<usize>().ok())
+                    .and_then(|value| value.checked_add(1))
                 else { return false; };
-                let Some(generation_number) = str::from_utf8(generation).ok()
+                minimum_size = minimum_size.max(next_free);
+            } else {
+                // An in-use record must name its own indirect object.
+                let Some(object_offset) = str::from_utf8(offset).ok()
                     .and_then(|digits| digits.parse::<usize>().ok())
                 else { return false; };
                 if object_offset < 9 || object_offset >= document.len()
                     || !in_use_object_header(
-                        document, object_offset, index, generation_number,
+                        document, object_offset, index,
+                        usize::from(generation_number),
                     ) {
                     return false;
                 }
