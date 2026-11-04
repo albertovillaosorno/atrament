@@ -54,7 +54,9 @@ use atrament_notebook_profile::{MAX_NOTEBOOK_JSON_BYTES, NotebookProfile};
 use atrament_session_runtime as _;
 use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 use atrament_handwriting_statistics::HandwritingStatisticsProfile;
-use atrament_handwriting_statistics_json::{decode_statistics_json, encode_statistics_json};
+use atrament_handwriting_statistics_json::{
+    decode_statistics_json, encode_statistics_json,
+};
 use atrament_session_handshake_port::{
     HandshakeResult, SessionHandshake, VersionDimension, Versions,
 };
@@ -79,7 +81,8 @@ impl runtime::HandwritingProfileGateway for TestHandwritingGateway {
             .map_err(|_error| runtime::HandwritingProfileError)
     }
 
-    fn default_json(&self) -> Result<Vec<u8>, runtime::HandwritingProfileError> {
+    fn default_json(&self)
+        -> Result<Vec<u8>, runtime::HandwritingProfileError> {
         encode_statistics_json(
             &HandwritingStatisticsProfile::baseline(0),
             &UnicodeGraphemeSegmentation,
@@ -89,7 +92,11 @@ impl runtime::HandwritingProfileGateway for TestHandwritingGateway {
     fn numeric_preview_json(
         &self, input: &[u8],
     ) -> Result<Vec<u8>, runtime::HandwritingProfileError> {
-        if input == b"{\"profile\":{},\"grapheme\":\"a\",\"dimension\":\"height\",\"occurrence\":0}" {
+        let valid = concat!(
+            r#"{"profile":{},"grapheme":"a","dimension":"height","#,
+            r#""occurrence":0}"#,
+        );
+        if input == valid.as_bytes() {
             Ok(br#"{"value":3000}"#.to_vec())
         } else {
             Err(runtime::HandwritingProfileError)
@@ -5107,7 +5114,8 @@ fn paper_api_does_not_leak_profiles_without_authentication() {
                 EXPECTED_HOST,
             );
             assert_eq!(status_line(&response), "HTTP/1.1 401 Unauthorized");
-            assert!(!String::from_utf8_lossy(&response).contains("atrament.paper.v1"));
+            assert!(!String::from_utf8_lossy(&response)
+                .contains("atrament.paper.v1"));
         }
     }
 }
@@ -5317,7 +5325,10 @@ fn handwriting_profile_http_refuses_invalid_json_and_payload_shapes() {
 
 #[test]
 fn handwriting_numeric_preview_is_authenticated_bounded_and_post_only() {
-    let valid = br#"{"profile":{},"grapheme":"a","dimension":"height","occurrence":0}"#;
+    let valid = concat!(
+        r#"{"profile":{},"grapheme":"a","dimension":"height","#,
+        r#""occurrence":0}"#,
+    ).as_bytes();
     let request = |method: &str, secret: Option<&str>,
         origin: Option<&str>, content_type: Option<&str>, body: &[u8]| {
         route_runtime(&paper_endpoint_request(
@@ -5996,7 +6007,9 @@ impl runtime::ProfileFileGateway for TestFileGateway {
         }
         let json = match kind {
             runtime::ProfileFileKind::Notebook => NotebookProfile::default()
-                .canonical_json().expect("canonical native notebook").into_bytes(),
+                .canonical_json()
+                .expect("canonical native notebook")
+                .into_bytes(),
             runtime::ProfileFileKind::Handwriting => encode_statistics_json(
                 &HandwritingStatisticsProfile::baseline(0),
                 &UnicodeGraphemeSegmentation,
@@ -6034,7 +6047,8 @@ fn profile_file_routes_require_selected_store_and_exact_session_admission() {
          Authorization: Bearer {EXPECTED_SECRET}\r\n\
          X-Atrament-Profile-Name: local.json\r\n\r\n",
     );
-    assert_eq!(status_line(&route_runtime(authorized.as_bytes(), EXPECTED_HOST)),
+    assert_eq!(
+        status_line(&route_runtime(authorized.as_bytes(), EXPECTED_HOST)),
         "HTTP/1.1 503 Service Unavailable");
     let loaded = route_with_profile_file_gateway(authorized.as_bytes());
     assert_eq!(status_line(&loaded), "HTTP/1.1 200 OK");
@@ -6048,18 +6062,21 @@ fn profile_file_routes_require_selected_store_and_exact_session_admission() {
     let missing_auth = authorized.replace(
         &format!("Authorization: Bearer {EXPECTED_SECRET}\r\n"), "",
     );
-    assert_eq!(status_line(&route_with_profile_file_gateway(missing_auth.as_bytes())),
+    assert_eq!(
+        status_line(&route_with_profile_file_gateway(missing_auth.as_bytes())),
         "HTTP/1.1 401 Unauthorized");
     let wrong_origin = authorized.replace(
         "X-Atrament-Profile-Name:",
         "Origin: http://evil.invalid\r\nX-Atrament-Profile-Name:",
     );
-    assert_eq!(status_line(&route_with_profile_file_gateway(wrong_origin.as_bytes())),
+    assert_eq!(
+        status_line(&route_with_profile_file_gateway(wrong_origin.as_bytes())),
         "HTTP/1.1 401 Unauthorized");
     for name in ["../wrong.json", ".private.json", "bad!.json", "noextension",
         "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.json"] {
         let request = authorized.replace("local.json", name);
-        assert_eq!(status_line(&route_with_profile_file_gateway(request.as_bytes())),
+        assert_eq!(
+            status_line(&route_with_profile_file_gateway(request.as_bytes())),
             "HTTP/1.1 400 Bad Request", "name {name:?}");
     }
     let duplicate = authorized.replace(
@@ -6067,10 +6084,12 @@ fn profile_file_routes_require_selected_store_and_exact_session_admission() {
         "X-Atrament-Profile-Name: local.json\r\n\
          X-Atrament-Profile-Name: local.json\r\n",
     );
-    assert_eq!(status_line(&route_with_profile_file_gateway(duplicate.as_bytes())),
+    assert_eq!(
+        status_line(&route_with_profile_file_gateway(duplicate.as_bytes())),
         "HTTP/1.1 400 Bad Request");
     let handwriting = authorized.replace("notebook/file", "handwriting/file");
-    let handwriting_response = route_with_profile_file_gateway(handwriting.as_bytes());
+    let handwriting_response =
+        route_with_profile_file_gateway(handwriting.as_bytes());
     let (_, body) = response_parts(&handwriting_response);
     let data = std::str::from_utf8(body).expect("handwriting JSON UTF-8");
     assert!(data.contains("\"atrament.handwriting.statistics.v1\""));
@@ -6088,12 +6107,16 @@ fn profile_file_post_refuses_missing_origin_and_stale_revision() {
          Content-Type: application/json\r\n{origin}\
          Content-Length: {}\r\n\r\n{body}", body.len(),
     );
-    let valid = post("new", &format!("Origin: {EXPECTED_ORIGIN}\r\n"), &profile);
+    let valid = post(
+        "new", &format!("Origin: {EXPECTED_ORIGIN}\r\n"), &profile,
+    );
     let saved = route_with_profile_file_gateway(valid.as_bytes());
     assert_eq!(status_line(&saved), "HTTP/1.1 200 OK");
     let (_, json) = response_parts(&saved);
     let parsed = std::str::from_utf8(json).expect("saved revision UTF-8");
-    assert_eq!(parsed, format!("{{\"revision\":\"sha256:{}\"}}", "b".repeat(64)));
+    assert_eq!(
+        parsed, format!("{{\"revision\":\"sha256:{}\"}}", "b".repeat(64)),
+    );
     let stale = post(&format!("sha256:{}", "a".repeat(64)),
         &format!("Origin: {EXPECTED_ORIGIN}\r\n"), &profile);
     assert_eq!(status_line(&route_with_profile_file_gateway(stale.as_bytes())),

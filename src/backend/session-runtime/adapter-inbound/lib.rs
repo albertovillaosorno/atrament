@@ -136,7 +136,7 @@ const PAPER_PROFILE_JAVASCRIPT: &[u8] = include_bytes!(
 );
 // Keep this audited absolute module path as a single literal for the
 // browser resource allowlist, not a dynamic build-time input.
-// jig-ignore-next-line JIG-TEXT-005: literal asset is pinned by security tests.
+// jig-ignore-next-line: Literal asset path is pinned by security tests.
 const HANDWRITING_PROFILE_JAVASCRIPT: &[u8] = include_bytes!("../../../browser/workspace/adapter-inbound/generated/handwriting-profile.js");
 const GLYPH_STROKES_JAVASCRIPT: &[u8] = include_bytes!(
     "../../../browser/workspace/adapter-inbound/generated/glyph-strokes.js"
@@ -1470,7 +1470,8 @@ fn profile_file_response_error(error: ProfileFileError) -> Vec<u8> {
             "500 Internal Server Error", br#"{"error":"profile_file_io"}"#,
         ),
         ProfileFileError::Unavailable => json_response(
-            "503 Service Unavailable", br#"{"error":"profile_file_unavailable"}"#,
+            "503 Service Unavailable",
+            br#"{"error":"profile_file_unavailable"}"#,
         ),
     }
 }
@@ -1497,7 +1498,9 @@ fn route_profile_file(
     else {
         return profile_file_response_error(ProfileFileError::InvalidInput);
     };
-    if name.len() > 64 || name.rsplit_once('.').is_none_or(|(_, extension)| extension != "json")
+    if name.len() > 64
+        || name.rsplit_once('.')
+            .is_none_or(|(_, extension)| extension != "json")
         || name.starts_with('.') || name.contains("..")
         || !name.bytes().all(|byte| byte.is_ascii_alphanumeric()
             || matches!(byte, b'-' | b'_' | b'.')) {
@@ -1520,35 +1523,47 @@ fn route_profile_file(
             let Some(revision) = single_header_value(
                 request, "x-atrament-profile-revision",
             ) else {
-                return profile_file_response_error(ProfileFileError::InvalidInput);
+                return profile_file_response_error(
+                    ProfileFileError::InvalidInput,
+                );
             };
             if revision != "new" && (revision.len() != 71
                 || !revision.starts_with("sha256:")
                 || !revision.get(7..).is_some_and(|hex| hex.bytes().all(|byte|
                     byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte)))) {
-                return profile_file_response_error(ProfileFileError::InvalidInput);
+                return profile_file_response_error(
+                    ProfileFileError::InvalidInput,
+                );
             }
             if !single_header_value(request, "content-type")
                 .is_some_and(|value| value.eq_ignore_ascii_case(
-                    "application/json") || value.eq_ignore_ascii_case(JSON_CONTENT_TYPE))
+                    "application/json")
+                    || value.eq_ignore_ascii_case(JSON_CONTENT_TYPE))
             {
-                return profile_file_response_error(ProfileFileError::InvalidInput);
+                return profile_file_response_error(
+                    ProfileFileError::InvalidInput,
+                );
             }
             let Some(body) = request_body(request) else {
-                return profile_file_response_error(ProfileFileError::InvalidInput);
+                return profile_file_response_error(
+                    ProfileFileError::InvalidInput,
+                );
             };
             let limit = match kind {
-                ProfileFileKind::Notebook => context.notebook_gateway.max_input_bytes(),
+                ProfileFileKind::Notebook =>
+                    context.notebook_gateway.max_input_bytes(),
                 ProfileFileKind::Handwriting => MAXIMUM_STATISTICS_JSON_BYTES,
             };
             if body.len() > limit {
                 return json_response(
-                    "413 Content Too Large", br#"{"error":"profile_file_too_large"}"#,
+                    "413 Content Too Large",
+                    br#"{"error":"profile_file_too_large"}"#,
                 );
             }
             match gateway.save(kind, name, body, revision) {
                 Ok(saved) => json_response(
-                    "200 OK", format!("{{\"revision\":\"{saved}\"}}").as_bytes(),
+                    "200 OK",
+                    format!("{{\"revision\":\"{saved}\"}}").as_bytes(),
                 ),
                 Err(error) => profile_file_response_error(error),
             }
