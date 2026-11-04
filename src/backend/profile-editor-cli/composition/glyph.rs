@@ -554,6 +554,59 @@ impl GlyphOverlay {
             || !self.text_joins.is_empty()
     }
 
+    /// Inspect consecutive directed pen segments as contiguous candidate
+    /// paths; never assert persisted pen-down groups or inferred cursive.
+    pub(super) fn inspect_paths(
+        &self, grapheme: &str,
+    ) -> Result<Vec<u8>, String> {
+        if !is_exact_visible_grapheme(grapheme, UnicodeGraphemeSegmentation) {
+            return Err("inspection requires one exact visible grapheme".into());
+        }
+        let selected = self.strokes.iter()
+            .filter(|stroke| stroke.grapheme == grapheme)
+            .collect::<Vec<_>>();
+        if selected.is_empty() {
+            return Err("no authored strokes for exact glyph inspection".into());
+        }
+        let codepoints = grapheme.chars()
+            .map(|ch| format!("U+{:04X}", u32::from(ch)))
+            .collect::<Vec<_>>().join(" ");
+        let mut details = String::new();
+        let mut start = 0usize;
+        let mut paths = 0usize;
+        for index in 1..selected.len() {
+            let before = selected.get(index.saturating_sub(1))
+                .ok_or("missing previous glyph segment")?;
+            let after = selected.get(index)
+                .ok_or("missing next glyph segment")?;
+            let prior_end = before.end_um;
+            let next_start = after.start_um;
+            if prior_end != next_start
+                || before.rgb != after.rgb
+                || before.width_um != after.width_um
+            {
+                paths = paths.saturating_add(1);
+                append_path_summary(
+                    &mut details, &selected, paths, start, index,
+                )?;
+                start = index;
+            }
+        }
+        paths = paths.saturating_add(1);
+        append_path_summary(
+            &mut details, &selected, paths, start, selected.len(),
+        )?;
+        Ok(format!(
+            concat!(
+                "Candidate continuous pen paths (exact authored order)\n",
+                "Glyph: \"{}\" [{}]\n",
+                "Strokes: {}\nPaths: {}\nPen lifts: {}\n{}",
+            ),
+            grapheme.escape_debug(), codepoints, selected.len(), paths,
+            paths.saturating_sub(1), details,
+        ).into_bytes())
+    }
+
     /// Show the exact caller-authored order and direction without writing
     /// a file, inferring joins, normalizing Unicode or sampling variation.
     pub(super) fn inspect_stroke_order(
@@ -972,6 +1025,29 @@ impl GlyphOverlay {
         }
         Ok(())
     }
+}
+
+fn append_path_summary(
+    details: &mut String, strokes: &[&GlyphStroke], number: usize,
+    start: usize, end: usize,
+) -> Result<(), String> {
+    let first = strokes.get(start).ok_or("missing first path segment")?;
+    let last = strokes.get(end.saturating_sub(1))
+        .ok_or("missing last path segment")?;
+    let count = end.saturating_sub(start);
+    let unit = if count == 1 { "segment" } else { "segments" };
+    let _written = writeln!(
+        details,
+        concat!(
+            "Path {}: strokes {}..{} ({} {}) ",
+            "({}, {}) -> ({}, {}) width {} um color #{:02X}{:02X}{:02X}",
+        ),
+        number, start.saturating_add(1), end, count, unit,
+        first.start_um.0, first.start_um.1,
+        last.end_um.0, last.end_um.1,
+        first.width_um, first.rgb[0], first.rgb[1], first.rgb[2],
+    );
+    Ok(())
 }
 
 fn is_exact_visible_grapheme(

@@ -2002,6 +2002,182 @@ fn glyph_library_audit_separates_nfc_nfd_math_and_missing_punctuation() {
 }
 
 #[test]
+fn path_inspector_groups_only_exact_directed_same_pen_segments() {
+    let file = test_path().with_extension("tsv");
+    let name = file.to_str().expect("owned TSV");
+    let strokes = args(&[
+        "--glyph-stroke", "n\u{303}", "100", "200", "200", "300",
+        "250", "#102030",
+        "--glyph-stroke", "ñ", "100", "100", "200", "200",
+        "300", "#AABBCC",
+        "--glyph-stroke", "n\u{303}", "200", "300", "400", "500",
+        "250", "#102030",
+        "--glyph-stroke", "n\u{303}", "400", "500", "450", "600",
+        "300", "#102030",
+        "--glyph-stroke", "n\u{303}", "450", "600", "500", "700",
+        "300", "#102030",
+        "--glyph-stroke", "n\u{303}", "550", "700", "600", "800",
+        "300", "#102030",
+        "--glyph-stroke", "n\u{303}", "600", "800", "700", "900",
+        "300", "#304050",
+    ]);
+    let library = execute_glyph_library(&strokes)
+        .expect("authored library").expect("canonical TSV");
+    fs::write(&file, &library).expect("own source file");
+    let report = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", name, "--inspect-paths", "n\u{303}",
+    ])).expect("read-only path inspection").expect("stdout report"))
+        .expect("UTF-8 report");
+    let expected = concat!(
+        "Candidate continuous pen paths (exact authored order)\n",
+        "Glyph: \"ñ\" [U+006E U+0303]\n",
+        "Strokes: 6\nPaths: 4\nPen lifts: 3\n",
+        "Path 1: strokes 1..2 (2 segments) ",
+        "(100, 200) -> (400, 500) width 250 um color #102030\n",
+        "Path 2: strokes 3..4 (2 segments) ",
+        "(400, 500) -> (500, 700) width 300 um color #102030\n",
+        "Path 3: strokes 5..5 (1 segment) ",
+        "(550, 700) -> (600, 800) width 300 um color #102030\n",
+        "Path 4: strokes 6..6 (1 segment) ",
+        "(600, 800) -> (700, 900) width 300 um color #304050\n",
+    );
+    assert_eq!(report, expected);
+    let mut inline = strokes.clone();
+    inline.extend(args(&["--inspect-paths", "n\u{303}"]));
+    assert_eq!(execute_glyph_library(&inline)
+        .expect("inline inspector").expect("report"),
+        report.as_bytes());
+    let nfc = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", name, "--inspect-paths", "ñ",
+    ])).expect("NFC paths").expect("report"))
+        .expect("UTF-8");
+    assert!(nfc.contains("Glyph: \"ñ\" [U+00F1]"), "{nfc}");
+    assert!(nfc.contains("Strokes: 1\nPaths: 1\nPen lifts: 0"));
+    assert!(!nfc.contains("(400, 500)"));
+    assert_eq!(fs::read(&file).expect("canonical unchanged"), library);
+    fs::remove_file(file).expect("remove owned source");
+}
+
+#[test]
+fn explicit_join_and_reversal_change_candidate_path_boundaries() {
+    let base = args(&[
+        "--glyph-stroke", "n\u{303}", "500", "600", "800",
+        "1000", "250", "#102030",
+        "--glyph-stroke", "ñ", "1000", "1000", "2000",
+        "2000", "300", "#AABBCC",
+        "--glyph-stroke", "n\u{303}", "1100", "1200", "1600",
+        "1500", "250", "#102030",
+    ]);
+    let mut report = base.clone();
+    report.extend(args(&["--inspect-paths", "n\u{303}"]));
+    let before = String::from_utf8(execute_glyph_library(&report)
+        .expect("unconnected exact glyph").expect("report"))
+        .expect("UTF-8");
+    assert!(before.contains("Strokes: 2\nPaths: 2\nPen lifts: 1"));
+    let mut connected = base.clone();
+    connected.extend(args(&[
+        "--join-strokes", "n\u{303}", "1",
+        "--inspect-paths", "n\u{303}",
+    ]));
+    let joined = String::from_utf8(execute_glyph_library(&connected)
+        .expect("explicit joined glyph").expect("report"))
+        .expect("UTF-8");
+    assert!(joined.contains("Strokes: 3\nPaths: 1\nPen lifts: 0"));
+    assert!(joined.contains("Path 1: strokes 1..3 (3 segments)"));
+    let mut reversed = base;
+    reversed.extend(args(&[
+        "--join-strokes", "n\u{303}", "1",
+        "--reverse-stroke", "n\u{303}", "2",
+        "--inspect-paths", "n\u{303}",
+    ]));
+    let inverted = String::from_utf8(execute_glyph_library(&reversed)
+        .expect("directed inverse").expect("report"))
+        .expect("UTF-8");
+    assert!(inverted.contains("Strokes: 3\nPaths: 3\nPen lifts: 2"));
+    let mut moved = args(&[
+        "--glyph-stroke", "n\u{303}", "500", "600", "800",
+        "1000", "250", "#102030",
+        "--glyph-stroke", "n\u{303}", "1100", "1200", "1600",
+        "1500", "250", "#102030",
+    ]);
+    moved.extend(args(&[
+        "--join-strokes", "n\u{303}", "1",
+        "--move-stroke", "n\u{303}", "3", "1",
+        "--inspect-paths", "n\u{303}",
+    ]));
+    let reordered = String::from_utf8(execute_glyph_library(&moved)
+        .expect("reorder authored pen sequence").expect("report"))
+        .expect("UTF-8");
+    assert!(reordered.contains("Strokes: 3\nPaths: 2\nPen lifts: 1"));
+    assert!(reordered.contains("Path 2: strokes 2..3 (2 segments)"));
+}
+
+#[test]
+fn path_inspection_can_report_the_full_bounded_library() {
+    let mut source = String::from("atrament.glyph-strokes.v1\n");
+    for index in 0..4096 {
+        let (start_x, end_x) = if index % 2 == 0 {
+            (100, 200)
+        } else {
+            (200, 100)
+        };
+        source.push_str(&format!(
+            "n\u{303}\t{start_x}\t100\t{end_x}\t200\t250\t#102030\n",
+        ));
+    }
+    let mut overlay = GlyphOverlay::default();
+    overlay.load_file_bytes(source.as_bytes())
+        .expect("4096 authored strokes within bounded file");
+    // Repeated example alternates horizontal endpoints but the y direction
+    // does not match; every segment therefore starts a candidate new path.
+    let report = String::from_utf8(overlay.inspect_paths("n\u{303}")
+        .expect("bounded per-stroke diagnostic"))
+        .expect("UTF-8 report");
+    assert!(report.contains("Strokes: 4096\nPaths: 4096"));
+    assert!(report.contains("Pen lifts: 4095"));
+    assert!(report.contains("Path 4096: strokes 4096..4096"));
+}
+
+#[test]
+fn path_inspection_refuses_invalid_modes_without_writing_files() {
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let name = source.to_str().expect("owned source");
+    let destination = output.to_str().expect("owned target");
+    let library = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "100", "200", "800",
+        "1200", "250", "#112233",
+    ])).expect("source library").expect("TSV");
+    fs::write(&source, &library).expect("source");
+    fs::write(&output, b"preserve target sentinel").expect("sentinel");
+    for options in [
+        args(&["--inspect-paths"]),
+        args(&["--inspect-paths", ""]),
+        args(&["--inspect-paths", " "]),
+        args(&["--inspect-paths", "n\u{303}"]),
+        args(&["--inspect-paths", "ab"]),
+        args(&["--inspect-paths", "ñ", "--inspect-paths", "ñ"]),
+        args(&["--inspect-paths", "ñ", "--inspect-glyph", "ñ"]),
+        args(&["--inspect-paths", "ñ", "--audit-baseline"]),
+        args(&["--inspect-paths", "ñ", "--audit-text", "ñ"]),
+        args(&["--inspect-paths", "ñ", "--replace"]),
+        args(&["--inspect-paths", "ñ", "--output", destination]),
+        args(&["--inspect-paths", "ñ", "--output", destination,
+            "--replace"]),
+    ] {
+        let mut command = args(&["--profile", name]);
+        command.extend(options);
+        assert!(execute_glyph_library(&command).is_err(),
+            "inspection cannot mutate source or output: {command:?}");
+        assert_eq!(fs::read(&source).expect("source unchanged"), library);
+        assert_eq!(fs::read(&output).expect("target unchanged"),
+            b"preserve target sentinel");
+    }
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(output).expect("remove sentinel");
+}
+
+#[test]
 fn glyph_inspection_preserves_exact_unicode_order_and_ink_direction() {
     let file = test_path().with_extension("tsv");
     let path = file.to_str().expect("owned library filename");

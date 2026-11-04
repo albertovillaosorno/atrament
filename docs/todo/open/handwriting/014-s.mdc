@@ -321,6 +321,23 @@ curve/native motion paths. Browser authored
 stroke connectivity remains per glyph; native parametric curves and
 word-level cursive are still open.
 
+## Native continuous-path inspection (partial) — 2026-11-03
+
+`atrament-profiles glyphs --inspect-paths GRAPHEME` reports candidate
+pen-down runs based only on exact authored segment order, physical endpoint
+continuity and equal pen RGB/width. Its numbered paths give stroke-index
+ranges, start/end coordinates, segment counts and apparent pen lifts.
+NFC and NFD glyphs remain independent even when interleaved in a TSV.
+
+Four native regressions cover consecutive segments, broken coordinates,
+pen-width/pigment changes, an explicit `--join-strokes` reducing the lift
+count, reversing and reordering connector strokes, the full 4096-stroke
+library bound, stdout-only inspection, and rejection of conflicting controls
+without file modification.
+This is a read-only view of v1 line segments, not a persisted grouping or
+an explicit physical plotter pen-lift command. The remaining P1-014 goals
+of authored continuous paths, analytic curves and genuine cursive stay open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

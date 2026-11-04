@@ -822,6 +822,17 @@ cargo run -q -p atrament_profile_editor_cli -- glyphs \
   --profile my-glyphs.tsv --inspect-glyph 'ñ'
 ```
 
+For a read-only preview of possible continuous pen paths within one exact
+glyph, use `glyphs --profile my-glyphs.tsv --inspect-paths 'ñ'` instead.
+The report groups consecutive authored segments only when the directed end
+of one equals the start of the next and both have the same width and RGB.
+It lists stroke-number ranges, endpoints and candidate pen-lift boundaries.
+
+Reordering or reversing a stroke may split the reported paths. Explicitly
+using `--join-strokes` can merge paths by inserting an authored bridge.
+The groups are **diagnostic**: neither inspection nor TSV stores semantic
+pen-down groups, interpolated curves, or inferred cursive joins.
+
 The report numbers the segments in the same order the native PDF compositor
 uses, with original `(start x, start y) -> (end x, end y)` positions in
 micrometres. `ñ` and `ñ` remain different exact Unicode identities, and

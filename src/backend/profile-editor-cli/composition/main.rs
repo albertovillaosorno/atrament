@@ -89,7 +89,8 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--join-strokes GRAPHEME FIRST_INDEX] \
     [--set-stroke GRAPHEME INDEX X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--remove-stroke GRAPHEME INDEX] \
-    [--audit-text UTF8_TEXT|--audit-baseline|--inspect-glyph GRAPHEME] \
+    [--audit-text UTF8_TEXT|--audit-baseline|--inspect-glyph GRAPHEME \
+    |--inspect-paths GRAPHEME] \
     [--output strokes.tsv [--replace]] \
     | handwriting [--profile ink.json] [--seed U64] \
     [--set-global DIM MIN MAX MEAN MEDIAN DEVIATION] \
@@ -101,6 +102,8 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     Handwriting units: micrometres, millidegrees, or parts per thousand.\n\
     --inspect-glyph prints exact authored stroke order and direction;\n\
     output is stdout-only and never an inferred cursive pen path.\n\
+    --inspect-paths groups exactly touching, same-pen directed segments\n\
+    in stroke order; it does not persist new curve or pen-lift metadata.\n\
     Glyph stroke indices are one-based within one exact Unicode glyph;\n\
     --reverse-stroke flips pen direction and --move-stroke shifts order.\n\
     --set-stroke updates ink geometry; --remove-stroke deletes one segment.\n\
@@ -753,7 +756,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let mut output = None;
     let mut audit_text = None;
     let mut audit_baseline = false;
-    let mut inspect_glyph = None;
+    let mut inspection: Option<(String, bool)> = None;
     let mut replace = false;
     let mut iter = args.iter();
     while let Some(option) = iter.next() {
@@ -798,13 +801,13 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 audit_text = Some(selected.clone());
             }
 
-            "--inspect-glyph" => {
-                if inspect_glyph.is_some() {
-                    return Err("--inspect-glyph may appear only once".into());
+            "--inspect-paths" | "--inspect-glyph" => {
+                if inspection.is_some() {
+                    return Err("glyph inspection may appear only once".into());
                 }
-                inspect_glyph = Some(iter.next()
-                    .ok_or("--inspect-glyph requires an exact grapheme")?
-                    .clone());
+                inspection = Some((iter.next()
+                    .ok_or("inspection requires an exact grapheme")?
+                    .clone(), option == "--inspect-paths"));
             }
             "--output" => {
                 output = Some(parse_selected_output(
@@ -823,14 +826,21 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     if replace && output.is_none() {
         return Err("--replace requires --output".into());
     }
-    if let Some(grapheme) = inspect_glyph {
+    if let Some((grapheme, paths)) = inspection {
         if audit_text.is_some() {
-            return Err("--inspect-glyph cannot accompany a glyph audit".into());
+            return Err(concat!(
+                "glyph inspection cannot accompany ",
+                "a glyph audit",
+            ).into());
         }
         if output.is_some() || replace {
-            return Err("--inspect-glyph is stdout-only; omit --output".into());
+            return Err("glyph inspection is stdout-only; omit --output".into());
         }
-        return glyphs.inspect_stroke_order(&grapheme).map(Some);
+        return if paths {
+            glyphs.inspect_paths(&grapheme).map(Some)
+        } else {
+            glyphs.inspect_stroke_order(&grapheme).map(Some)
+        };
     }
     if let Some(text) = audit_text {
         if output.is_some() || replace {
