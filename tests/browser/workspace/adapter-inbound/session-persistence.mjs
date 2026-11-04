@@ -523,7 +523,7 @@ function hasUnreviewedBrowserGlobalAuthority(
         const allowedTop = [
             'const top = chosen.variant.startsWith("two-storey")',
             "box.top",
-            "const accent = acuteAccent(cx, cy, r, pen, dx, lift, top);",
+            ": acuteAccent(cx, cy, r, pen, dx, lift, top);",
         ];
         for (const site of allowedTop) {
             if (remaining.split(site).length - 1 !== 1) return true;
@@ -1868,7 +1868,14 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
     "idealAccent.setAttribute(axis, String(accent[axis]));",
     "idealAccent.setAttribute(\"stroke-width\", numeric.width.value);",
     "idealAccent.setAttribute(\"stroke\", color.value);",
-    "idealAccent.setAttribute(\"visibility\", accentState);",
+    'idealAccent.setAttribute("visibility", active && hasAcute',
+    // The Spanish accent guide uses only a bounded local path from
+    // caller-authored pen strokes; no SVG URL or resource attribute.
+    'idealDiacritic.setAttribute("d", diacriticD);',
+    'idealDiacritic.setAttribute("stroke-width", numeric.width.value);',
+    'idealDiacritic.setAttribute("stroke", color.value);',
+    'idealDiacritic.setAttribute("visibility", active && composedMarks',
+    'idealDiacritic.setAttribute("visibility", "hidden");',
     // Bounded SVG geometry only: affine slant without external resource.
     'idealGeometry.setAttribute("transform", isItalic ? '
         + '`matrix(1 0 ${-slope} 1 ${slope * baseline} 0)` : "");',
@@ -2062,6 +2069,21 @@ test("browser dynamic markup and CSSOM request sinks require review",
         }
     }
 });
+
+test("accent guide SVG resource attributes require a fresh review",
+    async () => {
+        for (const { filename, source } of await browserModuleSources()) {
+            if (!isGlyphModule(filename)) continue;
+            const original = 'idealDiacritic.setAttribute("d", diacriticD);';
+            const changed = source.replace(original,
+                'idealDiacritic.setAttribute("href", diacriticD);');
+            assert.notEqual(changed, source,
+                "the exact local accent path must still exist");
+            assert.equal(hasUnreviewedDynamicResourceAuthority(
+                changed, false, 0, false, true), true,
+            `${filename} must refuse a resource-bearing accent guide`);
+        }
+    });
 
 test("cursive connector axis edits require a fresh resource review",
     async () => {
