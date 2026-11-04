@@ -291,6 +291,47 @@ mod source_tests {
             &"a\t".repeat(1_025));
         assert!(refused.is_err(), "over-limit expansion must refuse");
     }
+
+    #[test]
+    fn literal_indent_before_setext_mark_keeps_its_glyph_pitch() {
+        use atrament_handwriting_statistics::{
+            Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+            ScalarStatistics,
+        };
+        use atrament_notebook_profile::NotebookProfile;
+        use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+        let tall = ScalarStatistics {
+            maximum: 25_000, mean: 25_000, median: 25_000,
+            minimum: 25_000, standard_deviation: 0,
+        };
+        let stats = HandwritingStatisticsProfile::baseline(1)
+            .with_glyph("=", DimensionStatistics {
+                dimension: Dimension::Height, statistics: tall,
+            }, &UnicodeGraphemeSegmentation)
+            .expect("valid tall literal glyph");
+        let literal = FlowSource::new(
+            FlowFormat::Markdown, "    a\n=\na",
+        ).expect("four-space literal row before an equal mark");
+        let (runs, _, _) = super::layout_flow(
+            &literal, &NotebookProfile::default(), Some(&stats),
+            super::HeadingDecoration::default(),
+        ).expect("literal equal glyph is visible ink");
+        assert_eq!(runs.iter().map(|run| run.text.as_str())
+            .collect::<Vec<_>>(), ["    a", "= a"]);
+        assert_eq!(runs[1].origin_um.1 - runs[0].origin_um.1,
+            29_000, "visible equal glyph must determine row pitch");
+
+        let heading = FlowSource::new(
+            FlowFormat::Markdown, "a\n=\na",
+        ).expect("actual Setext heading");
+        let (rows, _, _) = super::layout_flow(
+            &heading, &NotebookProfile::default(), Some(&stats),
+            super::HeadingDecoration::default(),
+        ).expect("heading underline is syntax, not glyph ink");
+        assert_eq!(rows[1].origin_um.1 - rows[0].origin_um.1,
+            9_000, "actual Setext syntax must not inflate row pitch");
+    }
 }
 
 /// CLI-only title decoration; immutable canonical glyph templates are
@@ -1430,7 +1471,11 @@ fn measured_pitch(
                 let (style, body) = markdown_line(raw);
                 let (visible, hard_break) = markdown_paragraph_break(
                     raw, style, body.as_ref());
+                // Four-space literal rows are laid out immediately,
+                // leaving no paragraph to promote to a Setext heading.
+                // An underline on the next line must stay visible ink.
                 pending_setext = matches!(style, LineStyle::Body)
+                    && !raw.starts_with("    ")
                     && !visible.trim_matches(' ').is_empty()
                     && !hard_break;
                 Cow::Owned(visible.to_owned())

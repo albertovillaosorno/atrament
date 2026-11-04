@@ -1997,3 +1997,36 @@ test('literal paired list backslashes still require authored glyph ink',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('four-space Markdown row before equals measures literal glyph ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/setext-literal-pitch-'));
+        try {
+            const stats = join(dir, 'tall-equal.json');
+            const edited = spawnSync('cargo', [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+                'handwriting', '--set-glyph', '=', 'height',
+                '25000', '25000', '25000', '25000', '0',
+            ], { cwd: root, timeout: 120000 });
+            assert.equal(edited.status, 0,
+                edited.stderr?.toString() || edited.error?.message);
+            writeFileSync(stats, edited.stdout);
+            const ink = [
+                '--handwriting-profile', stats, '--glyph-stroke', '=',
+                '600', '500', '1800', '3000', '250', '#123456',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const expected = render(dir, '    a\n= a', format, ink);
+                assert.equal(expected.result.status, 0,
+                    expected.result.stderr);
+                const reference = readFileSync(expected.output);
+                const split = render(dir, '    a\n=\na', format, ink);
+                assert.equal(split.result.status, 0,
+                    split.result.stderr);
+                assert.deepEqual(readFileSync(split.output), reference,
+                    `literal Setext-like mark keeps ${format} row spacing`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

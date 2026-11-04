@@ -641,6 +641,14 @@ markers, unapproved glyphs and fenced literal content refuse without
 replacing an accepted export. The original thematic-rule tests now use an
 explicit blank line where the horizontal separator follows text.
 
+A measured-height correction also keeps a literal `=` line visible when
+it follows a four-space-indented Markdown row. Such a row is already laid
+out, so no pending paragraph exists for Setext promotion; the measurement
+pass must count the actual `=` glyph height, not treat it as syntax. One
+native row-pitch regression uses a 25-mm `=` height override and compares
+the real PDF and transparent PNG to the equivalent single-line literal
+text. Actual Setext underlines still do not require or measure `=` ink.
+
 ## ATX heading whitespace parity (partial) — 2026-11-04
 
 The Rust CLI now treats additional ASCII spaces following the mandatory
