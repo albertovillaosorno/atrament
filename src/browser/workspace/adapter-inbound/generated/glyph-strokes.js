@@ -819,6 +819,11 @@ function capitalGuide(cx, cy, radius, glyph) {
     }
     return punctuationGuide(capitalParts(cx, cy, radius, glyph));
 }
+// Complete the finite native Spanish/English text inventory without
+// substituting typographic quotes for independent ASCII quote keys.
+// These additional caller-selected notation shapes do not change the
+// frozen 114-glyph language inventory or its eleven-mark fill action.
+const NOTATION_MARKS = ["/", "\\", "{", "}"];
 const TEXT_MARKS = [";", ":", "\"", "'", "…", "–", "—",
     "(", ")", "[", "]"];
 function textMarkParts(cx, cy, r, glyph) {
@@ -839,6 +844,25 @@ function textMarkParts(cx, cy, r, glyph) {
             line(0.35, -0.95, 0.24, -0.55)];
     if (glyph === "…")
         return [-0.7, 0, 0.7].map((x) => dot(x, 0.78));
+    if (glyph === "/")
+        return [line(0.65, -0.95, -0.65, 0.95)];
+    if (glyph === "\\")
+        return [line(-0.65, -0.95, 0.65, 0.95)];
+    if (glyph === "{" || glyph === "}") {
+        const side = glyph === "{" ? 1 : -1;
+        const point = (x, y) => p(side * x, y);
+        const upper = point(-0.15, -0.62);
+        const middle = point(-0.5, 0);
+        const lower = point(-0.15, 0.62);
+        return [
+            { from: point(0.35, -0.95),
+                control: point(-0.15, -0.95), to: upper },
+            { from: upper, control: point(-0.1, -0.1), to: middle },
+            { from: middle, control: point(-0.1, 0.1), to: lower },
+            { from: lower, control: point(-0.15, 0.95),
+                to: point(0.35, 0.95) },
+        ];
+    }
     if (glyph === "–" || glyph === "—") {
         const half = glyph === "—" ? 0.9 : 0.65;
         return [line(-half, 0, half, 0)];
@@ -1240,7 +1264,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         "«", "»", "‘", "’", "“", "”",
         ...MATH_GLYPHS,
         ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-        ...TEXT_MARKS].includes(g)) {
+        ...TEXT_MARKS, ...NOTATION_MARKS].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
     const twoStorey = kind === "two-storey"
@@ -1287,7 +1311,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         || cy + radius + halfPen > 4500) {
         throw new Error("Shape and pen thickness must fit inside glyph cell");
     }
-    if (TEXT_MARKS.includes(g)) {
+    if ([...TEXT_MARKS, ...NOTATION_MARKS].includes(g)) {
         if ([";", ":", "…"].includes(g) && radius * 0.5 < pen + 80) {
             throw new Error("Text punctuation needs dot pen-clearance");
         }
@@ -2169,7 +2193,7 @@ export function createGlyphStrokeEditor() {
             const digitD = isDigit ? digitGuide(digitGeometry(cx, cy, r, chosen.grapheme)) : "";
             const isCapital = /^[A-Z]$/.test(chosen.grapheme);
             const capitalD = isCapital ? capitalGuide(cx, cy, r, chosen.grapheme) : "";
-            const isTextMark = TEXT_MARKS
+            const isTextMark = [...TEXT_MARKS, ...NOTATION_MARKS]
                 .includes(chosen.grapheme);
             const markD = isTextMark ? punctuationGuide(textMarkParts(cx, cy, r, chosen.grapheme)) : "";
             const roundedD = isTextMark ? markD
@@ -2207,7 +2231,7 @@ export function createGlyphStrokeEditor() {
                     "«", "»", "‘", "’", "“", "”",
                     ...MATH_GLYPHS,
                     ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
-                    ...TEXT_MARKS]
+                    ...TEXT_MARKS, ...NOTATION_MARKS]
                     .includes(chosen.grapheme);
             const roundedState = roundedVisible ? "visible" : "hidden";
             const roundedStemState = roundedVisible && !isStraight

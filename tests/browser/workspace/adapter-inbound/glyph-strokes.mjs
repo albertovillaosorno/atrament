@@ -3466,6 +3466,94 @@ test("eleven text punctuation shapes remain distinct and bounded", () => {
         250, "#243647"), /fit inside glyph cell|clips glyph cell/);
 });
 
+test("manual notation strokes keep distinct slash and mirrored curly ink",
+    () => {
+    const args = [1550, 2450, 1100, 250, "#123456"];
+    const forms = ["/", "\\", "{", "}"];
+    const counts = [1, 1, 64, 64];
+    const lines = forms.map((glyph) => geometricStarter(glyph, ...args));
+    for (const [index, glyph] of forms.entries()) {
+        const strokes = lines[index];
+        assert.equal(strokes.length, counts[index], glyph);
+        assert.ok(strokes.every((stroke) => stroke.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(strokes)),
+            strokes, "exact ASCII punctuation survives native TSV");
+        assert.equal(candidatePenPaths(strokes, glyph).length, 1,
+            "each notation mark is one directed pen path");
+    }
+    assert.deepEqual(lines[0][0], {
+        grapheme: "/", x1: 2265, y1: 1405, x2: 835, y2: 3495,
+        width: 250, color: "#123456",
+    });
+    assert.deepEqual(lines[1][0], {
+        grapheme: "\\", x1: 835, y1: 1405, x2: 2265, y2: 3495,
+        width: 250, color: "#123456",
+    });
+    const left = lines[2];
+    const right = lines[3];
+    for (let index = 0; index < left.length; index += 1) {
+        assert.ok(Math.abs(left[index].x1 + right[index].x1 - 3100) <= 1,
+            "rounded native micrometres preserve the mirrored ideal");
+        assert.ok(Math.abs(left[index].x2 + right[index].x2 - 3100) <= 1);
+        assert.equal(left[index].y1, right[index].y1);
+        assert.equal(left[index].y2, right[index].y2);
+        if (index > 0) {
+            assert.deepEqual([left[index].x1, left[index].y1],
+                [left[index - 1].x2, left[index - 1].y2],
+                "one continuous four-curve brace path");
+        }
+    }
+    assert.throws(() => geometricStarter("{", 250, 2450, 1100,
+        250, "#123456"), /Shape and pen/);
+    assert.throws(() => geometricStarter("\\", 1550, 2450, 1100,
+        1600, "#123456"), /outside native bounds/);
+    assert.throws(() => geometricStarter("/", 1550, 2450, 1100,
+        250, "#GGGGGG"), /Ink color/);
+});
+
+test("manual notation guide, save and clipped edit preserve authored draft",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            for (const glyph of ["/", "\\", "{", "}"]) {
+                get("character").value = glyph;
+                get("character").dispatch("input");
+                get("form").value = glyph;
+                get("form").dispatch("change");
+                const guide = get("ideal-rounded");
+                assert.equal(guide.attributes.get("visibility"), "visible");
+                const path = guide.attributes.get("d");
+                assert.match(path, /M [0-9]+ [0-9]+ /);
+                if (glyph === "{" || glyph === "}") {
+                    assert.equal((path.match(/Q /g) ?? []).length, 4,
+                        "each brace retains four exact SVG quadratic guides");
+                } else {
+                    assert.match(path, / L /, "slash guide stays straight");
+                }
+                get("construct").dispatch("click");
+                assert.match(get("status").textContent, /Constructed/);
+            }
+            get("save").dispatch("click");
+            const saved = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(saved, ["/", "\\", "{", "}"].flatMap(
+                (glyph) => geometricStarter(glyph, 1550, 2450, 1100,
+                    250, "#243647")));
+            get("circle-x").value = "150";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "hidden", "clipped notation has no misleading valid guide");
+            get("construct").dispatch("click");
+            assert.match(get("status").textContent, /Shape and pen/);
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                saved, "refusal must never change prior caller-authored ink");
+        } finally {
+            ui.restore();
+        }
+    });
+
 test("text marks fill keeps custom ink and rejects over-cap", async () => {
     const ui = mountEditor();
     try {
@@ -3555,6 +3643,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "√", "π", "∞", "≠", "≤", "≥", "∑", "∫", "∂", "Δ", "≈",
         ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",
+        "/", "\\", "{", "}",
         "k", "x", "y", "z", "c", "e", "i", "í", "j"];
     let accepted = 0;
     let checked = 0;
@@ -3593,7 +3682,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 15120);
+    assert.equal(checked, 15696);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

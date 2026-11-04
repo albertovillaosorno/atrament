@@ -323,3 +323,62 @@ test('mathematical Markdown paginates with visible marker and atomic refusal',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('manual slash and curly notation survives native PDF PNG and refusal',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/notation-native-'));
+        try {
+            const source = join(dir, 'notation.tsv');
+            const output = join(dir, 'notation.pdf');
+            const symbols = ['/', '\\', '{', '}'];
+            const text = symbols.join('');
+            const authored = symbols.flatMap((symbol) => geometricStarter(
+                symbol, 1550, 2450, 1100, 250, '#243647'));
+            assert.equal(authored.length, 130,
+                'two directed slash strokes and two 64-chord curly braces');
+            const canonical = Buffer.from(encodeGlyphLibrary(authored));
+            writeFileSync(source, canonical);
+            const reopened = cli('glyphs', ['--profile', source]);
+            assert.equal(reopened.status, 0, reopened.stderr.toString());
+            assert.deepEqual(reopened.stdout, canonical,
+                'Rust accepts exact backslash and brace TSV unchanged');
+            const audit = cli('glyphs', [
+                '--profile', source, '--audit-text', text,
+            ]);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 4/);
+            const flags = [
+                '--printed-sheet', 'true', '--glyph-file', source,
+                '--flow-text', `${text}\n${text}`,
+            ];
+            const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+                '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const bytes = readFileSync(output);
+            const vector = bytes.toString('latin1');
+            assert.match(vector, /^%PDF-1\.4/);
+            assert.equal((vector.match(/ m\n/g) ?? []).length, 260,
+                'two physical rows use every directed authored pen segment');
+            const png = cli('notebook', [
+                ...flags, '--export-paper', 'png', '--dpi', '72',
+            ]);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const refused = cli('notebook', [
+                '--printed-sheet', 'true', '--glyph-file', source,
+                '--flow-text', `${text}%`, '--export-paper', 'pdf',
+                '--output', output, '--replace',
+            ]);
+            assert.notEqual(refused.status, 0,
+                'unapproved percent glyph must not inherit other ink');
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), bytes,
+                'a refused notation edit never replaces an accepted PDF');
+            assert.deepEqual(readFileSync(source), canonical,
+                'native exports never modify caller-owned notation TSV');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

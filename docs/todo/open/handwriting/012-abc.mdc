@@ -1084,6 +1084,29 @@ missing neighbor refuses without replacing accepted ink or changing TSV.
 Real adjacent-word cursive joining, stored variant names and analytic curves
 in Rust PDF remain open.
 
+## Additional manually selected notation glyphs (partial) — 2026-11-04
+
+The localhost geometry editor now offers four additional exact caller-owned
+notation starters: ASCII forward slash `/`, ASCII backslash `\`, and the
+curly braces `{` and `}`. The two diagonals are one directed straight pen
+stroke each. Each brace has four analytic SVG quadratic arcs sampled into
+64 directed segments in the existing bounded Rust TSV format. Both braces
+mirror their ideal horizontal coordinates while retaining their own exact
+Unicode identities; sampling rounds each coordinate to whole micrometres.
+These are manual choices, not automatic replacements or additions to the
+frozen eleven-mark Spanish/English text-punctuation fill action.
+
+Browser tests verify the four stroke counts, contiguous pen paths, exact
+SVG guides, native TSV identity, refused clipped geometry, preserved saved
+drafts and the 15,696-case physical pen-clearance matrix. A separate native
+Rust CLI acceptance reopens the 130-segment browser-authored TSV byte for
+byte, audits all four symbols, and renders two real physical handwriting
+rows (260 vector pen moves) into PDF and transparent 72-DPI PNG. An
+unauthored `%` refuses without replacing the already accepted PDF or
+mutating the source library. These are finite extra notation shapes, not a
+persisted handwriting font, automatic stroke joining or symbolic equation
+layout; the full glyph and calibration scope remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
