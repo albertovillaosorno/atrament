@@ -427,6 +427,28 @@ This is deterministic editing of candidate line groups inside v1, not
 persistent path identifiers, authored Bézier curves, an explicit pen-up
 event stream, or inferred multi-letter cursive. The P1 task stays open.
 
+## Browser bounded whole-path translation (partial) — 2026-11-03
+
+The authenticated glyph editor now has explicit signed micrometre
+horizontal and vertical offsets for **Translate selected continuous pen
+path**. It translates every segment in the currently selected
+exact-grapheme candidate path together, preserving path continuity,
+direction, pen width/color and unrelated interleaved Unicode TSV rows.
+Single-stroke accent paths can be adjusted independently.
+
+Two focused browser tests cover exact NFD/NFC/math separation, two-way
+byte-identical translation, connected 4096-segment boundary cases,
+pen half-width clearance, invalid offsets, unchanged unsaved drafts
+on refusal, actual UI buttons, session reset and explicit TSV download.
+
+An independent browser-to-Rust integration verifies the translated
+NFD connected contour and separate accent against native exact
+path inspection, then compares real PDF and transparent PNG output
+byte-for-byte with manually authored physical pen segments.
+
+This remains a sampled-line edit with no saved path identity,
+anchor, analytic curve or automatic cursive movement. P1-014 stays open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

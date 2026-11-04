@@ -4,7 +4,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, composeAccentedGlyph, varyGlyphStrokes,
-    candidatePenPaths, reverseCandidatePath, moveCandidatePath } =
+    candidatePenPaths, reverseCandidatePath, moveCandidatePath,
+    translateCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -177,6 +178,63 @@ test("move adjacent complete paths without breaking stroke continuity", () => {
         "no path movement can mutate the caller's source");
 });
 
+test("whole candidate path translation retains exact directed pen joins",
+    () => {
+    const nfd = "n\u{303}";
+    const a = { ...stroke(nfd), x1: 500, y1: 600,
+        x2: 900, y2: 1000, width: 300 };
+    const b = { ...a, x1: 900, y1: 1000, x2: 1400, y2: 1500 };
+    const c = { ...a, x1: 1700, y1: 2800,
+        x2: 2000, y2: 3100, width: 350 };
+    const other = { ...stroke("ñ"), x1: 300, y1: 400 };
+    const math = { ...stroke("∞"), x1: 400, y1: 500 };
+    const original = [a, other, b, math, c];
+    const source = encodeGlyphLibrary(original);
+    const shifted = translateCandidatePath(original, nfd, 2, 150, -200);
+    assert.equal(shifted.selectedIndex, 2);
+    const offset = (item, dx, dy) => ({
+        ...item, x1: item.x1 + dx, x2: item.x2 + dx,
+        y1: item.y1 + dy, y2: item.y2 + dy,
+    });
+    assert.deepEqual(shifted.strokes,
+        [offset(a, 150, -200), other, offset(b, 150, -200),
+            math, c]);
+    assert.deepEqual(candidatePenPaths(shifted.strokes, nfd)
+        .map((path) => [path.first, path.last]), [[1, 2], [3, 3]]);
+    assert.deepEqual(translateCandidatePath(
+        shifted.strokes, nfd, 2, -150, 200,
+    ).strokes, original);
+    const single = translateCandidatePath(original, nfd, 4, -100, -200);
+    assert.deepEqual(single.strokes,
+        [a, other, b, math, offset(c, -100, -200)]);
+    assert.equal(encodeGlyphLibrary(original), source,
+        "a translation never mutates the source bytes");
+    for (const [glyph, index, dx, dy] of [
+        [nfd, 0, 0, 0], [nfd, 0, 0.5, 100],
+        [nfd, 0, Number.NaN, 100], [nfd, 0, 3501, 0],
+        [nfd, 0, -500, 0], [nfd, 0, 0, -600],
+        [nfd, 0, 3000, 0], [nfd, 0, 0, -4501],
+        [nfd, -1, 100, 0], [nfd, 1, 100, 0],
+        [nfd, 99, 100, 0], ["ñ", 0, 100, 0],
+    ]) {
+        assert.throws(() => translateCandidatePath(
+            original, glyph, index, dx, dy,
+        ), "invalid selection, shift or pen clearance must refuse");
+        assert.equal(encodeGlyphLibrary(original), source);
+    }
+    const chain = Array.from({ length: 4096 }, (_, i) => ({
+        ...stroke("ó"), x1: 600, x2: 600,
+        y1: 200 + i, y2: 201 + i,
+    }));
+    const huge = translateCandidatePath(chain, "ó", 3000, 100, 0);
+    assert.equal(huge.strokes.length, 4096);
+    assert.equal(candidatePenPaths(huge.strokes, "ó").length, 1);
+    assert.equal(chain[0].x1, 600);
+    assert.throws(() => translateCandidatePath(
+        chain, "ó", 3000, 0, 200,
+    ), "the final pen segment would leave the paper cell");
+});
+
 test("untrusted glyph TSV and edited numeric fields fail closed", () => {
     const valid = encodeGlyphLibrary([stroke()]);
     const bad = [
@@ -324,6 +382,7 @@ function mountEditor() {
         "glyph-ideal-accent",
         "glyph-update", "glyph-remove", "glyph-reverse",
         "glyph-reverse-path", "glyph-path-earlier", "glyph-path-later",
+        "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
         "glyph-earlier", "glyph-later", "glyph-join",
         "glyph-paths", "glyph-variation-preview", "glyph-variation-status",
         "glyph-variation-seed", "glyph-variation-sample",
@@ -343,6 +402,8 @@ function mountEditor() {
     get("circle-radius").value = "1100";
     get("accent-shift").value = "0";
     get("accent-lift").value = "0";
+    get("path-dx").value = "0";
+    get("path-dy").value = "0";
     get("variation-sample").value = "1";
     for (const [key, value] of Object.entries({
         seed: 42, width: 6, height: 6, thickness: 8, slant: 4,
@@ -953,6 +1014,74 @@ test("browser reverses whole selected pen path and retains TSV rows",
             "a single isolated stroke is not a continuous path of two");
         editor.reset();
         assert.equal(get("reverse-path").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("browser translates selected whole path without saving invalid ink",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        const nfd = "n\u{303}";
+        const a = { ...stroke(nfd), x1: 500, y1: 600,
+            x2: 1000, y2: 1300 };
+        const b = { ...a, x1: 1000, y1: 1300,
+            x2: 1400, y2: 1800 };
+        const accent = { ...a, x1: 1800, y1: 3000,
+            x2: 2300, y2: 3500, color: "#334455" };
+        const other = stroke("ñ");
+        const original = [a, other, b, accent];
+        const bytes = new TextEncoder().encode(encodeGlyphLibrary(original));
+        assert.equal(get("path-translate").disabled, true);
+        editor.start();
+        get("load").files = [{
+            size: bytes.length, arrayBuffer: async () => bytes.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        get("selected").value = "2";
+        get("selected").dispatch("change");
+        assert.equal(get("path-translate").disabled, false);
+        get("path-dx").value = "250";
+        get("path-dy").value = "-300";
+        get("path-translate").dispatch("click");
+        assert.match(get("status").textContent,
+            /Translated selected continuous pen path; unsaved/);
+        assert.equal(get("selected").value, "2");
+        assert.match(get("paths").textContent,
+            /Path 1: strokes 1–2, \(750, 300\) → \(1650, 1500\)/);
+        get("save").dispatch("click");
+        const changed = translateCandidatePath(original, nfd, 2, 250, -300);
+        assert.deepEqual(parseGlyphLibrary(await downloads[0].text()),
+            changed.strokes);
+        for (const [dx, dy] of [
+            ["0", "0"], ["-1000", "0"], ["1.5", "0"],
+            ["3501", "0"], ["0", "-5000"],
+        ]) {
+            get("path-dx").value = dx;
+            get("path-dy").value = dy;
+            get("path-translate").dispatch("click");
+            assert.doesNotMatch(get("status").textContent, /; unsaved/);
+        }
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads[1].text()),
+            changed.strokes, "invalid attempts do not update the draft");
+        get("path-dx").value = "-250";
+        get("path-dy").value = "300";
+        get("path-translate").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads[2].text(),
+            encodeGlyphLibrary(original), "inverse translation is exact");
+        get("character").value = "ñ";
+        get("character").dispatch("input");
+        assert.equal(get("path-translate").disabled, true);
+        editor.reset();
+        assert.equal(get("path-translate").disabled, true);
+        assert.equal(get("path-dx").disabled, true);
+        assert.equal(get("path-dy").disabled, true);
     } finally {
         ui.restore();
     }

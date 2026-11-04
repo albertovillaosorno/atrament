@@ -878,12 +878,27 @@
             <button id="glyph-reverse-path" type="button" disabled>
               Reverse selected continuous pen path
             </button>
+            <label>Selected path horizontal shift (µm)
+              <input id="glyph-path-dx" type="number" min="-3500"
+                max="3500" step="10" value="0" disabled>
+            </label>
+            <label>Selected path vertical shift (µm)
+              <input id="glyph-path-dy" type="number" min="-4500"
+                max="4500" step="10" value="0" disabled>
+            </label>
+            <button id="glyph-path-translate" type="button" disabled>
+              Translate selected continuous pen path
+            </button>
             <button id="glyph-path-earlier" type="button" disabled>
               Move selected pen path earlier
             </button>
             <button id="glyph-path-later" type="button" disabled>
               Move selected pen path later
             </button>
+            <p class="field-help">A path shift moves all its directed
+              segments together in micrometres. Enter a signed offset
+              for either axis. A zero shift or any clipped pen contour
+              is refused without changing the unsaved ink.</p>
             <p class="field-help">Path reversal flips the order and
               direction of every touching segment in the selected path.
               Unrelated strokes and Unicode glyphs keep their positions;

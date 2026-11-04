@@ -11,7 +11,7 @@ import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 import {
     composeAccentedGlyph, encodeGlyphLibrary, geometricStarter,
-    reverseCandidatePath, moveCandidatePath,
+    reverseCandidatePath, moveCandidatePath, translateCandidatePath,
 } from '../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
@@ -493,6 +493,83 @@ test('Rust path-level edits exactly match browser-authored candidate paths',
                 pngHasTransparentCorner(readFileSync(actualPath));
             }
         }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+
+test('browser whole-path translation has native PDF/PNG ink parity', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-shift-path-'));
+    try {
+        const nfd = 'n\u0303';
+        const ink = (grapheme, x1, y1, x2, y2, color) => ({
+            grapheme, x1, y1, x2, y2,
+            color, width: 250,
+        });
+        const a = ink(nfd, 500, 650, 850, 950, '#243647');
+        const b = ink(nfd, 850, 950, 1300, 1400, '#243647');
+        const accent = ink(nfd, 1600, 2500, 2000, 2900, '#B03040');
+        const original = [
+            a, ink('ñ', 100, 200, 300, 400, '#121212'),
+            b, ink('∞', 500, 600, 700, 800, '#121212'), accent,
+        ];
+        const originalBytes = encodeGlyphLibrary(original);
+        const shifted = translateCandidatePath(
+            original, nfd, 2, 300, -250);
+        const movedAccent = translateCandidatePath(
+            shifted.strokes, nfd, 4, -100, 200);
+        const library = join(dir, 'shifted.tsv');
+        writeFileSync(library, encodeGlyphLibrary(movedAccent.strokes));
+        const independentlyAuthored = [
+            ink(nfd, 800, 400, 1150, 700, '#243647'),
+            ink(nfd, 1150, 700, 1600, 1150, '#243647'),
+            ink(nfd, 1500, 2700, 1900, 3100, '#B03040'),
+        ];
+        assert.deepEqual(movedAccent.strokes, [
+            independentlyAuthored[0], original[1],
+            independentlyAuthored[1], original[3],
+            independentlyAuthored[2],
+        ]);
+        assert.equal(encodeGlyphLibrary(original), originalBytes);
+        const inspection = native('glyphs', '--profile', library,
+            '--inspect-paths', nfd);
+        assert.equal(inspection.status, 0, inspection.stderr);
+        assert.match(inspection.stdout,
+            /Strokes: 3\nPaths: 2\nPen lifts: 1/);
+        assert.ok(inspection.stdout.includes(
+            'Path 1: strokes 1..2 (2 segments) (800, 400) '
+            + '-> (1600, 1150) width 250 um color #243647'));
+        assert.ok(inspection.stdout.includes(
+            'Path 2: strokes 3..3 (1 segment) (1500, 2700) '
+            + '-> (1900, 3100) width 250 um color #B03040'));
+
+        for (const format of ['pdf', 'png']) {
+            const flags = ['--export-paper', format];
+            if (format === 'png') flags.push('--dpi', '72');
+            const actual = join(dir, 'translated.' + format);
+            const reference = join(dir, 'reference.' + format);
+            const run = (args, target) => native('notebook',
+                '--printed-sheet', 'true', ...args,
+                '--place-text', '1', '30000', '45000', nfd,
+                ...flags, '--output', target);
+            const rendered = run(['--glyph-file', library], actual);
+            const independent = run(independentlyAuthored.flatMap(
+                (shape) => [
+                    '--glyph-stroke', nfd,
+                    String(shape.x1), String(shape.y1),
+                    String(shape.x2), String(shape.y2),
+                    String(shape.width), shape.color,
+                ]), reference);
+            assert.equal(rendered.status, 0, rendered.stderr);
+            assert.equal(independent.status, 0, independent.stderr);
+            assert.deepEqual(readFileSync(actual), readFileSync(reference),
+                'translated path physical ' + format + ' parity');
+            if (format === 'png') {
+                pngHasTransparentCorner(readFileSync(actual));
+            }
+        }
+        assert.equal(encodeGlyphLibrary(original), originalBytes);
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

@@ -1137,6 +1137,19 @@ continuity, RGB and pen width at the moment of each edit; indices can
 change after an edit. These controls do not persist explicit pen lifts,
 curve primitives, or a cursive model.
 
+**Translate selected continuous pen path** moves every segment of
+the chosen exact-glyph pen path by explicit signed micrometre X/Y
+offsets. Use it to reposition a handwritten accent or a larger
+connected contour without breaking endpoint joins or moving another
+Unicode glyph. The browser validates the entire path, including
+the pen's half-width clearance from the 3.5 × 4.5 mm cell edges.
+
+A zero shift, out-of-range integer, clipped ink or TSV overflow
+refuses without changing the unsaved draft. An isolated accent
+stroke can also be translated as its own one-segment path.
+The path order, color and widths remain authored; this is
+not a new native TSV field or an automatically inferred anchor.
+
 **Load stroke TSV** reads an explicit existing glyph file into an in-memory
 draft. **Download stroke TSV** saves the canonical native-compatible file;
 there is no automatic saving or new server-side file endpoint. The Rust CLI

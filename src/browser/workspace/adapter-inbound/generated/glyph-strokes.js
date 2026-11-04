@@ -186,6 +186,49 @@ export function reverseCandidatePath(strokes, grapheme, selectedIndex) {
             - slots.indexOf(selectedIndex)],
     };
 }
+// Translate one complete candidate pen path while retaining every joint,
+// interleaved Unicode TSV slot, and the original pen/segment direction.
+// Validate the ENTIRE moved contour before returning a changed draft.
+export function translateCandidatePath(
+    strokes, grapheme, selectedIndex, dx, dy
+) {
+    if (!Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path translation needs a selected exact glyph stroke");
+    }
+    if (!Number.isSafeInteger(dx) || !Number.isSafeInteger(dy)
+        || Math.abs(dx) > 3500 || Math.abs(dy) > 4500
+        || (dx === 0 && dy === 0)) {
+        throw new Error("Path offsets need nonzero bounded whole µm values");
+    }
+    const indices = strokes.flatMap((stroke, index) =>
+        stroke.grapheme === grapheme ? [index] : []);
+    const position = indices.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) =>
+        position >= candidate.first && position <= candidate.last);
+    if (!path)
+        throw new Error("Selected glyph has no candidate pen path");
+    const slots = indices.slice(path.first - 1, path.last);
+    const translated = slots.map((index) => {
+        const stroke = strokes[index];
+        const moved = {
+            ...stroke, x1: stroke.x1 + dx, y1: stroke.y1 + dy,
+            x2: stroke.x2 + dx, y2: stroke.y2 + dy,
+        };
+        validateStroke(moved);
+        const radius = stroke.width / 2;
+        if ([moved.x1, moved.x2].some((x) => x < radius || x > 3500 - radius)
+            || [moved.y1, moved.y2].some((y) =>
+                y < radius || y > 4500 - radius)) {
+            throw new Error("Translated pen contour clips the glyph cell");
+        }
+        return moved;
+    });
+    const next = strokes.slice();
+    slots.forEach((index, offset) => { next[index] = translated[offset]; });
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex };
+}
 // Reorder neighboring candidate paths, keeping every stroke within each
 // path in the same direction/order and every other glyph in the same TSV slot.
 export function moveCandidatePath(strokes, grapheme, selectedIndex, direction) {
@@ -1400,6 +1443,9 @@ export function createGlyphStrokeEditor() {
     const remove = required("glyph-remove");
     const reverse = required("glyph-reverse");
     const reversePath = required("glyph-reverse-path");
+    const translatePath = required("glyph-path-translate");
+    const pathDx = required("glyph-path-dx");
+    const pathDy = required("glyph-path-dy");
     const earlierPath = required("glyph-path-earlier");
     const laterPath = required("glyph-path-later");
     const earlier = required("glyph-earlier");
@@ -1435,8 +1481,8 @@ export function createGlyphStrokeEditor() {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, reverse, reversePath, earlierPath, laterPath,
-        earlier, later, join, save,
+        remove, reverse, reversePath, translatePath, pathDx, pathDy,
+        earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
     let generation = 0;
@@ -1874,6 +1920,7 @@ export function createGlyphStrokeEditor() {
         });
         reversePath.disabled = !active || !chosenPath
             || chosenPath.first === chosenPath.last;
+        translatePath.disabled = !active || !chosenPath;
         const pathIndex = paths.indexOf(chosenPath);
         earlierPath.disabled = !active || pathIndex <= 0;
         laterPath.disabled = !active || pathIndex < 0
@@ -2499,6 +2546,32 @@ export function createGlyphStrokeEditor() {
             strokes = changed.strokes;
             choose(changed.selectedIndex);
             message("Reversed selected continuous pen path; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    translatePath.addEventListener("click", () => {
+        if (!active || selectedIndex === null)
+            return;
+        try {
+            const signed = (raw, maximum) => {
+                if (!/^-?[0-9]+$/.test(raw)) {
+                    throw new Error("Path offset needs a whole micrometre");
+                }
+                const value = Number(raw);
+                if (!Number.isSafeInteger(value)
+                    || Math.abs(value) > maximum) {
+                    throw new Error("Path offset outside native bounds");
+                }
+                return value;
+            };
+            const changed = translateCandidatePath(
+                strokes, character.value, selectedIndex,
+                signed(pathDx.value, 3500), signed(pathDy.value, 4500));
+            strokes = changed.strokes;
+            choose(changed.selectedIndex);
+            message("Translated selected continuous pen path; unsaved");
         }
         catch (error) {
             message(String(error));
