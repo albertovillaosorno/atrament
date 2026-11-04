@@ -6709,3 +6709,72 @@ fn large_authored_glyph_flow_renders_exact_4096_segments_and_refuses_extra() {
         b"previous complete PDF");
     fs::remove_file(target).expect("remove only owned output");
 }
+
+#[test]
+fn native_glyph_width_preserves_exact_unicode_and_refuses_clipped_ink() {
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "o\u{301}", "450", "1000", "850", "1600",
+        "250", "#243647",
+        "--glyph-stroke", "ó", "300", "1000", "500", "1500",
+        "250", "#112233",
+        "--glyph-stroke", "o\u{301}", "850", "1600", "1300", "2200",
+        "250", "#243647",
+    ])).expect("source admitted").expect("TSV");
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    fs::write(&source, &original).expect("write source");
+    fs::write(&output, b"unchanged destination").expect("prior output");
+    let source_name = source.to_str().expect("path");
+    let output_name = output.to_str().expect("path");
+    let edited = execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-width", "o\u{301}",
+        "110", "1750",
+    ])).expect("resize").expect("TSV");
+    assert_eq!(edited, concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ó\t320\t1000\t760\t1600\t250\t#243647\n",
+        "ó\t300\t1000\t500\t1500\t250\t#112233\n",
+        "ó\t760\t1600\t1255\t2200\t250\t#243647\n",
+    ).as_bytes());
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-width", "o\u{301}",
+        "100", "1750",
+    ])).expect("identity").expect("TSV"), original);
+    let report = execute_glyph_library(&args(&[
+        "--profile", source_name, "--scale-glyph-width", "o\u{301}",
+        "110", "1750", "--inspect-paths", "o\u{301}",
+    ])).expect("inspect").expect("report");
+    assert!(String::from_utf8_lossy(&report)
+        .contains("Strokes: 2\nPaths: 1\nPen lifts: 0"));
+    for (glyph, percent, anchor) in [
+        ("o\u{301}", "49", "1750"),
+        ("o\u{301}", "151", "1750"),
+        ("o\u{301}", "110.5", "1750"),
+        ("o\u{301}", "110", "3501"),
+        ("ó", "150", "3500"),
+        ("ñ", "110", "1750"),
+        ("ab", "110", "1750"),
+    ] {
+        assert!(execute_glyph_library(&args(&[
+            "--profile", source_name, "--scale-glyph-width", glyph,
+            percent, anchor, "--output", output_name, "--replace",
+        ])).is_err());
+        assert_eq!(fs::read(&output).expect("prior output"),
+            b"unchanged destination");
+    }
+    let collapse = execute_glyph_library(&args(&[
+        "--glyph-stroke", "o", "1749", "2000", "1750", "2000",
+        "250", "#112233", "--scale-glyph-width", "o", "50", "1750",
+    ]));
+    assert!(collapse.expect_err("short segment collapses")
+        .contains("collapses a pen segment"));
+    let negative_half = execute_glyph_library(&args(&[
+        "--glyph-stroke", "o", "1749", "2000", "1751", "2100",
+        "250", "#112233", "--scale-glyph-width", "o", "50", "1750",
+    ])).expect("ties round upward").expect("TSV");
+    assert!(String::from_utf8_lossy(&negative_half)
+        .contains("o\t1750\t2000\t1751\t2100"));
+    assert_eq!(fs::read(&source).expect("source unchanged"), original);
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(output).expect("remove output");
+}

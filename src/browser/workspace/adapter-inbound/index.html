@@ -926,10 +926,37 @@
             <p class="field-help">Height rescales only the selected
               glyph's vertical pen coordinates about the specified baseline;
               X, pen widths, stroke order, and other Unicode glyphs remain
-              unchanged. Both previews are read-only. Scaling that clips a
+              unchanged. Every preview is read-only. Scaling that clips a
               pen edge or collapses a line refuses without altering ink.
               Height changes invalidate the previous slant undo step.
               Save the original TSV before transforming.</p>
+            <label>Authored glyph width (50–150% of current size)
+              <input id="glyph-width-percent" type="number" min="50"
+                max="150" step="1" value="110" disabled>
+            </label>
+            <label>Width anchor X (0–3500 µm)
+              <input id="glyph-width-anchor" type="number" min="0"
+                max="3500" step="1" value="1750" disabled>
+            </label>
+            <button id="glyph-scale-width" type="button" disabled>
+              Resize selected glyph width (unsaved)
+            </button>
+            <div class="glyph-slant-preview-region">
+              <svg id="glyph-width-preview"
+                class="glyph-stroke-preview glyph-stroke-slant-preview"
+                viewBox="0 0 3500 4500" role="img"
+                aria-label="Proposed glyph width preview"></svg>
+              <p id="glyph-width-preview-status" class="field-help"
+                role="status" aria-live="polite">
+                Author a glyph to preview a proposed width.
+              </p>
+            </div>
+            <p class="field-help">Width rescales selected glyph X
+              around an explicit anchor. Pen widths, Y, stroke order,
+              Unicode siblings, and saved TSV stay untouched until an
+              explicit edit and download. Previews show at most 128
+              segments; clipped pens or collapsed lines are refused.
+              Save an original before destructive resizing.</p>
             <p class="field-help">Apply a whole-glyph italic tilt to
               existing hand-authored segments without rebuilding any letter.
               The selected exact Unicode glyph changes only on an explicit

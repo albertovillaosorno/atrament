@@ -953,6 +953,42 @@ export function scaleGlyphHeight(source, grapheme, percent, baseline) {
     encodeGlyphLibrary(candidate);
     return candidate;
 }
+// Change horizontal proportions of one exact authored glyph around an X
+// anchor without changing sampled Y positions or pen characteristics.
+export function scaleGlyphWidth(source, grapheme, percent, anchor) {
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Width edit requires one exact visible glyph");
+    }
+    if (!Number.isSafeInteger(percent) || percent < 50 || percent > 150) {
+        throw new Error("Width percent must be 50..150 whole percent");
+    }
+    const pivot = boundedInteger(String(anchor), 3500, "glyph width anchor");
+    let found = false;
+    const candidate = source.map((line) => {
+        if (line.grapheme !== grapheme)
+            return line;
+        found = true;
+        const stroke = validateStroke(line);
+        if ([stroke.y1, stroke.y2].some((y) => y - stroke.width / 2 < 0
+            || y + stroke.width / 2 > 4500)) {
+            throw new Error("Resized ink and pen clip glyph cell");
+        }
+        const x1 = Math.round(pivot + (stroke.x1 - pivot) * percent / 100);
+        const x2 = Math.round(pivot + (stroke.x2 - pivot) * percent / 100);
+        if ([x1, x2].some((x) => x - stroke.width / 2 < 0
+            || x + stroke.width / 2 > 3500)) {
+            throw new Error("Resized ink and pen clip glyph cell");
+        }
+        if (stroke.y1 === stroke.y2 && x1 === x2) {
+            throw new Error("Width scaling collapses a pen segment");
+        }
+        return validateStroke({ ...stroke, x1, x2 });
+    });
+    if (!found)
+        throw new Error("Selected glyph has no authored ink");
+    encodeGlyphLibrary(candidate);
+    return candidate;
+}
 export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
@@ -1584,6 +1620,11 @@ export function createGlyphStrokeEditor() {
     const scaleHeight = required("glyph-scale-height");
     const heightPreview = required("glyph-height-preview");
     const heightPreviewStatus = required("glyph-height-preview-status");
+    const widthPercent = required("glyph-width-percent");
+    const widthAnchor = required("glyph-width-anchor");
+    const scaleWidth = required("glyph-scale-width");
+    const widthPreview = required("glyph-width-preview");
+    const widthPreviewStatus = required("glyph-width-preview-status");
     const idealGeometry = required("glyph-ideal-geometry");
     const ideal = required("glyph-ideal-preview");
     const idealCircle = required("glyph-ideal-circle");
@@ -1641,6 +1682,7 @@ export function createGlyphStrokeEditor() {
         accentShift, accentLift, italicAngle,
         authoredAngle, authoredBaseline, slantAuthored,
         heightPercent, heightBaseline, scaleHeight,
+        widthPercent, widthAnchor, scaleWidth,
         undoSlant, redoSlant, variationSeed,
         variationSample, variationDownload,
         ...Object.values(variationControls),
@@ -2131,6 +2173,47 @@ export function createGlyphStrokeEditor() {
             heightPreviewStatus.textContent = String(error);
         }
     };
+    const renderWidthPreview = () => {
+        widthPreview.replaceChildren();
+        if (!active) {
+            widthPreviewStatus.textContent =
+                "Requires a compatible backend session";
+            return;
+        }
+        const target = character.value;
+        const authored = strokes.filter((item) => item.grapheme === target);
+        if (authored.length === 0) {
+            widthPreviewStatus.textContent =
+                "Author this exact glyph before previewing width";
+            return;
+        }
+        try {
+            if (widthPercent.value === ""
+                || widthAnchor.value === "") {
+                throw new Error("Choose a width percent and anchor");
+            }
+            if (authored.length > 128) {
+                throw new Error("Preview limited to 128 authored segments");
+            }
+            const candidate = scaleGlyphWidth(strokes, target, Number(widthPercent.value), Number(widthAnchor.value));
+            const lines = candidate.filter((item) => item.grapheme === target).map((item) => {
+                const line = document.createElementNS(SVG_NS, "line");
+                for (const axis of ["x1", "y1", "x2", "y2"]) {
+                    line.setAttribute(axis, String(item[axis]));
+                }
+                line.setAttribute("stroke", item.color);
+                line.setAttribute("stroke-width", String(item.width));
+                line.setAttribute("stroke-linecap", "round");
+                return line;
+            });
+            widthPreview.replaceChildren(...lines);
+            widthPreviewStatus.textContent = `${lines.length} proposed `
+                + "width-scaled segments; preview only, draft unchanged";
+        }
+        catch (error) {
+            widthPreviewStatus.textContent = String(error);
+        }
+    };
     const render = () => {
         if (slantHistory !== null) {
             const expected = slantHistory[slantHistory.side];
@@ -2205,6 +2288,8 @@ export function createGlyphStrokeEditor() {
         slantAuthored.disabled = !active || shown.length === 0
             || drawing !== null;
         scaleHeight.disabled = !active || shown.length === 0
+            || drawing !== null;
+        scaleWidth.disabled = !active || shown.length === 0
             || drawing !== null;
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
@@ -2288,6 +2373,7 @@ export function createGlyphStrokeEditor() {
         preview.replaceChildren(...lines);
         renderSlantPreview();
         renderHeightPreview();
+        renderWidthPreview();
         const label = `${shown.length} strokes for selected glyph`;
         preview.setAttribute("aria-label", label);
         renderVariation();
@@ -2319,6 +2405,10 @@ export function createGlyphStrokeEditor() {
     for (const control of [heightPercent, heightBaseline]) {
         control.addEventListener("input", renderHeightPreview);
         control.addEventListener("change", renderHeightPreview);
+    }
+    for (const control of [widthPercent, widthAnchor]) {
+        control.addEventListener("input", renderWidthPreview);
+        control.addEventListener("change", renderWidthPreview);
     }
     for (const control of [
         form, centerX, centerY, radius, color, accentShift, accentLift,
@@ -2550,6 +2640,28 @@ export function createGlyphStrokeEditor() {
             selectedIndex = null;
             render();
             message(`Resized all authored ${target} height; unsaved`);
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    scaleWidth.addEventListener("click", () => {
+        if (!active)
+            return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the pen trace before width edit");
+            }
+            if (widthPercent.value === "" || widthAnchor.value === "") {
+                throw new Error("Choose a width percent and anchor");
+            }
+            const target = character.value;
+            const next = scaleGlyphWidth(strokes, target, Number(widthPercent.value), Number(widthAnchor.value));
+            strokes = next;
+            slantHistory = null;
+            selectedIndex = null;
+            render();
+            message(`Resized all authored ${target} width; unsaved`);
         }
         catch (error) {
             message(String(error));

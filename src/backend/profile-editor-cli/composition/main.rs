@@ -93,6 +93,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--translate-path GRAPHEME PATH_INDEX DX_UM DY_UM] \
     [--shear-glyph GRAPHEME ANGLE_DEG BASELINE_Y_UM] \
     [--scale-glyph-height GRAPHEME PERCENT BASELINE_Y_UM] \
+    [--scale-glyph-width GRAPHEME PERCENT ANCHOR_X_UM] \
     [--join-strokes GRAPHEME FIRST_INDEX] \
     [--set-stroke GRAPHEME INDEX X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--remove-stroke GRAPHEME INDEX] \
@@ -121,6 +122,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --translate-path moves one path using bounded signed micrometres.\n\
     --shear-glyph slants all exact-glyph pen segments 0..20 degrees.\n\
     --scale-glyph-height rescales exact-glyph Y about the baseline.\n\
+    --scale-glyph-width rescales exact-glyph X about the anchor.\n\
     --join-strokes inserts a short same-pen connector to the next segment.\n\
     --copy-glyph clones explicit source ink under an unoccupied target.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
@@ -767,8 +769,7 @@ fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
 
 fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let mut glyphs = GlyphOverlay::default();
-    let mut output = None;
-    let mut audit_text = None;
+    let (mut output, mut audit_text) = (None, None);
     let mut audit_baseline = false;
     let mut inspection: Option<(String, bool)> = None;
     let mut replace = false;
@@ -781,7 +782,8 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
             }
             "--copy-glyph" | "--glyph-stroke" | "--shear-glyph"
-            | "--scale-glyph-height" => glyphs.parse(option, &mut iter)?,
+            | "--scale-glyph-height" | "--scale-glyph-width" =>
+                glyphs.parse(option, &mut iter)?,
             "--reverse-stroke" | "--move-stroke" | "--join-strokes"
             | "--set-stroke" | "--remove-stroke" =>
                 glyphs.edit_stroke(option, &mut iter)?,

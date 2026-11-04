@@ -860,6 +860,23 @@ Height changes invalidate one-step slant undo, and integer resizing is not
 always reversible. This is not a saved height variant, analytic geometry,
 joined cursive or complete P1 inventory coverage; the task stays open.
 
+## Bounded per-glyph width editing (partial) — 2026-11-04
+
+The native `glyphs --scale-glyph-width GRAPHEME PERCENT ANCHOR_X_UM`
+and browser editor now change horizontal dimensions of one exact authored
+Unicode glyph about an explicit 0–3500 µm anchor, with a bounded 50–150%
+scale and independent read-only SVG proposal. Y, pen widths, colors,
+Unicode identity, candidate pen continuity and unrelated rows are retained.
+Both pen axes receive full-radius clearance checks, and collapsing a short
+horizontal segment refuses atomically. Browser edits remain unsaved until
+the explicit download; prior slant undo invalidates after an accepted edit.
+
+Dedicated browser/native unit tests cover identity, rounding, 4,096-stroke
+library limits, exact composed/decomposed accents and clipped/collapsed
+refusals. An independent browser/native integration verifies byte-identical
+TSV and real PDF/PNG exports after width editing and combined italic shear.
+This does not implement persistent analytic contours or named width styles.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

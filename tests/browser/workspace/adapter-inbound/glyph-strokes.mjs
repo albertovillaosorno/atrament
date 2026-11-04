@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
-    geometricStarter, italicizeGlyphStrokes, scaleGlyphHeight,
+    geometricStarter, italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
     composeAccentedGlyph, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
@@ -383,6 +383,9 @@ function mountEditor() {
         "glyph-height-percent", "glyph-height-baseline",
         "glyph-scale-height", "glyph-height-preview",
         "glyph-height-preview-status",
+        "glyph-width-percent", "glyph-width-anchor",
+        "glyph-scale-width", "glyph-width-preview",
+        "glyph-width-preview-status",
         "glyph-ideal-preview", "glyph-ideal-geometry",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
@@ -417,6 +420,8 @@ function mountEditor() {
     get("authored-baseline").value = "3550";
     get("height-percent").value = "110";
     get("height-baseline").value = "2250";
+    get("width-percent").value = "110";
+    get("width-anchor").value = "1750";
     get("path-dx").value = "0";
     get("path-dy").value = "0";
     get("variation-sample").value = "1";
@@ -4736,6 +4741,107 @@ test("height preview is exact and invalid edits keep the unsaved library",
         assert.match(status.textContent,
             /Requires a compatible backend session/);
         assert.equal(get("height-percent").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("whole-glyph width rescales exact Unicode and rejects clipped pen", () => {
+    const nfd = "o\u0301";
+    const source = [
+        { grapheme: nfd, x1: 450, y1: 1000, x2: 850,
+            y2: 1600, width: 250, color: "#243647" },
+        { grapheme: "ó", x1: 300, y1: 1000, x2: 500,
+            y2: 1500, width: 250, color: "#112233" },
+        { grapheme: nfd, x1: 850, y1: 1600, x2: 1300,
+            y2: 2200, width: 250, color: "#243647" },
+    ];
+    const before = encodeGlyphLibrary(source);
+    const resized = scaleGlyphWidth(source, nfd, 110, 1750);
+    assert.deepEqual(resized, source.map((line) => line.grapheme !== nfd
+        ? line : { ...line,
+            x1: Math.round(1750 + (line.x1 - 1750) * 1.1),
+            x2: Math.round(1750 + (line.x2 - 1750) * 1.1),
+        }));
+    assert.equal(resized[1], source[1]);
+    assert.deepEqual(candidatePenPaths(resized, nfd).map((path) =>
+        [path.first, path.last]), [[1, 2]]);
+    assert.equal(encodeGlyphLibrary(source), before);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(resized)),
+        resized);
+    assert.deepEqual(scaleGlyphWidth(source, nfd, 100, 1750), source);
+    const tie = [{ ...source[0], x1: 1749, x2: 1751 }];
+    assert.equal(scaleGlyphWidth(tie, nfd, 50, 1750)[0].x1,
+        1750, "negative half rounds upward");
+    for (const percent of [49, 151, 110.5, NaN]) {
+        assert.throws(() => scaleGlyphWidth(source, nfd,
+            percent, 1750), /Width percent/);
+    }
+    for (const anchor of [-1, 3501, 1.5, NaN]) {
+        assert.throws(() => scaleGlyphWidth(source, nfd,
+            110, anchor), /glyph width anchor/);
+    }
+    assert.throws(() => scaleGlyphWidth(source, "ab", 110,
+        1750), /exact visible/);
+    assert.throws(() => scaleGlyphWidth(source, "á", 110,
+        1750), /no authored ink/);
+    const clipped = [{ ...source[0], x1: 200, x2: 600 }];
+    assert.throws(() => scaleGlyphWidth(clipped, nfd,
+        150, 1750), /Resized ink and pen clip/);
+    const badY = [{ ...source[0], y1: 125, width: 251 }];
+    assert.throws(() => scaleGlyphWidth(badY, nfd,
+        100, 1750), /Resized ink and pen clip/);
+    const collapsed = [{ ...source[0], y1: 2000, y2: 2000,
+        x1: 1749, x2: 1750 }];
+    assert.throws(() => scaleGlyphWidth(collapsed, nfd,
+        50, 1750), /collapses a pen segment/);
+    assert.equal(encodeGlyphLibrary(source), before);
+    const full = Array.from({ length: 4096 }, (_, i) => ({
+        ...source[0], x1: 450 + i % 100, x2: 850 + i % 100,
+    }));
+    assert.equal(scaleGlyphWidth(full, nfd, 110, 1750).length, 4096);
+});
+
+test("width guide is read-only and accepted TSV is explicit", async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const nfd = "o\u0301";
+        editor.start();
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        assert.equal(get("scale-width").disabled, true);
+        for (const [key, value] of Object.entries({
+            x1: 450, y1: 1000, x2: 850, y2: 1600, width: 250,
+        })) get(key).value = String(value);
+        get("add").dispatch("click");
+        const source = [{ grapheme: nfd,
+            x1: 450, y1: 1000, x2: 850, y2: 1600,
+            width: 250, color: "#243647" }];
+        const proposed = scaleGlyphWidth(source, nfd, 110, 1750)[0];
+        const guide = get("width-preview");
+        assert.equal(get("scale-width").disabled, false);
+        assert.equal(guide.children.length, 1);
+        assert.equal(Number(guide.children[0].attributes.get("x1")),
+            proposed.x1);
+        assert.equal(downloads.length, 0);
+        get("width-percent").value = "151";
+        get("width-percent").dispatch("input");
+        assert.equal(guide.children.length, 0);
+        get("scale-width").dispatch("click");
+        assert.match(get("status").textContent, /Width percent/);
+        get("width-percent").value = "110";
+        get("width-percent").dispatch("input");
+        assert.equal(guide.children.length, 1);
+        get("scale-width").dispatch("click");
+        assert.match(get("status").textContent,
+            /Resized all authored ó width; unsaved/);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary([proposed]));
+        editor.reset();
+        assert.equal(guide.children.length, 0);
+        assert.equal(get("scale-width").disabled, true);
     } finally {
         ui.restore();
     }

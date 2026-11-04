@@ -1106,6 +1106,27 @@ A real headless Firefox/localhost regression checks preview rounding,
 explicit downloads for accepted and refused edits, independent NFC/NFD
 rows and mathematical ink, and unchanged backend-request counts.
 
+**Resize selected glyph width (unsaved)** symmetrically scales every X
+endpoint in the selected exact Unicode glyph by 50–150% around a user-set
+0–3500 µm X anchor. A separate preview remains read-only and capped at 128
+sampled strokes; actual browser/Rust edits admit the complete 4,096-stroke
+library. Y coordinates, pen widths, pigment, order and sibling Unicode rows
+remain unchanged, and ink must retain pen half-width clearance inside both
+cell axes. Any collapsing horizontal pen segment refuses the whole edit.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile regular.tsv --scale-glyph-width 'ó' 110 1750 \
+  --output wider.tsv
+```
+
+The Rust and browser controls use the same micrometre rounding and require
+an explicit save, with 100% as identity. A dedicated browser and native
+regression plus export integration prove exact TSV parity and matching
+PDF/transparent PNG after combining width with italic shear. Width edits
+also invalidate any earlier in-memory one-step slant recovery. A sampled
+width change is not a persistent geometric or named glyph variant.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each
