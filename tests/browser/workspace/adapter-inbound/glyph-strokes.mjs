@@ -375,7 +375,8 @@ function mountEditor() {
         "glyph-seed-text-marks",
         "glyph-circle-x",
         "glyph-circle-y", "glyph-circle-radius", "glyph-accent-shift",
-        "glyph-accent-lift", "glyph-ideal-preview",
+        "glyph-accent-lift", "glyph-italic-angle",
+        "glyph-ideal-preview", "glyph-ideal-geometry",
         "glyph-ideal-circle", "glyph-ideal-stem", "glyph-ideal-arch",
         "glyph-ideal-rounded", "glyph-ideal-rounded-left",
         "glyph-ideal-rounded-right", "glyph-ideal-c-loop",
@@ -404,6 +405,7 @@ function mountEditor() {
     get("circle-radius").value = "1100";
     get("accent-shift").value = "0";
     get("accent-lift").value = "0";
+    get("italic-angle").value = "12";
     get("path-dx").value = "0";
     get("path-dy").value = "0";
     get("variation-sample").value = "1";
@@ -1887,6 +1889,7 @@ test("accent action replaces target and refuses atomically", async () => {
         assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
             accepted, "a refused accent does not replace a saved draft");
         get("accent-lift").value = "0";
+    get("italic-angle").value = "12";
         get("character").value = "è";
         get("character").dispatch("input");
         get("compose").dispatch("click");
@@ -3234,6 +3237,7 @@ test("uppercase accent batches refuse clipped marks and over-cap", async () => {
         const before = parseGlyphLibrary(await downloads.at(-1).text());
         assert.equal(before.length, 512);
         get("accent-lift").value = "0";
+    get("italic-angle").value = "12";
         const full = [...before, ...Array.from({ length: 3540 },
             () => stroke("∞"))];
         const bytes = new TextEncoder().encode(encodeGlyphLibrary(full));
@@ -4069,6 +4073,119 @@ test("exact SVG circle guide tracks parameters without saving", async () => {
         assert.equal(get("ideal-stem").attributes.get("visibility"),
             "hidden");
         assert.equal(get("ideal-accent").attributes.get("visibility"),
+            "hidden");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("italic o/a variants shear the ideal base around a fixed baseline", () => {
+    const values = [1550, 2450, 700, 250, "#123456"];
+    const baseline = values[1] + values[2];
+    for (const [glyph, regular, italic, count] of [
+        ["o", "single", "italic", 48],
+        ["a", "single", "italic", 49],
+        ["ó", "single", "italic", 49],
+        ["á", "single", "italic", 50],
+        ["a", "two-storey", "two-storey-italic", 81],
+        ["á", "two-storey", "two-storey-italic", 82],
+    ]) {
+        const base = geometricStarter(glyph, ...values, undefined, regular);
+        const saved = encodeGlyphLibrary(base);
+        const position = { dx: 0, lift: 0, italicDegrees: 12 };
+        const result = geometricStarter(glyph, ...values, position, italic);
+        const slope = Math.tan(12 * Math.PI / 180);
+        assert.equal(result.length, count);
+        assert.deepEqual(result, base.map((stroke) => ({
+            ...stroke,
+            x1: Math.round(stroke.x1 + slope * (baseline - stroke.y1)),
+            x2: Math.round(stroke.x2 + slope * (baseline - stroke.y2)),
+        })), `${glyph} retains each stroke, color and order`);
+        assert.notDeepEqual(result, base, `${glyph} italic is distinct`);
+        assert.deepEqual(geometricStarter(glyph, ...values,
+            { ...position, italicDegrees: 0 }, italic), base);
+        assert.equal(encodeGlyphLibrary(base), saved,
+            "regular outlines remain unchanged by italic derivation");
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(result)),
+            result, "sampled italic ink has native v1 byte parity");
+    }
+    for (const invalid of [-1, 21, 1.5, NaN, Infinity]) {
+        assert.throws(() => geometricStarter("o", ...values,
+            { dx: 0, lift: 0, italicDegrees: invalid }, "italic"),
+        /Italic angle/);
+    }
+    assert.throws(() => geometricStarter("n", ...values,
+        undefined, "italic"), /Italic variant/);
+    assert.throws(() => geometricStarter("o", ...values,
+        undefined, "two-storey-italic"), /Two-storey/);
+    assert.throws(() => geometricStarter("a", 2900, 2450, 400,
+        250, "#123456", { dx: 0, lift: 0, italicDegrees: 20 },
+        "italic"), /Italic ink and pen clip/);
+});
+
+test("italic SVG guide and replacement are session-safe", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads, links } = ui;
+        assert.equal(get("italic-angle").disabled, true);
+        editor.start();
+        assert.equal(get("italic-angle").disabled, true,
+            "regular geometry does not enable italic control");
+        get("form").value = "a-italic";
+        get("form").dispatch("change");
+        assert.equal(get("italic-angle").disabled, false);
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-stem").attributes.get("visibility"),
+            "visible");
+        assert.match(get("ideal-geometry").attributes.get("transform"),
+            /^matrix\(1 0 -0\.2125.+ 1 .+ 0\)$/);
+        get("character").value = "a";
+        get("character").dispatch("input");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(links.at(-1).name, "my-glyph-strokes.tsv");
+        const first = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(first, geometricStarter("a", 1550, 2450,
+            1100, 250, "#243647",
+            { dx: 0, lift: 0, italicDegrees: 12 }, "italic"));
+        get("form").value = "a-two-italic";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-arch").attributes.get("visibility"),
+            "visible", "printed italic arch uses the same ideal bowl");
+        get("circle-radius").value = "800";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-arch").attributes.get("visibility"),
+            "visible");
+        get("italic-angle").value = "21";
+        get("italic-angle").dispatch("input");
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
+            "hidden", "invalid angle hides the whole stale guide");
+        const count = downloads.length;
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(downloads.length, count + 1,
+            "only explicit Save downloads the unchanged accepted draft");
+        assert.deepEqual(parseGlyphLibrary(
+            await downloads.at(-1).text()), first);
+        get("italic-angle").value = "8";
+        get("italic-angle").dispatch("input");
+        assert.equal(get("ideal-arch").attributes.get("visibility"),
+            "visible");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(
+            await downloads.at(-1).text()),
+        geometricStarter("a", 1550, 2450, 800, 250, "#243647",
+            { dx: 0, lift: 0, italicDegrees: 8 }, "two-storey-italic"));
+        get("form").value = "o";
+        get("form").dispatch("change");
+        assert.equal(get("italic-angle").disabled, true);
+        assert.equal(get("ideal-geometry").attributes.get("transform"),
+            "", "the regular perfect-circle SVG is not sheared");
+        editor.reset();
+        assert.equal(get("italic-angle").disabled, true);
+        assert.equal(get("ideal-circle").attributes.get("visibility"),
             "hidden");
     } finally {
         ui.restore();

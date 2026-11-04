@@ -1036,8 +1036,10 @@ function quadratic(
 
 export function geometricStarter(
     g: string, x: number, y: number, r: number, w: number,
-    color: string, pos?: { dx: number; lift: number },
-    kind: "single" | "two-storey" = "single",
+    color: string, pos?: { dx: number; lift: number;
+        italicDegrees?: number },
+    kind: "single" | "two-storey" | "italic"
+        | "two-storey-italic" = "single",
 ): Stroke[] {
     if (!["o", "a", "ó", "á", "b", "d", "p", "q",
         "n", "u", "h", "m", "r", "l", "t", "f", "v", "w",
@@ -1049,9 +1051,37 @@ export function geometricStarter(
         ...TEXT_MARKS].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
     }
-    if (kind !== "single" && kind !== "two-storey"
-        || (kind === "two-storey" && !["a", "á"].includes(g))) {
+    const twoStorey = kind === "two-storey"
+        || kind === "two-storey-italic";
+    const italic = kind === "italic" || kind === "two-storey-italic";
+    if (twoStorey && !["a", "á"].includes(g)) {
         throw new Error("Two-storey construction requires a or á");
+    }
+    if (!["single", "two-storey", "italic", "two-storey-italic"]
+        .includes(kind) || (italic && !["o", "a", "ó", "á"]
+            .includes(g))) {
+        throw new Error("Italic variant requires matching o/a glyph");
+    }
+    if (italic) {
+        const angle = pos?.italicDegrees ?? 12;
+        if (!Number.isSafeInteger(angle) || angle < 0 || angle > 20) {
+            throw new Error("Italic angle must be 0..20 whole degrees");
+        }
+        const baseKind = twoStorey ? "two-storey" : "single";
+        const base = geometricStarter(g, x, y, r, w, color, pos,
+            baseKind);
+        const slope = Math.tan(angle * Math.PI / 180);
+        const baseline = y + r;
+        return base.map((line) => {
+            const x1 = Math.round(line.x1 + slope * (baseline - line.y1));
+            const x2 = Math.round(line.x2 + slope * (baseline - line.y2));
+            if ([x1, x2].some((point) =>
+                point - line.width / 2 < 0
+                || point + line.width / 2 > 3500)) {
+                throw new Error("Italic ink and pen clip glyph cell");
+            }
+            return validateStroke({ ...line, x1, x2 });
+        });
     }
     const cx = boundedInteger(String(x), 3500, "center X");
     const cy = boundedInteger(String(y), 4500, "center Y");
@@ -1064,7 +1094,7 @@ export function geometricStarter(
     const lift = boundedInteger(
         String(pos?.lift ?? 0), 500, "accent lift");
     const halfPen = pen / 2;
-    const topOffset = kind === "two-storey" ? 2 * radius : radius;
+    const topOffset = twoStorey ? 2 * radius : radius;
     if (radius < 200 || cx - radius < halfPen
         || cy - radius < halfPen
         || cx + radius + halfPen > 3500
@@ -1425,7 +1455,7 @@ export function geometricStarter(
         }
         return lines;
     }
-    if (kind === "two-storey") {
+    if (twoStorey) {
         if (cy - topOffset < halfPen) {
             throw new Error("Two-storey arch exceeds glyph cell");
         }
@@ -1702,6 +1732,8 @@ export function createGlyphStrokeEditor(): {
     const radius = required<HTMLInputElement>("glyph-circle-radius");
     const accentShift = required<HTMLInputElement>("glyph-accent-shift");
     const accentLift = required<HTMLInputElement>("glyph-accent-lift");
+    const italicAngle = required<HTMLInputElement>("glyph-italic-angle");
+    const idealGeometry = required<SVGGElement>("glyph-ideal-geometry");
     const ideal = required<SVGSVGElement>("glyph-ideal-preview");
     const idealCircle = required<SVGCircleElement>("glyph-ideal-circle");
     const idealStem = required<SVGLineElement>("glyph-ideal-stem");
@@ -1762,7 +1794,7 @@ export function createGlyphStrokeEditor(): {
         seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
         seedTextMarks,
         centerX, centerY, radius,
-        accentShift, accentLift, variationSeed,
+        accentShift, accentLift, italicAngle, variationSeed,
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
@@ -1813,12 +1845,18 @@ export function createGlyphStrokeEditor(): {
         }
         return null;
     };
-    const selectedForm = () => ({
-        grapheme: form.value.endsWith("-two")
-            ? form.value.slice(0, -4) : form.value,
-        variant: form.value.endsWith("-two")
-            ? "two-storey" as const : "single" as const,
-    });
+    const selectedForm = () => {
+        const italic = form.value.endsWith("-italic");
+        const raw = italic ? form.value.slice(0, -7) : form.value;
+        const twoStorey = raw.endsWith("-two");
+        return {
+            grapheme: twoStorey ? raw.slice(0, -4) : raw,
+            variant: twoStorey
+                ? italic ? "two-storey-italic" as const
+                    : "two-storey" as const
+                : italic ? "italic" as const : "single" as const,
+        };
+    };
     const starterFromInputs = (): Stroke[] => {
         const chosen = selectedForm();
         const values: [string, number, number, number, number, string] = [
@@ -1827,6 +1865,8 @@ export function createGlyphStrokeEditor(): {
         ];
         const position = {
             dx: Number(accentShift.value), lift: Number(accentLift.value),
+            italicDegrees: italicAngle.value === ""
+                ? NaN : Number(italicAngle.value),
         };
         return geometricStarter(...values, position, chosen.variant);
     };
@@ -1845,6 +1885,13 @@ export function createGlyphStrokeEditor(): {
             idealCircle.setAttribute("stroke", color.value);
             const shown = active ? "visible" : "hidden";
             const chosen = selectedForm();
+            const isItalic = chosen.variant.endsWith("italic");
+            italicAngle.disabled = !active || !isItalic;
+            const slope = isItalic
+                ? Math.tan(Number(italicAngle.value) * Math.PI / 180) : 0;
+            const baseline = cy + r;
+            idealGeometry.setAttribute("transform", isItalic
+                ? `matrix(1 0 ${-slope} 1 ${slope * baseline} 0)` : "");
             const circleVisible = ["o", "a", "ó", "á", "b", "d",
                 "p", "q", "g", "O", "Q"].includes(chosen.grapheme);
             const circleState = circleVisible ? shown : "hidden";
@@ -1874,7 +1921,8 @@ export function createGlyphStrokeEditor(): {
             idealArch.setAttribute("d", archPath);
             idealArch.setAttribute("stroke-width", numeric.width.value);
             idealArch.setAttribute("stroke", color.value);
-            const archVisible = active && chosen.variant === "two-storey";
+            const archVisible = active
+                && chosen.variant.startsWith("two-storey");
             const archState = archVisible ? "visible" : "hidden";
             idealArch.setAttribute("visibility", archState);
             const roundedKind: "n" | "u" | "h" =
@@ -2051,7 +2099,8 @@ export function createGlyphStrokeEditor(): {
             iDot.setAttribute("visibility", dotState);
             const dx = Number(accentShift.value);
             const lift = Number(accentLift.value);
-            const top = chosen.variant === "two-storey" ? 2 * r : r;
+            const top = chosen.variant.startsWith("two-storey")
+                ? 2 * r : r;
             const accent = acuteAccent(cx, cy, r, pen, dx, lift, top);
             for (const axis of ["x1", "y1", "x2", "y2"] as const) {
                 idealAccent.setAttribute(axis, String(accent[axis]));
@@ -2076,6 +2125,9 @@ export function createGlyphStrokeEditor(): {
                 : `Analytic geometric ${form.value} guide, not retained in TSV`;
             ideal.setAttribute("aria-label", guideLabel);
         } catch {
+            italicAngle.disabled = !active
+                || !selectedForm().variant.endsWith("italic");
+            idealGeometry.setAttribute("transform", "");
             idealCircle.setAttribute("visibility", "hidden");
             idealStem.setAttribute("visibility", "hidden");
             idealArch.setAttribute("visibility", "hidden");
@@ -2323,6 +2375,7 @@ export function createGlyphStrokeEditor(): {
 
     for (const control of [
         form, centerX, centerY, radius, color, accentShift, accentLift,
+        italicAngle,
     ]) {
         control.addEventListener("input", renderIdeal);
         control.addEventListener("change", renderIdeal);

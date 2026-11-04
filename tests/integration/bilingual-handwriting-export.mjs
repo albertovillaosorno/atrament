@@ -948,3 +948,70 @@ test('combined pen-path edit script matches native and browser ink', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('italic circle and printed a export exact native PDF/PNG ink', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-italic-'));
+    try {
+        const args = [1550, 2450, 700, 250, '#243647'];
+        const position = { dx: 0, lift: 0, italicDegrees: 12 };
+        const forms = [
+            ['á', 'two-storey', 'two-storey-italic'],
+            ['ó', 'single', 'italic'],
+        ];
+        const lines = forms.flatMap(([glyph, regular, italic]) => {
+            const baseline = args[1] + args[2];
+            const slope = Math.tan(12 * Math.PI / 180);
+            const source = geometricStarter(glyph, ...args, position, regular);
+            const expected = source.map((stroke) => ({
+                ...stroke,
+                x1: Math.round(stroke.x1
+                    + slope * (baseline - stroke.y1)),
+                x2: Math.round(stroke.x2
+                    + slope * (baseline - stroke.y2)),
+            }));
+            assert.deepEqual(geometricStarter(glyph, ...args,
+                position, italic), expected);
+            return expected;
+        });
+        assert.equal(lines.length, 131);
+        const source = join(dir, 'italic.tsv');
+        const bytes = encodeGlyphLibrary(lines);
+        writeFileSync(source, bytes);
+        const readback = native('glyphs', '--profile', source);
+        assert.equal(readback.status, 0, readback.stderr);
+        assert.equal(readback.stdout, bytes);
+        const audit = native('glyphs', '--profile', source,
+            '--audit-text', 'áó');
+        assert.equal(audit.status, 0, audit.stderr);
+        assert.match(audit.stdout, /Missing authored glyphs: 0/);
+        const manual = lines.flatMap((stroke) => [
+            '--glyph-stroke', stroke.grapheme,
+            String(stroke.x1), String(stroke.y1),
+            String(stroke.x2), String(stroke.y2),
+            String(stroke.width), stroke.color,
+        ]);
+        for (const format of ['pdf', 'png']) {
+            const flags = ['--export-paper', format];
+            if (format === 'png') flags.push('--dpi', '72');
+            const output = join(dir, `italic.${format}`);
+            const expected = join(dir, `manual.${format}`);
+            const command = (ink, target) => native('notebook',
+                '--printed-sheet', 'true', ...ink,
+                '--place-text', '1', '30000', '45000', 'áó',
+                ...flags, '--output', target);
+            const actual = command(['--glyph-file', source], output);
+            const reference = command(manual, expected);
+            assert.equal(actual.status, 0, actual.stderr);
+            assert.equal(reference.status, 0, reference.stderr);
+            assert.deepEqual(readFileSync(output), readFileSync(expected),
+                `italic selected variant is physical ${format} ink`);
+            if (format === 'png') {
+                pngHasTransparentCorner(readFileSync(output));
+            }
+        }
+        assert.equal(readFileSync(source, 'utf8'), bytes,
+            'rendering cannot modify the original authored TSV');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

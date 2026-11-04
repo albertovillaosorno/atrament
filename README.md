@@ -998,6 +998,20 @@ Two-storey `a` adds 32 upper-arch samples and a right stem
 (81 lines); two-storey `á` adds an accent (82). This is **sampled near-curve
 ink**, not an exact vector-curve PDF export.
 
+The editor also offers six explicit **italic** choices: `o`, `ó`, simple
+`a`/`á` and two-storey `a`/`á`. Select the italic form, set a whole-number
+rightward slant from 0 to 20 degrees (12 by default), then deliberately
+replace that exact glyph. The analytic SVG guide shears the original circle,
+stem, upper arch and accent around the lower baseline; the regular geometric
+starter remains unchanged.
+
+The downloadable v1 TSV contains bounded, individually rounded integer
+pen segments, not a saved italic style or vector ellipse. Pen clipping
+refuses the entire candidate before replacing any authored strokes. A
+real Rust export test checks italic accented `áó` (131 ink lines) against
+independently supplied PDF/PNG pen strokes. This is a selectable sampled
+italic starter, **not** cursive joining or persistent geometry metadata.
+
 Lowercase `n` and `u` now have separately selectable analytic quadratic
 constructions: `n` uses an upper hump and two stems, while `u` uses a lower
 bowl and two stems. Each SVG guide shows two exact quadratic arcs; each

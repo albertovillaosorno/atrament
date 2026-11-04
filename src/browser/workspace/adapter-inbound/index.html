@@ -629,6 +629,7 @@
                 <option value="×">Math multiplication ×</option>
                 <option value="÷">Math division ÷ (bar and dots)</option>
                 <option value="o">Circle o</option>
+                <option value="o-italic">Italic o (sheared circle)</option>
                 <option value="b">Ascender b (left stem)</option>
                 <option value="d">Ascender d (right stem)</option>
                 <option value="p">Descender p (left stem)</option>
@@ -655,10 +656,15 @@
                 <option value="h">Ascender h (upper hump)</option>
                 <option value="m">Double-hump m (two arches)</option>
                 <option value="a">Simple a (circle + stem)</option>
+                <option value="a-italic">Italic simple a (slanted)</option>
                 <option value="a-two">Printed two-storey a (upper arch)</option>
+                <option value="a-two-italic">Italic printed two-storey a</option>
                 <option value="ó">Acute ó (circle + accent)</option>
+                <option value="ó-italic">Italic acute ó</option>
                 <option value="á">Acute á (simple a + accent)</option>
+                <option value="á-italic">Italic acute simple á</option>
                 <option value="á-two">Acute printed two-storey á</option>
+                <option value="á-two-italic">Italic two-storey á</option>
               </select>
             </label>
             <label>Geometry center X (µm)
@@ -672,6 +678,10 @@
             <label>Shape radius (200–1600 µm)
               <input id="glyph-circle-radius" type="number" min="200"
                 max="1600" step="1" value="1100" disabled>
+            </label>
+            <label>Italic slant (0–20° rightward at top)
+              <input id="glyph-italic-angle" type="number" min="0"
+                max="20" step="1" value="12" disabled>
             </label>
             <label>Accent horizontal shift (-500–500 µm)
               <input id="glyph-accent-shift" type="number" min="-500"
@@ -721,8 +731,11 @@
           <p class="field-help">The acute forms use an explicit rising
             accent stroke above the highest story, positioned from geometry
             and pen width. A two-storey á may require reducing the radius.
-            Shift or lift with the controls. If any ink cannot fit, no glyph
-            is replaced.</p>
+            Shift or lift with the controls. Italic variants shear the
+            original circle, stem and optional accent around the lower
+            baseline without editing the regular form; the angle is bounded
+            and any clipping refuses the entire replacement. If any ink
+            cannot fit, no glyph is replaced.</p>
           <p class="field-help">Fill missing lowercase adds only letters
             without authored strokes using the currently selected center,
             radius, ink color and pen width. Existing letters remain as
@@ -763,6 +776,7 @@
           <svg id="glyph-ideal-preview" class="glyph-stroke-preview"
             viewBox="0 0 3500 4500" role="img"
             aria-label="Analytic geometric circle guide">
+            <g id="glyph-ideal-geometry">
             <circle id="glyph-ideal-circle" cx="1550" cy="2450" r="1100"
               fill="none" stroke="#243647" stroke-width="250"
               visibility="hidden"></circle>
@@ -796,6 +810,7 @@
             <line id="glyph-ideal-accent" x1="1165" y1="980"
               x2="1825" y2="485" stroke="#243647" stroke-width="250"
               stroke-linecap="round" visibility="hidden"></line>
+            </g>
           </svg>
           <div class="handwriting-controls">
             <label>Start X (0–3500 µm)

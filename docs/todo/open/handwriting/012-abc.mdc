@@ -707,6 +707,27 @@ independent browser-assembled reference. This verifies a real frontend TSV
 shared analytic-circle primitive or automatic anchor placement. The full
 coverage and two-storey/cursive acceptance criteria remain open.
 
+## Explicit italic o/a geometric variants (partial) — 2026-11-03
+
+Six independently selectable localhost starters now apply a bounded,
+user-adjustable 0–20 degree rightward italic shear to the exact geometric
+SVG circle/bowl, including simple `a`, printed two-storey `a` and the
+accented `ó`/`á` combinations. The lower baseline is fixed, the unsheared
+regular starter remains unchanged, and native v1 TSV contains only ordered
+integer pen chords. Pen-width clearance and invalid angles refuse before
+replacing the exact glyph. Selecting a form is preview-only; an explicit
+Replace and separate Download gesture are still required.
+
+Two focused browser regressions verify six independent base/italic forms,
+zero-angle identity, exact stroke-level shear, guide visibility, bounded
+parameters, session gating, clip refusal and unchanged downloaded TSV after
+a rejected edit. The separate Rust CLI reads back the 131-stroke browser
+italic `áó` library exactly and renders a real PDF and transparent PNG
+whose bytes match independently authored physical strokes. This does not
+preserve italic metadata in the native glyph file, add a handwriting-wide
+italic profile, keep SVG circles analytically exact in PDF, or implement
+joined cursive. The full executable P1 task remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
