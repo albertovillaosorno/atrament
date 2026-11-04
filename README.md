@@ -1041,6 +1041,7 @@ unless the caller explicitly requests `--output` with `--replace`.
 The operation keeps each stroke's color, width, direction, original
 row slot and NFC/NFD spelling. The native and browser shears produce
 byte-identical glyph TSV and physically identical PDF/transparent PNG.
+
 A clipped pen edge or invalid input refuses before writing an output file;
 0 degrees is a valid identity edit. Saving overwrites sampled coordinates,
 not a retained analytic or named italic variant.
@@ -1051,6 +1052,7 @@ One in-memory step saves exact original and resulting TSV bytes; undo
 restores the original pen strokes and redo reapplies the accepted shear.
 Neither action downloads a file or changes a Rust profile. Only the exact
 selected Unicode grapheme that was slanted may invoke these controls.
+
 A subsequent authored ink edit, successful TSV import, or session reset
 invalidates the history, preventing stale undo from erasing later strokes.
 Applying another slant replaces the previous undo step. Download regular
@@ -1063,7 +1065,9 @@ sampled pen coordinates before changing any authored ink. Changing the
 angle or baseline updates the read-only SVG immediately. The preview
 uses the same Unicode key, tangent rounding and pen-edge validation as
 the actual Rust-compatible edit; refused inputs clear the preview and
-display a visible reason. The SVG is deliberately limited to **128
+display a visible reason.
+
+The SVG is deliberately limited to **128
 segments per selected glyph**; the actual edit keeps the larger native
 4,096-stroke library limit. The guide draws straight sampled chords,
 not persisted analytic vector curves, and never downloads or saves ink.

@@ -794,7 +794,9 @@ loading even a byte-identical TSV, or resetting the admitted session
 invalidates it. A stale snapshot may never silently replace a new edit.
 Undo/redo buttons remain disabled while drawing, outside the admitted
 session, when history is unavailable, or when a different exact Unicode
-glyph is selected. The actions never download files without the separate
+glyph is selected.
+
+The actions never download files without the separate
 Save gesture. A real headless Firefox session verifies the recovered and
 reapplied UTF-8 TSV bytes and no additional backend requests. Two browser
 unit regressions cover exact NFC/NFD separation, failed slant refusal,
@@ -809,7 +811,9 @@ proposed whole-glyph shear before any destructive edit. Every whole-angle
 or baseline input change refreshes the candidate for the selected exact
 Unicode grapheme using the same bounded geometry as the real transform.
 This preview never changes a draft, downloads a TSV, or requests a backend
-operation. Invalid angles, baselines or pen-edge clipping clear the guide
+operation.
+
+Invalid angles, baselines or pen-edge clipping clear the guide
 and report a visible refusal reason. A missing glyph is also explicit.
 
 To bound DOM work, only up to 128 authored strokes are previewed at once;
