@@ -141,6 +141,17 @@ Five bad-trailer regressions first demonstrated previous acceptance, then
 verified refusal without mutating the selected PDF. This does not inspect
 all trailer entries, trust arbitrary PDF comments or parse full PDF syntax.
 
+A further red-before/green-after preflight regression caught trailing
+nontrivia tokens after a traditional trailer's `>>`: the prior scanner
+stopped at its first closing delimiter and would admit a forged PDF to CUPS.
+The bounded replacement checks outer dictionary closure, ignores nested
+`/Size` names and words inside comments/literal strings, and permits only
+PDF whitespace/comments before `startxref`.
+
+Five added fake-table refusals and a valid nested/commented trailer now pass
+beside the real native two-page PDF. Refused bytes remain unchanged, with no
+fake-spool launch; no physical printer or full PDF grammar was exercised.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

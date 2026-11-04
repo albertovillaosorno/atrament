@@ -486,6 +486,13 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
         "multiple table subsections with numbered entries remain eligible");
     assert!(supported_pdf_cross_reference(&real_pdf()),
         "native physical-page PDF xref table remains eligible");
+    let with_comment_and_nested = concat!(
+        "%PDF-1.4\nxref\n0 1\n0000000000 65535 f \n",
+        "trailer\n<< /Meta << /Memo (literal >> text) >> /Size 1 >>\n",
+        "% allowed PDF comment\nstartxref\n9\n%%EOF\n",
+    ).as_bytes();
+    assert!(supported_pdf_cross_reference(with_comment_and_nested),
+        "balanced trailer metadata and terminal comments remain admissible");
     let compact_size = b"%PDF-1.4\nxref\n0 1\n0000000000 65535 f \n\
         trailer\n<< /Size 1>>\nstartxref\n9\n%%EOF\n";
     assert!(supported_pdf_cross_reference(compact_size),
@@ -512,6 +519,11 @@ fn xref_tables_require_a_real_subsection_and_trailer() {
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size -1 >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 0 >>\n",
         "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 /Size 2 >>\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 >>\nINJECTED\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Size 1 >>\n/Size 2 >>\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Meta << /Size 1 >>\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Meta << /Size 1 >> >>\n",
+        "xref\n0 1\n0000000000 65535 f \ntrailer\n<< /Memo (x) >>\n% /Size 1\n",
     ] {
         let fake = format!(
             "%PDF-1.7\n{fake_body}startxref\n9\n%%EOF\n"

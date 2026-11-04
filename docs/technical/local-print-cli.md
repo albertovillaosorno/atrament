@@ -100,6 +100,13 @@ lexically recognizable `/Size` entry with a positive direct ASCII decimal;
 missing, zero, signed, non-decimal or duplicate size tokens refuse. Numeric
 values immediately adjacent to the closing `>>` remain eligible.
 
+The trailer scanner now balances nested dictionaries and arrays, skipping
+literal/hex strings and comments when locating the one top-level `/Size`.
+Only whitespace and PDF comments may follow the complete outer `>>` before
+`startxref`; unclosed maps, nested-only size entries or trailing extra
+operators refuse before any printer launch. It does not validate all PDF
+objects or the numeric consistency of cross-reference entries.
+
 The stream type name must be an exact top-level `/Type /XRef` dictionary
 entry; longer names such as `/XRefShadow` and apparent type entries inside
 comments, literal strings, arrays or nested dictionaries are not sufficient.
@@ -147,8 +154,9 @@ multi-subsection framing and the unchanged native two-page output.
 The xref-stream regression also rejects six header-only or malformed
 terminal delimiter cases without spooling, while admitting terminal comments.
 
-Five more fake-table cases refuse missing, nonnumeric, zero, negative and
-duplicate `/Size` entries. A valid compact trailer remains eligible.
+Five additional fake-table cases refuse trailing tokens, missing outer
+dictionary closure, and `/Size` entries seen only in nested maps or comments.
+Valid compact, nested/commented and native two-page trailers remain eligible.
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,
 files above the size cap and symlinks; none sends a real job.

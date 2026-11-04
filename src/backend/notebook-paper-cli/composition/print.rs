@@ -234,23 +234,36 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
 // Traditional xref tables have fixed-width decimal entries and a trailer
 // dictionary. Do not spool a bare `xref` token or a forged subsection stub.
 // This confirms only the terminal table's framing, not offset correctness.
+fn xref_word<'bytes>(bytes: &'bytes [u8], at: &mut usize)
+    -> Option<&'bytes [u8]> {
+    *at = pdf_trivia_end(bytes, *at);
+    let start = *at;
+    while bytes.get(*at).is_some_and(|byte| {
+        !byte.is_ascii_whitespace() && *byte != b'%'
+    }) {
+        *at = at.checked_add(1)?;
+    }
+    bytes.get(start..*at).filter(|word| !word.is_empty())
+}
+
 fn supported_xref_table(bytes: &[u8]) -> bool {
-    let mut words = bytes.split(u8::is_ascii_whitespace)
-        .filter(|word| !word.is_empty());
-    if words.next() != Some(b"xref".as_slice()) {
+    let mut at = 0usize;
+    if xref_word(bytes, &mut at) != Some(b"xref".as_slice()) {
         return false;
     }
     let mut seen_entry = false;
     loop {
-        let Some(first) = words.next() else {
+        let Some(first) = xref_word(bytes, &mut at) else {
             return false;
         };
         if first == b"trailer" {
-            return seen_entry && supported_xref_table_trailer(words);
+            return seen_entry && supported_xref_table_trailer(
+                bytes.get(at..).unwrap_or_default(),
+            );
         }
         let valid_first = !first.is_empty()
             && first.iter().all(u8::is_ascii_digit);
-        let Some(count) = words.next()
+        let Some(count) = xref_word(bytes, &mut at)
             .and_then(|value| str::from_utf8(value).ok())
             .and_then(|digits| digits.parse::<usize>().ok())
         else {
@@ -261,9 +274,15 @@ fn supported_xref_table(bytes: &[u8]) -> bool {
             return false;
         }
         for _ in 0..count {
-            let Some(offset) = words.next() else { return false; };
-            let Some(generation) = words.next() else { return false; };
-            let Some(status) = words.next() else { return false; };
+            let Some(offset) = xref_word(bytes, &mut at) else {
+                return false;
+            };
+            let Some(generation) = xref_word(bytes, &mut at) else {
+                return false;
+            };
+            let Some(status) = xref_word(bytes, &mut at) else {
+                return false;
+            };
             if offset.len() != 10 || !offset.iter().all(u8::is_ascii_digit)
                 || generation.len() != 5
                 || !generation.iter().all(u8::is_ascii_digit)
@@ -276,41 +295,86 @@ fn supported_xref_table(bytes: &[u8]) -> bool {
     }
 }
 
-// The required trailer /Size is one positive direct decimal, never a
-// missing, duplicate, signed or symbolic value. This is lexical framing;
-// other PDF dictionary entries remain outside the preflight's authority.
-fn supported_xref_table_trailer<'bytes>(
-    mut words: impl Iterator<Item = &'bytes [u8]>,
-) -> bool {
-    let Some(open) = words.next() else { return false; };
-    let Some(attached) = open.strip_prefix(b"<<") else {
+// The required trailer /Size is one positive top-level direct decimal.
+// Balance nested dictionaries, arrays and literal/hex strings without
+// mistaking a nested /Size or >> text for the terminal dictionary close.
+// After that close, only whitespace or PDF comments may precede startxref.
+fn supported_xref_table_trailer(bytes: &[u8]) -> bool {
+    let mut at = pdf_trivia_end(bytes, 0);
+    if !bytes.get(at..).is_some_and(|tail| tail.starts_with(b"<<")) {
         return false;
-    };
-    // The opening delimiter may touch the first PDF name without a space.
-    let mut pending = (!attached.is_empty()).then_some(attached);
+    }
+    at = at.saturating_add(2);
+    let mut depth = 1usize;
+    let mut array_depth = 0usize;
     let mut seen_size = false;
-    while let Some(token) = pending.take().or_else(|| words.next()) {
-        if token == b">>" {
-            return seen_size;
-        }
-        if token == b"/Size" {
-            if seen_size {
-                return false;
+    while at < bytes.len() {
+        at = pdf_trivia_end(bytes, at);
+        match bytes.get(at) {
+            Some(&b'(') => {
+                let Some(end) = pdf_literal_end(bytes, at) else {
+                    return false;
+                };
+                at = end;
             }
-            let Some(value) = words.next() else { return false; };
-            let (digits, closes) = value.strip_suffix(b">>")
-                .map_or((value, false), |digits| (digits, true));
-            if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit)
-                || str::from_utf8(digits).ok()
-                    .and_then(|number| number.parse::<usize>().ok())
-                    .is_none_or(|number| number == 0)
-            {
-                return false;
+            Some(&b'<') if bytes.get(at.saturating_add(1)) == Some(&b'<') => {
+                depth = depth.saturating_add(1);
+                at = at.saturating_add(2);
             }
-            seen_size = true;
-            if closes {
-                return true;
+            Some(&b'<') => {
+                let Some(end) = bytes.get(at.saturating_add(1)..)
+                    .and_then(|tail| tail.iter().position(|byte| *byte == b'>'))
+                else { return false; };
+                at = at.saturating_add(end).saturating_add(2);
             }
+            Some(&b'>') if bytes.get(at.saturating_add(1)) == Some(&b'>') => {
+                depth = depth.saturating_sub(1);
+                at = at.saturating_add(2);
+                if depth == 0 {
+                    return array_depth == 0 && seen_size
+                        && pdf_trivia_end(bytes, at) == bytes.len();
+                }
+            }
+            Some(&b'[') => {
+                array_depth = array_depth.saturating_add(1);
+                at = at.saturating_add(1);
+            }
+            Some(&b']') => {
+                if array_depth == 0 {
+                    return false;
+                }
+                array_depth = array_depth.saturating_sub(1);
+                at = at.saturating_add(1);
+            }
+            Some(&b'/') => {
+                let Some((name, end)) = pdf_name(bytes, at) else {
+                    return false;
+                };
+                at = end;
+                if depth == 1 && array_depth == 0 && name == b"Size" {
+                    if seen_size {
+                        return false;
+                    }
+                    at = pdf_trivia_end(bytes, at);
+                    let start = at;
+                    while bytes.get(at).is_some_and(u8::is_ascii_digit) {
+                        at = at.saturating_add(1);
+                    }
+                    let value = bytes.get(start..at).unwrap_or_default();
+                    if value.is_empty() || str::from_utf8(value).ok()
+                        .and_then(|digits| digits.parse::<usize>().ok())
+                        .is_none_or(|number| number == 0)
+                        || !bytes.get(at).is_some_and(|byte| {
+                            byte.is_ascii_whitespace()
+                                || matches!(byte, b'>' | b'/' | b'%')
+                        }) {
+                        return false;
+                    }
+                    seen_size = true;
+                }
+            }
+            Some(_) => at = at.saturating_add(1),
+            None => break,
         }
     }
     false
