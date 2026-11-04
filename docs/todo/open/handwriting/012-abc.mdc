@@ -1141,7 +1141,12 @@ identity, stroke order, clipped-edit refusal and a 16,272-case bounded
 physical-cell matrix. A real native Rust integration reopens the resulting
 103-stroke TSV byte-for-byte, audits `$€`, exports two rows containing 206
 vector pen segments to PDF and transparent 72-DPI RGBA PNG, and refuses
-missing `£` without replacing a previous PDF. The full glyph/font,
+missing `£` without replacing a previous PDF. A separate real-Firefox
+BiDi acceptance now selects and constructs both currency signs in the
+session-authenticated browser, checks their live SVG paths, saves the exact
+378-stroke combined math/currency TSV, and replays that actual download
+into Rust PDF and transparent PNG output. It verifies 286 vector ink
+segments for `∑∫∂Δ≈$€` without extra backend calls. The full glyph/font,
 persisted analytic primitives and joined-cursive work remain open.
 
 ## Acceptance decision
