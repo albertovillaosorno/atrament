@@ -1,0 +1,176 @@
+// Copyright © 2026 Alberto Villa Osorno.
+// SPDX-License-Identifier: LicenseRef-Proprietary
+// Real Rust glyph + notebook subprocess acceptance, without a printer.
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import test from 'node:test';
+import { inflateSync } from 'node:zlib';
+
+const root = fileURLToPath(new URL('../../', import.meta.url));
+const nfd = 'a\u0301';
+const nfc = 'ó';
+const text = `${nfd}${nfc}${nfd}${nfc}\n${nfd}${nfc}${nfd}${nfc}`;
+const variation = [
+    '--glyph-variation', '42', '2', '2', '0', '1', '0', '8',
+];
+
+function cli(subcommand, args) {
+    const result = spawnSync('cargo', [
+        'run', '--offline', '--quiet', '-p', 'atrament_profile_editor_cli',
+        '--bin', 'atrament-profiles', '--', subcommand, ...args,
+    ], { cwd: root, timeout: 120000, maxBuffer: 16 * 1024 * 1024 });
+    assert.equal(result.error, undefined, result.error?.message);
+    return result;
+}
+
+function authoredLibrary(output) {
+    const rows = [
+        [nfd, 250, 900, 1500, 2600],
+        [nfd, 1500, 2600, 2900, 2400],
+        [nfd, 2850, 1350, 3250, 900],
+        [nfc, 250, 900, 1500, 2600],
+        [nfc, 1500, 2600, 2900, 2400],
+        [nfc, 2850, 1350, 3250, 900],
+    ];
+    const flags = rows.flatMap((row) => [
+        '--glyph-stroke', ...row.map(String), '250', '#102030',
+    ]);
+    const result = cli('glyphs', [...flags, '--output', output]);
+    assert.equal(result.status, 0, result.stderr.toString());
+    return readFileSync(output);
+}
+
+function pdfPenStarts(bytes) {
+    const pdf = bytes.toString('latin1');
+    assert.ok(pdf.startsWith('%PDF-1.4'), 'native vector PDF');
+    return [...pdf.matchAll(/([0-9.]+) ([0-9.]+) m\n/g)]
+        .map((match) => [Number(match[1]), Number(match[2])]);
+}
+
+function pngPigment(bytes) {
+    assert.deepEqual(bytes.subarray(0, 8),
+        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const compressed = [];
+    for (let index = 8; index + 12 <= bytes.length;) {
+        const length = bytes.readUInt32BE(index);
+        const type = bytes.toString('ascii', index + 4, index + 8);
+        if (type === 'IDAT') {
+            compressed.push(bytes.subarray(index + 8, index + 8 + length));
+        }
+        index += length + 12;
+    }
+    assert.ok(compressed.length, 'real PNG image data');
+    return inflateSync(Buffer.concat(compressed))
+        .includes(Buffer.from([16, 32, 48, 255]));
+}
+
+test('real two-line accented handwriting joins and varies seeded pen paths',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/joined-varied-'));
+        try {
+            const library = join(dir, 'authored.tsv');
+            const pdfPath = join(dir, 'joined.pdf');
+            const source = authoredLibrary(library);
+            const base = [
+                '--printed-sheet', 'true', '--glyph-file', library,
+                '--flow-text', text, '--join-text-pair', nfd, nfc,
+            ];
+            const render = (format, extra = []) => cli('notebook', [
+                ...base, ...extra, '--export-paper', format,
+                ...(format === 'png' ? ['--dpi', '72'] : []),
+            ]);
+            const ideal = render('pdf');
+            assert.equal(ideal.status, 0, ideal.stderr.toString());
+            const sampled = render('pdf', variation);
+            assert.equal(sampled.status, 0, sampled.stderr.toString());
+            const starts = pdfPenStarts(ideal.stdout);
+            assert.equal(starts.length, 28,
+                '24 authored glyph segments plus four joins');
+            assert.notDeepEqual(starts.slice(0, 14), starts.slice(14),
+                'each accented row has distinct physical y positions');
+            assert.notDeepEqual(sampled.stdout, ideal.stdout,
+                'seeded variation visibly changes pen trajectories');
+            assert.deepEqual(sampled.stdout, render('pdf', variation).stdout,
+                'seed and text deterministically replay the same ink');
+            const newSeed = [...variation];
+            newSeed[1] = '43';
+            assert.notDeepEqual(sampled.stdout, render('pdf', newSeed).stdout,
+                'the selected seed changes the occurrence samples');
+            assert.equal(pdfPenStarts(sampled.stdout).length,
+                28, 'seeded joins never duplicate or omit ink segments');
+            const unjoined = cli('notebook', [
+                '--printed-sheet', 'true', '--glyph-file', library,
+                '--flow-text', text, ...variation, '--export-paper', 'pdf',
+            ]);
+            assert.equal(unjoined.status, 0, unjoined.stderr.toString());
+            assert.equal(pdfPenStarts(unjoined.stdout).length,
+                24, 'no inferred join without an explicit pair');
+            const png = render('png', variation);
+            assert.equal(png.status, 0, png.stderr.toString());
+            assert.ok(pngPigment(png.stdout),
+                'transparent PNG contains the authored dark pen pigment');
+            assert.deepEqual(readFileSync(library), source,
+                'variation and row joins cannot modify canonical pen data');
+            // The final destination is replaced only after complete admission.
+            const accepted = cli('notebook', [
+                ...base, ...variation, '--export-paper', 'pdf',
+                '--output', pdfPath,
+            ]);
+            assert.equal(accepted.status, 0, accepted.stderr.toString());
+            const preserved = readFileSync(pdfPath);
+            for (const invalid of [
+                ['--glyph-variation', '42', '21', '2', '0', '1', '0', '8'],
+                [...variation, '--join-text-pair', nfc, nfc],
+                [...variation, '--join-text-pair', 'ñ', nfc],
+            ]) {
+                const refused = cli('notebook', [
+                    ...base, ...invalid, '--export-paper', 'pdf',
+                    '--output', pdfPath, '--replace',
+                ]);
+                assert.notEqual(refused.status, 0,
+                    `unsafe join or spread must refuse: ${invalid}`);
+                assert.deepEqual(readFileSync(pdfPath), preserved,
+                    'refusal preserves previously accepted PDF bytes');
+            }
+            // Stroke ordering and direction are explicit and reversible.
+            // Breaking the selected pen exit must refuse the cursive join.
+            for (const [flag, ordinal] of [
+                ['--reverse-stroke', '3'],
+                ['--move-stroke', '3'],
+            ]) {
+                const edited = join(dir, `${flag.slice(2)}.tsv`);
+                const edit = [
+                    '--profile', library, flag, nfd, ordinal,
+                    ...(flag === '--move-stroke' ? ['1'] : []),
+                ];
+                const changed = cli('glyphs', [
+                    ...edit, '--output', edited,
+                ]);
+                assert.equal(changed.status, 0, changed.stderr.toString());
+                assert.notDeepEqual(readFileSync(edited), source);
+                const recovery = cli('glyphs', [
+                    '--profile', edited, flag, nfd,
+                    ...(flag === '--move-stroke' ? ['1', '3'] : ['3']),
+                ]);
+                assert.equal(recovery.status, 0,
+                    recovery.stderr.toString());
+                assert.deepEqual(recovery.stdout, source,
+                    'explicit inverse edit recovers exact authored TSV');
+                const broken = cli('notebook', [
+                    '--printed-sheet', 'true', '--glyph-file', edited,
+                    '--flow-text', text, '--join-text-pair', nfd, nfc,
+                    ...variation, '--export-paper', 'pdf',
+                    '--output', pdfPath, '--replace',
+                ]);
+                assert.notEqual(broken.status, 0,
+                    'unsafe physical join after edit refuses rendering');
+                assert.deepEqual(readFileSync(pdfPath), preserved);
+                assert.deepEqual(readFileSync(library), source);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

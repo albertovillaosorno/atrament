@@ -578,6 +578,31 @@ or refused edit preserves earlier undo/redo. Any separate authored edit,
 TSV load or session reset invalidates the snapshot. This does not add
 persistent named variants or multi-step history; P1-014 remains open.
 
+## Two-row joined accented handwriting acceptance (partial) — 2026-11-04
+
+The repeatable `pnpm run test:joined-ink` subprocess journey now saves
+independent exact NFD `a` plus combining acute and NFC `ó` glyphs as a
+canonical six-segment Rust TSV library, then flows two authored text rows.
+It renders real PDF and transparent PNG with seeded per-occurrence width,
+height, slant and endpoint regularity. The PDF has 24 authored segments
+plus four explicit physical connectors, two per row; without the selected
+NFD-to-NFC join it has exactly 24 segments. Both rows use distinct sheet
+coordinates. The PNG contains actual authored dark pigment rather than
+only paper rules.
+
+Identical seeds replay byte-identical vector PDF ink; another seed changes
+the physical samples. Reversing or reordering the accent's last stroke
+changes its join endpoint, so the now unsafe connection refuses instead
+of silently drawing a long pen bridge. The same explicit inverse glyph edit
+recovers the original TSV byte-for-byte. Invalid spreads, missing pairs and
+unsafe joins all leave the last accepted PDF and source TSV unchanged.
+
+The test invokes the independent native Rust glyph and notebook CLI, not
+mocked renderer functions, and never contacts a local printer. It does not
+persist a joined cursive style, shape variants or sample parameters in a
+saved semantic document. Browser-controlled page composition, analytic
+curves, pen-lift identifiers and a complete personal script remain open.
+
  The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.

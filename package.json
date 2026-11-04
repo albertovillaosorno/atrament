@@ -12,7 +12,9 @@
     "test:flow":
       "node --test tests/backend/profile-editor-cli/composition/*.mjs",
     "test:print-ready":
-      "node --test tests/integration/print-ready-workflow.mjs"
+      "node --test tests/integration/print-ready-workflow.mjs",
+    "test:joined-ink":
+      "node --test tests/integration/joined-varied-handwriting.mjs"
   },
   "devDependencies": {
     "typescript": "7.0.2"
