@@ -1000,3 +1000,28 @@ physical page counts and atomic refusal of an insufficient PDF page limit.
 This is still limited one-line Setext lookahead in a CLI export bridge,
 not full Markdown parsing, generalized orphan control or saved notebook
 semantic identities. ATR-P2-011 remains open.
+
+## Keep multiline Setext titles together (partial) — 2026-11-04
+
+The mixed-heading lookahead now also recognizes a Setext title formed by
+multiple adjacent Markdown source lines joined into a single visible heading
+row. Previously `# Heading`, followed by a soft-joined two-line subtitle and
+`===`, could still leave the first title on an earlier sheet. The group now
+moves together with its first body row when a complete fixed-page region
+can accommodate it. The underline and continuation source lines do not add
+fictitious physical rows.
+
+A red-before/green-after Rust regression covers an ATX/Setext chain and two
+adjacent multiline Setext titles. Defensive cases keep hard breaks,
+four-space literal rows and final bodyless titles separate, without new
+heading ornaments or invisible pages. The real PDF and transparent PNG
+page-local parity regression covers these additional two sequences and
+retains the insufficient-page atomic refusal. This does not introduce
+nested Markdown, unrestricted multiline heading widths, persistent titles
+or full widow/orphan control; the semantic compiler task stays open.
+
+The lookahead also stops at a real fenced-code opener before reading a
+later `===` as Setext syntax. Otherwise an authored equals-sign row inside
+a code fence could incorrectly pull the preceding ATX heading onto the next
+sheet. Rust regressions for tilde/backtick fences and native PDF/PNG tests
+preserve the original first-page heading ink and real two-page output.

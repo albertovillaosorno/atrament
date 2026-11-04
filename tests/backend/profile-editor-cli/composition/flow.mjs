@@ -185,6 +185,8 @@ test('ATX and Setext heading chains keep native PDF and PNG ink together',
                 '# a\nó\n===\na',
                 'a\n===\nó\n---\na',
                 '# a\nó\n===\n## a\na',
+                '# a\nó\na\n===\na',
+                'ó\na\n===\na\nó\n---\na',
             ]) {
                 const combined = `${prelude}\n${group}`;
                 const first = render(dir, combined, 'png', region);
@@ -222,6 +224,41 @@ test('ATX and Setext heading chains keep native PDF and PNG ink together',
                 assert.match(refused.result.stderr, /page/i);
                 assert.deepEqual(readFileSync(refused.output), accepted,
                     'refused page limit cannot replace the accepted PDF');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('code fence underline ink cannot promote a preceding Markdown row',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-fence-setext-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '100000', '45000'];
+            const equal = ['--glyph-stroke', '=',
+                '600', '500', '1800', '3000', '250', '#123456'];
+            const firstPage = 'a  \na\n# a\nó';
+            for (const fence of ['~~~', '```']) {
+                const combined = `${firstPage}\n${fence}txt\n===\n`
+                    + `${fence}\na`;
+                const accepted = render(dir, firstPage, 'png',
+                    [...region, ...equal]);
+                assert.equal(accepted.result.status, 0,
+                    accepted.result.stderr);
+                const expected = readFileSync(accepted.output);
+                const actual = render(dir, combined, 'png',
+                    [...region, ...equal]);
+                assert.equal(actual.result.status, 0,
+                    actual.result.stderr);
+                assert.deepEqual(readFileSync(actual.output), expected,
+                    'fenced equals signs cannot move preceding heading');
+
+                const pdf = render(dir, combined, 'pdf',
+                    [...region, ...equal, '--pages', '2']);
+                assert.equal(pdf.result.status, 0, pdf.result.stderr);
+                assert.match(readFileSync(pdf.output).toString('latin1'),
+                    /\/Count 2/, 'code ink starts on physical page two');
             }
         } finally {
             rmSync(dir, { recursive: true, force: true });

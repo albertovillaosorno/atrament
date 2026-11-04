@@ -33,6 +33,7 @@
 //! A bounded text-to-physical-page bridge for the native CLI.
 
 use std::borrow::Cow;
+use std::iter::Peekable;
 use std::mem::take;
 use std::slice::Iter;
 
@@ -1253,6 +1254,41 @@ fn markdown_paragraph_break<'text>(
     (body, raw.ends_with("  "))
 }
 
+// Detect a Setext title from one or more soft-joined Markdown source lines.
+// The underline contributes no physical row; hard breaks, block boundaries
+// and literal four-space indents prevent promotion to a heading.
+fn take_following_setext<'text>(
+    raw: &str, body: &str,
+    lookahead: &mut Peekable<impl Iterator<Item = &'text str>>,
+) -> bool {
+    if raw.starts_with("    ")
+        || markdown_paragraph_break(raw, LineStyle::Body, body).1 {
+        return false;
+    }
+    while let Some(&next) = lookahead.peek() {
+        if markdown_setext_level(next).is_some() {
+            let _: Option<&str> = lookahead.next();
+            return true;
+        }
+        // An opening code fence terminates the pending paragraph; a
+        // later === inside the fence is literal ink, not a title mark.
+        let mut opening = None;
+        if markdown_fence_transition(&mut opening, next) {
+            return false;
+        }
+        let (style, next_body) = markdown_line(next);
+        if next.trim_end_matches(' ').is_empty()
+            || next.starts_with("    ")
+            || !matches!(style, LineStyle::Body)
+            || markdown_paragraph_break(next, style, next_body.as_ref()).1
+        {
+            return false;
+        }
+        let _: Option<&str> = lookahead.next();
+    }
+    false
+}
+
 // A heading needs its first following visible line. Consecutive ATX
 // headings also stay with their first body row if that span fits a sheet.
 // Do not reserve blank fenced rows or gaps after the final visible heading.
@@ -1286,15 +1322,10 @@ fn following_heading_gap<'text>(
                 following.heading_rows =
                     following.heading_rows.saturating_add(1);
             } else if matches!(style, LineStyle::Body)
-                && !line.starts_with("    ")
-                && !markdown_paragraph_break(line, style, body.as_ref()).1
-                && lookahead.peek().is_some_and(|next| {
-                    markdown_setext_level(next).is_some()
-                })
+                && take_following_setext(line, body.as_ref(), &mut lookahead)
             {
-                // One-line Setext titles are also heading rows. Consume
-                // their underline syntax, not a second physical row.
-                let _: Option<&str> = lookahead.next();
+                // A soft-joined Setext title still counts as just one
+                // heading row, regardless of its source line count.
                 following.heading_rows =
                     following.heading_rows.saturating_add(1);
             } else {

@@ -417,3 +417,100 @@ fn setext_heading_guard_does_not_promote_hard_or_literal_rows() {
     assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
         [1, 1, 1, 1]);
 }
+
+#[test]
+fn multiline_setext_titles_stay_in_the_adjacent_heading_chain() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 45_000,
+    };
+    for (source, expected_text) in [
+        ("a  \na\n# a\nó\na\n===\na",
+            ["a", "a", "a", "ó a", "a"]),
+        ("a  \na  \nó\na\n===\na\nó\n---\na",
+            ["a", "a", "ó a", "a ó", "a"]),
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, source)
+            .expect("soft-joined multiline Setext subtitle");
+        let (runs, _, pages) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("all three adjacent rows fit page two");
+        assert_eq!(pages, 2);
+        assert_eq!(runs.iter().map(|run| run.text.as_str())
+            .collect::<Vec<_>>(), expected_text);
+        assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+            [1, 1, 2, 2, 2], "soft-joined Setext title must not orphan");
+    }
+}
+
+#[test]
+fn multiline_setext_guard_respects_soft_paragraph_boundaries() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 45_000,
+    };
+    for (middle, expected_pages) in [
+        ("  a  ", vec![1, 1, 1, 1, 2]),
+        ("    a", vec![1, 1, 1, 1, 2, 2]),
+    ] {
+        let text = format!("a  \na\n# a\nó\n{middle}\n===\na");
+        let source = FlowSource::new(FlowFormat::Markdown, &text)
+            .expect("body continuation followed by non-Setext syntax");
+        let (runs, marks, pages) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("ordinary rows keep their original pagination");
+        assert_eq!(pages, 2);
+        assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+            expected_pages, "hard and literal rows separate title groups");
+        assert_eq!(marks.len(), 1, "only the ATX title is decorated");
+        assert_eq!(runs.last().expect("final text").text, "=== a");
+    }
+
+    let terminal = FlowSource::new(FlowFormat::Markdown,
+        "a  \na\n# a\nó\na\n===")
+        .expect("multiline heading at the end of the source");
+    let (runs, _, pages) = super::layout_flow_with_region(
+        &terminal, &paper, None, super::HeadingDecoration::default(),
+        Some(region),
+    ).expect("trailing heading doesn't create an invisible extra sheet");
+    assert_eq!(pages, 1);
+    assert_eq!(runs.last().expect("final heading").text, "ó a");
+}
+
+#[test]
+fn multiline_setext_lookahead_stops_at_fenced_code() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 45_000,
+    };
+    for opening in ["~~~txt", "```txt"] {
+        let closing = &opening[..3];
+        let source = FlowSource::new(FlowFormat::Markdown,
+            &format!("a  \na\n# a\nó\n{opening}\n===\n{closing}\na"))
+            .expect("code fence with a literal Setext-like row");
+        let (runs, ornaments, pages) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("fenced code remains ordinary physical ink");
+        assert_eq!(pages, 2);
+        assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+            [1, 1, 1, 1, 2, 2],
+            "fence cannot turn preceding body into a Setext heading");
+        assert_eq!(runs[4].text, "===");
+        assert_eq!(ornaments.len(), 1, "only ATX is decorated");
+    }
+}
