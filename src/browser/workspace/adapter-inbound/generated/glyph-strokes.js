@@ -565,6 +565,10 @@ function quoteMirror(cx, glyph, p) {
     return ["»", "’", "”"].includes(glyph)
         ? { x: 2 * cx - p.x, y: p.y } : p;
 }
+// Math starters use exact SVG paths; quadratic infinity lobes sample to
+// native integer pen chords. ASCII hyphen and Unicode minus stay distinct.
+const MATH_GLYPHS = ["+", "-", "−", "=", "×", "÷",
+    "√", "π", "∞", "≠", "≤", "≥"];
 function mathParts(cx, cy, radius, glyph) {
     const point = (x, y) => ({
         x: cx + Math.round(radius * x),
@@ -587,6 +591,47 @@ function mathParts(cx, cy, radius, glyph) {
             { from: point(-0.6, -0.6), to: point(0.6, 0.6) },
             { from: point(0.6, -0.6), to: point(-0.6, 0.6) },
         ];
+    const line = (x1, y1, x2, y2) => ({
+        from: point(x1, y1), to: point(x2, y2),
+    });
+    if (glyph === "≠")
+        return [
+            horizontal(-0.3), horizontal(0.3), line(-0.55, 0.75, 0.55, -0.75),
+        ];
+    if (glyph === "≤")
+        return [
+            line(0.55, -0.6, -0.6, 0.05),
+            line(-0.6, 0.05, 0.55, 0.6), horizontal(0.88),
+        ];
+    if (glyph === "≥")
+        return [
+            line(-0.55, -0.6, 0.6, 0.05),
+            line(0.6, 0.05, -0.55, 0.6), horizontal(0.88),
+        ];
+    if (glyph === "√")
+        return [
+            line(-0.85, 0.2, -0.5, 0.1), line(-0.5, 0.1, -0.1, 0.8),
+            line(-0.1, 0.8, 0.45, -0.75),
+            line(0.45, -0.75, 0.85, -0.75),
+        ];
+    if (glyph === "π")
+        return [
+            line(-0.8, -0.6, 0.8, -0.6),
+            line(-0.5, -0.6, -0.5, 0.75),
+            line(0.5, -0.6, 0.5, 0.55),
+            line(0.5, 0.55, 0.7, 0.75),
+        ];
+    if (glyph === "∞") {
+        const curve = (start, handle, end) => ({
+            from: point(...start), control: point(...handle), to: point(...end),
+        });
+        return [
+            curve([0, 0], [-0.55, -0.85], [-0.8, 0]),
+            curve([-0.8, 0], [-0.55, 0.85], [0, 0]),
+            curve([0, 0], [0.55, -0.85], [0.8, 0]),
+            curve([0.8, 0], [0.55, 0.85], [0, 0]),
+        ];
+    }
     return [horizontal(0),
         { from: point(0, -0.7), to: point(0, -0.58) },
         { from: point(0, 0.58), to: point(0, 0.7) },
@@ -1107,7 +1152,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s",
         ".", ",", "!", "¡", "?", "¿",
         "«", "»", "‘", "’", "“", "”",
-        "+", "-", "−", "=", "×", "÷",
+        ...MATH_GLYPHS,
         ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ...TEXT_MARKS].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
@@ -1239,11 +1284,11 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
             : Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1))));
         return [...ellipses, ...parts];
     }
-    if (["+", "-", "−", "=", "×", "÷"].includes(g)) {
+    if (MATH_GLYPHS.includes(g)) {
         if (g === "÷" && radius * 0.58 < pen + 100) {
             throw new Error("Division dots need visible pen-clearance");
         }
-        return mathParts(cx, cy, radius, g).map(({ from, to }) => {
+        const line = (from, to) => {
             for (const point of [from, to]) {
                 if (point.x - halfPen < 0
                     || point.x + halfPen > 3500
@@ -1256,7 +1301,10 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
                 grapheme: g, x1: from.x, y1: from.y,
                 x2: to.x, y2: to.y, width: pen, color,
             });
-        });
+        };
+        return mathParts(cx, cy, radius, g).flatMap(({ from, control, to }) => control === undefined
+            ? [line(from, to)]
+            : Array.from({ length: ARCH_SEGMENTS }, (_, step) => line(quadratic(from, control, to, step), quadratic(from, control, to, step + 1))));
     }
     if (["«", "»", "‘", "’", "“", "”"].includes(g)) {
         const glyph = g;
@@ -1989,7 +2037,7 @@ export function createGlyphStrokeEditor() {
                 to: quoteMirror(cx, chosen.grapheme, to),
                 ...(control ? { control: quoteMirror(cx, chosen.grapheme, control) } : {}),
             }))) : "";
-            const isMath = ["+", "-", "−", "=", "×", "÷"]
+            const isMath = MATH_GLYPHS
                 .includes(chosen.grapheme);
             const mathD = isMath ? punctuationGuide(mathParts(cx, cy, r, chosen.grapheme)) : "";
             const isDigit = /^[0-9]$/.test(chosen.grapheme);
@@ -2032,7 +2080,7 @@ export function createGlyphStrokeEditor() {
                     "v", "w", "k", "x", "y", "z",
                     ".", ",", "!", "¡", "?", "¿",
                     "«", "»", "‘", "’", "“", "”",
-                    "+", "-", "−", "=", "×", "÷",
+                    ...MATH_GLYPHS,
                     ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                     ...TEXT_MARKS]
                     .includes(chosen.grapheme);
@@ -3120,11 +3168,11 @@ export function createGlyphStrokeEditor() {
             if (drawing !== null) {
                 throw new Error("Finish the current pen trace before seeding");
             }
-            const glyphs = ["+", "-", "−", "=", "×", "÷"];
+            const glyphs = MATH_GLYPHS;
             const authored = new Set(strokes.map((stroke) => stroke.grapheme));
             const missing = glyphs.filter((g) => !authored.has(g));
             if (missing.length === 0) {
-                message("All six basic math glyphs have authored ink");
+                message("All twelve math glyphs have authored ink");
                 return;
             }
             const added = missing.flatMap((g) => geometricStarter(g, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value));

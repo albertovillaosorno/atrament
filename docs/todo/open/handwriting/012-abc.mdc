@@ -937,6 +937,34 @@ rotated SVG, exact visible undo/redo, and unchanged backend requests.
 Rotation persists the rounded stroke coordinates, not an editable parametric
 rotation object or independent cursive style. P1-012 remains open.
 
+## Six additional precise mathematical starters (partial) — 2026-11-04
+
+The admitted localhost editor now includes exact √, π, ∞, ≠, ≤ and ≥
+starters alongside six previous math operators. Root, pi, inequality and
+comparison marks use independently ordered straight pen movements. Infinity
+is a continuous closed path drawn by four exact quadratic SVG guides; the
+canonical portable Rust v1 TSV persists 64 connected sampled line chords,
+not the analytic curve controls. Every coordinate and round pen margin is
+checked before replacing one glyph or filling missing math in a batch.
+
+The existing fill-missing action now offers 12 exact math Unicode keys,
+retains custom glyphs (including an independently authored ∞), and refuses
+bad shapes or 4096-stroke overflow without changing the in-memory draft.
+Eleven combined geometric fill gestures now produce **125 independent exact
+Unicode glyphs and 2,819 sampled ink strokes**. Two additional browser
+regressions prove all six new structures, SVG-to-TSV correspondence, exact
+continuous infinity endpoints and atomic invalid edits. A 14,400-case
+radius/position/width grid verifies pen clearance across all starters.
+
+An independent real subprocess integration reopens the six-symbol, 81-line
+browser-authored TSV byte-for-byte with Rust; native audit finds six exact
+shapes with zero missing glyphs, real two-row PDF contains 162 authored
+segments, and transparent PNG includes the selected dark ink. An unknown
+mathematical glyph or invalid page count refuses without replacing the
+accepted PDF or changing its source ink. This is handcrafted starter
+geometry rather than equation layout, generalized formulas, analytic PDF
+paths or a complete personal style, so P4-012 remains open.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
