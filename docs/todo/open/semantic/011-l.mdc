@@ -702,6 +702,23 @@ modes, the embedded-code case and a subsequent indented plain row. This is
 only narrow-region placement refusal, not support for inferred indentation
 semantics, nested Markdown blocks or a finished semantic notebook editor.
 
+## Unicode whitespace ink admission (partial) — 2026-11-04
+
+The native flow compiler now distinguishes structural ASCII whitespace and
+Unicode line/paragraph separators from other exact Unicode space glyphs.
+U+00A0, U+2009 and U+202F are no longer rejected as empty Markdown blocks
+when the user has authored their pen strokes. The distinction covers plain
+text, Markdown body, ordered/bullet/quote rows, and headings, including a
+Setext title. The physical row-height measurement also retains their
+explicit height/baseline overrides rather than treating them as empty
+ASCII advances. ASCII spaces and source separators remain non-ink syntax.
+
+Native Rust source-admission tests and two real PDF/transparent PNG CLI
+regressions verify exact Unicode identity, physical vector ink and refusal
+of missing Unicode shapes before an existing selected export can be
+replaced. This is not whitespace-font synthesis, implicit fallback or
+completion of the bilingual language/glyph inventory.
+
 ## Repeatable native Markdown flow checks
 
 The root workspace now exposes `pnpm run test:flow`, which runs the bounded

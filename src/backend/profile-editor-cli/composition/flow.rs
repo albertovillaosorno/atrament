@@ -166,7 +166,8 @@ impl FlowSource {
         let admitted = source.strip_prefix('\u{feff}').unwrap_or(source);
         if admitted.is_empty()
             || source.len() > MAX_FLOW_BYTES
-            || !admitted.chars().any(|ch| !ch.is_whitespace())
+            || !admitted.chars().any(|ch| !matches!(ch,
+                ' ' | '\t' | '\n' | '\r' | '\u{2028}' | '\u{2029}'))
             || admitted
                 .chars()
                 .any(|ch| ch.is_control()
@@ -179,6 +180,9 @@ impl FlowSource {
             )
             .into());
         }
+        // Only ASCII spaces and source line separators are implicit
+        // spacing. Other Unicode whitespace may have exact authored pen
+        // strokes, so it must survive admission and visible-block checks.
         // A pasted tab advances to the next four-grapheme column, never
         // inventing a visible glyph. Preserve NFC/NFD identities: one
         // decomposed grapheme occupies one column just like its NFC form.
@@ -259,6 +263,22 @@ mod source_tests {
         assert_eq!(many.len(), 1_024);
         assert_eq!(width, 4_096_000);
         assert!(many.iter().all(|(text, _, _)| *text == "o\u{301}"));
+    }
+
+    #[test]
+    fn authored_unicode_spaces_are_not_implicit_blank_source() {
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            for authored in ["\u{00a0}", "\u{2009}", "\u{202f}"] {
+                let source = FlowSource::new(format, authored)
+                    .expect("Unicode space can have exact authored ink");
+                assert_eq!(source.text, authored);
+            }
+            for structural in [" ", "\n", "\t", "\u{2028}",
+                "\u{2029}", " \t\n"] {
+                assert!(FlowSource::new(format, structural).is_err(),
+                    "ASCII spacing and source separators have no ink");
+            }
+        }
     }
 
     #[test]
@@ -1193,7 +1213,7 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
         && digits.bytes().all(|digit| digit.is_ascii_digit())
     {
         return (LineStyle::Ordered, Cow::Borrowed(
-            if item.trim().is_empty() { "" }
+            if item.trim_matches(' ').is_empty() { "" }
             else { block.trim_end_matches(' ') }));
     }
     // A backslash before an otherwise syntactic ordered-list delimiter
@@ -1355,7 +1375,8 @@ fn measured_pitch(
                 let (visible, hard_break) = markdown_paragraph_break(
                     raw, style, body.as_ref());
                 pending_setext = matches!(style, LineStyle::Body)
-                    && !visible.trim().is_empty() && !hard_break;
+                    && !visible.trim_matches(' ').is_empty()
+                    && !hard_break;
                 Cow::Owned(visible.to_owned())
             }
         } else {
@@ -1365,7 +1386,9 @@ fn measured_pitch(
         while !remaining.is_empty() {
             let (grapheme, rest) = first_grapheme(remaining)?;
             remaining = rest;
-            if grapheme.chars().all(char::is_whitespace) {
+            // Unlike ordinary spaces, Unicode whitespace can have exact
+            // authored glyph ink and its own height/baseline statistics.
+            if grapheme == " " {
                 continue;
             }
             if let Some(stats) = statistics {
@@ -1491,7 +1514,7 @@ pub(super) fn layout_flow_with_region(
             layout.write_separator()?;
             continue;
         }
-        if body.trim().is_empty() {
+        if body.trim_matches(' ').is_empty() {
             return Err("empty Markdown block refused".into());
         }
         if source.format == FlowFormat::Markdown

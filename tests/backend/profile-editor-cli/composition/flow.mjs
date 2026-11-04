@@ -1685,3 +1685,92 @@ test('four-space list and quote marks remain literal refused glyphs',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+
+test('authored Unicode space glyphs render actual PDF and PNG flow ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-unicode-space-'));
+        try {
+            const extra = ['\u00a0', '\u2009', '\u202f', '1', '.']
+                .flatMap((glyph) => ['--glyph-stroke', glyph,
+                    '700', '800', '1700', '2900', '250', '#123456']);
+            const cases = [
+                ['--flow-text', '\u00a0'],
+                ['--flow-text', 'a\n\u00a0'],
+                ['--flow-markdown', '\u00a0'],
+                ['--flow-markdown', 'a\n\u00a0'],
+                ['--flow-markdown', '- \u00a0'],
+                ['--flow-markdown', '> \u2009'],
+                ['--flow-markdown', '1. \u202f'],
+                ['--flow-markdown', '# \u00a0'],
+                ['--flow-markdown', '\u00a0\n==='],
+            ];
+            for (const format of ['pdf', 'png']) {
+                const baseline = render(dir, 'a', format, extra,
+                    '--flow-text');
+                assert.equal(baseline.result.status, 0,
+                    baseline.result.stderr);
+                const noUnicodeInk = readFileSync(baseline.output);
+                for (const [flag, source] of cases) {
+                    const candidate = render(dir, source, format,
+                        extra, flag);
+                    assert.equal(candidate.result.status, 0,
+                        `${flag} ${JSON.stringify(source)}: ` +
+                        candidate.result.stderr);
+                    const ink = readFileSync(candidate.output);
+                    if (format === 'pdf') {
+                        assert.match(ink.toString('latin1'), /^%PDF-1\.4/);
+                        assert.match(ink.toString('latin1'), / m\n/,
+                            'Unicode glyph supplies native vector strokes');
+                    } else {
+                        assert.deepEqual(ink.subarray(0, 8),
+                            Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+                            'Unicode glyph has transparent PNG output');
+                    }
+                    assert.notDeepEqual(ink, noUnicodeInk,
+                        'Unicode whitespace is not discarded as blank ink');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('unapproved Unicode spaces refuse before replacing real PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-unicode-refuse-'));
+        try {
+            const sources = [
+                ['--flow-text', '\u00a0'],
+                ['--flow-text', 'a\n\u00a0'],
+                ['--flow-markdown', '- \u00a0'],
+                ['--flow-markdown', '> \u2009'],
+                ['--flow-markdown', '1. \u202f'],
+                ['--flow-markdown', '\u00a0\n==='],
+            ];
+            const numerals = ['1', '.'].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '700', '800', '1700',
+                '2900', '250', '#123456',
+            ]);
+            for (const format of ['pdf', 'png']) {
+                const accepted = render(dir, 'a', format, numerals,
+                    '--flow-text');
+                assert.equal(accepted.result.status, 0,
+                    accepted.result.stderr);
+                const original = readFileSync(accepted.output);
+                for (const [flag, source] of sources) {
+                    const refused = render(dir, source, format,
+                        numerals, flag);
+                    assert.notEqual(refused.result.status, 0,
+                        JSON.stringify(source));
+                    assert.match(refused.result.stderr,
+                        /missing authored glyph/i,
+                        'exact Unicode ink requires authored strokes');
+                    assert.deepEqual(readFileSync(refused.output), original,
+                        'a rejected Unicode glyph cannot replace valid output');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
