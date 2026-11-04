@@ -876,3 +876,53 @@ test('exact comparison chevrons render native PDF PNG and refuse fallback',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+
+test('left and bidirectional arrow ink renders Rust PDF PNG and refuses',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/arrow-ink-'));
+        try {
+            const source = join(dir, 'arrows.tsv');
+            const output = join(dir, 'arrows.pdf');
+            const symbols = ['→', '←', '↔'];
+            const strokes = symbols.flatMap((glyph) => geometricStarter(
+                glyph, 1550, 2450, 1100, 250, '#243647'));
+            assert.equal(strokes.length, 11);
+            const expected = Buffer.from(encodeGlyphLibrary(strokes));
+            writeFileSync(source, expected);
+            const reopened = cli('glyphs', ['--profile', source]);
+            assert.equal(reopened.status, 0, reopened.stderr.toString());
+            assert.deepEqual(reopened.stdout, expected);
+            const audit = cli('glyphs', ['--profile', source,
+                '--audit-text', symbols.join('')]);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 3/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', source,
+                '--flow-text', `${symbols.join('')}\n${symbols.join('')}`];
+            const pdf = cli('notebook', [...flags,
+                '--export-paper', 'pdf', '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+                .length, strokes.length * 2);
+            const png = cli('notebook', [...flags,
+                '--export-paper', 'png', '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const missing = cli('notebook', [
+                '--printed-sheet', 'true', '--glyph-file', source,
+                '--flow-text', '←↔↦', '--export-paper', 'pdf',
+                '--output', output, '--replace',
+            ]);
+            assert.notEqual(missing.status, 0);
+            assert.match(missing.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted);
+            assert.deepEqual(readFileSync(source), expected);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

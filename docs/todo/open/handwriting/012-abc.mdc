@@ -1453,6 +1453,27 @@ This is bounded manual math notation, not general mathematical layout,
 a saved font or automatic Unicode fallback. Full P1 glyph coverage and
 analytic native curves remain unfinished.
 
+## Distinct leftward and bidirectional arrow ink (partial) — 2026-11-04
+
+The explicit geometric math menu now offers `←` as a leftward shaft and
+connected left arrowhead, and `↔` as one horizontal shaft with separately
+lifted left and right arrowheads. They remain distinct from the earlier
+right-arrow `→` strokes and from every other Unicode glyph key. The
+opt-in **Fill missing math** operation now covers 25 exact symbols without
+changing existing caller-authored stroke geometry.
+
+Browser tests verify mirrored coordinates, directed path boundaries,
+SVG guides, strict cell clipping refusal and byte-identical native v1 TSV
+encoding. A Rust CLI acceptance independently reopens all three directions
+and renders two ink-bearing rows into real PDF and transparent PNG. A missing
+`↦` glyph refuses before replacing the accepted PDF or editing the saved
+TSV. A real authenticated Firefox session also selects both new glyphs,
+exports the full math library, and renders them through the Rust CLI
+without an extra browser-to-backend request during local drawing.
+
+These remain manually authored vector-chord templates, not automatic
+symbolic typesetting, native analytic path resources, or full font coverage.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

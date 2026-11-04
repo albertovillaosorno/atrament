@@ -679,8 +679,8 @@ function quoteMirror(
 // into integer pen chords. ASCII hyphen and Unicode minus stay distinct.
 const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∑", "∫",
-    "∂", "Δ", "≈", "→", "∝"] as const;
-// Extra manually selected marks do not change the 23-glyph math fill.
+    "∂", "Δ", "≈", "→", "←", "↔", "∝"] as const;
+// Extra manually selected marks do not change the 25-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -764,6 +764,21 @@ function mathParts(
     // its two arrowhead segments meet at the same physical tip.
     if (glyph === "→") return [
         line(-0.8, 0, 0.8, 0),
+        line(0.2, -0.55, 0.8, 0),
+        line(0.8, 0, 0.2, 0.55),
+    ];
+    // Reverse arrowhead points are separate directed pen paths. The
+    // bidirectional arrow has one shaft and one head on either end,
+    // without treating either exact Unicode glyph as a right arrow.
+    if (glyph === "←") return [
+        line(0.8, 0, -0.8, 0),
+        line(-0.2, -0.55, -0.8, 0),
+        line(-0.8, 0, -0.2, 0.55),
+    ];
+    if (glyph === "↔") return [
+        line(-0.8, 0, 0.8, 0),
+        line(-0.2, -0.55, -0.8, 0),
+        line(-0.8, 0, -0.2, 0.55),
         line(0.2, -0.55, 0.8, 0),
         line(0.8, 0, 0.2, 0.55),
     ];
