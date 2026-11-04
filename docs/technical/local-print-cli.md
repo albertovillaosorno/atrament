@@ -117,6 +117,12 @@ on both `f` and `n` records must fit an unsigned 16-bit PDF generation
 number. This does not parse the referenced object body or prove
 cross-reference completeness.
 
+The reserved object-zero table record is always a free-list head with
+generation 65535, even when another table record has that same generation.
+An in-use record zero or a free record zero with any other generation
+refuses before CUPS. The gate does not require a sparse terminal table to
+repeat object zero if that record is not present in the selected subsection.
+
 The trailer scanner now balances nested dictionaries and arrays, skipping
 literal/hex strings and comments when locating the one top-level `/Size`.
 Only whitespace and PDF comments may follow the complete outer `>>` before
@@ -236,6 +242,10 @@ Nine fake-spool refusal cases test missing, zero, nondecimal, duplicate,
 nested-only, oversized and mismatched stream lengths. Four positive framing
 fixtures admit bounded exact lengths including an `endstream` byte sequence
 inside encoded data; no stream payload is decoded or printed on a real queue.
+
+Two fake-spool cases refuse an in-use xref-table entry for object zero
+and a free object-zero record with generation other than 65535.
+The valid head-to-free-object chain and native pages remain admitted.
 
 A fake `lp` verifies exact PDF bytes and arguments: `-d`, the chosen queue,
 then `-`. The tests also reject invalid flags, missing or malformed PDFs,

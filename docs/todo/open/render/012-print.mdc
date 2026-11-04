@@ -242,6 +242,16 @@ source; four positive fixtures admit exact lengths and embedded literal
 and a line break, not an incidental payload substring. Indirect `/Length`
 references may require a reviewed re-export; no stream decoding occurs.
 
+A traditional xref table could also declare object zero as an active
+indirect object, or as free with an arbitrary generation counter.
+A red-before fake-CUPS test confirmed this admission; the table gate now
+reserves index zero for the permanent free head at generation 65535.
+
+Two invalid selected PDFs refuse unchanged without fake spool contact.
+An exact free-list head with a valid successor remains eligible, as do
+native exported pages and sparse subsection tables. This does not build
+or verify a complete free-list graph.
+
 The check is a restrictive framing preflight,
 not a trustworthy PDF syntax/content validator or printer acceptance proof.
 The task stays open for real-device alignment and complete saved overlays.

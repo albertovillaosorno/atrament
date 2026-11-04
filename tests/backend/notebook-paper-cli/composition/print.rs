@@ -748,6 +748,54 @@ fn xref_stream_length_must_match_selected_raw_bytes() {
     fs::remove_dir_all(&directory).expect("remove fixture directory");
 }
 
+#[cfg(unix)]
+#[test]
+fn xref_object_zero_is_always_the_permanent_free_head() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("unexpected-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS executable");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake CUPS executable");
+    let valid = concat!(
+        "%PDF-1.7\nxref\n0 2\n0000000001 65535 f \n",
+        "0000000000 00001 f \ntrailer\n<< /Size 2 >>\n",
+        "startxref\n9\n%%EOF\n",
+    );
+    assert!(supported_pdf_cross_reference(valid.as_bytes()),
+        "free object zero can name an in-range free-list successor");
+
+    let header = b"%PDF-1.7\n0 0 obj\nnull\nendobj\n";
+    let bad_in_use = [header.as_slice(), format!(
+        "xref\n0 1\n{offset:010} 00000 n \n\
+         trailer\n<< /Size 1 >>\n\
+         startxref\n{xref}\n%%EOF\n",
+        offset = b"%PDF-1.7\n".len(), xref = header.len(),
+    ).as_bytes()].concat();
+    let bad_free = b"%PDF-1.7\nxref\n0 1\n0000000000 00000 f \n\
+        trailer\n<< /Size 1 >>\nstartxref\n9\n%%EOF\n".to_vec();
+    for invalid in [bad_in_use, bad_free] {
+        assert!(!supported_pdf_cross_reference(&invalid),
+            "object zero must be free with generation 65535");
+        fs::write(&pdf, &invalid).expect("save invalid zero record");
+        let request = PrintRequest {
+            pdf: pdf.clone(), printer: "Queue_1".into(),
+            dry_run: false, expected_sha256: None,
+        };
+        assert!(selected_pdf(&pdf).is_err(), "reserved object zero refused");
+        assert!(submit_selected(&request, &fake_spool).is_err(),
+            "reserved object zero cannot contact CUPS");
+        assert!(!spooled.exists(), "fake CUPS not contacted");
+        assert_eq!(fs::read(&pdf).expect("source retained"), invalid);
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixtures");
+}
+
 #[test]
 fn xref_size_below_resource_ceiling_remains_admissible() {
     let sparse = format!(

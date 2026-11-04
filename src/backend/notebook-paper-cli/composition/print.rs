@@ -336,6 +336,12 @@ fn supported_xref_table(bytes: &[u8], document: &[u8]) -> bool {
             let Some(generation_number) = str::from_utf8(generation).ok()
                 .and_then(|digits| digits.parse::<u16>().ok())
             else { return false; };
+            // Object zero is the permanent free-list head in PDF tables.
+            // Its generation is reserved and must always be 65535.
+            if index == 0 && (status != b"f"
+                || generation_number != u16::MAX) {
+                return false;
+            }
             if status == b"f" {
                 // Free-table offsets name the next free object, not a byte.
                 // The trailer's /Size must also cover this reference.
