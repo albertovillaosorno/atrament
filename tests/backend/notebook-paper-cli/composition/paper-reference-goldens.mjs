@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -37,7 +38,7 @@ function digest(bytes) {
 }
 
 test('native CLI creates exact ruled and squared PDF/PNG references', () => {
-    const directory = mkdtempSync(join(root, '.temp/paper-goldens-'));
+    const directory = mkdtempSync(join(tmpdir(), 'atrament-paper-goldens-'));
     try {
         for (const style of ['ruled', 'grid']) {
             for (const format of ['pdf', 'png']) {
@@ -89,7 +90,7 @@ test('native CLI creates exact ruled and squared PDF/PNG references', () => {
 // README examples omit --bin. The package default must remain the harmless
 // paper exporter, never the separately opt-in local printer executable.
 test('default Cargo package run selects paper rather than local print', () => {
-    const directory = mkdtempSync(join(root, '.temp/paper-default-'));
+    const directory = mkdtempSync(join(tmpdir(), 'atrament-paper-default-'));
     try {
         for (const format of ['pdf', 'png']) {
             const output = join(directory, `paper.${format}`);
@@ -108,5 +109,27 @@ test('default Cargo package run selects paper rather than local print', () => {
         }
     } finally {
         rmSync(directory, { recursive: true, force: true });
+    }
+});
+
+// The documented shell redirection path must emit only exact binary paper,
+// without a selected file or accidental progress text on stdout.
+test('paper stdout exactly matches reference PDFs and RGBA PNGs', () => {
+    for (const style of ['ruled', 'grid']) {
+        for (const format of ['pdf', 'png']) {
+            const flags = format === 'png'
+                ? ['--format', 'png', '--dpi', '72'] : [];
+            const result = spawnSync('cargo', [
+                'run', '--offline', '--quiet', '-p',
+                'atrament_notebook_paper_cli', '--',
+                '--style', style, ...flags,
+            ], { cwd: root, timeout: 120000,
+                maxBuffer: 16 * 1024 * 1024 });
+            assert.equal(result.error, undefined, result.error?.message);
+            assert.equal(result.status, 0, result.stderr.toString());
+            assert.deepEqual(result.stdout, readFileSync(join(
+                referenceDir, `a4-${style}-72dpi.${format}`)),
+            'binary stdout must be exact native paper without extra text');
+        }
     }
 });

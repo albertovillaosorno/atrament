@@ -144,6 +144,13 @@ A4 grid visual candidates. It never invokes or selects a printer.
 This resolves the ambiguous README command, not the broader unsaved
 notebook model or localhost end-to-end acceptance.
 
+A separate raw-stdout process check now exports both styles to PDF and PNG
+without choosing any output path. Each binary stream must exactly match
+the checked-in visual reference, so stray progress text or missing native
+ink cannot silently corrupt shell-redirection output. The test uses
+isolated operating-system temporary directories rather than requiring
+an ignored repository `.temp` directory.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
