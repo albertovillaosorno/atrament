@@ -882,3 +882,24 @@ A red-before/green-after native PDF and transparent PNG regression checks
 byte-identical single-slash hard breaks across LF, U+2028 and explicit
 spaces; paired authored slash strokes still render and missing strokes refuse
 without replacing the selected export. This is not general inline escaping.
+
+## Saved bilingual Markdown through native page flow (partial) — 2026-11-04
+
+A cross-component integration regression now writes an exact UTF-8 BOM/CRLF
+Markdown source file and a browser-generated 119-form Unicode glyph library.
+The Rust CLI compiles headings, a bullet, quote, numbered item and checked
+box into two real physical PDF pages with marker-style heading strokes.
+Composed and decomposed Spanish accents, inverted punctuation, curly quotes
+and mathematical operators use caller-authored ink rather than font fallback.
+
+The test checks the page-local marker counts (four on page one and five on
+page two), byte-identical PDF/selected-page PNG against inline LF Markdown,
+different ink on the two PNG pages and unchanged saved source bytes. It also
+verifies one explicitly selected PDF page refuses without replacing accepted
+output, that an unauthored infinity glyph refuses, and that an explicit
+`∞`-to-`8` fallback produces the same physical PDF as authored `8` ink.
+All 21 bilingual integration tests pass after this addition.
+
+This is **saved source text plus an external glyph library**, not one native
+saved semantic notebook, stored styles, or image overlays. ATR-P2-011 and
+the complete notebook-to-PDF acceptance criteria remain open.

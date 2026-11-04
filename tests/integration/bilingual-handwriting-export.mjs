@@ -1,4 +1,5 @@
-// Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: LicenseRef-Proprietary
+// Copyright © 2026 Alberto Villa Osorno.
+// SPDX-License-Identifier: LicenseRef-Proprietary
 // A real browser-authored geometry -> TSV -> Rust page export regression.
 // Run after the frontend TypeScript build: node --test <this file>.
 import assert from 'node:assert/strict';
@@ -144,6 +145,123 @@ test('one-click 114-glyph text baseline reaches native PDF and PNG', () => {
         pngHasTransparentCorner(readFileSync(pngPath));
         assert.deepEqual(readFileSync(library), bytes,
             'native rendering never changes the authored library');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('saved bilingual Markdown yields exactly two physical ink pages', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'atrament-bilingual-markdown-'));
+    try {
+        const { strokes: shapes } = bilingualStarter();
+        const glyphFile = join(dir, 'handwriting.tsv');
+        const sourceFile = join(dir, 'notes.md');
+        const pdfFile = join(dir, 'notes.pdf');
+        const pngFile = join(dir, 'second-page.png');
+        const source = [
+            '# ¿Qué?',
+            '',
+            '- ¡niño!',
+            '> «ñ» n\u0303',
+            '',
+            '## Suma',
+            '1. a+b−c=d×e÷f',
+            '- [x] 42',
+            '',
+            '### Fin',
+            '“Á” ‘ü’',
+        ].join('\n');
+        const saved = Buffer.from('\uFEFF' +
+            source.replaceAll('\n', '\r\n'), 'utf8');
+        writeFileSync(glyphFile, encodeGlyphLibrary(shapes));
+        writeFileSync(sourceFile, saved);
+        const audit = native('glyphs', '--profile', glyphFile,
+            '--audit-text', '¿Qué? ¡niño! «ñ» n\u0303 a+b−c=d×e÷f 42 “Á” ‘ü’');
+        assert.equal(audit.status, 0, audit.stderr);
+        assert.match(audit.stdout, /Missing authored glyphs: 0/);
+
+        // A short repeated rectangle forces two pages without depending
+        // on pixels or a browser-only font measurement engine.
+        const flow = [
+            '--printed-sheet', 'true', '--glyph-file', glyphFile,
+            '--heading-style', 'marker', '--heading-color', '#F8DE91',
+            '--flow-region', '30000', '40000', '140000', '55000',
+        ];
+        const fileArgs = ['notebook', ...flow,
+            '--flow-markdown-file', sourceFile];
+        const inlineArgs = ['notebook', ...flow,
+            '--flow-markdown', source];
+        const generated = native(...fileArgs, '--export-paper', 'pdf',
+            '--output', pdfFile);
+        assert.equal(generated.status, 0, generated.stderr);
+        const pdf = readFileSync(pdfFile);
+        assert.ok(pdf.subarray(0, 8).toString().startsWith('%PDF-1.4'));
+        const streams = [...pdf.toString('latin1').matchAll(
+            /\nstream\n([\s\S]*?)\nendstream/g,
+        )].map((match) => match[1]);
+        assert.equal(streams.length, 2,
+            'both physical pages contain generated content streams');
+        assert.deepEqual(streams.map((stream) => (stream.match(
+            /0\.973 0\.871 0\.569 RG/g) ?? []).length), [4, 5],
+        'the second heading moves with its first row to page two');
+        const inlinePdf = native(...inlineArgs, '--export-paper', 'pdf',
+            '--output', pdfFile, '--replace');
+        assert.equal(inlinePdf.status, 0, inlinePdf.stderr);
+        assert.deepEqual(readFileSync(pdfFile), pdf,
+            'UTF-8 BOM/CRLF Markdown file preserves physical PDF ink');
+
+        const filePng = native(...fileArgs, '--export-paper', 'png',
+            '--dpi', '72', '--png-page', '2', '--output', pngFile);
+        assert.equal(filePng.status, 0, filePng.stderr);
+        const pageTwo = readFileSync(pngFile);
+        pngHasTransparentCorner(pageTwo);
+        const inlinePng = native(...inlineArgs, '--export-paper', 'png',
+            '--dpi', '72', '--png-page', '2', '--output', pngFile,
+            '--replace');
+        assert.equal(inlinePng.status, 0, inlinePng.stderr);
+        assert.deepEqual(readFileSync(pngFile), pageTwo,
+            'page-two PNG retains the same authored text and marker ink');
+        const firstPage = native(...fileArgs, '--export-paper', 'png',
+            '--dpi', '72', '--png-page', '1', '--output', pngFile,
+            '--replace');
+        assert.equal(firstPage.status, 0, firstPage.stderr);
+        assert.notDeepEqual(readFileSync(pngFile), pageTwo,
+            'selected page PNG cannot silently duplicate page-one ink');
+        assert.deepEqual(readFileSync(sourceFile), saved,
+            'CLI never rewrites the caller-saved Markdown source');
+
+        // Insufficient user-selected pages cannot destroy accepted ink.
+        const tooFew = native(...fileArgs, '--export-paper', 'pdf',
+            '--pages', '1', '--output', pdfFile, '--replace');
+        assert.notEqual(tooFew.status, 0);
+        assert.match(tooFew.stderr, /flow requires 2 physical pages/);
+        assert.deepEqual(readFileSync(pdfFile), pdf);
+
+        // An unsupported mathematical glyph must refuse before replacing
+        // a previously selected file; only explicit user-owned fallback
+        // can authorize its existing authored shape.
+        const missingFile = join(dir, 'missing.md');
+        const missingSource = source.replace('‘ü’', '‘∞’');
+        writeFileSync(missingFile, missingSource);
+        const unsupported = native('notebook', ...flow,
+            '--flow-markdown-file', missingFile, '--export-paper', 'pdf',
+            '--output', pdfFile, '--replace');
+        assert.notEqual(unsupported.status, 0);
+        assert.match(unsupported.stderr, /U\+221E/);
+        assert.deepEqual(readFileSync(pdfFile), pdf);
+
+        const explicit = native('notebook', ...flow,
+            '--fallback-glyph', '∞', '8',
+            '--flow-markdown-file', missingFile, '--export-paper', 'pdf',
+            '--output', pdfFile, '--replace');
+        assert.equal(explicit.status, 0, explicit.stderr);
+        const borrowedPdf = readFileSync(pdfFile);
+        const authored = native('notebook', ...flow,
+            '--flow-markdown', source.replace('‘ü’', '‘8’'),
+            '--export-paper', 'pdf', '--output', pdfFile, '--replace');
+        assert.equal(authored.status, 0, authored.stderr);
+        assert.deepEqual(readFileSync(pdfFile), borrowedPdf,
+            'explicit fallback has exactly the selected source pen geometry');
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }
