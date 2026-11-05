@@ -8716,3 +8716,80 @@ test("browser manual u/ú/ü picks visible curves and exact TSV", async () => {
         ui.restore();
     }
 });
+
+test("manual cursive m retains two analytic humps in one pen path", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("m", ...args);
+    const joined = geometricStarter("m", ...args, undefined, "cursive");
+    assert.equal(printed.length, 67);
+    assert.equal(joined.length, 71, "entry, two returns and exit");
+    assert.deepEqual(joined.slice(3, 35), printed.slice(1, 33),
+        "the first two sampled arches remain unchanged");
+    assert.deepEqual(joined.slice(35, 36), printed.slice(33, 34),
+        "middle downstroke remains editable");
+    assert.deepEqual(joined.slice(37, 70), printed.slice(34),
+        "second pair of arches and right downstroke remain unchanged");
+    assert.deepEqual(joined.slice(0, 3).map((line) => [
+        line.x1, line.y1, line.x2, line.y2,
+    ]), [[250, 3750, 450, 3550], [450, 3550, 450, 1350],
+        [450, 1350, 450, 2450]]);
+    assert.deepEqual(joined[36], {
+        grapheme: "m", x1: 1550, y1: 3550, x2: 1550, y2: 2450,
+        width: 250, color: "#243647",
+    });
+    assert.deepEqual(candidatePenPaths(joined, "m").map(
+        ({ first, last }) => [first, last]), [[1, 71]],
+    "the first stem and both humps remain one explicit pen gesture");
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("m", ...args), printed,
+        "printed m is never silently replaced by cursive ink");
+    assert.throws(() => geometricStarter("m", 1550, 2450,
+        1450, 250, "#243647", undefined, "cursive"),
+    /Shape and pen|clip glyph cell/);
+});
+
+test("browser manual cursive m previews both retraces and saves exact ink",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "m-cursive";
+            get("form").dispatch("change");
+            get("character").value = "m";
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-approach",
+                "ideal-exit", "ideal-rounded", "ideal-rounded-left",
+                "ideal-rounded-right"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `${id} belongs to the connected m guide`);
+            }
+            assert.equal(get("ideal-approach").attributes.get("y1"),
+                "1350", "first raised stem returns to the first hump");
+            assert.equal(get("ideal-approach").attributes.get("y2"),
+                "2450");
+            assert.match(get("ideal-rounded").attributes.get("d"),
+                /M 1550 2450 L 1550 3550 L 1550 2450$/,
+                "second downstroke returns to the next hump");
+            assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+                "hidden");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("m", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-radius").value = "1600";
+            get("circle-radius").dispatch("input");
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "hidden", "bad geometry must hide the guide");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "clipped geometry must not change authored ink");
+            editor.reset();
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });

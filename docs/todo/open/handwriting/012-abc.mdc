@@ -2562,3 +2562,17 @@ Browser guide and exact TSV tests, live Firefox selection/download, and
 native Rust PDF/transparent PNG replay verify the separate Unicode keys.
 Invalid placement refuses before touching the draft. Printed ink stays
 unchanged; adjacent glyph joining and calibrated script remain open.
+
+## Optional connected-pen double-hump m (partial) — 2026-11-05
+
+The geometric selector now offers a separately authored cursive `m`. It
+preserves all 64 printed quadratic hump chords and three directed stems,
+but adds a rising entry, two exact downward/upward stem retraces and a
+rising exit to form one continuous 71-segment pen gesture. The SVG guide
+shows both retraced joins; printed `m` remains an independent 67-segment
+choice, and an unauthored `M` never substitutes for lowercase ink.
+
+Browser SVG/TSV and clipping tests, real Firefox selection and download,
+and native Rust vector PDF/transparent PNG replay cover this bounded
+variant with missing-glyph refusal before file replacement. No automatic
+word joins, retained curves, calibrated writer or full alphabet are implied.

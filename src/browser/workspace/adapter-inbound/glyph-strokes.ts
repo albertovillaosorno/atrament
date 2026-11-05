@@ -2616,6 +2616,45 @@ function cursiveRounded(base: Stroke[], radius: number): Stroke[] {
     ];
 }
 
+// Printed m lifts between its first stem and first hump, and between
+// the descending middle stem and the next hump. The manually selected
+// connected variant retraces those two stems while the pen stays down;
+// this does not change the original double-hump quadratic samples.
+function cursiveDoubleHump(base: Stroke[], radius: number): Stroke[] {
+    if (base.length !== 67 || base.some((s) => s.grapheme !== "m")) {
+        throw new Error("Cursive m requires the full printed double hump");
+    }
+    const first = base[0]!;
+    const middle = base[33]!;
+    const last = base[66]!;
+    const lead = Math.min(200, Math.round(radius / 5));
+    const pen = first.width;
+    const draw = (from: Point, to: Point): Stroke => {
+        for (const point of [from, to]) {
+            if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
+                || point.y - pen / 2 < 0
+                || point.y + pen / 2 > 4500) {
+                throw new Error("Cursive m connector and pen clip glyph cell");
+            }
+        }
+        return validateStroke({ grapheme: "m",
+            x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+            width: pen, color: first.color });
+    };
+    const start = { x: first.x1, y: first.y1 };
+    const top = { x: first.x2, y: first.y2 };
+    const hump = { x: base[1]!.x1, y: base[1]!.y1 };
+    const middleEnd = { x: middle.x2, y: middle.y2 };
+    const nextHump = { x: base[34]!.x1, y: base[34]!.y1 };
+    const end = { x: last.x2, y: last.y2 };
+    return [
+        draw({ x: start.x - lead, y: start.y + lead }, start),
+        first, draw(top, hump), ...base.slice(1, 33),
+        middle, draw(middleEnd, nextHump), ...base.slice(34),
+        draw(end, { x: end.x + lead, y: end.y - lead }),
+    ];
+}
+
 // Optional one-click starters reuse the same accent composer as the manual
 // Spanish fill. They never normalize or overwrite an existing Unicode key.
 const ACCENTED_STARTERS: Readonly<Record<string, string>> = {
@@ -2667,10 +2706,10 @@ export function geometricStarter(
         throw new Error("Italic variant requires matching o/a glyph");
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
-        "i", "í", "l", "n", "ñ", "u", "ú", "ü"]
+        "i", "í", "l", "n", "ñ", "u", "ú", "ü", "m"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "l, n/ñ or u/ú/ü glyph");
+            + "l, n/ñ, u/ú/ü or m glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2689,7 +2728,9 @@ export function geometricStarter(
             ? cursiveOpenArc(base, r)
             : ["i", "í", "l"].includes(g)
                 ? cursiveStem(base, r) : ["n", "u"].includes(g)
-                    ? cursiveRounded(base, r) : cursiveLoop(base, r);
+                    ? cursiveRounded(base, r) : g === "m"
+                        ? cursiveDoubleHump(base, r)
+                        : cursiveLoop(base, r);
     }
     if (italic) {
         const angle = pos?.italicDegrees ?? 12;
@@ -3775,6 +3816,7 @@ export function createGlyphStrokeEditor(): {
                 .includes(chosen.grapheme);
             const cursiveU = connected && ["u", "ú", "ü"]
                 .includes(chosen.grapheme);
+            const cursiveM = connected && chosen.grapheme === "m";
             const nHump = roundedStory(cx, cy, r, "n");
             const uBowl = roundedStory(cx, cy, r, "u");
             const stemStartY = chosen.grapheme === "l"
@@ -3784,6 +3826,8 @@ export function createGlyphStrokeEditor(): {
             const connectors: [SVGLineElement, Point, Point][] = [
                 [idealEntry,
                     cursiveStem ? { x: cx - lead, y: stemStartY + lead }
+                        : cursiveM ? {
+                            x: cx - r - lead, y: cy + r + lead }
                         : cursiveN || cursiveU ? {
                             x: cx - r - lead,
                             y: (cursiveN ? nHump : uBowl).firstStem.from.y
@@ -3792,21 +3836,27 @@ export function createGlyphStrokeEditor(): {
                             ? { x: eUpper.x - lead, y: eUpper.y + lead }
                             : { x: cx - r - lead, y: cy + lead },
                     cursiveStem ? { x: cx, y: stemStartY }
+                        : cursiveM ? { x: cx - r, y: cy + r }
                         : cursiveN || cursiveU
                             ? (cursiveN ? nHump : uBowl).firstStem.from
                         : cursiveC ? eUpper : { x: cx - r, y: cy }],
                 [idealApproach,
-                    cursiveN ? nHump.firstStem.to
+                    cursiveM ? { x: cx - r, y: cy - r }
+                        : cursiveN ? nHump.firstStem.to
                         : cursiveE ? { x: cx - r, y: cy }
                             : { x: cx + r, y: cy },
-                    cursiveN ? nHump.start
+                    cursiveM ? { x: cx - r, y: cy }
+                        : cursiveN ? nHump.start
                         : cursiveE ? eUpper : { x: cx + r, y: cy - r }],
                 [idealExit,
                     cursiveStem ? { x: cx, y: cy + r }
+                        : cursiveM ? { x: cx + r, y: cy + r }
                         : cursiveN || cursiveU
                             ? (cursiveN ? nHump : uBowl).lastStem.to
                             : cursiveArc ? eLower : { x: cx + r, y: endY },
                     cursiveStem ? { x: cx + lead, y: cy + r - lead }
+                        : cursiveM ? {
+                            x: cx + r + lead, y: cy + r - lead }
                         : cursiveN || cursiveU ? {
                             x: cx + r + lead,
                             y: (cursiveN ? nHump : uBowl).lastStem.to.y
@@ -3824,6 +3874,7 @@ export function createGlyphStrokeEditor(): {
                 guide.setAttribute("stroke", color.value);
                 guide.setAttribute("visibility", connected &&
                     (guide !== idealApproach || cursiveE || cursiveN
+                        || cursiveM
                         || ["a", "á"].includes(chosen.grapheme))
                     ? shown : "hidden");
             }
@@ -3857,7 +3908,8 @@ export function createGlyphStrokeEditor(): {
             const doubledD = [
                 `M ${cx - r} ${cy}`,
                 ...doubledCommands,
-                `M ${cx} ${cy} L ${cx} ${cy + r}`,
+                `M ${cx} ${cy} L ${cx} ${cy + r}`
+                    + (cursiveM ? ` L ${cx} ${cy}` : ""),
             ].join(" ");
             const isStraight = ["v", "w", "k", "x", "y", "z"]
                 .includes(chosen.grapheme);
