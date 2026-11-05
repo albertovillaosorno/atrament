@@ -1,0 +1,9 @@
+identity:
+  id: function:handwriting-stroke-projection
+  name: handwriting-stroke-projection
+  path: src/backend/handwriting-stroke-projection
+classification:
+  repository: atrament
+  domain: backend
+architecture:
+  kind: domain

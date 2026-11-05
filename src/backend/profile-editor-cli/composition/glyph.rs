@@ -43,6 +43,10 @@ use std::str::from_utf8;
 use atrament_handwriting_statistics::{
     Dimension, HandwritingStatisticsProfile,
 };
+use atrament_handwriting_stroke_projection::{
+    AuthoredInkSegment, InkPlacement, MeasuredGlyphDimensions,
+    PhysicalInkSegment, connect_ink_segments, project_ink_segment,
+};
 use atrament_notebook_paper_cli::{
     MAX_NOTEBOOK_INK_LINES, NotebookInkLine,
 };
@@ -68,8 +72,6 @@ const GLYPH_LIBRARY_HEADER: &str = "atrament.glyph-strokes.v1";
 // statistical profile is explicitly selected by the caller.
 // A configured slant additionally shears the upper contours in physical units.
 const DEFAULT_TEMPLATE_WIDTH_UM: u32 = 3_500;
-const DEFAULT_TEMPLATE_HEIGHT_UM: u32 = 4_500;
-const DEFAULT_TEMPLATE_INK_UM: u32 = 300;
 
 /// Opt-in creative jitter, not an inferred distribution or saved profile.
 /// Units and the seeded xorshift match the browser glyph comparison.
@@ -1753,85 +1755,31 @@ fn is_exact_visible_grapheme(
         && boundaries.grapheme_count(grapheme) == 1
 }
 
-fn glyph_point(
-    glyph_x: i64, glyph_y: i64, point: (u32, u32),
-    metrics: Option<GlyphMetrics>,
-) -> Result<(u32, u32), String> {
-    let (x, y) = if let Some(values) = metrics {
-        (
-            scale(point.0, values.width, DEFAULT_TEMPLATE_WIDTH_UM)?,
-            scale(point.1, values.height, DEFAULT_TEMPLATE_HEIGHT_UM)?,
-        )
-    } else {
-        point
-    };
-    let x_on_page = if let Some(values) = metrics {
-        slanted_x(glyph_x, x, y, values.height, values.slant)?
-    } else {
-        coordinate(glyph_x, x)?
-    };
-    Ok((x_on_page, coordinate(glyph_y, y)?))
-}
-
-// Lean the upper edge of each caller-authored shape around its lower
-// baseline. Positive millidegrees lean right; negative values lean left.
-// Refuse nonfinite or unprintable positions rather than silently clipping.
-fn slanted_x(
-    origin_um: i64, local_x: u32, local_y: u32,
-    height: u32, slant_millidegrees: i32,
-) -> Result<u32, String> {
-    let radians = (f64::from(slant_millidegrees) / 1_000.0).to_radians();
-    let delta = (f64::from(height) - f64::from(local_y)) * radians.tan();
-    if !delta.is_finite() || delta.abs() > f64::from(i32::MAX) {
-        return Err("glyph slant exceeds coordinate limits".into());
-    }
-    #[expect(clippy::as_conversions, clippy::cast_possible_truncation, reason =
-        "bounded millidegree shear rounded to a whole micrometre")]
-    let shift_um = delta.round() as i32;
-    let absolute_um = origin_um
-        .checked_add(i64::from(local_x))
-        .and_then(|x| x.checked_add(i64::from(shift_um)))
-        .ok_or("slanted glyph x position overflow")?;
-    u32::try_from(absolute_um)
-        .map_err(|_error| "slanted glyph must stay on page".into())
-}
-
-fn coordinate(origin_um: i64, local_um: u32) -> Result<u32, String> {
-    let translated = origin_um.checked_add(i64::from(local_um))
-        .ok_or("glyph placement overflow")?;
-    u32::try_from(translated)
-        .map_err(|_error| {
-            "glyph placement needs nonnegative coordinates".into()
-        })
-}
-
-// Keep title lettering styling as the last, export-only ink treatment:
-// authored glyph coordinates, colors and dimensions never mutate.
+// The renderer-independent Rust handwriting engine owns every physical
+// transform; this CLI adapter maps admitted profile and output fields.
 fn placed_ink(
     shape: &GlyphStroke, run: &TextRun, origin: (i64, i64),
     metrics: Option<GlyphMetrics>,
 ) -> Result<NotebookInkLine, String> {
-    let translate = |point| glyph_point(origin.0, origin.1, point, metrics);
-    let mean_width = if let Some(values) = metrics {
-        scale(shape.width_um, values.ink_thickness, DEFAULT_TEMPLATE_INK_UM)?
-    } else {
-        shape.width_um
-    };
-    let width_um = if let Some(style) = run.heading_ink {
-        scale(mean_width, style.scale_percent, 100)?
-    } else {
-        mean_width
-    };
-    if !(80..=1_500).contains(&width_um) {
-        return Err("scaled glyph ink width exceeds 80..1500 um".into());
-    }
+    let projected = project_ink_segment(AuthoredInkSegment {
+        start_um: shape.start_um, end_um: shape.end_um,
+        width_um: shape.width_um, rgb: shape.rgb,
+    }, InkPlacement {
+        page: run.page, origin_um: origin,
+        dimensions: metrics.map(|values| MeasuredGlyphDimensions {
+            width_um: values.width, height_um: values.height,
+            ink_thickness_um: values.ink_thickness,
+            slant_millidegrees: values.slant,
+        }),
+        ink_scale_percent: run.heading_ink.map_or(100, |style| {
+            style.scale_percent
+        }),
+        color_override: run.heading_ink.and_then(|style| style.color),
+    }).map_err(str::to_owned)?;
     Ok(NotebookInkLine {
-        page: run.page,
-        start_um: translate(shape.start_um)?,
-        end_um: translate(shape.end_um)?,
-        width_um,
-        rgb: run.heading_ink.and_then(|style| style.color)
-            .unwrap_or(shape.rgb),
+        page: projected.page, start_um: projected.start_um,
+        end_um: projected.end_um, width_um: projected.width_um,
+        rgb: projected.rgb,
     })
 }
 
@@ -1882,27 +1830,17 @@ fn append_text_ink(
 fn text_join_bridge(
     before: NotebookInkLine, after: NotebookInkLine,
 ) -> Result<Option<NotebookInkLine>, String> {
-    if before.page != after.page {
-        return Err("text join cannot cross physical pages".into());
-    }
-    if before.rgb != after.rgb || before.width_um != after.width_um {
-        return Err("text join requires matching physical pen and RGB".into());
-    }
-    let (start, end) = (before.end_um, after.start_um);
-    if start == end {
-        return Ok(None);
-    }
-    let dx = i64::from(start.0).saturating_sub(i64::from(end.0));
-    let dy = i64::from(start.1).saturating_sub(i64::from(end.1));
-    if dx.unsigned_abs().pow(2).saturating_add(dy.unsigned_abs().pow(2))
-        > MAX_JOIN_GAP_UM.pow(2)
-    {
-        return Err("text join gap exceeds 1200 um".into());
-    }
-    Ok(Some(NotebookInkLine {
-        page: before.page, start_um: start, end_um: end,
-        width_um: before.width_um, rgb: before.rgb,
-    }))
+    let as_physical = |line: NotebookInkLine| PhysicalInkSegment {
+        page: line.page, start_um: line.start_um, end_um: line.end_um,
+        width_um: line.width_um, rgb: line.rgb,
+    };
+    connect_ink_segments(
+        as_physical(before), as_physical(after), MAX_JOIN_GAP_UM,
+    ).map(|bridge| bridge.map(|segment| NotebookInkLine {
+        page: segment.page,
+        start_um: segment.start_um, end_um: segment.end_um,
+        width_um: segment.width_um, rgb: segment.rgb,
+    })).map_err(str::to_owned)
 }
 
 fn missing_shapes_error(missing: &[&str]) -> String {
@@ -1948,19 +1886,6 @@ fn next_integer(
     export_integer(
         iter.next().map(String::as_str), label, minimum, maximum,
     )
-}
-
-fn scale(local_um: u32, target_um: u32, reference_um: u32)
-    -> Result<u32, String> {
-    let scaled = u64::from(local_um)
-        .checked_mul(u64::from(target_um))
-        .ok_or("glyph scale overflow")?
-        .checked_add(u64::from(reference_um.checked_div(2)
-            .ok_or("glyph scale reference is zero")?))
-        .ok_or("glyph rounding overflow")?
-        .checked_div(u64::from(reference_um))
-        .ok_or("glyph scale denominator is zero")?;
-    u32::try_from(scaled).map_err(|_error| "glyph scale too large".into())
 }
 
 /// Read one exact Unicode grapheme from the remaining UTF-8 suffix.

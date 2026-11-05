@@ -15,6 +15,29 @@ semantic, layout is compiled against a physical page, handwriting comes from a
 calibrated personal profile, and every visual adjustment remains an explicit
 constraint.
 
+## Executable handwriting-composition core
+
+The technically defining output is **physical pen geometry**, not editor state
+or an export codec. The Rust handwriting pipeline accepts authored grapheme
+strokes, selected seeded variation and optional statistical mean dimensions;
+then it places directed pen segments on real pages, applies lower-baseline
+slant and heading-ink treatment, and validates opt-in connections between
+consecutive glyphs. The same resulting physical segments feed the native
+**vector PDF and raster PNG** exporters.
+
+The numerical, side-effect-free engine is the independently testable Rust crate
+`atrament_handwriting_stroke_projection`. The production
+`atrament-profiles notebook` command imports its `project_ink_segment` and
+`connect_ink_segments` functions for **every** authored glyph and selected
+join; the browser is a glyph-authoring client, not the source of PDF geometry.
+See [the ink engine](docs/technical/handwriting-stroke-projection.md)
+for the exact call graph, admission boundaries and regression commands.
+
+This is currently **caller-authored penmanship with deterministic creative
+variation**, not automatic letter-shape generation, trained handwriting
+recognition, or evidence of a calibrated human writer. The broader full
+notebook-generation experience remains under development.
+
 ## Personal priority: automate handwritten notebooks
 
 Atrament exists because repetitive compulsory handwriting wastes time I would

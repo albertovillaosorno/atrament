@@ -376,6 +376,10 @@ name = "atrament_handwriting_stroke_plan"
 version = "0.1.0"
 
 [[package]]
+name = "atrament_handwriting_stroke_projection"
+version = "0.1.0"
+
+[[package]]
 name = "atrament_handwriting_stroke_vocabulary"
 version = "0.1.0"
 
@@ -585,6 +589,7 @@ dependencies = [
  "atrament_english_spanish_grapheme_inventory",
  "atrament_handwriting_statistics",
  "atrament_handwriting_statistics_json",
+ "atrament_handwriting_stroke_projection",
  "atrament_notebook_paper_cli",
  "atrament_notebook_profile",
  "atrament_profile_file_commit",

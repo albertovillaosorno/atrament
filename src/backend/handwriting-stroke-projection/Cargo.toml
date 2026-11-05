@@ -1,0 +1,16 @@
+[package]
+name = "atrament_handwriting_stroke_projection"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license-file = "../../../LICENSE"
+
+[lib]
+path = "domain/lib.rs"
+
+[lints]
+workspace = true
+
+[[test]]
+name = "handwriting_stroke_projection_domain"
+path = "../../../tests/backend/handwriting-stroke-projection/domain/lib.rs"
