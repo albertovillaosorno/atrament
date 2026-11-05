@@ -1934,3 +1934,22 @@ transparent PNG, rejecting unsupported lookalikes without replacing an
 accepted file. Firefox also verifies the live SVG guides and TSV-to-Rust
 output journey. This is sampled manual ink, not automatic math layout or
 complete baseline handwriting coverage.
+
+## Manually selected exact mathematical angle brackets (partial) — 2026-11-04
+
+The editor now offers exact Unicode inner-product brackets `⟨` and `⟩`.
+Each has two joined directed segments and its own SVG guide; neither
+borrows an authored ASCII comparison sign or CJK bracket glyph.
+
+These are **manual** starters, not new members of Fill missing math.
+All eleven independent fills remain at 206 graphemes / 4084 strokes,
+leaving just 12 strokes below the 4096-native-segment ceiling. Adding
+both brackets after the combined fill yields 208 keys / 4088 segments;
+all writes retain the same atomic native file validation.
+
+Browser tests check coordinates, pen joins, clipping, UI selection and
+UTF-8 TSV replay. Native Rust audits and exports real PDF/transparent
+PNG and refuses unauthored lookalikes before replacing an accepted PDF.
+The real Firefox workflow also verifies manual construction after math
+batch fill and source-to-native replay. This is a manual notation option,
+not automatic mathematical typesetting or generic glyph substitution.

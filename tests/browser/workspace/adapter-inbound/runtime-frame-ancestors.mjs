@@ -13208,6 +13208,18 @@ test(
                         currency.push({ ...guide,
                             status: get("status").textContent });
                     }
+                    const manualAngles = [];
+                    for (const glyph of ["⟨", "⟩"]) {
+                        change("form", glyph);
+                        change("character", glyph);
+                        const guide = get("ideal-rounded");
+                        const d = guide.getAttribute("d");
+                        const visible = guide.getAttribute("visibility");
+                        get("construct").click();
+                        manualAngles.push({ glyph, d, visible,
+                            selected: get("form").value,
+                            status: get("status").textContent });
+                    }
                     const names = [];
                     const blobs = [];
                     const create = URL.createObjectURL;
@@ -13230,7 +13242,8 @@ test(
                         const refused = get("status").textContent;
                         get("save").click();
                         return JSON.stringify({ before, filled, complete,
-                            guides, currency, hidden, refused, names,
+                            guides, currency, manualAngles, hidden, refused,
+                            names,
                             media: blobs.map((blob) => blob.type),
                             files: await Promise.all(blobs.map((blob) =>
                                 blob.text())) });
@@ -13295,6 +13308,14 @@ test(
                 assert.match(guide.status,
                     new RegExp(`Constructed ${count} sampled segments`));
             }
+            for (const guide of actual.manualAngles) {
+                assert.ok(["⟨", "⟩"].includes(guide.glyph));
+                assert.equal(guide.selected, guide.glyph);
+                assert.equal(guide.visible, "visible");
+                assert.equal((guide.d.match(/ Q /g) ?? []).length, 0);
+                assert.equal((guide.d.match(/M /g) ?? []).length, 1);
+                assert.match(guide.status, /Constructed 2 sampled segments/);
+            }
             assert.equal(actual.hidden, "hidden");
             assert.match(actual.refused, /fit inside glyph cell/);
             assert.deepEqual(actual.names,
@@ -13313,10 +13334,10 @@ test(
                 "↖", "↙", "⇐", "↦", "↤", "∣", "∤",
                 "′", "″", "‴", "⋅", "∗", "∖", "∦",
                 "⌊", "⌋", "⌈", "⌉"];
-            const ink = [...symbols, "$", "€"].flatMap((glyph) =>
+            const ink = [...symbols, "$", "€", "⟨", "⟩"].flatMap((glyph) =>
                 geometricStarter(glyph, 1550, 2450, 1100,
                     250, "#243647"));
-            assert.equal(ink.length, 1460);
+            assert.equal(ink.length, 1464);
             const expected = encodeGlyphLibrary(ink);
             assert.deepEqual(actual.files, [expected, expected],
                 "real browser fill and refusal preserve exact pen order");
@@ -13349,7 +13370,7 @@ test(
                     "true", "--glyph-file", library, "--flow-text",
                     "∑∫∂Δ≈$€∓→∝<>←↔↑↓↕∧∨∩∪∈∉⊂⊆⊃⊇⊄⊈⊅⊉"
                         + "∋∌∅∇≡≢∥⊥∼≅∀∃∄∴∵⊤⊢⊨∠∟⊬⊭¬⇒⇔"
-                        + "≪≫≮≯≰≱↗↘↖↙⇐↦↤∣∤′″‴⋅∗∖∦⌊⌋⌈⌉",
+                        + "≪≫≮≯≰≱↗↘↖↙⇐↦↤∣∤′″‴⋅∗∖∦⌊⌋⌈⌉⟨⟩",
                     "--export-paper", format,
                     ...(format === "png" ? ["--dpi", "72"] : []));
                 assert.equal(rendered.status, 0,
@@ -13358,7 +13379,7 @@ test(
                 if (format === "pdf") {
                     const vector = rendered.stdout.toString("latin1");
                     assert.match(vector, /^%PDF-1\.4/);
-                    assert.equal((vector.match(/ m\n/g) ?? []).length, 1365,
+                    assert.equal((vector.match(/ m\n/g) ?? []).length, 1369,
                         "calculus, currency, arrows and comparisons ink");
                 } else {
                     const bytes = rendered.stdout;

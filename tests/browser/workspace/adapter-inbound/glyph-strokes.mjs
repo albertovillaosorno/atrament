@@ -3450,6 +3450,26 @@ test("math prime strokes and dot/star operators retain exact pen paths", () => {
         "prime cannot borrow typographic apostrophe ink");
 });
 
+test("manual mathematical angle brackets preserve directed Unicode ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, expected, ordinary] of [
+        ["⟨", [[2232, 1570, 912, 2450],
+            [912, 2450, 2232, 3330]], "<"],
+        ["⟩", [[868, 1570, 2188, 2450],
+            [2188, 2450, 868, 3330]], ">"],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.deepEqual(ink.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), expected);
+        assert.deepEqual(candidatePenPaths(ink, glyph).map(
+            ({ first, last }) => [first, last]), [[1, 2]]);
+        assert.notDeepEqual(ink, geometricStarter(ordinary, ...args));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -4062,6 +4082,7 @@ test("calculus and comparison math SVG preserves ideal curve controls",
                 ["≰", 0, 3], ["≱", 0, 3],
                 ["↗", 0, 2], ["↘", 0, 2],
                 ["↖", 0, 2], ["↙", 0, 2], ["⇐", 0, 3],
+                ["⟨", 0, 1], ["⟩", 0, 1],
             ]) {
                 get("form").value = glyph;
                 get("character").value = glyph;
@@ -4266,6 +4287,9 @@ test("math fill keeps custom ink and refuses over-cap", async () => {
         assert.deepEqual(saved, [...originals, ...missing.flatMap(
             (glyph) => geometricStarter(glyph, 1550, 2450,
                 1100, 250, "#243647"))]);
+        assert.ok(!saved.some(({ grapheme }) =>
+            grapheme === "⟨" || grapheme === "⟩"),
+        "inner-product angle brackets require explicit manual selection");
         get("seed-math").dispatch("click");
         assert.match(get("status").textContent, /All 93 math/);
         get("save").dispatch("click");
@@ -5185,6 +5209,25 @@ test("eleven explicit fills author 206 exact glyphs", async () => {
         assert.equal(differentMinuses[1].length, 1);
         assert.notEqual(differentMinuses[0][0].grapheme,
             differentMinuses[1][0].grapheme);
+        for (const glyph of ["⟨", "⟩"]) {
+            get("form").value = glyph;
+            get("character").value = glyph;
+            get("form").dispatch("input");
+            get("construct").dispatch("click");
+            assert.match(get("status").textContent,
+                /Constructed 2 sampled segments/);
+        }
+        get("save").dispatch("click");
+        const manual = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.equal(manual.length, 4088);
+        assert.equal(new Set(manual.map((line) => line.grapheme)).size, 208);
+        assert.deepEqual(manual.slice(0, all.length), all,
+            "manual glyphs never alter preexisting mass-filled strokes");
+        get("seed-math").dispatch("click");
+        assert.match(get("status").textContent, /All 93 math/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            manual, "automatic math fill does not overwrite manual angles");
         editor.reset();
         assert.equal(get("seed-math").disabled, true);
         assert.equal(get("seed-digits").disabled, true);
@@ -5212,7 +5255,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "≪", "≫", "≮", "≯", "≰", "≱", "↗", "↘",
         "↖", "↙", "⇐", "↦", "↤", "∣", "∤", "′", "″", "‴",
         "⋅", "∗", "∖", "∦", "⌊", "⌋", "⌈", "⌉",
-        "°", "%", "$", "€",
+        "⟨", "⟩", "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",
@@ -5255,7 +5298,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 27216);
+    assert.equal(checked, 27504);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

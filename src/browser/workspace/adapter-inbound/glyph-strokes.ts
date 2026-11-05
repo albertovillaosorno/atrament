@@ -689,13 +689,19 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "↖", "↙", "⇐", "↦", "↤", "∣", "∤",
     "′", "″", "‴", "⋅", "∗", "∖", "∦",
     "⌊", "⌋", "⌈", "⌉"] as const;
+// Additional exact notation is manually selected, not automatically filled.
+// A full text/math fill currently sits just 12 strokes below the native cap.
+const MANUAL_MATH_GLYPHS = ["⟨", "⟩"] as const;
+const SELECTABLE_MATH_GLYPHS = [
+    ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
+] as const;
 // Extra manual marks do not change the 93-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
 type CurrencyMark = typeof CURRENCY_MARKS[number];
 type CircleMark = typeof CIRCLE_MARKS[number];
-type MathGlyph = typeof MATH_GLYPHS[number];
+type MathGlyph = typeof SELECTABLE_MATH_GLYPHS[number];
 
 function mathParts(
     cx: number, cy: number, radius: number, glyph: MathGlyph,
@@ -863,6 +869,16 @@ function mathParts(
         x2: number, y2: number): MarkPiece => ({
         from: point(x1, y1), to: point(x2, y2),
     });
+    // Inner-product angle brackets are taller, sharper connected strokes
+    // than ordinary comparisons. They are manual to respect the TSV cap.
+    if (glyph === "⟨") return [
+        line(0.62, -0.8, -0.58, 0),
+        line(-0.58, 0, 0.62, 0.8),
+    ];
+    if (glyph === "⟩") return [
+        line(-0.62, -0.8, 0.58, 0),
+        line(0.58, 0, -0.62, 0.8),
+    ];
     // Mathematical primes represent derivatives/arc minutes independently
     // of quotes. Each upper stroke lifts the pen; the centered multiply
     // dot and star do not inherit punctuation or ASCII asterisk geometry.
@@ -1912,7 +1928,8 @@ export function geometricStarter(
         "k", "x", "y", "z", "c", "e", "i", "í", "j", "g", "s",
         ".", ",", "!", "¡", "?", "¿",
         "«", "»", "‘", "’", "“", "”",
-        ...MATH_GLYPHS, ...CIRCLE_MARKS, ...CURRENCY_MARKS,
+        ...SELECTABLE_MATH_GLYPHS, ...CIRCLE_MARKS,
+        ...CURRENCY_MARKS,
         ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ...TEXT_MARKS, ...NOTATION_MARKS].includes(g)) {
         throw new Error("Choose a supported exact geometric glyph");
@@ -2099,7 +2116,7 @@ export function geometricStarter(
         }
         return ink;
     }
-    if ((MATH_GLYPHS as readonly string[]).includes(g)) {
+    if ((SELECTABLE_MATH_GLYPHS as readonly string[]).includes(g)) {
         if (g === "÷" && radius * 0.58 < pen + 100) {
             throw new Error("Division dots need visible pen-clearance");
         }
@@ -3085,7 +3102,8 @@ export function createGlyphStrokeEditor(): {
             const isCircleMark = (CIRCLE_MARKS as readonly string[])
                 .includes(chosen.grapheme);
             const isMath = isCircleMark
-                || (MATH_GLYPHS as readonly string[]).includes(chosen.grapheme);
+                || (SELECTABLE_MATH_GLYPHS as readonly string[])
+                    .includes(chosen.grapheme);
             let mathD = "";
             if (isCircleMark) {
                 const geometry = circleMarkGeometry(cx, cy, r,
@@ -3146,7 +3164,8 @@ export function createGlyphStrokeEditor(): {
                     "v", "w", "k", "x", "y", "z",
                     ".", ",", "!", "¡", "?", "¿",
                     "«", "»", "‘", "’", "“", "”",
-                    ...MATH_GLYPHS, ...CIRCLE_MARKS, ...CURRENCY_MARKS,
+                    ...SELECTABLE_MATH_GLYPHS, ...CIRCLE_MARKS,
+                    ...CURRENCY_MARKS,
                     ..."0123456789", ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
                     ...TEXT_MARKS, ...NOTATION_MARKS]
                     .includes(chosen.grapheme));
