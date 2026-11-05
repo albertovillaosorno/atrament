@@ -939,3 +939,72 @@ fn measured_pitch_matches_rendered_ink_across_mixed_markdown_blocks() {
     }
     assert!(cases > 2_000, "mixed grammar must admit enough cases");
 }
+
+#[test]
+fn seven_line_markdown_boundary_stress_preserves_exact_ink_pitch() {
+    // Longer sequences stress list, quote and code-fence state crossing.
+    // Compare physical ink rather than copying the Markdown parser.
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let tall = ScalarStatistics {
+        maximum: 25_000, mean: 25_000, median: 25_000,
+        minimum: 25_000, standard_deviation: 0,
+    };
+    let fragments = [
+        "a", "a  ", "a\\", "a\\\\", "a\\\\\\", "  a", "   a", "    a",
+        "=", "==", "===", "---", "  =", "   ===", "    ===",
+        "> a", "> a  ", "> a\\", ">", ">  =", "  > a",
+        "- a", "- a  ", "- a\\", "- [x] a", "- [ ] a", "+ a",
+        "-", "*", "1. a", "2) a", "10. a", "  - a", "   1. a",
+        "# a", "## a", "###### a", "# a #", "# a##", "#", "\\# a",
+        "```", "```txt", "~~~", "~~~txt", "~~~py", "  ~~~",
+        "", " ", "  ", "\\- a", "\\1. a", "[ ] a", "a # a", "a\\a",
+    ];
+    let paper = NotebookProfile::default();
+    let mut seed = 0x9988_7766u32;
+    let mut checked = 0usize;
+    for glyph in ["=", "#", "-", ">", "\\", "[", "]", "`", "~", "1", "."] {
+        let stats = HandwritingStatisticsProfile::baseline(1)
+            .with_glyph(glyph, DimensionStatistics {
+                dimension: Dimension::Height, statistics: tall,
+            }, &UnicodeGraphemeSegmentation)
+            .unwrap();
+        for _ in 0..500 {
+            let mut lines = Vec::new();
+            for _ in 0..7 {
+                seed = seed.wrapping_mul(1_664_525)
+                    .wrapping_add(1_013_904_223);
+                lines.push(fragments[(seed as usize) % fragments.len()]);
+            }
+            let source_text = lines.join("\n");
+            let source = FlowSource::new(FlowFormat::Markdown, &source_text)
+                .unwrap();
+            let Ok((rows, _, _)) = super::layout_flow(
+                &source, &paper, Some(&stats),
+                super::HeadingDecoration::default(),
+            ) else { continue };
+            let rendered = rows.iter().any(|row| {
+                let mut rest = row.text.as_str();
+                while !rest.is_empty() {
+                    let (grapheme, after) = super::first_grapheme(rest)
+                        .unwrap();
+                    if grapheme == glyph { return true }
+                    rest = after;
+                }
+                false
+            });
+            let actual = super::measured_pitch(&source, Some(&stats))
+                .unwrap();
+            let expected = if rendered { 29_000 } else { 9_000 };
+            assert_eq!(actual, expected,
+                "glyph={glyph:?}, source={source_text:?}, rows={rows:?}");
+            checked += 1;
+        }
+    }
+    assert!(checked > 500, "need meaningful accepted coverage");
+}

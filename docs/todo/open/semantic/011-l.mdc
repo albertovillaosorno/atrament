@@ -1142,9 +1142,19 @@ A deterministic follow-up replays five-fragment combinations of
 headings, tasks, quotes, numbered items, fences, thematic rules, escapes and
 indented continuations. Nineteen individually tall authored glyph profiles
 include Spanish `ó`, `ñ`, `¿`, the mathematical `∞`, and decomposed `o` with
-combining acute. Expected physical height comes from **exact rendered
+combining acute.
+
+Expected physical height comes from **exact rendered
 Unicode graphemes**, not raw substring matching: an accented `#` is not the
 same authored key as a standalone Markdown `#`. More than 2,000 admitted
 mixed cases pass, with the full native CLI and Rust workspace still green.
 This is a safety regression, not a new grammar feature or proof of completed
 persistent semantic notebook flow.
+
+A further bounded seven-line stress replay mixes escaped markers, hard
+breaks, code fences, heading chains, quotes, tasks and ordered lists.
+Eleven independently tall authored punctuation keys must affect row pitch
+**only** if that exact Unicode grapheme reaches a rendered text run;
+syntactic marks and synthetic ornaments cannot inherit that height. Over
+500 accepted seeded mixed cases pass. This is defensive measurement
+coverage, not persistent semantic block support.
