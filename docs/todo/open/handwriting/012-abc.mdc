@@ -2470,3 +2470,22 @@ Exact micrometre endpoints, directed pen paths, browser TSV, native Rust
 PDF/transparent PNG, atomic missing-lookalike refusal and real Firefox
 selection/download/export exercise these forms. They remain outside the
 93-key automatic math fill and do not close the larger handwriting task.
+
+## Explicit continuous-pen e and acute é starters (partial) — 2026-11-05
+
+The local geometric picker now offers a separate manual cursive `e`, NFC
+`é` and exact NFD `e` plus combining acute. Its circular open-loop source
+is traversed in reverse directed order after a short entry and rising
+inside crossing; a separate right exit continues the same pen-down path.
+The acute is a lifted, individually editable pen stroke. Printed `e` and
+its standard accent are not replaced by the new variants.
+
+The browser SVG guide shows the actual crossing/entry/exit and the reversed
+analytic circular arc. The v1 TSV samples 39 pen chords for `e` or 40 for
+either accented Unicode identity; there is no persisted curve or automatic
+inter-letter join. Invalid/clipped variants refuse without draft edits.
+Browser tests cover exact path continuity, independent NFC/NFD keys, and
+unchanged default ink. Real Firefox selects each form and downloads native
+TSV, which the separate Rust CLI reopens byte-for-byte and renders to a
+two-line physical vector PDF and transparent PNG. This advances selectable
+manual cursive shapes, not writer calibration or full P1-012 completion.

@@ -14509,3 +14509,164 @@ test(
         }
     },
 );
+
+test(
+    "Firefox cursive e and acute variants download exact native pen ink",
+    { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/cursive-e-firefox-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const get = (id) => document.getElementById("glyph-" + id);
+                    const change = (id, value) => {
+                        get(id).value = value;
+                        get(id).dispatchEvent(new Event("input", {
+                            bubbles: true,
+                        }));
+                    };
+                    change("circle-radius", "700");
+                    const constructed = [];
+                    const guides = [];
+                    for (const [form, exact] of [
+                        ["e-cursive", "e"], ["é-cursive", "é"],
+                        ["e\u0301-cursive", "e\u0301"],
+                    ]) {
+                        change("form", form);
+                        change("character", exact);
+                        guides.push({
+                            arc: get("ideal-c-loop").getAttribute("d"),
+                            arcVisible: get("ideal-c-loop")
+                                .getAttribute("visibility"),
+                            approach: get("ideal-approach")
+                                .getAttribute("visibility"),
+                            bar: get("ideal-e-bar")
+                                .getAttribute("visibility"),
+                            acute: get("ideal-accent")
+                                .getAttribute("visibility"),
+                        });
+                        get("construct").click();
+                        constructed.push(get("status").textContent);
+                    }
+                    const blobs = [];
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {};
+                        get("save").click();
+                        change("circle-radius", "1400");
+                        const clipped = get("ideal-c-loop")
+                            .getAttribute("visibility");
+                        get("construct").click();
+                        const refused = get("status").textContent;
+                        get("save").click();
+                        return JSON.stringify({
+                            constructed, guides, clipped, refused,
+                            files: await Promise.all(blobs.map((blob) =>
+                                blob.text())),
+                        });
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const actual = JSON.parse(response.result.value);
+            for (const guide of actual.guides) {
+                assert.equal(guide.arcVisible, "visible");
+                assert.equal(guide.approach, "visible");
+                assert.equal(guide.bar, "hidden");
+                assert.match(guide.arc, / A 700 700 0 1 0 /);
+            }
+            assert.deepEqual(actual.guides.map((guide) => guide.acute),
+                ["hidden", "visible", "visible"]);
+            assert.match(actual.constructed[0], /39 sampled segments/);
+            assert.match(actual.constructed[1], /40 sampled segments/);
+            assert.match(actual.constructed[2], /40 sampled segments/);
+            assert.equal(actual.clipped, "hidden");
+            assert.match(actual.refused, /Cursive e and pen clip/);
+            const glyphs = ["e", "é", "e\u0301"];
+            const expected = encodeGlyphLibrary(glyphs.flatMap((glyph) =>
+                geometricStarter(glyph, 1550, 2450, 700, 250,
+                    "#243647", undefined, "cursive")));
+            assert.deepEqual(actual.files, [expected, expected]);
+            assert.deepEqual(requests, baseline,
+                "glyph edits and deliberate downloads stay browser-local");
+            const library = path.join(profile, "cursive.tsv");
+            fs.writeFileSync(library, actual.files[0]);
+            const build = spawnSync(PINNED_CARGO, [
+                "build", "--offline", "--quiet",
+                "-p", "atrament_profile_editor_cli",
+                "--bin", "atrament-profiles",
+            ], {
+                timeout: 90_000, stdio: "pipe",
+                env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR },
+            });
+            assert.equal(build.status, 0,
+                "offline Rust CLI builds before real Firefox TSV replay");
+            const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            const invoke = (...args) => spawnSync(cli, args, {
+                timeout: 20_000, maxBuffer: 16 * 1024 * 1024,
+            });
+            const opened = invoke("glyphs", "--profile", library);
+            assert.equal(opened.status, 0, opened.stderr.toString());
+            assert.equal(opened.stdout.toString(), expected);
+            for (const format of ["pdf", "png"]) {
+                const result = invoke("notebook", "--printed-sheet",
+                    "true", "--glyph-file", library,
+                    "--flow-text", "eée\u0301\neée\u0301",
+                    "--export-paper", format,
+                    ...(format === "png" ? ["--dpi", "72"] : []));
+                assert.equal(result.status, 0, result.stderr.toString());
+                if (format === "pdf") {
+                    assert.match(result.stdout.toString("latin1"),
+                        /^%PDF-1\.4/);
+                    assert.equal((result.stdout.toString("latin1")
+                        .match(/ m\n/g) ?? []).length, 238);
+                } else {
+                    assert.deepEqual(result.stdout.subarray(0, 8),
+                        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+                    assert.equal(result.stdout[25], 6,
+                        "rendered page is transparent RGBA PNG");
+                }
+            }
+            assert.equal(fs.readFileSync(library, "utf8"), expected);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);

@@ -2501,6 +2501,47 @@ function cursiveLoop(base: Stroke[], radius: number): Stroke[] {
     return ink;
 }
 
+// An explicitly selected cursive e keeps one continuous pen gesture:
+// a short left entry, an upward crossing, the open circular contour in
+// reverse pen order, and a right exit. The printed e stays unchanged.
+function cursiveOpenE(base: Stroke[], radius: number): Stroke[] {
+    const arc = base.slice(0, OPEN_ARC_SEGMENTS);
+    const bar = base[OPEN_ARC_SEGMENTS];
+    const upper = arc.at(-1);
+    const lower = arc[0];
+    if (bar === undefined || upper === undefined || lower === undefined) {
+        throw new Error("Cursive e requires an authored open-loop source");
+    }
+    const glyph = bar.grapheme;
+    const pen = bar.width;
+    const lead = Math.min(200, Math.round(radius / 5));
+    const left = { x: bar.x1, y: bar.y1 };
+    const top = { x: upper.x2, y: upper.y2 };
+    const bottom = { x: lower.x1, y: lower.y1 };
+    const draw = (from: Point, to: Point): Stroke => {
+        for (const point of [from, to]) {
+            if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
+                || point.y - pen / 2 < 0
+                || point.y + pen / 2 > 4500) {
+                throw new Error("Cursive e and pen clip glyph cell");
+            }
+        }
+        return validateStroke({ grapheme: glyph,
+            x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+            width: pen, color: bar.color });
+    };
+    return [
+        draw({ x: left.x - lead, y: left.y + lead }, left),
+        draw(left, top),
+        ...arc.toReversed().map((stroke) => {
+            const from = { x: stroke.x2, y: stroke.y2 };
+            const to = { x: stroke.x1, y: stroke.y1 };
+            return draw(from, to);
+        }),
+        draw(bottom, { x: bottom.x + lead, y: bottom.y - lead }),
+    ];
+}
+
 // Optional one-click starters reuse the same accent composer as the manual
 // Spanish fill. They never normalize or overwrite an existing Unicode key.
 const ACCENTED_STARTERS: Readonly<Record<string, string>> = {
@@ -2551,19 +2592,23 @@ export function geometricStarter(
             && !["o", "a", "ó", "á"].includes(g))) {
         throw new Error("Italic variant requires matching o/a glyph");
     }
-    if (kind === "cursive" && !["o", "a", "ó", "á"].includes(g)) {
-        throw new Error("Cursive variant requires o/a circle glyph");
+    if (kind === "cursive" && !["o", "a", "ó", "á", "e", "é"]
+        .includes(g)) {
+        throw new Error("Cursive variant requires o/a or e glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
-        const base = geometricStarter(accentBase, x, y, r, w, color, pos);
+        const baseKind = kind === "cursive" && g === "é"
+            ? "cursive" : "single";
+        const input = [accentBase, x, y, r, w, color, pos] as const;
+        const base = geometricStarter(...input, baseKind);
         return composeAccentedGlyph(base, accentBase, g, color, {
             dx: pos?.dx ?? 0, lift: pos?.lift ?? 0,
         });
     }
     if (kind === "cursive") {
         const base = geometricStarter(g, x, y, r, w, color, pos, "single");
-        return cursiveLoop(base, r);
+        return g === "e" ? cursiveOpenE(base, r) : cursiveLoop(base, r);
     }
     if (italic) {
         const angle = pos?.italicDegrees ?? 12;
@@ -3639,16 +3684,22 @@ export function createGlyphStrokeEditor(): {
             const lead = Math.min(200, Math.round(r / 5));
             const endY = ["a", "á"].includes(chosen.grapheme)
                 ? cy + r : cy;
+            const cursiveE = connected && ["e", "é"]
+                .includes(chosen.grapheme);
+            const eUpper = openCirclePoint(cx, cy, r, OPEN_ARC_SEGMENTS);
+            const eLower = openCirclePoint(cx, cy, r, 0);
             const connectors: [SVGLineElement, Point, Point][] = [
                 [idealEntry,
                     { x: cx - r - lead, y: cy + lead },
                     { x: cx - r, y: cy }],
                 [idealApproach,
-                    { x: cx + r, y: cy },
-                    { x: cx + r, y: cy - r }],
+                    cursiveE ? { x: cx - r, y: cy }
+                        : { x: cx + r, y: cy },
+                    cursiveE ? eUpper : { x: cx + r, y: cy - r }],
                 [idealExit,
-                    { x: cx + r, y: endY },
-                    { x: cx + r + lead, y: endY - lead }],
+                    cursiveE ? eLower : { x: cx + r, y: endY },
+                    cursiveE ? { x: eLower.x + lead, y: eLower.y - lead }
+                        : { x: cx + r + lead, y: endY - lead }],
             ];
             for (const [guide, from, to] of connectors) {
                 for (const [axis, value] of [
@@ -3658,8 +3709,9 @@ export function createGlyphStrokeEditor(): {
                 guide.setAttribute("stroke-width", numeric.width.value);
                 guide.setAttribute("stroke", color.value);
                 guide.setAttribute("visibility", connected &&
-                    (guide !== idealApproach || ["a", "á"].includes(
-                        chosen.grapheme)) ? shown : "hidden");
+                    (guide !== idealApproach || cursiveE
+                        || ["a", "á"].includes(chosen.grapheme))
+                    ? shown : "hidden");
             }
             const { start, peak, end, left, right } = upperStory(cx, cy, r);
             const beginning = ["M", start.x, start.y].join(" ");
@@ -3819,7 +3871,10 @@ export function createGlyphStrokeEditor(): {
             const arcHeader = ["M", openStart.x, openStart.y];
             const arcTail = ["A", r, r, 0, 1, 1,
                 openEnd.x, openEnd.y];
-            const openD = [...arcHeader, ...arcTail].join(" ");
+            const openD = cursiveE
+                ? ["M", openEnd.x, openEnd.y, "A", r, r, 0, 1, 0,
+                    openStart.x, openStart.y].join(" ")
+                : [...arcHeader, ...arcTail].join(" ");
             openPath.setAttribute("d", openD);
             openPath.setAttribute("stroke-width", numeric.width.value);
             openPath.setAttribute("stroke", color.value);
@@ -3833,8 +3888,9 @@ export function createGlyphStrokeEditor(): {
             eBar.setAttribute("y2", String(cy));
             eBar.setAttribute("stroke-width", numeric.width.value);
             eBar.setAttribute("stroke", color.value);
-            const barState = active && ["e", "é", "t", "f"]
-                .includes(chosen.grapheme) ? "visible" : "hidden";
+            const barState = active && !cursiveE
+                && ["e", "é", "t", "f"].includes(chosen.grapheme)
+                ? "visible" : "hidden";
             eBar.setAttribute("visibility", barState);
             const pen = Number(numeric.width.value);
             const iParts = ["i", "í", "j"].includes(chosen.grapheme)

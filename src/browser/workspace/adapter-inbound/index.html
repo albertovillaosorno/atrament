@@ -845,7 +845,9 @@
                 <option value="g">Loop g (circle and quadratic hook)</option>
                 <option value="c">Open circle c</option>
                 <option value="e">Open loop e (with bar)</option>
+                <option value="e-cursive">Manual continuous-pen e</option>
                 <option value="é">Acute é (open loop and accent)</option>
+                <option value="é-cursive">Manual continuous-pen é</option>
                 <option value="i">Dotted i (stem and dot)</option>
                 <option value="í">Acute í (stem, no dot)</option>
                 <option value="j">Dotted j (curved descender)</option>
@@ -872,6 +874,7 @@
                 <option value="a&#x0301;-two-italic">NFD italic
                   two-storey a</option>
                 <option value="e&#x0301;">NFD lowercase e + acute</option>
+                <option value="e&#x0301;-cursive">NFD continuous-pen é</option>
                 <option value="i&#x0301;">NFD lowercase i + acute</option>
                 <option value="o&#x0301;">NFD lowercase o + acute</option>
                 <option value="o&#x0301;-italic">NFD italic acute o</option>
@@ -970,6 +973,7 @@
             selected base-plus-combining-mark Unicode key in TSV, even
             when their read-only SVG guide shares an NFC shape. The NFD
             acute a/o also allow explicit italic and connected-pen forms;
+            e/é have a separate connected-pen loop with one lifted acute;
             a offers a separate printed two-storey shape (reduce radius
             to fit its top accent). These
             starters never overwrite an independently authored NFC glyph.

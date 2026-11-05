@@ -8243,3 +8243,94 @@ test("whole-glyph rotation proposal and one-step undo are session-safe",
         ui.restore();
     }
 });
+
+test("opt-in cursive e and acute é keep exact directed pen paths", () => {
+    const geometry = [1550, 2450, 700, 250, "#123456"];
+    const printed = geometricStarter("e", ...geometry);
+    const body = geometricStarter("e", ...geometry, undefined, "cursive");
+    assert.equal(printed.length, 37);
+    assert.equal(body.length, 39);
+    assert.notDeepEqual(body, printed,
+        "manual connected-pen e is not silently substituted for printed e");
+    assert.deepEqual(body.slice(2, 38), printed.slice(0, 36)
+        .toReversed().map((line) => ({ ...line, x1: line.x2,
+            y1: line.y2, x2: line.x1, y2: line.y1 })),
+    "the authored circular C contour is traversed in reverse pen order");
+    for (const glyph of ["e", "é", "e\u0301"]) {
+        const lines = geometricStarter(glyph, ...geometry,
+            undefined, "cursive");
+        assert.equal(lines.length, glyph === "e" ? 39 : 40);
+        const paths = candidatePenPaths(lines, glyph);
+        assert.deepEqual(paths.map(({ first, last }) => [first, last]),
+            glyph === "e" ? [[1, 39]] : [[1, 39], [40, 40]],
+            "base has one continuously directed path; acute lifts once");
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(lines)),
+            lines, "exact Unicode identity survives native UTF-8 TSV");
+    }
+    assert.deepEqual(geometricStarter("e", ...geometry), printed,
+        "building the cursive e never mutates the default printed form");
+    assert.deepEqual(geometricStarter("é", ...geometry),
+        geometricStarter("e\u0301", ...geometry).map((line) => ({
+            ...line, grapheme: "é",
+        })), "NFC/NFD printed shape remains separate and unchanged");
+    assert.throws(() => geometricStarter("e", 1550, 2450,
+        1400, 250, "#123456", undefined, "cursive"),
+    /Cursive e and pen clip/);
+    assert.throws(() => geometricStarter("u", ...geometry,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser cursive e/é guides and manual TSV stay session-safe",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "e-cursive";
+            get("form").dispatch("change");
+            for (const id of ["ideal-entry", "ideal-approach",
+                "ideal-exit", "ideal-c-loop"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `connected e shows ${id}`);
+            }
+            assert.equal(get("ideal-e-bar").attributes.get("visibility"),
+                "hidden", "connected crossing replaces printed e bar");
+            assert.match(get("ideal-c-loop").attributes.get("d"),
+                / A 1100 1100 0 1 0 /,
+                "SVG guide reverses the C arc direction");
+            get("character").value = "e";
+            get("character").dispatch("input");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                geometricStarter("e", 1550, 2450, 1100, 250,
+                    "#243647", undefined, "cursive"));
+            get("circle-radius").value = "700";
+            get("circle-radius").dispatch("input");
+            get("form").value = "e\u0301-cursive";
+            get("form").dispatch("change");
+            get("character").value = "e\u0301";
+            get("character").dispatch("input");
+            assert.equal(get("ideal-accent").attributes.get("visibility"),
+                "visible", "NFD acute remains separately lifted ink");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            const lines = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(lines.filter((line) =>
+                line.grapheme === "e\u0301"), geometricStarter("e\u0301",
+                1550, 2450, 700, 250, "#243647", undefined, "cursive"));
+            get("circle-radius").value = "1400";
+            get("circle-radius").dispatch("input");
+            assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+                "hidden", "clipped draft cannot show stale guide");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                lines, "invalid geometry preserves existing unsaved ink");
+            editor.reset();
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden", "session end clears the connected-pen guide");
+        } finally {
+            ui.restore();
+        }
+    });

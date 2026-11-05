@@ -661,3 +661,13 @@ statistics transport only, not joined ink or calibrated strokes.
 The finite implementation described above is not established by
 the original theoretical design acceptance. This follow-up must be
 evaluated separately against its practical or theoretical scope.
+
+## Additional continuous-pen e and accented e samples (partial)
+
+The caller may explicitly choose a single directed cursive `e` path or
+compose one separately lifted acute on its NFC/NFD exact grapheme. Native
+TSV, Rust PDF and transparent PNG preserve the selected 39/40-segment pen
+order; browser guide and real Firefox acceptance prove no implicit draft
+replacement or automatic adjacent-word joining. Full two-line correlated
+cursive handwriting, joined letter families and persisted variation remain
+open. See the P1-012 exact glyph evidence for the tested geometry.
