@@ -583,7 +583,9 @@ and one-to-nine-digit ordered labels such as `1.` without item text refuse
 as empty Markdown blocks even if their literal glyph ink was authored.
 
 Escape a leading marker to print it literally, or use four initial spaces
-for literal indented punctuation. A standalone `-` immediately after a
+for literal indented punctuation. For example, three source lines `a`,
+`\===`, `a` print `a === a` with an authored equals glyph rather than a
+Setext title; the backslash itself needs no glyph. A standalone `-` after a
 paragraph is still a Setext H2 underline rather than an empty list item.
 
 A nonempty title followed immediately by one or more `=` or `-` marks
