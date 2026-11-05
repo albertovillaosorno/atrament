@@ -592,7 +592,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "⌊", "⌋", "⌈", "⌉"];
 // Additional exact notation is manually selected, not automatically filled.
 // A full text/math fill currently sits just 12 strokes below the native cap.
-const MANUAL_MATH_GLYPHS = ["⟨", "⟩"];
+const MANUAL_MATH_GLYPHS = ["⟨", "⟩", "α", "β", "θ", "λ"];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
 ];
@@ -1097,6 +1097,38 @@ function mathParts(cx, cy, radius, glyph) {
     const curve = (start, handle, end) => ({
         from: point(...start), control: point(...handle), to: point(...end),
     });
+    // Common Greek mathematics symbols have exact, manually selected
+    // Unicode keys. Sample their analytic bowls into native pen chords;
+    // do not add them to the nearly full automatic 93-glyph math batch.
+    if (glyph === "α")
+        return [
+            curve([0, -0.8], [0.65, -0.8], [0.65, 0]),
+            curve([0.65, 0], [0.65, 0.8], [0, 0.8]),
+            curve([0, 0.8], [-0.65, 0.8], [-0.65, 0]),
+            curve([-0.65, 0], [-0.65, -0.8], [0, -0.8]),
+            line(0.65, 0, 0.75, 0.8),
+        ];
+    if (glyph === "β")
+        return [
+            line(-0.55, -0.85, -0.55, 0.9),
+            curve([-0.55, -0.78], [0.8, -0.95], [0.65, -0.25]),
+            curve([0.65, -0.25], [0.7, 0], [-0.55, 0]),
+            curve([-0.55, 0], [0.9, 0.1], [0.65, 0.5]),
+            curve([0.65, 0.5], [0.35, 1], [-0.55, 0.8]),
+        ];
+    if (glyph === "θ")
+        return [
+            curve([0, -0.85], [0.65, -0.85], [0.65, 0]),
+            curve([0.65, 0], [0.65, 0.85], [0, 0.85]),
+            curve([0, 0.85], [-0.65, 0.85], [-0.65, 0]),
+            curve([-0.65, 0], [-0.65, -0.85], [0, -0.85]),
+            line(-0.65, 0, 0.65, 0),
+        ];
+    if (glyph === "λ")
+        return [
+            line(-0.38, -0.85, -0.75, 0.8),
+            line(-0.38, -0.85, 0.75, 0.8),
+        ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.
     // A saved '=' or approximate sign never supplies either shape.

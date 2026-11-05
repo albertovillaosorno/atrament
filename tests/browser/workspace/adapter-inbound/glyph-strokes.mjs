@@ -3470,6 +3470,35 @@ test("manual mathematical angle brackets preserve directed Unicode ink", () => {
     }
 });
 
+test("manual Greek math keeps exact alpha beta theta lambda pen paths", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const expectedCounts = [["α", 65], ["β", 65],
+        ["θ", 65], ["λ", 2]];
+    const ink = expectedCounts.flatMap(([glyph, count]) => {
+        const strokes = geometricStarter(glyph, ...args);
+        assert.equal(strokes.length, count, `${glyph} native pen count`);
+        assert.ok(strokes.every((part) => part.grapheme === glyph));
+        const paths = candidatePenPaths(strokes, glyph);
+        assert.equal(paths.length, 2, `${glyph} deliberate pen lifts`);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(strokes)),
+            strokes, `${glyph} exact Unicode and directed stroke replay`);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+        return strokes;
+    });
+    assert.equal(ink.length, 197);
+    assert.deepEqual(new Set(ink.map((line) => line.grapheme)),
+        new Set(expectedCounts.map(([glyph]) => glyph)));
+    assert.notDeepEqual(geometricStarter("θ", ...args),
+        geometricStarter("o", ...args),
+        "theta needs separate crossbar and cannot alias Latin o");
+    assert.notDeepEqual(geometricStarter("α", ...args),
+        geometricStarter("a", ...args),
+        "Greek alpha cannot borrow single-storey Latin a");
+    assert.throws(() => geometricStarter("μ", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5228,6 +5257,16 @@ test("eleven explicit fills author 206 exact glyphs", async () => {
         get("save").dispatch("click");
         assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
             manual, "automatic math fill does not overwrite manual angles");
+        // The combined 4088-stroke library cannot admit a 65-stroke Greek
+        // outline; the editor must refuse without changing saved TSV.
+        get("form").value = "α";
+        get("character").value = "α";
+        get("form").dispatch("input");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /4096/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            manual, "over-cap manual Greek cannot corrupt prior TSV");
         editor.reset();
         assert.equal(get("seed-math").disabled, true);
         assert.equal(get("seed-digits").disabled, true);
@@ -5255,7 +5294,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "≪", "≫", "≮", "≯", "≰", "≱", "↗", "↘",
         "↖", "↙", "⇐", "↦", "↤", "∣", "∤", "′", "″", "‴",
         "⋅", "∗", "∖", "∦", "⌊", "⌋", "⌈", "⌉",
-        "⟨", "⟩", "°", "%", "$", "€",
+        "⟨", "⟩", "α", "β", "θ", "λ", "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",
@@ -5298,7 +5337,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 27504);
+    assert.equal(checked, 28080);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 

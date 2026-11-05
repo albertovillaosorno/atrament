@@ -1953,3 +1953,26 @@ PNG and refuses unauthored lookalikes before replacing an accepted PDF.
 The real Firefox workflow also verifies manual construction after math
 batch fill and source-to-native replay. This is a manual notation option,
 not automatic mathematical typesetting or generic glyph substitution.
+
+## Manually selected Greek mathematics ink (partial) — 2026-11-04
+
+The exact Unicode Greek letters `α`, `β`, `θ`, and `λ` are now separately
+selectable from the glyph editor. Alpha, beta and theta have four sampled
+analytic quadratics and a deliberately lifted terminal or crossbar (65
+strokes each); lambda has two independent directed pen legs. These are
+caller-chosen glyph outlines, not automatic handwriting or Latin-letter
+fallbacks. Their ideal guides and native TSV keys remain distinct from
+Latin `a`, `b`, `o` and `l` and unsupported Greek `μ`.
+
+They are **manual only**, preserving the 93-symbol automatic math fill and
+its 4084/4096-stroke ceiling after all eleven independent baseline fills.
+The browser explicitly refuses a further 65-stroke Greek glyph when the
+remaining eight slots cannot fit it, preserving the existing library. In a
+separate bounded library, all four Greek shapes produce 197 exact segments,
+which Rust reopens and renders in a physical two-row PDF and transparent PNG.
+Native refusal tests preserve accepted output for unauthored lookalikes.
+
+Geometry/boundary, real Firefox SVG and TSV export, and native PDF/PNG tests
+verify the paths, selection, cap and refusal. This does not add the full
+Greek alphabet, automatic prose composition or calibrated physical writing;
+the P1 glyph coverage task remains open.
