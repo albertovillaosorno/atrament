@@ -2485,10 +2485,12 @@ analytic circular arc. The v1 TSV samples 39 pen chords for `e` or 40 for
 either accented Unicode identity; there is no persisted curve or automatic
 inter-letter join. Invalid/clipped variants refuse without draft edits.
 Browser tests cover exact path continuity, independent NFC/NFD keys, and
-unchanged default ink. Real Firefox selects each form and downloads native
-TSV, which the separate Rust CLI reopens byte-for-byte and renders to a
-two-line physical vector PDF and transparent PNG. This advances selectable
-manual cursive shapes, not writer calibration or full P1-012 completion.
+unchanged default ink.
+
+Real Firefox selects each form and downloads native TSV, which the separate
+Rust CLI reopens byte-for-byte and renders to a two-line physical vector PDF
+and transparent PNG. This advances selectable manual cursive shapes, not
+writer calibration or full P1-012 completion.
 
 ## Complementary continuous-pen c starter (partial) — 2026-11-05
 
@@ -2527,6 +2529,7 @@ The opt-in `l` variant now preserves the full-height printed downstroke
 and connects a short rising entry and exit around it, creating one directed
 three-segment pen gesture without a fabricated second dot or pen lift.
 The ordinary single-segment printed `l` remains available and unchanged.
+
 Browser and real Firefox guide/download cases exercise actual native TSV,
 Rust PDF and transparent PNG output alongside `c`, `e`, `i` and their
 accented variants. Invalid tall-stem geometry refuses before draft edits.
