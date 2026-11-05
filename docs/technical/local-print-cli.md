@@ -165,6 +165,11 @@ An in-use record zero or a free record zero with any other generation
 refuses before CUPS. The gate does not require a sparse terminal table to
 repeat object zero if that record is not present in the selected subsection.
 
+All PDF dictionary names in terminal table trailers and cross-reference
+stream headers must use valid `#` plus two hexadecimal digits for escapes,
+including unknown extension keys. Malformed or truncated escapes refuse
+before contacting CUPS; valid escaped names and aliases remain supported.
+
 The trailer scanner now balances nested dictionaries and arrays, skipping
 literal/hex strings and comments when locating the one top-level `/Size`.
 Only whitespace and PDF comments may follow the complete outer `>>` before

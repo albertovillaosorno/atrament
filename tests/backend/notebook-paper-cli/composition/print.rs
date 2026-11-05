@@ -1504,6 +1504,59 @@ fn xref_in_use_object_cannot_point_into_terminal_trailer() {
 
 #[cfg(unix)]
 #[test]
+fn malformed_pdf_name_escapes_refuse_in_table_and_stream_metadata() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS fixture");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake CUPS executable");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    let samples = |name: &str| [
+        format!(concat!(
+            "%PDF-1.7\nxref\n0 1\n0000000000 65535 f \n",
+            "trailer\n<< /Size 1 /{} /Value >>\n",
+            "startxref\n9\n%%EOF\n",
+        ), name).into_bytes(),
+        one_page_xref_stream_pdf("1.7", &format!(" /{name} /Value")),
+    ];
+    for valid in ["CustomName", "Custom#20Name", "Custom#23Name"] {
+        for candidate in samples(valid) {
+            assert!(supported_pdf_cross_reference(&candidate), "{valid}");
+            fs::write(&pdf, &candidate).expect("write valid PDF");
+            let digest = submit_selected(&request, &fake_spool)
+                .expect("valid PDF reaches explicit fake CUPS queue");
+            assert_eq!(digest, sha256_profile_bytes(&candidate).bytes());
+            assert_eq!(fs::read(&spooled).expect("spooled PDF"), candidate);
+        }
+    }
+    fs::remove_file(&spooled).expect("clear fake spool");
+    for invalid in ["Custom#", "Custom#2", "Custom#G0", "Custom#9g"] {
+        for candidate in samples(invalid) {
+            assert!(!supported_pdf_cross_reference(&candidate),
+                "malformed key must refuse: {invalid}");
+            fs::write(&pdf, &candidate).expect("write malformed PDF");
+            assert!(selected_pdf(&pdf).is_err());
+            assert!(submit_selected(&request, &fake_spool).is_err(),
+                "invalid PDF must not contact CUPS");
+            assert!(!spooled.exists(), "fake spool must remain untouched");
+            assert_eq!(fs::read(&pdf).expect("source unchanged"),
+                candidate);
+        }
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixture");
+}
+
+#[cfg(unix)]
+#[test]
 fn xref_escaped_pdf_names_cannot_hide_duplicate_size_keys() {
     use std::os::unix::fs::PermissionsExt as _;
 

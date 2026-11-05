@@ -717,6 +717,14 @@ fn pdf_name(bytes: &[u8], start: usize) -> Option<(&[u8], usize)> {
     while bytes.get(end).is_some_and(|byte| {
         !pdf_whitespace(*byte) && !b"()<>[]{}/%".contains(byte)
     }) {
+        // Every # begins a two-digit hex escape, including in unknown
+        // keys. Do not let malformed PDF names bypass lexical preflight.
+        if bytes.get(end) == Some(&b'#')
+            && !bytes.get(end.saturating_add(1)..end.saturating_add(3))
+                .is_some_and(|pair| pair.len() == 2
+                    && pair.iter().all(u8::is_ascii_hexdigit)) {
+            return None;
+        }
         end = end.saturating_add(1);
     }
     if end == first {
