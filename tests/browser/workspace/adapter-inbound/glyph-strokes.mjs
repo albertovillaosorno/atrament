@@ -3582,6 +3582,32 @@ test("manual Greek epsilon and omega keep distinct pen lifts", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual Greek kappa and chi preserve separate native pen paths", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, start] of [
+        ["κ", 33, [835, 1515, 835, 3385]],
+        ["χ", 32, [835, 1570]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, `${glyph} sampled stroke count`);
+        assert.equal(candidatePenPaths(ink, glyph).length, 2,
+            `${glyph} maintains distinct directed pen paths`);
+        assert.deepEqual([ink[0].x1, ink[0].y1,
+            ...(start.length === 4 ? [ink[0].x2, ink[0].y2] : [])],
+        start, `${glyph} first ink is not borrowed`);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("κ", ...args),
+        geometricStarter("k", ...args), "kappa is not Latin k");
+    assert.notDeepEqual(geometricStarter("χ", ...args),
+        geometricStarter("x", ...args), "chi is not Latin x");
+    assert.throws(() => geometricStarter("ν", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5378,7 +5404,8 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "↖", "↙", "⇐", "↦", "↤", "∣", "∤", "′", "″", "‴",
         "⋅", "∗", "∖", "∦", "⌊", "⌋", "⌈", "⌉",
         "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
-        "δ", "σ", "ρ", "τ", "ε", "ω", "°", "%", "$", "€",
+        "δ", "σ", "ρ", "τ", "ε", "ω", "κ", "χ",
+        "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",

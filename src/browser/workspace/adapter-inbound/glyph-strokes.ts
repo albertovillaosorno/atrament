@@ -692,7 +692,8 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 // Additional exact notation is manually selected, not automatically filled.
 // A full text/math fill currently sits just 12 strokes below the native cap.
 const MANUAL_MATH_GLYPHS = [
-    "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ", "ε", "ω",
+    "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
+    "ε", "ω", "κ", "χ",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1236,6 +1237,18 @@ function mathParts(
         curve([0, -0.15], [0.05, 0.75], [0.45, 0.75]),
         curve([0.45, 0.75], [0.85, 0.75], [0.85, -0.65]),
         line(-0.75, 0.85, -0.35, 0.85),
+    ];
+    // Kappa lifts from an upright to a separate, joined curved arm.
+    // Chi draws two independent crossing curved paths; neither borrows
+    // the Latin k/x outlines or a Unicode lookalike.
+    if (glyph === "κ") return [
+        line(-0.65, -0.85, -0.65, 0.85),
+        curve([0.7, -0.75], [0.1, -0.4], [-0.45, 0.05]),
+        curve([-0.45, 0.05], [0.35, 0.4], [0.75, 0.85]),
+    ];
+    if (glyph === "χ") return [
+        curve([-0.65, -0.8], [-0.2, 0.02], [0.75, 0.8]),
+        curve([0.65, -0.85], [0.15, -0.1], [-0.75, 0.85]),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

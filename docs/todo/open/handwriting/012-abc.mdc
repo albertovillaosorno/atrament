@@ -2034,3 +2034,16 @@ Neither is added to the capped automatic 93-key math fill. Real browser
 SVG and exact Unicode TSV, Firefox export to native PDF/PNG, and Rust
 missing-glyph refusal without replacing an accepted file are tested.
 The broader Greek alphabet and persisted text layout remain unfinished.
+
+## Manually selected Greek kappa and chi ink (partial) — 2026-11-04
+
+Exact lowercase `κ` and `χ` now have manually selectable directed pen paths.
+Kappa combines one upright with a separately lifted, joined quadratic arm
+(33 native segments). Chi crosses two independent quadratic pen paths (32
+segments), without borrowing the Latin `k`/`x` or other authored glyph ink.
+
+Both remain separate from the nearly full automatic 93-symbol math fill.
+Browser geometry and Unicode TSV checks, Firefox SVG/TSV export, native Rust
+PDF/transparent PNG replay, and atomic refusal for missing glyphs verify this
+bounded addition. The full Greek alphabet, editable notebook ink composition
+and calibrated handwriting are still unfinished.
