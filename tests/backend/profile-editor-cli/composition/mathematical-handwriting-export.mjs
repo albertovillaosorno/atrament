@@ -1716,6 +1716,60 @@ test('converse implication and left diagonals export native ink', () => {
     }
 });
 
+// Function mapsto arrows have an upright stop distinct from ordinary arrows.
+test('left and right mapsto arrows retain native pen stops and refusal', () => {
+    const dir = mkdtempSync(join(root, '.temp/math-mapsto-'));
+    try {
+        const library = join(dir, 'mapsto.tsv');
+        const output = join(dir, 'mapsto.pdf');
+        const symbols = ['↦', '↤'];
+        const ink = symbols.flatMap((glyph) => geometricStarter(
+            glyph, 1550, 2450, 1100, 250, '#243647'));
+        assert.equal(ink.length, 8);
+        for (const glyph of symbols) {
+            assert.deepEqual(candidatePenPaths(ink, glyph).map(
+                ({ first, last }) => [first, last]),
+            [[1, 1], [2, 2], [3, 4]],
+            'mapsto stop, shaft and head must have separate pen lifts');
+        }
+        const original = Buffer.from(encodeGlyphLibrary(ink));
+        writeFileSync(library, original);
+        const reopened = cli('glyphs', ['--profile', library]);
+        assert.equal(reopened.status, 0, reopened.stderr.toString());
+        assert.deepEqual(reopened.stdout, original);
+        const audit = cli('glyphs', ['--profile', library,
+            '--audit-text', symbols.join('')]);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        assert.match(audit.stdout.toString(), /Distinct visible graphemes: 2/);
+        const flags = ['--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', `${symbols.join('')}\n${symbols.join('')}`];
+        const pdf = cli('notebook', [...flags,
+            '--export-paper', 'pdf', '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, ink.length * 2, 'two rows keep every mapsto pen stop');
+        const png = cli('notebook', [...flags,
+            '--export-paper', 'png', '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        for (const missing of ['←', '→', '↪']) {
+            const refused = cli('notebook', ['--printed-sheet', 'true',
+                '--glyph-file', library, '--flow-text', `↦↤${missing}`,
+                '--export-paper', 'pdf', '--output', output, '--replace']);
+            assert.notEqual(refused.status, 0);
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted,
+                'missing arrow cannot overwrite the accepted PDF');
+        }
+        assert.deepEqual(readFileSync(library), original);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 // Logical implication retains distinct multi-shaft pen order and Unicode.
 test('negation and two implications export exactly in native PDF PNG', () => {
     const dir = mkdtempSync(join(root, '.temp/math-implication-'));

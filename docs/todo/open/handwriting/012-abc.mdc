@@ -1833,3 +1833,22 @@ full semantic mathematics or automatic handwriting layout.
 Open. Provide the actual bounded Rust/backend or browser integration and an
 accepted/refused example before marking the executable capability complete.
 Theoretical design acceptance alone cannot establish that this feature runs.
+
+## Exact mapsto arrow bars (partial) — 2026-11-04
+
+The optional geometric math editor now offers `↦` (maps to) and `↤`
+(maps from) as distinct Unicode pen glyphs. Each has a separately lifted
+endpoint stop, a directional horizontal shaft, and a two-segment connected
+head. Ordinary `→` and `←` remain independent; no existing authored ink
+is replaced. **Fill missing math** now covers 80 exact keys.
+
+The browser regression checks all four source micrometre segments, directed
+pen-path boundaries, native TSV round-trip, cell clipping and atomic fill.
+A native Rust integration reopens the UTF-8 library, audits both exact
+keys, renders two real PDF/transparent PNG rows and refuses missing arrow
+shapes before replacing a selected PDF. The authenticated Firefox flow
+checks both controls, the complete opt-in library, visible SVG guides and
+Rust PDF/PNG replay without a hidden editor-to-backend authoring request.
+
+This remains sampled manual pen geometry, not symbolic function typesetting,
+automatic glyph fallback or the completed P1 bilingual handwriting library.

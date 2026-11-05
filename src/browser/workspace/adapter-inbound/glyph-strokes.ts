@@ -686,8 +686,8 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",
     "∠", "∟", "⊬", "⊭", "¬", "⇒", "⇔",
     "≪", "≫", "≮", "≯", "≰", "≱", "↗", "↘",
-    "↖", "↙", "⇐"] as const;
-// Extra manual marks do not change the 78-glyph math fill.
+    "↖", "↙", "⇐", "↦", "↤"] as const;
+// Extra manual marks do not change the 80-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -1034,6 +1034,21 @@ function mathParts(
         line(-0.8, 0, -0.2, 0.55),
         line(0.2, -0.55, 0.8, 0),
         line(0.8, 0, 0.2, 0.55),
+    ];
+    // Function mapsto arrows keep an upright endpoint bar, one directed
+    // shaft and a separate connected arrowhead. These exact symbols never
+    // inherit the ordinary arrows or borrow an authored glyph's ink.
+    if (glyph === "↦") return [
+        line(-0.75, -0.65, -0.75, 0.65),
+        line(-0.75, 0, 0.8, 0),
+        line(0.2, -0.55, 0.8, 0),
+        line(0.8, 0, 0.2, 0.55),
+    ];
+    if (glyph === "↤") return [
+        line(0.75, -0.65, 0.75, 0.65),
+        line(0.75, 0, -0.8, 0),
+        line(-0.2, -0.55, -0.8, 0),
+        line(-0.8, 0, -0.2, 0.55),
     ];
     // Vertical arrows keep their own exact Unicode and ordered shaft.
     // Each separate head joins at its tip without making an implied
