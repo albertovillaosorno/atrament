@@ -595,7 +595,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
     "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
-    "ν", "ς", "Γ", "Ω",
+    "ν", "ς", "Γ", "Ω", "Π", "Σ",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1309,6 +1309,22 @@ function mathParts(cx, cy, radius, glyph) {
             curve([0, -0.85], [0.2, -1.05], [0.55, -0.65]),
             curve([0.55, -0.65], [0.9, -0.1], [0.45, 0.55]),
             line(0.35, 0.8, 0.75, 0.8),
+        ];
+    // Capital Pi traces both uprights and the connecting cap without a
+    // lift. Capital Sigma has one angular zigzag between its top/bottom
+    // bars. Each is distinct from Gamma and the summation operator ∑.
+    if (glyph === "Π")
+        return [
+            line(-0.7, 0.85, -0.7, -0.85),
+            line(-0.7, -0.85, 0.7, -0.85),
+            line(0.7, -0.85, 0.7, 0.85),
+        ];
+    if (glyph === "Σ")
+        return [
+            line(0.75, -0.85, -0.65, -0.85),
+            line(-0.65, -0.85, 0.25, 0),
+            line(0.25, 0, -0.65, 0.85),
+            line(-0.65, 0.85, 0.75, 0.85),
         ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

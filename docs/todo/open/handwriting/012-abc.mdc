@@ -2135,3 +2135,17 @@ Browser clipping/TSV geometry, live Firefox selection and native PDF
 and transparent PNG rendering prove the pen paths. A declined export
 for unauthored Latin/Greek lookalikes preserves accepted PDF bytes.
 The broader uppercase alphabet and calibrated handwriting are open.
+
+## Manually selected uppercase Greek Pi and Sigma (partial) — 2026-11-04
+
+Uppercase `Π` and `Σ` now have exact manual geometric starters. Pi
+traces both stems and its top cap in a continuous three-segment pen
+path; Sigma joins its two horizontal terminals with a central angular
+zigzag in one four-segment pen path. Neither inherits ink from `Γ`,
+`∑`, lowercase Greek, or Latin lookalikes.
+
+The automatic 93-symbol fill remains unchanged at 4,084 native strokes.
+Browser SVG geometry, Unicode TSV roundtrip, live Firefox selection,
+Rust PDF/transparent PNG rendering, and preservation of an accepted
+PDF on unauthored-glyph refusal are verified with dedicated tests.
+The full Greek uppercase inventory and calibrated handwriting remain open.
