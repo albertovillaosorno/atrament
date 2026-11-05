@@ -3908,6 +3908,32 @@ test("manual Greek capitals Alpha and Epsilon keep unique pen paths", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual Greek capitals Iota and Omicron preserve exact pen paths", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, first] of [
+        ["Ι", 1, [1550, 1515]],
+        ["Ο", 64, [1550, 1570]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count);
+        assert.equal(candidatePenPaths(ink, glyph).length, 1,
+            glyph + " draws one uninterrupted exact path");
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.ok(ink.every((stroke) => stroke.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("Ι", ...args),
+        geometricStarter("I", ...args), "capital Iota differs from Latin I");
+    assert.notDeepEqual(geometricStarter("Ο", ...args),
+        geometricStarter("O", ...args), "capital Omicron differs from O");
+    assert.notDeepEqual(geometricStarter("Ι", ...args),
+        geometricStarter("ι", ...args), "capital Iota differs from lower");
+    assert.notDeepEqual(geometricStarter("Ο", ...args),
+        geometricStarter("ο", ...args), "capital Omicron differs from lower");
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [

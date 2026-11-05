@@ -2217,3 +2217,17 @@ bounded 93-symbol automatic math fill. Browser TSV and clipping tests,
 real Firefox SVG/TSV export to Rust PDF/transparent PNG, and atomic
 refusal of unauthored Greek/Latin lookalikes provide regression coverage.
 The complete uppercase Greek alphabet is still unfinished P1 work.
+
+## Manually selected uppercase Greek Iota and Omicron (partial) — 2026-11-04
+
+Capital `Ι` is a single, undotted upright stroke with no Latin `I`
+serifs. Capital `Ο` is a closed asymmetric oval, four joined quadratic
+curves sampled to 64 directed native chords; it is not the 48-segment
+Latin `O` ring or lowercase Greek `ο` ink. Both keep independent exact
+Unicode identities and preserve their authored pen continuity.
+
+The browser's 93-glyph automatic math fill remains unchanged. Tests now
+cover opt-in SVG/TSV construction, clipping and exact roundtrips, live
+Firefox native PDF/transparent PNG replay, and refusal to overwrite
+accepted pages on missing Greek/Latin glyphs. Greek uppercase coverage,
+calibration and personal handwriting remain incomplete P1 requirements.
