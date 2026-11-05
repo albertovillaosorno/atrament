@@ -139,6 +139,74 @@ fn literal_indent_before_setext_mark_keeps_its_glyph_pitch() {
 }
 
 #[test]
+fn indented_blockquote_lines_keep_the_quote_rule_and_exact_ink() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default writing rectangle");
+    let region = super::FlowRegion {
+        left, top, width: 24_000, height: 36_000,
+    };
+    let render = |text: &str| {
+        let source = FlowSource::new(FlowFormat::Markdown, text)
+            .expect("bounded Markdown quote source");
+        super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("quoted paragraph fits the selected rectangle")
+    };
+    let canonical = render("> a ó a a");
+    for continued in [
+        "> a\n  ó a a", "> a\n   ó a a",
+        "> a\n  ó a\n   a",
+    ] {
+        let actual = render(continued);
+        assert_eq!(actual.0.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>(), canonical.0.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>());
+        assert_eq!(actual.1, canonical.1,
+            "every wrapped row must retain the quote bar");
+        assert_eq!(actual.2, canonical.2);
+    }
+    assert!(canonical.0.len() >= 2,
+        "narrow region must wrap authored quote ink");
+    assert_eq!(canonical.1.len(), canonical.0.len(),
+        "quote bar accompanies every physical row");
+}
+
+#[test]
+fn indented_blockquote_ends_at_explicit_breaks_and_new_blocks() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let render = |text: &str| {
+        let source = FlowSource::new(FlowFormat::Markdown, text)
+            .expect("bounded Markdown quote source");
+        super::layout_flow(
+            &source, &paper, None, super::HeadingDecoration::default(),
+        ).expect("quoted and ordinary source are both physical ink")
+    };
+    for source in [
+        "> a\nó", "> a  \nó", "> a\\\nó", "> a\n\nó",
+        "> a  \n  ó", "> a\\\n  ó",
+        "> a\n# ó", "> a\n- ó", "> a\n~~~txt\nó\n~~~",
+        "> a\n    ó", "> a\n===",
+    ] {
+        let (rows, marks, _) = render(source);
+        assert_eq!(rows.len(), 2, "source: {source:?}");
+        assert_eq!(marks.iter().filter(|mark| {
+            mark.start_um.0 == mark.end_um.0
+        }).count(), 1, "only quoted rows have vertical bars");
+        assert_eq!(rows[0].text, "a");
+        assert_ne!(rows[1].text, "a ó",
+            "structural or explicit break must end quote continuation");
+    }
+}
+
+#[test]
 fn trailing_blank_rows_do_not_create_invisible_pages() {
     use atrament_notebook_profile::NotebookProfile;
 

@@ -531,8 +531,12 @@ semantic region identities.
 Use `--flow-text-file` for plain text, or `--flow-text` and
 `--flow-markdown` for inline command arguments. Plain-text newlines each
 start a physical row. In Markdown, consecutive ordinary lines form one
-soft-wrapped paragraph, while two spaces or a single trailing backslash
-before a newline request a hard row break for ordinary and quoted paragraphs.
+soft-wrapped paragraph.
+
+Two- or three-space-indented body lines can continue a `> quoted` paragraph
+while retaining its quote bar. Unindented body text ends the quote as before.
+Two spaces or a trailing backslash before a newline request a hard row break
+for ordinary and quoted paragraphs.
 
 Up to three leading ASCII spaces on an ordinary Markdown paragraph line
 are syntax and do not shift ink. Four or more remain literal spaces,

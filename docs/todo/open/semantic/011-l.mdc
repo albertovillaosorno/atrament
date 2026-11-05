@@ -1082,3 +1082,25 @@ PDF/transparent PNG acceptance compares page-local bytes to separately
 rendered prelude and whole terminal heading groups, and verifies atomic
 one-page PDF refusal. This does not add general widow/orphan control or
 persistent semantic heading identities; the task remains open.
+
+## Keep indented blockquote continuation inside its rule (partial)
+
+A two- or three-space-indented ordinary Markdown line immediately after
+an open `> ` quote now continues that one-level paragraph, measured and
+wrapped at the quote indent. Previously `> a\n  ó` became a separate
+unquoted physical row instead of the quoted soft paragraph `> a ó`. Each
+wrapped row retains its vertical quote rule, including in narrow repeated
+fixed regions.
+
+Unindented text still ends the quote as documented; so do explicit hard
+breaks, blank lines, literal four-space indents, fences, headings, lists
+and thematic separators. This intentionally supports an opt-in continuation,
+not every CommonMark lazy-quote spelling.
+
+Two Rust unit tests reproduce the previous missing-quote behavior, compare
+exact rows and ornaments against fully marked source, and reject inadvertent
+joins at structural boundaries. A native integration compares vector PDF
+and both page-local transparent PNG outputs byte-for-byte against the
+fully marked quote on a two-page fixed region; a one-page PDF request still
+refuses without replacing the accepted file. This is a bounded Markdown
+export behavior, not nested quotes, saved semantic styles or full CommonMark.

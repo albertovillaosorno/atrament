@@ -1429,6 +1429,29 @@ fn continue_list_item(
     Ok(false)
 }
 
+// Two/three-space-indented body rows can explicitly continue an open
+// blockquote paragraph under its physical rule. Unindented ordinary rows
+// still end that quote, preserving the CLI's established separation.
+// Explicit breaks, literal four-space rows and new blocks also end it.
+fn continue_quote_paragraph(
+    layout: &mut Layout<'_>, paragraph: &mut String, previous: LineStyle,
+    line: &str, style: LineStyle, body: &str, hard_break: bool,
+) -> Result<bool, String> {
+    if paragraph.is_empty() || !matches!(previous, LineStyle::Quote)
+        || !matches!(style, LineStyle::Body)
+        || !(2..=3).contains(&line.bytes()
+            .take_while(|&byte| byte == b' ').count())
+        || markdown_setext_level(line).is_some() {
+        return Ok(false);
+    }
+    paragraph.push(' ');
+    paragraph.push_str(body);
+    if hard_break {
+        flush_paragraph(layout, paragraph, previous)?;
+    }
+    Ok(true)
+}
+
 // Defer a list's physical row until its possible soft continuations.
 // Trailing two spaces also represent pasted Unicode hard line separators,
 // so they end the current list item before the next source row.
@@ -1689,8 +1712,10 @@ pub(super) fn layout_flow_with_region(
             continue;
         }
         if source.format == FlowFormat::Markdown
-            && continue_list_item(&mut layout, &mut paragraph,
-                paragraph_style, input_line, style, body, hard_break)? {
+            && (continue_list_item(&mut layout, &mut paragraph,
+                paragraph_style, input_line, style, body, hard_break)?
+            || continue_quote_paragraph(&mut layout, &mut paragraph,
+                paragraph_style, input_line, style, body, hard_break)?) {
             continue;
         }
         if source.format == FlowFormat::Markdown

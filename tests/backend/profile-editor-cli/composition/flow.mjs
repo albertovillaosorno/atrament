@@ -2042,6 +2042,61 @@ test('indented bullet quote and ordered blocks preserve actual PDF and PNG',
         }
     });
 
+test('indented quote lines retain physical PDF and page-local PNG bars',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-quote-indent-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '24000', '23000'];
+            const canonical = 'a  \na\n> a ó a a';
+            const variants = [
+                'a  \na\n> a\n  ó a a',
+                'a  \na\n> a\n   ó a a',
+                'a  \na\n> a\n  ó a\n   a',
+            ];
+            const pageOne = render(dir, canonical, 'png', region);
+            assert.equal(pageOne.result.status, 0, pageOne.result.stderr);
+            const expectedOne = readFileSync(pageOne.output);
+            const pageTwo = render(dir, canonical, 'png', region,
+                '--flow-markdown', 2);
+            assert.equal(pageTwo.result.status, 0, pageTwo.result.stderr);
+            const expectedTwo = readFileSync(pageTwo.output);
+            assert.notDeepEqual(expectedOne, expectedTwo,
+                'quote rule and ink must appear on page two');
+            const pdf = render(dir, canonical, 'pdf',
+                [...region, '--pages', '2']);
+            assert.equal(pdf.result.status, 0, pdf.result.stderr);
+            const expectedPdf = readFileSync(pdf.output);
+            assert.match(expectedPdf.toString('latin1'), /\/Count 2/);
+            for (const continued of variants) {
+                const outputPdf = render(dir, continued, 'pdf',
+                    [...region, '--pages', '2']);
+                assert.equal(outputPdf.result.status, 0,
+                    outputPdf.result.stderr);
+                assert.deepEqual(readFileSync(outputPdf.output), expectedPdf,
+                    'indented quote continuation preserves native vector ink');
+                for (const [page, expected] of [
+                    [1, expectedOne], [2, expectedTwo],
+                ]) {
+                    const outputPng = render(dir, continued, 'png', region,
+                        '--flow-markdown', page);
+                    assert.equal(outputPng.result.status, 0,
+                        outputPng.result.stderr);
+                    assert.deepEqual(readFileSync(outputPng.output), expected,
+                        `page ${page} keeps exact transparent quote ink`);
+                }
+            }
+            const refused = render(dir, variants[0], 'pdf',
+                [...region, '--pages', '1']);
+            assert.notEqual(refused.result.status, 0);
+            assert.match(refused.result.stderr, /page/i);
+            assert.deepEqual(readFileSync(refused.output), expectedPdf,
+                'invalid page selection cannot replace a good PDF');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('four-space list and quote marks remain literal refused glyphs',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-list-'));
