@@ -2472,3 +2472,53 @@ test('fenced blank row keeps adjacent titles and body on page two', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('terminal heading chains retain interior fenced blank rows in PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-terminal-titles-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '100000', '36000'];
+            const prelude = 'a';
+            for (const group of [
+                '# a\n~~~txt\n\n~~~\n## ó',
+                '# a\n~~~txt\n\n~~~\nó\n===',
+                '# a\n~~~txt\n\n~~~\n## ó\n~~~txt\n\n~~~',
+            ]) {
+                const combined = `${prelude}\n${group}`;
+                const first = render(dir, combined, 'png', region);
+                assert.equal(first.result.status, 0, first.result.stderr);
+                const alonePrelude = render(dir, prelude, 'png', region);
+                assert.equal(alonePrelude.result.status, 0,
+                    alonePrelude.result.stderr);
+                assert.deepEqual(readFileSync(first.output),
+                    readFileSync(alonePrelude.output),
+                    'page one must contain only the prelude');
+
+                const second = render(dir, combined, 'png', region,
+                    '--flow-markdown', 2);
+                assert.equal(second.result.status, 0, second.result.stderr);
+                const aloneGroup = render(dir, group, 'png', region);
+                assert.equal(aloneGroup.result.status, 0,
+                    aloneGroup.result.stderr);
+                assert.deepEqual(readFileSync(second.output),
+                    readFileSync(aloneGroup.output),
+                    'page two must retain both titles and interior blank');
+
+                const accepted = render(dir, combined, 'pdf',
+                    [...region, '--pages', '2']);
+                assert.equal(accepted.result.status, 0,
+                    accepted.result.stderr);
+                const pdf = readFileSync(accepted.output);
+                assert.match(pdf.toString('latin1'), /\/Count 2/);
+                const refused = render(dir, combined, 'pdf',
+                    [...region, '--pages', '1']);
+                assert.notEqual(refused.result.status, 0);
+                assert.match(refused.result.stderr, /page/i);
+                assert.deepEqual(readFileSync(refused.output), pdf,
+                    'page-budget refusal preserves accepted PDF bytes');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

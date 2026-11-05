@@ -1064,3 +1064,21 @@ one-page PDF request refuses without replacing accepted bytes.
 
 This preserves the limited single-row orphan guard, not full Markdown,
 saved semantic identities, or general widow/orphan control.
+
+## Keep fenced gaps before terminal subtitles (partial) — 2026-11-04
+
+A terminal ATX or Setext subtitle may still follow one or more blank
+physical rows inside a preceding fenced code block. The orphan guard now
+commits those rows to its page budget only when subsequent visible ink
+exists. Previously the terminal-heading fallback discarded all fenced
+blank-row measurements, allowing the first title to stay behind on page
+one while the subtitle moved to page two, although both and the interior
+blank fit together on the second physical sheet.
+
+A red-before/green-after Rust regression checks three-row fixed regions,
+exact title-page positions, 18-mm separation through the fenced blank,
+and the case with another empty fence after the final subtitle. Native
+PDF/transparent PNG acceptance compares page-local bytes to separately
+rendered prelude and whole terminal heading groups, and verifies atomic
+one-page PDF refusal. This does not add general widow/orphan control or
+persistent semantic heading identities; the task remains open.

@@ -1305,6 +1305,7 @@ fn following_heading_gap<'text>(
     };
     let mut fence = None;
     let mut pending_gap = false;
+    let mut pending_blank_rows = 0usize;
     let mut lookahead = lines.peekable();
     while let Some(line) = lookahead.next() {
         if markdown_fence_transition(&mut fence, line) {
@@ -1312,7 +1313,7 @@ fn following_heading_gap<'text>(
             continue;
         }
         if fence.is_some() && line.trim_matches(' ').is_empty() {
-            following.blank_rows = following.blank_rows.saturating_add(1);
+            pending_blank_rows = pending_blank_rows.saturating_add(1);
             continue;
         }
         if fence.is_none() && line.trim_end_matches(' ').is_empty() {
@@ -1325,9 +1326,12 @@ fn following_heading_gap<'text>(
                 following.paragraph_gaps.saturating_add(1);
             pending_gap = false;
         }
-        // Blank physical code rows do not end a following title chain.
-        // Continue counting headings after the closing fence so they and
-        // their first body row can move together when the next page fits.
+        // Include fenced blank rows only when visible ink follows them.
+        // Interior rows must count when grouping terminal headings, while
+        // a final empty code fence must not force an ink-free page.
+        following.blank_rows = following.blank_rows
+            .saturating_add(pending_blank_rows);
+        pending_blank_rows = 0;
         if fence.is_some() {
             return Some(following);
         }
@@ -1348,7 +1352,7 @@ fn following_heading_gap<'text>(
     // The last heading is printable ink. Trailing empty Markdown or
     // fenced code rows must not reserve nonexistent following ink.
     (following.heading_rows > 0).then_some(FollowingInkSpacing {
-        blank_rows: 0,
+        blank_rows: following.blank_rows,
         heading_rows: following.heading_rows.saturating_sub(1),
         paragraph_gaps: following.paragraph_gaps,
     })

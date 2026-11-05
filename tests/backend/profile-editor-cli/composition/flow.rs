@@ -618,3 +618,36 @@ fn blank_fenced_rows_keep_following_title_chain_with_its_body() {
         assert!(marks.iter().all(|mark| mark.page == 2));
     }
 }
+
+#[test]
+fn terminal_heading_chain_counts_interior_fenced_blank_rows() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default writing rectangle");
+    // Three physical rows fit per sheet. After one prelude row, the
+    // heading, fenced blank row and terminal subtitle must move together.
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 36_000,
+    };
+    for source in [
+        "a\n# a\n~~~txt\n\n~~~\n## ó",
+        "a\n# a\n~~~txt\n\n~~~\nó\n===",
+        "a\n# a\n~~~txt\n\n~~~\n## ó\n~~~txt\n\n~~~",
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, source)
+            .expect("valid terminal heading chain");
+        let (runs, ornaments, pages) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("terminal headings and interior blanks fit page two");
+        assert_eq!(pages, 2);
+        assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+            [1, 2, 2], "interior fence gap must not orphan first title");
+        assert_eq!(runs[2].origin_um.1 - runs[1].origin_um.1,
+            18_000, "fenced blank reserves physical ink spacing");
+        assert_eq!(ornaments.len(), 2);
+        assert!(ornaments.iter().all(|mark| mark.page == 2));
+    }
+}
