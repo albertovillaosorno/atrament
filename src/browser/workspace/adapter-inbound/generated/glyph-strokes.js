@@ -602,6 +602,7 @@ const MANUAL_MATH_GLYPHS = [
     "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘", "⋂", "⋃", "⋀", "⋁", "⊓", "⊔",
     "⊏", "⊐", "⊑", "⊒", "⊞", "⊟", "⊠", "⊡",
     "≺", "≻", "≼", "≽", "⊲", "⊳", "⊴", "⊵",
+    "⋖", "⋗", "⋘", "⋙",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -896,6 +897,26 @@ function mathParts(cx, cy, radius, glyph) {
             curve.push(line(-0.65, 0.96, 0.65, 0.96));
         }
         return curve;
+    }
+    // Manual dotted strict comparisons draw a continuous angled pair
+    // then lift for a short, separately editable interior-side dot.
+    // Mirroring coordinates preserves the distinct exact Unicode keys.
+    if (glyph === "⋖" || glyph === "⋗") {
+        const mirror = glyph === "⋗" ? -1 : 1;
+        return [
+            line(mirror * 0.45, -0.7, -mirror * 0.52, 0),
+            line(-mirror * 0.52, 0, mirror * 0.45, 0.7),
+            line(mirror * 0.8, -0.09, mirror * 0.8, 0.09),
+        ];
+    }
+    // Triple chevrons are three separately lifted joined angular pen
+    // gestures, never repeat-filled or silently mapped to ≪ and ≫.
+    if (glyph === "⋘" || glyph === "⋙") {
+        const mirror = glyph === "⋙" ? -1 : 1;
+        return [-0.6, 0, 0.6].flatMap((center) => [
+            line(center + mirror * 0.15, -0.72, center - mirror * 0.15, 0),
+            line(center - mirror * 0.15, 0, center + mirror * 0.15, 0.72),
+        ]);
     }
     // Doubled chevrons are two separately lifted, connected comparisons.
     // Negated strict signs keep their exact positive contour and then lift
@@ -2635,6 +2656,12 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         }
         if (["⊴", "⊵"].includes(g) && radius * 0.31 < pen + 60) {
             throw new Error("Subgroup underbar needs pen-clearance");
+        }
+        if (["⋖", "⋗"].includes(g) && radius * 0.35 < pen + 60) {
+            throw new Error("Dotted comparison needs pen-clearance");
+        }
+        if (["⋘", "⋙"].includes(g) && radius * 0.3 < pen + 60) {
+            throw new Error("Triple comparison needs pen-clearance");
         }
         if (["⊞", "⊟", "⊠", "⊡"].includes(g)
             && radius * 0.38 < pen + 80) {

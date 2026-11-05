@@ -2443,3 +2443,17 @@ replacing an output. Real Firefox tests select, download and replay these
 forms in the Rust export alongside other manually authored symbols while
 staying within the 4096-stroke TSV cap. The separate automatic 93-key
 math fill remains unchanged. Full notebook synthesis is still unfinished.
+
+## Dotted and triple comparisons (partial) — 2026-11-05
+
+The manual geometric picker now offers exact Unicode `⋖` and `⋗`
+(less/greater with dot) and `⋘` and `⋙` (very much less/greater).
+The dotted signs keep two joined angular pen strokes and a lifted dot;
+the triple signs draw three independent, internally joined chevrons.
+Width-dependent clearance refusal protects their separate ink marks.
+
+Browser geometry, directed path, bounded TSV and clipping regressions,
+real Firefox selection/download, native Rust vector PDF/transparent PNG,
+and missing-key atomic refusal verify these distinct manual keys. The
+93-key automatic math batch is untouched. The full joined notebook and
+writer-calibrated math outlines remain unfinished.

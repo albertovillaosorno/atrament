@@ -4386,6 +4386,49 @@ test("normal subgroup relations keep closed triangles and lifted bars", () => {
         /supported exact geometric glyph/);
 });
 
+test("dotted and triple comparisons preserve mirrored lifted ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const cases = [
+        ["⋖", [[2045, 1680, 978, 2450],
+            [978, 2450, 2045, 3220], [2430, 2351, 2430, 2549]]],
+        ["⋗", [[1055, 1680, 2122, 2450],
+            [2122, 2450, 1055, 3220], [670, 2351, 670, 2549]]],
+        ["⋘", [[1055, 1658, 725, 2450],
+            [725, 2450, 1055, 3242],
+            [1715, 1658, 1385, 2450],
+            [1385, 2450, 1715, 3242],
+            [2375, 1658, 2045, 2450],
+            [2045, 2450, 2375, 3242]]],
+        ["⋙", [[725, 1658, 1055, 2450],
+            [1055, 2450, 725, 3242],
+            [1385, 1658, 1715, 2450],
+            [1715, 2450, 1385, 3242],
+            [2045, 1658, 2375, 2450],
+            [2375, 2450, 2045, 3242]]],
+    ];
+    for (const [glyph, expected] of cases) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.deepEqual(ink.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), expected);
+        assert.deepEqual(candidatePenPaths(ink, glyph).map(
+            ({ first, last }) => [first, last]),
+        glyph === "⋖" || glyph === "⋗"
+            ? [[1, 2], [3, 3]] : [[1, 2], [3, 4], [5, 6]]);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.ok(ink.every(({ grapheme }) => grapheme === glyph));
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"), /fit inside glyph cell/);
+        assert.throws(() => geometricStarter(glyph, 1550, 2450,
+            500, 250, "#243647"), /pen-clearance/);
+    }
+    assert.notDeepEqual(geometricStarter("⋖", ...args),
+        geometricStarter("<", ...args));
+    assert.notDeepEqual(geometricStarter("⋘", ...args),
+        geometricStarter("≪", ...args));
+    assert.throws(() => geometricStarter("⋚", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
