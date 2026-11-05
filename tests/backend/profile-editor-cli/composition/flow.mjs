@@ -2627,3 +2627,38 @@ test('quoted continuation keeps literal Setext-like ink in native PDF/PNG',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('escaped Setext equals exports literal native ink, not a title', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-escaped-equals-'));
+    try {
+        const equals = [
+            '--glyph-stroke', '=', '600', '500', '1800', '3000',
+            '250', '#123456',
+        ];
+        for (const format of ['pdf', 'png']) {
+            const expected = render(dir, 'a === a', format, equals);
+            assert.equal(expected.result.status, 0,
+                expected.result.stderr);
+            const bytes = readFileSync(expected.output);
+            for (const source of ['a\n\\===\na', 'a\n  \\===\na']) {
+                const actual = render(dir, source, format, equals);
+                assert.equal(actual.result.status, 0,
+                    actual.result.stderr);
+                assert.deepEqual(readFileSync(actual.output), bytes,
+                    'escaped equals line must be exact authored paragraph');
+            }
+            const missing = render(dir, 'a\n\\===\na', format);
+            assert.notEqual(missing.result.status, 0);
+            assert.match(missing.result.stderr,
+                /missing authored glyph shapes.*U\+003D/);
+            assert.deepEqual(readFileSync(missing.output), bytes,
+                'refusal cannot replace accepted page ink');
+            const title = render(dir, 'a\n===\na', format);
+            assert.equal(title.result.status, 0, title.result.stderr);
+            assert.notDeepEqual(readFileSync(title.output), bytes,
+                'an actual Setext underline remains structural');
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

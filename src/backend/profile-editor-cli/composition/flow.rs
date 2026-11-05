@@ -1124,7 +1124,7 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
         && let Some(escaped) = line.trim_start_matches(' ')
             .strip_prefix('\\')
         && escaped.bytes().next().is_some_and(|mark| {
-            matches!(mark, b'#' | b'>' | b'-' | b'*' | b'+' | b'_')
+            matches!(mark, b'#' | b'>' | b'-' | b'*' | b'+' | b'_' | b'=')
                 || matches!(mark, b'`' | b'~')
         })
     {

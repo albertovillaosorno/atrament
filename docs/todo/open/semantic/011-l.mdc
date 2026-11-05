@@ -1182,3 +1182,18 @@ page-two RGBA ink and a two-page PDF, and refuses an insufficient page count
 without replacing the PDF. Typing source material updates the authenticated
 source session once; neither download adds another network request. The
 notebook's semantic state is still not persisted.
+
+## Escaped literal equals after Markdown paragraphs (partial) — 2026-11-05
+
+A leading backslash now escapes a literal `=` on a Markdown source line,
+matching the existing marker escapes. `a\n\===\na` joins as handwritten
+`a === a`, not a Setext heading or a literal backslash. Without an authored
+`=` glyph the native compositor refuses; unescaped `===` after a paragraph
+still produces an underlined Setext title without requiring equals ink.
+
+A red-before/green-after Rust regression confirms literal ink identity,
+29-mm pitch for a 25-mm-tall equals glyph and unchanged unescaped heading
+syntax. Native PDF/transparent PNG comparisons prove both indented and
+unindented escapes equal the same authored text, with atomic refusal when
+an exact equals glyph is absent. Other inline Markdown escapes and full
+semantic notebook persistence remain outside this limited CLI parser.

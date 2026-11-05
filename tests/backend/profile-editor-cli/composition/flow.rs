@@ -1008,3 +1008,47 @@ fn seven_line_markdown_boundary_stress_preserves_exact_ink_pitch() {
     }
     assert!(checked > 500, "need meaningful accepted coverage");
 }
+
+#[test]
+fn escaped_setext_equals_stays_literal_ink_after_body() {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let tall = ScalarStatistics {
+        maximum: 25_000, mean: 25_000, median: 25_000,
+        minimum: 25_000, standard_deviation: 0,
+    };
+    let statistics = HandwritingStatisticsProfile::baseline(1)
+        .with_glyph("=", DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+        .expect("valid tall authored equals glyph");
+    let paper = NotebookProfile::default();
+    for escaped in ["\\=", "\\==", "\\===", "  \\==="] {
+        let source = FlowSource::new(
+            FlowFormat::Markdown, &format!("a\n{escaped}\na"),
+        ).expect("bounded Markdown with literal Setext characters");
+        let (runs, ornaments, pages) = super::layout_flow(
+            &source, &paper, Some(&statistics),
+            super::HeadingDecoration::default(),
+        ).expect("escaped marker remains authored ink");
+        assert_eq!(pages, 1);
+        assert!(ornaments.is_empty(), "no heading underline");
+        assert_eq!(runs.len(), 1);
+        let expected = format!(
+            "a {} a", escaped.trim_start().trim_start_matches('\\'),
+        );
+        assert_eq!(runs[0].text, expected);
+        assert_eq!(super::measured_pitch(&source, Some(&statistics))
+            .expect("literal equals determines row pitch"), 29_000);
+    }
+    // Unescaped equals is still title syntax and cannot become glyph ink.
+    let title = FlowSource::new(FlowFormat::Markdown, "a\n===\na")
+        .expect("valid Setext source");
+    assert_eq!(super::measured_pitch(&title, Some(&statistics))
+        .expect("heading syntax has no equals glyph"), 9_000);
+}
