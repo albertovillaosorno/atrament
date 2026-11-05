@@ -3677,7 +3677,7 @@ test("manual Greek xi and iota retain exact continuous pen geometry", () => {
         geometricStarter("z", ...args), "xi cannot borrow Latin z");
     assert.notDeepEqual(geometricStarter("ι", ...args),
         geometricStarter("i", ...args), "iota has no Latin i dot");
-    assert.throws(() => geometricStarter("Ρ", ...args),
+    assert.throws(() => geometricStarter("Ϡ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3754,7 +3754,7 @@ test("manual uppercase Greek Gamma and Omega keep exact distinct ink", () => {
         geometricStarter("L", ...args), "Gamma is not Latin L");
     assert.notDeepEqual(geometricStarter("Ω", ...args),
         geometricStarter("ω", ...args), "uppercase Omega is not lowercase");
-    assert.throws(() => geometricStarter("Ρ", ...args),
+    assert.throws(() => geometricStarter("Ϡ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3778,7 +3778,7 @@ test("manual uppercase Greek Pi and Sigma preserve exact pen order", () => {
         geometricStarter("Γ", ...args), "Pi is not capital Gamma");
     assert.notDeepEqual(geometricStarter("Σ", ...args),
         geometricStarter("∑", ...args), "capital Sigma is not sum symbol");
-    assert.throws(() => geometricStarter("Ρ", ...args),
+    assert.throws(() => geometricStarter("Ϡ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3802,7 +3802,7 @@ test("manual Greek capital Lambda and Theta retain exact ordered ink", () => {
         geometricStarter("λ", ...args), "capital Lambda keeps exact identity");
     assert.notDeepEqual(geometricStarter("Θ", ...args),
         geometricStarter("θ", ...args), "capital Theta is not lowercase");
-    assert.throws(() => geometricStarter("Ρ", ...args),
+    assert.throws(() => geometricStarter("Ϡ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3826,7 +3826,7 @@ test("manual uppercase Greek Xi and Phi keep distinct ink", () => {
         geometricStarter("≡", ...args), "Xi is not identity operator");
     assert.notDeepEqual(geometricStarter("Φ", ...args),
         geometricStarter("φ", ...args), "capital Phi is not lowercase");
-    assert.throws(() => geometricStarter("Ρ", ...args),
+    assert.throws(() => geometricStarter("Ϡ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3850,7 +3850,7 @@ test("manual capital Greek Psi and Chi have exact lifted ink", () => {
         geometricStarter("ψ", ...args), "capital Psi is not lowercase");
     assert.notDeepEqual(geometricStarter("Χ", ...args),
         geometricStarter("χ", ...args), "capital Chi is not lowercase");
-    assert.throws(() => geometricStarter("Ρ", ...args),
+    assert.throws(() => geometricStarter("Ϡ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3904,7 +3904,7 @@ test("manual Greek capitals Alpha and Epsilon keep unique pen paths", () => {
         geometricStarter("α", ...args), "capital is not lowercase Alpha");
     assert.notDeepEqual(geometricStarter("Ε", ...args),
         geometricStarter("ε", ...args), "capital is not lowercase Epsilon");
-    assert.throws(() => geometricStarter("Ρ", ...args),
+    assert.throws(() => geometricStarter("Ϡ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3954,7 +3954,36 @@ test("manual Greek capitals Zeta and Eta keep ordered lifted ink", () => {
         geometricStarter("ζ", ...args), "capital and lower zeta differ");
     assert.notDeepEqual(geometricStarter("Η", ...args),
         geometricStarter("η", ...args), "capital and lower eta differ");
-    assert.throws(() => geometricStarter("Κ", ...args),
+    assert.throws(() => geometricStarter("Ϡ", ...args),
+        /supported exact geometric glyph/);
+});
+
+test("remaining Greek capitals keep exact pen routes and inventory", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, first, lifts] of [
+        ["Κ", 3, [780, 1515], 2],
+        ["Μ", 4, [780, 3385], 1],
+        ["Ν", 3, [780, 3385], 1],
+        ["Ρ", 33, [835, 1515], 2],
+        ["Τ", 2, [725, 1515], 2],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " sampled chords");
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.equal(candidatePenPaths(ink, glyph).length, lifts);
+        assert.ok(ink.every((stroke) => stroke.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"), /fit inside glyph cell/);
+    }
+    const capitals = [..."ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ"];
+    assert.equal(capitals.length, 24);
+    const ink = capitals.flatMap((glyph) => geometricStarter(
+        glyph, ...args));
+    assert.deepEqual([...new Set(ink.map((line) => line.grapheme))],
+        capitals, "each Greek uppercase must have exact authored ink");
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+    assert.throws(() => geometricStarter("Ϡ", ...args),
         /supported exact geometric glyph/);
 });
 

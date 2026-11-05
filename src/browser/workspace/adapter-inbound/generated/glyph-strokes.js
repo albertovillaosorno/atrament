@@ -597,6 +597,7 @@ const MANUAL_MATH_GLYPHS = [
     "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
     "ν", "ς", "Γ", "Ω", "Π", "Σ", "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ",
     "Β", "Υ", "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
+    "Κ", "Μ", "Ν", "Ρ", "Τ",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1436,6 +1437,41 @@ function mathParts(cx, cy, radius, glyph) {
             line(-0.7, -0.85, -0.7, 0.85),
             line(0.7, -0.85, 0.7, 0.85),
             line(-0.7, 0, 0.7, 0),
+        ];
+    // Greek capital Kappa lifts from its upright to two connected arms.
+    // Mu and Nu form uninterrupted angular pen routes; Greek identities
+    // remain distinct from their Latin lookalikes and lowercase letters.
+    if (glyph === "Κ")
+        return [
+            line(-0.7, -0.85, -0.7, 0.85),
+            line(0.7, -0.85, -0.58, 0),
+            line(-0.58, 0, 0.7, 0.85),
+        ];
+    if (glyph === "Μ")
+        return [
+            line(-0.7, 0.85, -0.7, -0.85),
+            line(-0.7, -0.85, 0, 0.28),
+            line(0, 0.28, 0.7, -0.85),
+            line(0.7, -0.85, 0.7, 0.85),
+        ];
+    if (glyph === "Ν")
+        return [
+            line(-0.7, 0.85, -0.7, -0.85),
+            line(-0.7, -0.85, 0.7, 0.85),
+            line(0.7, 0.85, 0.7, -0.85),
+        ];
+    // Capital Rho has a straight lifted upright and two connected bowl
+    // quadratics. Capital Tau separates its top cap from its central stem.
+    if (glyph === "Ρ")
+        return [
+            line(-0.65, -0.85, -0.65, 0.85),
+            curve([-0.65, -0.85], [0.85, -0.95], [0.7, -0.15]),
+            curve([0.7, -0.15], [0.75, 0.5], [-0.65, 0.15]),
+        ];
+    if (glyph === "Τ")
+        return [
+            line(-0.75, -0.85, 0.75, -0.85),
+            line(0, -0.85, 0, 0.85),
         ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

@@ -2245,3 +2245,21 @@ and accepted-output preservation on missing Greek/Latin aliases. The
 live Firefox export adds both capitals without changing the bounded
 93-glyph automatic math fill. The whole Greek alphabet and personalized
 calibration remain unfinished.
+
+## Remaining uppercase Greek glyphs (partial) — 2026-11-04
+
+The one-click exact geometry menu now has 24/24 standard Greek capitals,
+with `Δ` as an existing bounded automatic math symbol and the other
+23 as independently selected manual glyphs. `Κ` lifts before two joined
+arms, `Μ` and `Ν` follow continuous angular strokes, `Ρ` lifts from its
+stem to a two-curve bowl, and `Τ` lifts before its centered vertical.
+
+Browser coverage verifies all 24 Unicode identities, pen continuity,
+clipping refusal and native TSV roundtrip. A real Rust PDF/transparent
+PNG export checks the five added capitals and atomic refusal of missing
+Latin/lowercase lookalikes. The live Firefox composition retains the
+93-glyph automatic math batch and verifies the additional exact ink.
+
+This completes *only* selectable uppercase Greek geometric starters.
+Lowercase accents, persistent analytic outlines, personalized writing,
+full bilingual coverage and automated notebook handwriting remain open.
