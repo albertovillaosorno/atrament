@@ -691,7 +691,9 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "⌊", "⌋", "⌈", "⌉"] as const;
 // Additional exact notation is manually selected, not automatically filled.
 // A full text/math fill currently sits just 12 strokes below the native cap.
-const MANUAL_MATH_GLYPHS = ["⟨", "⟩", "α", "β", "θ", "λ"] as const;
+const MANUAL_MATH_GLYPHS = [
+    "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
+] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
 ] as const;
@@ -1172,6 +1174,21 @@ function mathParts(
     if (glyph === "λ") return [
         line(-0.38, -0.85, -0.75, 0.8),
         line(-0.38, -0.85, 0.75, 0.8),
+    ];
+    // Lowercase mu has a continuous descended left leg, two curved
+    // bowls and a right exit. This is exact Greek ink, not Latin u.
+    if (glyph === "μ") return [
+        line(-0.65, 1.05, -0.65, -0.6),
+        curve([-0.65, -0.6], [-0.65, 0.65], [0, 0.65]),
+        curve([0, 0.65], [0.65, 0.65], [0.65, -0.6]),
+        line(0.65, -0.6, 0.65, 0.65),
+    ];
+    // Lowercase gamma deliberately lifts before its descender instead
+    // of reusing a Latin y or merging two unrelated pen directions.
+    if (glyph === "γ") return [
+        curve([-0.75, -0.65], [-0.2, 0.35], [0.1, 0.1]),
+        curve([0.1, 0.1], [0.45, -0.4], [0.75, -0.65]),
+        line(0.1, 0.1, 0.1, 1.05),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

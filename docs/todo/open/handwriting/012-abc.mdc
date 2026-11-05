@@ -1962,7 +1962,7 @@ analytic quadratics and a deliberately lifted terminal or crossbar (65
 strokes each); lambda has two independent directed pen legs. These are
 caller-chosen glyph outlines, not automatic handwriting or Latin-letter
 fallbacks. Their ideal guides and native TSV keys remain distinct from
-Latin `a`, `b`, `o` and `l` and unsupported Greek `μ`.
+Latin `a`, `b`, `o` and `l` and unsupported Greek `ν`.
 
 They are **manual only**, preserving the 93-symbol automatic math fill and
 its 4084/4096-stroke ceiling after all eleven independent baseline fills.
@@ -1976,3 +1976,19 @@ Geometry/boundary, real Firefox SVG and TSV export, and native PDF/PNG tests
 verify the paths, selection, cap and refusal. This does not add the full
 Greek alphabet, automatic prose composition or calibrated physical writing;
 the P1 glyph coverage task remains open.
+
+## Manually selected Greek mu and gamma ink (partial) — 2026-11-04
+
+Added exact `μ` and `γ` to the manually selectable Greek mathematics
+editor without changing the automatic 93-glyph baseline or its
+4,084-stroke limit. Mu has a continuous descended left stem, two
+quadratics and a right exit (34 native segments). Gamma has two connected
+quadratics and one lifted descender (33 segments). Neither is a
+substitution for Latin `u` or `y`; unsupported `ν` still refuses.
+
+A separate 67-segment TSV survives native Rust glyph readback and
+produces real two-row PDF and transparent PNG ink. Browser geometry
+and 4,096-stroke limits, exact Unicode selection, a Firefox TSV export,
+and native missing-shape atomic refusal are regression-tested.
+The broader Greek alphabet, editable notebook text and calibrated
+handwriting remain unfinished.

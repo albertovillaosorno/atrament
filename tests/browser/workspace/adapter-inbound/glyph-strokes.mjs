@@ -3495,7 +3495,30 @@ test("manual Greek math keeps exact alpha beta theta lambda pen paths", () => {
     assert.notDeepEqual(geometricStarter("α", ...args),
         geometricStarter("a", ...args),
         "Greek alpha cannot borrow single-storey Latin a");
-    assert.throws(() => geometricStarter("μ", ...args),
+    assert.throws(() => geometricStarter("ν", ...args),
+        /supported exact geometric glyph/);
+});
+
+test("manual Greek mu and gamma keep exact non-Latin pen paths", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const glyphs = [["μ", 34, 1], ["γ", 33, 2]];
+    const strokes = glyphs.flatMap(([glyph, count, lifts]) => {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " sampled stroke count");
+        assert.equal(candidatePenPaths(ink, glyph).length, lifts,
+            glyph + " deliberate pen lifts");
+        assert.ok(ink.every((part) => part.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+        return ink;
+    });
+    assert.equal(strokes.length, 67);
+    assert.notDeepEqual(geometricStarter("μ", ...args),
+        geometricStarter("u", ...args), "mu cannot borrow Latin u");
+    assert.notDeepEqual(geometricStarter("γ", ...args),
+        geometricStarter("y", ...args), "gamma cannot borrow Latin y");
+    assert.throws(() => geometricStarter("ν", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -5294,7 +5317,8 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "≪", "≫", "≮", "≯", "≰", "≱", "↗", "↘",
         "↖", "↙", "⇐", "↦", "↤", "∣", "∤", "′", "″", "‴",
         "⋅", "∗", "∖", "∦", "⌊", "⌋", "⌈", "⌉",
-        "⟨", "⟩", "α", "β", "θ", "λ", "°", "%", "$", "€",
+        "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
+        "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",
@@ -5337,7 +5361,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 28080);
+    assert.equal(checked, 28368);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 
