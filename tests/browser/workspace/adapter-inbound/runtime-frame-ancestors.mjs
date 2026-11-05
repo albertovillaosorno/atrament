@@ -13210,7 +13210,7 @@ test(
                     }
                     const manualMarks = [];
                     for (const glyph of ["⟨", "⟩", "α", "β", "θ", "λ",
-                        "μ", "γ"]) {
+                        "μ", "γ", "δ", "σ"]) {
                         change("form", glyph);
                         change("character", glyph);
                         const guide = get("ideal-rounded");
@@ -13310,7 +13310,7 @@ test(
                     new RegExp(`Constructed ${count} sampled segments`));
             }
             for (const guide of actual.manualMarks) {
-                assert.ok(["⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ"]
+                assert.ok(["⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ"]
                     .includes(guide.glyph));
                 assert.equal(guide.selected, guide.glyph);
                 assert.equal(guide.visible, "visible");
@@ -13346,10 +13346,10 @@ test(
                 "′", "″", "‴", "⋅", "∗", "∖", "∦",
                 "⌊", "⌋", "⌈", "⌉"];
             const ink = [...symbols, "$", "€", "⟨", "⟩",
-                "α", "β", "θ", "λ", "μ", "γ"].flatMap((glyph) =>
+                "α", "β", "θ", "λ", "μ", "γ", "δ", "σ"].flatMap((glyph) =>
                 geometricStarter(glyph, 1550, 2450, 1100,
                     250, "#243647"));
-            assert.equal(ink.length, 1728);
+            assert.equal(ink.length, 1858);
             const expected = encodeGlyphLibrary(ink);
             assert.deepEqual(actual.files, [expected, expected],
                 "real browser fill and refusal preserve exact pen order");
@@ -13382,7 +13382,7 @@ test(
                     "true", "--glyph-file", library, "--flow-text",
                     "∑∫∂Δ≈$€∓→∝<>←↔↑↓↕∧∨∩∪∈∉⊂⊆⊃⊇⊄⊈⊅⊉"
                         + "∋∌∅∇≡≢∥⊥∼≅∀∃∄∴∵⊤⊢⊨∠∟⊬⊭¬⇒⇔"
-                        + "≪≫≮≯≰≱↗↘↖↙⇐↦↤∣∤′″‴⋅∗∖∦⌊⌋⌈⌉⟨⟩αβθλμγ",
+                        + "≪≫≮≯≰≱↗↘↖↙⇐↦↤∣∤′″‴⋅∗∖∦⌊⌋⌈⌉⟨⟩αβθλμγδσ",
                     "--export-paper", format,
                     ...(format === "png" ? ["--dpi", "72"] : []));
                 assert.equal(rendered.status, 0,
@@ -13391,7 +13391,7 @@ test(
                 if (format === "pdf") {
                     const vector = rendered.stdout.toString("latin1");
                     assert.match(vector, /^%PDF-1\.4/);
-                    assert.equal((vector.match(/ m\n/g) ?? []).length, 1633,
+                    assert.equal((vector.match(/ m\n/g) ?? []).length, 1763,
                         "calculus, currency, arrows and comparisons ink");
                 } else {
                     const bytes = rendered.stdout;

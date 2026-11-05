@@ -692,7 +692,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 // Additional exact notation is manually selected, not automatically filled.
 // A full text/math fill currently sits just 12 strokes below the native cap.
 const MANUAL_MATH_GLYPHS = [
-    "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
+    "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1189,6 +1189,23 @@ function mathParts(
         curve([-0.75, -0.65], [-0.2, 0.35], [0.1, 0.1]),
         curve([0.1, 0.1], [0.45, -0.4], [0.75, -0.65]),
         line(0.1, 0.1, 0.1, 1.05),
+    ];
+    // Lowercase delta is its own lower bowl with an ascending diagonal;
+    // sigma has a closed rounded sweep and a separately lifted top exit.
+    // These exact Greek shapes never reuse Latin o or Greek theta ink.
+    if (glyph === "δ") return [
+        curve([0, -0.25], [0.7, -0.25], [0.7, 0.35]),
+        curve([0.7, 0.35], [0.7, 0.9], [0, 0.9]),
+        curve([0, 0.9], [-0.7, 0.9], [-0.7, 0.35]),
+        curve([-0.7, 0.35], [-0.7, -0.25], [0, -0.25]),
+        line(0.4, -0.25, -0.25, -0.95),
+    ];
+    if (glyph === "σ") return [
+        curve([0, -0.7], [0.7, -0.7], [0.7, 0]),
+        curve([0.7, 0], [0.7, 0.7], [0, 0.7]),
+        curve([0, 0.7], [-0.7, 0.7], [-0.7, 0]),
+        curve([-0.7, 0], [-0.7, -0.7], [0, -0.7]),
+        line(0.15, -0.7, 0.85, -0.7),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

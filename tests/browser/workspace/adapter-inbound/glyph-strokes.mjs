@@ -3522,6 +3522,26 @@ test("manual Greek mu and gamma keep exact non-Latin pen paths", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual Greek delta and sigma keep exact Unicode pen paths", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const glyph of ["δ", "σ"]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, 65, glyph + " sampled stroke count");
+        assert.equal(candidatePenPaths(ink, glyph).length, 2,
+            glyph + " separate accent or exit path");
+        assert.ok(ink.every((part) => part.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("δ", ...args),
+        geometricStarter("o", ...args), "delta cannot borrow Latin o");
+    assert.notDeepEqual(geometricStarter("σ", ...args),
+        geometricStarter("θ", ...args), "sigma cannot borrow Greek theta");
+    assert.throws(() => geometricStarter("ν", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5318,7 +5338,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "↖", "↙", "⇐", "↦", "↤", "∣", "∤", "′", "″", "‴",
         "⋅", "∗", "∖", "∦", "⌊", "⌋", "⌈", "⌉",
         "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
-        "°", "%", "$", "€",
+        "δ", "σ", "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",
@@ -5361,7 +5381,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
             }
         }
     }
-    assert.equal(checked, 28368);
+    assert.equal(checked, forms.length * 3 * 4 * 4 * 3);
     assert.ok(accepted > 1500, "boundary grid must test valid shapes");
 });
 
