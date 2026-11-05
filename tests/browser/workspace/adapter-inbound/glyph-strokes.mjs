@@ -7008,7 +7008,7 @@ test("cursive o/a starters keep directed entry, loop and exit", () => {
         assert.deepEqual(geometricStarter(glyph, ...values), base,
             "choosing cursive cannot mutate its regular form");
     }
-    for (const invalid of ["b", "k", "A", "∞"]) {
+    for (const invalid of ["b", "A", "∞"]) {
         assert.throws(() => geometricStarter(invalid, ...values,
             undefined, "cursive"), /Cursive variant/);
     }
@@ -8276,7 +8276,7 @@ test("opt-in cursive e and acute é keep exact directed pen paths", () => {
     assert.throws(() => geometricStarter("e", 1550, 2450,
         1400, 250, "#123456", undefined, "cursive"),
     /Cursive e and pen clip/);
-    assert.throws(() => geometricStarter("k", ...geometry,
+    assert.throws(() => geometricStarter("K", ...geometry,
         undefined, "cursive"), /Cursive variant/);
 });
 
@@ -9442,6 +9442,97 @@ test("browser manual y shows fork retrace and refuses clipped replacement",
             get("save").dispatch("click");
             assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
                 accepted, "clipped y leaves the accepted TSV unchanged");
+            editor.reset();
+            assert.equal(get("ideal-exit").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });
+
+// A visible half-stem retrace and upper arm reversal make a one-pen k.
+test("manual connected k preserves printed stem and diagonal order", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("k", ...args);
+    const joined = geometricStarter("k", ...args, undefined, "cursive");
+    assert.equal(printed.length, 3);
+    assert.equal(joined.length, 7);
+    assert.deepEqual([joined[1], joined[4], joined[5]], printed,
+        "all printed k strokes retain their original directed geometry");
+    assert.deepEqual(joined[2], {
+        ...printed[0], x1: printed[0].x2, y1: printed[0].y2,
+        x2: printed[1].x2, y2: printed[1].y2,
+    }, "the downstroke retraces from the bottom to its fork");
+    assert.deepEqual(joined[3], {
+        ...printed[1], x1: printed[1].x2, y1: printed[1].y2,
+        x2: printed[1].x1, y2: printed[1].y1,
+    }, "the upper arm reverses once before its authored downward line");
+    assert.deepEqual(candidatePenPaths(joined, "k").map(
+        ({ first, last }) => [first, last]), [[1, 7]]);
+    assert.deepEqual(joined[0], {
+        grapheme: "k", x1: 250, y1: 1000,
+        x2: 450, y2: 800, width: 250, color: "#243647",
+    });
+    assert.deepEqual(joined.at(-1), {
+        grapheme: "k", x1: 2650, y1: 3550,
+        x2: 2850, y2: 3350, width: 250, color: "#243647",
+    });
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("k", ...args), printed);
+    assert.equal(geometricStarter("k", 1250, 2450,
+        1100, 250, "#243647").length, 3,
+        "printed k fits even when the optional entry cannot");
+    assert.throws(() => geometricStarter("k", 1250, 2450,
+        1100, 250, "#243647", undefined, "cursive"),
+        /Cursive k connector and pen clip/);
+    assert.throws(() => geometricStarter("K", ...args,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser manual k previews both retraces and refuses clipped ink",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "k-cursive";
+            get("form").dispatch("change");
+            get("character").value = "k";
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-approach",
+                "ideal-exit", "ideal-rounded", "ideal-rounded-left"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual k shows ${id}`);
+            }
+            assert.equal(get("ideal-rounded-left").attributes.get("y1"),
+                "3550", "stem retrace starts at its lowest point");
+            assert.equal(get("ideal-rounded-left").attributes.get("y2"),
+                "2450", "stem retrace ends at the diagonal fork");
+            assert.equal(get("ideal-approach").attributes.get("x1"),
+                "450", "the upper-diagonal reversal begins at the fork");
+            assert.equal(get("ideal-approach").attributes.get("x2"),
+                "2650", "the upper-diagonal reversal reaches the arm top");
+            assert.equal(get("ideal-entry").attributes.get("y2"), "800");
+            assert.equal(get("ideal-exit").attributes.get("y1"), "3550");
+            for (const id of ["ideal-rounded-right", "ideal-i-dot"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "hidden", `manual k does not invent ${id}`);
+            }
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, 7);
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("k", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-x").value = "1250";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-rounded-left").attributes
+                .get("visibility"), "hidden",
+            "invalid connector cannot display a stale retrace guide");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "clipped k cannot overwrite accepted TSV");
             editor.reset();
             assert.equal(get("ideal-exit").attributes.get("visibility"),
                 "hidden");

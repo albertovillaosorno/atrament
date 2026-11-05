@@ -2656,6 +2656,47 @@ function cursiveFork(base: Stroke[], radius: number): Stroke[] {
     ];
 }
 
+// The printed k uses three detached strokes. A down-and-back stem,
+// upper diagonal out-and-back, and lower outgoing diagonal form one
+// deliberate pen gesture. Every original stroke is retained in its
+// authored direction; both retraces and lifted word joins stay explicit.
+function cursiveK(base: Stroke[], radius: number): Stroke[] {
+    if (base.length !== 3 || base.some((stroke) =>
+        stroke.grapheme !== "k")) {
+        throw new Error("Cursive k needs the printed stem and diagonals");
+    }
+    const [stem, upper, lower] = base as [Stroke, Stroke, Stroke];
+    if (stem.x1 !== stem.x2 || stem.x1 !== upper.x2
+        || upper.x2 !== lower.x1 || upper.y2 !== lower.y1
+        || !(stem.y1 < upper.y2 && upper.y2 < stem.y2)) {
+        throw new Error("Cursive k needs a shared stem and diagonal fork");
+    }
+    const lead = Math.min(200, Math.round(radius / 5));
+    const pen = stem.width;
+    const draw = (from: Point, to: Point): Stroke => {
+        for (const point of [from, to]) {
+            if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
+                || point.y - pen / 2 < 0
+                || point.y + pen / 2 > 4500) {
+                throw new Error("Cursive k connector and pen clip glyph cell");
+            }
+        }
+        return validateStroke({ grapheme: "k",
+            x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+            width: pen, color: stem.color });
+    };
+    const start = { x: stem.x1, y: stem.y1 };
+    const bottom = { x: stem.x2, y: stem.y2 };
+    const fork = { x: upper.x2, y: upper.y2 };
+    const upperEnd = { x: upper.x1, y: upper.y1 };
+    const finish = { x: lower.x2, y: lower.y2 };
+    return [
+        draw({ x: start.x - lead, y: start.y + lead }, start),
+        stem, draw(bottom, fork), draw(fork, upperEnd), upper, lower,
+        draw(finish, { x: finish.x + lead, y: finish.y - lead }),
+    ];
+}
+
 // Optional j keeps its straight stem and sampled hooked descender in
 // one directed pen gesture. Its dot must remain a separate pen lift.
 // This does not connect neighboring glyphs or change the printed j.
@@ -2827,10 +2868,10 @@ export function geometricStarter(
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
         "i", "í", "j", "l", "t", "f", "n", "ñ", "u", "ú", "ü",
-        "m", "h", "r", "v", "w", "z", "s", "y"]
+        "m", "h", "r", "v", "w", "z", "s", "y", "k"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m, v/w/z, s or y glyph");
+            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m, v/w/z, s/y/k glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2848,6 +2889,7 @@ export function geometricStarter(
         if (g === "c" || g === "e") return cursiveOpenArc(base, r);
         if (g === "j") return cursiveHook(base, r);
         if (g === "y") return cursiveFork(base, r);
+        if (g === "k") return cursiveK(base, r);
         if (["v", "w", "z", "s"].includes(g)) {
             return cursiveContour(base, r);
         }
@@ -3956,6 +3998,8 @@ export function createGlyphStrokeEditor(): {
                 ? smoothS(cx, cy, r) : null;
             const cursiveY = connected && chosen.grapheme === "y";
             const yLines = cursiveY ? straightLines(cx, cy, r, "y") : [];
+            const cursiveKForm = connected && chosen.grapheme === "k";
+            const kLines = cursiveKForm ? straightLines(cx, cy, r, "k") : [];
             const contourStart = zigLines[0]?.from ?? smoothParts?.[0]?.[0];
             const contourEnd = zigLines.at(-1)?.to
                 ?? smoothParts?.at(-1)?.[2];
@@ -4049,6 +4093,22 @@ export function createGlyphStrokeEditor(): {
                 exit[1] = yFinish;
                 exit[2] = { x: yFinish.x + lead, y: yFinish.y - lead };
             }
+            const kStem = kLines[0];
+            const kUpper = kLines[1];
+            const kLower = kLines[2];
+            if (kStem && kUpper && kLower) {
+                const entry = connectors[0]!;
+                entry[1] = { x: kStem.from.x - lead,
+                    y: kStem.from.y + lead };
+                entry[2] = kStem.from;
+                const upperReturn = connectors[1]!;
+                upperReturn[1] = kUpper.to;
+                upperReturn[2] = kUpper.from;
+                const exit = connectors[2]!;
+                exit[1] = kLower.to;
+                exit[2] = { x: kLower.to.x + lead,
+                    y: kLower.to.y - lead };
+            }
             for (const [guide, from, to] of connectors) {
                 for (const [axis, value] of [
                     ["x1", from.x], ["y1", from.y],
@@ -4058,7 +4118,7 @@ export function createGlyphStrokeEditor(): {
                 guide.setAttribute("stroke", color.value);
                 guide.setAttribute("visibility", connected &&
                     (guide !== idealApproach || cursiveE || cursiveUp
-                        || cursiveM || cursiveY
+                        || cursiveM || cursiveY || cursiveKForm
                         || ["a", "á"].includes(chosen.grapheme))
                     ? shown : "hidden");
             }
@@ -4191,6 +4251,12 @@ export function createGlyphStrokeEditor(): {
                 element.setAttribute("stroke-width", numeric.width.value);
                 element.setAttribute("stroke", color.value);
             }
+            if (kStem && kUpper) {
+                roundedLeft.setAttribute("x1", String(kStem.to.x));
+                roundedLeft.setAttribute("y1", String(kStem.to.y));
+                roundedLeft.setAttribute("x2", String(kUpper.to.x));
+                roundedLeft.setAttribute("y2", String(kUpper.to.y));
+            }
             const roundedVisible = active
                 && (isCapital || ["n", "u", "ñ", "ú", "ü", "h", "m", "r",
                     "j", "g", "s",
@@ -4209,7 +4275,8 @@ export function createGlyphStrokeEditor(): {
                 && !["j", "g", "s"].includes(chosen.grapheme)
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
-            roundedLeft.setAttribute("visibility", roundedStemState);
+            roundedLeft.setAttribute("visibility", cursiveKForm
+                ? shown : roundedStemState);
             const roundedRightState = chosen.grapheme === "r"
                 ? "hidden" : roundedStemState;
             roundedRight.setAttribute("visibility", roundedRightState);

@@ -2698,3 +2698,17 @@ The browser SVG explicitly previews the retraced right arm as an approach,
 while clipping refusal preserves the last saved TSV. Real Firefox selection,
 native Rust vector PDF and transparent PNG, and exact missing uppercase
 `Y` refusal verify the opt-in gesture. Adjacent letters are not joined.
+
+## Opt-in continuous-pen lowercase k — 2026-11-05
+
+The manually selected `k` retains the printed tall stem and both of its
+original diagonals in their exact directions. It draws the full stem,
+retraces the lower half to the fork, reverses the upper diagonal once,
+then follows the unchanged upper and lower strokes. Bounded entry and
+exit lines make seven continuous directed segments without fake pen lifts.
+
+The browser SVG separately shows both retraces. Its valid-printed but
+clipped-connector case refuses to overwrite accepted TSV. Real Firefox
+selection/download and native Rust PDF/transparent PNG replay verify the
+same source strokes; missing uppercase `K` refuses output replacement.
+Neither adjoining letters nor the automatic-fill inventory is modified.
