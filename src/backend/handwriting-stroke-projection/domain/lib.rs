@@ -202,6 +202,9 @@ pub fn project_ink_segment(
     let end_um = glyph_point(
         placement.origin_um, segment.end_um, placement.dimensions,
     )?;
+    if start_um == end_um {
+        return Err("projected glyph segment must have distinct endpoints");
+    }
     Ok(PhysicalInkSegment {
         page: placement.page,
         start_um,

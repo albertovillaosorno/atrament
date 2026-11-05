@@ -196,6 +196,54 @@ fn refuses_invalid_ink_and_coordinates_without_clipping_or_wrapping() {
 }
 
 #[test]
+fn projection_rejects_ink_that_collapses_to_a_point() {
+    // Both source points are different and valid. A narrowly scaled mean
+    // cell rounds their physical coordinates to the same micrometre.
+    let tiny = AuthoredInkSegment {
+        start_um: (500, 1_000),
+        end_um: (501, 1_000),
+        ..ORIGINAL
+    };
+    let dimensions = MeasuredGlyphDimensions {
+        width_um: 100,
+        height_um: 100,
+        ink_thickness_um: 300,
+        slant_millidegrees: 0,
+    };
+    assert_eq!(
+        project_ink_segment(tiny, placement()),
+        Ok(PhysicalInkSegment {
+            page: 1,
+            start_um: (10_500, 21_000),
+            end_um: (10_501, 21_000),
+            width_um: 200,
+            rgb: [0x11, 0x22, 0x33],
+        }),
+        "the authored 1um line remains valid without statistical scaling"
+    );
+    assert_eq!(
+        project_ink_segment(
+            tiny,
+            InkPlacement {
+                dimensions: Some(dimensions),
+                ..placement()
+            }
+        ),
+        Err("projected glyph segment must have distinct endpoints"),
+    );
+    assert_eq!(
+        project_ink_segment(
+            AuthoredInkSegment {
+                end_um: ORIGINAL.start_um,
+                ..ORIGINAL
+            },
+            placement()
+        ),
+        Err("projected glyph segment must have distinct endpoints"),
+    );
+}
+
+#[test]
 fn exact_direction_and_displacement_determine_join_without_source_mutation() {
     let left = PhysicalInkSegment {
         page: 2,

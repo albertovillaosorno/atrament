@@ -62,7 +62,8 @@ function's physical output.
 ## Failure Modes
 
 The core refuses negative or unrepresentable coordinates, nonfinite shear,
-pen widths outside 80–1500 µm, cross-page connections, mismatched pen color
+pen widths outside 80–1500 µm, source or scaled zero-length segments,
+cross-page connections, mismatched pen color
 or width, and gaps beyond the supplied 1200 µm production limit. Its squared
 distance uses checked `u128` arithmetic, including extreme `u32` coordinates.
 It does not clip or mutate original shapes. The physical export adapter has
@@ -75,7 +76,7 @@ fitted pen-contact response. Those remain separate research/future contracts.
 ## Verification
 
 - `tests/backend/handwriting-stroke-projection/domain/lib.rs`: exact mean,
-  shear, width, color, overflow, join and deterministic replay fixtures.
+  shear, width, color, rounding-collapse refusal, overflow, join and replay.
 - `tests/backend/profile-editor-cli/composition/lib.rs`: actual Rust CLI
   regression tests for profile means, glyph placement and PDF/PNG output.
 - `tests/backend/profile-editor-cli/composition/joined-varied-handwriting.mjs`:
