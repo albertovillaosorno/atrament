@@ -54,6 +54,21 @@ fn fixture_dir() -> PathBuf {
     dir
 }
 
+// Keep fake CUPS rejection checks identical across backward xref chains.
+// The candidate must remain byte-for-byte unchanged and the fake queue
+// must never be invoked. The fixture is fail-fast on its own I/O.
+#[cfg(unix)]
+fn assert_fake_spool_rejected(
+    pdf: &Path, request: &PrintRequest, fake_spool: &Path,
+    spooled: &Path, candidate: &[u8],
+) {
+    fs::write(pdf, candidate).expect("write candidate PDF");
+    assert!(submit_selected(request, fake_spool).is_err(),
+        "invalid xref cannot reach a printer");
+    assert!(!spooled.exists(), "no fake spool side effect");
+    assert_eq!(fs::read(pdf).expect("unchanged source PDF"), candidate);
+}
+
 fn real_pdf_with_marks(include_marks: bool) -> Vec<u8> {
     use atrament_notebook_paper_cli::{
         NotebookInkLine, PaperDatePlaceholder,
@@ -1174,14 +1189,18 @@ fn pdf_whitespace_in_xref_metadata_and_eof_is_admitted_exactly() {
         .position(|part| part == b"/Size ")
         .expect("native trailer declares a size");
     let number_start = size + b"/Size ".len();
-    let number_end = number_start + native[number_start..].iter()
+    let number_end = number_start + native.get(number_start..)
+        .expect("native decimal suffix").iter()
         .take_while(|byte| byte.is_ascii_digit()).count();
-    assert_eq!(native[number_end], b' ', "space after native size");
+    assert_eq!(native.get(number_end), Some(&b' '),
+        "space after native size");
 
     let mut before_number = native.clone();
-    before_number[number_start - 1] = b'\0';
+    *before_number.get_mut(number_start - 1)
+        .expect("separator before native size") = b'\0';
     let mut after_number = native.clone();
-    after_number[number_end] = b'\0';
+    *after_number.get_mut(number_end)
+        .expect("separator after native size") = b'\0';
     let mut after_eof = native.clone();
     after_eof.push(b'\0');
 
@@ -1189,7 +1208,8 @@ fn pdf_whitespace_in_xref_metadata_and_eof_is_admitted_exactly() {
     let width = stream.windows(b"/W [".len())
         .position(|part| part == b"/W [")
         .expect("xref stream has direct widths");
-    stream[width + b"/W".len()] = b'\0';
+    *stream.get_mut(width + b"/W".len())
+        .expect("stream width separator") = b'\0';
 
     for (label, candidate) in [
         ("NUL before numeric trailer value", before_number),
@@ -1215,7 +1235,8 @@ fn pdf_whitespace_in_xref_metadata_and_eof_is_admitted_exactly() {
     // Vertical tab (0B) is ASCII whitespace but not PDF whitespace.
     // A forged numeric delimiter must not qualify for print admission.
     let mut vertical_tab = native;
-    vertical_tab[number_end] = b'\x0b';
+    *vertical_tab.get_mut(number_end)
+        .expect("native size trailing separator") = b'\x0b';
     assert!(!supported_pdf_cross_reference(&vertical_tab),
         "non-PDF vertical tab cannot delimit trailer size");
     fs::write(&pdf, &vertical_tab).expect("write invalid PDF");
@@ -1250,9 +1271,11 @@ fn startxref_decimal_line_uses_pdf_whitespace_not_vertical_tab() {
         .rposition(|part| part == b"startxref\n")
         .expect("native PDF has a final startxref locator");
     let number_start = locator + b"startxref\n".len();
-    let number_end = number_start + native[number_start..].iter()
+    let number_end = number_start + native.get(number_start..)
+        .expect("native locator suffix").iter()
         .take_while(|byte| byte.is_ascii_digit()).count();
-    assert_eq!(native[number_end], b'\n', "decimal locator line ending");
+    assert_eq!(native.get(number_end), Some(&b'\n'),
+        "decimal locator line ending");
 
     let mut leading_nul = native.clone();
     leading_nul.insert(number_start, b'\0');
@@ -1744,7 +1767,8 @@ fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
     let locator = original.windows(b"startxref\n".len())
         .rposition(|part| part == b"startxref\n")
         .expect("original terminal locator");
-    let prefix = &original[..locator];
+    let prefix = original.get(..locator)
+        .expect("prefix before native startxref");
     let revised = |source: &[u8], trailer: &str| [
         source,
         format!(
@@ -1783,24 +1807,22 @@ fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
         let candidate = revised(prefix, &trailer);
         assert!(!supported_pdf_cross_reference(&candidate),
             "invalid hybrid pointer must refuse: {trailer}");
-        fs::write(&pdf, &candidate).expect("write malformed PDF");
-        assert!(submit_selected(&request, &fake_spool).is_err(),
-            "invalid hybrid pointer cannot contact CUPS");
-        assert!(!spooled.exists(), "no spool side effects");
-        assert_eq!(fs::read(&pdf).expect("source unchanged"), candidate);
+        assert_fake_spool_rejected(
+            &pdf, &request, &fake_spool, &spooled, &candidate);
     }
     let last_endobj = prefix.windows(b"endobj\n".len())
         .rposition(|part| part == b"endobj\n")
         .expect("prior stream closing object");
-    let missing_endobj = [&prefix[..last_endobj],
-        &prefix[last_endobj + b"endobj\n".len()..]].concat();
+    let missing_endobj = [
+        prefix.get(..last_endobj).expect("prefix before endobj"),
+        prefix.get(last_endobj + b"endobj\n".len()..)
+            .expect("prefix after endobj"),
+    ].concat();
     let forged = revised(&missing_endobj, &format!("/XRefStm {prior}"));
     assert!(!supported_pdf_cross_reference(&forged),
         "hybrid pointer cannot name a stream without its endobj");
-    fs::write(&pdf, &forged).expect("write truncated prior stream");
-    assert!(submit_selected(&request, &fake_spool).is_err());
-    assert!(!spooled.exists(), "truncated stream cannot reach CUPS");
-    assert_eq!(fs::read(&pdf).expect("source unchanged"), forged);
+    assert_fake_spool_rejected(
+        &pdf, &request, &fake_spool, &spooled, &forged);
 
     // A prior stream's own /Prev must have a direct bounded numeric value,
     // even when we deliberately do not follow older revision chains.
@@ -1809,32 +1831,28 @@ fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
         .rposition(|part| part == length_key)
         .expect("prior xref stream has direct Length");
     for invalid_prev in [
-        "abc".to_string(), "-1".to_string(),
-        "0".to_string(), "9999999999".to_string(),
+        "abc".to_owned(), "-1".to_owned(),
+        "0".to_owned(), "9999999999".to_owned(),
         prior.to_string(), (prior + 1).to_string(),
     ] {
         let malformed = [
-            &prefix[..before_length],
+            prefix.get(..before_length).expect("prior stream prefix"),
             format!("/Prev {invalid_prev} ").as_bytes(),
-            &prefix[before_length..],
+            prefix.get(before_length..).expect("prior stream suffix"),
         ].concat();
         let candidate = revised(&malformed, &format!("/XRefStm {prior}"));
         assert!(!supported_pdf_cross_reference(&candidate),
             "prior stream /Prev must be a bounded decimal: {invalid_prev}");
-        fs::write(&pdf, &candidate).expect("write malformed prior stream");
-        assert!(submit_selected(&request, &fake_spool).is_err(),
-            "malformed older Prev cannot launch fake CUPS");
-        assert!(!spooled.exists(), "no spool side effects");
-        assert_eq!(fs::read(&pdf).expect("unchanged PDF"), candidate);
+        assert_fake_spool_rejected(
+            &pdf, &request, &fake_spool, &spooled, &candidate);
     }
 
     let mut obsolete = revised(prefix, &format!("/XRefStm {prior}"));
     *obsolete.get_mut(7).expect("PDF minor version") = b'4';
     assert!(!supported_pdf_cross_reference(&obsolete),
         "PDF 1.4 cannot declare a hybrid-reference stream");
-    fs::write(&pdf, &obsolete).expect("write version-spoofed PDF");
-    assert!(submit_selected(&request, &fake_spool).is_err());
-    assert!(!spooled.exists());
+    assert_fake_spool_rejected(
+        &pdf, &request, &fake_spool, &spooled, &obsolete);
     fs::remove_dir_all(&directory).expect("remove test fixtures");
 }
 
@@ -1957,17 +1975,13 @@ fn xref_table_prev_must_point_back_to_a_prior_xref() {
         let candidate = revised(&invalid);
         assert!(!supported_pdf_cross_reference(&candidate),
             "bad incremental xref link refuses: {invalid}");
-        fs::write(&pdf, &candidate).expect("write invalid PDF");
         let request = PrintRequest {
             pdf: pdf.clone(), printer: "Queue_1".into(),
             dry_run: false, expected_sha256: None,
         };
+        assert_fake_spool_rejected(
+            &pdf, &request, &fake_spool, &spooled, &candidate);
         assert!(selected_pdf(&pdf).is_err(), "invalid Prev refused");
-        assert!(submit_selected(&request, &fake_spool).is_err(),
-            "invalid Prev cannot contact CUPS");
-        assert!(!spooled.exists(), "no fake spool contact");
-        assert_eq!(fs::read(&pdf).expect("selected bytes intact"),
-            candidate);
     }
     // A prior /Prev table must contain its complete first subsection,
     // not merely an xref keyword and one plausible first record. Forged
@@ -2000,16 +2014,12 @@ fn xref_table_prev_must_point_back_to_a_prior_xref() {
         ].concat();
         assert!(!supported_pdf_cross_reference(&candidate),
             "fake predecessor must not be accepted: {fragment:?}");
-        fs::write(&pdf, &candidate).expect("write forged PDF");
         let request = PrintRequest {
             pdf: pdf.clone(), printer: "Queue_1".into(),
             dry_run: false, expected_sha256: None,
         };
-        assert!(submit_selected(&request, &fake_spool).is_err(),
-            "fake predecessor cannot reach CUPS");
-        assert!(!spooled.exists(), "refusal does not launch fake CUPS");
-        assert_eq!(fs::read(&pdf).expect("selected PDF unchanged"),
-            candidate);
+        assert_fake_spool_rejected(
+            &pdf, &request, &fake_spool, &spooled, &candidate);
     }
     fs::remove_dir_all(&directory).expect("remove fixture directory");
 }

@@ -588,6 +588,17 @@ selected source bytes unchanged. Four legitimate hex forms are admitted to
 the same fake queue with a matching SHA-256. The scanner does not parse
 arbitrary PDF objects, compressed stream data or prove physical printing.
 
+## Strict all-target CUPS regression gate (partial) — 2026-11-04
+
+The Rust print test harness now checks source bytes through explicit
+fail-fast slice and offset access instead of unchecked indexing. A single
+fake-CUPS rejection helper consistently proves untouched source bytes and
+no spool contact for malformed hybrid and incremental xref references.
+
+This eliminates 19 existing strict all-target Clippy failures in the paper
+crate without weakening its established 37 print and 38 paper tests. The
+native spool regression remains isolated; no physical printer is contacted.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
