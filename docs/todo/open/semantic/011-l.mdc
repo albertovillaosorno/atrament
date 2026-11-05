@@ -1046,3 +1046,21 @@ boundaries retain their earlier behavior; neither gains printable ink.
 
 This remains a limited CLI layout guard, not general widow/orphan control,
 full Markdown parsing or a persisted semantic notebook model.
+
+## Keep titles together across blank fenced code rows — 2026-11-04
+
+The bounded heading orphan guard now scans beyond an empty physical row
+inside a fenced code block when looking for a subsequent ATX or Setext
+subtitle. Previously it stopped at that blank row and could leave the
+first title on page one while moving its subtitle and first body line
+together to page two, even when the whole group fit on page two.
+
+A red-before/green-after Rust regression locks the exact four-row
+physical region and the page-local positions of both title variants.
+A separate native integration exports two-page vector PDF and transparent
+PNG for each form: first-page PNG matches the independent prelude,
+second-page PNG matches the complete title/fence/body group, and a
+one-page PDF request refuses without replacing accepted bytes.
+
+This preserves the limited single-row orphan guard, not full Markdown,
+saved semantic identities, or general widow/orphan control.

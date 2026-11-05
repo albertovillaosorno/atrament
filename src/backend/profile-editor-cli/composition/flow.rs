@@ -1325,7 +1325,10 @@ fn following_heading_gap<'text>(
                 following.paragraph_gaps.saturating_add(1);
             pending_gap = false;
         }
-        if fence.is_some() || following.blank_rows > 0 {
+        // Blank physical code rows do not end a following title chain.
+        // Continue counting headings after the closing fence so they and
+        // their first body row can move together when the next page fits.
+        if fence.is_some() {
             return Some(following);
         }
         let (style, body) = markdown_line(line);

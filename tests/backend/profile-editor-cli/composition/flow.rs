@@ -586,3 +586,35 @@ fn separate_blank_gaps_between_three_titles_are_measured_once_each() {
     ).expect("trailing gaps cannot create an ink-free sheet");
     assert_eq!(count, 1);
 }
+
+#[test]
+fn blank_fenced_rows_keep_following_title_chain_with_its_body() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    // Four rows fit on the page, but only three remain after the prelude.
+    // Title, fenced blank, subtitle and body fit together on page two.
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 41_000,
+    };
+    for text in [
+        "a  \n# a\n~~~txt\n\n~~~\n## ó\nb",
+        "a  \n# a\n~~~txt\n\n~~~\nó\n===\nb",
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, text)
+            .expect("valid heading chain with fenced blank row");
+        let (runs, marks, pages) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("heading group fits in the physical region");
+        assert_eq!(pages, 2);
+        assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+            [1, 2, 2, 2], "title must not orphan from subtitle");
+        assert_eq!(runs[2].origin_um.1 - runs[1].origin_um.1, 18_000);
+        assert_eq!(runs[3].origin_um.1 - runs[2].origin_um.1, 9_000);
+        assert_eq!(marks.len(), 2, "both headings remain decorated");
+        assert!(marks.iter().all(|mark| mark.page == 2));
+    }
+}
