@@ -2149,3 +2149,16 @@ Browser SVG geometry, Unicode TSV roundtrip, live Firefox selection,
 Rust PDF/transparent PNG rendering, and preservation of an accepted
 PDF on unauthored-glyph refusal are verified with dedicated tests.
 The full Greek uppercase inventory and calibrated handwriting remain open.
+
+## Manually selected uppercase Greek Lambda and Theta (partial) — 2026-11-04
+
+Uppercase `Λ` is now an exact two-segment, joined rising/falling peak;
+uppercase `Θ` traces a four-quadratic closed oval (64 sampled chords)
+with a separately lifted horizontal bar. They remain distinct Unicode
+keys from lowercase `λ` and `θ`, Latin `A`, and other authored symbols.
+
+Neither extends the near-cap 93-key automatic math fill. Browser TSV
+geometry and clipping, authenticated Firefox selection and native PDF/PNG
+replay, plus atomic missing-glyph refusal are regression-tested. The
+remaining uppercase Greek alphabet and calibrated personal ink remain
+open P1 requirements.

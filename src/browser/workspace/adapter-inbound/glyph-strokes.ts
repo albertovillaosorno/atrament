@@ -694,7 +694,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
     "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
-    "ν", "ς", "Γ", "Ω", "Π", "Σ",
+    "ν", "ς", "Γ", "Ω", "Π", "Σ", "Λ", "Θ",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1345,6 +1345,20 @@ function mathParts(
         line(-0.65, -0.85, 0.25, 0),
         line(0.25, 0, -0.65, 0.85),
         line(-0.65, 0.85, 0.75, 0.85),
+    ];
+    // Capital Lambda joins the ascending and descending peak without a
+    // pen lift. Capital Theta retains a rounded oval and lifted bar,
+    // separate from the smaller lowercase theta geometry.
+    if (glyph === "Λ") return [
+        line(-0.7, 0.85, 0, -0.85),
+        line(0, -0.85, 0.7, 0.85),
+    ];
+    if (glyph === "Θ") return [
+        curve([0, -0.85], [0.85, -0.9], [0.78, 0]),
+        curve([0.78, 0], [0.85, 0.9], [0, 0.85]),
+        curve([0, 0.85], [-0.85, 0.9], [-0.78, 0]),
+        curve([-0.78, 0], [-0.85, -0.9], [0, -0.85]),
+        line(-0.6, 0, 0.6, 0),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.
