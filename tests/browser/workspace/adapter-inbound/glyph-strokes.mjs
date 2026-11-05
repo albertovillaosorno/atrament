@@ -7008,7 +7008,7 @@ test("cursive o/a starters keep directed entry, loop and exit", () => {
         assert.deepEqual(geometricStarter(glyph, ...values), base,
             "choosing cursive cannot mutate its regular form");
     }
-    for (const invalid of ["b", "A", "∞"]) {
+    for (const invalid of ["d", "A", "∞"]) {
         assert.throws(() => geometricStarter(invalid, ...values,
             undefined, "cursive"), /Cursive variant/);
     }
@@ -9535,6 +9535,90 @@ test("browser manual k previews both retraces and refuses clipped ink",
                 accepted, "clipped k cannot overwrite accepted TSV");
             editor.reset();
             assert.equal(get("ideal-exit").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });
+
+// An opt-in b joins its printed ascender to the original full circular bowl.
+test("manual continuous b retains exact circle and connected pen order", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("b", ...args);
+    const joined = geometricStarter("b", ...args, undefined, "cursive");
+    assert.equal(printed.length, 49);
+    assert.equal(joined.length, 76);
+    assert.deepEqual(joined[1], printed[48],
+        "the printed ascender retains its original direction and length");
+    assert.deepEqual(joined.slice(3, 27), printed.slice(24, 48),
+        "the upper semicircle carries the pen to the loop start");
+    assert.deepEqual(joined.slice(27, 75), printed.slice(0, 48),
+        "every original printed circle chord appears in order");
+    assert.deepEqual(joined[2], {
+        grapheme: "b", x1: 450, y1: 3550,
+        x2: 450, y2: 2450, width: 250, color: "#243647",
+    }, "the ascender retraces precisely to the left circle tangent");
+    assert.deepEqual(joined[0], {
+        grapheme: "b", x1: 250, y1: 1000,
+        x2: 450, y2: 800, width: 250, color: "#243647",
+    });
+    assert.deepEqual(joined.at(-1), {
+        grapheme: "b", x1: 2650, y1: 2450,
+        x2: 2850, y2: 2250, width: 250, color: "#243647",
+    });
+    assert.deepEqual(candidatePenPaths(joined, "b").map(
+        ({ first, last }) => [first, last]), [[1, 76]]);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("b", ...args), printed);
+    assert.equal(geometricStarter("b", 1400, 2450,
+        1100, 250, "#243647").length, 49,
+    "valid printed b must not be blocked by an optional entry");
+    assert.throws(() => geometricStarter("b", 1400, 2450,
+        1100, 250, "#243647", undefined, "cursive"),
+    /Cursive b connector and pen clip/);
+    assert.throws(() => geometricStarter("B", ...args,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser manual b previews exact ascender retrace and saves TSV",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "b-cursive";
+            get("form").dispatch("change");
+            get("character").value = "b";
+            get("character").dispatch("input");
+            for (const id of ["ideal-circle", "ideal-stem", "ideal-entry",
+                "ideal-approach", "ideal-exit"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual b previews ${id}`);
+            }
+            assert.equal(get("ideal-entry").attributes.get("y2"), "800");
+            assert.equal(get("ideal-approach").attributes.get("y1"), "3550");
+            assert.equal(get("ideal-approach").attributes.get("y2"), "2450");
+            assert.equal(get("ideal-approach").attributes.get("x2"), "450");
+            assert.equal(get("ideal-exit").attributes.get("x1"), "2650");
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "hidden", "b must not expose an unrelated arch");
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, 76);
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("b", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-x").value = "1400";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-approach").attributes
+                .get("visibility"), "hidden",
+            "clipped b must hide its stale retrace guide");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "invalid b does not overwrite accepted ink");
+            editor.reset();
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
                 "hidden");
         } finally {
             ui.restore();

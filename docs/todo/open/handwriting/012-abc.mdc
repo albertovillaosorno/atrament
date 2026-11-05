@@ -2712,3 +2712,18 @@ clipped-connector case refuses to overwrite accepted TSV. Real Firefox
 selection/download and native Rust PDF/transparent PNG replay verify the
 same source strokes; missing uppercase `K` refuses output replacement.
 Neither adjoining letters nor the automatic-fill inventory is modified.
+
+## Opt-in continuous-pen lowercase b — 2026-11-05
+
+The manually selected `b` retains the full printed 48-chord circle and
+original tall left stem. Its short entry flows down the ascender, retraces
+to the left bowl tangent, carries the pen over the unchanged upper
+semicircle to the right, traverses the original circle in order, and exits
+without a pen lift. This yields 76 explicit, continuous TSV segments. The
+printed `b` remains the independent default.
+
+Browser guide/TSV tests verify the retrace, circle-chord order and atomic
+clipped-entry refusal; real Firefox selection/download and Rust vector PDF
+and transparent PNG replay verify native ink. Exact uppercase `B` remains
+unsupported without separately authored strokes and refuses to overwrite
+a valid page. This does not infer cross-letter joins or a calibrated font.

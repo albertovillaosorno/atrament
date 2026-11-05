@@ -14511,7 +14511,7 @@ test(
 );
 
 test(
-    "Firefox cursive c/e/i/j/l/t/n/u/m/h/r/f/v/w/z/s/y/k native ink",
+    "Firefox cursive c/e/i/j/l/t/n/u/m/h/r/f/v/w/z/s/y/k/b native ink",
     { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
@@ -14579,6 +14579,7 @@ test(
                         ["s-cursive", "s", 1100],
                         ["y-cursive", "y", 1100],
                         ["k-cursive", "k", 1100],
+                        ["b-cursive", "b", 1100],
                     ]) {
                         change("circle-radius", String(radius));
                         change("form", form);
@@ -14587,6 +14588,14 @@ test(
                             arc: get("ideal-c-loop").getAttribute("d"),
                             arcVisible: get("ideal-c-loop")
                                 .getAttribute("visibility"),
+                            circle: get("ideal-circle")
+                                .getAttribute("visibility"),
+                            baseStem: get("ideal-stem")
+                                .getAttribute("visibility"),
+                            retraceY1: get("ideal-approach")
+                                .getAttribute("y1"),
+                            retraceY2: get("ideal-approach")
+                                .getAttribute("y2"),
                             approach: get("ideal-approach")
                                 .getAttribute("visibility"),
                             bar: get("ideal-e-bar")
@@ -14650,6 +14659,21 @@ test(
             assert.equal(response.type, "success");
             assert.equal(response.result.type, "string");
             const actual = JSON.parse(response.result.value);
+            assert.equal(actual.guides.length, 29);
+            assert.equal(actual.constructed.length, 29);
+            const bGuide = actual.guides.at(-1);
+            assert.equal(bGuide.circle, "visible");
+            assert.equal(bGuide.baseStem, "visible");
+            assert.equal(bGuide.entry, "visible");
+            assert.equal(bGuide.entryTop, "800");
+            assert.equal(bGuide.approach, "visible");
+            assert.equal(bGuide.retraceY1, "3550");
+            assert.equal(bGuide.retraceY2, "2450");
+            assert.match(actual.constructed.at(-1), /76 sampled segments/);
+            // Preserve the original 28-form guide assertions below while
+            // the downloaded TSV still includes the additional b ink.
+            actual.guides.pop();
+            actual.constructed.pop();
             for (const guide of actual.guides.slice(0, 4)) {
                 assert.equal(guide.arcVisible, "visible");
                 assert.equal(guide.bar, "hidden");
@@ -14764,7 +14788,7 @@ test(
             const glyphs = ["c", "e", "é", "e\u0301",
                 "i", "í", "i\u0301", "l", "n", "ñ", "n\u0303",
                 "u", "ú", "ü", "u\u0301", "u\u0308", "m", "h", "t",
-                "r", "f", "j", "v", "w", "z", "s", "y", "k"];
+                "r", "f", "j", "v", "w", "z", "s", "y", "k", "b"];
             const expectedInk = glyphs.flatMap(
                 (glyph, index) => geometricStarter(glyph, 1550, 2450,
                     index < 4 ? 700 : 1100, 250, "#243647",
