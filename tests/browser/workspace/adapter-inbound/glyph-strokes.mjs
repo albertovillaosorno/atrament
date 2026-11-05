@@ -4040,6 +4040,29 @@ test("manual contour and repeated integrals retain exact joined paths", () => {
         "an unsupplied lookalike must not silently inherit ink");
 });
 
+test("blackboard number sets retain distinct directed Unicode ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, paths, latin] of [
+        ["ℕ", 4, 2, "N"], ["ℤ", 4, 2, "Z"],
+        ["ℚ", 66, 3, "Q"], ["ℝ", 35, 2, "R"],
+        ["ℂ", 65, 2, "C"],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " sampled pen segments");
+        assert.equal(candidatePenPaths(ink, glyph).length, paths,
+            glyph + " connected paths retain intended lifts");
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.notDeepEqual(ink, geometricStarter(latin, ...args),
+            glyph + " must not silently inherit the Latin shape");
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell/);
+    }
+    assert.throws(() => geometricStarter("ℍ", ...args),
+        /supported exact geometric glyph/,
+        "unauthored mathematical alphabet variants require manual ink");
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5828,6 +5851,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∧", "∨",
         "∩", "∪", "∈", "∉", "∋", "∌", "⊂", "⊆", "⊃", "⊇",
         "⊄", "⊈", "⊅", "⊉", "∑", "∫", "∂", "∮", "∬", "∭",
+        "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
         "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
         "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
         "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",

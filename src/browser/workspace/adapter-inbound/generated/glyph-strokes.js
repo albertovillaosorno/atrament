@@ -598,6 +598,7 @@ const MANUAL_MATH_GLYPHS = [
     "ν", "ς", "Γ", "Ω", "Π", "Σ", "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ",
     "Β", "Υ", "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
     "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐", "∮", "∬", "∭",
+    "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1553,6 +1554,47 @@ function mathParts(cx, cy, radius, glyph) {
             } : {}),
         })));
     }
+    // Blackboard number sets are opt-in exact Unicode outlines, not
+    // Latin letter substitutions. Second rails have deliberate pen lifts.
+    if (glyph === "ℕ")
+        return [
+            line(-0.8, 0.8, -0.8, -0.8),
+            line(-0.8, -0.8, 0.8, 0.8),
+            line(0.8, 0.8, 0.8, -0.8),
+            line(-0.56, 0.6, -0.56, -0.48),
+        ];
+    if (glyph === "ℤ")
+        return [
+            line(-0.75, -0.8, 0.75, -0.8),
+            line(0.75, -0.8, -0.75, 0.8),
+            line(-0.75, 0.8, 0.75, 0.8),
+            line(0.56, -0.8, -0.56, 0.8),
+        ];
+    if (glyph === "ℚ")
+        return [
+            curve([0, -0.85], [0.7, -0.85], [0.7, 0]),
+            curve([0.7, 0], [0.7, 0.85], [0, 0.85]),
+            curve([0, 0.85], [-0.7, 0.85], [-0.7, 0]),
+            curve([-0.7, 0], [-0.7, -0.85], [0, -0.85]),
+            line(0.15, 0.4, 0.8, 0.95),
+            line(-0.42, -0.4, -0.42, 0.4),
+        ];
+    if (glyph === "ℝ")
+        return [
+            line(-0.7, 0.85, -0.7, -0.85),
+            curve([-0.7, -0.85], [0.7, -1], [0.65, -0.35]),
+            curve([0.65, -0.35], [0.65, 0.15], [-0.7, 0.15]),
+            line(-0.7, 0.15, 0.75, 0.85),
+            line(-0.48, -0.6, -0.48, 0.05),
+        ];
+    if (glyph === "ℂ")
+        return [
+            curve([0.68, -0.65], [0.1, -1], [-0.56, -0.6]),
+            curve([-0.56, -0.6], [-0.9, -0.3], [-0.8, 0]),
+            curve([-0.8, 0], [-0.9, 0.3], [-0.56, 0.6]),
+            curve([-0.56, 0.6], [0.1, 1], [0.68, 0.65]),
+            line(-0.51, -0.48, -0.51, 0.48),
+        ];
     if (glyph === "∂")
         return [
             // A single directed pen path: high tail, round bowl and return

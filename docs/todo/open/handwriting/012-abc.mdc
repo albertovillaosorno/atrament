@@ -2292,3 +2292,18 @@ export now have focused regressions, including unchanged accepted output on
 missing lookalikes. Live Firefox validates the SVG guides, download and
 Rust replay. These manual forms remain outside the 93-key bounded automatic
 math batch; persistent analytic curves and full math/font synthesis are open.
+
+## Manually selected blackboard number sets (partial) — 2026-11-04
+
+The exact Unicode glyphs `ℕ`, `ℤ`, `ℚ`, `ℝ`, `ℂ` have opt-in
+blackboard-bold pen starters, distinct from Latin `N`, `Z`, `Q`, `R`, `C`.
+Natural and integer set letters add a lifted interior rail to a directed
+angular outline. Rational, real and complex sets retain their curved
+bowls with separately lifted inner strokes. Each samples into native
+integer micrometre segments and keeps its own Unicode identity.
+
+Focused browser/TSV, clipping and real Rust PDF/transparent PNG regressions
+verify the selected paths and immutable output when an unauthored lookalike
+is requested. Live Firefox checks guides, exact TSV export and native replay.
+They do not change the bounded 93-symbol automatic math fill; a complete
+mathematical alphabet and automatic handwritten notebook remain unfinished.
