@@ -4224,7 +4224,7 @@ test("square lattice meet and join retain three connected sides", () => {
         assert.throws(() => geometricStarter(glyph, 100, 2450,
             1100, 250, "#243647"), /fit inside glyph cell/);
     }
-    assert.throws(() => geometricStarter("⊟", ...args),
+    assert.throws(() => geometricStarter("⊝", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -4259,7 +4259,43 @@ test("square subset and superset retain exact directed contours", () => {
         "square subset cannot borrow rounded subset ink");
     assert.throws(() => geometricStarter("⊑", 1550, 2450,
         500, 250, "#243647"), /pen-clearance/);
-    assert.throws(() => geometricStarter("⊟", ...args),
+    assert.throws(() => geometricStarter("⊝", ...args),
+        /supported exact geometric glyph/);
+});
+
+test("square operators preserve closed border and lifted inner marks", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const border = [[692, 1592, 2408, 1592],
+        [2408, 1592, 2408, 3308], [2408, 3308, 692, 3308],
+        [692, 3308, 692, 1592]];
+    const cases = [
+        ["⊞", [[1110, 2450, 1990, 2450],
+            [1550, 2010, 1550, 2890]]],
+        ["⊟", [[1110, 2450, 1990, 2450]]],
+        ["⊠", [[1110, 2010, 1990, 2890],
+            [1990, 2010, 1110, 2890]]],
+        ["⊡", [[1484, 2450, 1616, 2450]]],
+    ];
+    for (const [glyph, inner] of cases) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.deepEqual(ink.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), [...border, ...inner]);
+        const paths = candidatePenPaths(ink, glyph);
+        assert.deepEqual(paths.map(({ first, last }) => [first, last]),
+            [[1, 4], ...inner.map((_, i) => [i + 5, i + 5])],
+            "border closes without lifting, inner strokes lift exactly");
+        assert.deepEqual(paths[0].start, paths[0].end);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"), /fit inside glyph cell/);
+        assert.throws(() => geometricStarter(glyph, 1550, 2450,
+            500, 250, "#243647"), /pen-clearance/);
+    }
+    assert.notDeepEqual(geometricStarter("⊞", ...args),
+        geometricStarter("⊕", ...args),
+        "square enclosure must not borrow circled ink");
+    assert.throws(() => geometricStarter("⊝", ...args),
         /supported exact geometric glyph/);
 });
 

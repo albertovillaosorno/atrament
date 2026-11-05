@@ -2401,3 +2401,16 @@ clearance checks, native Rust PDF/transparent PNG, missing-key atomic
 refusal, and live Firefox export cover all four new opt-in shapes. The
 93-key automatic math fill is unchanged; baseline font synthesis and
 calibrated personal handwriting remain open.
+
+## Exact square math enclosure starters (partial) — 2026-11-05
+
+The opt-in manual selector also draws `⊞`, `⊟`, `⊠` and `⊡` as
+independent exact Unicode square operators. All four perimeter segments
+form one closed directed pen path; central plus, minus, times or dot ink
+lifts separately inside the box. Narrow radius and heavy pens refuse
+insufficient clearance rather than merging distinct strokes.
+
+Focused browser path and TSV tests, live Firefox, native Rust vector
+PDF/transparent PNG and missing-key atomic refusal exercise the square
+forms without substituting their circled counterparts. The automatic
+93-form math batch and uncalibrated geometry status remain unchanged.

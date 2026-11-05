@@ -699,7 +699,7 @@ const MANUAL_MATH_GLYPHS = [
     "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐", "∮", "∬", "∭",
     "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
     "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘", "⋂", "⋃", "⋀", "⋁", "⊓", "⊔",
-    "⊏", "⊐", "⊑", "⊒",
+    "⊏", "⊐", "⊑", "⊒", "⊞", "⊟", "⊠", "⊡",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1018,6 +1018,25 @@ function mathParts(
                 mirror * 0.72, 0.95));
         }
         return subset;
+    }
+    // Exact square operators keep a closed four-edge perimeter. Their
+    // plus, minus, times or center-dot ink is lifted inside the border;
+    // circular operator contours are never silently substituted.
+    if (["⊞", "⊟", "⊠", "⊡"].includes(glyph)) {
+        const perimeter = [
+            line(-0.78, -0.78, 0.78, -0.78),
+            line(0.78, -0.78, 0.78, 0.78),
+            line(0.78, 0.78, -0.78, 0.78),
+            line(-0.78, 0.78, -0.78, -0.78),
+        ];
+        if (glyph === "⊞") return [...perimeter,
+            line(-0.4, 0, 0.4, 0), line(0, -0.4, 0, 0.4)];
+        if (glyph === "⊟") return [...perimeter,
+            line(-0.4, 0, 0.4, 0)];
+        if (glyph === "⊠") return [...perimeter,
+            line(-0.4, -0.4, 0.4, 0.4),
+            line(0.4, -0.4, -0.4, 0.4)];
+        return [...perimeter, line(-0.06, 0, 0.06, 0)];
     }
     // N-ary logical AND/OR uses exact, independently selected wide wedges,
     // not implicit enlargement or substitution of ordinary ∧/∨ ink.
@@ -2638,6 +2657,10 @@ export function geometricStarter(
         }
         if (["⊑", "⊒"].includes(g) && radius * 0.33 < pen + 60) {
             throw new Error("Square subset underbar needs pen-clearance");
+        }
+        if (["⊞", "⊟", "⊠", "⊡"].includes(g)
+            && radius * 0.38 < pen + 80) {
+            throw new Error("Square math operator needs pen-clearance");
         }
         if (g === "÷" && radius * 0.58 < pen + 100) {
             throw new Error("Division dots need visible pen-clearance");
