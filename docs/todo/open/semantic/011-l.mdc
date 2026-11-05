@@ -1137,3 +1137,14 @@ accepted combinations pass without changing any native PDF/PNG semantics.
 This protects the existing export-time height contract against future
 parser changes. It does not add saved semantic blocks, arbitrary Markdown
 features or independent page-region placement; ATR-P2-011 remains open.
+
+A deterministic follow-up replays five-fragment combinations of
+headings, tasks, quotes, numbered items, fences, thematic rules, escapes and
+indented continuations. Nineteen individually tall authored glyph profiles
+include Spanish `ó`, `ñ`, `¿`, the mathematical `∞`, and decomposed `o` with
+combining acute. Expected physical height comes from **exact rendered
+Unicode graphemes**, not raw substring matching: an accented `#` is not the
+same authored key as a standalone Markdown `#`. More than 2,000 admitted
+mixed cases pass, with the full native CLI and Rust workspace still green.
+This is a safety regression, not a new grammar feature or proof of completed
+persistent semantic notebook flow.
