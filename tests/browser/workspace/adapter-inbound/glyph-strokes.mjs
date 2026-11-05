@@ -7008,7 +7008,7 @@ test("cursive o/a starters keep directed entry, loop and exit", () => {
         assert.deepEqual(geometricStarter(glyph, ...values), base,
             "choosing cursive cannot mutate its regular form");
     }
-    for (const invalid of ["b", "n", "A", "∞"]) {
+    for (const invalid of ["b", "h", "A", "∞"]) {
         assert.throws(() => geometricStarter(invalid, ...values,
             undefined, "cursive"), /Cursive variant/);
     }
@@ -8540,6 +8540,92 @@ test("browser continuous-pen l guide, download and refusal", async () => {
         get("save").dispatch("click");
         assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
             expected, "bad placement cannot change authored ink");
+        editor.reset();
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "hidden");
+    } finally {
+        ui.restore();
+    }
+});
+
+
+test("manual cursive n and ñ join the hump but lift for tilde", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("n", ...args);
+    const body = geometricStarter("n", ...args, undefined, "cursive");
+    assert.equal(printed.length, 34);
+    assert.equal(body.length, 37);
+    assert.deepEqual(body[1], printed[0], "left stem remains exact");
+    assert.deepEqual(body.slice(3, 36), printed.slice(1),
+        "hump and descending right stem remain exact");
+    assert.deepEqual(candidatePenPaths(body, "n").map(
+        ({ first, last }) => [first, last]), [[1, 37]]);
+    assert.deepEqual({ x: body[0].x2, y: body[0].y2 },
+        { x: body[1].x1, y: body[1].y1 });
+    assert.deepEqual({ x: body[2].x2, y: body[2].y2 },
+        { x: printed[1].x1, y: printed[1].y1 });
+    for (const glyph of ["ñ", "n\u0303"]) {
+        const lines = geometricStarter(glyph, ...args,
+            undefined, "cursive");
+        assert.equal(lines.length, 40);
+        assert.deepEqual(candidatePenPaths(lines, glyph).map(
+            ({ first, last }) => [first, last]),
+            [[1, 37], [38, 40]],
+            "a continuous body and a detached three-stroke tilde");
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(lines)),
+            lines, "native TSV retains exact Unicode glyph identity");
+    }
+    assert.deepEqual(geometricStarter("n", ...args), printed);
+    assert.throws(() => geometricStarter("n", 300, 2450,
+        1100, 250, "#243647", undefined, "cursive"),
+    /Shape and pen|Cursive hump/);
+});
+
+
+test("browser manual n/ñ SVG, exact TSV and clipping refusal", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        for (const [form, glyph] of [["n-cursive", "n"],
+            ["ñ-cursive", "ñ"], ["n\u0303-cursive", "n\u0303"]]) {
+            get("form").value = form;
+            get("form").dispatch("change");
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-approach",
+                "ideal-exit", "ideal-rounded", "ideal-rounded-left",
+                "ideal-rounded-right"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual ${glyph} shows ${id}`);
+            }
+            assert.equal(get("ideal-approach").attributes.get("x1"),
+                "450");
+            assert.equal(get("ideal-approach").attributes.get("y1"),
+                "1350");
+            assert.equal(get("ideal-approach").attributes.get("y2"),
+                "2450");
+            assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+                "hidden", "hump never substitutes a circular loop");
+            assert.equal(get("ideal-diacritic").attributes.get("visibility"),
+                glyph === "n" ? "hidden" : "visible");
+            get("construct").dispatch("click");
+        }
+        get("save").dispatch("click");
+        const glyphs = ["n", "ñ", "n\u0303"];
+        const expected = glyphs.flatMap((glyph) => geometricStarter(
+            glyph, 1550, 2450, 1100, 250, "#243647",
+            undefined, "cursive"));
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            expected);
+        get("circle-radius").value = "1600";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden", "clipped starter cannot leave a misleading guide");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            expected, "refused geometry leaves the draft and download exact");
         editor.reset();
         assert.equal(get("ideal-entry").attributes.get("visibility"),
             "hidden");

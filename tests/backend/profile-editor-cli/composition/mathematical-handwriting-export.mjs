@@ -3913,3 +3913,60 @@ test('manual cursive i/í/NFD/l export exact two-line physical ink', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+// Cursive n/ñ/NFD keep a single directed body, then lift only for the
+// separately selectable tilde. Printed n and other exact keys are distinct.
+test('manual cursive n/ñ/NFD render exact native vector PDF and PNG', () => {
+    const dir = mkdtempSync(join(root, '.temp/cursive-n-'));
+    try {
+        const library = join(dir, 'cursive.tsv');
+        const output = join(dir, 'cursive.pdf');
+        const glyphs = ['n', 'ñ', 'n\u0303'];
+        const ink = glyphs.flatMap((g) => geometricStarter(
+            g, 1550, 2450, 1100, 250, '#243647',
+            undefined, 'cursive'));
+        assert.equal(ink.length, 117);
+        for (const glyph of glyphs) {
+            const lines = ink.filter((line) => line.grapheme === glyph);
+            assert.deepEqual(candidatePenPaths(lines, glyph).map(
+                ({ first, last }) => [first, last]), glyph === 'n'
+                ? [[1, 37]] : [[1, 37], [38, 40]]);
+        }
+        const original = Buffer.from(encodeGlyphLibrary(ink));
+        writeFileSync(library, original);
+        const reopened = cli('glyphs', ['--profile', library]);
+        assert.equal(reopened.status, 0, reopened.stderr.toString());
+        assert.deepEqual(reopened.stdout, original);
+        const text = glyphs.join('');
+        const audit = cli('glyphs', ['--profile', library,
+            '--audit-text', text]);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        assert.match(audit.stdout.toString(),
+            /Distinct visible graphemes: 3/);
+        const flags = ['--printed-sheet', 'true',
+            '--glyph-file', library, '--flow-text', `${text}\n${text}`];
+        const pdf = cli('notebook', [...flags,
+            '--export-paper', 'pdf', '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, ink.length * 2);
+        const png = cli('notebook', [...flags, '--export-paper',
+            'png', '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        const missing = cli('notebook', [
+            '--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', 'N\u0303', '--export-paper', 'pdf',
+            '--output', output, '--replace']);
+        assert.notEqual(missing.status, 0);
+        assert.match(missing.stderr.toString(), /missing authored glyph/i);
+        assert.deepEqual(readFileSync(output), accepted,
+            'missing uppercase exact NFD cannot replace accepted PDF');
+        assert.deepEqual(readFileSync(library), original);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

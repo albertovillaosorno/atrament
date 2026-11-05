@@ -2534,3 +2534,19 @@ Browser and real Firefox guide/download cases exercise actual native TSV,
 Rust PDF and transparent PNG output alongside `c`, `e`, `i` and their
 accented variants. Invalid tall-stem geometry refuses before draft edits.
 This manual starter is not a calibrated alphabet or inter-letter layout.
+
+## Optional connected-pen n, ñ and decomposed n-tilde (partial)
+
+The local manual picker now offers exact `n`, NFC `ñ` and NFD `n` plus
+combining tilde in a continuous-pen variant. A short entry joins the
+original rising left stem; a small downward return meets the original
+32-chord rounded hump, followed by its right stem and a rising exit.
+The base is one 37-segment directed path, with no pen lift.
+
+The tilde is a separately lifted three-stroke mark for both exact Unicode
+accent spellings (40 segments total). Printed variants are unchanged.
+Browser SVG guides, TSV and clipping refusals, actual Firefox selection,
+and Rust vector PDF/transparent PNG replay verify the new opt-in forms.
+
+These are local geometric starters: they do not implement neighboring
+letter joins, a persisted analytic font, or calibrated writing style.

@@ -699,3 +699,16 @@ Unlike dotted or accented `i`, it needs no detached mark. Browser exact
 TSV and placement/refusal checks, Firefox selection/download and native
 Rust PDF/transparent PNG replay cover this form. Automatic neighboring
 letter joins and seeded line-level variation remain unfinished.
+
+## Manual n/ñ pen gesture with detached tilde (partial) — 2026-11-05
+
+The explicit `n` variant now joins the printed left stem, two rounded
+quadratic arcs forming one hump, then the right stem, with a retrace.
+Entry and exit
+complete one 37-segment directed path; NFC/NFD tilde forms keep the three
+accent strokes in a second pen path. The default printed `n` is untouched.
+
+Browser SVG, exact TSV, real Firefox and native Rust PDF/PNG acceptance
+check stroke direction, path boundaries, clipping refusal and missing-key
+atomicity. This does not establish adjacent-letter joining or correlated
+handwriting variation across notebook text.
