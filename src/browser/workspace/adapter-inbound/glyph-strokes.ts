@@ -2578,19 +2578,19 @@ function cursiveStem(base: Stroke[], radius: number): Stroke[] {
     ];
 }
 
-// Explicit v/w pen entry and exit preserve the exact 2/4-segment
-// printed zigzag. It is already one directed pen-down path and needs
+// Explicit v/w/z pen entry and exit preserve their exact 2/4/3
+// printed zigzags. Each is one directed pen-down path and needs
 // no invented retrace, intermediate pen lift or automatic word join.
 function cursiveZigzag(base: Stroke[], radius: number): Stroke[] {
     const first = base[0];
     const last = base.at(-1);
     const glyph = first?.grapheme ?? "";
-    if (!first || !last || !["v", "w"].includes(glyph)
-        || base.length !== (glyph === "v" ? 2 : 4)
+    if (!first || !last || !["v", "w", "z"].includes(glyph)
+        || base.length !== (glyph === "v" ? 2 : glyph === "w" ? 4 : 3)
         || base.some((stroke, index) => stroke.grapheme !== glyph
             || (index > 0 && (base[index - 1]!.x2 !== stroke.x1
                 || base[index - 1]!.y2 !== stroke.y1)))) {
-        throw new Error("Cursive v/w needs a continuous printed zigzag");
+        throw new Error("Cursive v/w/z needs a continuous printed zigzag");
     }
     const lead = Math.min(200, Math.round(radius / 5));
     const pen = first.width;
@@ -2786,10 +2786,10 @@ export function geometricStarter(
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
         "i", "í", "j", "l", "t", "f", "n", "ñ", "u", "ú", "ü",
-        "m", "h", "r", "v", "w"]
+        "m", "h", "r", "v", "w", "z"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m or v/w glyph");
+            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m or v/w/z glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2806,7 +2806,9 @@ export function geometricStarter(
         const base = geometricStarter(g, x, y, r, w, color, pos, "single");
         if (g === "c" || g === "e") return cursiveOpenArc(base, r);
         if (g === "j") return cursiveHook(base, r);
-        if (g === "v" || g === "w") return cursiveZigzag(base, r);
+        if (["v", "w", "z"].includes(g)) {
+            return cursiveZigzag(base, r);
+        }
         if (["i", "í", "l", "t", "f"].includes(g)) {
             return cursiveStem(base, r);
         }
@@ -3901,12 +3903,12 @@ export function createGlyphStrokeEditor(): {
                 ? hookedJ(cx, cy, r, Number(numeric.width.value)) : null;
             const jHookEnd = cursiveJ && jParts !== null
                 ? jParts.turn[2] : null;
-            const cursiveZig = connected && ["v", "w"]
+            const cursiveZig = connected && ["v", "w", "z"]
                 .includes(chosen.grapheme);
             let zigLines: StraightLine[] = [];
             if (cursiveZig) {
                 zigLines = straightLines(cx, cy, r,
-                    chosen.grapheme as "v" | "w");
+                    chosen.grapheme as "v" | "w" | "z");
             }
             const zigStart = zigLines[0]?.from;
             const zigEnd = zigLines.at(-1)?.to;

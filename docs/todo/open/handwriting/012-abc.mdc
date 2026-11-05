@@ -2659,3 +2659,15 @@ and native Rust vector PDF/transparent PNG tests preserve each exact
 selected key. Unauthored uppercase glyphs refuse before replacing a page.
 These geometric starters do not connect neighboring letters or create
 calibrated script.
+
+## Opt-in continuous-pen lowercase z — 2026-11-05
+
+The manual `z` variant now wraps the exact three joined straight printed
+segments with short bounded entry and exit strokes, producing a single
+five-segment directed path. The printed `z` retains all three segments,
+and no line joins an adjacent character or inserts an invisible pen lift.
+
+Browser SVG/TSV clipping refusal, real Firefox selection/download and
+native Rust vector PDF/transparent PNG replay verify exact authored ink.
+An unknown uppercase `Z` refuses page replacement. This does not finish
+writer-calibrated glyph coverage or cross-letter handwriting joins.

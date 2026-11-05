@@ -9222,3 +9222,73 @@ test("browser manual v/w previews exact straight ink and refuses clipped entry",
             ui.restore();
         }
     });
+
+
+test("manual connected z keeps printed angular chain exact", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("z", ...args);
+    const joined = geometricStarter("z", ...args, undefined, "cursive");
+    assert.equal(printed.length, 3);
+    assert.equal(joined.length, 5);
+    assert.deepEqual(joined.slice(1, -1), printed);
+    assert.deepEqual(candidatePenPaths(joined, "z").map(
+        ({ first, last }) => [first, last]), [[1, 5]]);
+    assert.deepEqual(joined[0], {
+        grapheme: "z", x1: 250, y1: 1550, x2: 450, y2: 1350,
+        width: 250, color: "#243647",
+    });
+    assert.deepEqual(joined.at(-1), {
+        grapheme: "z", x1: 2650, y1: 3550, x2: 2850, y2: 3350,
+        width: 250, color: "#243647",
+    });
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("z", ...args), printed);
+    assert.throws(() => geometricStarter("z", 1300, 2450,
+        1100, 250, "#243647", undefined, "cursive"),
+    /Cursive zigzag and pen clip/);
+    assert.throws(() => geometricStarter("Z", ...args,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser manual z previews exact pen path and refuses clipped entry",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "z-cursive";
+            get("form").dispatch("change");
+            get("character").value = "z";
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-exit",
+                "ideal-rounded"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual z shows ${id}`);
+            }
+            for (const id of ["ideal-approach", "ideal-i-dot",
+                "ideal-rounded-left", "ideal-rounded-right"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "hidden", `manual z does not invent ${id}`);
+            }
+            assert.equal(get("ideal-entry").attributes.get("x2"), "450");
+            assert.equal(get("ideal-exit").attributes.get("y1"), "3550");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("z", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-x").value = "1300";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden", "a clipped entry hides the guides");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "failed z cannot replace the valid saved draft");
+            editor.reset();
+            assert.equal(get("ideal-exit").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });
