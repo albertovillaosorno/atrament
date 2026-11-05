@@ -2376,3 +2376,15 @@ Browser TSV roundtrip, clipping and directed-path checks, live Firefox
 selection/export, Rust PDF/transparent PNG replay and atomic refusal of
 missing lookalikes cover these additions. The 93-key automatic math fill
 is unchanged. Complete handwriting synthesis remains unfinished.
+
+## Exact square lattice meet and join (partial) — 2026-11-05
+
+The manual geometric selector admits separate `⊓` (square meet) and
+`⊔` (square join) pen shapes. Each has three fully connected straight
+sides and two corners, unlike the sampled rounded `∩`/`∪` and tall
+`⋂`/`⋃` symbols; no glyph is silently borrowed from another key.
+
+Browser geometry, clipping and TSV roundtrip regressions, native Rust
+PDF/transparent PNG and missing-key atomic refusal tests, and live
+Firefox composition cover these additions. The 93-key automatic math
+fill is still unchanged; complete handwriting synthesis remains open.

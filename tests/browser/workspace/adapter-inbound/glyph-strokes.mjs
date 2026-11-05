@@ -4204,6 +4204,30 @@ test("n-ary logical wedges retain exact wide joined strokes", () => {
         /supported exact geometric glyph/);
 });
 
+test("square lattice meet and join retain three connected sides", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, rounded, expected] of [
+        ["⊓", "∩", [[725, 3242, 725, 1658],
+            [725, 1658, 2375, 1658], [2375, 1658, 2375, 3242]]],
+        ["⊔", "∪", [[725, 1658, 725, 3242],
+            [725, 3242, 2375, 3242], [2375, 3242, 2375, 1658]]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.deepEqual(ink.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), expected,
+            "square lattice contour keeps three directed sides");
+        assert.deepEqual(candidatePenPaths(ink, glyph).map(
+            ({ first, last }) => [first, last]), [[1, 3]]);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.notDeepEqual(ink, geometricStarter(rounded, ...args));
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"), /fit inside glyph cell/);
+    }
+    assert.throws(() => geometricStarter("⊑", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [

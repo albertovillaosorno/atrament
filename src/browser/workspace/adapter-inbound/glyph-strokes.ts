@@ -698,7 +698,7 @@ const MANUAL_MATH_GLYPHS = [
     "Β", "Υ", "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
     "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐", "∮", "∬", "∭",
     "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
-    "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘", "⋂", "⋃", "⋀", "⋁",
+    "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘", "⋂", "⋃", "⋀", "⋁", "⊓", "⊔",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -991,6 +991,17 @@ function mathParts(
         line(-0.65, -0.6, 0, 0.6),
         line(0, 0.6, 0.65, -0.6),
     ];
+    // Square lattice meet/join retain one connected three-sided contour,
+    // distinct from rounded ∩/∪ and their larger ⋂/⋃ counterparts.
+    // Both square corners and the bar are drawn without a pen lift.
+    if (glyph === "⊓" || glyph === "⊔") {
+        const sign = glyph === "⊓" ? 1 : -1;
+        return [
+            line(-0.75, sign * 0.72, -0.75, -sign * 0.72),
+            line(-0.75, -sign * 0.72, 0.75, -sign * 0.72),
+            line(0.75, -sign * 0.72, 0.75, sign * 0.72),
+        ];
+    }
     // N-ary logical AND/OR uses exact, independently selected wide wedges,
     // not implicit enlargement or substitution of ordinary ∧/∨ ink.
     // Both arms join at their peak in one uninterrupted pen path.
