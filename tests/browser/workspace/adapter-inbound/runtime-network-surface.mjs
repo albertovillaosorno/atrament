@@ -1381,9 +1381,10 @@ test("standard-library process detector covers equivalent imports", () => {
     }
 });
 
-// A narrow print exception must not hide a second command, thread or shell.
-// Remove only its known fixed CUPS argv and stream-routing expressions, then
-// apply the original conservative process scanner to everything remaining.
+// A narrow print exception must not hide an extra command, worker or shell.
+// One named CUPS stdin writer is reviewed for bounded pipe submissions.
+// Strip only its exact construction and fixed argv/stream routing, then
+// scan everything left for otherwise unreviewed process authority.
 function unreviewedPrintSubprocessAuthority(source) {
     let remaining = source;
     for (const site of [
@@ -1394,6 +1395,9 @@ function unreviewedPrintSubprocessAuthority(source) {
         '.stdout(Stdio::null())',
         '.stderr(Stdio::null())',
         '.spawn()',
+        'thread::Builder::new()',
+        '.name("atrament-cups-stdin".into())',
+        '.spawn(move || input.write_all(&pdf))',
         'Path::new("/usr/bin/lp")',
     ]) {
         if (remaining.split(site).length - 1 !== 1) return true;
@@ -1410,6 +1414,8 @@ test("opt-in CUPS process cannot grow an extra subprocess", async () => {
         'std::process::Command::new("curl").status();',
         'command.spawn().unwrap();',
         'std::thread::spawn(move || {});',
+        'thread::Builder::new().name("second".into()).spawn(|| {});',
+        '.spawn(move || input.write_all(&pdf))',
         'use std::process::Command as OtherCommand;',
     ]) {
         assert.equal(unreviewedPrintSubprocessAuthority(`${print}\n${extra}`),
