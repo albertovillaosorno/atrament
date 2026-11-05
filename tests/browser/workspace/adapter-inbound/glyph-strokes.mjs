@@ -430,7 +430,8 @@ function mountEditor() {
         "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
         "glyph-seed-connected",
-        "glyph-seed-baseline", "glyph-focus-missing",
+        "glyph-seed-baseline", "glyph-seed-connected-baseline",
+        "glyph-focus-missing",
         "glyph-baseline-coverage",
         "glyph-seed-spanish", "glyph-seed-spanish-nfd",
         "glyph-seed-upper-spanish", "glyph-seed-upper-spanish-nfd",
@@ -6257,6 +6258,89 @@ test("one atomic fill authors only the 114 exact bilingual baseline", () => {
     "complete baseline is a no-op, including unchanged object identity");
     assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(filled)), filled);
 });
+
+test("connected bilingual fill admits 114 exact keys with continuous bases",
+    () => {
+        const existing = [stroke("∞"), ...geometricStarter("a",
+            1550, 2450, 1100, 250, "#243647")];
+        const before = encodeGlyphLibrary(existing);
+        const filled = fillMissingBilingualBaseline(existing,
+            1550, 2450, 1100, 250, "#243647",
+            { dx: 0, lift: 0 }, "cursive");
+        assert.equal(missingBilingualBaseline(filled).length, 0);
+        assert.equal(new Set(filled.map((line) => line.grapheme)).size, 115);
+        assert.deepEqual(filled.slice(0, existing.length), existing,
+            "custom printed a and unrelated math ink stay untouched");
+        assert.equal(encodeGlyphLibrary(existing), before);
+        for (const base of "bcdefghijklmnopqrstuvwxyz") {
+            assert.deepEqual(filled.filter((line) => line.grapheme === base),
+                geometricStarter(base, 1550, 2450, 1100, 250,
+                    "#243647", undefined, "cursive"));
+        }
+        for (const target of ["í", "i\u0301", "ñ", "n\u0303", "Á",
+            "A\u0301", "Ü", "U\u0308"]) {
+            assert.ok(filled.some((line) => line.grapheme === target));
+        }
+        assert.strictEqual(fillMissingBilingualBaseline(filled,
+            1550, 2450, 1100, 250, "#243647",
+            { dx: 0, lift: 0 }, "cursive"), filled);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(filled)),
+            filled);
+    });
+
+test("connected baseline fill is atomic on ambiguous i, clipping and cap",
+    () => {
+        for (const [existing, pos, error] of [
+            [[stroke("i"), stroke("∞")], { dx: 0, lift: 0 },
+                /Acute i requires one stem and a clear upper dot/],
+            [[stroke("∞")], { dx: 0, lift: 500 },
+                /must fit inside glyph cell/],
+            [Array.from({ length: 4090 }, () => stroke("∞")),
+                { dx: 0, lift: 0 }, /Save requires 1..4096/],
+        ]) {
+            const before = encodeGlyphLibrary(existing);
+            assert.throws(() => fillMissingBilingualBaseline(existing,
+                1550, 2450, 1100, 250, "#243647", pos, "cursive"),
+            error);
+            assert.equal(encodeGlyphLibrary(existing), before);
+        }
+    });
+
+test("connected baseline button is session-gated, unsaved and idempotent",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            assert.equal(get("seed-connected-baseline").disabled, true);
+            get("seed-connected-baseline").dispatch("click");
+            assert.equal(downloads.length, 0);
+            editor.start();
+            get("seed-connected-baseline").dispatch("click");
+            assert.match(get("status").textContent,
+                /Filled 114 missing connected bilingual baseline glyphs/);
+            assert.match(get("baseline-coverage").textContent,
+                /114\/114 exact glyphs; complete/);
+            assert.equal(downloads.length, 0);
+            get("character").value = "g";
+            get("character").dispatch("input");
+            assert.equal(get("preview").children.length, 91);
+            get("save").dispatch("click");
+            const bytes = await downloads.at(-1).text();
+            const filled = parseGlyphLibrary(bytes);
+            assert.equal(filled.length, 3091);
+            assert.equal(new Set(filled.map((line) => line.grapheme)).size,
+                114);
+            get("seed-connected-baseline").dispatch("click");
+            assert.match(get("status").textContent,
+                /All 114 bilingual text glyphs already have ink/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), bytes);
+            editor.reset();
+            assert.equal(get("seed-connected-baseline").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
 
 test("atomic bilingual fill refuses ambiguous i, clipped marks and caps",
     () => {

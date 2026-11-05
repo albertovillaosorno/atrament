@@ -10,7 +10,8 @@ import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 import {
     candidatePenPaths, encodeGlyphLibrary, geometricStarter,
-    fillMissingConnectedLowercase,
+    fillMissingConnectedLowercase, fillMissingBilingualBaseline,
+    missingBilingualBaseline,
     composeAccentedGlyph,
     reverseCandidatePath, rotateClosedCandidatePath,
 } from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
@@ -4892,6 +4893,61 @@ test('connected lowercase fill exports native PDF and transparent PNG', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+// The explicit connected-style bilingual button uses the same authored
+// continuous-pen lowercase, then supplies independently exact NFC/NFD ink.
+test('connected full bilingual baseline renders native PDF PNG atomically',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/connected-bilingual-'));
+        try {
+            const library = join(dir, 'connected.tsv');
+            const output = join(dir, 'connected.pdf');
+            const rows = fillMissingBilingualBaseline([], 1550, 2450,
+                1100, 250, '#243647', { dx: 0, lift: 0 }, 'cursive');
+            const keys = [...new Set(rows.map((line) => line.grapheme))];
+            assert.equal(keys.length, 114);
+            assert.equal(rows.length, 3091);
+            assert.equal(missingBilingualBaseline(rows).length, 0);
+            const connected = fillMissingConnectedLowercase([],
+                1550, 2450, 1100, 250, '#243647');
+            assert.deepEqual(rows.slice(0, connected.length), connected,
+                'exact connected lowercase source precedes accent pen lifts');
+            const bytes = Buffer.from(encodeGlyphLibrary(rows));
+            writeFileSync(library, bytes);
+            const opened = cli('glyphs', ['--profile', library]);
+            assert.equal(opened.status, 0, opened.stderr.toString());
+            assert.deepEqual(opened.stdout, bytes);
+            const text = keys.join('');
+            const audit = cli('glyphs', ['--profile', library,
+                '--audit-text', text]);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            const flags = ['--printed-sheet', 'true', '--glyph-file', library,
+                '--flow-text', text];
+            const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+                '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+                .length, rows.length,
+                'all 114 distinct exact glyphs draw their authored ink');
+            const png = cli('notebook', [...flags, '--export-paper', 'png',
+                '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const refused = cli('notebook', [
+                '--printed-sheet', 'true', '--glyph-file', library,
+                '--flow-text', `${text}Ω`, '--export-paper', 'pdf',
+                '--output', output, '--replace']);
+            assert.notEqual(refused.status, 0);
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted);
+            assert.deepEqual(readFileSync(library), bytes);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 
 // The batch and the existing Spanish accent gesture must interoperate:
 // each connected stem keeps its directed path and loses only the lifted i dot.

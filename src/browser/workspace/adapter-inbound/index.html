@@ -966,6 +966,10 @@
             <button id="glyph-seed-baseline" type="button" disabled>
               Fill missing 114 English/Spanish text glyphs (unsaved)
             </button>
+            <button id="glyph-seed-connected-baseline" type="button"
+              disabled>
+              Fill missing 114 text glyphs with connected lowercase (unsaved)
+            </button>
             <button id="glyph-seed-lowercase" type="button" disabled>
               Fill missing lowercase a–z (unsaved)
             </button>
@@ -1038,7 +1042,10 @@
             Inspect next missing selects an exact key and matching guide
             without creating any ink. The one-click baseline fill adds only
             missing text glyphs,
-            preserving custom ink and refusing the whole operation if
+            with printed lowercase by default. The separate connected-style
+            baseline fill uses the explicit 26 continuous-pen lowercase
+            templates before composing exact NFC/NFD accents. Both preserve
+            custom ink and refuse the whole operation if
             any glyph or native TSV limit fails. It excludes optional math
             and currency symbols. Nothing is saved or printed until an
             independent, explicit action.</p>

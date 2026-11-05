@@ -2841,3 +2841,23 @@ Browser regressions exercise both seven-accent batch gestures and ensure
 exact lowercase source preservation. Native Rust admits all 40 exact
 lowercase plus NFC/NFD glyphs, exports vector PDF and transparent PNG, and
 refuses unknown ink without overwriting a valid page.
+## Connected-style full bilingual baseline batch — 2026-11-05
+
+A separate explicit localhost button can now author the entire fixed
+114-grapheme English/Spanish text baseline with the 26 continuous-pen
+lowercase templates rather than the default printed lowercase forms.
+Capital letters, punctuation, numerals and exact NFC/NFD accents continue
+to use the existing bounded starters. Custom ink and Unicode identities
+remain untouched; one clipped source, ambiguous dotted `i`, invalid pen
+clearance or exceeded native TSV cap refuses the entire in-memory batch.
+No implicit save, inferred adjacent-letter join or automatic fallback occurs.
+
+Focused browser tests verify all 114 keys, editable connected bases,
+idempotence and atomic refusal. A separate Rust CLI integration test loads
+the 3,091 authored line segments, audits and renders all 114 graphemes to
+native vector PDF and transparent PNG, and refuses an unauthored Greek
+character without changing the last valid PDF. A real Firefox session
+independently clicks the new button, captures the actual downloaded TSV,
+reopens its bytes through Rust and repeats PDF/PNG and refusal checks.
+This is an explicit geometry authoring shortcut; full cross-letter cursive
+joining, writer calibration and semantic notebook persistence remain open.

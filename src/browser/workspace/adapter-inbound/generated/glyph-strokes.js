@@ -3665,12 +3665,15 @@ export function missingBilingualBaseline(strokes) {
     const authored = new Set(strokes.map((stroke) => stroke.grapheme));
     return BILINGUAL_KEYS.filter((glyph) => !authored.has(glyph));
 }
-export function fillMissingBilingualBaseline(existing, x, y, r, pen, color, pos) {
+export function fillMissingBilingualBaseline(existing, x, y, r, pen, color, pos, lowercaseForm = "single") {
     const authored = new Set(existing.map((stroke) => stroke.grapheme));
     const next = existing.slice();
     for (const glyph of BILINGUAL_DIRECT) {
         if (!authored.has(glyph)) {
-            next.push(...geometricStarter(glyph, x, y, r, pen, color));
+            const form = lowercaseForm === "cursive"
+                && /^[a-z]$/.test(glyph) ? "cursive" : "single";
+            const source = [glyph, x, y, r, pen, color];
+            next.push(...geometricStarter(...source, undefined, form));
             authored.add(glyph);
         }
     }
@@ -3788,6 +3791,7 @@ export function createGlyphStrokeEditor() {
     const seedCapitals = required("glyph-seed-capitals");
     const seedTextMarks = required("glyph-seed-text-marks");
     const seedBaseline = required("glyph-seed-baseline");
+    const seedConnectedBaseline = required("glyph-seed-connected-baseline");
     const focusMissing = required("glyph-focus-missing");
     const baselineCoverage = required("glyph-baseline-coverage");
     const centerX = required("glyph-circle-x");
@@ -3885,7 +3889,7 @@ export function createGlyphStrokeEditor() {
         seedSpanish, seedSpanishNfd,
         seedUpperSpanish, seedUpperSpanishNfd,
         seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
-        seedTextMarks, seedBaseline, focusMissing,
+        seedTextMarks, seedBaseline, seedConnectedBaseline, focusMissing,
         centerX, centerY, radius,
         accentShift, accentLift, italicAngle,
         authoredAngle, authoredBaseline, slantAuthored,
@@ -5481,7 +5485,7 @@ export function createGlyphStrokeEditor() {
             : `${next.normalize("NFC")} (NFD)`;
         message(`Inspecting missing glyph ${display}; draft unchanged`);
     });
-    seedBaseline.addEventListener("click", () => {
+    const fillBaseline = (form) => {
         if (!active)
             return;
         try {
@@ -5489,7 +5493,7 @@ export function createGlyphStrokeEditor() {
                 throw new Error("Finish the current pen trace before seeding");
             }
             const next = fillMissingBilingualBaseline(strokes, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value, { dx: Number(accentShift.value),
-                lift: Number(accentLift.value) });
+                lift: Number(accentLift.value) }, form);
             if (next === strokes) {
                 message("All 114 bilingual text glyphs already have ink");
                 return;
@@ -5500,12 +5504,18 @@ export function createGlyphStrokeEditor() {
             strokes = next;
             selectedIndex = null;
             render();
-            message(`Filled ${count} missing bilingual baseline glyphs (`
+            const style = form === "cursive" ? "connected " : "";
+            message(`Filled ${count} missing ${style}bilingual baseline `
+                + `glyphs (`
                 + `${added} sampled strokes); unsaved draft`);
         }
         catch (error) {
             message(String(error));
         }
+    };
+    seedBaseline.addEventListener("click", () => fillBaseline("single"));
+    seedConnectedBaseline.addEventListener("click", () => {
+        fillBaseline("cursive");
     });
     seedPunctuation.addEventListener("click", () => {
         if (!active)
