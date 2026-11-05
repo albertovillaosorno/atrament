@@ -695,7 +695,7 @@ const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
     "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
     "ν", "ς", "Γ", "Ω", "Π", "Σ", "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ",
-    "Β", "Υ",
+    "Β", "Υ", "Α", "Ε",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1403,6 +1403,20 @@ function mathParts(
         line(-0.7, -0.85, 0, 0),
         line(0.7, -0.85, 0, 0),
         line(0, 0, 0, 0.9),
+    ];
+    // Capital Alpha joins its two peaked strokes before lifting for the
+    // crossbar; Epsilon joins three outer sides then lifts for its middle
+    // bar. These are exact Greek keys with their own geometry, not Latin A/E.
+    if (glyph === "Α") return [
+        line(-0.7, 0.85, 0, -0.85),
+        line(0, -0.85, 0.7, 0.85),
+        line(-0.4, 0.23, 0.4, 0.23),
+    ];
+    if (glyph === "Ε") return [
+        line(0.65, -0.85, -0.7, -0.85),
+        line(-0.7, -0.85, -0.7, 0.85),
+        line(-0.7, 0.85, 0.65, 0.85),
+        line(-0.7, 0, 0.48, 0),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

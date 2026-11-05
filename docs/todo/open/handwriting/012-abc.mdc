@@ -2203,3 +2203,17 @@ These exact Unicode keys are opt-in manual starters outside the unchanged
 real Firefox selection/download, native PDF/transparent PNG output, and
 atomic refusal of unauthored lookalikes have dedicated regressions.
 Complete uppercase Greek coverage and calibrated handwriting remain open.
+
+## Manually selected uppercase Greek Alpha and Epsilon (partial) — 2026-11-04
+
+Capital `Α` now joins two ascending/descending peak strokes before
+lifting for a separately authored crossbar (three native segments).
+Capital `Ε` joins its top edge, left upright and bottom edge, then lifts
+for the middle bar (four segments). These are distinct Unicode keys
+with distinct proportions and pen order from Latin `A`/`E`, not aliases.
+
+Each manual shape is independently selected and remains outside the
+bounded 93-symbol automatic math fill. Browser TSV and clipping tests,
+real Firefox SVG/TSV export to Rust PDF/transparent PNG, and atomic
+refusal of unauthored Greek/Latin lookalikes provide regression coverage.
+The complete uppercase Greek alphabet is still unfinished P1 work.
