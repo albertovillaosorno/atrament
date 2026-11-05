@@ -587,8 +587,9 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",
     "∠", "∟", "⊬", "⊭", "¬", "⇒", "⇔",
     "≪", "≫", "≮", "≯", "≰", "≱", "↗", "↘",
-    "↖", "↙", "⇐", "↦", "↤", "∣", "∤"];
-// Extra manual marks do not change the 82-glyph math fill.
+    "↖", "↙", "⇐", "↦", "↤", "∣", "∤",
+    "′", "″", "‴", "⋅", "∗"];
+// Extra manual marks do not change the 87-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"];
@@ -752,6 +753,30 @@ function mathParts(cx, cy, radius, glyph) {
     const line = (x1, y1, x2, y2) => ({
         from: point(x1, y1), to: point(x2, y2),
     });
+    // Mathematical primes represent derivatives/arc minutes independently
+    // of quotes. Each upper stroke lifts the pen; the centered multiply
+    // dot and star do not inherit punctuation or ASCII asterisk geometry.
+    if (glyph === "′")
+        return [line(0, -0.8, -0.25, -0.15)];
+    if (glyph === "″")
+        return [
+            line(-0.33, -0.8, -0.58, -0.15),
+            line(0.33, -0.8, 0.08, -0.15),
+        ];
+    if (glyph === "‴")
+        return [
+            line(-0.55, -0.8, -0.8, -0.15),
+            line(0, -0.8, -0.25, -0.15),
+            line(0.55, -0.8, 0.3, -0.15),
+        ];
+    if (glyph === "⋅")
+        return [line(-0.08, 0, 0.08, 0)];
+    if (glyph === "∗")
+        return [
+            line(-0.7, 0, 0.7, 0),
+            line(-0.35, -0.6, 0.35, 0.6),
+            line(0.35, -0.6, -0.35, 0.6),
+        ];
     // ± retains two independently lifted horizontal marks. The upper
     // plus has an intersecting stem; the lower minus never contacts it.
     if (glyph === "±")

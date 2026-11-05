@@ -1870,3 +1870,27 @@ PDF/PNG replay using the actual downloaded TSV, without a hidden save.
 
 The symbols are opt-in sampled line geometry, not general mathematical
 typesetting, Unicode fallback or a complete handwriting library.
+
+## Exact prime and centered multiplication marks (partial) — 2026-11-04
+
+The opt-in math construction menu now admits five more independent Unicode
+keys: prime `′`, double prime `″`, triple prime `‴`, dot operator `⋅`, and
+asterisk operator `∗`. Raised prime ink uses one, two or three separately
+lifted short diagonals; the centered multiplication dot is a short, real
+native pen stroke, and the asterisk has three crossing straight strokes.
+None silently borrows a quote, punctuation dot or ASCII asterisk template.
+
+The 87-form optional math fill and ten other independent fills now construct
+200 exact graphemes and 4072 integer-micrometre segments, still within the
+4096 native limit. Each explicit form retains its own ordered TSV key;
+existing caller-authored ink is left untouched.
+
+The browser geometry regression checks precise pen endpoints, distinct
+candidate paths, cell clipping, and exact Unicode roundtrip. A native
+PDF/PNG regression exercises a two-line math page, refusal of unauthored
+lookalikes, and preservation of existing output on failure. The
+authenticated Firefox export journey includes all five choices in its
+sampled ink replay.
+
+These are sampled manual pen marks, not automatic mathematical typesetting,
+font substitution, or the completed bilingual glyph library.
