@@ -779,6 +779,7 @@ fn measured_pitch_only_counts_rendered_markdown_ink_at_block_boundaries() {
     let fragments = [
         "a", "a  ", "a\\", "> a", "> a\n  a", "> a\n   a",
         "- a", "- a\n  a", "1. a", "1. a\n  a", "# a",
+        "- [ ] a", "* [X] a", "- [x] a\n  a",
         "~~~txt\na\n~~~", "~~~txt\n\n~~~", "    a", "\\# a",
         "a\n", "a\n\n", "a\n~~~txt\n\n~~~", "a\n# a",
     ];
@@ -787,6 +788,7 @@ fn measured_pitch_only_counts_rendered_markdown_ink_at_block_boundaries() {
         "  =", "  =\na", "   =\na", "    =\na",
         "~~~txt\n=\n~~~\na", "\n=\na", "\n===\na",
         "\\=\na", "- a\n  =\na", "> a\n  =\na",
+        "- [ ] a\n  =\na", "[ ] a",
     ];
     // Cross-check source parsing against actual physical text rather
     // than duplicating the parser's idea of structural syntax.
@@ -823,4 +825,41 @@ fn measured_pitch_only_counts_rendered_markdown_ink_at_block_boundaries() {
         }
     }
     assert!(verified > 1_000, "admitted boundary sample is meaningful");
+}
+
+#[test]
+fn checkbox_syntax_does_not_inherit_literal_bracket_height() {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let tall = ScalarStatistics {
+        maximum: 25_000, mean: 25_000, median: 25_000,
+        minimum: 25_000, standard_deviation: 0,
+    };
+    let statistics = HandwritingStatisticsProfile::baseline(1)
+        .with_glyph("[", DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+        .expect("valid tall literal bracket");
+    for (text, expected_ink, height, marks) in [
+        ("- [ ] a", "a", 9_000, 4),
+        ("* [X] a", "a", 9_000, 6),
+        ("[ ] a", "[ ] a", 29_000, 0),
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, text)
+            .expect("bounded task or literal text");
+        let (runs, ink, _) = super::layout_flow(
+            &source, &NotebookProfile::default(), Some(&statistics),
+            super::HeadingDecoration::default(),
+        ).expect("valid visible Markdown text");
+        assert_eq!(runs.iter().map(|run| run.text.as_str())
+            .collect::<Vec<_>>(), [expected_ink]);
+        assert_eq!(ink.len(), marks, "source: {text:?}");
+        assert_eq!(super::measured_pitch(&source, Some(&statistics))
+            .expect("bounded glyph height"), height);
+    }
 }
