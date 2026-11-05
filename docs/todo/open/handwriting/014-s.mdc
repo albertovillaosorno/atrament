@@ -690,3 +690,12 @@ unchanged. Browser, Firefox, exact native TSV, vector PDF and transparent
 PNG checks cover both pen groups and an invalid-dot-clearance refusal.
 This is still not automatic letter joining, persistent analytic geometry or
 seeded correlated variation over a line of text.
+
+## Opt-in continuous-pen tall l (partial) — 2026-11-05
+
+The local handwritten `l` starter now uses its original tall downstroke
+between short entry and exit strokes as one continuous directed path.
+Unlike dotted or accented `i`, it needs no detached mark. Browser exact
+TSV and placement/refusal checks, Firefox selection/download and native
+Rust PDF/transparent PNG replay cover this form. Automatic neighboring
+letter joins and seeded line-level variation remain unfinished.

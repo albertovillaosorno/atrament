@@ -2545,13 +2545,14 @@ function cursiveOpenArc(base: Stroke[], radius: number): Stroke[] {
     ];
 }
 
-// The optional cursive i/í keeps the printed stem directed downward, with
-// short entry/exit strokes attached to it. The dot or acute remains a
-// separate, deliberately lifted mark, never part of the connected body.
-function cursiveDottedI(base: Stroke[], radius: number): Stroke[] {
+// Explicit connected i/í/l keeps the printed downward stem and attaches
+// short entry/exit strokes. A dotted or acute i keeps its separate lifted
+// mark; the one-stroke printed l has no mark to add.
+function cursiveStem(base: Stroke[], radius: number): Stroke[] {
     const [stem, mark] = base;
-    if (stem === undefined || mark === undefined) {
-        throw new Error("Cursive i requires a stem and detached mark");
+    if (stem === undefined || (stem.grapheme !== "l"
+        && mark === undefined)) {
+        throw new Error("Cursive stem requires the authored base strokes");
     }
     const lead = Math.min(200, Math.round(radius / 5));
     const pen = stem.width;
@@ -2560,7 +2561,7 @@ function cursiveDottedI(base: Stroke[], radius: number): Stroke[] {
             if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
                 || point.y - pen / 2 < 0
                 || point.y + pen / 2 > 4500) {
-                throw new Error("Cursive i and pen clip glyph cell");
+                throw new Error("Cursive stem and pen clip glyph cell");
             }
         }
         return validateStroke({ grapheme: stem.grapheme,
@@ -2573,7 +2574,7 @@ function cursiveDottedI(base: Stroke[], radius: number): Stroke[] {
         draw({ x: start.x - lead, y: start.y + lead }, start),
         stem,
         draw(end, { x: end.x + lead, y: end.y - lead }),
-        mark,
+        ...(mark === undefined ? [] : [mark]),
     ];
 }
 
@@ -2628,9 +2629,9 @@ export function geometricStarter(
         throw new Error("Italic variant requires matching o/a glyph");
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
-        "i", "í"]
+        "i", "í", "l"]
         .includes(g)) {
-        throw new Error("Cursive variant requires o/a, c/e or i/í glyph");
+        throw new Error("Cursive variant requires o/a, c/e, i/í or l glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2646,8 +2647,8 @@ export function geometricStarter(
         const base = geometricStarter(g, x, y, r, w, color, pos, "single");
         return g === "c" || g === "e"
             ? cursiveOpenArc(base, r)
-            : g === "i" || g === "í"
-                ? cursiveDottedI(base, r) : cursiveLoop(base, r);
+            : ["i", "í", "l"].includes(g)
+                ? cursiveStem(base, r) : cursiveLoop(base, r);
     }
     if (italic) {
         const angle = pos?.italicDegrees ?? 12;
@@ -3727,27 +3728,28 @@ export function createGlyphStrokeEditor(): {
                 .includes(chosen.grapheme);
             const cursiveC = connected && chosen.grapheme === "c";
             const cursiveArc = cursiveE || cursiveC;
-            const cursiveI = connected && ["i", "í"]
+            const cursiveStem = connected && ["i", "í", "l"]
                 .includes(chosen.grapheme);
-            const iStartY = cy - Math.round(r * 0.4);
+            const stemStartY = chosen.grapheme === "l"
+                ? cy - Math.round(r * 1.5) : cy - Math.round(r * 0.4);
             const eUpper = openCirclePoint(cx, cy, r, OPEN_ARC_SEGMENTS);
             const eLower = openCirclePoint(cx, cy, r, 0);
             const connectors: [SVGLineElement, Point, Point][] = [
                 [idealEntry,
-                    cursiveI ? { x: cx - lead, y: iStartY + lead }
+                    cursiveStem ? { x: cx - lead, y: stemStartY + lead }
                         : cursiveC
                             ? { x: eUpper.x - lead, y: eUpper.y + lead }
                             : { x: cx - r - lead, y: cy + lead },
-                    cursiveI ? { x: cx, y: iStartY }
+                    cursiveStem ? { x: cx, y: stemStartY }
                         : cursiveC ? eUpper : { x: cx - r, y: cy }],
                 [idealApproach,
                     cursiveE ? { x: cx - r, y: cy }
                         : { x: cx + r, y: cy },
                     cursiveE ? eUpper : { x: cx + r, y: cy - r }],
                 [idealExit,
-                    cursiveI ? { x: cx, y: cy + r }
+                    cursiveStem ? { x: cx, y: cy + r }
                         : cursiveArc ? eLower : { x: cx + r, y: endY },
-                    cursiveI ? { x: cx + lead, y: cy + r - lead }
+                    cursiveStem ? { x: cx + lead, y: cy + r - lead }
                         : cursiveArc
                             ? { x: eLower.x + lead, y: eLower.y - lead }
                             : { x: cx + r + lead, y: endY - lead }],

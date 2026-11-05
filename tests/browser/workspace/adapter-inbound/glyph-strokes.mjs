@@ -8482,3 +8482,68 @@ test("browser manual cursive i/í guides, exact TSV and refusal", async () => {
         ui.restore();
     }
 });
+
+test("manual cursive l joins a tall stem without inventing a pen lift", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("l", ...args);
+    const cursive = geometricStarter("l", ...args, undefined, "cursive");
+    assert.equal(printed.length, 1);
+    assert.equal(cursive.length, 3);
+    assert.deepEqual(cursive[1], printed[0],
+        "the original full-height l downstroke remains unchanged");
+    assert.deepEqual(candidatePenPaths(cursive, "l").map(
+        ({ first, last }) => [first, last]), [[1, 3]],
+    "entry, tall downstroke and exit form one uninterrupted path");
+    assert.equal(cursive[0].y2, 800, "entry meets tall stem top");
+    assert.equal(cursive[2].y1, 3550, "exit starts at its baseline");
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(cursive)),
+        cursive, "no invisible stroke or path marker is synthesized");
+    assert.deepEqual(geometricStarter("l", ...args), printed);
+    assert.throws(() => geometricStarter("l", 1550, 2100,
+        1400, 250, "#243647", undefined, "cursive"),
+    /Tall stem and pen must fit/);
+    assert.throws(() => geometricStarter("L", ...args,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser continuous-pen l guide, download and refusal", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("form").value = "l-cursive";
+        get("form").dispatch("change");
+        for (const part of ["ideal-entry", "ideal-exit",
+            "ideal-i-stem"]) {
+            assert.equal(get(part).attributes.get("visibility"),
+                "visible", `cursive l shows ${part}`);
+        }
+        for (const part of ["ideal-approach", "ideal-c-loop",
+            "ideal-i-dot", "ideal-accent"]) {
+            assert.equal(get(part).attributes.get("visibility"),
+                "hidden", `cursive l never invents ${part}`);
+        }
+        assert.equal(get("ideal-entry").attributes.get("y2"), "800");
+        get("character").value = "l";
+        get("character").dispatch("input");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        const expected = geometricStarter("l", 1550, 2450, 1100,
+            250, "#243647", undefined, "cursive");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            expected);
+        get("circle-radius").value = "1600";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-i-stem").attributes.get("visibility"),
+            "hidden", "clipped tall stem must not leave stale SVG");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            expected, "bad placement cannot change authored ink");
+        editor.reset();
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "hidden");
+    } finally {
+        ui.restore();
+    }
+});

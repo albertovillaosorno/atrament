@@ -2520,3 +2520,14 @@ invalid dot clearance and unchanged saved draft on refusal; native Rust
 CLI PDF and transparent PNG replay the two-line Unicode sequence, and real
 Firefox checks selection, download and independent export. This is local
 opt-in geometry, not writer-calibrated joins between adjacent letters.
+
+## Explicit continuous-pen tall l (partial) — 2026-11-05
+
+The opt-in `l` variant now preserves the full-height printed downstroke
+and connects a short rising entry and exit around it, creating one directed
+three-segment pen gesture without a fabricated second dot or pen lift.
+The ordinary single-segment printed `l` remains available and unchanged.
+Browser and real Firefox guide/download cases exercise actual native TSV,
+Rust PDF and transparent PNG output alongside `c`, `e`, `i` and their
+accented variants. Invalid tall-stem geometry refuses before draft edits.
+This manual starter is not a calibrated alphabet or inter-letter layout.

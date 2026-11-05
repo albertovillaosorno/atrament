@@ -3857,22 +3857,23 @@ test('continuous-pen c/e and acute forms export native PDF and PNG',
         }
     });
 
-// Manual continuous-pen i/í keep one joined three-segment body and one
-// lifted dot/acute, retaining separate NFC and NFD authored glyph keys.
-test('manual cursive i/í/NFD export exact two-line physical ink', () => {
+// Manual i/í and tall l each preserve a connected three-segment body;
+// only the dotted or acute i keeps a separate lifted second pen path.
+test('manual cursive i/í/NFD/l export exact two-line physical ink', () => {
     const dir = mkdtempSync(join(root, '.temp/cursive-i-'));
     try {
         const library = join(dir, 'cursive.tsv');
         const output = join(dir, 'cursive.pdf');
-        const glyphs = ['i', 'í', 'i\u0301'];
+        const glyphs = ['i', 'í', 'i\u0301', 'l'];
         const ink = glyphs.flatMap((g) => geometricStarter(
             g, 1550, 2450, 1100, 250, '#243647',
             undefined, 'cursive'));
-        assert.equal(ink.length, 12);
+        assert.equal(ink.length, 15);
         for (const glyph of glyphs) {
             const lines = ink.filter((line) => line.grapheme === glyph);
             assert.deepEqual(candidatePenPaths(lines, glyph).map(
-                ({ first, last }) => [first, last]), [[1, 3], [4, 4]]);
+                ({ first, last }) => [first, last]),
+                glyph === 'l' ? [[1, 3]] : [[1, 3], [4, 4]]);
         }
         const original = Buffer.from(encodeGlyphLibrary(ink));
         writeFileSync(library, original);
@@ -3885,7 +3886,7 @@ test('manual cursive i/í/NFD export exact two-line physical ink', () => {
         assert.equal(audit.status, 0, audit.stderr.toString());
         assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
         assert.match(audit.stdout.toString(),
-            /Distinct visible graphemes: 3/);
+            /Distinct visible graphemes: 4/);
         const flags = ['--printed-sheet', 'true',
             '--glyph-file', library, '--flow-text', `${text}\n${text}`];
         const pdf = cli('notebook', [...flags,

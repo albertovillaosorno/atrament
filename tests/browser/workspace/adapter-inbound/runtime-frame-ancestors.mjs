@@ -14511,7 +14511,7 @@ test(
 );
 
 test(
-    "Firefox cursive c/e/i and acute forms download native pen ink",
+    "Firefox cursive c/e/i/l and acute forms download native pen ink",
     { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
@@ -14558,6 +14558,7 @@ test(
                         ["i-cursive", "i", 1100],
                         ["í-cursive", "í", 1100],
                         ["i\u0301-cursive", "i\u0301", 1100],
+                        ["l-cursive", "l", 1100],
                     ]) {
                         change("circle-radius", String(radius));
                         change("form", form);
@@ -14592,6 +14593,8 @@ test(
                         };
                         HTMLAnchorElement.prototype.click = function () {};
                         get("save").click();
+                        change("form", "i\u0301-cursive");
+                        change("character", "i\u0301");
                         change("circle-radius", "700");
                         const clipped = get("ideal-i-stem")
                             .getAttribute("visibility");
@@ -14627,23 +14630,25 @@ test(
             }
             assert.deepEqual(actual.guides.map((guide) => guide.approach),
                 ["hidden", "visible", "visible", "visible",
-                    "hidden", "hidden", "hidden"]);
+                    "hidden", "hidden", "hidden", "hidden"]);
             assert.deepEqual(actual.guides.map((guide) => guide.acute),
                 ["hidden", "hidden", "visible", "visible",
-                    "hidden", "visible", "visible"]);
+                    "hidden", "visible", "visible", "hidden"]);
             assert.deepEqual(actual.guides.slice(4).map((g) => g.dot),
-                ["visible", "hidden", "hidden"]);
+                ["visible", "hidden", "hidden", "hidden"]);
             assert.match(actual.constructed[0], /38 sampled segments/);
             assert.match(actual.constructed[1], /39 sampled segments/);
             assert.match(actual.constructed[2], /40 sampled segments/);
             assert.match(actual.constructed[3], /40 sampled segments/);
-            for (const status of actual.constructed.slice(4)) {
+            for (const status of actual.constructed.slice(4, 7)) {
                 assert.match(status, /4 sampled segments/);
             }
+            assert.match(actual.constructed[7], /3 sampled segments/);
             assert.equal(actual.clipped, "hidden");
             assert.match(actual.refused,
                 /Dotted i requires visible pen-clearance/);
-            const glyphs = ["c", "e", "é", "e\u0301", "i", "í", "i\u0301"];
+            const glyphs = ["c", "e", "é", "e\u0301",
+                "i", "í", "i\u0301", "l"];
             const expected = encodeGlyphLibrary(glyphs.flatMap(
                 (glyph, index) => geometricStarter(glyph, 1550, 2450,
                     index < 4 ? 700 : 1100, 250, "#243647",
@@ -14682,7 +14687,7 @@ test(
                     assert.match(result.stdout.toString("latin1"),
                         /^%PDF-1\.4/);
                     assert.equal((result.stdout.toString("latin1")
-                        .match(/ m\n/g) ?? []).length, 338);
+                        .match(/ m\n/g) ?? []).length, 344);
                 } else {
                     assert.deepEqual(result.stdout.subarray(0, 8),
                         Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
