@@ -3854,6 +3854,32 @@ test("manual capital Greek Psi and Chi have exact lifted ink", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual Greek capitals Beta and Upsilon keep exact lifted ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, first] of [
+        ["Β", 65, [835, 1515]],
+        ["Υ", 3, [780, 1515]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " native segment count");
+        assert.equal(candidatePenPaths(ink, glyph).length, 2,
+            glyph + " preserves independently lifted pen paths");
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("Β", ...args),
+        geometricStarter("β", ...args), "Beta is not lowercase beta");
+    assert.notDeepEqual(geometricStarter("Β", ...args),
+        geometricStarter("B", ...args), "Greek Beta is not Latin B");
+    assert.notDeepEqual(geometricStarter("Υ", ...args),
+        geometricStarter("υ", ...args), "capital Upsilon is not lowercase");
+    assert.notDeepEqual(geometricStarter("Υ", ...args),
+        geometricStarter("Y", ...args), "Greek Upsilon is not Latin Y");
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [

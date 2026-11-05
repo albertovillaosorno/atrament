@@ -695,6 +695,7 @@ const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
     "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
     "ν", "ς", "Γ", "Ω", "Π", "Σ", "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ",
+    "Β", "Υ",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1387,6 +1388,21 @@ function mathParts(
     if (glyph === "Χ") return [
         line(-0.7, -0.85, 0.7, 0.85),
         line(0.7, -0.85, -0.7, 0.85),
+    ];
+    // Capital Beta keeps a separately lifted upright and four joined
+    // quadratic bowl sweeps. Capital Upsilon lifts between its two arms,
+    // then continues into one central stem; neither borrows Latin B/Y.
+    if (glyph === "Β") return [
+        line(-0.65, -0.85, -0.65, 0.85),
+        curve([-0.65, -0.85], [0.9, -0.9], [0.65, -0.06]),
+        curve([0.65, -0.06], [0.5, 0.12], [-0.65, 0.05]),
+        curve([-0.65, 0.05], [0.95, 0.12], [0.7, 0.47]),
+        curve([0.7, 0.47], [0.7, 0.9], [-0.65, 0.85]),
+    ];
+    if (glyph === "Υ") return [
+        line(-0.7, -0.85, 0, 0),
+        line(0.7, -0.85, 0, 0),
+        line(0, 0, 0, 0.9),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

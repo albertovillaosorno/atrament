@@ -2189,3 +2189,17 @@ Browser SVG geometry, clipping and Unicode TSV identity, live Firefox
 export to native PDF/transparent PNG, and atomic refusal for unauthored
 lookalikes are tested. Complete Greek coverage, joined personal writing
 and calibrated pen strokes remain unfinished.
+
+## Manually selected uppercase Greek Beta and Upsilon (partial) — 2026-11-04
+
+Capital `Β` now retains an upright pen stroke and four joined quadratic
+bowl sweeps (65 sampled native chords) with one intentional pen lift.
+Capital `Υ` has two lifted upper arms followed by its central descending
+stem (three segments, two distinct continuous paths). Neither borrows
+Latin `B`/`Y` or lowercase Greek `β`/`υ` ink.
+
+These exact Unicode keys are opt-in manual starters outside the unchanged
+93-glyph automatic math fill. Browser TSV, geometry and clipping checks,
+real Firefox selection/download, native PDF/transparent PNG output, and
+atomic refusal of unauthored lookalikes have dedicated regressions.
+Complete uppercase Greek coverage and calibrated handwriting remain open.
