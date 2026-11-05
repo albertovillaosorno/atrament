@@ -2741,3 +2741,20 @@ preservation. Firefox performs the real download and Rust PDF/transparent
 PNG replay, including exact native `p` identity. Unauthored uppercase `P`
 refuses replacement. Printed `p`, automatic fill and cross-letter joins
 remain unchanged; this is not a learned or calibrated handwriting model.
+
+## Opt-in continuous-pen lowercase d and q — 2026-11-05
+
+The manual right-stem variants reuse the exact 48-chord printed `o` bowl
+and their original `d` ascender or `q` descender. A short left entry,
+complete loop starting at its left tangent, upper-half carry to the right
+stem, topward retrace, original full-length stem and short exit make one
+76-segment directed pen gesture for each letter. The source remains
+independently editable TSV, without inferred joins to adjacent letters.
+
+Focused browser tests verify the original geometric segments, contiguous
+pen path, SVG approach/exit and opt-in TSV replacement, plus clipped-entry
+refusal without discarding accepted ink. Native Rust tests audit the exact
+`d`/`q` library and render real vector PDF and transparent PNG; Firefox
+exercises both new manual choices and replays actual downloaded ink through
+Rust. Printed `d`/`q` remain unchanged, and unauthored uppercase `D`/`Q`
+refuse overwrite. This is not a trained or calibrated cursive font.

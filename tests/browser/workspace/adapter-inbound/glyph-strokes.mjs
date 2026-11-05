@@ -7008,7 +7008,7 @@ test("cursive o/a starters keep directed entry, loop and exit", () => {
         assert.deepEqual(geometricStarter(glyph, ...values), base,
             "choosing cursive cannot mutate its regular form");
     }
-    for (const invalid of ["d", "A", "∞"]) {
+    for (const invalid of ["x", "A", "∞"]) {
         assert.throws(() => geometricStarter(invalid, ...values,
             undefined, "cursive"), /Cursive variant/);
     }
@@ -9696,3 +9696,89 @@ test("browser manual p previews descending retrace and refuses clip",
             ui.restore();
         }
     });
+
+// Right-stem d/q retain the original circle and exact ascender/descender.
+test("manual cursive d/q carry the full bowl into their right stems", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, top, bottom] of [
+        ["d", 800, 3550], ["q", 1350, 4100],
+    ]) {
+        const printed = geometricStarter(glyph, ...args);
+        const joined = geometricStarter(glyph, ...args, undefined,
+            "cursive");
+        assert.equal(printed.length, 49);
+        assert.equal(joined.length, 76);
+        assert.deepEqual(joined.slice(1, 25), printed.slice(24, 48));
+        assert.deepEqual(joined.slice(25, 49), printed.slice(0, 24));
+        assert.deepEqual(joined.slice(49, 73), printed.slice(24, 48));
+        assert.deepEqual(joined[73], {
+            grapheme: glyph, x1: 2650, y1: 2450, x2: 2650, y2: top,
+            width: 250, color: "#243647",
+        });
+        assert.deepEqual(joined[74], printed[48]);
+        assert.deepEqual(joined[75], {
+            grapheme: glyph, x1: 2650, y1: bottom,
+            x2: 2850, y2: bottom - 200,
+            width: 250, color: "#243647",
+        });
+        assert.deepEqual(candidatePenPaths(joined, glyph).map(
+            ({ first, last }) => [first, last]), [[1, 76]]);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)),
+            joined);
+        assert.deepEqual(geometricStarter(glyph, ...args), printed);
+        assert.equal(geometricStarter(glyph, 1400, 2450, 1100,
+            250, "#243647").length, 49);
+        assert.throws(() => geometricStarter(glyph, 1400, 2450,
+            1100, 250, "#243647", undefined, "cursive"),
+        new RegExp(`Cursive ${glyph} connector and pen clip`));
+        assert.throws(() => geometricStarter(glyph.toUpperCase(), ...args,
+            undefined, "cursive"), /Cursive variant/);
+    }
+});
+
+test("browser manual d/q SVG, TSV and clipped-entry refusal", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        for (const [glyph, top, bottom] of [
+            ["d", "800", "3550"], ["q", "1350", "4100"],
+        ]) {
+            get("form").value = `${glyph}-cursive`;
+            get("form").dispatch("change");
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            for (const id of ["ideal-circle", "ideal-stem", "ideal-entry",
+                "ideal-approach", "ideal-exit"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual ${glyph} previews ${id}`);
+            }
+            assert.equal(get("ideal-approach").attributes.get("x1"),
+                "2650");
+            assert.equal(get("ideal-approach").attributes.get("y1"),
+                "2450");
+            assert.equal(get("ideal-approach").attributes.get("y2"), top);
+            assert.equal(get("ideal-exit").attributes.get("y1"), bottom);
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, 76);
+        }
+        get("save").dispatch("click");
+        const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+        assert.deepEqual(accepted, ["d", "q"].flatMap((glyph) =>
+            geometricStarter(glyph, 1550, 2450, 1100, 250,
+                "#243647", undefined, "cursive")));
+        get("circle-x").value = "1400";
+        get("circle-x").dispatch("input");
+        assert.equal(get("ideal-approach").attributes
+            .get("visibility"), "hidden");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            accepted, "invalid q cannot overwrite accepted d/q strokes");
+        editor.reset();
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "hidden");
+    } finally {
+        ui.restore();
+    }
+});

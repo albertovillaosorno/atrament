@@ -14511,7 +14511,7 @@ test(
 );
 
 test(
-    "Firefox cursive c/e/i/j/l/t/n/u/m/h/r/f/v/w/z/s/y/k/b/p native ink",
+    "Firefox manual connected bilingual ink exports through Rust",
     { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
@@ -14581,6 +14581,8 @@ test(
                         ["k-cursive", "k", 1100],
                         ["b-cursive", "b", 1100],
                         ["p-cursive", "p", 1100],
+                        ["d-cursive", "d", 1100],
+                        ["q-cursive", "q", 1100],
                     ]) {
                         change("circle-radius", String(radius));
                         change("form", form);
@@ -14660,9 +14662,9 @@ test(
             assert.equal(response.type, "success");
             assert.equal(response.result.type, "string");
             const actual = JSON.parse(response.result.value);
-            assert.equal(actual.guides.length, 30);
-            assert.equal(actual.constructed.length, 30);
-            const bGuide = actual.guides.at(-2);
+            assert.equal(actual.guides.length, 32);
+            assert.equal(actual.constructed.length, 32);
+            const bGuide = actual.guides.at(-4);
             assert.equal(bGuide.circle, "visible");
             assert.equal(bGuide.baseStem, "visible");
             assert.equal(bGuide.entry, "visible");
@@ -14670,8 +14672,8 @@ test(
             assert.equal(bGuide.approach, "visible");
             assert.equal(bGuide.retraceY1, "3550");
             assert.equal(bGuide.retraceY2, "2450");
-            assert.match(actual.constructed.at(-2), /76 sampled segments/);
-            const pGuide = actual.guides.at(-1);
+            assert.match(actual.constructed.at(-4), /76 sampled segments/);
+            const pGuide = actual.guides.at(-3);
             assert.equal(pGuide.circle, "visible");
             assert.equal(pGuide.baseStem, "visible");
             assert.equal(pGuide.entry, "visible");
@@ -14679,11 +14681,25 @@ test(
             assert.equal(pGuide.approach, "visible");
             assert.equal(pGuide.retraceY1, "4100");
             assert.equal(pGuide.retraceY2, "2450");
-            assert.match(actual.constructed.at(-1), /76 sampled segments/);
-            // The previous 28-form guide assertions stay independent of
-            // both additional exact Unicode connected-pen variants.
-            actual.guides.splice(-2);
-            actual.constructed.splice(-2);
+            assert.match(actual.constructed.at(-3), /76 sampled segments/);
+            for (const [glyph, top, bottom, index] of [
+                ["d", "800", "3550", -2],
+                ["q", "1350", "4100", -1],
+            ]) {
+                const guide = actual.guides.at(index);
+                assert.equal(guide.circle, "visible");
+                assert.equal(guide.baseStem, "visible");
+                assert.equal(guide.entry, "visible");
+                assert.equal(guide.entryTop, "2450");
+                assert.equal(guide.approach, "visible");
+                assert.equal(guide.retraceY1, "2450");
+                assert.equal(guide.retraceY2, top);
+                assert.match(actual.constructed.at(index),
+                    /76 sampled segments/, `manual ${glyph} path`);
+            }
+            // The original 28-form guide expectations remain independent.
+            actual.guides.splice(-4);
+            actual.constructed.splice(-4);
             for (const guide of actual.guides.slice(0, 4)) {
                 assert.equal(guide.arcVisible, "visible");
                 assert.equal(guide.bar, "hidden");
@@ -14798,7 +14814,8 @@ test(
             const glyphs = ["c", "e", "é", "e\u0301",
                 "i", "í", "i\u0301", "l", "n", "ñ", "n\u0303",
                 "u", "ú", "ü", "u\u0301", "u\u0308", "m", "h", "t",
-                "r", "f", "j", "v", "w", "z", "s", "y", "k", "b", "p"];
+                "r", "f", "j", "v", "w", "z", "s", "y", "k", "b", "p",
+                "d", "q"];
             const expectedInk = glyphs.flatMap(
                 (glyph, index) => geometricStarter(glyph, 1550, 2450,
                     index < 4 ? 700 : 1100, 250, "#243647",
