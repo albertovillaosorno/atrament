@@ -3681,6 +3681,33 @@ test("manual Greek xi and iota retain exact continuous pen geometry", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual Greek omicron and upsilon keep separate exact pen paths", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const all = [];
+    for (const [glyph, count, first] of [
+        ["ο", 64, [1550, 1625]],
+        ["υ", 32, [780, 1680]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " exact pen count");
+        assert.equal(candidatePenPaths(ink, glyph).length, 1,
+            glyph + " has one unbroken directed pen path");
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+        all.push(...ink);
+    }
+    assert.equal(all.length, 96);
+    assert.notDeepEqual(geometricStarter("ο", ...args),
+        geometricStarter("o", ...args), "omicron is not Latin o");
+    assert.notDeepEqual(geometricStarter("υ", ...args),
+        geometricStarter("u", ...args), "upsilon is not Latin u");
+    assert.throws(() => geometricStarter("ν", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5478,7 +5505,8 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "⋅", "∗", "∖", "∦", "⌊", "⌋", "⌈", "⌉",
         "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
         "δ", "σ", "ρ", "τ", "ε", "ω", "κ", "χ",
-        "φ", "ψ", "ζ", "η", "ξ", "ι", "°", "%", "$", "€",
+        "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
+        "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",

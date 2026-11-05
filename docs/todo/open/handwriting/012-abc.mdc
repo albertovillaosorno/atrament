@@ -2088,3 +2088,19 @@ geometry and exact TSV, real Firefox export, Rust native PDF/transparent
 PNG and refusal to replace accepted files with missing shapes have focused
 regressions. This still does not constitute a full Greek font or calibrated
 handwriting engine.
+
+## Manually selected Greek omicron and upsilon ink (partial) — 2026-11-04
+
+Exact lowercase `ο` and `υ` now have separate, explicitly selected
+Greek math pen paths. Omicron draws an asymmetric four-quadratic oval
+(64 directed native chords) rather than copying a Latin `o` circle.
+Upsilon connects two descending shoulder curves into a single 32-chord
+open bowl, independently of the Latin `u` starter. Both paths carry
+their exact Unicode identity and one continuous pen-down sequence.
+
+The automatic 93-symbol math fill and its existing capacity do not
+change. Browser SVG/TSV geometry and clipping, real Firefox glyph
+selection and export, Rust PDF and transparent PNG rendering, and
+atomic refusal for missing Latin/Greek lookalikes have regressions.
+Greek `ν`, automatic alphabet generation and calibrated writing
+remain out of scope; the broader handwriting TODO is still open.

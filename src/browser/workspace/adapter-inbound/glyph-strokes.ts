@@ -693,7 +693,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 // A full text/math fill currently sits just 12 strokes below the native cap.
 const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
-    "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι",
+    "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1290,6 +1290,19 @@ function mathParts(
     if (glyph === "ι") return [
         curve([-0.2, -0.7], [-0.4, 0.3], [-0.1, 0.55]),
         curve([-0.1, 0.55], [0.1, 0.85], [0.45, 0.55]),
+    ];
+    // Omicron has an asymmetric, exact Unicode oval, not a copy of the
+    // circular Latin o. Upsilon joins two open shoulders at its bowl;
+    // both keep their own uninterrupted directed native pen paths.
+    if (glyph === "ο") return [
+        curve([0, -0.75], [0.68, -0.85], [0.7, 0.02]),
+        curve([0.7, 0.02], [0.65, 0.75], [0.05, 0.75]),
+        curve([0.05, 0.75], [-0.75, 0.8], [-0.7, 0.05]),
+        curve([-0.7, 0.05], [-0.7, -0.75], [0, -0.75]),
+    ];
+    if (glyph === "υ") return [
+        curve([-0.7, -0.7], [-0.65, 0.7], [0, 0.72]),
+        curve([0, 0.72], [0.65, 0.7], [0.65, -0.7]),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.
