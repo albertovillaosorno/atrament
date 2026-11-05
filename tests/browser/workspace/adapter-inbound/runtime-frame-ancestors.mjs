@@ -15108,8 +15108,19 @@ test(
                         get("seed-connected-baseline").click();
                         const again = get("status").textContent;
                         get("save").click();
+                        const markdown = "# ñ\n- [x] a\n> i\u0301\n¿u?";
+                        const source = document.getElementById("source-input");
+                        source.value = markdown;
+                        source.dispatchEvent(new Event("input", {
+                            bubbles: true,
+                        }));
+                        const download = document.getElementById(
+                            "source-markdown-export");
+                        const sourceEnabled = !download.disabled;
+                        download.click();
                         return JSON.stringify({ enabled, refused, before,
                             filled, coverage, gStrokes, unsaved, again, names,
+                            markdown, sourceEnabled,
                             files: await Promise.all(blobs.map((blob) =>
                                 blob.text())) });
                     } finally {
@@ -15132,15 +15143,24 @@ test(
             assert.equal(actual.gStrokes, 91);
             assert.equal(actual.unsaved, 0);
             assert.match(actual.again, /All 114 bilingual text glyphs/);
-            assert.deepEqual(actual.names, ["my-glyph-strokes.tsv"]);
+            assert.equal(actual.sourceEnabled, true);
+            assert.equal(actual.markdown, "# ñ\n- [x] a\n> i\u0301\n¿u?");
+            assert.deepEqual(actual.names,
+                ["my-glyph-strokes.tsv", "atrament-source.md"]);
             const rows = fillMissingBilingualBaseline([], 1550, 2450,
                 1100, 250, "#243647", { dx: 0, lift: 0 }, "cursive");
             const expected = encodeGlyphLibrary(rows);
-            assert.deepEqual(actual.files, [expected]);
-            assert.deepEqual(requests, baseline,
-                "authored draft and TSV download require no backend writes");
+            assert.deepEqual(actual.files, [expected, actual.markdown]);
+            assert.deepEqual(requests,
+                [...baseline, "POST /api/session/source"],
+                "source edit updates the authenticated session once; "
+                + "both Blob downloads require no additional request");
             const library = path.join(profile, "connected.tsv");
             fs.writeFileSync(library, actual.files[0]);
+            const markdownFile = path.join(profile, "browser-notes.md");
+            fs.writeFileSync(markdownFile, actual.files[1]);
+            assert.deepEqual(fs.readFileSync(markdownFile),
+                Buffer.from(actual.markdown, "utf8"));
             const build = spawnSync(PINNED_CARGO, ["build", "--offline",
                 "--quiet", "-p", "atrament_profile_editor_cli", "--bin",
                 "atrament-profiles"], { timeout: 90_000, stdio: "pipe",
@@ -15185,6 +15205,46 @@ test(
             assert.match(unknown.stderr.toString(), /missing authored glyph/i);
             assert.deepEqual(fs.readFileSync(pdfPath), accepted);
             assert.equal(fs.readFileSync(library, "utf8"), expected);
+
+            const markdownBase = ["notebook", "--printed-sheet", "true",
+                "--glyph-file", library, "--flow-region", "30000",
+                "40000", "100000", "23000"];
+            const markdownPdf = path.join(profile, "browser-notes.pdf");
+            const physical = invoke(...markdownBase,
+                "--flow-markdown-file", markdownFile,
+                "--export-paper", "pdf", "--pages", "2",
+                "--output", markdownPdf);
+            assert.equal(physical.status, 0, physical.stderr.toString());
+            const pages = fs.readFileSync(markdownPdf);
+            assert.match(pages.toString("latin1"), /\/Count 2\b/);
+            const page = (sourceFlag, source, number) => {
+                const rendered = invoke(...markdownBase, sourceFlag, source,
+                    "--export-paper", "png", "--dpi", "72",
+                    "--png-page", String(number));
+                assert.equal(rendered.status, 0,
+                    rendered.stderr.toString());
+                assert.deepEqual(rendered.stdout.subarray(0, 8),
+                    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+                assert.equal(rendered.stdout[25], 6);
+                return rendered.stdout;
+            };
+            const firstPage = page("--flow-markdown-file", markdownFile, 1);
+            const secondPage = page("--flow-markdown-file", markdownFile, 2);
+            assert.deepEqual(firstPage,
+                page("--flow-markdown", "# ñ\n- [x] a", 1));
+            assert.deepEqual(secondPage,
+                page("--flow-markdown", "> i\u0301\n¿u?", 1));
+            assert.notDeepEqual(firstPage, secondPage);
+            const insufficient = invoke(...markdownBase,
+                "--flow-markdown-file", markdownFile,
+                "--export-paper", "pdf", "--pages", "1",
+                "--output", markdownPdf, "--replace");
+            assert.notEqual(insufficient.status, 0);
+            assert.match(insufficient.stderr.toString(),
+                /flow requires 2 physical pages/i);
+            assert.deepEqual(fs.readFileSync(markdownPdf), pages);
+            assert.deepEqual(fs.readFileSync(markdownFile),
+                Buffer.from(actual.markdown, "utf8"));
         } finally {
             bidi?.close();
             await closeFixtureServer(server);

@@ -1174,3 +1174,11 @@ replacing the accepted PDF or changing either source file. This verifies
 existing authoring and CLI export interoperability, not automatic joins
 between neighboring letters, persisted semantic blocks or notebook edits.
 The finite saved-notebook acceptance criterion remains open.
+
+A real Firefox session now exercises the authenticated connected baseline
+button and the source Markdown download in the same browser session. Rust
+reopens the two actual downloaded payloads, draws independent page-one and
+page-two RGBA ink and a two-page PDF, and refuses an insufficient page count
+without replacing the PDF. Typing source material updates the authenticated
+source session once; neither download adds another network request. The
+notebook's semantic state is still not persisted.
