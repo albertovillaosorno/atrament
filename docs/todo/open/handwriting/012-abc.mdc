@@ -1914,3 +1914,23 @@ replay refuses missing lookalikes without replacing a previous output.
 Firefox guide checks include both Unicode options and physical Rust ink.
 
 This remains optional manual geometry, not automatic semantic notation.
+
+## Exact floor and ceiling delimiter ink (partial) — 2026-11-04
+
+The opt-in mathematical editor now authors four bracket-like Unicode
+forms: left/right floor `⌊`/`⌋` and left/right ceiling `⌈`/`⌉`.
+Each has its own directed upright and a joined lower/upper foot. Unlike
+ordinary square brackets, each corner is a single two-segment pen path;
+no ASCII or other authored glyph is silently substituted.
+
+The optional math fill now contains 93 exact symbols. Eleven independent
+fills together build 206 graphemes with 4084 native strokes, still below
+the 4096 limit. Custom glyphs are preserved and any over-cap fill refuses
+atomically.
+
+The browser checks exact physical endpoints, pen joins, TSV roundtrip and
+clipping. Rust reopens the same exact Unicode library for real PDF and
+transparent PNG, rejecting unsupported lookalikes without replacing an
+accepted file. Firefox also verifies the live SVG guides and TSV-to-Rust
+output journey. This is sampled manual ink, not automatic math layout or
+complete baseline handwriting coverage.

@@ -687,8 +687,9 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "∠", "∟", "⊬", "⊭", "¬", "⇒", "⇔",
     "≪", "≫", "≮", "≯", "≰", "≱", "↗", "↘",
     "↖", "↙", "⇐", "↦", "↤", "∣", "∤",
-    "′", "″", "‴", "⋅", "∗", "∖", "∦"] as const;
-// Extra manual marks do not change the 89-glyph math fill.
+    "′", "″", "‴", "⋅", "∗", "∖", "∦",
+    "⌊", "⌋", "⌈", "⌉"] as const;
+// Extra manual marks do not change the 93-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"] as const;
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"] as const;
@@ -730,6 +731,22 @@ function mathParts(
         ...mathParts(cx, cy, radius, "∥"),
         { from: point(-0.7, 0.7), to: point(0.7, -0.7) },
     ];
+    // Floor and ceiling are independently authored Unicode delimiters.
+    // Each vertical and its lower/upper foot share one directed pen path;
+    // neither is borrowed from a square bracket in the caller's TSV.
+    if (glyph === "⌊" || glyph === "⌋"
+        || glyph === "⌈" || glyph === "⌉") {
+        const left = glyph === "⌊" || glyph === "⌈";
+        const floor = glyph === "⌊" || glyph === "⌋";
+        const edge = left ? -0.68 : 0.68;
+        const end = left ? 0.4 : -0.4;
+        const stemStart = floor ? -0.75 : 0.75;
+        const corner = -stemStart;
+        return [
+            { from: point(edge, stemStart), to: point(edge, corner) },
+            { from: point(edge, corner), to: point(end, corner) },
+        ];
+    }
     // Separate exact directed ink for parallel and perpendicular geometry.
     // Neither substitutes for a Latin letter or ordinary equality glyph.
     if (glyph === "∥") return [
