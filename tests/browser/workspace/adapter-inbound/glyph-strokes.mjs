@@ -7008,7 +7008,7 @@ test("cursive o/a starters keep directed entry, loop and exit", () => {
         assert.deepEqual(geometricStarter(glyph, ...values), base,
             "choosing cursive cannot mutate its regular form");
     }
-    for (const invalid of ["g", "A", "∞"]) {
+    for (const invalid of ["0", "A", "∞"]) {
         assert.throws(() => geometricStarter(invalid, ...values,
             undefined, "cursive"), /Cursive variant/);
     }
@@ -9851,6 +9851,76 @@ test("browser manual x shows both retraces and refuses clipped entry",
             editor.reset();
             assert.equal(get("ideal-rounded-left").attributes
                 .get("visibility"), "hidden");
+        } finally {
+            ui.restore();
+        }
+    });
+
+// The manual g keeps the exact circle and its independently sampled hook.
+// A second lower semicircle carries the pen back to the right stem.
+test("manual cursive g connects a complete bowl to its original hook", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("g", ...args);
+    const joined = geometricStarter("g", ...args, undefined, "cursive");
+    assert.equal(printed.length, 65);
+    assert.equal(joined.length, 91);
+    assert.deepEqual(joined.slice(1, 25), printed.slice(24, 48));
+    assert.deepEqual(joined.slice(25, 49), printed.slice(0, 24));
+    assert.deepEqual(joined.slice(49, 73), printed.slice(24, 48));
+    assert.deepEqual(joined.slice(73, 90), printed.slice(48));
+    assert.deepEqual(joined[90], {
+        grapheme: "g", x1: 2100, y1: 4045,
+        x2: 2300, y2: 3845, width: 250, color: "#243647",
+    });
+    assert.deepEqual(candidatePenPaths(joined, "g").map(
+        ({ first, last }) => [first, last]), [[1, 91]]);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("g", ...args), printed);
+    assert.equal(geometricStarter("g", 1400, 2450,
+        1100, 250, "#243647").length, 65);
+    assert.throws(() => geometricStarter("g", 1400, 2450,
+        1100, 250, "#243647", undefined, "cursive"),
+    /Cursive g connector and pen clip/);
+    assert.throws(() => geometricStarter("G", ...args, undefined,
+        "cursive"), /Cursive variant/);
+});
+
+test("browser manual g shows hook exit and retains clipped-out TSV",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "g-cursive";
+            get("form").dispatch("change");
+            get("character").value = "g";
+            get("character").dispatch("input");
+            for (const id of ["ideal-circle", "ideal-stem",
+                "ideal-rounded", "ideal-entry", "ideal-exit"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual g previews ${id}`);
+            }
+            assert.equal(get("ideal-approach").attributes.get("visibility"),
+                "hidden");
+            assert.equal(get("ideal-exit").attributes.get("x1"), "2100");
+            assert.equal(get("ideal-exit").attributes.get("y1"), "4045");
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, 91);
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("g", 1550,
+                2450, 1100, 250, "#243647", undefined, "cursive"));
+            get("circle-x").value = "1400";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "clipped g cannot overwrite accepted glyph ink");
+            editor.reset();
+            assert.equal(get("ideal-exit").attributes.get("visibility"),
+                "hidden");
         } finally {
             ui.restore();
         }

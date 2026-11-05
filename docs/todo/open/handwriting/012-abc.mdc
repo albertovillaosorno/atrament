@@ -2776,3 +2776,19 @@ transparent PNG replay. A native test confirms exact `x` export and safe
 refusal to replace a page when uppercase `X` was not authored. This does
 not persist stroke direction as a high-level curve or complete cursive
 joining across words; the P1 glyph task remains open.
+
+## Opt-in continuous-pen lowercase g — 2026-11-05
+
+The explicitly selected `g` retains all 48 ideal `o` circle chords and
+the existing straight right stem plus 16 sampled quadratic hook chords.
+It enters at the left bowl, retraces only the lower semicircle after the
+complete loop, and continues from the right tangent through the original
+stem and descending hook into an upward exit. All 91 TSV segments join
+into one directed pen gesture; the printed 65-segment `g` is unchanged.
+
+The analytic SVG guide retains its independent circle and quadratic hook,
+with visible manual entry and hook-end exit. Browser and real Firefox tests
+cover exact geometry, TSV download and clipped-entry refusal; Rust PDF/PNG
+integration replays the same ink and refuses missing uppercase `G` without
+overwriting an accepted page. No stored analytic curve, automatically joined
+word or learned writer calibration is implied; P1 coverage remains open.

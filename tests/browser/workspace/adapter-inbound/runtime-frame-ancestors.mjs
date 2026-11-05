@@ -14584,6 +14584,7 @@ test(
                         ["d-cursive", "d", 1100],
                         ["q-cursive", "q", 1100],
                         ["x-cursive", "x", 1100],
+                        ["g-cursive", "g", 1100],
                     ]) {
                         change("circle-radius", String(radius));
                         change("form", form);
@@ -14663,8 +14664,19 @@ test(
             assert.equal(response.type, "success");
             assert.equal(response.result.type, "string");
             const actual = JSON.parse(response.result.value);
-            assert.equal(actual.guides.length, 33);
-            assert.equal(actual.constructed.length, 33);
+            assert.equal(actual.guides.length, 34);
+            assert.equal(actual.constructed.length, 34);
+            const gGuide = actual.guides.at(-1);
+            assert.equal(gGuide.circle, "visible");
+            assert.equal(gGuide.baseStem, "visible");
+            assert.equal(gGuide.rounded, "visible");
+            assert.equal(gGuide.entry, "visible");
+            assert.equal(gGuide.entryTop, "2450");
+            assert.equal(gGuide.approach, "hidden");
+            assert.match(gGuide.roundedD, /M 2650 3165 Q 2650 4045/);
+            assert.match(actual.constructed.at(-1), /91 sampled segments/);
+            actual.guides.pop();
+            actual.constructed.pop();
             const xGuide = actual.guides.at(-1);
             assert.equal(xGuide.rounded, "visible");
             assert.equal(xGuide.entry, "visible");
@@ -14831,7 +14843,7 @@ test(
                 "i", "í", "i\u0301", "l", "n", "ñ", "n\u0303",
                 "u", "ú", "ü", "u\u0301", "u\u0308", "m", "h", "t",
                 "r", "f", "j", "v", "w", "z", "s", "y", "k", "b", "p",
-                "d", "q", "x"];
+                "d", "q", "x", "g"];
             const expectedInk = glyphs.flatMap(
                 (glyph, index) => geometricStarter(glyph, 1550, 2450,
                     index < 4 ? 700 : 1100, 250, "#243647",
