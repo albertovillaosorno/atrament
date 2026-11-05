@@ -449,7 +449,7 @@ enum LineStyle {
 struct FollowingInkSpacing {
     blank_rows: usize,
     heading_rows: usize,
-    paragraph_gap: bool,
+    paragraph_gaps: usize,
 }
 
 struct Layout<'model> {
@@ -551,10 +551,12 @@ impl Layout<'_> {
                 .map_err(|_error| "heading chain-row budget overflow")?)
             .and_then(|rows| rows.checked_add(2))
             .ok_or("heading following-row budget overflow")?;
+        let gaps = u32::try_from(following.paragraph_gaps)
+            .map_err(|_error| "heading paragraph-gap budget overflow")?
+            .checked_mul(PARAGRAPH_GAP_UM)
+            .ok_or("heading paragraph-gap budget overflow")?;
         let needed = self.pitch.checked_mul(rows)
-            .and_then(|value| value.checked_add(if following.paragraph_gap {
-                PARAGRAPH_GAP_UM
-            } else { 0 }))
+            .and_then(|value| value.checked_add(gaps))
             .ok_or("heading following-row budget overflow")?;
         // If one sheet cannot hold this full span, fall back to normal
         // pagination instead of refusing valid short paper outright.
@@ -1289,8 +1291,9 @@ fn take_following_setext<'text>(
     false
 }
 
-// A heading needs its first following visible line. Consecutive ATX
-// headings also stay with their first body row if that span fits a sheet.
+// A heading needs its first following visible line. Adjacent ATX and
+// Setext headings, including collapsed blank paragraph gaps, stay with
+// their first body row when that span fits on one physical sheet.
 // Do not reserve blank fenced rows or gaps after the final visible heading.
 fn following_heading_gap<'text>(
     lines: impl Iterator<Item = &'text str>,
@@ -1298,49 +1301,53 @@ fn following_heading_gap<'text>(
     let mut following = FollowingInkSpacing {
         blank_rows: 0,
         heading_rows: 0,
-        paragraph_gap: false,
+        paragraph_gaps: 0,
     };
     let mut fence = None;
+    let mut pending_gap = false;
     let mut lookahead = lines.peekable();
     while let Some(line) = lookahead.next() {
         if markdown_fence_transition(&mut fence, line) {
             // Fence delimiters themselves have no physical row.
             continue;
         }
-        if fence.is_some() {
-            if line.trim_matches(' ').is_empty() {
-                following.blank_rows = following.blank_rows.saturating_add(1);
-                continue;
-            }
+        if fence.is_some() && line.trim_matches(' ').is_empty() {
+            following.blank_rows = following.blank_rows.saturating_add(1);
+            continue;
+        }
+        if fence.is_none() && line.trim_end_matches(' ').is_empty() {
+            // Multiple empty Markdown lines form just one 4-mm gap.
+            pending_gap = true;
+            continue;
+        }
+        if pending_gap {
+            following.paragraph_gaps =
+                following.paragraph_gaps.saturating_add(1);
+            pending_gap = false;
+        }
+        if fence.is_some() || following.blank_rows > 0 {
             return Some(following);
         }
-        if line.trim_end_matches(' ').is_empty() {
-            following.paragraph_gap = true;
-        } else if !following.paragraph_gap && following.blank_rows == 0 {
-            let (style, body) = markdown_line(line);
-            if matches!(style, LineStyle::Heading(_)) {
-                following.heading_rows =
-                    following.heading_rows.saturating_add(1);
-            } else if matches!(style, LineStyle::Body)
-                && take_following_setext(line, body.as_ref(), &mut lookahead)
-            {
-                // A soft-joined Setext title still counts as just one
-                // heading row, regardless of its source line count.
-                following.heading_rows =
-                    following.heading_rows.saturating_add(1);
-            } else {
-                return Some(following);
-            }
+        let (style, body) = markdown_line(line);
+        if matches!(style, LineStyle::Heading(_)) {
+            following.heading_rows =
+                following.heading_rows.saturating_add(1);
+        } else if matches!(style, LineStyle::Body)
+            && take_following_setext(line, body.as_ref(), &mut lookahead)
+        {
+            // A soft-joined Setext title contributes one physical row.
+            following.heading_rows =
+                following.heading_rows.saturating_add(1);
         } else {
-            // A blank paragraph or code row separates heading groups.
             return Some(following);
         }
     }
-    // The last heading is printable ink. Trailing blank rows are not.
+    // The last heading is printable ink. Trailing empty Markdown or
+    // fenced code rows must not reserve nonexistent following ink.
     (following.heading_rows > 0).then_some(FollowingInkSpacing {
         blank_rows: 0,
         heading_rows: following.heading_rows.saturating_sub(1),
-        paragraph_gap: false,
+        paragraph_gaps: following.paragraph_gaps,
     })
 }
 

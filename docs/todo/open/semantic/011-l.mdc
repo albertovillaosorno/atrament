@@ -1025,3 +1025,24 @@ later `===` as Setext syntax. Otherwise an authored equals-sign row inside
 a code fence could incorrectly pull the preceding ATX heading onto the next
 sheet. Rust regressions for tilde/backtick fences and native PDF/PNG tests
 preserve the original first-page heading ink and real two-page output.
+
+## Keep blank-separated title groups together (partial) — 2026-11-04
+
+The bounded native Markdown heading orphan guard now looks through collapsed
+blank paragraph lines when a following ATX or Setext title continues a
+heading group. It counts each intervening 4-mm paragraph gap separately
+before deciding whether all titles and their first visible body row fit
+on the current physical page. Previously a blank between `#` and `##`
+could strand the first heading on page one while the subtitle and body
+moved together to page two, even though the entire group fit page two.
+
+Rust regressions first reproduced that orphan and now verify ATX/Setext
+parity, repeated source blanks, two distinct gaps between three headings,
+and safe fallback for a region too short to contain the entire group.
+Native PDF and transparent PNG regressions compare both pages against
+independently rendered page-local ink and preserve an accepted PDF when
+the caller requests too few pages. Empty trailing rows and code-fence
+boundaries retain their earlier behavior; neither gains printable ink.
+
+This remains a limited CLI layout guard, not general widow/orphan control,
+full Markdown parsing or a persisted semantic notebook model.

@@ -514,3 +514,75 @@ fn multiline_setext_lookahead_stops_at_fenced_code() {
         assert_eq!(ornaments.len(), 1, "only ATX is decorated");
     }
 }
+
+#[test]
+fn blank_separated_heading_chain_keeps_first_body_on_one_page() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    // One prelude row leaves room for the next heading alone, but not a
+    // blank-separated subtitle and its body. A new page fits all three.
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 41_000,
+    };
+    for text in [
+        "a  \n# a\n\n## ó\na",
+        "a  \n# a\n\nó\n===\na",
+        "a  \n# a\n\n\n## ó\na",
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, text)
+            .expect("heading and blank-separated subtitle");
+        let (runs, _, pages) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        ).expect("heading group fits on the next physical sheet");
+        assert_eq!(pages, 2);
+        assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+            [1, 2, 2, 2], "first title must not orphan from subtitle");
+    }
+}
+
+#[test]
+fn separate_blank_gaps_between_three_titles_are_measured_once_each() {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let (left, top, _, _) = paper.printable_rect_um()
+        .expect("default physical writing rectangle");
+    // Four visible group rows and two 4-mm gaps fit a 50-mm region,
+    // but cannot fit after one prelude row on the first page.
+    let region = super::FlowRegion {
+        left, top, width: 100_000, height: 50_000,
+    };
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a  \n# a\n\n## ó\n\n### a\na")
+        .expect("three blank-separated headings");
+    let (runs, _, pages) = super::layout_flow_with_region(
+        &source, &paper, None, super::HeadingDecoration::default(),
+        Some(region),
+    ).expect("whole heading group fits on second page");
+    assert_eq!(pages, 2);
+    assert_eq!(runs.iter().map(|run| run.page).collect::<Vec<_>>(),
+        [1, 2, 2, 2, 2]);
+    assert_eq!(runs[2].origin_um.1 - runs[1].origin_um.1, 13_000);
+    assert_eq!(runs[3].origin_um.1 - runs[2].origin_um.1, 13_000);
+
+    let too_short = super::FlowRegion { height: 36_000, ..region };
+    let (fallback, _, count) = super::layout_flow_with_region(
+        &source, &paper, None, super::HeadingDecoration::default(),
+        Some(too_short),
+    ).expect("unfittable group still paginates without refusing");
+    assert!(count > 1);
+    assert_eq!(fallback.len(), 5);
+
+    let terminal = FlowSource::new(FlowFormat::Markdown,
+        "a  \n# a\n\n## ó\n\n\n")
+        .expect("trailing blank heading source");
+    let (_, _, count) = super::layout_flow_with_region(
+        &terminal, &paper, None, super::HeadingDecoration::default(),
+        Some(region),
+    ).expect("trailing gaps cannot create an ink-free sheet");
+    assert_eq!(count, 1);
+}

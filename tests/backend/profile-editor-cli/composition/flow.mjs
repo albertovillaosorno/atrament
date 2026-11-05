@@ -230,6 +230,57 @@ test('ATX and Setext heading chains keep native PDF and PNG ink together',
         }
     });
 
+test('blank-separated heading groups preserve native PDF and PNG pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-title-blank-'));
+        try {
+            for (const [height, group] of [
+                ['41000', '# a\n\n## ó\na'],
+                ['41000', '# a\n\nó\n===\na'],
+                ['50000', '# a\n\n## ó\n\n### a\na'],
+            ]) {
+                const region = ['--flow-region', '30000', '40000',
+                    '100000', height];
+                const prelude = 'a  ';
+                const combined = `${prelude}\n${group}`;
+                const first = render(dir, combined, 'png', region);
+                assert.equal(first.result.status, 0, first.result.stderr);
+                const actualFirstInk = readFileSync(first.output);
+                const expectedFirst = render(dir, prelude, 'png', region);
+                assert.equal(expectedFirst.result.status, 0,
+                    expectedFirst.result.stderr);
+                assert.deepEqual(actualFirstInk,
+                    readFileSync(expectedFirst.output),
+                    'initial sheet must contain only the prelude');
+
+                const second = render(dir, combined, 'png', region,
+                    '--flow-markdown', 2);
+                assert.equal(second.result.status, 0, second.result.stderr);
+                const actualSecondInk = readFileSync(second.output);
+                const expectedSecond = render(dir, group, 'png', region);
+                assert.equal(expectedSecond.result.status, 0,
+                    expectedSecond.result.stderr);
+                assert.deepEqual(actualSecondInk,
+                    readFileSync(expectedSecond.output),
+                    'the next sheet retains every title, gap and body');
+
+                const pdf = render(dir, combined, 'pdf',
+                    [...region, '--pages', '2']);
+                assert.equal(pdf.result.status, 0, pdf.result.stderr);
+                const accepted = readFileSync(pdf.output);
+                assert.match(accepted.toString('latin1'), /\/Count 2\b/);
+                const rejected = render(dir, combined, 'pdf',
+                    [...region, '--pages', '1']);
+                assert.notEqual(rejected.result.status, 0);
+                assert.match(rejected.result.stderr, /page/i);
+                assert.deepEqual(readFileSync(rejected.output), accepted,
+                    'insufficient page selection preserves the prior PDF');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('code fence underline ink cannot promote a preceding Markdown row',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-fence-setext-'));
