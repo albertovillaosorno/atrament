@@ -1557,6 +1557,63 @@ fn malformed_pdf_name_escapes_refuse_in_table_and_stream_metadata() {
 
 #[cfg(unix)]
 #[test]
+fn malformed_hex_metadata_refuses_before_spooling_table_or_stream() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("selected.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS fixture");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    let samples = |hex: &str| [
+        format!(concat!(
+            "%PDF-1.7\nxref\n0 1\n0000000000 65535 f \n",
+            "trailer\n<< /Size 1 /Meta {hex} >>\n",
+            "startxref\n9\n%%EOF\n",
+        ), hex = hex).into_bytes(),
+        one_page_xref_stream_pdf("1.7", &format!(" /Meta {hex}")),
+    ];
+    // PDF hexadecimal strings admit an odd final nibble and PDF whitespace.
+    for valid in ["<>", "<A>", "<a0 3F>", "<A0\n3f>"] {
+        for candidate in samples(valid) {
+            assert!(supported_pdf_cross_reference(&candidate),
+                "valid PDF hex string {valid:?} must stay eligible");
+            fs::write(&pdf, &candidate).expect("write valid PDF");
+            assert_eq!(submit_selected(&request, &fake_spool)
+                .expect("valid hex PDF admitted to fake CUPS"),
+                sha256_profile_bytes(&candidate).bytes());
+            assert!(spooled.exists(), "explicit fake queue contacted");
+            fs::remove_file(&spooled).expect("clear fake spool");
+        }
+    }
+    for invalid in ["<G0>", "<0G>", "<A/B>", "<00!>",
+        "<00<01>", "<FF\u{000b}>"] {
+        for candidate in samples(invalid) {
+            assert!(!supported_pdf_cross_reference(&candidate),
+                "malformed PDF hex string must refuse: {invalid:?}");
+            fs::write(&pdf, &candidate).expect("write malformed PDF");
+            assert!(selected_pdf(&pdf).is_err(),
+                "invalid lexical metadata cannot be selected");
+            assert!(submit_selected(&request, &fake_spool).is_err(),
+                "invalid PDF must not contact CUPS");
+            assert!(!spooled.exists(), "fake queue remains untouched");
+            assert_eq!(fs::read(&pdf).expect("source still present"),
+                candidate, "refusal must preserve selected bytes");
+        }
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixture");
+}
+
+#[cfg(unix)]
+#[test]
 fn xref_escaped_pdf_names_cannot_hide_duplicate_size_keys() {
     use std::os::unix::fs::PermissionsExt as _;
 

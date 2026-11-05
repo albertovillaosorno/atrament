@@ -574,6 +574,20 @@ All existing table and xref-stream compatibility cases stay eligible.
 This admits a legal token boundary, not a complete PDF parse or physical
 printer verification.
 
+## Bounded hexadecimal metadata in print preflight (partial) — 2026-11-04
+
+The opt-in print path now scans PDF hexadecimal strings in the terminal
+traditional xref trailer and typed xref-stream dictionary instead of
+skipping arbitrary bytes until the next `>`. PDF whitespace, even mixed
+case hex digits and an odd final nibble remain accepted. Nonhex bytes,
+vertical tabs and nested `<` delimiters refuse before any CUPS contact.
+
+One red-before/green-after Rust regression checks six malformed samples
+across both cross-reference forms against an isolated fake spool, with
+selected source bytes unchanged. Four legitimate hex forms are admitted to
+the same fake queue with a matching SHA-256. The scanner does not parse
+arbitrary PDF objects, compressed stream data or prove physical printing.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

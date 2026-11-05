@@ -639,10 +639,10 @@ fn supported_xref_table_trailer(
                 at = at.saturating_add(2);
             }
             Some(&b'<') => {
-                let Some(end) = bytes.get(at.saturating_add(1)..)
-                    .and_then(|tail| tail.iter().position(|byte| *byte == b'>'))
-                else { return false; };
-                at = at.saturating_add(end).saturating_add(2);
+                let Some(end) = pdf_hex_end(bytes, at) else {
+                    return false;
+                };
+                at = end;
             }
             Some(&b'>') if bytes.get(at.saturating_add(1)) == Some(&b'>') => {
                 depth = depth.saturating_sub(1);
@@ -777,6 +777,28 @@ fn pdf_trivia_end(bytes: &[u8], mut at: usize) -> usize {
             }
         }
     }
+}
+
+// PDF hexadecimal string contents are hex digits and PDF whitespace.
+// An odd last nibble is legal (implicitly padded with zero), but arbitrary
+// punctuation or a second opening delimiter cannot be skipped as metadata.
+// Use the same bounded lexical check in table trailers and xref streams.
+fn pdf_hex_end(bytes: &[u8], start: usize) -> Option<usize> {
+    if bytes.get(start) != Some(&b'<')
+        || bytes.get(start.checked_add(1)?) == Some(&b'<') {
+        return None;
+    }
+    let mut at = start.checked_add(1)?;
+    while let Some(byte) = bytes.get(at) {
+        if *byte == b'>' {
+            return at.checked_add(1);
+        }
+        if !byte.is_ascii_hexdigit() && !pdf_whitespace(*byte) {
+            return None;
+        }
+        at = at.checked_add(1)?;
+    }
+    None
 }
 
 fn pdf_literal_end(bytes: &[u8], start: usize) -> Option<usize> {
@@ -984,11 +1006,7 @@ fn xref_stream_header_end(
                 depth = depth.saturating_add(1);
                 at = at.saturating_add(2);
             }
-            Some(&b'<') => {
-                let tail = prefix.get(at.saturating_add(1)..)?;
-                let end = tail.iter().position(|byte| *byte == b'>')?;
-                at = at.saturating_add(end).saturating_add(2);
-            }
+            Some(&b'<') => at = pdf_hex_end(prefix, at)?,
             Some(&b'>') if prefix.get(at.saturating_add(1)) == Some(&b'>') => {
                 depth = depth.saturating_sub(1);
                 at = at.saturating_add(2);
