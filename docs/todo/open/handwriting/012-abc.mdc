@@ -2277,3 +2277,18 @@ accepted PDF on missing symbol/letter variants preserve that boundary.
 Live Firefox exports both symbols in the same downloadable math profile.
 These are simple editable segment approximations, not analytic outlines or
 complete mathematical notation coverage.
+
+## Manually selected contour and multiple integrals (partial) — 2026-11-04
+
+The opt-in geometry menu now distinguishes exact Unicode `∮`, `∬` and `∭`
+from the existing single `∫`. Contour integration draws the original
+48-chord integral path and a separately lifted closed four-quadratic loop
+(112 sampled segments). Double and triple integration horizontally compress
+and translate two or three independent, internally joined S-shaped paths
+(96 and 144 segments respectively). No glyph is silently substituted.
+
+Browser geometry, pen-lift/clipping, exact UTF-8 TSV and native Rust PDF/PNG
+export now have focused regressions, including unchanged accepted output on
+missing lookalikes. Live Firefox validates the SVG guides, download and
+Rust replay. These manual forms remain outside the 93-key bounded automatic
+math batch; persistent analytic curves and full math/font synthesis are open.

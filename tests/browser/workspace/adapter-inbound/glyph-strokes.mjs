@@ -4010,6 +4010,36 @@ test("n-ary product and coproduct have independent lifted paths", () => {
         "n-ary coproduct has an independently inverted cap");
 });
 
+test("manual contour and repeated integrals retain exact joined paths", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const expected = [
+        ["∮", 112, 2], ["∬", 96, 2], ["∭", 144, 3],
+    ];
+    for (const [glyph, count, paths] of expected) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " native chords");
+        assert.equal(candidatePenPaths(ink, glyph).length, paths,
+            glyph + " independently joined pen paths");
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell/);
+        assert.notDeepEqual(ink, geometricStarter("∫", ...args),
+            glyph + " cannot borrow the single integral");
+    }
+    const [contour, double, triple] = expected.map(([glyph]) =>
+        geometricStarter(glyph, ...args));
+    assert.deepEqual(contour.slice(0, 48),
+        geometricStarter("∫", ...args)
+            .map((line) => ({ ...line, grapheme: "∮" })),
+    "contour integral retains one uninterrupted base integral");
+    assert.notDeepEqual(double.slice(0, 48), triple.slice(0, 48),
+        "two- and three-fold integrals have distinct deliberate spacing");
+    assert.throws(() => geometricStarter("∯", ...args),
+        /supported exact geometric glyph/,
+        "an unsupplied lookalike must not silently inherit ink");
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5797,7 +5827,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "+", "-", "−", "±", "∓", "=", "×", "÷",
         "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∧", "∨",
         "∩", "∪", "∈", "∉", "∋", "∌", "⊂", "⊆", "⊃", "⊇",
-        "⊄", "⊈", "⊅", "⊉", "∑", "∫", "∂",
+        "⊄", "⊈", "⊅", "⊉", "∑", "∫", "∂", "∮", "∬", "∭",
         "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
         "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
         "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",

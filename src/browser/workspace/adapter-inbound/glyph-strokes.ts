@@ -696,7 +696,7 @@ const MANUAL_MATH_GLYPHS = [
     "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
     "ν", "ς", "Γ", "Ω", "Π", "Σ", "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ",
     "Β", "Υ", "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
-    "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐",
+    "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐", "∮", "∬", "∭",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1518,6 +1518,35 @@ function mathParts(
         curve([0.12, -0.52], [-0.12, -0.1], [-0.2, 0.5]),
         curve([-0.2, 0.5], [-0.4, 1], [-0.78, 0.78]),
     ];
+    // Calculus variants have exact keys rather than substitutions for ∫.
+    // The contour integral keeps its original uninterrupted S-shaped path
+    // and then lifts to a closed, four-quadratic loop across the midpoint.
+    if (glyph === "∮") return [
+        ...mathParts(cx, cy, radius, "∫"),
+        curve([0, -0.36], [0.6, -0.36], [0.6, 0]),
+        curve([0.6, 0], [0.6, 0.36], [0, 0.36]),
+        curve([0, 0.36], [-0.6, 0.36], [-0.6, 0]),
+        curve([-0.6, 0], [-0.6, -0.36], [0, -0.36]),
+    ];
+    if (glyph === "∬" || glyph === "∭") {
+        // Shrink only horizontal geometry; independently translated
+        // integral paths remain continuous and separately editable.
+        const triple = glyph === "∭";
+        const scale = triple ? 0.46 : 0.62;
+        const offsets = triple ? [-0.47, 0, 0.47] : [-0.35, 0.35];
+        const transform = (p: Point, offset: number): Point => ({
+            x: cx + Math.round((p.x - cx) * scale + offset * radius),
+            y: p.y,
+        });
+        const integral = mathParts(cx, cy, radius, "∫");
+        return offsets.flatMap((offset) => integral.map((part) => ({
+            from: transform(part.from, offset),
+            to: transform(part.to, offset),
+            ...(part.control ? {
+                control: transform(part.control, offset),
+            } : {}),
+        })));
+    }
     if (glyph === "∂") return [
         // A single directed pen path: high tail, round bowl and return
         // to the shoulder. The native v1 library samples four curves.
