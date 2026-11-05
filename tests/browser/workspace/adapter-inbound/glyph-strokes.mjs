@@ -4343,6 +4343,49 @@ test("precedence geometry has smooth pen paths and lifted bars", () => {
         /supported exact geometric glyph/);
 });
 
+test("normal subgroup relations keep closed triangles and lifted bars", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const cases = [
+        ["⊲", [[2298, 1735, 758, 2450], [758, 2450, 2298, 3165],
+            [2298, 3165, 2298, 1735]], false],
+        ["⊳", [[802, 1735, 2342, 2450], [2342, 2450, 802, 3165],
+            [802, 3165, 802, 1735]], false],
+        ["⊴", [[2298, 1735, 758, 2450], [758, 2450, 2298, 3165],
+            [2298, 3165, 2298, 1735]], true],
+        ["⊵", [[802, 1735, 2342, 2450], [2342, 2450, 802, 3165],
+            [802, 3165, 802, 1735]], true],
+    ];
+    for (const [glyph, sides, inclusive] of cases) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.deepEqual(ink.slice(0, 3).map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), sides);
+        assert.equal(ink.length, inclusive ? 4 : 3);
+        const paths = candidatePenPaths(ink, glyph);
+        assert.deepEqual(paths.map(({ first, last }) => [first, last]),
+            inclusive ? [[1, 3], [4, 4]] : [[1, 3]]);
+        assert.deepEqual(paths[0].start, paths[0].end,
+            "triangle is one closed pen-down contour");
+        if (inclusive) {
+            assert.deepEqual([ink[3].x1, ink[3].y1,
+                ink[3].x2, ink[3].y2], [802, 3506, 2298, 3506]);
+        }
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.ok(ink.every((segment) => segment.grapheme === glyph));
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"), /fit inside glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("⊲", ...args),
+        geometricStarter("≺", ...args));
+    assert.notDeepEqual(geometricStarter("⊴", ...args),
+        geometricStarter("⊑", ...args));
+    assert.throws(() => geometricStarter("⊴", 1550, 2450,
+        500, 250, "#243647"), /pen-clearance/);
+    assert.throws(() => geometricStarter("⊵", 1550, 2450,
+        500, 250, "#243647"), /pen-clearance/);
+    assert.throws(() => geometricStarter("⋖", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [

@@ -2428,3 +2428,18 @@ PNG, exact-key audit and atomic missing-lookalike refusal cover this slice.
 Firefox checks the real selection and downloadable authored ink. These
 forms remain opt-in and never expand the near-capacity 93-form automatic
 math fill; persistent math layout and calibrated handwriting stay open.
+
+## Exact normal-subgroup triangle relations (partial) — 2026-11-05
+
+The manual math picker now distinguishes Unicode `⊲`, `⊳`, `⊴` and `⊵`
+from both curved precedence and square subset marks. Each has a fully
+closed three-sided triangle in one continuous pen-down path; the two
+inclusive signs append a distinct lifted equality underbar, with a
+bounded clearance refusal for narrow or thick ink (3 or 4 segments).
+
+Browser path, clipping, exact TSV and native Rust PDF/transparent PNG
+regressions verify all four identities, rejecting missing lookalikes before
+replacing an output. Real Firefox tests select, download and replay these
+forms in the Rust export alongside other manually authored symbols while
+staying within the 4096-stroke TSV cap. The separate automatic 93-key
+math fill remains unchanged. Full notebook synthesis is still unfinished.

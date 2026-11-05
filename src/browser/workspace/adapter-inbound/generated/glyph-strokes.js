@@ -601,7 +601,7 @@ const MANUAL_MATH_GLYPHS = [
     "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
     "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘", "⋂", "⋃", "⋀", "⋁", "⊓", "⊔",
     "⊏", "⊐", "⊑", "⊒", "⊞", "⊟", "⊠", "⊡",
-    "≺", "≻", "≼", "≽",
+    "≺", "≻", "≼", "≽", "⊲", "⊳", "⊴", "⊵",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -864,6 +864,21 @@ function mathParts(cx, cy, radius, glyph) {
             line(0.6, 0.05, -0.55, 0.6),
             ...(glyph === "≥" ? [horizontal(0.88)] : []),
         ];
+    // Normal-subgroup relations are closed three-sided triangular paths.
+    // Each inclusive form lifts the pen for a separate equality underbar;
+    // these exact keys cannot borrow curved precedence or subset ink.
+    if (["⊲", "⊳", "⊴", "⊵"].includes(glyph)) {
+        const mirror = glyph === "⊳" || glyph === "⊵" ? -1 : 1;
+        const triangle = [
+            line(mirror * 0.68, -0.65, -mirror * 0.72, 0),
+            line(-mirror * 0.72, 0, mirror * 0.68, 0.65),
+            line(mirror * 0.68, 0.65, mirror * 0.68, -0.65),
+        ];
+        if (glyph === "⊴" || glyph === "⊵") {
+            triangle.push(line(-0.68, 0.96, 0.68, 0.96));
+        }
+        return triangle;
+    }
     // Precedes/follows are two joined quadratic curves rather than the
     // sharp < and > comparisons. Inclusive relations add a lifted underbar.
     // All four forms remain opt-in, outside the full automatic math batch.
@@ -2617,6 +2632,9 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         }
         if (["≼", "≽"].includes(g) && radius * 0.31 < pen + 60) {
             throw new Error("Precedence underbar needs pen-clearance");
+        }
+        if (["⊴", "⊵"].includes(g) && radius * 0.31 < pen + 60) {
+            throw new Error("Subgroup underbar needs pen-clearance");
         }
         if (["⊞", "⊟", "⊠", "⊡"].includes(g)
             && radius * 0.38 < pen + 80) {

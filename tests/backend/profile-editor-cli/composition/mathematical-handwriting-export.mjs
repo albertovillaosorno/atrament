@@ -3636,3 +3636,56 @@ test('four precedence operators export authored native PDF and PNG', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+// Triangular subgroup relations have closed directed contours and lifted bars.
+test('four normal subgroup relations export real Rust PDF and PNG', () => {
+    const dir = mkdtempSync(join(root, '.temp/math-subgroup-'));
+    try {
+        const library = join(dir, 'subgroups.tsv');
+        const output = join(dir, 'subgroups.pdf');
+        const glyphs = ['⊲', '⊳', '⊴', '⊵'];
+        const ink = glyphs.flatMap((glyph) => geometricStarter(
+            glyph, 1550, 2450, 1100, 250, '#243647'));
+        assert.equal(ink.length, 14);
+        for (const [index, glyph] of glyphs.entries()) {
+            const paths = candidatePenPaths(ink, glyph);
+            assert.deepEqual(paths.map(({ first, last }) => [first, last]),
+                index < 2 ? [[1, 3]] : [[1, 3], [4, 4]]);
+            assert.deepEqual(paths[0].start, paths[0].end);
+        }
+        const original = Buffer.from(encodeGlyphLibrary(ink));
+        writeFileSync(library, original);
+        const opened = cli('glyphs', ['--profile', library]);
+        assert.equal(opened.status, 0, opened.stderr.toString());
+        assert.deepEqual(opened.stdout, original);
+        const audit = cli('glyphs', ['--profile', library,
+            '--audit-text', glyphs.join('')]);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        assert.match(audit.stdout.toString(), /Distinct visible graphemes: 4/);
+        const flags = ['--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', `${glyphs.join('')}\n${glyphs.join('')}`];
+        const pdf = cli('notebook', [...flags,
+            '--export-paper', 'pdf', '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, 28);
+        const png = cli('notebook', [...flags, '--export-paper',
+            'png', '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        for (const missing of ['≺', '≼', '⊏', '⊑', '⋖']) {
+            const refused = cli('notebook', ['--printed-sheet', 'true',
+                '--glyph-file', library, '--flow-text', `⊲⊵${missing}`,
+                '--export-paper', 'pdf', '--output', output, '--replace']);
+            assert.notEqual(refused.status, 0);
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted);
+        }
+        assert.deepEqual(readFileSync(library), original);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
