@@ -170,6 +170,13 @@ stream headers must use valid `#` plus two hexadecimal digits for escapes,
 including unknown extension keys. Malformed or truncated escapes refuse
 before contacting CUPS; valid escaped names and aliases remain supported.
 
+Hexadecimal string values (`<...>`) in traditional trailers and typed
+cross-reference stream dictionaries must contain only ASCII hexadecimal
+digits and the six PDF whitespace bytes. Mixed-case digits, whitespace and
+odd final nibbles remain valid; punctuation, vertical tabs and nested `<`
+delimiters refuse before any queue contact. This is a lexical metadata check,
+not validation of every PDF object or encoded stream row.
+
 The trailer scanner now balances nested dictionaries and arrays, skipping
 literal/hex strings and comments when locating the one top-level `/Size`.
 Only whitespace and PDF comments may follow the complete outer `>>` before
