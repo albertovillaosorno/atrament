@@ -2350,3 +2350,17 @@ and Rust PDF/transparent PNG export with atomic missing-glyph refusal
 validate this small addition. The complete 93-glyph automatic math fill
 is unchanged; wider Unicode coverage and personalized outlines remain
 open handwriting work.
+
+## Exact n-ary set operators (partial) — 2026-11-04
+
+The manual geometric menu now provides distinct Unicode `⋂` and `⋃`
+for large intersection and union. Each follows a taller, wider connected
+stem–two-quadratic–stem contour, giving 34 directed native segments
+in one continuous path. Regular `∩`/`∪` remain their own 32-chord
+pen constructions; neither shape is used as a silent substitute.
+
+Browser guides and exact TSV replay, real Firefox export to the native
+Rust compositor, PDF/transparent PNG output and atomic refusal for
+missing lookalikes validate these manual additions. The automatic
+93-symbol math fill remains unchanged. A complete math font and
+writer-personalized analytic outlines remain unfinished.

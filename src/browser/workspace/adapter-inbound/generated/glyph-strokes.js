@@ -599,7 +599,7 @@ const MANUAL_MATH_GLYPHS = [
     "Β", "Υ", "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
     "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐", "∮", "∬", "∭",
     "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
-    "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘",
+    "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘", "⋂", "⋃",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -931,6 +931,22 @@ function mathParts(cx, cy, radius, glyph) {
             line(-0.65, -0.6, 0, 0.6),
             line(0, 0.6, 0.65, -0.6),
         ];
+    // N-ary intersection and union have taller stems and a wider rounded
+    // middle than the regular ∩/∪. All four directed pieces join as one
+    // pen-down path; these exact Unicode keys remain manual-only ink.
+    if (glyph === "⋂" || glyph === "⋃") {
+        const sign = glyph === "⋂" ? 1 : -1;
+        return [
+            line(-0.78, sign * 0.87, -0.78, -sign * 0.12),
+            { from: point(-0.78, -sign * 0.12),
+                control: point(-0.78, -sign * 0.85),
+                to: point(0, -sign * 0.85) },
+            { from: point(0, -sign * 0.85),
+                control: point(0.78, -sign * 0.85),
+                to: point(0.78, -sign * 0.12) },
+            line(0.78, -sign * 0.12, 0.78, sign * 0.87),
+        ];
+    }
     // Intersection and union are true paired quadratic guides. Native
     // TSV uses one continuous 32-chord path per exact Unicode glyph,
     // never substituting the two-stroke logical AND/OR wedges.

@@ -4158,6 +4158,28 @@ test("circled minus and divide keep separate inner ink", () => {
         /supported exact geometric glyph/);
 });
 
+test("big set union and intersection have distinct joined contours", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, small, first] of [
+        ["⋂", "∩", [692, 3407]],
+        ["⋃", "∪", [692, 1493]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, 34, glyph + " native segments");
+        assert.equal(candidatePenPaths(ink, glyph).length, 1,
+            "both stems and bow form one connected pen path");
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.notDeepEqual(ink, geometricStarter(small, ...args),
+            "the n-ary operator has separate Unicode and taller geometry");
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"), /fit inside glyph cell/);
+    }
+    assert.throws(() => geometricStarter("⋀", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
