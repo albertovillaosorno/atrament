@@ -3934,6 +3934,30 @@ test("manual Greek capitals Iota and Omicron preserve exact pen paths", () => {
         geometricStarter("ο", ...args), "capital Omicron differs from lower");
 });
 
+test("manual Greek capitals Zeta and Eta keep ordered lifted ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, first, lifts] of [
+        ["Ζ", [780, 1515], 1],
+        ["Η", [780, 1515], 3],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, 3);
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.equal(candidatePenPaths(ink, glyph).length, lifts);
+        assert.ok(ink.every((stroke) => stroke.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"),
+        /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("Ζ", ...args),
+        geometricStarter("ζ", ...args), "capital and lower zeta differ");
+    assert.notDeepEqual(geometricStarter("Η", ...args),
+        geometricStarter("η", ...args), "capital and lower eta differ");
+    assert.throws(() => geometricStarter("Κ", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [

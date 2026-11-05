@@ -695,7 +695,7 @@ const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
     "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
     "ν", "ς", "Γ", "Ω", "Π", "Σ", "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ",
-    "Β", "Υ", "Α", "Ε", "Ι", "Ο",
+    "Β", "Υ", "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1429,6 +1429,19 @@ function mathParts(
         curve([0.76, 0], [0.75, 0.8], [0.05, 0.83]),
         curve([0.05, 0.83], [-0.75, 0.85], [-0.72, 0]),
         curve([-0.72, 0], [-0.7, -0.88], [0, -0.8]),
+    ];
+    // Capital Zeta's top, diagonal and foot are one continuous angular
+    // pen route. Capital Eta lifts between two uprights and its centered
+    // crossbar, retaining a distinct exact Unicode key from Latin H.
+    if (glyph === "Ζ") return [
+        line(-0.7, -0.85, 0.7, -0.85),
+        line(0.7, -0.85, -0.7, 0.85),
+        line(-0.7, 0.85, 0.7, 0.85),
+    ];
+    if (glyph === "Η") return [
+        line(-0.7, -0.85, -0.7, 0.85),
+        line(0.7, -0.85, 0.7, 0.85),
+        line(-0.7, 0, 0.7, 0),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

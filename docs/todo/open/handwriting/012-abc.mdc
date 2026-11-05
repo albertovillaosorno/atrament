@@ -2231,3 +2231,17 @@ cover opt-in SVG/TSV construction, clipping and exact roundtrips, live
 Firefox native PDF/transparent PNG replay, and refusal to overwrite
 accepted pages on missing Greek/Latin glyphs. Greek uppercase coverage,
 calibration and personal handwriting remain incomplete P1 requirements.
+
+## Manually selected uppercase Greek Zeta and Eta (partial) — 2026-11-04
+
+Capital `Ζ` traces an angular top, diagonal and bottom as one continuous
+three-segment pen path. Capital `Η` has two separate uprights and one
+centered lifted crossbar, with three exact directed strokes. Neither is
+silently borrowed from Latin `Z`/`H` or lowercase Greek `ζ`/`η`.
+
+Browser and Rust regression tests verify exact Unicode TSV roundtrips,
+pen-lift counts, clipping refusal, native PDF/transparent PNG rendering,
+and accepted-output preservation on missing Greek/Latin aliases. The
+live Firefox export adds both capitals without changing the bounded
+93-glyph automatic math fill. The whole Greek alphabet and personalized
+calibration remain unfinished.
