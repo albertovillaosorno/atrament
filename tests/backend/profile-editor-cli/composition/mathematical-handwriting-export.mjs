@@ -4839,3 +4839,82 @@ test('manual continuous g exports native PDF and transparent PNG', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+// A full manually selected lowercase inventory must coexist with separately
+// lifted Spanish accents and non-Latin school ink on one native page.
+test('complete manual lowercase and bilingual marks export as one page',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/cursive-baseline-'));
+        try {
+            const library = join(dir, 'complete.tsv');
+            const output = join(dir, 'complete.pdf');
+            const lowercase = [...'abcdefghijklmnopqrstuvwxyz'];
+            const nfc = ['á', 'é', 'í', 'ó', 'ú', 'ñ', 'ü'];
+            const nfd = nfc.map((glyph) => glyph.normalize('NFD'));
+            const capitals = [...'ABCDEFGHIJKLMNOPQRSTUVWXYZ'];
+            const upperAccents = ['Á', 'É', 'Í', 'Ó', 'Ú', 'Ñ', 'Ü'];
+            const marks = ['¿', '¡', '«', '»', '‘', '’', '“', '”'];
+            const math = ['√', 'π', '∞', '≠', '≤', '≥', '∑', '∫', 'Δ', '≈'];
+            const manuallyJoined = [...lowercase, ...nfc, ...nfd];
+            const glyphs = [...manuallyJoined, ...capitals,
+                ...upperAccents, ...marks, ...math];
+            const strokes = glyphs.flatMap((glyph) => geometricStarter(
+                glyph, 1550, 2450, 1100, 250, '#243647', undefined,
+                manuallyJoined.includes(glyph) ? 'cursive' : 'single'));
+            for (const glyph of lowercase) {
+                const group = strokes.filter((ink) => ink.grapheme === glyph);
+                const paths = candidatePenPaths(group, glyph);
+                const lifts = ['f', 'i', 'j', 't'].includes(glyph) ? 1 : 0;
+                assert.equal(paths.length, 1 + lifts,
+                    `${glyph}: only a deliberately lifted dot/bar is separate`);
+                assert.equal(paths[0].first, 1);
+                assert.equal(paths.at(-1).last, group.length);
+            }
+            for (const glyph of [...nfc, ...nfd]) {
+                const paths = candidatePenPaths(strokes, glyph);
+                assert.equal(paths.length, glyph.normalize('NFC') === 'ü'
+                    ? 3 : 2, `${glyph}: accent requires a pen lift`);
+            }
+            const original = Buffer.from(encodeGlyphLibrary(strokes));
+            writeFileSync(library, original);
+            const reopened = cli('glyphs', ['--profile', library]);
+            assert.equal(reopened.status, 0, reopened.stderr.toString());
+            assert.deepEqual(reopened.stdout, original);
+            const sample = [lowercase.join(''), nfc.join(''),
+                nfd.join(''), capitals.join(''), upperAccents.join(''),
+                marks.join(''), math.join('')].join('\n');
+            const audit = cli('glyphs', ['--profile', library,
+                '--audit-text', sample]);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 91/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', library, '--flow-text', sample];
+            const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+                '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.match(accepted.toString('latin1'), /\/Count 1\b/);
+            assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+                .length, strokes.length,
+            'one page renders every exact authored directed segment');
+            const png = cli('notebook', [...flags, '--export-paper', 'png',
+                '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const refused = cli('notebook', [
+                '--printed-sheet', 'true', '--glyph-file', library,
+                '--flow-text', `${sample}Ω`, '--export-paper', 'pdf',
+                '--output', output, '--replace']);
+            assert.notEqual(refused.status, 0);
+            assert.match(refused.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted,
+                'missing ink cannot replace a valid bilingual page');
+            assert.deepEqual(readFileSync(library), original,
+                'a failed export never changes authored glyph inventory');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

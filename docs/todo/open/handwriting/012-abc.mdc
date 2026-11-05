@@ -2792,3 +2792,20 @@ cover exact geometry, TSV download and clipped-entry refusal; Rust PDF/PNG
 integration replays the same ink and refuses missing uppercase `G` without
 overwriting an accepted page. No stored analytic curve, automatically joined
 word or learned writer calibration is implied; P1 coverage remains open.
+
+## Complete manual lowercase bilingual native-page replay — 2026-11-05
+
+A fixed seven-line native acceptance fixture now combines all 26 individually
+selected lowercase continuous-pen variants (including their deliberate dot
+and crossbar lifts), seven NFC and seven exact NFD Spanish accents, 26 printed
+capitals, seven accented capitals, eight Spanish/curly punctuation marks,
+and ten manually authored mathematical symbols. The 91 distinct visible
+Unicode graphemes share one browser-compatible v1 TSV without a missing
+shape; native admission roundtrips exact bytes and Rust renders all directed
+segments to a single vector PDF page and transparent RGBA PNG.
+
+The test also confirms exactly separate accent pen paths and refuses an
+unknown Greek glyph without replacing the previous PDF or changing TSV.
+This is an integration regression for *explicitly selected* forms, not a
+new automatic cursive font: capitals are still printed, glyphs do not join
+across neighbors, and analytic SVG curves still become sampled TSV ink.
