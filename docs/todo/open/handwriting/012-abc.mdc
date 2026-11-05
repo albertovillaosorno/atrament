@@ -1852,3 +1852,21 @@ Rust PDF/PNG replay without a hidden editor-to-backend authoring request.
 
 This remains sampled manual pen geometry, not symbolic function typesetting,
 automatic glyph fallback or the completed P1 bilingual handwriting library.
+
+## Exact divisibility glyphs (partial) — 2026-11-04
+
+The optional mathematical glyph editor now authors `∣` (divides) as one
+vertical directed pen stroke and `∤` (does not divide) as the same stroke
+with an independently lifted diagonal slash. Neither sign aliases ASCII
+`|`, equality, or another caller-authored glyph. **Fill missing math** now
+includes 82 explicit Unicode keys, preserving any existing custom ink.
+
+Browser regression tests cover exact coordinates, both path identities,
+clipping, TSV preservation and an expanded pen-clearance grid. Native Rust
+reopens both exact keys, exports real physical PDF and transparent PNG and
+refuses a missing related symbol without replacing an accepted PDF. Live
+authenticated Firefox verifies opt-in fill, visible SVG guides and Rust
+PDF/PNG replay using the actual downloaded TSV, without a hidden save.
+
+The symbols are opt-in sampled line geometry, not general mathematical
+typesetting, Unicode fallback or a complete handwriting library.

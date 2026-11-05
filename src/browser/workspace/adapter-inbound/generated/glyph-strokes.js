@@ -587,8 +587,8 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",
     "∠", "∟", "⊬", "⊭", "¬", "⇒", "⇔",
     "≪", "≫", "≮", "≯", "≰", "≱", "↗", "↘",
-    "↖", "↙", "⇐", "↦", "↤"];
-// Extra manual marks do not change the 78-glyph math fill.
+    "↖", "↙", "⇐", "↦", "↤", "∣", "∤"];
+// Extra manual marks do not change the 82-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"];
@@ -609,6 +609,16 @@ function mathParts(cx, cy, radius, glyph) {
         return [horizontal(0), vertical()];
     if (glyph === "=")
         return [horizontal(-0.3), horizontal(0.3)];
+    // Number-theory divisibility is one exact upright pen stroke.
+    // Negated divisibility retains it and lifts for a crossing slash;
+    // neither form borrows the ASCII pipe or another glyph's ink.
+    if (glyph === "∣" || glyph === "∤")
+        return [
+            { from: point(0, -0.8), to: point(0, 0.8) },
+            ...(glyph === "∤" ? [
+                { from: point(-0.65, 0.65), to: point(0.65, -0.65) },
+            ] : []),
+        ];
     // Separate exact directed ink for parallel and perpendicular geometry.
     // Neither substitutes for a Latin letter or ordinary equality glyph.
     if (glyph === "∥")
