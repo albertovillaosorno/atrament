@@ -1104,3 +1104,21 @@ and both page-local transparent PNG outputs byte-for-byte against the
 fully marked quote on a two-page fixed region; a one-page PDF request still
 refuses without replacing the accepted file. This is a bounded Markdown
 export behavior, not nested quotes, saved semantic styles or full CommonMark.
+
+## Quoted continuation preserves literal Setext height (partial)
+
+The native Markdown row-height pass now retains quote context across an
+explicit two- or three-space soft continuation. Previously a following
+literal `=` row could be mistaken for a Setext heading underline during
+height measurement, although the physical compiler correctly kept the
+quote and wrote the equals sign as ordinary handwriting. An unusually tall
+user-authored `=` therefore received too little vertical clearance.
+
+A red-before/green-after Rust regression verifies both continuation widths,
+exact 29-mm row pitch from a 25-mm equals-sign height override, and the
+separate physical quote bar. A native subprocess test compares byte-identical
+vector PDF and transparent PNG against independently joined quoted ink,
+requires a real glyph for literal `=`, preserves selected exports on refusal,
+and proves actual Setext syntax remains independent of literal equals ink.
+No new Markdown constructs or persistent semantic notebook content are
+introduced; ATR-P2-011 remains open.

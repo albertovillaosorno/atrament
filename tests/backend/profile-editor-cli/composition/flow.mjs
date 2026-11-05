@@ -2577,3 +2577,53 @@ test('terminal heading chains retain interior fenced blank rows in PDF/PNG',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('quoted continuation keeps literal Setext-like ink in native PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-quote-equal-pitch-'));
+        try {
+            const statistics = join(dir, 'tall-equal.json');
+            const configured = spawnSync('cargo', [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+                'handwriting', '--set-glyph', '=', 'height',
+                '25000', '25000', '25000', '25000', '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(statistics, configured.stdout);
+            const ink = [
+                '--handwriting-profile', statistics,
+                '--glyph-stroke', '=', '600', '500', '1800', '3000',
+                '250', '#123456',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const canonical = render(dir, '> a a\n= a', format, ink);
+                assert.equal(canonical.result.status, 0,
+                    canonical.result.stderr);
+                const expected = readFileSync(canonical.output);
+                for (const source of [
+                    '> a\n  a\n=\na', '> a\n   a\n=\na',
+                ]) {
+                    const joined = render(dir, source, format, ink);
+                    assert.equal(joined.result.status, 0,
+                        joined.result.stderr);
+                    assert.deepEqual(readFileSync(joined.output), expected,
+                        'literal equal glyph must set physical row pitch');
+                }
+                const missing = render(dir, '> a\n  a\n=\na', format,
+                    ['--handwriting-profile', statistics]);
+                assert.notEqual(missing.result.status, 0);
+                assert.match(missing.result.stderr,
+                    /missing authored glyph shapes.*U\+003D/);
+                assert.deepEqual(readFileSync(missing.output), expected,
+                    'refused literal equals must preserve existing export');
+                const heading = render(dir, 'a\n=\na', format,
+                    ['--handwriting-profile', statistics]);
+                assert.equal(heading.result.status, 0,
+                    heading.result.stderr);
+                assert.notDeepEqual(readFileSync(heading.output), expected,
+                    'actual Setext syntax still has no equals-sign ink');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

@@ -139,6 +139,49 @@ fn literal_indent_before_setext_mark_keeps_its_glyph_pitch() {
 }
 
 #[test]
+fn quote_continuation_cannot_hide_literal_setext_marker_height() {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let tall = ScalarStatistics {
+        maximum: 25_000, mean: 25_000, median: 25_000,
+        minimum: 25_000, standard_deviation: 0,
+    };
+    let statistics = HandwritingStatisticsProfile::baseline(1)
+        .with_glyph("=", DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+        .expect("valid literal equal glyph height");
+    let render = |text: &str| {
+        let source = FlowSource::new(FlowFormat::Markdown, text)
+            .expect("valid quoted Markdown");
+        super::layout_flow(
+            &source, &NotebookProfile::default(), Some(&statistics),
+            super::HeadingDecoration::default(),
+        ).expect("quoted and literal rows render")
+    };
+    let canonical = render("> a a\n= a");
+    assert_eq!(canonical.0.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(), ["a a", "= a"]);
+    for continued in ["> a\n  a\n=\na", "> a\n   a\n=\na"] {
+        let actual = render(continued);
+        assert_eq!(actual.0.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>(), canonical.0.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>(), "source: {continued:?}");
+        assert_eq!(actual.1, canonical.1,
+            "only the original quote row receives a bar");
+        assert_eq!(actual.0[1].origin_um.1 - actual.0[0].origin_um.1,
+            29_000, "literal equal height determines the common row pitch");
+    }
+}
+
+#[test]
 fn indented_blockquote_lines_keep_the_quote_rule_and_exact_ink() {
     use atrament_notebook_profile::NotebookProfile;
 

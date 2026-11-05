@@ -1508,19 +1508,23 @@ fn measured_pitch(
     let mut fence = None;
     let mut pending_setext = false;
     let mut pending_list = false;
+    let mut pending_quote = false;
     for raw in source.text.lines() {
         let visible = if source.format == FlowFormat::Markdown {
             if markdown_fence_transition(&mut fence, raw) {
                 pending_setext = false;
                 pending_list = false;
+                pending_quote = false;
                 continue;
             }
             if fence.is_some() {
                 pending_setext = false;
                 pending_list = false;
+                pending_quote = false;
                 Cow::Borrowed(raw)
             } else if pending_setext && markdown_setext_level(raw).is_some() {
                 pending_setext = false;
+                pending_quote = false;
                 continue;
             } else {
                 let (style, body) = markdown_line(raw);
@@ -1533,12 +1537,19 @@ fn measured_pitch(
                 let list_continuation = pending_list
                     && (2..=3).contains(&indent)
                     && matches!(style, LineStyle::Body);
+                let quote_continuation = pending_quote
+                    && (2..=3).contains(&indent)
+                    && matches!(style, LineStyle::Body)
+                    && markdown_setext_level(raw).is_none();
                 pending_list = !hard_break && (list_continuation
                     || matches!(style, LineStyle::Bullet | LineStyle::Ordered
                         | LineStyle::Task(_)));
-                // Four-space literal rows are also laid out immediately,
-                // leaving no ordinary paragraph for Setext promotion.
-                pending_setext = !list_continuation
+                pending_quote = !hard_break && (quote_continuation
+                    || matches!(style, LineStyle::Quote));
+                // List and quote continuations remain structural blocks,
+                // not body paragraphs eligible for Setext promotion.
+                // Four-space literal rows were also laid out immediately.
+                pending_setext = !list_continuation && !quote_continuation
                     && matches!(style, LineStyle::Body)
                     && indent < 4
                     && !visible.trim_matches(' ').is_empty()
