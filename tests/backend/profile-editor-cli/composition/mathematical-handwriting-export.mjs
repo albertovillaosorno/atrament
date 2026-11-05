@@ -5089,3 +5089,89 @@ test('complete manual lowercase and bilingual marks export as one page',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+// The browser's connected bilingual starter must also work as the exact ink
+// source for the Rust Markdown compiler, not only direct --flow-text export.
+test('connected bilingual Markdown flow preserves both physical page inks',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/connected-markdown-'));
+        try {
+            const library = join(dir, 'connected.tsv');
+            const sourceFile = join(dir, 'notes.md');
+            const output = join(dir, 'notebook.pdf');
+            const rows = fillMissingBilingualBaseline([], 1550, 2450,
+                1100, 250, '#243647', { dx: 0, lift: 0 }, 'cursive');
+            assert.equal(missingBilingualBaseline(rows).length, 0);
+            const bytes = Buffer.from(encodeGlyphLibrary(rows));
+            writeFileSync(library, bytes);
+            const region = ['--flow-region', '30000', '40000',
+                '100000', '23000'];
+            const base = ['--printed-sheet', 'true',
+                '--glyph-file', library, ...region];
+            const first = '# ñ\n- [x] a';
+            const second = '> i\u0301\n¿u?';
+            const markdown = `${first}\n${second}`;
+            const png = (text, page = 1) => {
+                const result = cli('notebook', [...base,
+                    '--flow-markdown', text, '--export-paper', 'png',
+                    '--dpi', '72', '--png-page', String(page)]);
+                assert.equal(result.status, 0, result.stderr.toString());
+                actualPngInk(result.stdout);
+                return result.stdout;
+            };
+            const pageOne = png(markdown);
+            const pageTwo = png(markdown, 2);
+            assert.deepEqual(pageOne, png(first),
+                'heading and task are unchanged by later page breaks');
+            assert.deepEqual(pageTwo, png(second),
+                'quote and punctuation retain page-local authored ink');
+            assert.notDeepEqual(pageOne, pageTwo,
+                'the two pages carry different physical handwriting');
+            const nfc = markdown.replace('i\u0301', 'í');
+            assert.deepEqual(pageOne, png(nfc),
+                'NFC and NFD keys render identical connected page-one ink');
+            assert.deepEqual(pageTwo, png(nfc, 2),
+                'composed accents preserve actual page-two ink');
+
+            const pdfFlags = ['--export-paper', 'pdf',
+                '--pages', '2', '--output', output];
+            const inline = cli('notebook', [...base,
+                '--flow-markdown', markdown, ...pdfFlags]);
+            assert.equal(inline.status, 0, inline.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.match(accepted.toString('latin1'), /\/Count 2\b/);
+
+            const saved = Buffer.from(`\uFEFF${markdown.replaceAll(
+                '\n', '\r\n')}`, 'utf8');
+            writeFileSync(sourceFile, saved);
+            const reopened = cli('notebook', [...base,
+                '--flow-markdown-file', sourceFile, ...pdfFlags,
+                '--replace']);
+            assert.equal(reopened.status, 0,
+                reopened.stderr.toString());
+            assert.deepEqual(readFileSync(output), accepted,
+                'BOM/CRLF source file is physically identical to inline');
+
+            for (const [source, flags, expected] of [
+                ['too few pages', ['--flow-markdown', markdown,
+                    '--pages', '1'], /flow requires 2 physical pages/i],
+                ['missing glyph', ['--flow-markdown', `${markdown}Ω`,
+                    '--pages', '2'], /missing authored glyph/i],
+            ]) {
+                const refused = cli('notebook', [...base, ...flags,
+                    '--export-paper', 'pdf', '--output', output,
+                    '--replace']);
+                assert.notEqual(refused.status, 0, source);
+                assert.match(refused.stderr.toString(), expected);
+                assert.deepEqual(readFileSync(output), accepted,
+                    `${source}: never replace a previously accepted PDF`);
+            }
+            assert.deepEqual(readFileSync(library), bytes,
+                'native layout never modifies the authored glyph library');
+            assert.deepEqual(readFileSync(sourceFile), saved,
+                'native layout never modifies the selected Markdown file');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

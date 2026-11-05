@@ -1158,3 +1158,19 @@ Eleven independently tall authored punctuation keys must affect row pitch
 syntactic marks and synthetic ornaments cannot inherit that height. Over
 500 accepted seeded mixed cases pass. This is defensive measurement
 coverage, not persistent semantic block support.
+
+## Connected bilingual Markdown page replay (partial) — 2026-11-05
+
+The browser-authored 114-key connected bilingual v1 TSV now has a native
+cross-feature regression through the bounded Markdown flow compiler. A
+fixed two-row physical region creates two pages with a heading, checked
+task, blockquote, NFD `i` with acute, and Spanish punctuation. Both native
+transparent PNG pages match independently exported page-local ink, and NFC
+`í` reproduces the same physical strokes. A vector PDF reports two pages;
+a caller-selected BOM/CRLF Markdown file reproduces its exact bytes.
+
+An insufficient one-page request or unknown Greek glyph refuses without
+replacing the accepted PDF or changing either source file. This verifies
+existing authoring and CLI export interoperability, not automatic joins
+between neighboring letters, persisted semantic blocks or notebook edits.
+The finite saved-notebook acceptance criterion remains open.
