@@ -2578,19 +2578,19 @@ function cursiveStem(base: Stroke[], radius: number): Stroke[] {
     ];
 }
 
-// Explicit v/w/z pen entry and exit preserve their exact 2/4/3
-// printed zigzags. Each is one directed pen-down path and needs
-// no invented retrace, intermediate pen lift or automatic word join.
-function cursiveZigzag(base: Stroke[], radius: number): Stroke[] {
+// Explicit v/w/z and smooth s connectors wrap existing directed contours.
+// Their 2/4/3 straight segments or 64 sampled quadratic chords are
+// unchanged. No intermediate pen lifts or adjacent-letter joins are added.
+function cursiveContour(base: Stroke[], radius: number): Stroke[] {
     const first = base[0];
     const last = base.at(-1);
     const glyph = first?.grapheme ?? "";
-    if (!first || !last || !["v", "w", "z"].includes(glyph)
-        || base.length !== (glyph === "v" ? 2 : glyph === "w" ? 4 : 3)
+    const counts: Record<string, number> = { v: 2, w: 4, z: 3, s: 64 };
+    if (!first || !last || base.length !== counts[glyph]
         || base.some((stroke, index) => stroke.grapheme !== glyph
             || (index > 0 && (base[index - 1]!.x2 !== stroke.x1
                 || base[index - 1]!.y2 !== stroke.y1)))) {
-        throw new Error("Cursive v/w/z needs a continuous printed zigzag");
+        throw new Error("Cursive contour needs an uninterrupted source");
     }
     const lead = Math.min(200, Math.round(radius / 5));
     const pen = first.width;
@@ -2599,7 +2599,9 @@ function cursiveZigzag(base: Stroke[], radius: number): Stroke[] {
             if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
                 || point.y - pen / 2 < 0
                 || point.y + pen / 2 > 4500) {
-                throw new Error("Cursive zigzag and pen clip glyph cell");
+                throw new Error(glyph === "s"
+                    ? "Cursive s and pen clip glyph cell"
+                    : "Cursive zigzag and pen clip glyph cell");
             }
         }
         return validateStroke({ grapheme: glyph,
@@ -2786,10 +2788,10 @@ export function geometricStarter(
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
         "i", "í", "j", "l", "t", "f", "n", "ñ", "u", "ú", "ü",
-        "m", "h", "r", "v", "w", "z"]
+        "m", "h", "r", "v", "w", "z", "s"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m or v/w/z glyph");
+            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m, v/w/z or s glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2806,8 +2808,8 @@ export function geometricStarter(
         const base = geometricStarter(g, x, y, r, w, color, pos, "single");
         if (g === "c" || g === "e") return cursiveOpenArc(base, r);
         if (g === "j") return cursiveHook(base, r);
-        if (["v", "w", "z"].includes(g)) {
-            return cursiveZigzag(base, r);
+        if (["v", "w", "z", "s"].includes(g)) {
+            return cursiveContour(base, r);
         }
         if (["i", "í", "l", "t", "f"].includes(g)) {
             return cursiveStem(base, r);
@@ -3910,8 +3912,11 @@ export function createGlyphStrokeEditor(): {
                 zigLines = straightLines(cx, cy, r,
                     chosen.grapheme as "v" | "w" | "z");
             }
-            const zigStart = zigLines[0]?.from;
-            const zigEnd = zigLines.at(-1)?.to;
+            const smoothParts = connected && chosen.grapheme === "s"
+                ? smoothS(cx, cy, r) : null;
+            const contourStart = zigLines[0]?.from ?? smoothParts?.[0]?.[0];
+            const contourEnd = zigLines.at(-1)?.to
+                ?? smoothParts?.at(-1)?.[2];
             const cursiveUp = connected && ["n", "ñ", "h", "r"]
                 .includes(chosen.grapheme);
             const cursiveU = connected && ["u", "ú", "ü"]
@@ -3977,14 +3982,14 @@ export function createGlyphStrokeEditor(): {
                 exit[1] = jHookEnd;
                 exit[2] = { x: jHookEnd.x + lead, y: jHookEnd.y - lead };
             }
-            if (zigStart !== undefined && zigEnd !== undefined) {
+            if (contourStart !== undefined && contourEnd !== undefined) {
                 const entry = connectors[0]!;
-                entry[1] = { x: zigStart.x - lead,
-                    y: zigStart.y + lead };
-                entry[2] = zigStart;
+                entry[1] = { x: contourStart.x - lead,
+                    y: contourStart.y + lead };
+                entry[2] = contourStart;
                 const exit = connectors[2]!;
-                exit[1] = zigEnd;
-                exit[2] = { x: zigEnd.x + lead, y: zigEnd.y - lead };
+                exit[1] = contourEnd;
+                exit[2] = { x: contourEnd.x + lead, y: contourEnd.y - lead };
             }
             for (const [guide, from, to] of connectors) {
                 for (const [axis, value] of [

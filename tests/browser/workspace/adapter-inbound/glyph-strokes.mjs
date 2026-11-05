@@ -9292,3 +9292,76 @@ test("browser manual z previews exact pen path and refuses clipped entry",
             ui.restore();
         }
     });
+
+// The four smooth quadratic arcs already form one ordered ink path.
+test("manual connected s preserves every sampled curve chord", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("s", ...args);
+    const joined = geometricStarter("s", ...args, undefined, "cursive");
+    assert.equal(printed.length, 64);
+    assert.equal(joined.length, 66);
+    assert.deepEqual(joined.slice(1, -1), printed,
+        "the exact four tangent-continuous printed arcs remain untouched");
+    assert.deepEqual(candidatePenPaths(joined, "s").map(
+        ({ first, last }) => [first, last]), [[1, 66]]);
+    assert.deepEqual(joined[0], {
+        grapheme: "s", x1: 2120, y1: 1770,
+        x2: 2320, y2: 1570, width: 250, color: "#243647",
+    });
+    assert.deepEqual(joined.at(-1), {
+        grapheme: "s", x1: 780, y1: 3330,
+        x2: 980, y2: 3130, width: 250, color: "#243647",
+    });
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("s", ...args), printed);
+    assert.throws(() => geometricStarter("s", 1200, 2450,
+        1100, 250, "#243647", undefined, "cursive"), /Shape and pen/);
+    assert.throws(() => geometricStarter("S", ...args,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser manual s previews one smooth contour and preserves refused TSV",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "s-cursive";
+            get("form").dispatch("change");
+            get("character").value = "s";
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-exit",
+                "ideal-rounded"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual s shows ${id}`);
+            }
+            for (const id of ["ideal-approach", "ideal-i-dot",
+                "ideal-rounded-left", "ideal-rounded-right"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "hidden", `manual s does not invent ${id}`);
+            }
+            assert.match(get("ideal-rounded").attributes.get("d"),
+                /^M 2320 1570 Q 1550 1350 780 1900/);
+            assert.equal(get("ideal-entry").attributes.get("x2"), "2320");
+            assert.equal(get("ideal-exit").attributes.get("y1"), "3330");
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, 66);
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("s", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-x").value = "1200";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden", "clipped s hides both connector guides");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "invalid s cannot replace exact saved ink");
+            editor.reset();
+            assert.equal(get("ideal-exit").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });

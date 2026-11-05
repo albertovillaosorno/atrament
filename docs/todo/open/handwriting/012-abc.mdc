@@ -2671,3 +2671,17 @@ Browser SVG/TSV clipping refusal, real Firefox selection/download and
 native Rust vector PDF/transparent PNG replay verify exact authored ink.
 An unknown uppercase `Z` refuses page replacement. This does not finish
 writer-calibrated glyph coverage or cross-letter handwriting joins.
+
+## Opt-in continuous-pen lowercase s — 2026-11-05
+
+Manual `s` connects the existing four tangent-continuous quadratic arcs
+without resampling or changing their 64 directed chords. A bounded lead-in
+and rising terminal exit form one 66-segment ink gesture. The unchanged
+printed S-shaped lowercase form remains separately selectable; no word join
+or hidden pen lift is inferred.
+
+Browser SVG/TSV, atomic clipped-source refusal, actual Firefox selection
+and download, and native Rust vector PDF/transparent PNG replay verify the
+same authored source ink. Missing uppercase `S` refuses output replacement.
+This does not implement full cursive letter spacing, writer calibration or
+cross-letter pen trajectories.
