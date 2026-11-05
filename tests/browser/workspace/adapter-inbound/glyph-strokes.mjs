@@ -3657,6 +3657,30 @@ test("manual Greek zeta and eta keep exact lifted pen paths", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual Greek xi and iota retain exact continuous pen geometry", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, first] of [
+        ["ξ", 64, [2210, 1515]],
+        ["ι", 32, [1330, 1680]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, `${glyph} native segment count`);
+        assert.equal(candidatePenPaths(ink, glyph).length, 1,
+            `${glyph} stays one continuous directed pen path`);
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("ξ", ...args),
+        geometricStarter("z", ...args), "xi cannot borrow Latin z");
+    assert.notDeepEqual(geometricStarter("ι", ...args),
+        geometricStarter("i", ...args), "iota has no Latin i dot");
+    assert.throws(() => geometricStarter("Ξ", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5454,7 +5478,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "⋅", "∗", "∖", "∦", "⌊", "⌋", "⌈", "⌉",
         "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
         "δ", "σ", "ρ", "τ", "ε", "ω", "κ", "χ",
-        "φ", "ψ", "ζ", "η", "°", "%", "$", "€",
+        "φ", "ψ", "ζ", "η", "ξ", "ι", "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",

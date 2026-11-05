@@ -693,7 +693,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 // A full text/math fill currently sits just 12 strokes below the native cap.
 const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
-    "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η",
+    "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1277,6 +1277,19 @@ function mathParts(
         line(-0.65, -0.7, -0.65, 0.65),
         curve([-0.65, -0.55], [0, -0.9], [0.6, -0.4]),
         curve([0.6, -0.4], [0.7, 0.2], [0.6, 1.05]),
+    ];
+    // Xi joins four successive curved turns into a descending exit.
+    // Iota has one uninterrupted short rising hook without Latin i's
+    // dot; neither glyph takes another authored Unicode key as ink.
+    if (glyph === "ξ") return [
+        curve([0.6, -0.85], [-0.1, -1], [-0.6, -0.55]),
+        curve([-0.6, -0.55], [-0.85, -0.05], [0.45, 0.1]),
+        curve([0.45, 0.1], [0.85, 0.4], [-0.4, 0.65]),
+        curve([-0.4, 0.65], [-0.55, 0.9], [0.35, 1.05]),
+    ];
+    if (glyph === "ι") return [
+        curve([-0.2, -0.7], [-0.4, 0.3], [-0.1, 0.55]),
+        curve([-0.1, 0.55], [0.1, 0.85], [0.45, 0.55]),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

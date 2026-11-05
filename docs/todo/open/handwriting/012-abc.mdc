@@ -2074,3 +2074,17 @@ The manual starters do not alter the near-cap 93-symbol automatic math fill.
 Browser Unicode TSV geometry, live Firefox export, native Rust PDF/transparent
 PNG, clipping refusal and preservation of previous output for missing glyphs
 are tested. This is partial glyph coverage, not a trained writing model.
+
+## Manually selected Greek xi and iota ink (partial) — 2026-11-04
+
+The manually selected lowercase Greek `ξ` and `ι` now have independent
+Unicode pen geometry. Xi joins four curved turns into one continuous
+64-segment native path; dotless iota uses two connected quadratic curves
+(32 sampled segments) without borrowing the distinct Latin `i` outline.
+Uppercase `Ξ` remains unsupported rather than silently substituted.
+
+Neither glyph changes the bounded 93-symbol automatic math fill. Browser
+geometry and exact TSV, real Firefox export, Rust native PDF/transparent
+PNG and refusal to replace accepted files with missing shapes have focused
+regressions. This still does not constitute a full Greek font or calibrated
+handwriting engine.
