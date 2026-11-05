@@ -4429,6 +4429,42 @@ test("dotted and triple comparisons preserve mirrored lifted ink", () => {
         /supported exact geometric glyph/);
 });
 
+test("stacked comparisons keep distinct pen paths and equality bar", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const lessOverGreater = [[2265, 1482, 1055, 1790],
+        [1055, 1790, 2265, 2098], [835, 2802, 2045, 3110],
+        [2045, 3110, 835, 3418]];
+    const greaterOverLess = [[835, 1482, 2045, 1790],
+        [2045, 1790, 835, 2098], [2265, 2802, 1055, 3110],
+        [1055, 3110, 2265, 3418]];
+    for (const [glyph, contour, equal] of [
+        ["≶", lessOverGreater, false],
+        ["≷", greaterOverLess, false],
+        ["⋚", lessOverGreater, true],
+        ["⋛", greaterOverLess, true],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.deepEqual(ink.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), equal
+            ? [...contour, [945, 2450, 2155, 2450]] : contour);
+        assert.deepEqual(candidatePenPaths(ink, glyph).map(
+            ({ first, last }) => [first, last]), equal
+            ? [[1, 2], [3, 4], [5, 5]] : [[1, 2], [3, 4]]);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.ok(ink.every(({ grapheme }) => grapheme === glyph));
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"), /fit inside glyph cell/);
+        assert.throws(() => geometricStarter(glyph, 1550, 2450,
+            equal ? 500 : 350, 250, "#243647"), /pen-clearance/);
+    }
+    assert.notDeepEqual(geometricStarter("≶", ...args),
+        geometricStarter("≪", ...args));
+    assert.notDeepEqual(geometricStarter("⋚", ...args),
+        geometricStarter("≤", ...args));
+    assert.throws(() => geometricStarter("⋜", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [

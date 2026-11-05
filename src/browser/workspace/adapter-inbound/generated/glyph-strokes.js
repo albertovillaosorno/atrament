@@ -603,6 +603,7 @@ const MANUAL_MATH_GLYPHS = [
     "⊏", "⊐", "⊑", "⊒", "⊞", "⊟", "⊠", "⊡",
     "≺", "≻", "≼", "≽", "⊲", "⊳", "⊴", "⊵",
     "⋖", "⋗", "⋘", "⋙",
+    "≶", "≷", "⋚", "⋛",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -917,6 +918,20 @@ function mathParts(cx, cy, radius, glyph) {
             line(center + mirror * 0.15, -0.72, center - mirror * 0.15, 0),
             line(center - mirror * 0.15, 0, center + mirror * 0.15, 0.72),
         ]);
+    }
+    // Stacked trichotomy signs keep two independently joined angular
+    // comparisons, with a separately lifted middle equality bar for ⋚/⋛.
+    // Exact glyphs do not alias the single <, > or ≤/≥ constructions.
+    if (["≶", "≷", "⋚", "⋛"].includes(glyph)) {
+        const upper = glyph === "≷" || glyph === "⋛" ? -1 : 1;
+        return [
+            line(upper * 0.65, -0.88, -upper * 0.45, -0.6),
+            line(-upper * 0.45, -0.6, upper * 0.65, -0.32),
+            line(-upper * 0.65, 0.32, upper * 0.45, 0.6),
+            line(upper * 0.45, 0.6, -upper * 0.65, 0.88),
+            ...(["⋚", "⋛"].includes(glyph)
+                ? [line(-0.55, 0, 0.55, 0)] : []),
+        ];
     }
     // Doubled chevrons are two separately lifted, connected comparisons.
     // Negated strict signs keep their exact positive contour and then lift
@@ -2662,6 +2677,10 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         }
         if (["⋘", "⋙"].includes(g) && radius * 0.3 < pen + 60) {
             throw new Error("Triple comparison needs pen-clearance");
+        }
+        if (["≶", "≷", "⋚", "⋛"].includes(g) && radius
+            * (["⋚", "⋛"].includes(g) ? 0.32 : 0.64) < pen + 60) {
+            throw new Error("Stacked comparison needs pen-clearance");
         }
         if (["⊞", "⊟", "⊠", "⊡"].includes(g)
             && radius * 0.38 < pen + 80) {
