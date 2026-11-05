@@ -593,7 +593,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 // Additional exact notation is manually selected, not automatically filled.
 // A full text/math fill currently sits just 12 strokes below the native cap.
 const MANUAL_MATH_GLYPHS = [
-    "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
+    "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ", "ε", "ω",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1183,6 +1183,23 @@ function mathParts(cx, cy, radius, glyph) {
             line(-0.75, -0.55, 0.75, -0.55),
             line(0.15, -0.55, 0.15, 0.65),
             line(0.15, 0.65, 0.65, 0.75),
+        ];
+    // Epsilon's left-facing open loop lifts for its separate middle bar.
+    // Omega draws two joined bowls and a short lifted baseline foot;
+    // neither silently borrows Latin e or w handwriting.
+    if (glyph === "ε")
+        return [
+            curve([0.75, -0.7], [-0.75, -1], [-0.65, 0]),
+            curve([-0.65, 0], [-0.65, 0.85], [0.75, 0.7]),
+            line(-0.55, 0, 0.45, 0),
+        ];
+    if (glyph === "ω")
+        return [
+            curve([-0.85, -0.65], [-0.85, 0.75], [-0.45, 0.75]),
+            curve([-0.45, 0.75], [-0.05, 0.75], [0, -0.15]),
+            curve([0, -0.15], [0.05, 0.75], [0.45, 0.75]),
+            curve([0.45, 0.75], [0.85, 0.75], [0.85, -0.65]),
+            line(-0.75, 0.85, -0.35, 0.85),
         ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

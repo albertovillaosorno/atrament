@@ -3562,6 +3562,26 @@ test("manual Greek rho and tau keep independent pen paths", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual Greek epsilon and omega keep distinct pen lifts", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count] of [["ε", 33], ["ω", 65]]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " exact sampled strokes");
+        assert.equal(candidatePenPaths(ink, glyph).length, 2,
+            glyph + " keeps its independent crossbar or foot");
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("ε", ...args),
+        geometricStarter("e", ...args), "epsilon is not Latin e");
+    assert.notDeepEqual(geometricStarter("ω", ...args),
+        geometricStarter("w", ...args), "omega is not Latin w");
+    assert.throws(() => geometricStarter("ν", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5358,7 +5378,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "↖", "↙", "⇐", "↦", "↤", "∣", "∤", "′", "″", "‴",
         "⋅", "∗", "∖", "∦", "⌊", "⌋", "⌈", "⌉",
         "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
-        "δ", "σ", "ρ", "τ", "°", "%", "$", "€",
+        "δ", "σ", "ρ", "τ", "ε", "ω", "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",

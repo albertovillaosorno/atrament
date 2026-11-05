@@ -2021,3 +2021,16 @@ untouched. Browser pen geometry, glyph-cell bounds, real Firefox TSV
 and native Rust PDF/transparent PNG export, plus atomic missing-glyph
 refusal, have focused regressions. The complete Greek alphabet and
 saved notebook text editing remain unfinished.
+
+## Manually selected Greek epsilon and omega ink (partial) — 2026-11-04
+
+The exact lowercase `ε` and `ω` are manually selectable Greek math
+starters with no Latin letter substitution. Epsilon uses two connected
+quadratic arcs and a separately lifted crossbar (33 sampled strokes).
+Omega has four connected curved bowl arcs with a lifted lower foot
+(65 directed native segments). Each remains an independent Unicode key.
+
+Neither is added to the capped automatic 93-key math fill. Real browser
+SVG and exact Unicode TSV, Firefox export to native PDF/PNG, and Rust
+missing-glyph refusal without replacing an accepted file are tested.
+The broader Greek alphabet and persisted text layout remain unfinished.
