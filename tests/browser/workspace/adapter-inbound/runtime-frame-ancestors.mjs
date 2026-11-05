@@ -14511,7 +14511,7 @@ test(
 );
 
 test(
-    "Firefox cursive c/e and acute forms download native pen ink",
+    "Firefox cursive c/e/i and acute forms download native pen ink",
     { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
@@ -14551,11 +14551,15 @@ test(
                     change("circle-radius", "700");
                     const constructed = [];
                     const guides = [];
-                    for (const [form, exact] of [
-                        ["c-cursive", "c"], ["e-cursive", "e"],
-                        ["é-cursive", "é"],
-                        ["e\u0301-cursive", "e\u0301"],
+                    for (const [form, exact, radius] of [
+                        ["c-cursive", "c", 700], ["e-cursive", "e", 700],
+                        ["é-cursive", "é", 700],
+                        ["e\u0301-cursive", "e\u0301", 700],
+                        ["i-cursive", "i", 1100],
+                        ["í-cursive", "í", 1100],
+                        ["i\u0301-cursive", "i\u0301", 1100],
                     ]) {
+                        change("circle-radius", String(radius));
                         change("form", form);
                         change("character", exact);
                         guides.push({
@@ -14567,6 +14571,12 @@ test(
                             bar: get("ideal-e-bar")
                                 .getAttribute("visibility"),
                             acute: get("ideal-accent")
+                                .getAttribute("visibility"),
+                            stem: get("ideal-i-stem")
+                                .getAttribute("visibility"),
+                            dot: get("ideal-i-dot")
+                                .getAttribute("visibility"),
+                            entry: get("ideal-entry")
                                 .getAttribute("visibility"),
                         });
                         get("construct").click();
@@ -14582,8 +14592,8 @@ test(
                         };
                         HTMLAnchorElement.prototype.click = function () {};
                         get("save").click();
-                        change("circle-radius", "1400");
-                        const clipped = get("ideal-c-loop")
+                        change("circle-radius", "700");
+                        const clipped = get("ideal-i-stem")
                             .getAttribute("visibility");
                         get("construct").click();
                         const refused = get("status").textContent;
@@ -14604,26 +14614,40 @@ test(
             assert.equal(response.type, "success");
             assert.equal(response.result.type, "string");
             const actual = JSON.parse(response.result.value);
-            for (const guide of actual.guides) {
+            for (const guide of actual.guides.slice(0, 4)) {
                 assert.equal(guide.arcVisible, "visible");
-                assert.ok(["visible", "hidden"].includes(guide.approach));
                 assert.equal(guide.bar, "hidden");
                 assert.match(guide.arc, / A 700 700 0 1 0 /);
             }
+            for (const guide of actual.guides.slice(4)) {
+                assert.equal(guide.arcVisible, "hidden");
+                assert.equal(guide.stem, "visible");
+                assert.equal(guide.entry, "visible");
+                assert.equal(guide.approach, "hidden");
+            }
             assert.deepEqual(actual.guides.map((guide) => guide.approach),
-                ["hidden", "visible", "visible", "visible"]);
+                ["hidden", "visible", "visible", "visible",
+                    "hidden", "hidden", "hidden"]);
             assert.deepEqual(actual.guides.map((guide) => guide.acute),
-                ["hidden", "hidden", "visible", "visible"]);
+                ["hidden", "hidden", "visible", "visible",
+                    "hidden", "visible", "visible"]);
+            assert.deepEqual(actual.guides.slice(4).map((g) => g.dot),
+                ["visible", "hidden", "hidden"]);
             assert.match(actual.constructed[0], /38 sampled segments/);
             assert.match(actual.constructed[1], /39 sampled segments/);
             assert.match(actual.constructed[2], /40 sampled segments/);
             assert.match(actual.constructed[3], /40 sampled segments/);
+            for (const status of actual.constructed.slice(4)) {
+                assert.match(status, /4 sampled segments/);
+            }
             assert.equal(actual.clipped, "hidden");
-            assert.match(actual.refused, /Cursive e and pen clip/);
-            const glyphs = ["c", "e", "é", "e\u0301"];
-            const expected = encodeGlyphLibrary(glyphs.flatMap((glyph) =>
-                geometricStarter(glyph, 1550, 2450, 700, 250,
-                    "#243647", undefined, "cursive")));
+            assert.match(actual.refused,
+                /Dotted i requires visible pen-clearance/);
+            const glyphs = ["c", "e", "é", "e\u0301", "i", "í", "i\u0301"];
+            const expected = encodeGlyphLibrary(glyphs.flatMap(
+                (glyph, index) => geometricStarter(glyph, 1550, 2450,
+                    index < 4 ? 700 : 1100, 250, "#243647",
+                    undefined, "cursive")));
             assert.deepEqual(actual.files, [expected, expected]);
             assert.deepEqual(requests, baseline,
                 "glyph edits and deliberate downloads stay browser-local");
@@ -14646,10 +14670,11 @@ test(
             const opened = invoke("glyphs", "--profile", library);
             assert.equal(opened.status, 0, opened.stderr.toString());
             assert.equal(opened.stdout.toString(), expected);
+            const text = glyphs.join("");
             for (const format of ["pdf", "png"]) {
                 const result = invoke("notebook", "--printed-sheet",
                     "true", "--glyph-file", library,
-                    "--flow-text", "ceée\u0301\nceée\u0301",
+                    "--flow-text", `${text}\n${text}`,
                     "--export-paper", format,
                     ...(format === "png" ? ["--dpi", "72"] : []));
                 assert.equal(result.status, 0, result.stderr.toString());
@@ -14657,7 +14682,7 @@ test(
                     assert.match(result.stdout.toString("latin1"),
                         /^%PDF-1\.4/);
                     assert.equal((result.stdout.toString("latin1")
-                        .match(/ m\n/g) ?? []).length, 314);
+                        .match(/ m\n/g) ?? []).length, 338);
                 } else {
                     assert.deepEqual(result.stdout.subarray(0, 8),
                         Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));

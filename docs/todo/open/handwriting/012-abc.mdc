@@ -2505,3 +2505,18 @@ atomic refusal regressions pass; actual Firefox selection and download
 replay to the exact Rust UTF-8 library, vector PDF and transparent PNG.
 Both c/e families remain optional local geometric starters rather than
 a completed writer-calibrated joining or word-layout system.
+
+## Explicit continuous-pen i/í starters (partial) — 2026-11-05
+
+The manual geometric picker now offers separately selected connected-stem
+`i`, `í` and exact NFD `i` plus combining acute. A short rising entry,
+the unchanged downward printed stem and an upward exit form one ordered
+three-segment pen gesture; the dot or acute remains a distinct lifted
+fourth segment. The ordinary printed two-segment forms stay unchanged.
+
+The SVG preview shows the authored entry, stem, exit and correct detached
+mark. Browser tests cover directed path continuity, exact Unicode TSV,
+invalid dot clearance and unchanged saved draft on refusal; native Rust
+CLI PDF and transparent PNG replay the two-line Unicode sequence, and real
+Firefox checks selection, download and independent export. This is local
+opt-in geometry, not writer-calibrated joins between adjacent letters.

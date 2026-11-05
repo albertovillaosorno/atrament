@@ -680,3 +680,13 @@ basis with cursive `e` but does not add the e's crossing. Real Firefox TSV
 replay, Rust PDF/PNG output and exact directed pen path tests validate the
 new opt-in shape. Inter-letter spacing, word-level joins, and correlated
 writer signatures are still unimplemented.
+
+## Opt-in connected i/í with deliberate pen lift (partial) — 2026-11-05
+
+The manual `i`, NFC `í` and NFD `i` plus acute variants now combine a rising
+entry, the original downward stem and a short exit into one directed pen
+path; the separate dot or acute starts another path. Printed shapes are
+unchanged. Browser, Firefox, exact native TSV, vector PDF and transparent
+PNG checks cover both pen groups and an invalid-dot-clearance refusal.
+This is still not automatic letter joining, persistent analytic geometry or
+seeded correlated variation over a line of text.

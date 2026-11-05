@@ -8399,3 +8399,86 @@ test("browser manual cursive c SVG and download are exact", async () => {
         ui.restore();
     }
 });
+
+test("manual continuous-pen i/í retain directed body and lifted marks", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const glyph of ["i", "í", "i\u0301"]) {
+        const printed = geometricStarter(glyph, ...args);
+        const cursive = geometricStarter(glyph, ...args,
+            undefined, "cursive");
+        assert.equal(printed.length, 2);
+        assert.equal(cursive.length, 4);
+        assert.deepEqual(candidatePenPaths(cursive, glyph).map(
+            ({ first, last }) => [first, last]), [[1, 3], [4, 4]],
+        "the dot or acute requires exactly one deliberate pen lift");
+        assert.deepEqual(cursive[1], printed[0],
+            "opt-in entry/exit preserve the exact printed downstroke");
+        assert.deepEqual(cursive[3], printed[1],
+            "the existing dot or acute is not replaced or joined");
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(cursive)),
+            cursive, "native TSV keeps exact Unicode identity and pen order");
+        assert.deepEqual(geometricStarter(glyph, ...args), printed,
+            "choosing cursive must never mutate the printed baseline");
+    }
+    assert.deepEqual(geometricStarter("i\u0301", ...args,
+        undefined, "cursive").map((s) => ({ ...s, grapheme: "í" })),
+    geometricStarter("í", ...args, undefined, "cursive"),
+    "NFC and NFD are distinct keys for identical physical geometry");
+    assert.throws(() => geometricStarter("i", 1550, 2450, 700,
+        250, "#243647", undefined, "cursive"),
+    /Dotted i requires visible pen-clearance/);
+    assert.throws(() => geometricStarter("I", ...args,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser manual cursive i/í guides, exact TSV and refusal", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("form").value = "i-cursive";
+        get("form").dispatch("change");
+        for (const part of ["ideal-entry", "ideal-exit",
+            "ideal-i-stem", "ideal-i-dot"]) {
+            assert.equal(get(part).attributes.get("visibility"),
+                "visible", `manual i exposes ${part}`);
+        }
+        assert.equal(get("ideal-approach").attributes.get("visibility"),
+            "hidden", "i has no e-style interior crossing");
+        assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+            "hidden", "i has no circular arc");
+        assert.equal(get("ideal-entry").attributes.get("x2"), "1550");
+        assert.equal(get("ideal-entry").attributes.get("y2"), "2010");
+        get("character").value = "i";
+        get("character").dispatch("input");
+        get("construct").dispatch("click");
+        get("form").value = "i\u0301-cursive";
+        get("form").dispatch("change");
+        get("character").value = "i\u0301";
+        get("character").dispatch("input");
+        assert.equal(get("ideal-i-dot").attributes.get("visibility"),
+            "hidden", "the acute replaces the disconnected dot");
+        assert.equal(get("ideal-accent").attributes.get("visibility"),
+            "visible");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        const ink = ["i", "i\u0301"].flatMap((g) => geometricStarter(
+            g, 1550, 2450, 1100, 250, "#243647",
+            undefined, "cursive"));
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            ink);
+        get("circle-radius").value = "700";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "hidden", "clipped dot gap cannot leave a stale guide");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            ink, "invalid cursive marks leave the authored draft intact");
+        editor.reset();
+        assert.equal(get("ideal-exit").attributes.get("visibility"),
+            "hidden", "reset clears manual continuous-pen guide");
+    } finally {
+        ui.restore();
+    }
+});
