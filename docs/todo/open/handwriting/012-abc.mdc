@@ -2388,3 +2388,16 @@ Browser geometry, clipping and TSV roundtrip regressions, native Rust
 PDF/transparent PNG and missing-key atomic refusal tests, and live
 Firefox composition cover these additions. The 93-key automatic math
 fill is still unchanged; complete handwriting synthesis remains open.
+
+## Exact square subset and superset family (partial) — 2026-11-05
+
+Manual `⊏`, `⊐`, `⊑` and `⊒` are now independent exact Unicode
+three-sided open pen contours. The two equal-or-square forms include a
+separate, deliberately lifted underbar and refuse insufficient clearance;
+these do not borrow the curved `⊂`/`⊃` or square lattice `⊓`/`⊔` ink.
+
+Browser micrometre endpoints, directed pen-paths, TSV, bad-placement and
+clearance checks, native Rust PDF/transparent PNG, missing-key atomic
+refusal, and live Firefox export cover all four new opt-in shapes. The
+93-key automatic math fill is unchanged; baseline font synthesis and
+calibrated personal handwriting remain open.

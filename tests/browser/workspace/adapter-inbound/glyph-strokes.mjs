@@ -4224,7 +4224,42 @@ test("square lattice meet and join retain three connected sides", () => {
         assert.throws(() => geometricStarter(glyph, 100, 2450,
             1100, 250, "#243647"), /fit inside glyph cell/);
     }
-    assert.throws(() => geometricStarter("⊑", ...args),
+    assert.throws(() => geometricStarter("⊟", ...args),
+        /supported exact geometric glyph/);
+});
+
+test("square subset and superset retain exact directed contours", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const cases = [
+        ["⊏", [[2342, 1768, 758, 1768], [758, 1768, 758, 3132],
+            [758, 3132, 2342, 3132]], [[1, 3]]],
+        ["⊐", [[758, 1768, 2342, 1768], [2342, 1768, 2342, 3132],
+            [2342, 3132, 758, 3132]], [[1, 3]]],
+        ["⊑", [[2342, 1768, 758, 1768], [758, 1768, 758, 3132],
+            [758, 3132, 2342, 3132], [758, 3495, 2342, 3495]],
+        [[1, 3], [4, 4]]],
+        ["⊒", [[758, 1768, 2342, 1768], [2342, 1768, 2342, 3132],
+            [2342, 3132, 758, 3132], [2342, 3495, 758, 3495]],
+        [[1, 3], [4, 4]]],
+    ];
+    for (const [glyph, expected, paths] of cases) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.deepEqual(ink.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), expected);
+        assert.deepEqual(candidatePenPaths(ink, glyph).map(
+            ({ first, last }) => [first, last]), paths,
+            "the optional underbar requires a deliberate pen lift");
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"), /fit inside glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("⊏", ...args),
+        geometricStarter("⊂", ...args),
+        "square subset cannot borrow rounded subset ink");
+    assert.throws(() => geometricStarter("⊑", 1550, 2450,
+        500, 250, "#243647"), /pen-clearance/);
+    assert.throws(() => geometricStarter("⊟", ...args),
         /supported exact geometric glyph/);
 });
 

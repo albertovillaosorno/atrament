@@ -600,6 +600,7 @@ const MANUAL_MATH_GLYPHS = [
     "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐", "∮", "∬", "∭",
     "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
     "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘", "⋂", "⋃", "⋀", "⋁", "⊓", "⊔",
+    "⊏", "⊐", "⊑", "⊒",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -941,6 +942,21 @@ function mathParts(cx, cy, radius, glyph) {
             line(-0.75, -sign * 0.72, 0.75, -sign * 0.72),
             line(0.75, -sign * 0.72, 0.75, sign * 0.72),
         ];
+    }
+    // Square subset/superset are connected three-sided open contours.
+    // Equal-or-square variants lift for a physically separate underbar;
+    // neither direction borrows rounded subset nor square lattice ink.
+    if (["⊏", "⊐", "⊑", "⊒"].includes(glyph)) {
+        const mirror = glyph === "⊐" || glyph === "⊒" ? -1 : 1;
+        const subset = [
+            line(mirror * 0.72, -0.62, -mirror * 0.72, -0.62),
+            line(-mirror * 0.72, -0.62, -mirror * 0.72, 0.62),
+            line(-mirror * 0.72, 0.62, mirror * 0.72, 0.62),
+        ];
+        if (glyph === "⊑" || glyph === "⊒") {
+            subset.push(line(-mirror * 0.72, 0.95, mirror * 0.72, 0.95));
+        }
+        return subset;
     }
     // N-ary logical AND/OR uses exact, independently selected wide wedges,
     // not implicit enlargement or substitution of ordinary ∧/∨ ink.
@@ -2554,6 +2570,9 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         if (["⊕", "⊗", "⊙", "⊖", "⊘"].includes(g)
             && radius < 2 * pen) {
             throw new Error("Circled math requires inner pen-clearance");
+        }
+        if (["⊑", "⊒"].includes(g) && radius * 0.33 < pen + 60) {
+            throw new Error("Square subset underbar needs pen-clearance");
         }
         if (g === "÷" && radius * 0.58 < pen + 100) {
             throw new Error("Division dots need visible pen-clearance");
