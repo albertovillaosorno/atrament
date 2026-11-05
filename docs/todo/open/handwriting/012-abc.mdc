@@ -2758,3 +2758,21 @@ refusal without discarding accepted ink. Native Rust tests audit the exact
 exercises both new manual choices and replays actual downloaded ink through
 Rust. Printed `d`/`q` remain unchanged, and unauthored uppercase `D`/`Q`
 refuse overwrite. This is not a trained or calibrated cursive font.
+
+## Opt-in continuous-pen lowercase x — 2026-11-05
+
+The manual lowercase `x` variant preserves both exactly authored printed
+crossing diagonals. A short upper-left entry precedes the complete first
+stroke; one deliberate half-diagonal retrace reaches its central crossing,
+then another reaches the upper-right start of the second printed stroke.
+The pen follows that unchanged stroke to the lower-left and exits upward.
+Six integer TSV segments form one directed pen gesture, without a hidden
+lift or automatically inferred neighboring-letter connection.
+
+The SVG guide separately displays both retraces, and browser tests verify
+exact printed segment preservation, TSV roundtrip and clipped-entry atomic
+refusal. Firefox downloads the actual authored ink for Rust PDF and
+transparent PNG replay. A native test confirms exact `x` export and safe
+refusal to replace a page when uppercase `X` was not authored. This does
+not persist stroke direction as a high-level curve or complete cursive
+joining across words; the P1 glyph task remains open.

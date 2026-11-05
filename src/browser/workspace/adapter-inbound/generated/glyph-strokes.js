@@ -2744,6 +2744,49 @@ function cursiveK(base, radius) {
         draw(finish, { x: finish.x + lead, y: finish.y - lead }),
     ];
 }
+// An optional lowercase x traces both original diagonals without a pen lift.
+// The pen returns to their exact crossing on the first diagonal, then
+// retraces the upper half of the second before drawing it in its printed
+// direction. No hidden connector or neighboring-letter join is inferred.
+function cursiveCross(base, radius) {
+    if (base.length !== 2 || base.some((line) => line.grapheme !== "x")) {
+        throw new Error("Cursive x requires two printed diagonals");
+    }
+    const [falling, rising] = base;
+    const crossing = {
+        x: Math.round((falling.x1 + falling.x2) / 2),
+        y: Math.round((falling.y1 + falling.y2) / 2),
+    };
+    if (falling.x1 !== rising.x2 || falling.x2 !== rising.x1
+        || falling.y1 !== rising.y1 || falling.y2 !== rising.y2
+        || rising.width !== falling.width || rising.color !== falling.color) {
+        throw new Error("Cursive x needs symmetric crossing diagonals");
+    }
+    const lead = Math.min(200, Math.round(radius / 5));
+    const pen = falling.width;
+    const draw = (from, to) => {
+        for (const point of [from, to]) {
+            if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
+                || point.y - pen / 2 < 0
+                || point.y + pen / 2 > 4500) {
+                throw new Error("Cursive x connector and pen clip glyph cell");
+            }
+        }
+        return validateStroke({ grapheme: "x",
+            x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+            width: pen, color: falling.color });
+    };
+    const start = { x: falling.x1, y: falling.y1 };
+    const lowerRight = { x: falling.x2, y: falling.y2 };
+    const upperRight = { x: rising.x1, y: rising.y1 };
+    const finish = { x: rising.x2, y: rising.y2 };
+    return [
+        draw({ x: start.x - lead, y: start.y + lead }, start),
+        falling, draw(lowerRight, crossing), draw(crossing, upperRight),
+        rising, draw(finish, { x: finish.x + lead,
+            y: finish.y - lead }),
+    ];
+}
 // Optional j keeps its straight stem and sampled hooked descender in
 // one directed pen gesture. Its dot must remain a separate pen lift.
 // This does not connect neighboring glyphs or change the printed j.
@@ -2904,10 +2947,10 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
         "i", "í", "j", "l", "t", "f", "n", "ñ", "u", "ú", "ü",
-        "m", "h", "r", "v", "w", "z", "s", "y", "k", "b", "p", "d", "q"]
+        "m", "h", "r", "v", "w", "z", "s", "y", "k", "x", "b", "p", "d", "q"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m, v/w/z, s/y/k/b/p/d/q glyph");
+            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m, v/w/z, s/y/k/x/b/p/d/q glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2930,6 +2973,8 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
             return cursiveFork(base, r);
         if (g === "k")
             return cursiveK(base, r);
+        if (g === "x")
+            return cursiveCross(base, r);
         if (g === "b" || g === "p")
             return cursiveLeftBowl(base, r);
         if (g === "d" || g === "q")
@@ -3927,6 +3972,8 @@ export function createGlyphStrokeEditor() {
             const cursiveY = connected && chosen.grapheme === "y";
             const yLines = cursiveY ? straightLines(cx, cy, r, "y") : [];
             const cursiveKForm = connected && chosen.grapheme === "k";
+            const cursiveX = connected && chosen.grapheme === "x";
+            const xLines = cursiveX ? straightLines(cx, cy, r, "x") : [];
             const cursiveLeftBowl = connected && ["b", "p"]
                 .includes(chosen.grapheme);
             const cursiveRightBowl = connected && ["d", "q"]
@@ -4045,6 +4092,21 @@ export function createGlyphStrokeEditor() {
                 exit[2] = { x: kLower.to.x + lead,
                     y: kLower.to.y - lead };
             }
+            if (cursiveX && xLines.length === 2) {
+                const first = xLines[0];
+                const second = xLines[1];
+                const entry = connectors[0];
+                entry[1] = { x: first.from.x - lead,
+                    y: first.from.y + lead };
+                entry[2] = first.from;
+                const retrace = connectors[1];
+                retrace[1] = first.to;
+                retrace[2] = { x: cx, y: cy };
+                const exit = connectors[2];
+                exit[1] = second.to;
+                exit[2] = { x: second.to.x + lead,
+                    y: second.to.y - lead };
+            }
             if (cursiveLeftBowl) {
                 const leftKind = chosen.grapheme;
                 const tall = loopStem(cx, cy, r, leftKind);
@@ -4080,7 +4142,7 @@ export function createGlyphStrokeEditor() {
                 guide.setAttribute("stroke", color.value);
                 guide.setAttribute("visibility", connected &&
                     (guide !== idealApproach || cursiveE || cursiveUp
-                        || cursiveM || cursiveY || cursiveKForm
+                        || cursiveM || cursiveY || cursiveKForm || cursiveX
                         || cursiveLeftBowl || cursiveRightBowl
                         || ["a", "á"].includes(chosen.grapheme))
                     ? shown : "hidden");
@@ -4207,6 +4269,13 @@ export function createGlyphStrokeEditor() {
                 roundedLeft.setAttribute("x2", String(kUpper.to.x));
                 roundedLeft.setAttribute("y2", String(kUpper.to.y));
             }
+            if (cursiveX && xLines.length === 2) {
+                const upperRight = xLines[1].from;
+                roundedLeft.setAttribute("x1", String(cx));
+                roundedLeft.setAttribute("y1", String(cy));
+                roundedLeft.setAttribute("x2", String(upperRight.x));
+                roundedLeft.setAttribute("y2", String(upperRight.y));
+            }
             const roundedVisible = active
                 && (isCapital || ["n", "u", "ñ", "ú", "ü", "h", "m", "r",
                     "j", "g", "s",
@@ -4226,7 +4295,7 @@ export function createGlyphStrokeEditor() {
                 ? "visible" : "hidden";
             roundedPath.setAttribute("visibility", roundedState);
             roundedLeft.setAttribute("visibility", cursiveKForm
-                ? shown : roundedStemState);
+                || cursiveX ? shown : roundedStemState);
             const roundedRightState = chosen.grapheme === "r"
                 ? "hidden" : roundedStemState;
             roundedRight.setAttribute("visibility", roundedRightState);

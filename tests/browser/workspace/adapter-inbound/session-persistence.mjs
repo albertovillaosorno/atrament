@@ -1850,8 +1850,14 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
     'roundedLeft.setAttribute("y1", String(kStem.to.y));',
     'roundedLeft.setAttribute("x2", String(kUpper.to.x));',
     'roundedLeft.setAttribute("y2", String(kUpper.to.y));',
+    // The optional x crossing uses an integer center and the exact upper
+    // diagonal endpoint. Only local SVG x/y paint points are modified.
+    'roundedLeft.setAttribute("x1", String(cx));',
+    'roundedLeft.setAttribute("y1", String(cy));',
+    'roundedLeft.setAttribute("x2", String(upperRight.x));',
+    'roundedLeft.setAttribute("y2", String(upperRight.y));',
     'roundedLeft.setAttribute("visibility", cursiveKForm '
-        + '? shown : roundedStemState);',
+        + '|| cursiveX ? shown : roundedStemState);',
     'roundedRight.setAttribute("visibility", roundedRightState);',
     'openPath.setAttribute("d", openD);',
     'openPath.setAttribute("stroke-width", numeric.width.value);',

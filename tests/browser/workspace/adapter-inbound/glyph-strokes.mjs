@@ -7008,7 +7008,7 @@ test("cursive o/a starters keep directed entry, loop and exit", () => {
         assert.deepEqual(geometricStarter(glyph, ...values), base,
             "choosing cursive cannot mutate its regular form");
     }
-    for (const invalid of ["x", "A", "∞"]) {
+    for (const invalid of ["g", "A", "∞"]) {
         assert.throws(() => geometricStarter(invalid, ...values,
             undefined, "cursive"), /Cursive variant/);
     }
@@ -9782,3 +9782,76 @@ test("browser manual d/q SVG, TSV and clipped-entry refusal", async () => {
         ui.restore();
     }
 });
+
+// The two printed X diagonals stay intact; deliberate half-diagonal
+// retraces connect them into one optional pen gesture at their crossing.
+test("manual cursive x retraces its crossing, keeps printed diagonals", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("x", ...args);
+    const joined = geometricStarter("x", ...args, undefined, "cursive");
+    assert.equal(printed.length, 2);
+    assert.equal(joined.length, 6);
+    assert.deepEqual(joined[1], printed[0]);
+    assert.deepEqual(joined[4], printed[1]);
+    assert.deepEqual(joined.slice(2, 4).map(({ x1, y1, x2, y2 }) =>
+        [x1, y1, x2, y2]), [
+        [2650, 3550, 1550, 2450],
+        [1550, 2450, 2650, 1350],
+    ]);
+    assert.deepEqual(candidatePenPaths(joined, "x").map(
+        ({ first, last }) => [first, last]), [[1, 6]]);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("x", ...args), printed);
+    assert.equal(geometricStarter("x", 1400, 2450, 1100,
+        250, "#243647").length, 2);
+    assert.throws(() => geometricStarter("x", 1400, 2450, 1100,
+        250, "#243647", undefined, "cursive"),
+    /Cursive x connector and pen clip/);
+    assert.throws(() => geometricStarter("X", ...args, undefined,
+        "cursive"), /Cursive variant/);
+});
+
+test("browser manual x shows both retraces and refuses clipped entry",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "x-cursive";
+            get("form").dispatch("change");
+            get("character").value = "x";
+            get("character").dispatch("input");
+            for (const id of ["ideal-rounded", "ideal-entry",
+                "ideal-approach", "ideal-rounded-left", "ideal-exit"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual x previews ${id}`);
+            }
+            assert.equal(get("ideal-approach").attributes.get("x1"),
+                "2650");
+            assert.equal(get("ideal-approach").attributes.get("y2"),
+                "2450");
+            assert.equal(get("ideal-rounded-left").attributes.get("x1"),
+                "1550");
+            assert.equal(get("ideal-rounded-left").attributes.get("y2"),
+                "1350");
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, 6);
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("x", 1550,
+                2450, 1100, 250, "#243647", undefined, "cursive"));
+            get("circle-x").value = "1400";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "invalid x leaves accepted glyph ink unchanged");
+            editor.reset();
+            assert.equal(get("ideal-rounded-left").attributes
+                .get("visibility"), "hidden");
+        } finally {
+            ui.restore();
+        }
+    });

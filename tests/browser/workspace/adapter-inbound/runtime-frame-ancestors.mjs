@@ -14583,6 +14583,7 @@ test(
                         ["p-cursive", "p", 1100],
                         ["d-cursive", "d", 1100],
                         ["q-cursive", "q", 1100],
+                        ["x-cursive", "x", 1100],
                     ]) {
                         change("circle-radius", String(radius));
                         change("form", form);
@@ -14662,8 +14663,23 @@ test(
             assert.equal(response.type, "success");
             assert.equal(response.result.type, "string");
             const actual = JSON.parse(response.result.value);
-            assert.equal(actual.guides.length, 32);
-            assert.equal(actual.constructed.length, 32);
+            assert.equal(actual.guides.length, 33);
+            assert.equal(actual.constructed.length, 33);
+            const xGuide = actual.guides.at(-1);
+            assert.equal(xGuide.rounded, "visible");
+            assert.equal(xGuide.entry, "visible");
+            assert.equal(xGuide.entryTop, "1350");
+            assert.equal(xGuide.approach, "visible");
+            assert.equal(xGuide.retraceY1, "3550");
+            assert.equal(xGuide.retraceY2, "2450");
+            assert.equal(xGuide.leftRetrace, "visible");
+            assert.equal(xGuide.leftTop, "1350");
+            assert.match(xGuide.roundedD,
+                /M 450 1350 L 2650 3550 M 2650 1350 L 450 3550/);
+            assert.match(actual.constructed.at(-1), /6 sampled segments/);
+            // Keep historical 32-form guide assertions independently scoped.
+            actual.guides.pop();
+            actual.constructed.pop();
             const bGuide = actual.guides.at(-4);
             assert.equal(bGuide.circle, "visible");
             assert.equal(bGuide.baseStem, "visible");
@@ -14815,7 +14831,7 @@ test(
                 "i", "í", "i\u0301", "l", "n", "ñ", "n\u0303",
                 "u", "ú", "ü", "u\u0301", "u\u0308", "m", "h", "t",
                 "r", "f", "j", "v", "w", "z", "s", "y", "k", "b", "p",
-                "d", "q"];
+                "d", "q", "x"];
             const expectedInk = glyphs.flatMap(
                 (glyph, index) => geometricStarter(glyph, 1550, 2450,
                     index < 4 ? 700 : 1100, 250, "#243647",
