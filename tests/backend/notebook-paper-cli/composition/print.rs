@@ -1565,7 +1565,7 @@ fn malformed_hex_metadata_refuses_before_spooling_table_or_stream() {
     let spooled = directory.join("fake-spool.pdf");
     let fake_spool = directory.join("lp.sh");
     fs::write(&fake_spool, format!(
-        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
     )).expect("write fake CUPS fixture");
     fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
         .expect("make fake spool executable");
@@ -1590,7 +1590,8 @@ fn malformed_hex_metadata_refuses_before_spooling_table_or_stream() {
             assert_eq!(submit_selected(&request, &fake_spool)
                 .expect("valid hex PDF admitted to fake CUPS"),
                 sha256_profile_bytes(&candidate).bytes());
-            assert!(spooled.exists(), "explicit fake queue contacted");
+            assert_eq!(fs::read(&spooled).expect("exact fake-spooled PDF"),
+                candidate, "fake CUPS must consume complete PDF bytes");
             fs::remove_file(&spooled).expect("clear fake spool");
         }
     }
