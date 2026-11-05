@@ -2467,15 +2467,15 @@ function cursiveOpenArc(base, radius) {
     const lower = arc[0];
     if (upper === undefined || lower === undefined
         || (upper.grapheme === "e" && bar === undefined)) {
-        throw new Error("Cursive c/e requires an authored open-loop source");
+        throw new Error("Cursive c/e requires an authored arc source");
     }
     const glyph = upper.grapheme;
     const label = glyph === "e" ? "Cursive e" : "Cursive c";
     const pen = upper.width;
     const lead = Math.min(200, Math.round(radius / 5));
-    const top = { x: upper.x2, y: upper.y2 };
+    const upperPoint = { x: upper.x2, y: upper.y2 };
     const bottom = { x: lower.x1, y: lower.y1 };
-    const entry = bar === undefined ? top : { x: bar.x1, y: bar.y1 };
+    const entry = bar === undefined ? upperPoint : { x: bar.x1, y: bar.y1 };
     const draw = (from, to) => {
         for (const point of [from, to]) {
             if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
@@ -2490,7 +2490,7 @@ function cursiveOpenArc(base, radius) {
     };
     return [
         draw({ x: entry.x - lead, y: entry.y + lead }, entry),
-        ...(bar === undefined ? [] : [draw(entry, top)]),
+        ...(bar === undefined ? [] : [draw(entry, upperPoint)]),
         ...arc.toReversed().map((stroke) => {
             const from = { x: stroke.x2, y: stroke.y2 };
             const to = { x: stroke.x1, y: stroke.y1 };
@@ -2559,14 +2559,14 @@ function cursiveRounded(base, radius) {
             width: pen, color: first.color });
     };
     const start = { x: first.x1, y: first.y1 };
-    const top = { x: first.x2, y: first.y2 };
+    const stemTop = { x: first.x2, y: first.y2 };
     const hump = { x: arc.x1, y: arc.y1 };
     const end = { x: last.x2, y: last.y2 };
     return [
         draw({ x: start.x - lead, y: start.y + lead }, start),
         first,
         ...(["n", "h", "r"].includes(first.grapheme)
-            ? [draw(top, hump)] : []),
+            ? [draw(stemTop, hump)] : []),
         ...base.slice(1),
         draw(end, { x: end.x + lead, y: end.y - lead }),
     ];
@@ -2597,14 +2597,14 @@ function cursiveDoubleHump(base, radius) {
             width: pen, color: first.color });
     };
     const start = { x: first.x1, y: first.y1 };
-    const top = { x: first.x2, y: first.y2 };
+    const stemTop = { x: first.x2, y: first.y2 };
     const hump = { x: base[1].x1, y: base[1].y1 };
     const middleEnd = { x: middle.x2, y: middle.y2 };
     const nextHump = { x: base[34].x1, y: base[34].y1 };
     const end = { x: last.x2, y: last.y2 };
     return [
         draw({ x: start.x - lead, y: start.y + lead }, start),
-        first, draw(top, hump), ...base.slice(1, 33),
+        first, draw(stemTop, hump), ...base.slice(1, 33),
         middle, draw(middleEnd, nextHump), ...base.slice(34),
         draw(end, { x: end.x + lead, y: end.y - lead }),
     ];
