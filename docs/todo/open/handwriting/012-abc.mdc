@@ -2335,3 +2335,18 @@ and native Rust PDF/transparent PNG export and missing-shape refusal
 verify the directed paths. These forms remain manual additions; the
 bounded 93-symbol automatic math fill stays unchanged. Calibrated
 analytical outlines and complete math handwriting remain open.
+
+## Exact circled subtraction and division (partial) — 2026-11-04
+
+The same manually selected mathematical family now includes independent
+Unicode `⊖` and `⊘` pen shapes. Each uses the established 64-segment
+closed four-quadratic ring, lifting for one horizontal minus or one
+upward slash (65 segments, two pen paths each). They do not borrow
+uncircled `−`, `÷` or a different authored ring. The browser refuses
+clipped and insufficiently separated ink without changing the draft.
+
+Browser exact-coordinate and TSV checks, real Firefox selection/download,
+and Rust PDF/transparent PNG export with atomic missing-glyph refusal
+validate this small addition. The complete 93-glyph automatic math fill
+is unchanged; wider Unicode coverage and personalized outlines remain
+open handwriting work.

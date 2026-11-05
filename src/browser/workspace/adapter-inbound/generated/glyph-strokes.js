@@ -599,7 +599,7 @@ const MANUAL_MATH_GLYPHS = [
     "Β", "Υ", "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
     "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐", "∮", "∬", "∭",
     "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
-    "∛", "∜", "⊕", "⊗", "⊙",
+    "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1620,9 +1620,9 @@ function mathParts(cx, cy, radius, glyph) {
         ];
     }
     // Manual circled arithmetic keeps a single joined four-quadratic
-    // outer ring and separately lifted plus, cross, or short dot ink.
+    // outer ring and separately lifted arithmetic or short dot ink.
     // These are their own Unicode keys, not +, × or Latin O aliases.
-    if (glyph === "⊕" || glyph === "⊗" || glyph === "⊙") {
+    if (["⊕", "⊗", "⊙", "⊖", "⊘"].includes(glyph)) {
         const ring = [
             curve([0, -0.82], [0.82, -0.82], [0.82, 0]),
             curve([0.82, 0], [0.82, 0.82], [0, 0.82]),
@@ -1638,6 +1638,14 @@ function mathParts(cx, cy, radius, glyph) {
             return [
                 ...ring, line(-0.32, -0.32, 0.32, 0.32),
                 line(-0.32, 0.32, 0.32, -0.32),
+            ];
+        if (glyph === "⊖")
+            return [
+                ...ring, line(-0.43, 0, 0.43, 0),
+            ];
+        if (glyph === "⊘")
+            return [
+                ...ring, line(-0.4, 0.4, 0.4, -0.4),
             ];
         return [...ring, line(0, -0.08, 0, 0.08)];
     }
@@ -2506,7 +2514,8 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         return ink;
     }
     if (SELECTABLE_MATH_GLYPHS.includes(g)) {
-        if (["⊕", "⊗", "⊙"].includes(g) && radius < 2 * pen) {
+        if (["⊕", "⊗", "⊙", "⊖", "⊘"].includes(g)
+            && radius < 2 * pen) {
             throw new Error("Circled math requires inner pen-clearance");
         }
         if (g === "÷" && radius * 0.58 < pen + 100) {

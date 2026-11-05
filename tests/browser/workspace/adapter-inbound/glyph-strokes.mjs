@@ -4128,6 +4128,36 @@ test("manual circled operators retain separate ring and interior ink", () => {
         "an unauthored circled lookalike is not an alias");
 });
 
+test("circled minus and divide keep separate inner ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, interior] of [
+        ["⊖", [1077, 2450, 2023, 2450]],
+        ["⊘", [1110, 2890, 1990, 2010]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, 65, glyph + " sampled ink chords");
+        assert.deepEqual(candidatePenPaths(ink, glyph).map(
+            ({ first, last }) => [first, last]),
+        [[1, 64], [65, 65]], "ring and stroke retain one pen lift");
+        assert.deepEqual([ink[0].x1, ink[0].y1,
+            ink[63].x2, ink[63].y2], [1550, 1548, 1550, 1548]);
+        assert.deepEqual([ink[64].x1, ink[64].y1,
+            ink[64].x2, ink[64].y2], interior,
+        "minus and slash are independently directed inner strokes");
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"), /fit inside glyph cell/);
+        assert.throws(() => geometricStarter(glyph, 1550, 2450,
+            200, 250, "#243647"), /pen-clearance/);
+    }
+    assert.notDeepEqual(geometricStarter("⊖", ...args),
+        geometricStarter("-", ...args));
+    assert.notDeepEqual(geometricStarter("⊘", ...args),
+        geometricStarter("÷", ...args));
+    assert.throws(() => geometricStarter("⦸", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
