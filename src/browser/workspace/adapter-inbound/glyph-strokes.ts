@@ -2578,12 +2578,14 @@ function cursiveStem(base: Stroke[], radius: number): Stroke[] {
     ];
 }
 
-// The optional n/h/u joins the printed rounded shape in one pen gesture.
-// n/h retrace their rising left stem to meet the hump; u already connects.
-// Exact accent and diaeresis marks are separate lifted pen paths.
+// Optional n/h/u/r keep the printed rounded shoulder in one pen gesture.
+// n/h/r retrace the rising left stem to meet the arch; u already connects.
+// r ends at its shoulder without inventing the n's descending right stem.
+// Exact accent and diaeresis marks remain separate lifted pen paths.
 function cursiveRounded(base: Stroke[], radius: number): Stroke[] {
-    if (base.length !== 2 * ARCH_SEGMENTS + 2
-        || !["n", "h", "u"].includes(base[0]?.grapheme ?? "")) {
+    const glyph = base[0]?.grapheme;
+    if (!["n", "h", "u", "r"].includes(glyph ?? "")
+        || base.length !== 2 * ARCH_SEGMENTS + (glyph === "r" ? 1 : 2)) {
         throw new Error("Cursive rounded glyph needs the printed contour");
     }
     const first = base[0]!;
@@ -2610,7 +2612,7 @@ function cursiveRounded(base: Stroke[], radius: number): Stroke[] {
     return [
         draw({ x: start.x - lead, y: start.y + lead }, start),
         first,
-        ...(["n", "h"].includes(first.grapheme)
+        ...(["n", "h", "r"].includes(first.grapheme)
             ? [draw(top, hump)] : []),
         ...base.slice(1),
         draw(end, { x: end.x + lead, y: end.y - lead }),
@@ -2707,10 +2709,10 @@ export function geometricStarter(
         throw new Error("Italic variant requires matching o/a glyph");
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
-        "i", "í", "l", "t", "n", "ñ", "u", "ú", "ü", "m", "h"]
+        "i", "í", "l", "t", "n", "ñ", "u", "ú", "ü", "m", "h", "r"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "l/t, n/ñ, h, u/ú/ü or m glyph");
+            + "l/t, n/ñ, h/r, u/ú/ü or m glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2728,7 +2730,7 @@ export function geometricStarter(
         return g === "c" || g === "e"
             ? cursiveOpenArc(base, r)
             : ["i", "í", "l", "t"].includes(g)
-                ? cursiveStem(base, r) : ["n", "u", "h"].includes(g)
+                ? cursiveStem(base, r) : ["n", "u", "h", "r"].includes(g)
                     ? cursiveRounded(base, r) : g === "m"
                         ? cursiveDoubleHump(base, r)
                         : cursiveLoop(base, r);
@@ -3813,7 +3815,7 @@ export function createGlyphStrokeEditor(): {
             const cursiveArc = cursiveE || cursiveC;
             const cursiveStem = connected && ["i", "í", "l", "t"]
                 .includes(chosen.grapheme);
-            const cursiveUp = connected && ["n", "ñ", "h"]
+            const cursiveUp = connected && ["n", "ñ", "h", "r"]
                 .includes(chosen.grapheme);
             const cursiveU = connected && ["u", "ú", "ü"]
                 .includes(chosen.grapheme);
@@ -3821,6 +3823,10 @@ export function createGlyphStrokeEditor(): {
             const upKind = chosen.grapheme === "h" ? "h" : "n";
             const upHump = roundedStory(cx, cy, r, upKind);
             const uBowl = roundedStory(cx, cy, r, "u");
+            const roundedExit = cursiveUp
+                ? (chosen.grapheme === "r"
+                    ? upHump.end : upHump.lastStem.to)
+                : uBowl.lastStem.to;
             const stemStartY = chosen.grapheme === "l"
                 ? cy - Math.round(r * 1.5)
                 : chosen.grapheme === "t" ? cy - r
@@ -3856,15 +3862,14 @@ export function createGlyphStrokeEditor(): {
                     cursiveStem ? { x: cx, y: cy + r }
                         : cursiveM ? { x: cx + r, y: cy + r }
                         : cursiveUp || cursiveU
-                            ? (cursiveUp ? upHump : uBowl).lastStem.to
+                            ? roundedExit
                             : cursiveArc ? eLower : { x: cx + r, y: endY },
                     cursiveStem ? { x: cx + lead, y: cy + r - lead }
                         : cursiveM ? {
                             x: cx + r + lead, y: cy + r - lead }
                         : cursiveUp || cursiveU ? {
                             x: cx + r + lead,
-                            y: (cursiveUp ? upHump : uBowl).lastStem.to.y
-                                - lead }
+                            y: roundedExit.y - lead }
                         : cursiveArc
                             ? { x: eLower.x + lead, y: eLower.y - lead }
                             : { x: cx + r + lead, y: endY - lead }],

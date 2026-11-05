@@ -7008,7 +7008,7 @@ test("cursive o/a starters keep directed entry, loop and exit", () => {
         assert.deepEqual(geometricStarter(glyph, ...values), base,
             "choosing cursive cannot mutate its regular form");
     }
-    for (const invalid of ["b", "r", "A", "∞"]) {
+    for (const invalid of ["b", "v", "A", "∞"]) {
         assert.throws(() => geometricStarter(invalid, ...values,
             undefined, "cursive"), /Cursive variant/);
     }
@@ -8920,6 +8920,80 @@ test("browser manual cursive h shows the tall retrace, saves exact TSV",
             editor.reset();
             assert.equal(get("ideal-entry").attributes.get("visibility"),
                 "hidden");
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("manual cursive r retraces its stem but does not invent a right stem",
+    () => {
+        const args = [1550, 2450, 1100, 250, "#243647"];
+        const printed = geometricStarter("r", ...args);
+        const joined = geometricStarter("r", ...args, undefined, "cursive");
+        assert.equal(printed.length, 33);
+        assert.equal(joined.length, 36);
+        assert.deepEqual(joined[1], printed[0],
+            "the source left stem keeps its exact direction and length");
+        assert.deepEqual(joined[2], {
+            grapheme: "r", x1: 450, y1: 1350, x2: 450, y2: 2450,
+            width: 250, color: "#243647",
+        }, "a pen-down retrace joins the shoulder after the tall stem");
+        assert.deepEqual(joined.slice(3, 35), printed.slice(1),
+            "the 32 original quadratic shoulder chords are unchanged");
+        assert.deepEqual(joined[35], {
+            grapheme: "r", x1: 2650, y1: 2450, x2: 2850, y2: 2250,
+            width: 250, color: "#243647",
+        }, "r exits at shoulder height, not n's descending baseline");
+        assert.deepEqual(candidatePenPaths(joined, "r").map(
+            ({ first, last }) => [first, last]), [[1, 36]]);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+        assert.deepEqual(geometricStarter("r", ...args), printed,
+            "printed r remains an independent selection");
+        assert.throws(() => geometricStarter("r", 1550, 2450,
+            1400, 250, "#243647", undefined, "cursive"),
+        /Cursive hump and pen clip glyph cell/);
+        assert.throws(() => geometricStarter("R", ...args,
+            undefined, "cursive"), /Cursive variant/);
+    });
+
+test("browser cursive r guide, exact download, and clipped refusal",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "r-cursive";
+            get("form").dispatch("change");
+            get("character").value = "r";
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-approach",
+                "ideal-exit", "ideal-rounded", "ideal-rounded-left"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual r shows ${id}`);
+            }
+            assert.equal(get("ideal-rounded-right").attributes
+                .get("visibility"), "hidden",
+            "the r shoulder never acquires a printed n right stem");
+            assert.equal(get("ideal-approach").attributes.get("y1"), "1350");
+            assert.equal(get("ideal-approach").attributes.get("y2"), "2450");
+            assert.equal(get("ideal-exit").attributes.get("y1"), "2450");
+            assert.equal(get("ideal-exit").attributes.get("y2"), "2250");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("r", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-radius").value = "1400";
+            get("circle-radius").dispatch("input");
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "hidden", "a clipped entry hides the entire shape guide");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "invalid edit preserves accepted TSV bytes");
+            editor.reset();
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden", "session end removes the r join guide");
         } finally {
             ui.restore();
         }

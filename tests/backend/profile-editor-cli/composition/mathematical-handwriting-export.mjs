@@ -4182,3 +4182,54 @@ test('manual cursive h renders exact native PDF and transparent PNG', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+// A manual r has one retraced stem and no invented n-like right descent.
+// The downloaded directed segments remain the native Rust source of ink.
+test('manual connected r exports one path to Rust PDF and PNG', () => {
+    const dir = mkdtempSync(join(root, '.temp/cursive-r-'));
+    try {
+        const library = join(dir, 'cursive.tsv');
+        const output = join(dir, 'cursive.pdf');
+        const printed = geometricStarter('r', 1550, 2450, 1100,
+            250, '#243647');
+        const ink = geometricStarter('r', 1550, 2450, 1100,
+            250, '#243647', undefined, 'cursive');
+        assert.equal(printed.length, 33);
+        assert.equal(ink.length, 36);
+        assert.deepEqual(candidatePenPaths(ink, 'r').map(
+            ({ first, last }) => [first, last]), [[1, 36]]);
+        const original = Buffer.from(encodeGlyphLibrary(ink));
+        writeFileSync(library, original);
+        const reopened = cli('glyphs', ['--profile', library]);
+        assert.equal(reopened.status, 0, reopened.stderr.toString());
+        assert.deepEqual(reopened.stdout, original);
+        const audit = cli('glyphs', ['--profile', library,
+            '--audit-text', 'rr']);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        const flags = ['--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', 'rr\nrr'];
+        const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+            '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, ink.length * 4);
+        const png = cli('notebook', [...flags, '--export-paper', 'png',
+            '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        const refused = cli('notebook', [
+            '--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', 'R', '--export-paper', 'pdf',
+            '--output', output, '--replace']);
+        assert.notEqual(refused.status, 0);
+        assert.match(refused.stderr.toString(), /missing authored glyph/i);
+        assert.deepEqual(readFileSync(output), accepted,
+            'missing uppercase ink cannot overwrite an accepted page');
+        assert.deepEqual(readFileSync(library), original);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

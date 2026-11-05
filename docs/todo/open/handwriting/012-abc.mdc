@@ -2607,3 +2607,16 @@ Firefox BiDi session constructs this `t` alongside other cursive samples,
 downloads the complete TSV and verifies native PDF/PNG replay with no new
 backend requests. No joined words, analytic curve or persisted pen-lift
 identity is introduced; the broader task remains open.
+
+## Optional connected-pen lowercase r — 2026-11-05
+
+The manual `r` option joins the existing 33-segment printed shoulder with
+an entry stroke, a deliberate retrace from the rising left stem into its
+first quadratic arch, and a rising exit at shoulder height. The resulting
+36 directed ink segments form one pen gesture. Unlike `n`, no descending
+right stem is invented; the original printed `r` stays selectable.
+
+Browser geometry, SVG guide and clipped-entry refusal checks, live Firefox
+TSV download, and native Rust vector PDF/transparent PNG replay verify this
+opt-in variant and exact missing uppercase glyph refusal. This is not a
+joined word model, a learned handwriting profile or complete glyph coverage.
