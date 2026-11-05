@@ -1894,3 +1894,23 @@ sampled ink replay.
 
 These are sampled manual pen marks, not automatic mathematical typesetting,
 font substitution, or the completed bilingual glyph library.
+
+
+## Exact set-difference and nonparallel ink (partial) — 2026-11-04
+
+Two further independently editable mathematics forms now have explicit
+Unicode pen geometry: set difference `∖` and not parallel `∦`. Set
+difference uses a directed descending backslash-like line, distinct
+from ASCII `\`. Nonparallel preserves both ordered native `∥` uprights,
+then lifts for a separate diagonal cross-stroke.
+
+The opt-in math fill reaches 89 exact forms. All eleven independent
+fills now construct 202 graphemes and 4076 sampled strokes, below the
+native 4096 limit.
+
+Browser tests verify exact coordinates, clipping, path lifts, fill
+preservation and UTF-8 TSV identity. Native PDF/PNG
+replay refuses missing lookalikes without replacing a previous output.
+Firefox guide checks include both Unicode options and physical Rust ink.
+
+This remains optional manual geometry, not automatic semantic notation.

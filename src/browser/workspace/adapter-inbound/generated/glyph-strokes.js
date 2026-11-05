@@ -588,8 +588,8 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
     "∠", "∟", "⊬", "⊭", "¬", "⇒", "⇔",
     "≪", "≫", "≮", "≯", "≰", "≱", "↗", "↘",
     "↖", "↙", "⇐", "↦", "↤", "∣", "∤",
-    "′", "″", "‴", "⋅", "∗"];
-// Extra manual marks do not change the 87-glyph math fill.
+    "′", "″", "‴", "⋅", "∗", "∖", "∦"];
+// Extra manual marks do not change the 89-glyph math fill.
 const CIRCLE_MARKS = ["°", "%"];
 // Currency is manual, not an implicit text/math baseline substitution.
 const CURRENCY_MARKS = ["$", "€"];
@@ -619,6 +619,17 @@ function mathParts(cx, cy, radius, glyph) {
             ...(glyph === "∤" ? [
                 { from: point(-0.65, 0.65), to: point(0.65, -0.65) },
             ] : []),
+        ];
+    // Set difference is its own slanted backslash-like Unicode ink.
+    // Nonparallel keeps both directed parallel uprights with a lifted slash.
+    if (glyph === "∖")
+        return [
+            { from: point(-0.7, -0.75), to: point(0.7, 0.75) },
+        ];
+    if (glyph === "∦")
+        return [
+            ...mathParts(cx, cy, radius, "∥"),
+            { from: point(-0.7, 0.7), to: point(0.7, -0.7) },
         ];
     // Separate exact directed ink for parallel and perpendicular geometry.
     // Neither substitutes for a Latin letter or ordinary equality glyph.
