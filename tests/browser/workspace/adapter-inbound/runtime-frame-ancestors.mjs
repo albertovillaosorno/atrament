@@ -14511,7 +14511,7 @@ test(
 );
 
 test(
-    "Firefox cursive c/e/i/j/l/t/n/u/m/h/r/f/v/w/z/s native ink",
+    "Firefox cursive c/e/i/j/l/t/n/u/m/h/r/f/v/w/z/s/y native ink",
     { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
@@ -14577,6 +14577,7 @@ test(
                         ["w-cursive", "w", 1100],
                         ["z-cursive", "z", 1100],
                         ["s-cursive", "s", 1100],
+                        ["y-cursive", "y", 1100],
                     ]) {
                         change("circle-radius", String(radius));
                         change("form", form);
@@ -14661,14 +14662,16 @@ test(
                     "visible", "visible", "visible",
                     "hidden", "hidden", "hidden", "hidden", "hidden",
                     "visible", "visible", "hidden", "visible", "hidden",
-                    "hidden", "hidden", "hidden", "hidden", "hidden"]);
+                    "hidden", "hidden", "hidden", "hidden", "hidden",
+                    "visible"]);
             assert.deepEqual(actual.guides.map((guide) => guide.acute),
                 ["hidden", "hidden", "visible", "visible",
                     "hidden", "visible", "visible", "hidden",
                     "hidden", "hidden", "hidden",
                     "hidden", "visible", "hidden", "visible", "hidden",
                     "hidden", "hidden", "hidden", "hidden", "hidden",
-                    "hidden", "hidden", "hidden", "hidden", "hidden"]);
+                    "hidden", "hidden", "hidden", "hidden", "hidden",
+                    "hidden"]);
             assert.deepEqual(actual.guides.slice(4, 8).map((g) => g.dot),
                 ["visible", "hidden", "hidden", "hidden"]);
             assert.match(actual.constructed[0], /38 sampled segments/);
@@ -14686,61 +14689,69 @@ test(
             assert.deepEqual(actual.constructed.slice(8).map((s) =>
                 Number(s.match(/(\d+) sampled segments/)?.[1])),
             [37, 40, 40, 36, 37, 38, 37, 38, 71, 37, 4, 36, 4, 20,
-                4, 6, 5, 66]);
+                4, 6, 5, 66, 6]);
             assert.deepEqual(actual.guides.slice(11).map((g) => g.rounded),
                 ["visible", "visible", "visible", "visible", "visible",
                     "visible", "visible", "hidden", "visible", "hidden",
                     "visible", "visible", "visible", "visible",
-                    "visible"]);
+                    "visible", "visible"]);
             assert.deepEqual(actual.guides.slice(11).map((g) => g.tilde),
                 ["hidden", "hidden", "visible", "hidden", "visible",
                     "hidden", "hidden", "hidden", "hidden", "hidden",
-                    "hidden", "hidden", "hidden", "hidden", "hidden"]);
-            assert.match(actual.guides.at(-10).roundedD,
+                    "hidden", "hidden", "hidden", "hidden", "hidden",
+                    "hidden"]);
+            assert.match(actual.guides.at(-11).roundedD,
                 /M 1550 2450 L 1550 3550 L 1550 2450$/);
-            assert.equal(actual.guides.at(-9).leftTop, "800");
-            assert.equal(actual.guides.at(-8).stem, "visible");
-            assert.equal(actual.guides.at(-8).bar, "visible");
-            assert.equal(actual.guides.at(-8).entry, "visible");
-            assert.equal(actual.guides.at(-7).rounded, "visible");
-            assert.equal(actual.guides.at(-7).approach, "visible");
-            assert.equal(actual.guides.at(-7).stem, "hidden");
+            assert.equal(actual.guides.at(-10).leftTop, "800");
+            assert.equal(actual.guides.at(-9).stem, "visible");
+            assert.equal(actual.guides.at(-9).bar, "visible");
+            assert.equal(actual.guides.at(-9).entry, "visible");
+            assert.equal(actual.guides.at(-8).rounded, "visible");
+            assert.equal(actual.guides.at(-8).approach, "visible");
+            assert.equal(actual.guides.at(-8).stem, "hidden");
+            assert.equal(actual.guides.at(-7).stem, "visible");
+            assert.equal(actual.guides.at(-7).bar, "visible");
+            assert.equal(actual.guides.at(-7).entry, "visible");
+            assert.equal(actual.guides.at(-7).approach, "hidden");
+            assert.equal(actual.guides.at(-7).entryTop, "800");
             assert.equal(actual.guides.at(-6).stem, "visible");
-            assert.equal(actual.guides.at(-6).bar, "visible");
-            assert.equal(actual.guides.at(-6).entry, "visible");
+            assert.equal(actual.guides.at(-6).dot, "visible");
+            assert.equal(actual.guides.at(-6).rounded, "visible");
+            assert.equal(actual.guides.at(-6).entryTop, "2010");
             assert.equal(actual.guides.at(-6).approach, "hidden");
-            assert.equal(actual.guides.at(-6).entryTop, "800");
-            assert.equal(actual.guides.at(-5).stem, "visible");
-            assert.equal(actual.guides.at(-5).dot, "visible");
-            assert.equal(actual.guides.at(-5).rounded, "visible");
-            assert.equal(actual.guides.at(-5).entryTop, "2010");
-            assert.equal(actual.guides.at(-5).approach, "hidden");
-            for (const guide of actual.guides.slice(-4, -1)) {
+            for (const guide of actual.guides.slice(-5, -2)) {
                 assert.equal(guide.rounded, "visible");
                 assert.equal(guide.approach, "hidden");
                 assert.equal(guide.entry, "visible");
                 assert.equal(guide.entryTop, "1350");
                 assert.equal(guide.dot, "hidden");
             }
-            assert.match(actual.guides.at(-4).roundedD,
+            assert.match(actual.guides.at(-5).roundedD,
                 /M 450 1350 L 1550 3550 L 2650 1350/);
-            assert.match(actual.guides.at(-3).roundedD,
+            assert.match(actual.guides.at(-4).roundedD,
                 /M 450 1350 L 1000 3550 L 1550 2450/);
-            assert.match(actual.guides.at(-2).roundedD,
+            assert.match(actual.guides.at(-3).roundedD,
                 /M 450 1350 L 2650 1350 L 450 3550 L 2650 3550/);
-            assert.match(actual.guides.at(-1).roundedD,
+            assert.match(actual.guides.at(-2).roundedD,
                 /^M 2320 1570 Q 1550 1350 780 1900/);
+            assert.equal(actual.guides.at(-2).entry, "visible");
+            assert.equal(actual.guides.at(-2).entryTop, "1570");
+            assert.equal(actual.guides.at(-2).approach, "hidden");
+            assert.match(actual.constructed.at(-2), /66 sampled segments/);
+            assert.equal(actual.guides.at(-1).rounded, "visible");
+            assert.equal(actual.guides.at(-1).approach, "visible");
             assert.equal(actual.guides.at(-1).entry, "visible");
-            assert.equal(actual.guides.at(-1).entryTop, "1570");
-            assert.equal(actual.guides.at(-1).approach, "hidden");
-            assert.match(actual.constructed.at(-1), /66 sampled segments/);
+            assert.equal(actual.guides.at(-1).entryTop, "1350");
+            assert.match(actual.guides.at(-1).roundedD,
+                /M 450 1350 L 1550 2450 M 2650 1350 L 1550 2450/);
+            assert.match(actual.constructed.at(-1), /6 sampled segments/);
             assert.equal(actual.clipped, "hidden");
             assert.match(actual.refused,
                 /Dotted i requires visible pen-clearance/);
             const glyphs = ["c", "e", "é", "e\u0301",
                 "i", "í", "i\u0301", "l", "n", "ñ", "n\u0303",
                 "u", "ú", "ü", "u\u0301", "u\u0308", "m", "h", "t",
-                "r", "f", "j", "v", "w", "z", "s"];
+                "r", "f", "j", "v", "w", "z", "s", "y"];
             const expectedInk = glyphs.flatMap(
                 (glyph, index) => geometricStarter(glyph, 1550, 2450,
                     index < 4 ? 700 : 1100, 250, "#243647",

@@ -2617,6 +2617,45 @@ function cursiveContour(base: Stroke[], radius: number): Stroke[] {
     ];
 }
 
+// The printed y contains two arms that meet at one fork and a descending
+// tail. A deliberate reverse of the right arm reaches its start, then the
+// original right arm and tail complete one pen-down path. Printed ink stays
+// untouched and the extra retrace is explicit, not an inferred word join.
+function cursiveFork(base: Stroke[], radius: number): Stroke[] {
+    if (base.length !== 3 || base.some((stroke) =>
+        stroke.grapheme !== "y")) {
+        throw new Error("Cursive y needs the three printed fork strokes");
+    }
+    const [left, right, tail] = base as [Stroke, Stroke, Stroke];
+    if (left.x2 !== right.x2 || left.y2 !== right.y2
+        || tail.x1 !== left.x2 || tail.y1 !== left.y2) {
+        throw new Error("Cursive y requires a shared fork junction");
+    }
+    const lead = Math.min(200, Math.round(radius / 5));
+    const pen = left.width;
+    const draw = (from: Point, to: Point): Stroke => {
+        for (const point of [from, to]) {
+            if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
+                || point.y - pen / 2 < 0
+                || point.y + pen / 2 > 4500) {
+                throw new Error("Cursive y connector and pen clip glyph cell");
+            }
+        }
+        return validateStroke({ grapheme: "y",
+            x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+            width: pen, color: left.color });
+    };
+    const start = { x: left.x1, y: left.y1 };
+    const fork = { x: left.x2, y: left.y2 };
+    const rightTop = { x: right.x1, y: right.y1 };
+    const finish = { x: tail.x2, y: tail.y2 };
+    return [
+        draw({ x: start.x - lead, y: start.y + lead }, start),
+        left, draw(fork, rightTop), right, tail,
+        draw(finish, { x: finish.x + lead, y: finish.y - lead }),
+    ];
+}
+
 // Optional j keeps its straight stem and sampled hooked descender in
 // one directed pen gesture. Its dot must remain a separate pen lift.
 // This does not connect neighboring glyphs or change the printed j.
@@ -2788,10 +2827,10 @@ export function geometricStarter(
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
         "i", "í", "j", "l", "t", "f", "n", "ñ", "u", "ú", "ü",
-        "m", "h", "r", "v", "w", "z", "s"]
+        "m", "h", "r", "v", "w", "z", "s", "y"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m, v/w/z or s glyph");
+            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m, v/w/z, s or y glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2808,6 +2847,7 @@ export function geometricStarter(
         const base = geometricStarter(g, x, y, r, w, color, pos, "single");
         if (g === "c" || g === "e") return cursiveOpenArc(base, r);
         if (g === "j") return cursiveHook(base, r);
+        if (g === "y") return cursiveFork(base, r);
         if (["v", "w", "z", "s"].includes(g)) {
             return cursiveContour(base, r);
         }
@@ -3914,6 +3954,8 @@ export function createGlyphStrokeEditor(): {
             }
             const smoothParts = connected && chosen.grapheme === "s"
                 ? smoothS(cx, cy, r) : null;
+            const cursiveY = connected && chosen.grapheme === "y";
+            const yLines = cursiveY ? straightLines(cx, cy, r, "y") : [];
             const contourStart = zigLines[0]?.from ?? smoothParts?.[0]?.[0];
             const contourEnd = zigLines.at(-1)?.to
                 ?? smoothParts?.at(-1)?.[2];
@@ -3991,6 +4033,22 @@ export function createGlyphStrokeEditor(): {
                 exit[1] = contourEnd;
                 exit[2] = { x: contourEnd.x + lead, y: contourEnd.y - lead };
             }
+            const yStart = yLines[0]?.from;
+            const yJoint = yLines[0]?.to;
+            const yTop = yLines[1]?.from;
+            const yFinish = yLines[2]?.to;
+            if (yStart !== undefined && yJoint !== undefined
+                && yTop !== undefined && yFinish !== undefined) {
+                const entry = connectors[0]!;
+                entry[1] = { x: yStart.x - lead, y: yStart.y + lead };
+                entry[2] = yStart;
+                const retrace = connectors[1]!;
+                retrace[1] = yJoint;
+                retrace[2] = yTop;
+                const exit = connectors[2]!;
+                exit[1] = yFinish;
+                exit[2] = { x: yFinish.x + lead, y: yFinish.y - lead };
+            }
             for (const [guide, from, to] of connectors) {
                 for (const [axis, value] of [
                     ["x1", from.x], ["y1", from.y],
@@ -4000,7 +4058,7 @@ export function createGlyphStrokeEditor(): {
                 guide.setAttribute("stroke", color.value);
                 guide.setAttribute("visibility", connected &&
                     (guide !== idealApproach || cursiveE || cursiveUp
-                        || cursiveM
+                        || cursiveM || cursiveY
                         || ["a", "á"].includes(chosen.grapheme))
                     ? shown : "hidden");
             }

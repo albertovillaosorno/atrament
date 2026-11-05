@@ -9365,3 +9365,87 @@ test("browser manual s previews one smooth contour and preserves refused TSV",
             ui.restore();
         }
     });
+
+// The y right fork is deliberately doubled to keep one pen down.
+test("manual connected y retains all three directed printed strokes", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("y", ...args);
+    const joined = geometricStarter("y", ...args, undefined, "cursive");
+    assert.equal(printed.length, 3);
+    assert.equal(joined.length, 6);
+    assert.deepEqual([joined[1], joined[3], joined[4]], printed,
+        "original two arms and descender retain exact pen direction");
+    assert.deepEqual(joined[2], {
+        ...printed[1], x1: printed[1].x2, y1: printed[1].y2,
+        x2: printed[1].x1, y2: printed[1].y1,
+    }, "the extra stroke retraces the right arm deliberately");
+    assert.deepEqual(candidatePenPaths(joined, "y").map(
+        ({ first, last }) => [first, last]), [[1, 6]]);
+    assert.deepEqual(joined[0], {
+        grapheme: "y", x1: 250, y1: 1550,
+        x2: 450, y2: 1350, width: 250, color: "#243647",
+    });
+    assert.deepEqual(joined.at(-1), {
+        grapheme: "y", x1: 1000, y1: 4100,
+        x2: 1200, y2: 3900, width: 250, color: "#243647",
+    });
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("y", ...args), printed);
+    assert.equal(geometricStarter("y", 1250, 2450,
+        1100, 250, "#243647").length, 3,
+        "the printed fork remains valid near the left cell margin");
+    assert.throws(() => geometricStarter("y", 1250, 2450,
+        1100, 250, "#243647", undefined, "cursive"),
+        /Cursive y connector and pen clip/);
+    assert.throws(() => geometricStarter("y", 1550, 2450,
+        1300, 250, "#243647", undefined, "cursive"), /Straight strokes/);
+    assert.throws(() => geometricStarter("Y", ...args,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser manual y shows fork retrace and refuses clipped replacement",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "y-cursive";
+            get("form").dispatch("change");
+            get("character").value = "y";
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-approach",
+                "ideal-exit", "ideal-rounded"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual y shows ${id}`);
+            }
+            assert.equal(get("ideal-approach").attributes.get("x1"),
+                "1550", "pen retrace begins at the shared fork");
+            assert.equal(get("ideal-approach").attributes.get("x2"),
+                "2650", "pen retrace reaches right arm's upper end");
+            assert.equal(get("ideal-exit").attributes.get("y1"), "4100");
+            for (const id of ["ideal-i-dot", "ideal-rounded-left",
+                "ideal-rounded-right"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "hidden", `manual y does not invent ${id}`);
+            }
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, 6);
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("y", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-x").value = "1250";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-approach").attributes.get("visibility"),
+                "hidden", "clipped connector hides the fork retrace guide");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "clipped y leaves the accepted TSV unchanged");
+            editor.reset();
+            assert.equal(get("ideal-exit").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });

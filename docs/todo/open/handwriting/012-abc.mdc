@@ -2685,3 +2685,16 @@ and download, and native Rust vector PDF/transparent PNG replay verify the
 same authored source ink. Missing uppercase `S` refuses output replacement.
 This does not implement full cursive letter spacing, writer calibration or
 cross-letter pen trajectories.
+
+## Opt-in continuous-pen lowercase y — 2026-11-05
+
+The manual `y` path now follows the printed left fork to its junction,
+retraces the right arm once to reach its top, follows that unchanged arm
+back to the junction, and then follows the original descending tail. A
+short entry and exit form six directed strokes with no intervening pen
+lift. All three default printed strokes and their directions remain exact.
+
+The browser SVG explicitly previews the retraced right arm as an approach,
+while clipping refusal preserves the last saved TSV. Real Firefox selection,
+native Rust vector PDF and transparent PNG, and exact missing uppercase
+`Y` refusal verify the opt-in gesture. Adjacent letters are not joined.

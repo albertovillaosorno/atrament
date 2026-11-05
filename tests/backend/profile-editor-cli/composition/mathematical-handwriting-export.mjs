@@ -4487,3 +4487,52 @@ test('manual smooth s has one native PDF/PNG ink path', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+// The y fork retraces its right arm instead of inventing a detached pen lift.
+test('manual forked y exports one native PDF/PNG gesture', () => {
+    const dir = mkdtempSync(join(root, '.temp/cursive-y-'));
+    try {
+        const library = join(dir, 'cursive.tsv');
+        const output = join(dir, 'cursive.pdf');
+        const printed = geometricStarter('y', 1550, 2450, 1100,
+            250, '#243647');
+        const ink = geometricStarter('y', 1550, 2450, 1100,
+            250, '#243647', undefined, 'cursive');
+        assert.equal(ink.length, 6);
+        assert.deepEqual([ink[1], ink[3], ink[4]], printed);
+        assert.deepEqual(candidatePenPaths(ink, 'y').map(
+            ({ first, last }) => [first, last]), [[1, 6]]);
+        const original = Buffer.from(encodeGlyphLibrary(ink));
+        writeFileSync(library, original);
+        const reopened = cli('glyphs', ['--profile', library]);
+        assert.equal(reopened.status, 0, reopened.stderr.toString());
+        assert.deepEqual(reopened.stdout, original);
+        const audit = cli('glyphs', ['--profile', library,
+            '--audit-text', 'yy']);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        const flags = ['--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', 'yy\nyy'];
+        const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+            '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, ink.length * 4);
+        const png = cli('notebook', [...flags, '--export-paper', 'png',
+            '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        const missing = cli('notebook', [
+            '--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', 'Y', '--export-paper', 'pdf',
+            '--output', output, '--replace']);
+        assert.notEqual(missing.status, 0);
+        assert.match(missing.stderr.toString(), /missing authored glyph/i);
+        assert.deepEqual(readFileSync(output), accepted);
+        assert.deepEqual(readFileSync(library), original);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
