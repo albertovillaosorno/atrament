@@ -8549,6 +8549,71 @@ test("browser continuous-pen l guide, download and refusal", async () => {
 });
 
 
+test("manual cursive t preserves lifted crossbar and exact stem", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("t", ...args);
+    const joined = geometricStarter("t", ...args, undefined, "cursive");
+    assert.equal(printed.length, 2);
+    assert.equal(joined.length, 4);
+    assert.deepEqual(joined[1], printed[0],
+        "joined body retains the original t stem geometry");
+    assert.deepEqual(joined[3], printed[1],
+        "the crossbar remains its own lifted original pen stroke");
+    assert.deepEqual(candidatePenPaths(joined, "t").map(
+        ({ first, last }) => [first, last]), [[1, 3], [4, 4]]);
+    assert.equal(joined[0].y2, 1350);
+    assert.equal(joined[2].y1, 3550);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("t", ...args), printed,
+        "opt-in form leaves the printed t unchanged");
+    assert.throws(() => geometricStarter("t", 1550, 1250,
+        1300, 250, "#243647", undefined, "cursive"),
+    /Shape and pen thickness must fit/);
+    assert.throws(() => geometricStarter("T", ...args,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser manual cursive t guides and saves a lifted bar", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("form").value = "t-cursive";
+        get("form").dispatch("change");
+        for (const part of ["ideal-entry", "ideal-exit",
+            "ideal-i-stem", "ideal-e-bar"]) {
+            assert.equal(get(part).attributes.get("visibility"),
+                "visible", `manual t must show ${part}`);
+        }
+        assert.equal(get("ideal-entry").attributes.get("y2"), "1350");
+        assert.equal(get("ideal-approach").attributes.get("visibility"),
+            "hidden");
+        assert.equal(get("ideal-i-dot").attributes.get("visibility"),
+            "hidden", "the t crossbar is not a dotted i mark");
+        get("character").value = "t";
+        get("character").dispatch("input");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        const expected = geometricStarter("t", 1550, 2450, 1100,
+            250, "#243647", undefined, "cursive");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            expected);
+        get("circle-radius").value = "1550";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "hidden", "clipped t cannot leave a stale connector guide");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            expected, "invalid selection preserves saved TSV");
+        editor.reset();
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "hidden", "session reset removes the manual t guide");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("manual cursive n and ñ join the hump but lift for tilde", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const printed = geometricStarter("n", ...args);

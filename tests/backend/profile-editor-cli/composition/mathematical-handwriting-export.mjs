@@ -3914,6 +3914,57 @@ test('manual cursive i/í/NFD/l export exact two-line physical ink', () => {
     }
 });
 
+// Manual lowercase t keeps the original stem between one connected entry
+// and exit. Its crossbar is separate author-selected lifted ink.
+test('manual cursive t keeps its crossbar in native PDF and PNG', () => {
+    const dir = mkdtempSync(join(root, '.temp/cursive-t-'));
+    try {
+        const library = join(dir, 'cursive.tsv');
+        const output = join(dir, 'cursive.pdf');
+        const printed = geometricStarter('t', 1550, 2450, 1100,
+            250, '#243647');
+        const cursive = geometricStarter('t', 1550, 2450, 1100,
+            250, '#243647', undefined, 'cursive');
+        assert.equal(cursive.length, 4);
+        assert.deepEqual(cursive[1], printed[0]);
+        assert.deepEqual(cursive[3], printed[1]);
+        assert.deepEqual(candidatePenPaths(cursive, 't').map(
+            ({ first, last }) => [first, last]), [[1, 3], [4, 4]]);
+        const original = Buffer.from(encodeGlyphLibrary(cursive));
+        writeFileSync(library, original);
+        const reopened = cli('glyphs', ['--profile', library]);
+        assert.equal(reopened.status, 0, reopened.stderr.toString());
+        assert.deepEqual(reopened.stdout, original);
+        const audit = cli('glyphs', [
+            '--profile', library, '--audit-text', 't']);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        const flags = ['--printed-sheet', 'true',
+            '--glyph-file', library, '--flow-text', 't\nt'];
+        const pdf = cli('notebook', [...flags,
+            '--export-paper', 'pdf', '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, 8, 'two t glyphs retain eight physical strokes');
+        const png = cli('notebook', [...flags, '--export-paper', 'png',
+            '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        const missing = cli('notebook', [
+            '--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', 'T', '--export-paper', 'pdf',
+            '--output', output, '--replace']);
+        assert.notEqual(missing.status, 0);
+        assert.match(missing.stderr.toString(), /missing authored glyph/i);
+        assert.deepEqual(readFileSync(output), accepted);
+        assert.deepEqual(readFileSync(library), original);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 // Cursive n/ñ/NFD keep a single directed body, then lift only for the
 // separately selectable tilde. Printed n and other exact keys are distinct.
 test('manual cursive n/ñ/NFD render exact native vector PDF and PNG', () => {

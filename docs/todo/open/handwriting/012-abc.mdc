@@ -2590,3 +2590,20 @@ selection and download, and native Rust PDF/transparent PNG export confirm
 this opt-in variant with exact uppercase missing-key refusal. This does
 not imply automatic connections between neighboring characters or
 calibrated personal handwriting.
+
+## Opt-in connected lowercase t with lifted crossbar — 2026-11-05
+
+The manual lowercase `t` starter now keeps the exact printed tall stem
+between short, directed pen entry and exit strokes. This forms one
+three-segment continuous path; the original straight crossbar remains
+its own separately lifted path, rather than being incorrectly joined to
+the stem. The printed `t` and existing automatic-fill inventory are unchanged.
+
+Browser geometry, SVG, Unicode TSV, clipped-shape refusal and session reset
+have focused regressions. A native Rust CLI test reopens the exact saved
+library, renders genuine vector PDF and transparent PNG, and proves an
+unauthored uppercase `T` cannot overwrite the selected output. A live
+Firefox BiDi session constructs this `t` alongside other cursive samples,
+downloads the complete TSV and verifies native PDF/PNG replay with no new
+backend requests. No joined words, analytic curve or persisted pen-lift
+identity is introduced; the broader task remains open.

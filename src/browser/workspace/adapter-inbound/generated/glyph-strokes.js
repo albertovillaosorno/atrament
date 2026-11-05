@@ -2499,9 +2499,9 @@ function cursiveOpenArc(base, radius) {
         draw(bottom, { x: bottom.x + lead, y: bottom.y - lead }),
     ];
 }
-// Explicit connected i/í/l keeps the printed downward stem and attaches
-// short entry/exit strokes. A dotted or acute i keeps its separate lifted
-// mark; the one-stroke printed l has no mark to add.
+// Explicit connected i/í/l/t keeps the printed downward stem and attaches
+// short entry/exit strokes. The dot, acute or t crossbar retains a separate
+// pen lift; only the printed l has no second mark.
 function cursiveStem(base, radius) {
     const [stem, mark] = base;
     if (stem === undefined || (stem.grapheme !== "l"
@@ -2650,10 +2650,10 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         throw new Error("Italic variant requires matching o/a glyph");
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
-        "i", "í", "l", "n", "ñ", "u", "ú", "ü", "m", "h"]
+        "i", "í", "l", "t", "n", "ñ", "u", "ú", "ü", "m", "h"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "l, n/ñ, h, u/ú/ü or m glyph");
+            + "l/t, n/ñ, h, u/ú/ü or m glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2670,7 +2670,7 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         const base = geometricStarter(g, x, y, r, w, color, pos, "single");
         return g === "c" || g === "e"
             ? cursiveOpenArc(base, r)
-            : ["i", "í", "l"].includes(g)
+            : ["i", "í", "l", "t"].includes(g)
                 ? cursiveStem(base, r) : ["n", "u", "h"].includes(g)
                 ? cursiveRounded(base, r) : g === "m"
                 ? cursiveDoubleHump(base, r)
@@ -3638,7 +3638,7 @@ export function createGlyphStrokeEditor() {
                 .includes(chosen.grapheme);
             const cursiveC = connected && chosen.grapheme === "c";
             const cursiveArc = cursiveE || cursiveC;
-            const cursiveStem = connected && ["i", "í", "l"]
+            const cursiveStem = connected && ["i", "í", "l", "t"]
                 .includes(chosen.grapheme);
             const cursiveUp = connected && ["n", "ñ", "h"]
                 .includes(chosen.grapheme);
@@ -3649,7 +3649,9 @@ export function createGlyphStrokeEditor() {
             const upHump = roundedStory(cx, cy, r, upKind);
             const uBowl = roundedStory(cx, cy, r, "u");
             const stemStartY = chosen.grapheme === "l"
-                ? cy - Math.round(r * 1.5) : cy - Math.round(r * 0.4);
+                ? cy - Math.round(r * 1.5)
+                : chosen.grapheme === "t" ? cy - r
+                    : cy - Math.round(r * 0.4);
             const eUpper = openCirclePoint(cx, cy, r, OPEN_ARC_SEGMENTS);
             const eLower = openCirclePoint(cx, cy, r, 0);
             const connectors = [
