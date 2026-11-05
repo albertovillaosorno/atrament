@@ -1844,7 +1844,14 @@ const REVIEWED_GLYPH_SVG_ATTRIBUTES = [
     'element.setAttribute("stroke", color.value);',
     'roundedPath.setAttribute("visibility", roundedState);',
     // Zigzag guide reuses roundedPath; hide the unrelated n/u stem lines.
-    'roundedLeft.setAttribute("visibility", roundedStemState);',
+    // The opt-in k retrace maps bounded pen endpoints to x/y-only SVG
+    // geometry and toggles visibility. No URI or request attribute exists.
+    'roundedLeft.setAttribute("x1", String(kStem.to.x));',
+    'roundedLeft.setAttribute("y1", String(kStem.to.y));',
+    'roundedLeft.setAttribute("x2", String(kUpper.to.x));',
+    'roundedLeft.setAttribute("y2", String(kUpper.to.y));',
+    'roundedLeft.setAttribute("visibility", cursiveKForm '
+        + '? shown : roundedStemState);',
     'roundedRight.setAttribute("visibility", roundedRightState);',
     'openPath.setAttribute("d", openD);',
     'openPath.setAttribute("stroke-width", numeric.width.value);',
