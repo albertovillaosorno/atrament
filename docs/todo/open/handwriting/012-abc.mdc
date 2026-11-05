@@ -2047,3 +2047,17 @@ Browser geometry and Unicode TSV checks, Firefox SVG/TSV export, native Rust
 PDF/transparent PNG replay, and atomic refusal for missing glyphs verify this
 bounded addition. The full Greek alphabet, editable notebook ink composition
 and calibrated handwriting are still unfinished.
+
+## Manually selected Greek phi and psi ink (partial) — 2026-11-04
+
+Exact lowercase `φ` and `ψ` now offer independent manual pen geometry.
+Phi traces four joined quadratic sides around a closed bowl before lifting
+for a vertical stem (65 sampled segments). Psi traces two connected curved
+shoulders and lifts before its vertical stem (33 native segments). No Latin
+letter or alternate phi `ϕ` is implicitly substituted for either Unicode key.
+
+They remain opt-in, preserving the automatic 93-symbol mathematical fill
+at 4,084/4,096 segments. Browser ink and TSV checks, real Firefox SVG/export,
+native Rust PDF/transparent PNG replay and preservation of previous output
+on missing-shape refusal have focused regressions. Greek coverage remains
+partial; this does not establish a calibrated writer or full notebook editor.

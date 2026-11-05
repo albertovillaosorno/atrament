@@ -13211,7 +13211,7 @@ test(
                     const manualMarks = [];
                     for (const glyph of ["⟨", "⟩", "α", "β", "θ", "λ",
                         "μ", "γ", "δ", "σ", "ρ", "τ", "ε", "ω",
-                        "κ", "χ"]) {
+                        "κ", "χ", "φ", "ψ"]) {
                         change("form", glyph);
                         change("character", glyph);
                         const guide = get("ideal-rounded");
@@ -13314,6 +13314,7 @@ test(
                 assert.ok([
                     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
                     "δ", "σ", "ρ", "τ", "ε", "ω", "κ", "χ",
+                    "φ", "ψ",
                 ].includes(guide.glyph));
                 assert.equal(guide.selected, guide.glyph);
                 assert.equal(guide.visible, "visible");
@@ -13325,12 +13326,14 @@ test(
                 const epsilon = guide.glyph === "ε";
                 const kappa = guide.glyph === "κ";
                 const chi = guide.glyph === "χ";
+                const psi = guide.glyph === "ψ";
                 const count = bracket || lambda ? 2
-                    : tau ? 3 : epsilon || kappa ? 33 : chi ? 32
+                    : tau ? 3 : epsilon || kappa || psi ? 33 : chi ? 32
                         : mu ? 34 : gamma ? 33 : 65;
                 assert.equal((guide.d.match(/ Q /g) ?? []).length,
                     bracket || lambda || tau ? 0
-                        : mu || gamma || epsilon || kappa || chi ? 2 : 4);
+                        : mu || gamma || epsilon || kappa || chi || psi
+                            ? 2 : 4);
                 assert.equal((guide.d.match(/M /g) ?? []).length,
                     bracket || mu ? 1 : 2);
                 assert.match(guide.status,
@@ -13357,10 +13360,10 @@ test(
             const ink = [
                 ...symbols, "$", "€", "⟨", "⟩",
                 "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
-                "ε", "ω", "κ", "χ",
+                "ε", "ω", "κ", "χ", "φ", "ψ",
             ].flatMap((glyph) => geometricStarter(
                 glyph, 1550, 2450, 1100, 250, "#243647"));
-            assert.equal(ink.length, 2089);
+            assert.equal(ink.length, 2187);
             const expected = encodeGlyphLibrary(ink);
             assert.deepEqual(actual.files, [expected, expected],
                 "real browser fill and refusal preserve exact pen order");
@@ -13393,7 +13396,7 @@ test(
                     "true", "--glyph-file", library, "--flow-text",
                     "∑∫∂Δ≈$€∓→∝<>←↔↑↓↕∧∨∩∪∈∉⊂⊆⊃⊇⊄⊈⊅⊉"
                         + "∋∌∅∇≡≢∥⊥∼≅∀∃∄∴∵⊤⊢⊨∠∟⊬⊭¬⇒⇔"
-                        + "≪≫≮≯≰≱↗↘↖↙⇐↦↤∣∤′″‴⋅∗∖∦⌊⌋⌈⌉⟨⟩αβθλμγδσρτεωκχ",
+                        + "≪≫≮≯≰≱↗↘↖↙⇐↦↤∣∤′″‴⋅∗∖∦⌊⌋⌈⌉⟨⟩αβθλμγδσρτεωκχφψ",
                     "--export-paper", format,
                     ...(format === "png" ? ["--dpi", "72"] : []));
                 assert.equal(rendered.status, 0,
@@ -13402,7 +13405,7 @@ test(
                 if (format === "pdf") {
                     const vector = rendered.stdout.toString("latin1");
                     assert.match(vector, /^%PDF-1\.4/);
-                    assert.equal((vector.match(/ m\n/g) ?? []).length, 1994,
+                    assert.equal((vector.match(/ m\n/g) ?? []).length, 2092,
                         "calculus, currency, arrows and comparisons ink");
                 } else {
                     const bytes = rendered.stdout;

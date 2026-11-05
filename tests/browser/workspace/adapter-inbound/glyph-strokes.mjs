@@ -3608,6 +3608,31 @@ test("manual Greek kappa and chi preserve separate native pen paths", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual Greek phi and psi retain separate ink and Unicode", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, first] of [
+        ["φ", 65, [1550, 1625]],
+        ["ψ", 33, [725, 1680]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, `${glyph} native segment count`);
+        assert.equal(candidatePenPaths(ink, glyph).length, 2,
+            `${glyph} deliberately lifts before its stem`);
+        assert.deepEqual([ink[0].x1, ink[0].y1], first,
+            `${glyph} retains its authored entry`);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("φ", ...args),
+        geometricStarter("o", ...args), "phi is not Latin o");
+    assert.notDeepEqual(geometricStarter("ψ", ...args),
+        geometricStarter("y", ...args), "psi is not Latin y");
+    assert.throws(() => geometricStarter("ϕ", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5405,7 +5430,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "⋅", "∗", "∖", "∦", "⌊", "⌋", "⌈", "⌉",
         "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
         "δ", "σ", "ρ", "τ", "ε", "ω", "κ", "χ",
-        "°", "%", "$", "€",
+        "φ", "ψ", "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
         ";", ":", "\"", "'", "…", "–", "—", "(", ")", "[", "]",

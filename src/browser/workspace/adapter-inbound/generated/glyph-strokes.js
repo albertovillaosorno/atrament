@@ -594,7 +594,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 // A full text/math fill currently sits just 12 strokes below the native cap.
 const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
-    "ε", "ω", "κ", "χ",
+    "ε", "ω", "κ", "χ", "φ", "ψ",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1215,6 +1215,23 @@ function mathParts(cx, cy, radius, glyph) {
         return [
             curve([-0.65, -0.8], [-0.2, 0.02], [0.75, 0.8]),
             curve([0.65, -0.85], [0.15, -0.1], [-0.75, 0.85]),
+        ];
+    // Phi uses a sampled, closed bowl and a separately lifted long stem.
+    // Psi has a joined pair of shoulders before its own upright stem;
+    // neither reuses another Greek or Latin glyph's pen geometry.
+    if (glyph === "φ")
+        return [
+            curve([0, -0.75], [0.65, -0.75], [0.65, 0]),
+            curve([0.65, 0], [0.65, 0.75], [0, 0.75]),
+            curve([0, 0.75], [-0.65, 0.75], [-0.65, 0]),
+            curve([-0.65, 0], [-0.65, -0.75], [0, -0.75]),
+            line(0, -1.05, 0, 1.05),
+        ];
+    if (glyph === "ψ")
+        return [
+            curve([-0.75, -0.7], [-0.75, 0.65], [0, 0.65]),
+            curve([0, 0.65], [0.75, 0.65], [0.75, -0.7]),
+            line(0, -0.85, 0, 1.05),
         ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.
