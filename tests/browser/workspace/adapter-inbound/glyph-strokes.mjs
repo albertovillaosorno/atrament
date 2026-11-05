@@ -8334,3 +8334,68 @@ test("browser cursive e/é guides and manual TSV stay session-safe",
             ui.restore();
         }
     });
+
+test("opt-in continuous-pen c keeps a single reversible open arc", () => {
+    const geometry = [1550, 2450, 700, 250, "#243647"];
+    const printed = geometricStarter("c", ...geometry);
+    const cursive = geometricStarter("c", ...geometry,
+        undefined, "cursive");
+    assert.equal(printed.length, 36);
+    assert.equal(cursive.length, 38);
+    assert.deepEqual(candidatePenPaths(cursive, "c").map(
+        ({ first, last }) => [first, last]), [[1, 38]],
+    "entry, reversed circle contour and exit form one pen-down gesture");
+    assert.deepEqual(cursive.slice(1, 37), printed.toReversed().map(
+        (line) => ({ ...line, x1: line.x2, y1: line.y2,
+            x2: line.x1, y2: line.y1 })),
+    "manual c preserves exact sampled circular C contour in reverse order");
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(cursive)), cursive);
+    assert.deepEqual(geometricStarter("c", ...geometry), printed,
+        "opt-in form cannot replace default printed c");
+    assert.throws(() => geometricStarter("C", ...geometry,
+        undefined, "cursive"), /Cursive variant/);
+    assert.throws(() => geometricStarter("c", 1550, 2450,
+        1600, 250, "#243647", undefined, "cursive"),
+    /Shape and pen thickness must fit/);
+});
+
+test("browser manual cursive c SVG and download are exact", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("form").value = "c-cursive";
+        get("form").dispatch("change");
+        assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+            "visible");
+        assert.match(get("ideal-c-loop").attributes.get("d"),
+            / A 1100 1100 0 1 0 /);
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-exit").attributes.get("visibility"),
+            "visible");
+        assert.equal(get("ideal-approach").attributes.get("visibility"),
+            "hidden", "only e needs an inside crossing");
+        get("character").value = "c";
+        get("character").dispatch("input");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        const expected = geometricStarter("c", 1550, 2450, 1100, 250,
+            "#243647", undefined, "cursive");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            expected);
+        get("circle-radius").value = "1600";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+            "hidden", "invalid radius hides stale C contour");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            expected, "invalid starter cannot alter the unsaved draft");
+        editor.reset();
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "hidden");
+    } finally {
+        ui.restore();
+    }
+});

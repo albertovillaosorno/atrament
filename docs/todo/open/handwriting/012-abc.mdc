@@ -2489,3 +2489,19 @@ unchanged default ink. Real Firefox selects each form and downloads native
 TSV, which the separate Rust CLI reopens byte-for-byte and renders to a
 two-line physical vector PDF and transparent PNG. This advances selectable
 manual cursive shapes, not writer calibration or full P1-012 completion.
+
+## Complementary continuous-pen c starter (partial) — 2026-11-05
+
+An explicit manual `c` variant now places a short entry before the
+reversed 36-chord C-shaped open circle, then carries the pen into a
+short right exit: one 38-segment continuous stroke. Unlike the adjacent
+cursive `e`, no internal crossing is created. The ordinary printed `c`
+still uses its original unmodified 36-chord loop. No Unicode alias,
+automatic joining or seeded fill substitution is introduced.
+
+The analytic SVG guide reverses its arc direction, adds an entry and exit,
+and hides the e-only crossing. Browser stroke/TSV continuity, clipping and
+atomic refusal regressions pass; actual Firefox selection and download
+replay to the exact Rust UTF-8 library, vector PDF and transparent PNG.
+Both c/e families remain optional local geometric starters rather than
+a completed writer-calibrated joining or word-layout system.

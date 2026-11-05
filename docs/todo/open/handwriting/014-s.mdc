@@ -671,3 +671,12 @@ order; browser guide and real Firefox acceptance prove no implicit draft
 replacement or automatic adjacent-word joining. Full two-line correlated
 cursive handwriting, joined letter families and persisted variation remain
 open. See the P1-012 exact glyph evidence for the tested geometry.
+
+## Complementary handwritten open c (partial)
+
+Manual `c` now supports a 38-segment entry/loop/exit pen gesture, distinct
+from its unchanged printed 36-segment contour. It shares the round C-arc
+basis with cursive `e` but does not add the e's crossing. Real Firefox TSV
+replay, Rust PDF/PNG output and exact directed pen path tests validate the
+new opt-in shape. Inter-letter spacing, word-level joins, and correlated
+writer signatures are still unimplemented.

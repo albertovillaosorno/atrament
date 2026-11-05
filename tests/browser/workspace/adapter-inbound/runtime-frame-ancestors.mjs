@@ -14511,7 +14511,7 @@ test(
 );
 
 test(
-    "Firefox cursive e and acute variants download exact native pen ink",
+    "Firefox cursive c/e and acute forms download native pen ink",
     { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
@@ -14552,7 +14552,8 @@ test(
                     const constructed = [];
                     const guides = [];
                     for (const [form, exact] of [
-                        ["e-cursive", "e"], ["é-cursive", "é"],
+                        ["c-cursive", "c"], ["e-cursive", "e"],
+                        ["é-cursive", "é"],
                         ["e\u0301-cursive", "e\u0301"],
                     ]) {
                         change("form", form);
@@ -14605,18 +14606,21 @@ test(
             const actual = JSON.parse(response.result.value);
             for (const guide of actual.guides) {
                 assert.equal(guide.arcVisible, "visible");
-                assert.equal(guide.approach, "visible");
+                assert.ok(["visible", "hidden"].includes(guide.approach));
                 assert.equal(guide.bar, "hidden");
                 assert.match(guide.arc, / A 700 700 0 1 0 /);
             }
+            assert.deepEqual(actual.guides.map((guide) => guide.approach),
+                ["hidden", "visible", "visible", "visible"]);
             assert.deepEqual(actual.guides.map((guide) => guide.acute),
-                ["hidden", "visible", "visible"]);
-            assert.match(actual.constructed[0], /39 sampled segments/);
-            assert.match(actual.constructed[1], /40 sampled segments/);
+                ["hidden", "hidden", "visible", "visible"]);
+            assert.match(actual.constructed[0], /38 sampled segments/);
+            assert.match(actual.constructed[1], /39 sampled segments/);
             assert.match(actual.constructed[2], /40 sampled segments/);
+            assert.match(actual.constructed[3], /40 sampled segments/);
             assert.equal(actual.clipped, "hidden");
             assert.match(actual.refused, /Cursive e and pen clip/);
-            const glyphs = ["e", "é", "e\u0301"];
+            const glyphs = ["c", "e", "é", "e\u0301"];
             const expected = encodeGlyphLibrary(glyphs.flatMap((glyph) =>
                 geometricStarter(glyph, 1550, 2450, 700, 250,
                     "#243647", undefined, "cursive")));
@@ -14645,7 +14649,7 @@ test(
             for (const format of ["pdf", "png"]) {
                 const result = invoke("notebook", "--printed-sheet",
                     "true", "--glyph-file", library,
-                    "--flow-text", "eée\u0301\neée\u0301",
+                    "--flow-text", "ceée\u0301\nceée\u0301",
                     "--export-paper", format,
                     ...(format === "png" ? ["--dpi", "72"] : []));
                 assert.equal(result.status, 0, result.stderr.toString());
@@ -14653,7 +14657,7 @@ test(
                     assert.match(result.stdout.toString("latin1"),
                         /^%PDF-1\.4/);
                     assert.equal((result.stdout.toString("latin1")
-                        .match(/ m\n/g) ?? []).length, 238);
+                        .match(/ m\n/g) ?? []).length, 314);
                 } else {
                     assert.deepEqual(result.stdout.subarray(0, 8),
                         Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));

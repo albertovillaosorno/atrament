@@ -3795,27 +3795,27 @@ test('stacked comparisons export native PDF and transparent PNG', () => {
     }
 });
 
-// Manual cursive e carries one uninterrupted pen gesture around the open
-// arc, and accented NFC/NFD variants lift only for the acute mark.
-test('continuous-pen e and exact acute forms export native PDF and PNG',
+// Manual cursive c/e carries one uninterrupted open-arc pen gesture:
+// c has no crossing; e crosses inside; NFC/NFD lift for acute.
+test('continuous-pen c/e and acute forms export native PDF and PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/cursive-e-'));
         try {
             const library = join(dir, 'cursive.tsv');
             const output = join(dir, 'cursive.pdf');
-            const glyphs = ['e', 'é', 'e\u0301'];
+            const glyphs = ['c', 'e', 'é', 'e\u0301'];
             const ink = glyphs.flatMap((glyph) => geometricStarter(
                 glyph, 1550, 2450, 700, 250, '#243647',
                 undefined, 'cursive'));
-            assert.equal(ink.length, 119);
-            for (const [glyph, size] of [['e', 39], ['é', 40],
+            assert.equal(ink.length, 157);
+            for (const [glyph, size] of [['c', 38], ['e', 39], ['é', 40],
                 ['e\u0301', 40]]) {
                 const strokes = ink.filter((line) =>
                     line.grapheme === glyph);
                 assert.equal(strokes.length, size);
                 assert.deepEqual(candidatePenPaths(strokes, glyph).map(
                     ({ first, last }) => [first, last]),
-                size === 39 ? [[1, 39]] : [[1, 39], [40, 40]]);
+                size < 40 ? [[1, size]] : [[1, 39], [40, 40]]);
             }
             const original = Buffer.from(encodeGlyphLibrary(ink));
             writeFileSync(library, original);
@@ -3828,7 +3828,7 @@ test('continuous-pen e and exact acute forms export native PDF and PNG',
             assert.equal(audit.status, 0, audit.stderr.toString());
             assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
             assert.match(audit.stdout.toString(),
-                /Distinct visible graphemes: 3/);
+                /Distinct visible graphemes: 4/);
             const flags = ['--printed-sheet', 'true',
                 '--glyph-file', library, '--flow-text', `${text}\n${text}`];
             const pdf = cli('notebook', [...flags,
