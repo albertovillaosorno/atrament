@@ -10,6 +10,7 @@ import { inflateSync } from 'node:zlib';
 import test from 'node:test';
 import {
     candidatePenPaths, encodeGlyphLibrary, geometricStarter,
+    fillMissingConnectedLowercase,
     reverseCandidatePath, rotateClosedCandidatePath,
 } from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -4835,6 +4836,57 @@ test('manual continuous g exports native PDF and transparent PNG', () => {
         assert.match(missing.stderr.toString(), /missing authored glyph/i);
         assert.deepEqual(readFileSync(output), accepted);
         assert.deepEqual(readFileSync(library), original);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+// The one-click browser batch is real CLI-readable ink, not a font fallback.
+test('connected lowercase fill exports native PDF and transparent PNG', () => {
+    const dir = mkdtempSync(join(root, '.temp/cursive-batch-'));
+    try {
+        const library = join(dir, 'batch.tsv');
+        const output = join(dir, 'batch.pdf');
+        const custom = geometricStarter('a', 1550, 2450, 1100,
+            250, '#243647');
+        const rows = fillMissingConnectedLowercase(custom, 1550, 2450,
+            1100, 250, '#243647');
+        assert.deepEqual(rows.slice(0, custom.length), custom);
+        assert.equal(rows.filter((row) => row.grapheme === 'a').length,
+            custom.length, 'custom printed a must not be overwritten');
+        const bytes = Buffer.from(encodeGlyphLibrary(rows));
+        writeFileSync(library, bytes);
+        const opened = cli('glyphs', ['--profile', library]);
+        assert.equal(opened.status, 0, opened.stderr.toString());
+        assert.deepEqual(opened.stdout, bytes);
+        const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+        const audit = cli('glyphs', ['--profile', library,
+            '--audit-text', lowercase]);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        assert.match(audit.stdout.toString(),
+            /Distinct visible graphemes: 26/);
+        const flags = ['--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', lowercase];
+        const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+            '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, rows.length);
+        const png = cli('notebook', [...flags, '--export-paper', 'png',
+            '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        const refused = cli('notebook', [
+            '--printed-sheet', 'true', '--glyph-file', library,
+            '--flow-text', 'A', '--export-paper', 'pdf',
+            '--output', output, '--replace']);
+        assert.notEqual(refused.status, 0);
+        assert.match(refused.stderr.toString(), /missing authored glyph/i);
+        assert.deepEqual(readFileSync(output), accepted);
+        assert.deepEqual(readFileSync(library), bytes);
     } finally {
         rmSync(dir, { recursive: true, force: true });
     }

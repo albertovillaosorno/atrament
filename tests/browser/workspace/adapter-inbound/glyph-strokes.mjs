@@ -6,6 +6,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
     scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
     composeAccentedGlyph, fillMissingBilingualBaseline,
+    fillMissingConnectedLowercase,
     missingBilingualBaseline, varyGlyphStrokes,
     candidatePenPaths, reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
@@ -428,6 +429,7 @@ function mountEditor() {
         "glyph-add", "glyph-copy-from", "glyph-copy", "glyph-compose",
         "glyph-selected",
         "glyph-form", "glyph-construct", "glyph-seed-lowercase",
+        "glyph-seed-connected",
         "glyph-seed-baseline", "glyph-focus-missing",
         "glyph-baseline-coverage",
         "glyph-seed-spanish", "glyph-seed-spanish-nfd",
@@ -2633,6 +2635,106 @@ test("s SVG and authored TSV replacement stay separate", async () => {
         ui.restore();
     }
 });
+
+test("connected lowercase batch preserves exact ink and refuses atomically",
+    () => {
+        const existing = [stroke("a"), stroke("∞"), stroke("n\u{303}")];
+        const before = encodeGlyphLibrary(existing);
+        const next = fillMissingConnectedLowercase(existing,
+            1550, 2450, 1100, 250, "#243647");
+        const missing = [..."bcdefghijklmnopqrstuvwxyz"];
+        const added = missing.flatMap((glyph) => geometricStarter(glyph,
+            1550, 2450, 1100, 250, "#243647", undefined, "cursive"));
+        assert.deepEqual(next, [...existing, ...added]);
+        assert.equal(encodeGlyphLibrary(existing), before);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(next)), next);
+        assert.equal(fillMissingConnectedLowercase(next,
+            1550, 2450, 1100, 250, "#FFFFFF"), next,
+        "fully authored lowercase remains unchanged after repeated click");
+        for (const glyph of missing) {
+            const paths = candidatePenPaths(next, glyph);
+            const lifts = ["f", "i", "j", "t"].includes(glyph) ? 1 : 0;
+            assert.equal(paths.length, 1 + lifts,
+                `${glyph} retains only its deliberate dot/crossbar lift`);
+        }
+        assert.throws(() => fillMissingConnectedLowercase(existing,
+            200, 2450, 1100, 250, "#243647"), /Shape and pen/);
+        assert.deepEqual(existing, [stroke("a"), stroke("∞"),
+            stroke("n\u{303}")], "clipped batch never changes source");
+        const nearCap = Array.from({ length: 4090 }, () => stroke("∞"));
+        assert.throws(() => fillMissingConnectedLowercase(nearCap,
+            1550, 2450, 1100, 250, "#243647"),
+        /Save requires 1..4096/);
+        assert.equal(nearCap.length, 4090);
+    });
+
+test("connected lowercase fill is session-gated, unsaved and idempotent",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            assert.equal(get("seed-connected").disabled, true);
+            get("seed-connected").dispatch("click");
+            assert.equal(get("preview").children.length, 0);
+            editor.start();
+            assert.equal(get("seed-connected").disabled, false);
+            get("seed-connected").dispatch("click");
+            assert.match(get("status").textContent,
+                /Filled 26 missing connected lowercase/);
+            assert.equal(downloads.length, 0);
+            get("character").value = "g";
+            get("character").dispatch("input");
+            assert.equal(get("preview").children.length, 91);
+            get("save").dispatch("click");
+            const first = await downloads.at(-1).text();
+            const expected = [..."abcdefghijklmnopqrstuvwxyz"].flatMap(
+                (glyph) => geometricStarter(glyph, 1550, 2450, 1100,
+                    250, "#243647", undefined, "cursive"));
+            assert.deepEqual(parseGlyphLibrary(first), expected);
+            get("color").value = "#ABCDEF";
+            get("seed-connected").dispatch("click");
+            assert.match(get("status").textContent, /All 26 lowercase/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), first);
+            editor.reset();
+            assert.equal(get("seed-connected").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("connected fill refuses bad settings without losing custom ink",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            const custom = [stroke("a"), stroke("∞")];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(custom));
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("circle-radius").value = "1600";
+            get("seed-connected").dispatch("click");
+            assert.match(get("status").textContent, /Shape and pen/);
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                custom);
+            get("circle-radius").value = "1100";
+            get("seed-connected").dispatch("click");
+            assert.match(get("status").textContent,
+                /Filled 25 missing connected lowercase/);
+            get("save").dispatch("click");
+            const saved = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(saved.slice(0, 2), custom,
+                "custom a and unrelated symbol retain exact authored ink");
+            assert.equal(saved.filter((line) => line.grapheme === "a")
+                .length, 1);
+        } finally {
+            ui.restore();
+        }
+    });
 
 test("fill-missing gesture seeds a-z only after admitted session", async () => {
     const ui = mountEditor();

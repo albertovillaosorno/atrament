@@ -969,6 +969,9 @@
             <button id="glyph-seed-lowercase" type="button" disabled>
               Fill missing lowercase a–z (unsaved)
             </button>
+            <button id="glyph-seed-connected" type="button" disabled>
+              Fill missing connected lowercase a–z (unsaved)
+            </button>
             <button id="glyph-seed-spanish" type="button" disabled>
               Fill missing Spanish accents (unsaved)
             </button>
@@ -1042,9 +1045,13 @@
           <p class="field-help">Fill missing lowercase adds only letters
             without authored strokes using the currently selected center,
             radius, ink color and pen width. Existing letters remain as
-            drawn. Review and download the TSV explicitly; this does not
-            add uppercase, accents, or automatic handwritten text. Fill
-            missing Spanish accents separately copies authored lowercase
+            drawn. The separate connected-lowercase button explicitly fills
+            missing a–z with the 26 individually authored continuous-pen
+            templates; dots and crossbars remain lifted. It does not alter
+            existing printed or custom glyphs, join adjacent letters, or
+            automatically save. Review and download TSV explicitly. Neither
+            button adds uppercase, accents, or automatic handwritten text.
+            Fill missing Spanish accents separately copies authored lowercase
             bases into á, é, í, ó, ú, ñ, ü (NFC). The decomposed button
             independently constructs their seven NFD forms, keeping exact
             Unicode keys and custom target ink separate. A missing base,

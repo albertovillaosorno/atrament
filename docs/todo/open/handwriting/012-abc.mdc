@@ -2809,3 +2809,21 @@ unknown Greek glyph without replacing the previous PDF or changing TSV.
 This is an integration regression for *explicitly selected* forms, not a
 new automatic cursive font: capitals are still printed, glyphs do not join
 across neighbors, and analytic SVG curves still become sampled TSV ink.
+
+## One-click missing connected lowercase templates — 2026-11-05
+
+The admitted browser editor now offers a separate explicit button to fill
+only missing `a`–`z` from the 26 authored continuous-pen templates. It
+retains independently authored custom or printed letters, and preserves
+unrelated exact Unicode ink. Every target uses the selected geometry, color
+and pen width; the entire candidate must fit the cell and native v1 TSV
+limits before the unsaved session draft changes. Repeating the gesture is
+idempotent; pen dots and bars stay lifted, with no inferred letter joins.
+
+Browser and real Firefox tests check session gating, exact 26-glyph strokes,
+pen-path continuity, custom ink, replay, clipped geometry, 4096-stroke
+refusal and no implicit download. Native Rust roundtrips the resulting TSV
+and renders all lowercase forms onto a vector PDF and transparent PNG,
+with an unknown uppercase refusing replacement of a valid page. This is an
+opt-in authoring shortcut, not automatic handwriting synthesis, learned
+calibration, or completion of the wider P1 glyph task.

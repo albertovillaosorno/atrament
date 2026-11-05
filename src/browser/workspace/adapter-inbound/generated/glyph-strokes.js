@@ -3615,6 +3615,18 @@ export function composeAccentedGlyph(strokes, source, target, color, pos = { dx:
     return [...base.map((stroke) => ({ ...stroke, grapheme: target })),
         ...accent];
 }
+// Explicitly construct missing connected lowercase templates as one atomic
+// candidate. Printed or custom authored letters are never silently replaced.
+export function fillMissingConnectedLowercase(existing, x, y, r, pen, color) {
+    const authored = new Set(existing.map((stroke) => stroke.grapheme));
+    const missing = [..."abcdefghijklmnopqrstuvwxyz"].filter((glyph) => !authored.has(glyph));
+    if (missing.length === 0)
+        return existing;
+    const added = missing.flatMap((glyph) => geometricStarter(glyph, x, y, r, pen, color, undefined, "cursive"));
+    const next = [...existing, ...added];
+    encodeGlyphLibrary(next);
+    return next;
+}
 // The frozen 114-grapheme English/Spanish text baseline is distinct from
 // optional math and notation symbols. Compose on a disposable candidate so
 // one clipped mark, ambiguous custom i, or native TSV cap refuses *all* fills.
@@ -3760,6 +3772,7 @@ export function createGlyphStrokeEditor() {
     const form = required("glyph-form");
     const construct = required("glyph-construct");
     const seedLowercase = required("glyph-seed-lowercase");
+    const seedConnected = required("glyph-seed-connected");
     const seedSpanish = required("glyph-seed-spanish");
     const seedSpanishNfd = required("glyph-seed-spanish-nfd");
     const seedUpperSpanish = required("glyph-seed-upper-spanish");
@@ -3864,7 +3877,8 @@ export function createGlyphStrokeEditor() {
         ranges[axis] = required(`glyph-${axis}-range`);
     }
     const controls = [character, color, source, add, copyFrom, copy, compose,
-        form, construct, seedLowercase, seedSpanish, seedSpanishNfd,
+        form, construct, seedLowercase, seedConnected,
+        seedSpanish, seedSpanishNfd,
         seedUpperSpanish, seedUpperSpanishNfd,
         seedPunctuation, seedQuotes, seedMath, seedDigits, seedCapitals,
         seedTextMarks, seedBaseline, focusMissing,
@@ -5411,6 +5425,31 @@ export function createGlyphStrokeEditor() {
             render();
             message(`Filled ${missing.length} missing lowercase templates (`
                 + `${added.length} sampled strokes); unsaved draft`);
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    seedConnected.addEventListener("click", () => {
+        if (!active)
+            return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the current pen trace before seeding");
+            }
+            const next = fillMissingConnectedLowercase(strokes, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value);
+            if (next === strokes) {
+                message("All 26 lowercase glyphs already have authored ink");
+                return;
+            }
+            const count = new Set(next.map((line) => line.grapheme)).size
+                - new Set(strokes.map((line) => line.grapheme)).size;
+            const added = next.length - strokes.length;
+            strokes = next;
+            selectedIndex = null;
+            render();
+            message(`Filled ${count} missing connected lowercase glyphs (`
+                + `${added} sampled strokes); unsaved draft`);
         }
         catch (error) {
             message(String(error));

@@ -49,7 +49,8 @@ import { PassThrough } from "node:stream";
 import test from "node:test";
 import { inflateSync } from "node:zlib";
 const { geometricStarter, encodeGlyphLibrary,
-    fillMissingBilingualBaseline, italicizeGlyphStrokes, scaleGlyphHeight,
+    fillMissingBilingualBaseline, fillMissingConnectedLowercase,
+    italicizeGlyphStrokes, scaleGlyphHeight,
     scaleGlyphWidth, scaleGlyphInk,
     translateGlyphStrokes } = await import(new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/"
@@ -14892,6 +14893,148 @@ test(
                         "rendered page is transparent RGBA PNG");
                 }
             }
+            assert.equal(fs.readFileSync(library, "utf8"), expected);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+// Explicit batching reuses manual pen geometry and only the user's download
+// becomes a native input. No hidden browser font or automatic joins are used.
+test(
+    "Firefox one-click connected lowercase downloads native ink",
+    { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/cursive-batch-firefox-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const get = (id) => document.getElementById("glyph-" + id);
+                    const blobs = [];
+                    const names = [];
+                    const originalUrl = URL.createObjectURL;
+                    const originalClick = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return originalUrl.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            names.push(this.download);
+                        };
+                        const enabled = !get("seed-connected").disabled;
+                        get("circle-x").value = "200";
+                        get("seed-connected").click();
+                        const refused = get("status").textContent;
+                        get("circle-x").value = "1550";
+                        get("seed-connected").click();
+                        const filled = get("status").textContent;
+                        get("character").value = "g";
+                        get("character").dispatchEvent(new Event("input"));
+                        const previewCount = get("preview").childElementCount;
+                        const unsaved = blobs.length;
+                        get("seed-connected").click();
+                        const already = get("status").textContent;
+                        get("save").click();
+                        return JSON.stringify({ enabled, refused, filled,
+                            previewCount, unsaved, already, names,
+                            files: await Promise.all(blobs.map((blob) =>
+                                blob.text())) });
+                    } finally {
+                        URL.createObjectURL = originalUrl;
+                        HTMLAnchorElement.prototype.click = originalClick;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const actual = JSON.parse(response.result.value);
+            assert.equal(actual.enabled, true);
+            assert.match(actual.refused, /Shape and pen/);
+            assert.match(actual.filled,
+                /Filled 26 missing connected lowercase glyphs/);
+            assert.equal(actual.previewCount, 91);
+            assert.equal(actual.unsaved, 0);
+            assert.match(actual.already, /All 26 lowercase/);
+            assert.deepEqual(actual.names, ["my-glyph-strokes.tsv"]);
+            const expected = encodeGlyphLibrary(fillMissingConnectedLowercase(
+                [], 1550, 2450, 1100, 250, "#243647"));
+            assert.deepEqual(actual.files, [expected]);
+            assert.deepEqual(requests, baseline,
+                "explicit browser authoring does not use a backend API");
+            const library = path.join(profile, "connected.tsv");
+            fs.writeFileSync(library, actual.files[0]);
+            const build = spawnSync(PINNED_CARGO, ["build", "--offline",
+                "--quiet", "-p", "atrament_profile_editor_cli", "--bin",
+                "atrament-profiles"], { timeout: 90_000, stdio: "pipe",
+                    env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR } });
+            assert.equal(build.status, 0,
+                "offline native CLI builds for real browser download");
+            const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            const invoke = (...args) => spawnSync(cli, args,
+                { timeout: 20_000, maxBuffer: 16 * 1024 * 1024 });
+            const reopened = invoke("glyphs", "--profile", library);
+            assert.equal(reopened.status, 0, reopened.stderr.toString());
+            assert.equal(reopened.stdout.toString(), expected);
+            const inkText = "abcdefghijklmnopqrstuvwxyz";
+            const audit = invoke("glyphs", "--profile", library,
+                "--audit-text", inkText);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 26/);
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            const flags = ["notebook", "--printed-sheet", "true",
+                "--glyph-file", library, "--flow-text", inkText];
+            const pdfPath = path.join(profile, "connected.pdf");
+            const pdf = invoke(...flags, "--export-paper", "pdf",
+                "--output", pdfPath);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = fs.readFileSync(pdfPath);
+            assert.match(accepted.toString("latin1"), /^%PDF-1\.4/);
+            assert.equal((accepted.toString("latin1").match(/ m\n/g) ?? [])
+                .length, expected.trimEnd().split("\n").length - 1);
+            const png = invoke(...flags, "--export-paper", "png",
+                "--dpi", "72");
+            assert.equal(png.status, 0, png.stderr.toString());
+            assert.deepEqual(png.stdout.subarray(0, 8),
+                Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+            assert.equal(png.stdout[25], 6, "actual transparent RGBA ink");
+            const unknown = invoke("notebook", "--printed-sheet", "true",
+                "--glyph-file", library, "--flow-text", "A",
+                "--export-paper", "pdf", "--output", pdfPath,
+                "--replace");
+            assert.notEqual(unknown.status, 0);
+            assert.match(unknown.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(fs.readFileSync(pdfPath), accepted);
             assert.equal(fs.readFileSync(library, "utf8"), expected);
         } finally {
             bidi?.close();
