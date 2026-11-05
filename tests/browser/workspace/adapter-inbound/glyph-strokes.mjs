@@ -7008,7 +7008,7 @@ test("cursive o/a starters keep directed entry, loop and exit", () => {
         assert.deepEqual(geometricStarter(glyph, ...values), base,
             "choosing cursive cannot mutate its regular form");
     }
-    for (const invalid of ["b", "v", "A", "∞"]) {
+    for (const invalid of ["b", "k", "A", "∞"]) {
         assert.throws(() => geometricStarter(invalid, ...values,
             undefined, "cursive"), /Cursive variant/);
     }
@@ -8276,7 +8276,7 @@ test("opt-in cursive e and acute é keep exact directed pen paths", () => {
     assert.throws(() => geometricStarter("e", 1550, 2450,
         1400, 250, "#123456", undefined, "cursive"),
     /Cursive e and pen clip/);
-    assert.throws(() => geometricStarter("v", ...geometry,
+    assert.throws(() => geometricStarter("k", ...geometry,
         undefined, "cursive"), /Cursive variant/);
 });
 
@@ -9133,6 +9133,88 @@ test("browser cursive j guide and TSV keep dot lifted after clipping refusal",
             get("save").dispatch("click");
             assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
                 accepted, "rejected j never replaces saved exact Unicode ink");
+            editor.reset();
+            assert.equal(get("ideal-exit").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });
+
+
+test("manual connected v/w keep both printed zigzags exact", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count] of [["v", 2], ["w", 4]]) {
+        const printed = geometricStarter(glyph, ...args);
+        const joined = geometricStarter(glyph, ...args,
+            undefined, "cursive");
+        assert.equal(printed.length, count);
+        assert.equal(joined.length, count + 2);
+        assert.deepEqual(joined.slice(1, -1), printed,
+            `exact printed ${glyph} zigzag is not modified`);
+        assert.deepEqual(candidatePenPaths(joined, glyph).map(
+            ({ first, last }) => [first, last]), [[1, count + 2]]);
+        assert.deepEqual(joined[0], {
+            grapheme: glyph, x1: 250, y1: 1550,
+            x2: 450, y2: 1350, width: 250, color: "#243647",
+        });
+        assert.deepEqual(joined.at(-1), {
+            grapheme: glyph, x1: 2650, y1: 1350,
+            x2: 2850, y2: 1150, width: 250, color: "#243647",
+        });
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)),
+            joined);
+        assert.deepEqual(geometricStarter(glyph, ...args), printed);
+        assert.equal(geometricStarter(glyph, 1300, 2450,
+            1100, 250, "#243647").length, count);
+        assert.throws(() => geometricStarter(glyph, 1300, 2450,
+            1100, 250, "#243647", undefined, "cursive"),
+        /Cursive zigzag and pen clip/);
+        assert.throws(() => geometricStarter(glyph.toUpperCase(), ...args,
+            undefined, "cursive"), /Cursive variant/);
+    }
+});
+
+test("browser manual v/w previews exact straight ink and refuses clipped entry",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            for (const glyph of ["v", "w"]) {
+                get("form").value = `${glyph}-cursive`;
+                get("form").dispatch("change");
+                get("character").value = glyph;
+                get("character").dispatch("input");
+                for (const id of ["ideal-entry", "ideal-exit",
+                    "ideal-rounded"]) {
+                    assert.equal(get(id).attributes.get("visibility"),
+                        "visible", `manual ${glyph} shows ${id}`);
+                }
+                for (const id of ["ideal-approach", "ideal-i-dot",
+                    "ideal-rounded-left", "ideal-rounded-right"]) {
+                    assert.equal(get(id).attributes.get("visibility"),
+                        "hidden", `manual ${glyph} does not invent ${id}`);
+                }
+                assert.equal(get("ideal-entry").attributes.get("x2"),
+                    "450");
+                assert.equal(get("ideal-exit").attributes.get("y1"),
+                    "1350");
+                get("construct").dispatch("click");
+            }
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, ["v", "w"].flatMap((glyph) =>
+                geometricStarter(glyph, 1550, 2450, 1100, 250,
+                    "#243647", undefined, "cursive")));
+            get("circle-x").value = "1300";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden", "clipped v/w entry hides preview pen guides");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "a rejected w cannot replace an admitted draft");
             editor.reset();
             assert.equal(get("ideal-exit").attributes.get("visibility"),
                 "hidden");

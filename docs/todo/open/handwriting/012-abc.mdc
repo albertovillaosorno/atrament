@@ -2645,3 +2645,17 @@ real Firefox selection/download and Rust vector PDF/transparent PNG replay
 verify 19 connected segments plus one detached dot. Missing uppercase `J`
 never overwrites a valid render. This does not imply cross-letter joins,
 calibrated handwriting or a persisted curve-based font.
+
+## Opt-in continuous-pen lowercase v and w — 2026-11-05
+
+The manual `v` and `w` options reuse their exact two- and four-stroke
+printed zigzags, which already meet at every directed vertex. Short
+left entry and rising right exit strokes turn them into respectively
+four- and six-segment continuous gestures, without fake pen lifts or
+unnecessary stem retraces. The printed variants remain unchanged.
+
+Browser straight SVG, TSV, left-edge pen clipping, actual Firefox download
+and native Rust vector PDF/transparent PNG tests preserve each exact
+selected key. Unauthored uppercase glyphs refuse before replacing a page.
+These geometric starters do not connect neighboring letters or create
+calibrated script.
