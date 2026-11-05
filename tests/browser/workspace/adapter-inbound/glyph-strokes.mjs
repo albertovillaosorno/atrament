@@ -9068,3 +9068,75 @@ test("browser cursive f draws its crossbar and saves exact lifted ink",
             ui.restore();
         }
     });
+
+
+test("manual cursive j keeps one hooked descender and lifted dot", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("j", ...args);
+    const joined = geometricStarter("j", ...args, undefined, "cursive");
+    assert.equal(printed.length, 18);
+    assert.equal(joined.length, 20);
+    assert.deepEqual(joined.slice(1, 18), printed.slice(0, 17),
+        "the exact printed stem and 32 directed quadratic chords survive");
+    assert.deepEqual(joined[19], printed[17],
+        "the dot stays a separate lifted stroke");
+    assert.deepEqual(candidatePenPaths(joined, "j").map(
+        ({ first, last }) => [first, last]), [[1, 19], [20, 20]]);
+    assert.deepEqual(joined[0], {
+        grapheme: "j", x1: 1350, y1: 2210, x2: 1550, y2: 2010,
+        width: 250, color: "#243647",
+    });
+    assert.deepEqual(joined[18], {
+        grapheme: "j", x1: 1000, y1: 3990, x2: 1200, y2: 3790,
+        width: 250, color: "#243647",
+    });
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("j", ...args), printed);
+    assert.throws(() => geometricStarter("j", 1550, 2450,
+        1400, 250, "#243647", undefined, "cursive"),
+    /Hooked descender and pen must fit/);
+    assert.throws(() => geometricStarter("J", ...args,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser cursive j guide and TSV keep dot lifted after clipping refusal",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "j-cursive";
+            get("form").dispatch("change");
+            get("character").value = "j";
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-exit",
+                "ideal-i-stem", "ideal-i-dot", "ideal-rounded"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual j shows ${id}`);
+            }
+            assert.equal(get("ideal-entry").attributes.get("y2"),
+                "2010", "entry joins the actual printed j stem");
+            assert.equal(get("ideal-exit").attributes.get("x1"),
+                "1000", "exit begins at the sampled hook end");
+            assert.equal(get("ideal-approach").attributes.get("visibility"),
+                "hidden", "j does not invent a stem-to-dot join");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("j", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-radius").value = "1400";
+            get("circle-radius").dispatch("input");
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden", "clipped descender hides all connected guides");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "rejected j never replaces saved exact Unicode ink");
+            editor.reset();
+            assert.equal(get("ideal-exit").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });

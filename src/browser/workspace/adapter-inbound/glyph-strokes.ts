@@ -2578,6 +2578,45 @@ function cursiveStem(base: Stroke[], radius: number): Stroke[] {
     ];
 }
 
+// Optional j keeps its straight stem and sampled hooked descender in
+// one directed pen gesture. Its dot must remain a separate pen lift.
+// This does not connect neighboring glyphs or change the printed j.
+function cursiveHook(base: Stroke[], radius: number): Stroke[] {
+    if (base.length !== ARCH_SEGMENTS + 2
+        || base.some((stroke) => stroke.grapheme !== "j")) {
+        throw new Error("Cursive j needs the authored hook and dot");
+    }
+    const stem = base[0]!;
+    const turn = base.slice(1, -1);
+    const dot = base.at(-1)!;
+    const end = turn.at(-1)!;
+    if (stem.x2 !== turn[0]!.x1 || stem.y2 !== turn[0]!.y1) {
+        throw new Error("Cursive j needs a continuous printed hook");
+    }
+    const lead = Math.min(200, Math.round(radius / 5));
+    const pen = stem.width;
+    const draw = (from: Point, to: Point): Stroke => {
+        for (const point of [from, to]) {
+            if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
+                || point.y - pen / 2 < 0
+                || point.y + pen / 2 > 4500) {
+                throw new Error("Cursive j connector and pen clip glyph cell");
+            }
+        }
+        return validateStroke({ grapheme: "j",
+            x1: from.x, y1: from.y, x2: to.x, y2: to.y,
+            width: pen, color: stem.color });
+    };
+    const start = { x: stem.x1, y: stem.y1 };
+    const finish = { x: end.x2, y: end.y2 };
+    return [
+        draw({ x: start.x - lead, y: start.y + lead }, start),
+        stem, ...turn,
+        draw(finish, { x: finish.x + lead, y: finish.y - lead }),
+        dot,
+    ];
+}
+
 // Optional n/h/u/r keep the printed rounded shoulder in one pen gesture.
 // n/h/r retrace the rising left stem to meet the arch; u already connects.
 // r ends at its shoulder without inventing the n's descending right stem.
@@ -2709,10 +2748,10 @@ export function geometricStarter(
         throw new Error("Italic variant requires matching o/a glyph");
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
-        "i", "í", "l", "t", "f", "n", "ñ", "u", "ú", "ü", "m", "h", "r"]
+        "i", "í", "j", "l", "t", "f", "n", "ñ", "u", "ú", "ü", "m", "h", "r"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "l/t/f, n/ñ, h/r, u/ú/ü or m glyph");
+            + "j, l/t/f, n/ñ, h/r, u/ú/ü or m glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2729,6 +2768,7 @@ export function geometricStarter(
         const base = geometricStarter(g, x, y, r, w, color, pos, "single");
         return g === "c" || g === "e"
             ? cursiveOpenArc(base, r)
+            : g === "j" ? cursiveHook(base, r)
             : ["i", "í", "l", "t", "f"].includes(g)
                 ? cursiveStem(base, r) : ["n", "u", "h", "r"].includes(g)
                     ? cursiveRounded(base, r) : g === "m"
@@ -3815,6 +3855,11 @@ export function createGlyphStrokeEditor(): {
             const cursiveArc = cursiveE || cursiveC;
             const cursiveStem = connected && ["i", "í", "l", "t", "f"]
                 .includes(chosen.grapheme);
+            const cursiveJ = connected && chosen.grapheme === "j";
+            const jParts = chosen.grapheme === "j"
+                ? hookedJ(cx, cy, r, Number(numeric.width.value)) : null;
+            const jHookEnd = cursiveJ && jParts !== null
+                ? jParts.turn[2] : null;
             const cursiveUp = connected && ["n", "ñ", "h", "r"]
                 .includes(chosen.grapheme);
             const cursiveU = connected && ["u", "ú", "ü"]
@@ -3835,7 +3880,8 @@ export function createGlyphStrokeEditor(): {
             const eLower = openCirclePoint(cx, cy, r, 0);
             const connectors: [SVGLineElement, Point, Point][] = [
                 [idealEntry,
-                    cursiveStem ? { x: cx - lead, y: stemStartY + lead }
+                    cursiveStem || cursiveJ
+                        ? { x: cx - lead, y: stemStartY + lead }
                         : cursiveM ? {
                             x: cx - r - lead, y: cy + r + lead }
                         : cursiveUp || cursiveU ? {
@@ -3845,7 +3891,7 @@ export function createGlyphStrokeEditor(): {
                         : cursiveC
                             ? { x: eUpper.x - lead, y: eUpper.y + lead }
                             : { x: cx - r - lead, y: cy + lead },
-                    cursiveStem ? { x: cx, y: stemStartY }
+                    cursiveStem || cursiveJ ? { x: cx, y: stemStartY }
                         : cursiveM ? { x: cx - r, y: cy + r }
                         : cursiveUp || cursiveU
                             ? (cursiveUp ? upHump : uBowl).firstStem.from
@@ -3874,6 +3920,11 @@ export function createGlyphStrokeEditor(): {
                             ? { x: eLower.x + lead, y: eLower.y - lead }
                             : { x: cx + r + lead, y: endY - lead }],
             ];
+            if (jHookEnd !== null) {
+                const exit = connectors[2]!;
+                exit[1] = jHookEnd;
+                exit[2] = { x: jHookEnd.x + lead, y: jHookEnd.y - lead };
+            }
             for (const [guide, from, to] of connectors) {
                 for (const [axis, value] of [
                     ["x1", from.x], ["y1", from.y],
@@ -3925,8 +3976,6 @@ export function createGlyphStrokeEditor(): {
             const straightD = isStraight ? straightGuide(straightLines(
                 cx, cy, r, chosen.grapheme as StraightGlyph,
             )) : "";
-            const jParts = chosen.grapheme === "j"
-                ? hookedJ(cx, cy, r, Number(numeric.width.value)) : null;
             const gParts = chosen.grapheme === "g"
                 ? hookedG(cx, cy, r) : null;
             const jTurn = jParts?.turn;

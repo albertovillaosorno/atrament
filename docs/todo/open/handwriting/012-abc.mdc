@@ -2632,3 +2632,16 @@ Browser pen-path, SVG and clipped-ascender refusal checks, live Firefox TSV
 capture and Rust native PDF/transparent PNG replay validate the selection.
 An unknown uppercase `F` refuses native replacement without data loss.
 This does not connect adjacent letters or finish calibrated handwriting.
+
+## Optional continuous-pen hooked lowercase j — 2026-11-05
+
+The manual `j` starter now carries the printed downstroke into its exact
+16 sampled quadratic descender chords, with a short entry and rising exit
+while keeping the dot as a separate lifted stroke. The default printed
+`j` is untouched; only the explicitly selected option joins the hook.
+
+Browser SVG geometry, exact Unicode TSV, clipping and atomic refusal tests,
+real Firefox selection/download and Rust vector PDF/transparent PNG replay
+verify 19 connected segments plus one detached dot. Missing uppercase `J`
+never overwrites a valid render. This does not imply cross-letter joins,
+calibrated handwriting or a persisted curve-based font.
