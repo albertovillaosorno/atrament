@@ -601,6 +601,7 @@ const MANUAL_MATH_GLYPHS = [
     "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
     "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘", "⋂", "⋃", "⋀", "⋁", "⊓", "⊔",
     "⊏", "⊐", "⊑", "⊒", "⊞", "⊟", "⊠", "⊡",
+    "≺", "≻", "≼", "≽",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -863,6 +864,24 @@ function mathParts(cx, cy, radius, glyph) {
             line(0.6, 0.05, -0.55, 0.6),
             ...(glyph === "≥" ? [horizontal(0.88)] : []),
         ];
+    // Precedes/follows are two joined quadratic curves rather than the
+    // sharp < and > comparisons. Inclusive relations add a lifted underbar.
+    // All four forms remain opt-in, outside the full automatic math batch.
+    if (["≺", "≻", "≼", "≽"].includes(glyph)) {
+        const mirror = glyph === "≻" || glyph === "≽" ? -1 : 1;
+        const curve = [
+            { from: point(mirror * 0.65, -0.65),
+                control: point(-mirror * 0.72, -0.65),
+                to: point(-mirror * 0.72, 0) },
+            { from: point(-mirror * 0.72, 0),
+                control: point(-mirror * 0.72, 0.65),
+                to: point(mirror * 0.65, 0.65) },
+        ];
+        if (glyph === "≼" || glyph === "≽") {
+            curve.push(line(-0.65, 0.96, 0.65, 0.96));
+        }
+        return curve;
+    }
     // Doubled chevrons are two separately lifted, connected comparisons.
     // Negated strict signs keep their exact positive contour and then lift
     // the pen for a diagonal slash; no fallback to other Unicode signs.
@@ -2595,6 +2614,9 @@ export function geometricStarter(g, x, y, r, w, color, pos, kind = "single") {
         }
         if (["⊑", "⊒"].includes(g) && radius * 0.33 < pen + 60) {
             throw new Error("Square subset underbar needs pen-clearance");
+        }
+        if (["≼", "≽"].includes(g) && radius * 0.31 < pen + 60) {
+            throw new Error("Precedence underbar needs pen-clearance");
         }
         if (["⊞", "⊟", "⊠", "⊡"].includes(g)
             && radius * 0.38 < pen + 80) {

@@ -2414,3 +2414,17 @@ Focused browser path and TSV tests, live Firefox, native Rust vector
 PDF/transparent PNG and missing-key atomic refusal exercise the square
 forms without substituting their circled counterparts. The automatic
 93-form math batch and uncalibrated geometry status remain unchanged.
+## Exact precedence and follows relations (partial) — 2026-11-05
+
+The manual math selector now admits exact `≺`, `≻`, `≼` and `≽` with
+separate Unicode keys. Each relation uses two connected quadratic guides,
+sampled to 32 directed native pen chords, rather than the sharp `<`/`>`
+comparison or a rounded subset sign. The two inclusive relations add a
+separately lifted equality underbar (33 total segments per glyph), and
+refuse insufficient pen clearance before altering any saved draft.
+
+Browser guide geometry, bounded TSV, native Rust vector PDF and transparent
+PNG, exact-key audit and atomic missing-lookalike refusal cover this slice.
+Firefox checks the real selection and downloadable authored ink. These
+forms remain opt-in and never expand the near-capacity 93-form automatic
+math fill; persistent math layout and calibrated handwriting stay open.
