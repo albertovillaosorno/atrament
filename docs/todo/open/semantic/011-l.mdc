@@ -1122,3 +1122,18 @@ requires a real glyph for literal `=`, preserves selected exports on refusal,
 and proves actual Setext syntax remains independent of literal equals ink.
 No new Markdown constructs or persistent semantic notebook content are
 introduced; ATR-P2-011 remains open.
+
+## Rendered-ink row-pitch boundary audit (partial) — 2026-11-05
+
+A bounded Rust regression now cross-checks native Markdown row-pitch
+measurement against the **actual rendered text runs**, not a duplicated
+syntax parser. It varies seven independently tall authored punctuation
+shapes across opening headings, task/list prefixes, quotes, indented
+continuations, fenced code and Setext-like title boundaries. A syntactic
+marker must not change a physical row's height; literal punctuation must
+retain its full 25-mm glyph height plus 4-mm clearance. Over one thousand
+accepted combinations pass without changing any native PDF/PNG semantics.
+
+This protects the existing export-time height contract against future
+parser changes. It does not add saved semantic blocks, arbitrary Markdown
+features or independent page-region placement; ATR-P2-011 remains open.

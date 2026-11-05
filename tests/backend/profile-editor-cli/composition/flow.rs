@@ -762,3 +762,65 @@ fn terminal_heading_chain_counts_interior_fenced_blank_rows() {
         assert!(ornaments.iter().all(|mark| mark.page == 2));
     }
 }
+
+#[test]
+fn measured_pitch_only_counts_rendered_markdown_ink_at_block_boundaries() {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let tall = ScalarStatistics {
+        maximum: 25_000, mean: 25_000, median: 25_000,
+        minimum: 25_000, standard_deviation: 0,
+    };
+    let fragments = [
+        "a", "a  ", "a\\", "> a", "> a\n  a", "> a\n   a",
+        "- a", "- a\n  a", "1. a", "1. a\n  a", "# a",
+        "~~~txt\na\n~~~", "~~~txt\n\n~~~", "    a", "\\# a",
+        "a\n", "a\n\n", "a\n~~~txt\n\n~~~", "a\n# a",
+    ];
+    let suffixes = [
+        "=", "=\na", "===\na", "---\na", "# a", "> a",
+        "  =", "  =\na", "   =\na", "    =\na",
+        "~~~txt\n=\n~~~\na", "\n=\na", "\n===\na",
+        "\\=\na", "- a\n  =\na", "> a\n  =\na",
+    ];
+    // Cross-check source parsing against actual physical text rather
+    // than duplicating the parser's idea of structural syntax.
+    let mut verified = 0;
+    for marker in ["=", "#", "-", ">", "\\", "[", "~"] {
+        let statistics = HandwritingStatisticsProfile::baseline(1)
+            .with_glyph(marker, DimensionStatistics {
+                dimension: Dimension::Height, statistics: tall,
+            }, &UnicodeGraphemeSegmentation)
+            .expect("valid tall authored marker");
+        for prefix in fragments {
+            for suffix in suffixes {
+                let text = format!("{prefix}\n{suffix}");
+                let source = FlowSource::new(FlowFormat::Markdown, &text)
+                    .expect("bounded Markdown candidate");
+                let Ok((runs, _, _)) = super::layout_flow(
+                    &source, &NotebookProfile::default(),
+                    Some(&statistics), super::HeadingDecoration::default(),
+                ) else {
+                    continue;
+                };
+                let measured = super::measured_pitch(&source,
+                    Some(&statistics)).expect("bounded pitch");
+                let expected = if runs.iter()
+                    .any(|run| run.text.contains(marker)) {
+                    29_000
+                } else {
+                    9_000
+                };
+                assert_eq!(measured, expected,
+                    "marker={marker:?}, source={text:?}, runs={runs:?}");
+                verified += 1;
+            }
+        }
+    }
+    assert!(verified > 1_000, "admitted boundary sample is meaningful");
+}
