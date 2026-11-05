@@ -9624,3 +9624,75 @@ test("browser manual b previews exact ascender retrace and saves TSV",
             ui.restore();
         }
     });
+
+// The p descender joins its complete circular bowl without lifting the pen.
+test("manual continuous p preserves its printed descender and circle", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("p", ...args);
+    const joined = geometricStarter("p", ...args, undefined, "cursive");
+    assert.equal(printed.length, 49);
+    assert.equal(joined.length, 76);
+    assert.deepEqual(joined[1], printed[48]);
+    assert.deepEqual(joined.slice(3, 27), printed.slice(24, 48));
+    assert.deepEqual(joined.slice(27, 75), printed.slice(0, 48));
+    assert.deepEqual(joined[0], {
+        grapheme: "p", x1: 250, y1: 1550,
+        x2: 450, y2: 1350, width: 250, color: "#243647",
+    });
+    assert.deepEqual(joined[2], {
+        grapheme: "p", x1: 450, y1: 4100,
+        x2: 450, y2: 2450, width: 250, color: "#243647",
+    });
+    assert.deepEqual(candidatePenPaths(joined, "p").map(
+        ({ first, last }) => [first, last]), [[1, 76]]);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(joined)), joined);
+    assert.deepEqual(geometricStarter("p", ...args), printed);
+    assert.equal(geometricStarter("p", 1400, 2450, 1100,
+        250, "#243647").length, 49);
+    assert.throws(() => geometricStarter("p", 1400, 2450,
+        1100, 250, "#243647", undefined, "cursive"),
+    /Cursive p connector and pen clip/);
+    assert.throws(() => geometricStarter("P", ...args,
+        undefined, "cursive"), /Cursive variant/);
+});
+
+test("browser manual p previews descending retrace and refuses clip",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "p-cursive";
+            get("form").dispatch("change");
+            get("character").value = "p";
+            get("character").dispatch("input");
+            for (const id of ["ideal-circle", "ideal-stem", "ideal-entry",
+                "ideal-approach", "ideal-exit"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `cursive p shows ${id}`);
+            }
+            assert.equal(get("ideal-entry").attributes.get("y2"), "1350");
+            assert.equal(get("ideal-stem").attributes.get("y2"), "4100");
+            assert.equal(get("ideal-approach").attributes.get("y1"), "4100");
+            assert.equal(get("ideal-approach").attributes.get("y2"), "2450");
+            get("construct").dispatch("click");
+            assert.equal(get("preview").children.length, 76);
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("p", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-x").value = "1400";
+            get("circle-x").dispatch("input");
+            assert.equal(get("ideal-approach").attributes
+                .get("visibility"), "hidden");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "clipped p does not replace downloaded ink");
+            editor.reset();
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });

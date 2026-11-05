@@ -2501,25 +2501,26 @@ function cursiveLoop(base: Stroke[], radius: number): Stroke[] {
     return ink;
 }
 
-// A manual b enters its original tall left stem, retraces to the left
-// circle tangent, and follows the upper semicircle to the printed loop's
-// right-hand start. The unmodified 48-chord circle then ends at that same
-// right point for a short exit. Its 49 printed strokes remain exact and
-// no unrecorded pen lift or adjacent-letter join is implied.
-function cursiveB(base: Stroke[], radius: number): Stroke[] {
+// A manual b/p enters its original left stem, retraces to the circle
+// tangent, and follows the upper semicircle to the printed loop start.
+// The unchanged 48-chord circle ends at the right for a short exit.
+// Printed ascenders and descenders remain exact and no word join is inferred.
+function cursiveLeftBowl(base: Stroke[], radius: number): Stroke[] {
     const circle = base.slice(0, CIRCLE_SEGMENTS);
     const stem = base[CIRCLE_SEGMENTS];
     const left = circle[CIRCLE_SEGMENTS / 2];
     const right = circle[0];
+    const glyph = stem?.grapheme;
     if (base.length !== CIRCLE_SEGMENTS + 1 || !left || !right || !stem
-        || base.some((line) => line.grapheme !== "b")
+        || (glyph !== "b" && glyph !== "p")
+        || base.some((line) => line.grapheme !== glyph)
         || stem.x1 !== left.x1 || stem.x2 !== left.x1
         || !(stem.y1 < left.y1 && left.y1 < stem.y2)
         || circle.some((line, index) => {
             const next = circle[(index + 1) % circle.length];
             return line.x2 !== next?.x1 || line.y2 !== next?.y1;
         })) {
-        throw new Error("Cursive b requires the printed circle and stem");
+        throw new Error("Cursive b/p requires the printed circle and stem");
     }
     const lead = Math.min(200, Math.round(radius / 5));
     const pen = stem.width;
@@ -2528,10 +2529,11 @@ function cursiveB(base: Stroke[], radius: number): Stroke[] {
             if (point.x - pen / 2 < 0 || point.x + pen / 2 > 3500
                 || point.y - pen / 2 < 0
                 || point.y + pen / 2 > 4500) {
-                throw new Error("Cursive b connector and pen clip glyph cell");
+                throw new Error(`Cursive ${glyph} connector and pen clip `
+                    + "glyph cell");
             }
         }
-        return validateStroke({ grapheme: "b",
+        return validateStroke({ grapheme: glyph,
             x1: from.x, y1: from.y, x2: to.x, y2: to.y,
             width: pen, color: stem.color });
     };
@@ -2916,10 +2918,10 @@ export function geometricStarter(
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
         "i", "í", "j", "l", "t", "f", "n", "ñ", "u", "ú", "ü",
-        "m", "h", "r", "v", "w", "z", "s", "y", "k", "b"]
+        "m", "h", "r", "v", "w", "z", "s", "y", "k", "b", "p"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m, v/w/z, s/y/k/b glyph");
+            + "j, l/t/f, n/ñ, h/r, u/ú/ü, m, v/w/z, s/y/k/b/p glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
@@ -2938,7 +2940,7 @@ export function geometricStarter(
         if (g === "j") return cursiveHook(base, r);
         if (g === "y") return cursiveFork(base, r);
         if (g === "k") return cursiveK(base, r);
-        if (g === "b") return cursiveB(base, r);
+        if (g === "b" || g === "p") return cursiveLeftBowl(base, r);
         if (["v", "w", "z", "s"].includes(g)) {
             return cursiveContour(base, r);
         }
@@ -4048,7 +4050,8 @@ export function createGlyphStrokeEditor(): {
             const cursiveY = connected && chosen.grapheme === "y";
             const yLines = cursiveY ? straightLines(cx, cy, r, "y") : [];
             const cursiveKForm = connected && chosen.grapheme === "k";
-            const cursiveBForm = connected && chosen.grapheme === "b";
+            const cursiveLeftBowl = connected && ["b", "p"]
+                .includes(chosen.grapheme);
             const kLines = cursiveKForm ? straightLines(cx, cy, r, "k") : [];
             const contourStart = zigLines[0]?.from ?? smoothParts?.[0]?.[0];
             const contourEnd = zigLines.at(-1)?.to
@@ -4159,8 +4162,9 @@ export function createGlyphStrokeEditor(): {
                 exit[2] = { x: kLower.to.x + lead,
                     y: kLower.to.y - lead };
             }
-            if (cursiveBForm) {
-                const tall = loopStem(cx, cy, r, "b");
+            if (cursiveLeftBowl) {
+                const leftKind = chosen.grapheme as "b" | "p";
+                const tall = loopStem(cx, cy, r, leftKind);
                 const entry = connectors[0]!;
                 entry[1] = { x: tall.from.x - lead,
                     y: tall.from.y + lead };
@@ -4182,7 +4186,7 @@ export function createGlyphStrokeEditor(): {
                 guide.setAttribute("visibility", connected &&
                     (guide !== idealApproach || cursiveE || cursiveUp
                         || cursiveM || cursiveY || cursiveKForm
-                        || cursiveBForm
+                        || cursiveLeftBowl
                         || ["a", "á"].includes(chosen.grapheme))
                     ? shown : "hidden");
             }

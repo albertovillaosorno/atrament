@@ -2727,3 +2727,17 @@ clipped-entry refusal; real Firefox selection/download and Rust vector PDF
 and transparent PNG replay verify native ink. Exact uppercase `B` remains
 unsupported without separately authored strokes and refuses to overwrite
 a valid page. This does not infer cross-letter joins or a calibrated font.
+
+## Opt-in continuous-pen lowercase p — 2026-11-05
+
+The manually selected `p` shares the exact left-bowl gesture with `b` but
+keeps its distinct printed descender. Its 48 original circle chords and
+full-length stem remain unchanged. One bounded entry, a stem retrace to
+the left tangent, an upper semicircle carry, the complete loop and a short
+exit form 76 directed, contiguous TSV segments without an inferred lift.
+
+Browser SVG/TSV tests check the descender, clipped-entry refusal and draft
+preservation. Firefox performs the real download and Rust PDF/transparent
+PNG replay, including exact native `p` identity. Unauthored uppercase `P`
+refuses replacement. Printed `p`, automatic fill and cross-letter joins
+remain unchanged; this is not a learned or calibrated handwriting model.
