@@ -4176,7 +4176,31 @@ test("big set union and intersection have distinct joined contours", () => {
         assert.throws(() => geometricStarter(glyph, 100, 2450,
             1100, 250, "#243647"), /fit inside glyph cell/);
     }
-    assert.throws(() => geometricStarter("⋀", ...args),
+    assert.throws(() => geometricStarter("⋏", ...args),
+        /supported exact geometric glyph/);
+});
+
+test("n-ary logical wedges retain exact wide joined strokes", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, small, expected] of [
+        ["⋀", "∧", [[626, 3495, 1550, 1405],
+            [1550, 1405, 2474, 3495]]],
+        ["⋁", "∨", [[626, 1405, 1550, 3495],
+            [1550, 3495, 2474, 1405]]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.deepEqual(ink.map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), expected,
+            "n-ary wedges use a wide, connected two-arm pen contour");
+        assert.equal(candidatePenPaths(ink, glyph).length, 1);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.notDeepEqual(ink, geometricStarter(small, ...args),
+            "regular logical wedge must not supply n-ary ink");
+        assert.throws(() => geometricStarter(glyph, 100, 2450,
+            1100, 250, "#243647"), /fit inside glyph cell/);
+    }
+    assert.throws(() => geometricStarter("⋏", ...args),
         /supported exact geometric glyph/);
 });
 

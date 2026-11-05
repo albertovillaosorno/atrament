@@ -2364,3 +2364,15 @@ Rust compositor, PDF/transparent PNG output and atomic refusal for
 missing lookalikes validate these manual additions. The automatic
 93-symbol math fill remains unchanged. A complete math font and
 writer-personalized analytic outlines remain unfinished.
+
+## Exact n-ary logical wedges (partial) — 2026-11-05
+
+The manual math selector now includes `⋀` (n-ary logical AND) and `⋁`
+(n-ary logical OR), independently drawn as two joined, wide symmetric
+pen segments. Their Unicode keys and exact 2-stroke geometries differ
+from the smaller `∧`/`∨` operators; neither substitutes for missing ink.
+
+Browser TSV roundtrip, clipping and directed-path checks, live Firefox
+selection/export, Rust PDF/transparent PNG replay and atomic refusal of
+missing lookalikes cover these additions. The 93-key automatic math fill
+is unchanged. Complete handwriting synthesis remains unfinished.

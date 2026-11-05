@@ -698,7 +698,7 @@ const MANUAL_MATH_GLYPHS = [
     "Β", "Υ", "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
     "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐", "∮", "∬", "∭",
     "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
-    "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘", "⋂", "⋃",
+    "∛", "∜", "⊕", "⊗", "⊙", "⊖", "⊘", "⋂", "⋃", "⋀", "⋁",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -991,6 +991,16 @@ function mathParts(
         line(-0.65, -0.6, 0, 0.6),
         line(0, 0.6, 0.65, -0.6),
     ];
+    // N-ary logical AND/OR uses exact, independently selected wide wedges,
+    // not implicit enlargement or substitution of ordinary ∧/∨ ink.
+    // Both arms join at their peak in one uninterrupted pen path.
+    if (glyph === "⋀" || glyph === "⋁") {
+        const sign = glyph === "⋀" ? 1 : -1;
+        return [
+            line(-0.84, sign * 0.95, 0, -sign * 0.95),
+            line(0, -sign * 0.95, 0.84, sign * 0.95),
+        ];
+    }
     // N-ary intersection and union have taller stems and a wider rounded
     // middle than the regular ∩/∪. All four directed pieces join as one
     // pen-down path; these exact Unicode keys remain manual-only ink.
