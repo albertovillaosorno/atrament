@@ -4382,7 +4382,7 @@ test("normal subgroup relations keep closed triangles and lifted bars", () => {
         500, 250, "#243647"), /pen-clearance/);
     assert.throws(() => geometricStarter("⊵", 1550, 2450,
         500, 250, "#243647"), /pen-clearance/);
-    assert.throws(() => geometricStarter("⋖", ...args),
+    assert.throws(() => geometricStarter("⋜", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -4425,7 +4425,7 @@ test("dotted and triple comparisons preserve mirrored lifted ink", () => {
         geometricStarter("<", ...args));
     assert.notDeepEqual(geometricStarter("⋘", ...args),
         geometricStarter("≪", ...args));
-    assert.throws(() => geometricStarter("⋚", ...args),
+    assert.throws(() => geometricStarter("⋜", ...args),
         /supported exact geometric glyph/);
 });
 
