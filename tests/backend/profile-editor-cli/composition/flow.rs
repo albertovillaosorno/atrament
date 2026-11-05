@@ -863,3 +863,79 @@ fn checkbox_syntax_does_not_inherit_literal_bracket_height() {
             .expect("bounded glyph height"), height);
     }
 }
+
+#[test]
+fn measured_pitch_matches_rendered_ink_across_mixed_markdown_blocks() {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let tall = ScalarStatistics {
+        maximum: 25_000, mean: 25_000, median: 25_000,
+        minimum: 25_000, standard_deviation: 0,
+    };
+    let lines = [
+        "a", "a  ", "a\\", "- a", "* a", "+ a", "- [ ] a",
+        "- [x] a", "1. a", "2) a", "# a", "### a", "> a",
+        "  a", "   a", "    a", "= a", "=", "==", "===",
+        "---", "* * *", "_ _ _", "~~~txt", "~~~", "```txt",
+        "```", "\\# a", "\\- a", "\\> a", "[ ] a",
+        "  =", "  = a", "    =", "  - a", "- a  ",
+        "  + a", "a # #", "\\1. a", "a\\a", "a\n",
+        "ó", "o\u{301}", "- ó", "> o\u{301}", "## ñ",
+        "¿a?", "¡a!", "«a»", "a∞", "#\u{301} a",
+    ];
+    let paper = NotebookProfile::default();
+    let mut cases = 0usize;
+    let mut seed = 0xD00D_F00Du32;
+    for marker in ["=", "#", "-", "+", "*", ">", "\\",
+        "[", "]", "`", "~", "_", "1", ".", "ó",
+        "o\u{301}", "ñ", "¿", "∞"] {
+        let statistics = HandwritingStatisticsProfile::baseline(1)
+            .with_glyph(marker, DimensionStatistics {
+                dimension: Dimension::Height, statistics: tall,
+            }, &UnicodeGraphemeSegmentation)
+            .expect("valid tall visible glyph");
+        for _ in 0..512 {
+            let mut parts = Vec::new();
+            for _ in 0..5 {
+                seed = seed.wrapping_mul(1_664_525)
+                    .wrapping_add(1_013_904_223);
+                parts.push(lines[(seed as usize) % lines.len()]);
+            }
+            let text = parts.join("\n");
+            let source = FlowSource::new(FlowFormat::Markdown, &text)
+                .expect("bounded Markdown sample");
+            let Ok((runs, _, _)) = super::layout_flow(
+                &source, &paper, Some(&statistics),
+                super::HeadingDecoration::default(),
+            ) else {
+                continue;
+            };
+            // A combining acute can attach to a punctuation mark: the
+            // visible grapheme "#́" is not the authored exact glyph "#".
+            let has_exact_marker = runs.iter().any(|run| {
+                let mut remaining = run.text.as_str();
+                while !remaining.is_empty() {
+                    let (grapheme, rest) = super::first_grapheme(remaining)
+                        .expect("laid-out text is valid Unicode");
+                    if grapheme == marker {
+                        return true;
+                    }
+                    remaining = rest;
+                }
+                false
+            });
+            let expected = if has_exact_marker { 29_000 } else { 9_000 };
+            let measured = super::measured_pitch(&source,
+                Some(&statistics)).expect("valid pitch");
+            assert_eq!(measured, expected,
+                "marker={marker:?}, source={text:?}, runs={runs:?}");
+            cases += 1;
+        }
+    }
+    assert!(cases > 2_000, "mixed grammar must admit enough cases");
+}
