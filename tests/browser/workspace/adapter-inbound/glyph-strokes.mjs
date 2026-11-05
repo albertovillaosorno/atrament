@@ -8998,3 +8998,73 @@ test("browser cursive r guide, exact download, and clipped refusal",
             ui.restore();
         }
     });
+
+test("manual cursive f keeps a tall stem and separately lifted crossbar",
+    () => {
+        const args = [1550, 2450, 1100, 250, "#243647"];
+        const printed = geometricStarter("f", ...args);
+        const cursive = geometricStarter("f", ...args, undefined, "cursive");
+        assert.equal(printed.length, 2);
+        assert.equal(cursive.length, 4);
+        assert.deepEqual(cursive[1], printed[0],
+            "the tall printed f ascender remains exact");
+        assert.deepEqual(cursive[3], printed[1],
+            "the horizontal f bar is still a separate pen-down stroke");
+        assert.deepEqual(candidatePenPaths(cursive, "f").map(
+            ({ first, last }) => [first, last]), [[1, 3], [4, 4]]);
+        assert.deepEqual(cursive[0], {
+            grapheme: "f", x1: 1350, y1: 1000, x2: 1550, y2: 800,
+            width: 250, color: "#243647",
+        });
+        assert.equal(cursive[2].y1, 3550,
+            "the exit starts at the same lower baseline as printed f");
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(cursive)),
+            cursive);
+        assert.deepEqual(geometricStarter("f", ...args), printed);
+        assert.throws(() => geometricStarter("f", 1550, 1900,
+            1200, 250, "#243647", undefined, "cursive"),
+        /Tall stem and pen must fit/);
+        assert.throws(() => geometricStarter("F", ...args,
+            undefined, "cursive"), /Cursive variant/);
+    });
+
+test("browser cursive f draws its crossbar and saves exact lifted ink",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "f-cursive";
+            get("form").dispatch("change");
+            get("character").value = "f";
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-exit",
+                "ideal-i-stem", "ideal-e-bar"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual f shows ${id}`);
+            }
+            assert.equal(get("ideal-entry").attributes.get("y2"), "800");
+            assert.equal(get("ideal-approach").attributes.get("visibility"),
+                "hidden", "f does not synthesize a crossbar-to-stem join");
+            assert.equal(get("ideal-i-dot").attributes.get("visibility"),
+                "hidden", "f never borrows the i dot");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("f", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-radius").value = "1600";
+            get("circle-radius").dispatch("input");
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden", "clipped ascender hides both connector guides");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "invalid f replacement keeps exact accepted TSV");
+            editor.reset();
+            assert.equal(get("ideal-exit").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });

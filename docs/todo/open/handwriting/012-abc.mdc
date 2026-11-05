@@ -2620,3 +2620,15 @@ Browser geometry, SVG guide and clipped-entry refusal checks, live Firefox
 TSV download, and native Rust vector PDF/transparent PNG replay verify this
 opt-in variant and exact missing uppercase glyph refusal. This is not a
 joined word model, a learned handwriting profile or complete glyph coverage.
+
+## Optional connected-pen lowercase f with lifted bar — 2026-11-05
+
+An explicitly selected `f` now adds a short entry/exit to the original
+full-height stem while preserving its separate horizontal crossbar. Its
+three-segment stem gesture and one separately lifted crossbar remain four
+exact directed segments. The default printed `f` is still two strokes.
+
+Browser pen-path, SVG and clipped-ascender refusal checks, live Firefox TSV
+capture and Rust native PDF/transparent PNG replay validate the selection.
+An unknown uppercase `F` refuses native replacement without data loss.
+This does not connect adjacent letters or finish calibrated handwriting.
