@@ -2104,3 +2104,20 @@ selection and export, Rust PDF and transparent PNG rendering, and
 atomic refusal for missing Latin/Greek lookalikes have regressions.
 Greek `ν`, automatic alphabet generation and calibrated writing
 remain out of scope; the broader handwriting TODO is still open.
+
+## Manually selected Greek nu and final sigma (partial) — 2026-11-04
+
+Exact lowercase Greek `ν` and word-final `ς` now have separate manual
+starters. Nu uses two connected quadratic strokes (32 directed
+chords), rather than Latin `v` ink. Final sigma uses three continuous
+curved turns with a descending hook (48 chords), rather than Latin
+`s` or medial Greek `σ`. Both stay exact Unicode keys in the v1 TSV
+and neither automatically substitutes for missing glyphs in a library.
+
+They remain excluded from the 93-symbol automatic math fill and its
+4,096-stroke ceiling. A red-before/green-after browser and Rust
+PDF/transparent PNG regression proves exact geometry, Unicode
+readback, native rendering, and atomic refusal for unprovided
+lookalikes. Real Firefox selection and TSV export also verify both
+forms. Greek uppercase variants and auto-generated handwriting
+remain unfinished; this P1 task is still open.

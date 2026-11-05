@@ -595,6 +595,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
     "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
+    "ν", "ς",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1277,6 +1278,20 @@ function mathParts(cx, cy, radius, glyph) {
         return [
             curve([-0.7, -0.7], [-0.65, 0.7], [0, 0.72]),
             curve([0, 0.72], [0.65, 0.7], [0.65, -0.7]),
+        ];
+    // Lowercase nu descends and rises in one rounded V-shaped motion.
+    // Final sigma ς keeps a descending terminal hook distinct from
+    // the closed medial σ, from Latin s and from Unicode theta variants.
+    if (glyph === "ν")
+        return [
+            curve([-0.7, -0.65], [-0.35, 0.1], [-0.12, 0.65]),
+            curve([-0.12, 0.65], [0.3, 0.25], [0.65, -0.65]),
+        ];
+    if (glyph === "ς")
+        return [
+            curve([0.65, -0.65], [-0.45, -1.05], [-0.65, -0.18]),
+            curve([-0.65, -0.18], [-0.85, 0.52], [0.1, 0.5]),
+            curve([0.1, 0.5], [0.9, 0.55], [0.25, 1.05]),
         ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

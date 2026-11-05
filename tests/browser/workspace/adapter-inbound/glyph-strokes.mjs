@@ -3495,7 +3495,7 @@ test("manual Greek math keeps exact alpha beta theta lambda pen paths", () => {
     assert.notDeepEqual(geometricStarter("α", ...args),
         geometricStarter("a", ...args),
         "Greek alpha cannot borrow single-storey Latin a");
-    assert.throws(() => geometricStarter("ν", ...args),
+    assert.throws(() => geometricStarter("ϑ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3518,7 +3518,7 @@ test("manual Greek mu and gamma keep exact non-Latin pen paths", () => {
         geometricStarter("u", ...args), "mu cannot borrow Latin u");
     assert.notDeepEqual(geometricStarter("γ", ...args),
         geometricStarter("y", ...args), "gamma cannot borrow Latin y");
-    assert.throws(() => geometricStarter("ν", ...args),
+    assert.throws(() => geometricStarter("ϑ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3538,7 +3538,7 @@ test("manual Greek delta and sigma keep exact Unicode pen paths", () => {
         geometricStarter("o", ...args), "delta cannot borrow Latin o");
     assert.notDeepEqual(geometricStarter("σ", ...args),
         geometricStarter("θ", ...args), "sigma cannot borrow Greek theta");
-    assert.throws(() => geometricStarter("ν", ...args),
+    assert.throws(() => geometricStarter("ϑ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3558,7 +3558,7 @@ test("manual Greek rho and tau keep independent pen paths", () => {
         geometricStarter("p", ...args), "rho is not Latin p");
     assert.notDeepEqual(geometricStarter("τ", ...args),
         geometricStarter("t", ...args), "tau is not Latin t");
-    assert.throws(() => geometricStarter("ν", ...args),
+    assert.throws(() => geometricStarter("ϑ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3578,7 +3578,7 @@ test("manual Greek epsilon and omega keep distinct pen lifts", () => {
         geometricStarter("e", ...args), "epsilon is not Latin e");
     assert.notDeepEqual(geometricStarter("ω", ...args),
         geometricStarter("w", ...args), "omega is not Latin w");
-    assert.throws(() => geometricStarter("ν", ...args),
+    assert.throws(() => geometricStarter("ϑ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3604,7 +3604,7 @@ test("manual Greek kappa and chi preserve separate native pen paths", () => {
         geometricStarter("k", ...args), "kappa is not Latin k");
     assert.notDeepEqual(geometricStarter("χ", ...args),
         geometricStarter("x", ...args), "chi is not Latin x");
-    assert.throws(() => geometricStarter("ν", ...args),
+    assert.throws(() => geometricStarter("ϑ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3653,7 +3653,7 @@ test("manual Greek zeta and eta keep exact lifted pen paths", () => {
         geometricStarter("z", ...args), "zeta cannot borrow Latin z");
     assert.notDeepEqual(geometricStarter("η", ...args),
         geometricStarter("n", ...args), "eta cannot borrow Latin n");
-    assert.throws(() => geometricStarter("ν", ...args),
+    assert.throws(() => geometricStarter("ϑ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3704,7 +3704,33 @@ test("manual Greek omicron and upsilon keep separate exact pen paths", () => {
         geometricStarter("o", ...args), "omicron is not Latin o");
     assert.notDeepEqual(geometricStarter("υ", ...args),
         geometricStarter("u", ...args), "upsilon is not Latin u");
-    assert.throws(() => geometricStarter("ν", ...args),
+    assert.throws(() => geometricStarter("ϑ", ...args),
+        /supported exact geometric glyph/);
+});
+
+test("manual Greek nu and final sigma preserve separate joined ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, first] of [
+        ["ν", 32, [780, 1735]],
+        ["ς", 48, [2265, 1735]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " native chord count");
+        assert.equal(candidatePenPaths(ink, glyph).length, 1,
+            glyph + " remains one uninterrupted pen gesture");
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.ok(ink.every((segment) => segment.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("ν", ...args),
+        geometricStarter("v", ...args), "Greek nu is not Latin v");
+    assert.notDeepEqual(geometricStarter("ς", ...args),
+        geometricStarter("σ", ...args), "final sigma is not medial sigma");
+    assert.notDeepEqual(geometricStarter("ς", ...args),
+        geometricStarter("s", ...args), "final sigma is not Latin s");
+    assert.throws(() => geometricStarter("ϑ", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -5505,7 +5531,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "⋅", "∗", "∖", "∦", "⌊", "⌋", "⌈", "⌉",
         "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
         "δ", "σ", "ρ", "τ", "ε", "ω", "κ", "χ",
-        "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
+        "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ", "ν", "ς",
         "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",
