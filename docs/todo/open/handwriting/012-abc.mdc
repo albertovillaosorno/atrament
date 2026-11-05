@@ -2006,3 +2006,18 @@ SVG geometry, capacity checks and Unicode identity, the real Firefox TSV
 roundtrip, native PDF/transparent PNG output and preservation of accepted
 files on a missing-glyph refusal have dedicated regressions. Greek
 alphabet coverage and persistent editable notebook glyphs remain open.
+
+## Manually selected Greek rho and tau ink (partial) — 2026-11-04
+
+Exact lowercase `ρ` and `τ` have separate manual geometric starters.
+Rho uses four quadratic bowl parts with a lifted descending stem (65
+sampled directed strokes). Tau uses one top bar and a two-segment
+connected bent exit (three directed straight strokes, two pen paths).
+Neither borrows Latin `p` or `t` handwriting, and unsupported Greek `ν`
+continues to refuse rather than getting a substitute shape.
+
+These starters leave the automatic 93-glyph, 4,084-stroke math fill
+untouched. Browser pen geometry, glyph-cell bounds, real Firefox TSV
+and native Rust PDF/transparent PNG export, plus atomic missing-glyph
+refusal, have focused regressions. The complete Greek alphabet and
+saved notebook text editing remain unfinished.

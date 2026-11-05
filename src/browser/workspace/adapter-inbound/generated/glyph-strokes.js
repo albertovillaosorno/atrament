@@ -593,7 +593,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 // Additional exact notation is manually selected, not automatically filled.
 // A full text/math fill currently sits just 12 strokes below the native cap.
 const MANUAL_MATH_GLYPHS = [
-    "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ",
+    "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1166,6 +1166,23 @@ function mathParts(cx, cy, radius, glyph) {
             curve([0, 0.7], [-0.7, 0.7], [-0.7, 0]),
             curve([-0.7, 0], [-0.7, -0.7], [0, -0.7]),
             line(0.15, -0.7, 0.85, -0.7),
+        ];
+    // Lowercase rho descends below a dedicated right bowl. Tau keeps a
+    // separate top cap and a connected falling stem with its own exit.
+    // Neither shape is substituted from an authored Latin p or t.
+    if (glyph === "ρ")
+        return [
+            curve([-0.55, -0.65], [0.75, -0.85], [0.75, 0]),
+            curve([0.75, 0], [0.75, 0.85], [-0.55, 0.65]),
+            curve([-0.55, 0.65], [-0.8, 0.35], [-0.55, 0]),
+            curve([-0.55, 0], [-0.8, -0.35], [-0.55, -0.65]),
+            line(-0.55, 1.05, -0.55, -0.65),
+        ];
+    if (glyph === "τ")
+        return [
+            line(-0.75, -0.55, 0.75, -0.55),
+            line(0.15, -0.55, 0.15, 0.65),
+            line(0.15, 0.65, 0.65, 0.75),
         ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.
