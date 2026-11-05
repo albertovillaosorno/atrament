@@ -694,7 +694,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
     "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
-    "ν", "ς", "Γ", "Ω", "Π", "Σ", "Λ", "Θ", "Ξ", "Φ",
+    "ν", "ς", "Γ", "Ω", "Π", "Σ", "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1375,6 +1375,18 @@ function mathParts(
         curve([0, 0.72], [-0.8, 0.8], [-0.75, 0]),
         curve([-0.75, 0], [-0.8, -0.8], [0, -0.72]),
         line(0, -0.95, 0, 0.95),
+    ];
+    // Capital Psi has one connected upper shoulder bowl with a lifted
+    // central descending stem. Capital Chi crosses two separate straight
+    // diagonals; neither reuses its lowercase curved letter's ink.
+    if (glyph === "Ψ") return [
+        curve([-0.7, -0.8], [-0.7, 0.55], [0, 0.55]),
+        curve([0, 0.55], [0.7, 0.55], [0.7, -0.8]),
+        line(0, 0.45, 0, 0.95),
+    ];
+    if (glyph === "Χ") return [
+        line(-0.7, -0.85, 0.7, 0.85),
+        line(0.7, -0.85, -0.7, 0.85),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

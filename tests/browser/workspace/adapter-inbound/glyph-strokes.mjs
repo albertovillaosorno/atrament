@@ -3830,6 +3830,30 @@ test("manual uppercase Greek Xi and Phi keep distinct ink", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual capital Greek Psi and Chi have exact lifted ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, first] of [
+        ["Ψ", 33, [780, 1570]],
+        ["Χ", 2, [780, 1515]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " native segment count");
+        assert.equal(candidatePenPaths(ink, glyph).length, 2,
+            glyph + " must lift between independent pen paths");
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("Ψ", ...args),
+        geometricStarter("ψ", ...args), "capital Psi is not lowercase");
+    assert.notDeepEqual(geometricStarter("Χ", ...args),
+        geometricStarter("χ", ...args), "capital Chi is not lowercase");
+    assert.throws(() => geometricStarter("Α", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [

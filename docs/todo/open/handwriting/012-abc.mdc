@@ -2176,3 +2176,16 @@ math fill. Browser geometry and TSV preservation, live Firefox SVG and
 Rust PDF/transparent PNG replay, and atomic missing-glyph refusal have
 dedicated tests. The remaining Greek alphabet and calibrated pen shapes
 are still incomplete P1 work.
+
+## Manually selected uppercase Greek Psi and Chi (partial) — 2026-11-04
+
+Exact uppercase `Ψ` now traces two joined curved shoulders (32 sampled
+native chords) before lifting for a central descending stem. Capital
+`Χ` crosses two separately lifted straight diagonal pen strokes.
+Neither reuses lowercase `ψ`/`χ` or the Latin `X` glyph key.
+
+Both are manual forms outside the existing 93-glyph automatic math fill.
+Browser SVG geometry, clipping and Unicode TSV identity, live Firefox
+export to native PDF/transparent PNG, and atomic refusal for unauthored
+lookalikes are tested. Complete Greek coverage, joined personal writing
+and calibrated pen strokes remain unfinished.
