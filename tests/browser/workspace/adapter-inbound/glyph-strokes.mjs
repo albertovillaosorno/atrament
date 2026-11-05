@@ -2119,8 +2119,74 @@ test("acute i composition removes only an identifiable upper dot", () => {
     ], "i", "í", "#ABCDEF"), /clear upper dot/);
     assert.throws(() => composeAccentedGlyph([
         ...source, { ...source[0], x1: 2000, x2: 2000 },
-    ], "i", "í", "#ABCDEF"), /clear upper dot/);
+    ], "i", "í", "#ABCDEF"), /clear upper dot|continuous stem path/,
+    "the unrelated third mark cannot be mistaken for continuous stem ink");
 });
+
+test("connected i composes exact NFC and NFD acute without its dot", () => {
+    const whole = fillMissingConnectedLowercase([], 1550, 2450,
+        1100, 250, "#243647");
+    const printed = whole.filter((line) => line.grapheme === "i");
+    const source = structuredClone(whole);
+    for (const target of ["í", "i\u0301"]) {
+        const ink = composeAccentedGlyph(whole, "i", target, "#ABCDEF");
+        assert.equal(ink.length, 4, "entry, stem, exit and lifted acute");
+        assert.deepEqual(ink.slice(0, 3), printed.slice(0, 3)
+            .map((line) => ({ ...line, grapheme: target })));
+        assert.deepEqual(candidatePenPaths(ink, target).map(
+            ({ first, last }) => [first, last]), [[1, 3], [4, 4]]);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+    }
+    const disconnected = printed.map((line) => ({ ...line }));
+    disconnected[1].y1 += 1;
+    assert.throws(() => composeAccentedGlyph(disconnected,
+        "i", "í", "#ABCDEF"), /one continuous stem path/,
+    "a disconnected body must not silently lose its other pen marks");
+    const secondDot = { ...printed[3], y1: 900, y2: 980 };
+    assert.throws(() => composeAccentedGlyph([...printed, secondDot],
+        "i", "í", "#ABCDEF"), /clear upper dot|continuous stem path/,
+    "a second lifted dot must not be confused with a stem segment");
+    assert.deepEqual(whole, source, "composition never edits the base");
+});
+
+test("connected lowercase batch composes NFC/NFD Spanish accents in UI",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("seed-connected").dispatch("click");
+            get("seed-spanish").dispatch("click");
+            assert.match(get("status").textContent,
+                /Filled 7 missing Spanish NFC accents/);
+            get("seed-spanish-nfd").dispatch("click");
+            assert.match(get("status").textContent,
+                /Filled 7 missing Spanish NFD accents/);
+            assert.equal(downloads.length, 0);
+            get("save").dispatch("click");
+            const saved = parseGlyphLibrary(await downloads.at(-1).text());
+            const connected = fillMissingConnectedLowercase([], 1550,
+                2450, 1100, 250, "#243647");
+            assert.deepEqual(saved.slice(0, connected.length), connected);
+            const targets = ["á", "é", "í", "ó", "ú", "ñ", "ü"];
+            for (const target of targets) {
+                for (const exact of [target, target.normalize("NFD")]) {
+                    const glyph = saved.filter((line) =>
+                        line.grapheme === exact);
+                    assert.ok(glyph.length > 1, `${exact} has authored ink`);
+                    const paths = candidatePenPaths(glyph, exact);
+                    assert.equal(paths.length, target === "ü" ? 3 : 2,
+                        `${exact} retains deliberate accent pen lifts`);
+                    assert.equal(paths.at(-1).last, glyph.length);
+                    assert.ok(paths.at(-1).first > 1);
+                }
+            }
+            assert.equal(saved.filter((line) => line.grapheme === "í")
+                .length, 4, "connected i never carries its dot into í");
+        } finally {
+            ui.restore();
+        }
+    });
 
 test("acute i button distinguishes Unicode targets", async () => {
     const ui = mountEditor();

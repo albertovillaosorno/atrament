@@ -11,6 +11,7 @@ import test from 'node:test';
 import {
     candidatePenPaths, encodeGlyphLibrary, geometricStarter,
     fillMissingConnectedLowercase,
+    composeAccentedGlyph,
     reverseCandidatePath, rotateClosedCandidatePath,
 } from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -4891,6 +4892,68 @@ test('connected lowercase fill exports native PDF and transparent PNG', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+// The batch and the existing Spanish accent gesture must interoperate:
+// each connected stem keeps its directed path and loses only the lifted i dot.
+test('connected batch Spanish NFC/NFD accents export native PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/cursive-accents-'));
+        try {
+            const library = join(dir, 'accents.tsv');
+            const output = join(dir, 'accents.pdf');
+            const lowercase = 'abcdefghijklmnopqrstuvwxyz';
+            const base = fillMissingConnectedLowercase([], 1550, 2450,
+                1100, 250, '#243647');
+            const accents = [['a', 'á'], ['e', 'é'], ['i', 'í'],
+                ['o', 'ó'], ['u', 'ú'], ['n', 'ñ'], ['u', 'ü']];
+            const targets = accents.flatMap(([, target]) =>
+                [target, target.normalize('NFD')]);
+            const ink = accents.flatMap(([source, target]) =>
+                [target, target.normalize('NFD')].flatMap((exact) =>
+                    composeAccentedGlyph(base, source, exact, '#243647')));
+            const rows = [...base, ...ink];
+            const bytes = Buffer.from(encodeGlyphLibrary(rows));
+            writeFileSync(library, bytes);
+            const opened = cli('glyphs', ['--profile', library]);
+            assert.equal(opened.status, 0, opened.stderr.toString());
+            assert.deepEqual(opened.stdout, bytes);
+            for (const target of ['í', 'i\u0301']) {
+                const paths = candidatePenPaths(rows, target);
+                assert.deepEqual(paths.map(({ first, last }) =>
+                    [first, last]), [[1, 3], [4, 4]]);
+            }
+            const text = `${lowercase}\n${targets.slice(0, 7).join('')}`
+                + `\n${targets.slice(7).join('')}`;
+            const audit = cli('glyphs', ['--profile', library,
+                '--audit-text', text]);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            assert.match(audit.stdout.toString(),
+                /Distinct visible graphemes: 40/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', library, '--flow-text', text];
+            const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+                '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+                .length, rows.length);
+            const png = cli('notebook', [...flags, '--export-paper', 'png',
+                '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            const missing = cli('notebook', [
+                '--printed-sheet', 'true', '--glyph-file', library,
+                '--flow-text', 'Ω', '--export-paper', 'pdf',
+                '--output', output, '--replace']);
+            assert.notEqual(missing.status, 0);
+            assert.match(missing.stderr.toString(), /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
 
 // A full manually selected lowercase inventory must coexist with separately
 // lifted Spanish accents and non-Latin school ink on one native page.

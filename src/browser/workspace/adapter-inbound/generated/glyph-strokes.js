@@ -3558,9 +3558,9 @@ export function composeAccentedGlyph(strokes, source, target, color, pos = { dx:
     if (base.length === 0) {
         throw new Error("Source grapheme has no authored strokes");
     }
-    // A precomposed or decomposed acute i has no dot. Only remove a clearly
-    // separate short upper dot; never guess which pen strokes to discard
-    // from a nonstandard user-authored i.
+    // Acute i has no dot. A printed i has one stem; a connected i may
+    // have several directed, contiguous stem segments. Remove only one
+    // clearly separated upper dot and refuse any disjoint body gesture.
     if (source === "i" && combining === "\u0301") {
         const dots = base.flatMap((stroke, index) => {
             const high = Math.min(stroke.y1, stroke.y2);
@@ -3570,10 +3570,14 @@ export function composeAccentedGlyph(strokes, source, target, color, pos = { dx:
             return stroke.x1 === stroke.x2 && low - high >= 40
                 && low - high <= 200 && separated ? [index] : [];
         });
-        if (base.length !== 2 || dots.length !== 1) {
+        if (dots.length !== 1) {
             throw new Error("Acute i requires one stem and a clear upper dot");
         }
-        base = base.filter((_, index) => index !== dots[0]);
+        const body = base.filter((_, index) => index !== dots[0]);
+        if (candidatePenPaths(body, "i").length !== 1) {
+            throw new Error("Acute i requires one continuous stem path");
+        }
+        base = body;
     }
     const xs = base.flatMap((stroke) => [stroke.x1, stroke.x2]);
     const topY = Math.min(...base.flatMap((stroke) => [stroke.y1, stroke.y2]));

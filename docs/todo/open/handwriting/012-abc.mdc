@@ -2827,3 +2827,17 @@ and renders all lowercase forms onto a vector PDF and transparent PNG,
 with an unknown uppercase refusing replacement of a valid page. This is an
 opt-in authoring shortcut, not automatic handwriting synthesis, learned
 calibration, or completion of the wider P1 glyph task.
+
+## Connected lowercase i and accent interoperability — 2026-11-05
+
+The connected lowercase batch can now feed the separate opt-in Spanish NFC
+and NFD accent buttons. For acute `í`, the composer removes only one short,
+fully separated upper `i` dot and preserves the entire directed three-part
+connected stem; a disjoint body or ambiguous dot still refuses atomically.
+The printed single-stem path and all other custom accent inputs keep their
+prior behavior. This does not join adjacent letters or normalize the keys.
+
+Browser regressions exercise both seven-accent batch gestures and ensure
+exact lowercase source preservation. Native Rust admits all 40 exact
+lowercase plus NFC/NFD glyphs, exports vector PDF and transparent PNG, and
+refuses unknown ink without overwriting a valid page.
