@@ -3049,6 +3049,53 @@ test('indexed radicals export native PDF PNG with atomic refusal', () => {
     }
 });
 
+// Circled math operators are explicit Unicode ink, not aliases of + or ×.
+test('circled math operators export PDF PNG and refuse missing ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/math-circled-'));
+    try {
+        const library = join(dir, 'circled.tsv');
+        const output = join(dir, 'circled.pdf');
+        const glyphs = ['⊕', '⊗', '⊙'];
+        const ink = glyphs.flatMap((glyph) => geometricStarter(
+            glyph, 1550, 2450, 1100, 250, '#243647'));
+        assert.equal(ink.length, 197);
+        const source = Buffer.from(encodeGlyphLibrary(ink));
+        writeFileSync(library, source);
+        const reopened = cli('glyphs', ['--profile', library]);
+        assert.equal(reopened.status, 0, reopened.stderr.toString());
+        assert.deepEqual(reopened.stdout, source);
+        const audit = cli('glyphs', ['--profile', library,
+            '--audit-text', glyphs.join('')]);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        const flags = ['--printed-sheet', 'true',
+            '--glyph-file', library, '--flow-text', glyphs.join('')];
+        const pdf = cli('notebook', [...flags, '--export-paper', 'pdf',
+            '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, ink.length);
+        const png = cli('notebook', [...flags,
+            '--export-paper', 'png', '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        for (const missing of ['+', '×', '⊚', '⊖']) {
+            const refused = cli('notebook', ['--printed-sheet', 'true',
+                '--glyph-file', library, '--flow-text', '⊕' + missing + '⊙',
+                '--export-paper', 'pdf', '--output', output, '--replace']);
+            assert.notEqual(refused.status, 0);
+            assert.match(refused.stderr.toString(),
+                /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted);
+        }
+        assert.deepEqual(readFileSync(library), source);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 // Floor and ceiling delimiters keep their directed corners across Rust PDF/PNG.
 test('four exact floor and ceiling corners export native ink', () => {
     const dir = mkdtempSync(join(root, '.temp/math-floors-'));

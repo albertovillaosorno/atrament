@@ -4084,6 +4084,50 @@ test("indexed radicals preserve exact native Unicode paths", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual circled operators retain separate ring and interior ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, paths] of [
+        ["⊕", 66, 3], ["⊗", 66, 3], ["⊙", 65, 2],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " native segments");
+        assert.equal(candidatePenPaths(ink, glyph).length, paths,
+            glyph + " joined outline and deliberate interior pen lifts");
+        assert.deepEqual([ink[0].x1, ink[0].y1], [1550, 1548],
+            "the closed ring starts at its top point");
+        assert.deepEqual(
+            [ink[63].x2, ink[63].y2], [ink[0].x1, ink[0].y1],
+            "four sampled quadratic curves close the outer ring");
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell/);
+        assert.throws(() => geometricStarter(glyph, 1550, 2450, 200,
+            250, "#243647"), /pen-clearance/);
+    }
+    for (const [glyph, expected] of [
+        ["⊕", [[1077, 2450, 2023, 2450],
+            [1550, 1977, 1550, 2923]]],
+        ["⊗", [[1198, 2098, 1902, 2802],
+            [1198, 2802, 1902, 2098]]],
+        ["⊙", [[1550, 2362, 1550, 2538]]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.deepEqual(ink.slice(64).map(({ x1, y1, x2, y2 }) =>
+            [x1, y1, x2, y2]), expected,
+            glyph + " retains an independently directed interior mark");
+    }
+    assert.notDeepEqual(geometricStarter("⊕", ...args),
+        geometricStarter("+", ...args),
+        "circled plus must not be borrowed from ordinary plus");
+    assert.notDeepEqual(geometricStarter("⊗", ...args),
+        geometricStarter("×", ...args),
+        "circled times must retain its own ring");
+    assert.throws(() => geometricStarter("⊚", ...args),
+        /supported exact geometric glyph/,
+        "an unauthored circled lookalike is not an alias");
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [

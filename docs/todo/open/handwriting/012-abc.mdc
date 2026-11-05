@@ -2320,3 +2320,18 @@ Browser pen-path, clipping and exact TSV tests, real Firefox SVG/download,
 and native PDF/transparent PNG replay exercise both keys. Missing symbols
 refuse export without replacing an accepted file. The automatic 93-key math
 fill and existing authored glyph ink are unchanged.
+
+## Exact circled arithmetic operators (partial) — 2026-11-04
+
+The opt-in mathematical glyph menu now provides exact Unicode `⊕`, `⊗`
+and `⊙` with independently authored pen starters. Each has a continuous
+four-quadratic outer loop sampled to 64 native segments, followed by
+lifted plus, cross or short centered-dot ink (66, 66 and 65 total).
+The browser refuses insufficient inner pen clearance, preserves the
+exact Unicode identity in TSV and never substitutes plain `+` or `×`.
+
+Browser geometry and clipping tests, real Firefox selection/download,
+and native Rust PDF/transparent PNG export and missing-shape refusal
+verify the directed paths. These forms remain manual additions; the
+bounded 93-symbol automatic math fill stays unchanged. Calibrated
+analytical outlines and complete math handwriting remain open.
