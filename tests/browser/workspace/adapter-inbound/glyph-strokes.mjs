@@ -4063,6 +4063,27 @@ test("blackboard number sets retain distinct directed Unicode ink", () => {
         "unauthored mathematical alphabet variants require manual ink");
 });
 
+test("indexed radicals preserve exact native Unicode paths", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, paths] of [
+        ["∛", 36, 2], ["∜", 7, 3],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count);
+        assert.equal(candidatePenPaths(ink, glyph).length, paths);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell/);
+        assert.notDeepEqual(ink, geometricStarter("√", ...args),
+            "indexed radical cannot borrow square-root ink");
+    }
+    assert.notDeepEqual(geometricStarter("∛", ...args),
+        geometricStarter("∜", ...args), "index number is independently inked");
+    assert.throws(() => geometricStarter("∯", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5851,7 +5872,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "√", "π", "∞", "≠", "<", ">", "≤", "≥", "∧", "∨",
         "∩", "∪", "∈", "∉", "∋", "∌", "⊂", "⊆", "⊃", "⊇",
         "⊄", "⊈", "⊅", "⊉", "∑", "∫", "∂", "∮", "∬", "∭",
-        "ℕ", "ℤ", "ℚ", "ℝ", "ℂ",
+        "ℕ", "ℤ", "ℚ", "ℝ", "ℂ", "∛", "∜",
         "Δ", "≈", "→", "←", "↔", "↑", "↓", "↕", "∝",
         "∅", "∇", "≡", "≢", "∥", "⊥", "∼", "≅",
         "∀", "∃", "∄", "∴", "∵", "⊤", "⊢", "⊨",

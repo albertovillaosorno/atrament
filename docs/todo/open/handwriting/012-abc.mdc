@@ -2307,3 +2307,16 @@ verify the selected paths and immutable output when an unauthored lookalike
 is requested. Live Firefox checks guides, exact TSV export and native replay.
 They do not change the bounded 93-symbol automatic math fill; a complete
 mathematical alphabet and automatic handwritten notebook remain unfinished.
+
+## Exact indexed radicals (partial) — 2026-11-04
+
+The manual math selector now offers exact `∛` and `∜` with four joined
+radical segments and distinct lifted index strokes. Cube-root 3 has two
+continuous quadratic guides (36 sampled segments including the radical);
+fourth-root 4 has three separate angular index segments (seven total).
+Neither is substituted from the existing simple `√` or from a numeral.
+
+Browser pen-path, clipping and exact TSV tests, real Firefox SVG/download,
+and native PDF/transparent PNG replay exercise both keys. Missing symbols
+refuse export without replacing an accepted file. The automatic 93-key math
+fill and existing authored glyph ink are unchanged.
