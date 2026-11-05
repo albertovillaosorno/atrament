@@ -3677,7 +3677,7 @@ test("manual Greek xi and iota retain exact continuous pen geometry", () => {
         geometricStarter("z", ...args), "xi cannot borrow Latin z");
     assert.notDeepEqual(geometricStarter("ι", ...args),
         geometricStarter("i", ...args), "iota has no Latin i dot");
-    assert.throws(() => geometricStarter("Ξ", ...args),
+    assert.throws(() => geometricStarter("Α", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3754,7 +3754,7 @@ test("manual uppercase Greek Gamma and Omega keep exact distinct ink", () => {
         geometricStarter("L", ...args), "Gamma is not Latin L");
     assert.notDeepEqual(geometricStarter("Ω", ...args),
         geometricStarter("ω", ...args), "uppercase Omega is not lowercase");
-    assert.throws(() => geometricStarter("Ξ", ...args),
+    assert.throws(() => geometricStarter("Α", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3778,7 +3778,7 @@ test("manual uppercase Greek Pi and Sigma preserve exact pen order", () => {
         geometricStarter("Γ", ...args), "Pi is not capital Gamma");
     assert.notDeepEqual(geometricStarter("Σ", ...args),
         geometricStarter("∑", ...args), "capital Sigma is not sum symbol");
-    assert.throws(() => geometricStarter("Ξ", ...args),
+    assert.throws(() => geometricStarter("Α", ...args),
         /supported exact geometric glyph/);
 });
 
@@ -3802,7 +3802,31 @@ test("manual Greek capital Lambda and Theta retain exact ordered ink", () => {
         geometricStarter("λ", ...args), "capital Lambda keeps exact identity");
     assert.notDeepEqual(geometricStarter("Θ", ...args),
         geometricStarter("θ", ...args), "capital Theta is not lowercase");
-    assert.throws(() => geometricStarter("Ξ", ...args),
+    assert.throws(() => geometricStarter("Α", ...args),
+        /supported exact geometric glyph/);
+});
+
+test("manual uppercase Greek Xi and Phi keep distinct ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, paths, first] of [
+        ["Ξ", 3, 3, [780, 1625]],
+        ["Φ", 65, 2, [1550, 1658]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " native ink count");
+        assert.equal(candidatePenPaths(ink, glyph).length, paths,
+            glyph + " preserves exact pen lifts");
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("Ξ", ...args),
+        geometricStarter("≡", ...args), "Xi is not identity operator");
+    assert.notDeepEqual(geometricStarter("Φ", ...args),
+        geometricStarter("φ", ...args), "capital Phi is not lowercase");
+    assert.throws(() => geometricStarter("Α", ...args),
         /supported exact geometric glyph/);
 });
 

@@ -2162,3 +2162,17 @@ geometry and clipping, authenticated Firefox selection and native PDF/PNG
 replay, plus atomic missing-glyph refusal are regression-tested. The
 remaining uppercase Greek alphabet and calibrated personal ink remain
 open P1 requirements.
+
+## Manually selected uppercase Greek Xi and Phi (partial) — 2026-11-04
+
+Capital `Ξ` now draws three separately lifted horizontal bars, with a
+shorter center bar distinct from the mathematical identity sign `≡`.
+Capital `Φ` adds a joined four-quadratic oval sampled to 64 directed
+chords and a lifted central vertical stem. It is an independent exact
+Unicode key, not the lowercase `φ` template or a fallback.
+
+These remain explicitly selected starters outside the capped 93-glyph
+math fill. Browser geometry and TSV preservation, live Firefox SVG and
+Rust PDF/transparent PNG replay, and atomic missing-glyph refusal have
+dedicated tests. The remaining Greek alphabet and calibrated pen shapes
+are still incomplete P1 work.

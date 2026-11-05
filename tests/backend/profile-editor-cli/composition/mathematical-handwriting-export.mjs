@@ -2538,6 +2538,52 @@ test('manual uppercase Greek Lambda Theta native PDF PNG stays exact', () => {
     }
 });
 
+// Capital Xi's three lifts and Phi's round body must retain exact keys.
+test('manual uppercase Greek Xi Phi render exact native PDF PNG', () => {
+    const dir = mkdtempSync(join(root, '.temp/math-greek-xi-phi-'));
+    try {
+        const library = join(dir, 'xi-phi.tsv');
+        const output = join(dir, 'upper.pdf');
+        const ink = ['Ξ', 'Φ'].flatMap((glyph) => geometricStarter(
+            glyph, 1550, 2450, 1100, 250, '#243647'));
+        assert.equal(ink.length, 68);
+        const source = Buffer.from(encodeGlyphLibrary(ink));
+        writeFileSync(library, source);
+        const opened = cli('glyphs', ['--profile', library]);
+        assert.equal(opened.status, 0, opened.stderr.toString());
+        assert.deepEqual(opened.stdout, source);
+        const audit = cli('glyphs', ['--profile', library,
+            '--audit-text', 'ΞΦΦΞ']);
+        assert.equal(audit.status, 0, audit.stderr.toString());
+        assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+        const flags = ['--printed-sheet', 'true',
+            '--glyph-file', library, '--flow-text', 'ΞΦ\nΦΞ'];
+        const pdf = cli('notebook', [...flags,
+            '--export-paper', 'pdf', '--output', output]);
+        assert.equal(pdf.status, 0, pdf.stderr.toString());
+        const accepted = readFileSync(output);
+        assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+        assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+            .length, ink.length * 2);
+        const png = cli('notebook', [...flags,
+            '--export-paper', 'png', '--dpi', '72']);
+        assert.equal(png.status, 0, png.stderr.toString());
+        actualPngInk(png.stdout);
+        for (const missing of ['≡', 'φ', 'Α', 'Φ́']) {
+            const refused = cli('notebook', ['--printed-sheet', 'true',
+                '--glyph-file', library, '--flow-text', 'Ξ' + missing + 'Φ',
+                '--export-paper', 'pdf', '--output', output, '--replace']);
+            assert.notEqual(refused.status, 0);
+            assert.match(refused.stderr.toString(),
+                /missing authored glyph/i);
+            assert.deepEqual(readFileSync(output), accepted);
+        }
+        assert.deepEqual(readFileSync(library), source);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 // Floor and ceiling delimiters keep their directed corners across Rust PDF/PNG.
 test('four exact floor and ceiling corners export native ink', () => {
     const dir = mkdtempSync(join(root, '.temp/math-floors-'));
