@@ -187,6 +187,14 @@ pub fn project_ink_segment(
     segment: AuthoredInkSegment,
     placement: InkPlacement,
 ) -> Result<PhysicalInkSegment, &'static str> {
+    if placement.page == 0 {
+        return Err("glyph page must be positive");
+    }
+    if placement.dimensions.is_some_and(|mean| {
+        mean.width_um == 0 || mean.height_um == 0
+    }) {
+        return Err("glyph mean cell width and height must be positive");
+    }
     let mean_width = if let Some(values) = placement.dimensions {
         scale(segment.width_um, values.ink_thickness_um, TEMPLATE_INK_UM)?
     } else {

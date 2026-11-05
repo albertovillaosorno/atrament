@@ -244,6 +244,43 @@ fn projection_rejects_ink_that_collapses_to_a_point() {
 }
 
 #[test]
+fn rejects_zero_physical_page_and_flattened_mean_cells() {
+    // These each retain two distinct physical endpoints, so a zero-length
+    // check alone cannot reject the impossible page or cell dimensions.
+    assert_eq!(
+        project_ink_segment(
+            ORIGINAL,
+            InkPlacement { page: 0, ..placement() },
+        ),
+        Err("glyph page must be positive"),
+    );
+    let valid = MeasuredGlyphDimensions {
+        width_um: 3_500,
+        height_um: 4_500,
+        ink_thickness_um: 300,
+        slant_millidegrees: 0,
+    };
+    assert!(project_ink_segment(
+        ORIGINAL,
+        InkPlacement { dimensions: Some(valid), ..placement() },
+    ).is_ok());
+    for flattened in [
+        MeasuredGlyphDimensions { width_um: 0, ..valid },
+        MeasuredGlyphDimensions { height_um: 0, ..valid },
+    ] {
+        assert_eq!(
+            project_ink_segment(
+                ORIGINAL,
+                InkPlacement {
+                    dimensions: Some(flattened), ..placement()
+                },
+            ),
+            Err("glyph mean cell width and height must be positive"),
+        );
+    }
+}
+
+#[test]
 fn exact_direction_and_displacement_determine_join_without_source_mutation() {
     let left = PhysicalInkSegment {
         page: 2,

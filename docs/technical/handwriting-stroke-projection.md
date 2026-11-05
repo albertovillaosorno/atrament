@@ -61,8 +61,9 @@ function's physical output.
 
 ## Failure Modes
 
-The core refuses negative or unrepresentable coordinates, nonfinite shear,
-pen widths outside 80–1500 µm, source or scaled zero-length segments,
+The core refuses a zero page index, zero-width/height mean cells, negative
+or unrepresentable coordinates, nonfinite shear, pen widths outside
+80–1500 µm, source or scaled zero-length segments,
 cross-page connections, mismatched pen color
 or width, and gaps beyond the supplied 1200 µm production limit. Its squared
 distance uses checked `u128` arithmetic, including extreme `u32` coordinates.
