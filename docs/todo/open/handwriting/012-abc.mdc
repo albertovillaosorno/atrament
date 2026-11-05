@@ -2550,3 +2550,15 @@ and Rust vector PDF/transparent PNG replay verify the new opt-in forms.
 
 These are local geometric starters: they do not implement neighboring
 letter joins, a persisted analytic font, or calibrated writing style.
+
+## Optional continuous-pen u, acute and diaeresis (partial)
+
+The local picker now offers a cursive `u`, NFC `ú` and `ü`, and both exact
+NFD variants. Its 34 printed lines already form one directed bowl; short
+entry and exit marks yield one continuous 36-segment pen gesture. The
+acute lifts for one independent segment, and the diaeresis lifts for two.
+
+Browser guide and exact TSV tests, live Firefox selection/download, and
+native Rust PDF/transparent PNG replay verify the separate Unicode keys.
+Invalid placement refuses before touching the draft. Printed ink stays
+unchanged; adjacent glyph joining and calibrated script remain open.

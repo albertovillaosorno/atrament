@@ -2578,13 +2578,13 @@ function cursiveStem(base: Stroke[], radius: number): Stroke[] {
     ];
 }
 
-// The optional n/ñ joins a rising left stem to the rounded hump by
-// retracing only the left upper half. Then it descends the unchanged
-// right stem and leaves on one rising exit. The tilde remains lifted.
-function cursiveHump(base: Stroke[], radius: number): Stroke[] {
+// The optional n/u joins the printed rounded shape in one pen gesture.
+// n retraces its rising left stem to meet the hump; u already connects.
+// Exact accent and diaeresis marks are separate lifted pen paths.
+function cursiveRounded(base: Stroke[], radius: number): Stroke[] {
     if (base.length !== 2 * ARCH_SEGMENTS + 2
-        || base[0]?.grapheme !== "n") {
-        throw new Error("Cursive hump requires the printed n contour");
+        || !["n", "u"].includes(base[0]?.grapheme ?? "")) {
+        throw new Error("Cursive rounded glyph needs the printed contour");
     }
     const first = base[0]!;
     const arc = base[1]!;
@@ -2610,7 +2610,7 @@ function cursiveHump(base: Stroke[], radius: number): Stroke[] {
     return [
         draw({ x: start.x - lead, y: start.y + lead }, start),
         first,
-        draw(top, hump),
+        ...(first.grapheme === "n" ? [draw(top, hump)] : []),
         ...base.slice(1),
         draw(end, { x: end.x + lead, y: end.y - lead }),
     ];
@@ -2667,14 +2667,15 @@ export function geometricStarter(
         throw new Error("Italic variant requires matching o/a glyph");
     }
     if (kind === "cursive" && !["o", "a", "ó", "á", "c", "e", "é",
-        "i", "í", "l", "n", "ñ"]
+        "i", "í", "l", "n", "ñ", "u", "ú", "ü"]
         .includes(g)) {
         throw new Error("Cursive variant requires o/a, c/e, i/í, "
-            + "l or n/ñ glyph");
+            + "l, n/ñ or u/ú/ü glyph");
     }
     const accentBase = ACCENTED_STARTERS[g];
     if (accentBase !== undefined) {
-        const baseKind = kind === "cursive" && ["é", "ñ"].includes(g)
+        const baseKind = kind === "cursive"
+            && ["é", "ñ", "ú", "ü"].includes(g)
             ? "cursive" : "single";
         const input = [accentBase, x, y, r, w, color, pos] as const;
         const base = geometricStarter(...input, baseKind);
@@ -2687,8 +2688,8 @@ export function geometricStarter(
         return g === "c" || g === "e"
             ? cursiveOpenArc(base, r)
             : ["i", "í", "l"].includes(g)
-                ? cursiveStem(base, r) : g === "n"
-                    ? cursiveHump(base, r) : cursiveLoop(base, r);
+                ? cursiveStem(base, r) : ["n", "u"].includes(g)
+                    ? cursiveRounded(base, r) : cursiveLoop(base, r);
     }
     if (italic) {
         const angle = pos?.italicDegrees ?? 12;
@@ -3772,7 +3773,10 @@ export function createGlyphStrokeEditor(): {
                 .includes(chosen.grapheme);
             const cursiveN = connected && ["n", "ñ"]
                 .includes(chosen.grapheme);
+            const cursiveU = connected && ["u", "ú", "ü"]
+                .includes(chosen.grapheme);
             const nHump = roundedStory(cx, cy, r, "n");
+            const uBowl = roundedStory(cx, cy, r, "u");
             const stemStartY = chosen.grapheme === "l"
                 ? cy - Math.round(r * 1.5) : cy - Math.round(r * 0.4);
             const eUpper = openCirclePoint(cx, cy, r, OPEN_ARC_SEGMENTS);
@@ -3780,13 +3784,16 @@ export function createGlyphStrokeEditor(): {
             const connectors: [SVGLineElement, Point, Point][] = [
                 [idealEntry,
                     cursiveStem ? { x: cx - lead, y: stemStartY + lead }
-                        : cursiveN ? { x: nHump.firstStem.from.x - lead,
-                            y: nHump.firstStem.from.y + lead }
+                        : cursiveN || cursiveU ? {
+                            x: cx - r - lead,
+                            y: (cursiveN ? nHump : uBowl).firstStem.from.y
+                                + lead }
                         : cursiveC
                             ? { x: eUpper.x - lead, y: eUpper.y + lead }
                             : { x: cx - r - lead, y: cy + lead },
                     cursiveStem ? { x: cx, y: stemStartY }
-                        : cursiveN ? nHump.firstStem.from
+                        : cursiveN || cursiveU
+                            ? (cursiveN ? nHump : uBowl).firstStem.from
                         : cursiveC ? eUpper : { x: cx - r, y: cy }],
                 [idealApproach,
                     cursiveN ? nHump.firstStem.to
@@ -3796,11 +3803,14 @@ export function createGlyphStrokeEditor(): {
                         : cursiveE ? eUpper : { x: cx + r, y: cy - r }],
                 [idealExit,
                     cursiveStem ? { x: cx, y: cy + r }
-                        : cursiveN ? nHump.lastStem.to
+                        : cursiveN || cursiveU
+                            ? (cursiveN ? nHump : uBowl).lastStem.to
                             : cursiveArc ? eLower : { x: cx + r, y: endY },
                     cursiveStem ? { x: cx + lead, y: cy + r - lead }
-                        : cursiveN ? { x: nHump.lastStem.to.x + lead,
-                            y: nHump.lastStem.to.y - lead }
+                        : cursiveN || cursiveU ? {
+                            x: cx + r + lead,
+                            y: (cursiveN ? nHump : uBowl).lastStem.to.y
+                                - lead }
                         : cursiveArc
                             ? { x: eLower.x + lead, y: eLower.y - lead }
                             : { x: cx + r + lead, y: endY - lead }],

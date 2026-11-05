@@ -8276,7 +8276,7 @@ test("opt-in cursive e and acute é keep exact directed pen paths", () => {
     assert.throws(() => geometricStarter("e", 1550, 2450,
         1400, 250, "#123456", undefined, "cursive"),
     /Cursive e and pen clip/);
-    assert.throws(() => geometricStarter("u", ...geometry,
+    assert.throws(() => geometricStarter("v", ...geometry,
         undefined, "cursive"), /Cursive variant/);
 });
 
@@ -8626,6 +8626,89 @@ test("browser manual n/ñ SVG, exact TSV and clipping refusal", async () => {
         get("save").dispatch("click");
         assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
             expected, "refused geometry leaves the draft and download exact");
+        editor.reset();
+        assert.equal(get("ideal-entry").attributes.get("visibility"),
+            "hidden");
+    } finally {
+        ui.restore();
+    }
+});
+
+test("manual cursive u and decorated ú/ü retain exact pen lifts", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const print = geometricStarter("u", ...args);
+    assert.equal(print.length, 34);
+    const body = geometricStarter("u", ...args, undefined, "cursive");
+    assert.equal(body.length, 36);
+    assert.deepEqual(body.slice(1, 35), print);
+    assert.deepEqual(candidatePenPaths(body, "u").map(
+        ({ first, last }) => [first, last]), [[1, 36]]);
+    for (const [glyph, paths] of [
+        ["ú", [[1, 36], [37, 37]]],
+        ["u\u0301", [[1, 36], [37, 37]]],
+        ["ü", [[1, 36], [37, 37], [38, 38]]],
+        ["u\u0308", [[1, 36], [37, 37], [38, 38]]],
+    ]) {
+        const strokes = geometricStarter(glyph, ...args,
+            undefined, "cursive");
+        assert.deepEqual(candidatePenPaths(strokes, glyph).map(
+            ({ first, last }) => [first, last]), paths);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(strokes)),
+            strokes, "exact composed/decomposed Unicode survives native TSV");
+    }
+    assert.deepEqual(geometricStarter("u", ...args), print);
+    assert.throws(() => geometricStarter("u", 1550, 2450,
+        1450, 250, "#243647", undefined, "cursive"),
+    /clip glyph cell|Shape and pen/);
+});
+
+test("browser manual u/ú/ü picks visible curves and exact TSV", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        const glyphs = ["u", "ú", "ü", "u\u0301", "u\u0308"];
+        for (const glyph of glyphs) {
+            get("form").value = `${glyph}-cursive`;
+            get("form").dispatch("change");
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-exit",
+                "ideal-rounded", "ideal-rounded-left",
+                "ideal-rounded-right"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `manual ${glyph} shows ${id}`);
+            }
+            for (const id of ["ideal-approach", "ideal-c-loop"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "hidden", `${glyph} has no crossing or stray loop`);
+            }
+            assert.equal(get("ideal-entry").attributes.get("y2"),
+                "1350", "entry starts at printed u's first stem");
+            assert.equal(get("ideal-exit").attributes.get("y1"),
+                "1350", "exit starts where printed u ends");
+            assert.equal(get("ideal-accent").attributes.get("visibility"),
+                glyph.includes("ú") || glyph.includes("\u0301")
+                    ? "visible" : "hidden");
+            assert.equal(get("ideal-diacritic").attributes.get("visibility"),
+                glyph.includes("ü") || glyph.includes("\u0308")
+                    ? "visible" : "hidden");
+            get("construct").dispatch("click");
+        }
+        get("save").dispatch("click");
+        const expected = glyphs.flatMap((glyph) => geometricStarter(
+            glyph, 1550, 2450, 1100, 250, "#243647",
+            undefined, "cursive"));
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            expected);
+        get("circle-radius").value = "1600";
+        get("circle-radius").dispatch("input");
+        assert.equal(get("ideal-rounded").attributes.get("visibility"),
+            "hidden", "clipping hides the SVG guide");
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            expected, "invalid geometry leaves the authored ink unchanged");
         editor.reset();
         assert.equal(get("ideal-entry").attributes.get("visibility"),
             "hidden");

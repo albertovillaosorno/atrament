@@ -712,3 +712,14 @@ Browser SVG, exact TSV, real Firefox and native Rust PDF/PNG acceptance
 check stroke direction, path boundaries, clipping refusal and missing-key
 atomicity. This does not establish adjacent-letter joining or correlated
 handwriting variation across notebook text.
+
+## Manual u/ú/ü with exact detached marks (partial) — 2026-11-05
+
+Manual `u` keeps its printed 34-segment connected bowl between short entry
+and exit lines, creating one continuous 36-segment pen gesture. Both NFC
+and NFD acute forms add a separate lifted segment; both diaeresis forms
+add two detached marks. The printed glyphs and default fill remain intact.
+
+Browser SVG and native TSV tests, live Firefox downloads and Rust PDF/PNG
+export confirm exact placement, identity and atomic missing-glyph refusal.
+A persistent connected alphabet or correlated handwriting remains open.
