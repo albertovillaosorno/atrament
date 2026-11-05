@@ -693,7 +693,7 @@ const MATH_GLYPHS = ["+", "-", "−", "±", "∓", "=", "×", "÷",
 // A full text/math fill currently sits just 12 strokes below the native cap.
 const MANUAL_MATH_GLYPHS = [
     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
-    "ε", "ω", "κ", "χ", "φ", "ψ",
+    "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η",
 ] as const;
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1264,6 +1264,19 @@ function mathParts(
         curve([-0.75, -0.7], [-0.75, 0.65], [0, 0.65]),
         curve([0, 0.65], [0.75, 0.65], [0.75, -0.7]),
         line(0, -0.85, 0, 1.05),
+    ];
+    // Zeta's three connected bowls turn into a descending exit; eta
+    // lifts between an independent left upright and a right-descending
+    // double-curve shoulder. Neither borrows Latin z/n pen geometry.
+    if (glyph === "ζ") return [
+        curve([0.7, -0.85], [-0.55, -1.05], [-0.55, -0.4]),
+        curve([-0.55, -0.4], [-0.5, 0.2], [0.45, 0.3]),
+        curve([0.45, 0.3], [0.95, 0.65], [-0.15, 1.05]),
+    ];
+    if (glyph === "η") return [
+        line(-0.65, -0.7, -0.65, 0.65),
+        curve([-0.65, -0.55], [0, -0.9], [0.6, -0.4]),
+        curve([0.6, -0.4], [0.7, 0.2], [0.6, 1.05]),
     ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.

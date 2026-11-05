@@ -2061,3 +2061,16 @@ at 4,084/4,096 segments. Browser ink and TSV checks, real Firefox SVG/export,
 native Rust PDF/transparent PNG replay and preservation of previous output
 on missing-shape refusal have focused regressions. Greek coverage remains
 partial; this does not establish a calibrated writer or full notebook editor.
+
+## Manually selected Greek zeta and eta ink (partial) — 2026-11-04
+
+Exact lowercase `ζ` and `η` now have independently selected pen geometry.
+Zeta has three connected quadratic bends and a descended tail (48 native
+segments). Eta uses a lifted left upright followed by two connected right
+shoulder/descender curves (33 native segments). Neither borrows Latin `z`
+or `n` as a fallback, and other Greek letters remain explicitly missing.
+
+The manual starters do not alter the near-cap 93-symbol automatic math fill.
+Browser Unicode TSV geometry, live Firefox export, native Rust PDF/transparent
+PNG, clipping refusal and preservation of previous output for missing glyphs
+are tested. This is partial glyph coverage, not a trained writing model.

@@ -2205,6 +2205,54 @@ test('manual Greek phi psi render native PDF PNG without lookalikes',
         }
     });
 
+// Zeta and eta are opt-in authored Unicode keys, not Latin substitutes.
+test('manual Greek zeta eta render native PDF PNG without aliases',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/math-greek-zeta-'));
+        try {
+            const library = join(dir, 'zeta-eta.tsv');
+            const output = join(dir, 'greek.pdf');
+            const glyphs = ['ζ', 'η'];
+            const ink = glyphs.flatMap((glyph) => geometricStarter(
+                glyph, 1550, 2450, 1100, 250, '#243647'));
+            assert.equal(ink.length, 81);
+            const original = Buffer.from(encodeGlyphLibrary(ink));
+            writeFileSync(library, original);
+            const reopen = cli('glyphs', ['--profile', library]);
+            assert.equal(reopen.status, 0, reopen.stderr.toString());
+            assert.deepEqual(reopen.stdout, original);
+            const audit = cli('glyphs', ['--profile', library,
+                '--audit-text', 'ζηηζ']);
+            assert.equal(audit.status, 0, audit.stderr.toString());
+            assert.match(audit.stdout.toString(), /Missing authored glyphs: 0/);
+            const flags = ['--printed-sheet', 'true',
+                '--glyph-file', library, '--flow-text', 'ζη\nηζ'];
+            const pdf = cli('notebook', [...flags,
+                '--export-paper', 'pdf', '--output', output]);
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            const accepted = readFileSync(output);
+            assert.match(accepted.toString('latin1'), /^%PDF-1\.4/);
+            assert.equal((accepted.toString('latin1').match(/ m\n/g) ?? [])
+                .length, ink.length * 2);
+            const png = cli('notebook', [...flags,
+                '--export-paper', 'png', '--dpi', '72']);
+            assert.equal(png.status, 0, png.stderr.toString());
+            actualPngInk(png.stdout);
+            for (const missing of ['z', 'n', 'ν']) {
+                const refused = cli('notebook', ['--printed-sheet', 'true',
+                    '--glyph-file', library, '--flow-text', 'ζ' + missing + 'η',
+                    '--export-paper', 'pdf', '--output', output, '--replace']);
+                assert.notEqual(refused.status, 0);
+                assert.match(refused.stderr.toString(),
+                    /missing authored glyph/i);
+                assert.deepEqual(readFileSync(output), accepted);
+            }
+            assert.deepEqual(readFileSync(library), original);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 // Floor and ceiling delimiters keep their directed corners across Rust PDF/PNG.
 test('four exact floor and ceiling corners export native ink', () => {
     const dir = mkdtempSync(join(root, '.temp/math-floors-'));
