@@ -3987,6 +3987,29 @@ test("remaining Greek capitals keep exact pen routes and inventory", () => {
         /supported exact geometric glyph/);
 });
 
+test("n-ary product and coproduct have independent lifted paths", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, first] of [
+        ["∏", [615, 1515]],
+        ["∐", [615, 3385]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, 5, glyph + " directed pen segments");
+        assert.equal(candidatePenPaths(ink, glyph).length, 5);
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.ok(ink.every((segment) => segment.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("∏", ...args),
+        geometricStarter("Π", ...args),
+        "n-ary product cannot borrow uppercase Greek Pi ink");
+    assert.notDeepEqual(geometricStarter("∐", ...args),
+        geometricStarter("∏", ...args),
+        "n-ary coproduct has an independently inverted cap");
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [

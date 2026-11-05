@@ -2263,3 +2263,17 @@ Latin/lowercase lookalikes. The live Firefox composition retains the
 This completes *only* selectable uppercase Greek geometric starters.
 Lowercase accents, persistent analytic outlines, personalized writing,
 full bilingual coverage and automated notebook handwriting remain open.
+
+## Exact n-ary product and coproduct operators (partial) — 2026-11-04
+
+Manually selected `∏` and `∐` have independently authored five-segment
+cap/upright/serif geometry, with reversed cap locations, deliberate five
+pen-path lifts and no fallback to Greek `Π` or Latin `P`. The automatic
+93-symbol math fill is unchanged.
+
+Browser geometry and clipping checks,
+Rust exact TSV replay, real vector PDF/transparent PNG, and immutable
+accepted PDF on missing symbol/letter variants preserve that boundary.
+Live Firefox exports both symbols in the same downloadable math profile.
+These are simple editable segment approximations, not analytic outlines or
+complete mathematical notation coverage.

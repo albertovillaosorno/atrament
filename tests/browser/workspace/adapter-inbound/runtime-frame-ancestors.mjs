@@ -13215,7 +13215,7 @@ test(
                         "ο", "υ", "ν", "ς", "Γ", "Ω", "Π", "Σ",
                         "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ", "Β", "Υ",
                         "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
-                        "Κ", "Μ", "Ν", "Ρ", "Τ"]) {
+                        "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐"]) {
                         change("form", glyph);
                         change("character", glyph);
                         const guide = get("ideal-rounded");
@@ -13322,7 +13322,7 @@ test(
                     "ο", "υ", "ν", "ς", "Γ", "Ω", "Π", "Σ",
                     "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ", "Β", "Υ",
                     "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
-                    "Κ", "Μ", "Ν", "Ρ", "Τ",
+                    "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐",
                 ].includes(guide.glyph));
                 assert.equal(guide.selected, guide.glyph);
                 assert.equal(guide.visible, "visible");
@@ -13363,7 +13363,8 @@ test(
                 const upperNu = guide.glyph === "Ν";
                 const upperRho = guide.glyph === "Ρ";
                 const upperTau = guide.glyph === "Τ";
-                const count = upperIota ? 1
+                const naryProduct = ["∏", "∐"].includes(guide.glyph);
+                const count = naryProduct ? 5 : upperIota ? 1
                     : bracket || lambda || upperGamma
                     || upperLambda || upperChi || upperTau ? 2
                     : tau || upperPi || upperXi || upperUpsilon
@@ -13384,7 +13385,7 @@ test(
                         || upperChi || upperUpsilon || upperAlpha
                         || upperEpsilon || upperIota || upperZeta
                         || upperEta || upperKappa || upperMu
-                        || upperNu || upperTau ? 0
+                        || upperNu || upperTau || naryProduct ? 0
                         : mu || gamma || epsilon || kappa || chi
                             || psi || eta || iota || upsilon || nu
                             || upperPsi || upperRho ? 2
@@ -13395,6 +13396,7 @@ test(
                         || omicron || upsilon || nu || finalSigma
                         || upperIota || upperOmicron || upperZeta
                         || upperMu || upperNu ? 1
+                            : naryProduct ? 5
                             : upperOmega || upperXi || upperEta ? 3 : 2);
                 assert.match(guide.status,
                     new RegExp(`Constructed ${count} sampled segments`));
@@ -13424,10 +13426,10 @@ test(
                 "ξ", "ι", "ο", "υ", "ν", "ς", "Γ", "Ω", "Π", "Σ",
                 "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ", "Β", "Υ",
                 "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
-                "Κ", "Μ", "Ν", "Ρ", "Τ",
+                "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐",
             ].flatMap((glyph) => geometricStarter(
                 glyph, 1550, 2450, 1100, 250, "#243647"));
-            assert.equal(ink.length, 2976);
+            assert.equal(ink.length, 2986);
             const expected = encodeGlyphLibrary(ink);
             assert.deepEqual(actual.files, [expected, expected],
                 "real browser fill and refusal preserve exact pen order");
@@ -13461,7 +13463,7 @@ test(
                     "∑∫∂Δ≈$€∓→∝<>←↔↑↓↕∧∨∩∪∈∉⊂⊆⊃⊇⊄⊈⊅⊉"
                         + "∋∌∅∇≡≢∥⊥∼≅∀∃∄∴∵⊤⊢⊨∠∟⊬⊭¬⇒⇔"
                         + "≪≫≮≯≰≱↗↘↖↙⇐↦↤∣∤′″‴⋅∗∖∦⌊⌋⌈⌉⟨⟩αβθλμγδσρτεωκχφψζηξι"
-                        + "ουνςΓΩΠΣΛΘΞΦΨΧΒΥΑΕΙΟΖΗΚΜΝΡΤ",
+                        + "ουνςΓΩΠΣΛΘΞΦΨΧΒΥΑΕΙΟΖΗΚΜΝΡΤ∏∐",
                     "--export-paper", format,
                     ...(format === "png" ? ["--dpi", "72"] : []));
                 assert.equal(rendered.status, 0,
@@ -13470,7 +13472,7 @@ test(
                 if (format === "pdf") {
                     const vector = rendered.stdout.toString("latin1");
                     assert.match(vector, /^%PDF-1\.4/);
-                    assert.equal((vector.match(/ m\n/g) ?? []).length, 2881,
+                    assert.equal((vector.match(/ m\n/g) ?? []).length, 2891,
                         "calculus, currency, arrows and comparisons ink");
                 } else {
                     const bytes = rendered.stdout;

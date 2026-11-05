@@ -597,7 +597,7 @@ const MANUAL_MATH_GLYPHS = [
     "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ",
     "ν", "ς", "Γ", "Ω", "Π", "Σ", "Λ", "Θ", "Ξ", "Φ", "Ψ", "Χ",
     "Β", "Υ", "Α", "Ε", "Ι", "Ο", "Ζ", "Η",
-    "Κ", "Μ", "Ν", "Ρ", "Τ",
+    "Κ", "Μ", "Ν", "Ρ", "Τ", "∏", "∐",
 ];
 const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
@@ -1472,6 +1472,25 @@ function mathParts(cx, cy, radius, glyph) {
         return [
             line(-0.75, -0.85, 0.75, -0.85),
             line(0, -0.85, 0, 0.85),
+        ];
+    // Product and coproduct are distinct n-ary operators, not uppercase
+    // Greek Pi. Both lift at the cap, uprights and their two serif feet;
+    // their cap positions are vertically inverted from one another.
+    if (glyph === "∏")
+        return [
+            line(-0.85, -0.85, 0.85, -0.85),
+            line(-0.6, -0.85, -0.6, 0.85),
+            line(0.6, -0.85, 0.6, 0.85),
+            line(-0.85, 0.85, -0.35, 0.85),
+            line(0.35, 0.85, 0.85, 0.85),
+        ];
+    if (glyph === "∐")
+        return [
+            line(-0.85, 0.85, 0.85, 0.85),
+            line(-0.6, 0.85, -0.6, -0.85),
+            line(0.6, 0.85, 0.6, -0.85),
+            line(-0.85, -0.85, -0.35, -0.85),
+            line(0.35, -0.85, 0.85, -0.85),
         ];
     // Similarity and congruence each have one continuously authored
     // two-quadratic tilde; congruence lifts for two independent bars.
