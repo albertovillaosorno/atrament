@@ -3734,6 +3734,30 @@ test("manual Greek nu and final sigma preserve separate joined ink", () => {
         /supported exact geometric glyph/);
 });
 
+test("manual uppercase Greek Gamma and Omega keep exact distinct ink", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    for (const [glyph, count, paths, first] of [
+        ["Γ", 2, 1, [780, 3385]],
+        ["Ω", 66, 3, [725, 3330]],
+    ]) {
+        const ink = geometricStarter(glyph, ...args);
+        assert.equal(ink.length, count, glyph + " segment count");
+        assert.equal(candidatePenPaths(ink, glyph).length, paths,
+            glyph + " preserves deliberate pen lift boundaries");
+        assert.deepEqual([ink[0].x1, ink[0].y1], first);
+        assert.ok(ink.every((line) => line.grapheme === glyph));
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(ink)), ink);
+        assert.throws(() => geometricStarter(glyph, 100, 2450, 1100,
+            250, "#243647"), /fit inside glyph cell|clips glyph cell/);
+    }
+    assert.notDeepEqual(geometricStarter("Γ", ...args),
+        geometricStarter("L", ...args), "Gamma is not Latin L");
+    assert.notDeepEqual(geometricStarter("Ω", ...args),
+        geometricStarter("ω", ...args), "uppercase Omega is not lowercase");
+    assert.throws(() => geometricStarter("Π", ...args),
+        /supported exact geometric glyph/);
+});
+
 test("floor and ceiling brackets preserve connected corner pen paths", () => {
     const args = [1550, 2450, 1100, 250, "#243647"];
     const cases = [
@@ -5532,6 +5556,7 @@ test("all geometric starters respect pen margins over a boundary grid", () => {
         "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
         "δ", "σ", "ρ", "τ", "ε", "ω", "κ", "χ",
         "φ", "ψ", "ζ", "η", "ξ", "ι", "ο", "υ", "ν", "ς",
+        "Γ", "Ω",
         "°", "%", "$", "€",
         ..."0123456789",
         ..."ABCDEFGHIJKLMNOPQRSTUVWXYZ",

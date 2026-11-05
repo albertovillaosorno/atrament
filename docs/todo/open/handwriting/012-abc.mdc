@@ -2121,3 +2121,17 @@ readback, native rendering, and atomic refusal for unprovided
 lookalikes. Real Firefox selection and TSV export also verify both
 forms. Greek uppercase variants and auto-generated handwriting
 remain unfinished; this P1 task is still open.
+
+## Manually selected uppercase Greek Gamma and Omega (partial) — 2026-11-04
+
+Capital `Γ` now draws a connected two-segment top corner; capital `Ω`
+draws a four-quadratic open bowl between two separately lifted
+baseline feet (66 directed strokes). These are exact Unicode keys,
+independent of Latin `L` and lowercase `ω`. They are offered for
+explicit manual selection, not substituted into missing text.
+
+The 93-symbol automatic math fill and its stroke cap remain unchanged.
+Browser clipping/TSV geometry, live Firefox selection and native PDF
+and transparent PNG rendering prove the pen paths. A declined export
+for unauthored Latin/Greek lookalikes preserves accepted PDF bytes.
+The broader uppercase alphabet and calibrated handwriting are open.

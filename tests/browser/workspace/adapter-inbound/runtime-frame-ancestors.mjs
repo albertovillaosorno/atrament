@@ -13212,7 +13212,7 @@ test(
                     for (const glyph of ["⟨", "⟩", "α", "β", "θ", "λ",
                         "μ", "γ", "δ", "σ", "ρ", "τ", "ε", "ω",
                         "κ", "χ", "φ", "ψ", "ζ", "η", "ξ", "ι",
-                        "ο", "υ", "ν", "ς"]) {
+                        "ο", "υ", "ν", "ς", "Γ", "Ω"]) {
                         change("form", glyph);
                         change("character", glyph);
                         const guide = get("ideal-rounded");
@@ -13316,7 +13316,7 @@ test(
                     "⟨", "⟩", "α", "β", "θ", "λ", "μ", "γ",
                     "δ", "σ", "ρ", "τ", "ε", "ω", "κ", "χ",
                     "φ", "ψ", "ζ", "η", "ξ", "ι",
-                    "ο", "υ", "ν", "ς",
+                    "ο", "υ", "ν", "ς", "Γ", "Ω",
                 ].includes(guide.glyph));
                 assert.equal(guide.selected, guide.glyph);
                 assert.equal(guide.visible, "visible");
@@ -13337,21 +13337,26 @@ test(
                 const upsilon = guide.glyph === "υ";
                 const nu = guide.glyph === "ν";
                 const finalSigma = guide.glyph === "ς";
-                const count = bracket || lambda ? 2
+                const upperGamma = guide.glyph === "Γ";
+                const upperOmega = guide.glyph === "Ω";
+                const count = bracket || lambda || upperGamma ? 2
                     : tau ? 3 : epsilon || kappa || psi || eta ? 33
                         : chi || iota || upsilon || nu ? 32
                             : zeta || finalSigma ? 48
+                                : upperOmega ? 66
                                 : xi || omicron ? 64
                             : mu ? 34
                             : gamma ? 33 : 65;
                 assert.equal((guide.d.match(/ Q /g) ?? []).length,
-                    bracket || lambda || tau ? 0
+                    bracket || lambda || tau || upperGamma ? 0
                         : mu || gamma || epsilon || kappa || chi
                             || psi || eta || iota || upsilon || nu
                             ? 2 : zeta || finalSigma ? 3 : 4);
                 assert.equal((guide.d.match(/M /g) ?? []).length,
                     bracket || mu || zeta || xi || iota
-                        || omicron || upsilon || nu || finalSigma ? 1 : 2);
+                        || upperGamma
+                        || omicron || upsilon || nu || finalSigma ? 1
+                            : upperOmega ? 3 : 2);
                 assert.match(guide.status,
                     new RegExp(`Constructed ${count} sampled segments`));
             }
@@ -13377,10 +13382,10 @@ test(
                 ...symbols, "$", "€", "⟨", "⟩",
                 "α", "β", "θ", "λ", "μ", "γ", "δ", "σ", "ρ", "τ",
                 "ε", "ω", "κ", "χ", "φ", "ψ", "ζ", "η",
-                "ξ", "ι", "ο", "υ", "ν", "ς",
+                "ξ", "ι", "ο", "υ", "ν", "ς", "Γ", "Ω",
             ].flatMap((glyph) => geometricStarter(
                 glyph, 1550, 2450, 1100, 250, "#243647"));
-            assert.equal(ink.length, 2540);
+            assert.equal(ink.length, 2608);
             const expected = encodeGlyphLibrary(ink);
             assert.deepEqual(actual.files, [expected, expected],
                 "real browser fill and refusal preserve exact pen order");
