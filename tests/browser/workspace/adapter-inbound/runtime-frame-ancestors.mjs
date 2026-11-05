@@ -14511,7 +14511,7 @@ test(
 );
 
 test(
-    "Firefox cursive c/e/i/l/n/u/m and accents export native ink",
+    "Firefox cursive c/e/i/l/n/u/m/h and accents export native ink",
     { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
     async () => {
         fs.mkdirSync(".temp", { recursive: true });
@@ -14568,6 +14568,7 @@ test(
                         ["u\u0301-cursive", "u\u0301", 1100],
                         ["u\u0308-cursive", "u\u0308", 1100],
                         ["m-cursive", "m", 1100],
+                        ["h-cursive", "h", 1100],
                     ]) {
                         change("circle-radius", String(radius));
                         change("form", form);
@@ -14590,6 +14591,8 @@ test(
                                 .getAttribute("visibility"),
                             roundedD: get("ideal-rounded")
                                 .getAttribute("d"),
+                            leftTop: get("ideal-rounded-left")
+                                .getAttribute("y2"),
                             tilde: get("ideal-diacritic")
                                 .getAttribute("visibility"),
                             entry: get("ideal-entry")
@@ -14648,13 +14651,13 @@ test(
                     "hidden", "hidden", "hidden", "hidden",
                     "visible", "visible", "visible",
                     "hidden", "hidden", "hidden", "hidden", "hidden",
-                    "visible"]);
+                    "visible", "visible"]);
             assert.deepEqual(actual.guides.map((guide) => guide.acute),
                 ["hidden", "hidden", "visible", "visible",
                     "hidden", "visible", "visible", "hidden",
                     "hidden", "hidden", "hidden",
                     "hidden", "visible", "hidden", "visible", "hidden",
-                    "hidden"]);
+                    "hidden", "hidden"]);
             assert.deepEqual(actual.guides.slice(4, 8).map((g) => g.dot),
                 ["visible", "hidden", "hidden", "hidden"]);
             assert.match(actual.constructed[0], /38 sampled segments/);
@@ -14671,21 +14674,22 @@ test(
                 ["hidden", "visible", "visible"]);
             assert.deepEqual(actual.constructed.slice(8).map((s) =>
                 Number(s.match(/(\d+) sampled segments/)?.[1])),
-            [37, 40, 40, 36, 37, 38, 37, 38, 71]);
+            [37, 40, 40, 36, 37, 38, 37, 38, 71, 37]);
             assert.deepEqual(actual.guides.slice(11).map((g) => g.rounded),
                 ["visible", "visible", "visible", "visible", "visible",
-                    "visible"]);
+                    "visible", "visible"]);
             assert.deepEqual(actual.guides.slice(11).map((g) => g.tilde),
                 ["hidden", "hidden", "visible", "hidden", "visible",
-                    "hidden"]);
-            assert.match(actual.guides.at(-1).roundedD,
+                    "hidden", "hidden"]);
+            assert.match(actual.guides.at(-2).roundedD,
                 /M 1550 2450 L 1550 3550 L 1550 2450$/);
+            assert.equal(actual.guides.at(-1).leftTop, "800");
             assert.equal(actual.clipped, "hidden");
             assert.match(actual.refused,
                 /Dotted i requires visible pen-clearance/);
             const glyphs = ["c", "e", "é", "e\u0301",
                 "i", "í", "i\u0301", "l", "n", "ñ", "n\u0303",
-                "u", "ú", "ü", "u\u0301", "u\u0308", "m"];
+                "u", "ú", "ü", "u\u0301", "u\u0308", "m", "h"];
             const expectedInk = glyphs.flatMap(
                 (glyph, index) => geometricStarter(glyph, 1550, 2450,
                     index < 4 ? 700 : 1100, 250, "#243647",

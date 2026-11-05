@@ -7008,7 +7008,7 @@ test("cursive o/a starters keep directed entry, loop and exit", () => {
         assert.deepEqual(geometricStarter(glyph, ...values), base,
             "choosing cursive cannot mutate its regular form");
     }
-    for (const invalid of ["b", "h", "A", "∞"]) {
+    for (const invalid of ["b", "r", "A", "∞"]) {
         assert.throws(() => geometricStarter(invalid, ...values,
             undefined, "cursive"), /Cursive variant/);
     }
@@ -8786,6 +8786,72 @@ test("browser manual cursive m previews both retraces and saves exact ink",
             get("save").dispatch("click");
             assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
                 accepted, "clipped geometry must not change authored ink");
+            editor.reset();
+            assert.equal(get("ideal-entry").attributes.get("visibility"),
+                "hidden");
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("manual cursive h retraces its ascender into one rounded path", () => {
+    const args = [1550, 2450, 1100, 250, "#243647"];
+    const printed = geometricStarter("h", ...args);
+    const cursive = geometricStarter("h", ...args, undefined, "cursive");
+    assert.equal(printed.length, 34);
+    assert.equal(cursive.length, 37);
+    assert.deepEqual(cursive[1], printed[0],
+        "the tall ascender does not lose its printed geometry");
+    assert.deepEqual(cursive.slice(3, 36), printed.slice(1),
+        "both smooth shoulder arcs and the descending stem are unchanged");
+    assert.deepEqual(cursive[2], {
+        grapheme: "h", x1: 450, y1: 800, x2: 450, y2: 2450,
+        width: 250, color: "#243647",
+    }, "the pen descends to the exact arc origin before continuing");
+    assert.deepEqual(candidatePenPaths(cursive, "h").map(
+        ({ first, last }) => [first, last]), [[1, 37]]);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(cursive)), cursive);
+    assert.deepEqual(geometricStarter("h", ...args), printed);
+    assert.throws(() => geometricStarter("h", 1550, 2450,
+        1450, 250, "#243647", undefined, "cursive"),
+    /Shape and pen|Ascender stem|clip glyph cell/);
+});
+
+test("browser manual cursive h shows the tall retrace, saves exact TSV",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("form").value = "h-cursive";
+            get("form").dispatch("change");
+            get("character").value = "h";
+            get("character").dispatch("input");
+            for (const id of ["ideal-entry", "ideal-approach",
+                "ideal-exit", "ideal-rounded", "ideal-rounded-left",
+                "ideal-rounded-right"]) {
+                assert.equal(get(id).attributes.get("visibility"),
+                    "visible", `${id} is shown on the cursive h guide`);
+            }
+            assert.equal(get("ideal-rounded-left").attributes.get("y2"),
+                "800", "the ascender reaches above the n x-height");
+            assert.equal(get("ideal-approach").attributes.get("y1"), "800");
+            assert.equal(get("ideal-approach").attributes.get("y2"), "2450");
+            assert.equal(get("ideal-c-loop").attributes.get("visibility"),
+                "hidden");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            const accepted = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.deepEqual(accepted, geometricStarter("h", 1550, 2450,
+                1100, 250, "#243647", undefined, "cursive"));
+            get("circle-radius").value = "1600";
+            get("circle-radius").dispatch("input");
+            assert.equal(get("ideal-rounded").attributes.get("visibility"),
+                "hidden", "clipped ascender must hide all of the guide");
+            get("construct").dispatch("click");
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                accepted, "refusal leaves accepted strokes unchanged");
             editor.reset();
             assert.equal(get("ideal-entry").attributes.get("visibility"),
                 "hidden");

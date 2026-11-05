@@ -2576,3 +2576,17 @@ Browser SVG/TSV and clipping tests, real Firefox selection and download,
 and native Rust vector PDF/transparent PNG replay cover this bounded
 variant with missing-glyph refusal before file replacement. No automatic
 word joins, retained curves, calibrated writer or full alphabet are implied.
+
+## Optional connected-pen tall h (partial) — 2026-11-05
+
+The manual cursive `h` retains the printed ascender reaching above the
+rounded shoulder, adds a rising entry and a pen-down return from the high
+stem to the first arch, then continues through both quadratic arches and
+the right descent to a rising exit. Its 37 directed native line segments
+remain one continuous pen gesture; printed `h` keeps its 34 segments.
+
+Browser guide/TSV and atomic clipping regressions, real Firefox local
+selection and download, and native Rust PDF/transparent PNG export confirm
+this opt-in variant with exact uppercase missing-key refusal. This does
+not imply automatic connections between neighboring characters or
+calibrated personal handwriting.
