@@ -1587,6 +1587,7 @@ It deliberately compresses the letter advances for ASCII numerals and exact
 NFC/NFD Spanish accents while preserving their 12-mm physical contours.
 For every accepted row, an independent walker checks each grapheme's farthest
 nominal advance or contour-plus-clearance against the actual right inset.
+
 Both indented text and later-page rows must be exercised, rather than merely
 counting admitted source strings. The underlying word preflight is unchanged;
 this adds complementary horizontal coverage to the existing row-pitch audit.
