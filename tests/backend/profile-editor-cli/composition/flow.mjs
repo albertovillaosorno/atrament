@@ -234,6 +234,60 @@ test('compressed ordered marker contours refuse before replacing PDF/PNG',
         }
     });
 
+test('compressed heading ink keeps underline aligned in native PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-heading-contour-'));
+        try {
+            const profile = join(dir, 'compressed-heading.json');
+            const configured = spawnSync(cargo, [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                '--', 'handwriting',
+                '--set-glyph', 'a', 'width',
+                ...Array(4).fill('12000'), '0',
+                '--set-glyph', 'a', 'letter_spacing',
+                ...Array(4).fill('-10000'), '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(profile, configured.stdout);
+            const selected = ['--handwriting-profile', profile,
+                '--heading-style', 'underline'];
+            const region = (width) => [
+                '--flow-region', '30000', '40000', String(width), '20000',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const accepted = render(dir, '# aa', format,
+                    [...selected, ...region(26000)]);
+                assert.equal(accepted.result.status, 0,
+                    accepted.result.stderr);
+                const bytes = readFileSync(accepted.output);
+                const manualOutput = join(dir, `heading-manual.${format}`);
+                const reference = spawnSync(cargo, [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...base, '--handwriting-profile', profile,
+                    '--place-text', '1', '32500', '42500', 'aa',
+                    '--ink-line', '1', '32500', '49200',
+                    '46500', '49200', '550', '#1E304A',
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', '1', '--dpi', '72'] : []),
+                    '--output', manualOutput,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(reference.status, 0, reference.stderr);
+                assert.deepEqual(bytes, readFileSync(manualOutput),
+                    `${format} underline reaches last glyph contour`);
+                const refused = render(dir, '# aa', format,
+                    [...selected, ...region(18000)]);
+                assert.notEqual(refused.result.status, 0);
+                assert.match(refused.result.stderr,
+                    /heading exceeds one-line fixed region/);
+                assert.deepEqual(readFileSync(refused.output), bytes,
+                    `${format} tight-region refusal keeps accepted ink`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('tabbed ordered marker keeps its measured hang on physical pages',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-ordered-tabs-'));

@@ -761,8 +761,14 @@ impl Layout<'_> {
         }
         let y = self.begin_row()?;
         if let LineStyle::Heading(level) = style {
+            // A compressed letter advance may end well before its visible
+            // glyph contour. Decorations must cover actual authored ink,
+            // not only the cursor position after the final grapheme.
+            let ink_extent = heading_contour_extent(
+                &text, extent, self.statistics,
+            )?;
             let mark_end = start_x
-                .checked_add(extent)
+                .checked_add(ink_extent)
                 .ok_or("heading ornament exceeds page")?;
             match self.heading.style.unwrap_or(HeadingStyle::Underline) {
                 HeadingStyle::DoubleUnderline | HeadingStyle::Underline => {
@@ -1033,6 +1039,30 @@ fn measured_word<'text>(
             .ok_or("flow word width overflow")?;
     }
     Ok((glyphs, width))
+}
+
+// Use the farthest visible glyph edge for heading ornaments. A glyph
+// with negative letter spacing can extend beyond later glyphs and beyond
+// the summed advances. Ordinary rows still use their original positions.
+fn heading_contour_extent(
+    text: &str, advances: u32,
+    statistics: Option<&HandwritingStatisticsProfile>,
+) -> Result<u32, String> {
+    let mut cursor = 0u32;
+    let mut extent = advances;
+    let mut remaining = text;
+    while !remaining.is_empty() {
+        let (grapheme, rest) = first_grapheme(remaining)?;
+        let (advance, contour) = GlyphOverlay::flow_advance_um(
+            grapheme, statistics,
+        )?;
+        extent = extent.max(cursor.checked_add(contour)
+            .ok_or("heading glyph contour overflow")?);
+        cursor = cursor.checked_add(advance)
+            .ok_or("heading glyph advance overflow")?;
+        remaining = rest;
+    }
+    Ok(extent)
 }
 
 // Closing ATX markers are syntax only after a separating space. A hash

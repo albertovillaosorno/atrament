@@ -2281,3 +2281,60 @@ fn ordered_marker_contours_are_preflighted_before_hanging_indent()
     }
     Ok(())
 }
+
+#[test]
+fn compressed_heading_decoration_covers_actual_authored_contour()
+    -> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(71);
+    for (dimension, mean) in [
+        (Dimension::Width, 12_000),
+        (Dimension::LetterSpacing, -10_000),
+    ] {
+        stats = stats.with_glyph("a", DimensionStatistics {
+            dimension,
+            statistics: ScalarStatistics {
+                minimum: mean, maximum: mean, mean, median: mean,
+                standard_deviation: 0,
+            },
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let paper = NotebookProfile::default();
+    for style in [super::HeadingStyle::Underline,
+        super::HeadingStyle::DoubleUnderline,
+        super::HeadingStyle::Marker] {
+        let heading = super::HeadingDecoration {
+            style: Some(style), ..super::HeadingDecoration::default()
+        };
+        for (markdown, expected_extent) in [
+            ("# aa", 14_000), ("aa\n===", 14_000),
+            ("# a\u{f3}", 12_000),
+        ] {
+            let source = FlowSource::new(FlowFormat::Markdown, markdown)?;
+            let (rows, marks, pages) = super::layout_flow(
+                &source, &paper, Some(&stats), heading,
+            )?;
+            assert_eq!(pages, 1);
+            assert_eq!(rows.len(), 1);
+            let origin = rows[0].origin_um.0;
+            assert_eq!(marks.len(), match style {
+                super::HeadingStyle::Underline => 1,
+                super::HeadingStyle::DoubleUnderline => 2,
+                super::HeadingStyle::Marker => 4,
+                super::HeadingStyle::None => 0,
+            });
+            assert!(marks.iter().all(|mark| {
+                mark.start_um.0 == origin
+                    && mark.end_um.0 == origin + expected_extent
+            }), "{markdown:?} decoration must follow physical ink");
+        }
+    }
+    Ok(())
+}

@@ -1485,3 +1485,19 @@ Each wide-region output is byte-identical to manually placed authored glyphs
 under the same statistics profile. Tightening only the selected rectangle
 must refuse with the ordered-label diagnostic while preserving the last
 accepted PDF or PNG bytes. No profile or source file is rewritten.
+
+## Compressed heading contour decoration (partial) — 2026-11-06
+
+The CLI-only Markdown heading compiler now spans underline, double-underline
+and marker ornaments to the farthest authored glyph contour, including a
+nonfinal glyph that overhangs later, tightly spaced characters. Strongly
+negative statistical letter spacing previously left these decorations ending
+at the cursor advance rather than the visible heading ink. Nominal advance
+and physical text placements remain unchanged.
+
+A red-before/green-after Rust regression verifies the exact ornament endpoints
+for ATX and Setext headings with compressed statistical widths; it also checks
+the three existing ornament styles. Native PDF and transparent PNG output now
+match independently placed handwritten glyph strokes and a full-length
+underline byte-for-byte. An insufficient fixed rectangle refuses without
+replacing the previous file. This does not add saved semantic heading styles.
