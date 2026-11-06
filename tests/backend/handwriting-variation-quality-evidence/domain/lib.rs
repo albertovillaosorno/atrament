@@ -81,7 +81,10 @@ fn every_todo_and_adr_artifact_axis_is_required_independently() {
         validate_handwriting_variation_quality_evidence_view(&evidence)
             .expect("complete evidence seals exact report");
     assert!(ptr::eq(validated.evidence(), evidence.as_slice()));
-    assert!(validated.detected_artifacts().is_empty());
+    assert_eq!(
+        validated.detected_artifacts(),
+        Vec::<HandwritingVariationQualityAxis>::new(),
+    );
     assert_eq!(
         detected_handwriting_variation_artifacts(&evidence),
         Ok(vec![]),

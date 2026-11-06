@@ -158,7 +158,7 @@ fn complete_role_audit_reports_missing_unique_and_ambiguous_without_policy() {
     );
     for missing in audit.get(2..7).expect("eight audited role entries") {
         assert_eq!(missing.status, HandwritingRoleMultiplicity::Missing);
-        assert!(missing.presentation_indices.is_empty());
+        assert_eq!(missing.presentation_indices, Vec::<usize>::new());
     }
     assert_eq!(profile.roles.len(), 3);
 }

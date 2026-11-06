@@ -35,7 +35,6 @@
 #![expect(
     clippy::create_dir,
     clippy::expect_used,
-    clippy::missing_trait_methods,
     reason = "fail-fast, test-owned filesystem fixtures"
 )]
 

@@ -228,7 +228,6 @@ fn credential_echoing_stderr_opener_is_silenced_and_typed() {
 #[cfg(target_os = "linux")]
 #[expect(
     clippy::expect_used,
-    clippy::missing_trait_methods,
     clippy::create_dir,
     reason = "test-only helper directory and fail-fast cleanup",
 )]
