@@ -2545,3 +2545,112 @@ fn compressed_following_word_wraps_without_phantom_trailing_space()
     ]);
     Ok(())
 }
+
+#[test]
+fn measured_pitch_matches_emitted_ink_for_mixed_sources()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(3);
+    for (glyph, height) in [
+        ("#", 18_000), (">", 19_000), ("=", 17_000),
+        ("-", 16_000), ("*", 15_000), ("~", 14_000),
+        ("`", 13_000), ("1", 12_000), (".", 11_000),
+        ("a", 10_000), ("ó", 20_000), ("\\", 9_000),
+        ("o\u{301}", 21_000),
+    ] {
+        stats = stats.with_glyph(
+            glyph,
+            DimensionStatistics {
+                dimension: Dimension::Height,
+                statistics: ScalarStatistics {
+                    minimum: height,
+                    maximum: height,
+                    mean: height,
+                    median: height,
+                    standard_deviation: 0,
+                },
+            },
+            &UnicodeGraphemeSegmentation,
+        ).map_err(|error| format!("{error:?}"))?;
+    }
+
+    // Deliberately interleave syntax-only and visible tall graphemes.
+    // Compare the pitch preflight to the independently parsed ink runs:
+    // formatting syntax must not influence the physical row height.
+    let examples = [
+        "a", "ó", "o\u{301}", "# a", "## ó", "- a", "1. a", "> a",
+        "  a", "    a", "  ó", "- ó", "  - a", "   ó",
+        "===", "---", "***", "~~~", "```", "```rust",
+        "# ó", "ó\\", "a  ", "a\\", "", "  ",
+        "  ===", "  ---", "\\===", "\\# a", "1. ó",
+        "- [x] a", "- [ ] ó", "> ó", "  > a",
+        "\tó", "a\u{2028}ó", "a\u{2029}ó", "### a",
+        "a\\  ", "# a ###", "```\nó\n```",
+    ];
+    let example_count = u64::try_from(examples.len())
+        .map_err(|_| "source example count refused")?;
+    let profile = NotebookProfile::default();
+    let mut seed = 0x9e37_79b9_7f4a_7c15_u64;
+    let mut admitted = 0;
+    for case in 0..6_000 {
+        let line_count = 2 + (case % 8);
+        let mut source_lines = Vec::new();
+        for _ in 0..line_count {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let index = usize::try_from(seed % example_count)
+                .map_err(|_| "source index refused")?;
+            source_lines.push(examples[index]);
+        }
+        let raw = source_lines.join("\n");
+        let format = if case % 4 == 0 {
+            FlowFormat::Plain
+        } else {
+            FlowFormat::Markdown
+        };
+        let Ok(source) = FlowSource::new(format, &raw) else {
+            continue;
+        };
+        let Ok((runs, _, _)) = super::layout_flow(
+            &source, &profile, Some(&stats),
+            super::HeadingDecoration::default(),
+        ) else {
+            continue;
+        };
+        let pitch = super::measured_pitch(&source, Some(&stats))?;
+        let mut emitted_pitch = 9_000_u32;
+        for run in &runs {
+            let mut remaining = run.text.as_str();
+            while !remaining.is_empty() {
+                let (grapheme, rest) = super::first_grapheme(remaining)?;
+                remaining = rest;
+                if grapheme == " " {
+                    continue;
+                }
+                let height = stats.statistics_for(
+                    grapheme, Dimension::Height,
+                ).ok_or("missing glyph height statistics")?.mean;
+                let baseline = stats.statistics_for(
+                    grapheme, Dimension::BaselineOffset,
+                ).ok_or("missing glyph baseline statistics")?.mean;
+                let needed = height.checked_add(baseline.abs())
+                    .and_then(|sum| sum.checked_add(4_000))
+                    .ok_or("emitted pitch overflow")?;
+                emitted_pitch = emitted_pitch.max(u32::try_from(needed)
+                    .map_err(|_| "emitted pitch exceeds u32")?);
+            }
+        }
+        assert_eq!(pitch, emitted_pitch,
+            "source {case} ({format:?}): {raw:?}; ink: {runs:?}");
+        admitted += 1;
+    }
+    assert!(admitted > 1_000, "too few admitted source sequences");
+    Ok(())
+}

@@ -1562,3 +1562,19 @@ acceptance compares both exact Unicode forms of a two-page compressed-accent
 example byte-for-byte with independently placed ink, and checks that missing
 Unicode glyphs cannot replace accepted outputs. This remains caller-authored
 CLI flow, not saved semantic notebook pagination or a general Markdown engine.
+
+## Mixed Markdown row-pitch invariant (partial) — 2026-11-06
+
+A deterministic native Rust regression now compiles 6,000 short combinations
+of plain text and restricted Markdown. It independently compares row-pitch
+preflight against the exact graphemes in the accepted physical text runs,
+using distinct extreme height statistics for syntax marks and accented ink.
+The combinations cover headings, Setext underlines, lists/tasks, quotes,
+fences, whitespace, tabs, Unicode line/paragraph separators, hard breaks,
+and NFC/NFD accents. Invalid sources are skipped; more than 1,000 admitted
+combinations must agree on the physical ink pitch.
+
+This guards against introducing phantom page-height changes from Markdown
+syntax, not a claim of complete Markdown support, saved semantic notebook
+content or the finite P1 acceptance. Existing PDF/PNG tests remain the
+independent exporter verification.
