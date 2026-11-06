@@ -2028,3 +2028,142 @@ fn markdown_pitch_agrees_with_actual_ink_for_escaped_and_nested_edges()
     assert!(checked > 2_000, "admit enough mixed Markdown sources");
     Ok(())
 }
+
+#[test]
+fn varied_ordered_labels_keep_unicode_within_physical_page_regions()
+    -> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let glyphs = ["0", "1", "2", "3", "4", "5", "6", "7", "8", "9",
+        ".", ")", "a", "ó", "o\u{301}", "ñ"];
+    let mut stats = HandwritingStatisticsProfile::baseline(47);
+    for (index, glyph) in glyphs.iter().enumerate() {
+        let width = 2_300 + (index as i32 % 7) * 620;
+        let spacing = (index as i32 % 5 - 2) * 550;
+        for (dimension, mean) in [
+            (Dimension::Width, width),
+            (Dimension::LetterSpacing, spacing),
+        ] {
+            let value = ScalarStatistics {
+                minimum: mean, maximum: mean, mean, median: mean,
+                standard_deviation: 0,
+            };
+            stats = stats.with_glyph(glyph, DimensionStatistics {
+                dimension, statistics: value,
+            }, &UnicodeGraphemeSegmentation)
+                .map_err(|error| format!("{error:?}"))?;
+        }
+    }
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 60_000, height: 14_000,
+    };
+    let paper = NotebookProfile::default();
+    let first_x = region.left + 8_500;
+    let right = region.left + region.width - 1_500;
+    let mut seed = 0x8b29_7a45u32;
+    let mut admitted = 0usize;
+    let mut page_rows = 0usize;
+    let mut label_lengths = [0usize; 3];
+    for sample in 0..256usize {
+        seed = seed.wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
+        let magnitude = sample % 3;
+        let digits = ([1u32, 10, 100][magnitude]
+            + seed % [9u32, 90, 900][magnitude]).to_string();
+        let marker = format!("{digits}{}", if sample % 2 == 0 {
+            '.'
+        } else { ')' });
+        let spaces = 1 + sample % 4;
+        let mut body = String::new();
+        for _ in 0..24 {
+            seed = seed.wrapping_mul(1_664_525)
+                .wrapping_add(1_013_904_223);
+            body.push_str(glyphs[12 + (seed as usize % 4)]);
+        }
+        let source_text = format!("{marker}{}{body}", " ".repeat(spaces));
+        let source = FlowSource::new(FlowFormat::Markdown, &source_text)?;
+        let (rows, marks, pages) = match super::layout_flow_with_region(
+            &source, &paper, Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        ) {
+            Ok(result) => result,
+            Err(message) if message.contains(
+                "ordered list label and first glyph exceed") => continue,
+            Err(message) => return Err(format!(
+                "sample {sample}, source {source_text:?}: {message}"
+            )),
+        };
+        if !marks.is_empty() || pages != rows.len() || rows.len() < 2 {
+            return Err(format!(
+                "sample {sample} has unexpected physical pages or marks: \
+                 {rows:?}, {pages} pages"
+            ));
+        }
+        let joined = rows.iter().map(|row| row.text.as_str())
+            .collect::<String>();
+        if joined != source_text {
+            return Err(format!(
+                "sample {sample} lost exact ordered Unicode ink: \
+                 {source_text:?} != {joined:?}"
+            ));
+        }
+        let mut indent = 4_000u32 * spaces as u32;
+        let mut marker_glyph = marker.as_str();
+        while !marker_glyph.is_empty() {
+            let (glyph, remaining) = super::first_grapheme(marker_glyph)?;
+            indent += super::GlyphOverlay::flow_advance_um(
+                glyph, Some(&stats),
+            )?.0;
+            marker_glyph = remaining;
+        }
+        if !rows[0].text.starts_with(&format!(
+            "{marker}{}", " ".repeat(spaces)
+        )) || rows[0].text == format!("{marker}{}", " ".repeat(spaces)) {
+            return Err(format!(
+                "sample {sample} split its numeral from first body glyph"
+            ));
+        }
+        for (index, row) in rows.iter().enumerate() {
+            let x = if index == 0 { first_x } else { first_x + indent };
+            if row.origin_um != (x, region.top + 2_500)
+                || row.page != index + 1 {
+                return Err(format!(
+                    "sample {sample} lost its measured hanging indent: \
+                     {row:?}, expected x {x} on page {}", index + 1
+                ));
+            }
+            let mut cursor = x;
+            let mut remaining = row.text.as_str();
+            while !remaining.is_empty() {
+                let (glyph, rest) = super::first_grapheme(remaining)?;
+                let (advance, contour) =
+                    super::GlyphOverlay::flow_advance_um(glyph, Some(&stats))?;
+                if cursor.checked_add(advance.max(contour + 800))
+                    .is_none_or(|end| end > right) {
+                    return Err(format!(
+                        "sample {sample} glyph {glyph:?} escapes page {}: \
+                         {row:?}", row.page
+                    ));
+                }
+                cursor += advance;
+                remaining = rest;
+            }
+            page_rows += 1;
+        }
+        admitted += 1;
+        label_lengths[magnitude] += 1;
+    }
+    if label_lengths.iter().any(|&count| count < 20)
+        || admitted < 100 || page_rows < 300 {
+        return Err(format!(
+            "insufficient ordered-label coverage: {label_lengths:?}, \
+             {admitted} admitted sources and {page_rows} physical rows"
+        ));
+    }
+    Ok(())
+}

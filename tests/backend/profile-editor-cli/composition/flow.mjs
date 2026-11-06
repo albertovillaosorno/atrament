@@ -270,6 +270,102 @@ test('two-digit ordered labels use statistical spacing across PDF pages',
         }
     });
 
+test('three-digit ordered labels retain heterogeneous ink across pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-three-digit-'));
+        try {
+            const statistics = join(dir, 'digit-widths.json');
+            const edits = [
+                ['9', '6500'], ['8', '5000'],
+                ['7', '4000'], [')', '5500'],
+            ].flatMap(([glyph, width]) => [
+                '--set-glyph', glyph, 'width',
+                width, width, width, width, '0',
+            ]);
+            const configured = spawnSync('cargo', [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+                'handwriting', ...edits,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(statistics, configured.stdout);
+            const markerInk = ['9', '8', '7', ')'].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '600', '500', '1800', '3000',
+                '250', '#123456',
+            ]);
+            const source = '987) aó';
+            const region = [
+                '--flow-region', '30000', '40000', '41000', '14000',
+            ];
+            const extras = [...markerInk, ...region];
+            const baseline = render(dir, source, 'pdf',
+                [...extras, '--pages', '1']);
+            assert.equal(baseline.result.status, 0, baseline.result.stderr);
+            assert.match(readFileSync(baseline.output)
+                .toString('latin1'), /\/Count 1/,
+            'nominal digits and punctuation fit in one row');
+
+            const profile = ['--handwriting-profile', statistics];
+            // The saved baseline adds 350 um of tracking to each of
+            // the four profiled marker glyphs: 21,000 + 1,400 +
+            // 4,000 = 26,400 um after the label separator space.
+            const manual = (format, page) => {
+                const output = join(dir, `three-manual-${format}-${page}`);
+                const args = [...base, ...markerInk, ...profile,
+                    '--place-text', '1', '38500', '42500', '987) a',
+                    '--place-text', '2', '64900', '42500', 'ó',
+                    ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    '--export-paper', format, '--output', output];
+                if (format === 'png') {
+                    args.push('--png-page', String(page), '--dpi', '72');
+                }
+                const result = spawnSync('cargo', [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...args,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(result.status, 0, result.stderr);
+                return readFileSync(output);
+            };
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const flowed = render(dir, source, format, [
+                        ...extras, ...profile,
+                        ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    ], '--flow-markdown', page);
+                    assert.equal(flowed.result.status, 0,
+                        flowed.result.stderr);
+                    const accepted = readFileSync(flowed.output);
+                    assert.deepEqual(accepted, manual(format, page),
+                        `page ${page} ${format} retains all digit widths`);
+                    if (format === 'pdf') {
+                        assert.match(accepted.toString('latin1'), /\/Count 2/);
+                        for (const [options, diagnostic] of [
+                            [[...extras, ...profile, '--pages', '1'],
+                                /flow requires 2 physical pages/],
+                            [[...markerInk, ...profile, '--flow-region',
+                                '30000', '40000', '38000', '14000'],
+                                /ordered list label and first glyph exceed/],
+                        ]) {
+                            const refused = render(dir, source, format,
+                                options);
+                            assert.notEqual(refused.result.status, 0);
+                            assert.match(refused.result.stderr, diagnostic);
+                            assert.deepEqual(readFileSync(refused.output),
+                                accepted, 'refusal preserves accepted PDF');
+                        }
+                    } else if (page === 2) {
+                        const refused = render(dir, source, format,
+                            [...extras, ...profile], '--flow-markdown', 3);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.deepEqual(readFileSync(refused.output), accepted,
+                            'missing page does not replace accepted PNG');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('notebook CLI help advertises real Markdown task shapes', () => {
     const help = spawnSync('cargo', [
         'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',

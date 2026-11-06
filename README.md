@@ -608,7 +608,10 @@ One-row-per-page regressions confirm the hanging indent on page two,
 including a two-digit label with two authored spaces and an opt-in
 per-digit letter-spacing override. They compare native PDF and transparent
 PNG ink to independently placed glyphs and preserve accepted exports on
-invalid page counts or regions.
+invalid page counts or regions. A further seeded regression covers 256
+variable-width one-to-three-digit labels with exact Unicode body ink,
+and a real PDF/PNG comparison verifies a three-digit label with separately
+configured numeral and punctuation widths across two physical pages.
 
 Quote text is inset 6 mm and gets a 0.4-mm vertical ink rule on each
 physical row, including wrapped continuations; the `>` marker itself needs
