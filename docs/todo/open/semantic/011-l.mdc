@@ -1419,3 +1419,17 @@ widths. Unmodified metrics fit in one row; a narrow fixed region, an
 insufficient PDF page selection, and a missing PNG page refuse without
 replacing accepted ink. The complete saved-notebook acceptance criterion
 remains open.
+
+## Maximum decimal marker boundary (partial) — 2026-11-06
+
+Native CLI acceptance now compares a nine-digit `123456789)` ordered item
+with a ten-digit `1234567890)` literal Markdown paragraph. Both use exact
+caller-authored numeral, punctuation and accented Unicode strokes; the
+nine-digit marker's page-two continuation starts at its measured hanging
+indent, while the ten-digit ordinary line wraps at the normal body inset.
+
+Independently placed physical ink must match the real two-page vector PDF
+and both transparent PNG pages byte-for-byte. Insufficient PDF page count,
+missing PNG selection and a fixed region too narrow for the nine-digit label
+must refuse without overwriting the last accepted export. The saved semantic
+notebook acceptance remains open.

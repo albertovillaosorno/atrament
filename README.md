@@ -612,6 +612,9 @@ invalid page counts or regions. A further seeded regression covers 256
 variable-width one-to-three-digit labels with exact Unicode body ink,
 and a real PDF/PNG comparison verifies a three-digit label with separately
 configured numeral and punctuation widths across two physical pages.
+An upper-bound regression now compares nine-digit ordered hanging-indents
+against ten-digit literal text on two physical PDF/PNG pages, including exact
+Unicode ink, narrow-region refusal and immutable previously accepted output.
 
 Quote text is inset 6 mm and gets a 0.4-mm vertical ink rule on each
 physical row, including wrapped continuations; the `>` marker itself needs

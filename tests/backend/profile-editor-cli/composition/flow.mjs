@@ -366,6 +366,106 @@ test('three-digit ordered labels retain heterogeneous ink across pages',
         }
     });
 
+test('nine-digit ordering stops at the exact Markdown marker boundary',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-nine-digit-'));
+        try {
+            const markerInk = [...'0123456789)'].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '600', '500', '1800', '3000',
+                '250', '#123456',
+            ]);
+            const region = [
+                '--flow-region', '30000', '40000', '60000', '14000',
+            ];
+            const cases = [
+                {
+                    source: '123456789) aó',
+                    rows: [
+                        [1, 38500, 42500, '123456789) a'],
+                        [2, 82500, 42500, 'ó'],
+                    ],
+                },
+                {
+                    // Ten digits are ordinary text, not a list whose
+                    // continuation inherits a fictitious hanging indent.
+                    source: '1234567890) aóóa',
+                    rows: [
+                        [1, 32500, 42500, '1234567890)'],
+                        [2, 32500, 42500, 'aóóa'],
+                    ],
+                },
+            ];
+            const manual = (entry, format, page) => {
+                const output = join(dir, `nine-manual-${format}-${page}`);
+                const placements = entry.rows.flatMap(
+                    ([number, x, y, content]) => [
+                        '--place-text', String(number), String(x),
+                        String(y), content,
+                    ]);
+                const args = [...base, ...markerInk, ...placements,
+                    ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    '--export-paper', format, '--output', output, '--replace'];
+                if (format === 'png') {
+                    args.push('--png-page', String(page), '--dpi', '72');
+                }
+                const result = spawnSync('cargo', [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...args,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(result.status, 0, result.stderr);
+                return readFileSync(output);
+            };
+            for (const entry of cases) {
+                for (const format of ['pdf', 'png']) {
+                    for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                        const options = [
+                            ...markerInk, ...region,
+                            ...(format === 'pdf' ? ['--pages', '2'] : []),
+                        ];
+                        const flowed = render(dir, entry.source, format,
+                            options, '--flow-markdown', page);
+                        assert.equal(flowed.result.status, 0,
+                            flowed.result.stderr);
+                        const accepted = readFileSync(flowed.output);
+                        assert.deepEqual(accepted,
+                            manual(entry, format, page),
+                            `${entry.source} page ${page} ${format}`);
+                        if (format === 'pdf') {
+                            assert.match(accepted.toString('latin1'),
+                                /\/Count 2/);
+                            const refused = render(dir, entry.source,
+                                format, [...markerInk, ...region,
+                                    '--pages', '1']);
+                            assert.notEqual(refused.result.status, 0);
+                            assert.match(refused.result.stderr,
+                                /flow requires 2 physical pages/);
+                            assert.deepEqual(readFileSync(refused.output),
+                                accepted, 'page refusal keeps prior PDF');
+                        } else if (page === 2) {
+                            const refused = render(dir, entry.source,
+                                format, [...markerInk, ...region],
+                                '--flow-markdown', 3);
+                            assert.notEqual(refused.result.status, 0);
+                            assert.deepEqual(readFileSync(refused.output),
+                                accepted, 'missing PNG page keeps prior ink');
+                        }
+                    }
+                }
+            }
+            const tooNarrow = render(dir, cases[0].source, 'pdf',
+                [...markerInk, '--flow-region', '30000', '40000',
+                    '57000', '14000', '--pages', '2']);
+            assert.notEqual(tooNarrow.result.status, 0);
+            assert.match(tooNarrow.result.stderr,
+                /ordered list label and first glyph exceed/);
+            assert.deepEqual(readFileSync(tooNarrow.output),
+                manual(cases[1], 'pdf', 1),
+                'oversized nine-digit label cannot overwrite accepted PDF');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('notebook CLI help advertises real Markdown task shapes', () => {
     const help = spawnSync('cargo', [
         'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
