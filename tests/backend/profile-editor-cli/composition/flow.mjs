@@ -2742,3 +2742,53 @@ test('Unicode breaks before Setext marks retain two-page native ink', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('mixed BOM CRLF tabs and Unicode breaks keep literal native ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-mixed-transport-'));
+    try {
+        const statistics = join(dir, 'tall-equal.json');
+        const configured = spawnSync('cargo', [
+            'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+            'handwriting', '--set-glyph', '=', 'height',
+            '25000', '25000', '25000', '25000', '0',
+        ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+        assert.equal(configured.status, 0, configured.stderr);
+        writeFileSync(statistics, configured.stdout);
+        const glyphs = [
+            '--glyph-stroke', 'b', '600', '500', '1800', '3000',
+            '250', '#123456',
+            '--glyph-stroke', 'c', '900', '500', '1800', '3000',
+            '250', '#123456',
+        ];
+        const equals = [
+            '--glyph-stroke', '=', '600', '500', '1800', '3000',
+            '250', '#123456',
+        ];
+        const ink = ['--handwriting-profile', statistics,
+            ...glyphs, ...equals];
+        const transported = '\uFEFFa\r\n\tb\u2028===\r\nc';
+        const canonical = 'a\n    b  \n===\nc';
+        for (const format of ['pdf', 'png']) {
+            const clean = render(dir, canonical, format, ink);
+            assert.equal(clean.result.status, 0, clean.result.stderr);
+            const expected = readFileSync(clean.output);
+            const actual = render(dir, transported, format, ink);
+            assert.equal(actual.result.status, 0, actual.result.stderr);
+            assert.deepEqual(readFileSync(actual.output), expected,
+                'combined source transports preserve literal physical ink');
+            const missing = render(dir, transported, format,
+                ['--handwriting-profile', statistics, ...glyphs]);
+            assert.notEqual(missing.result.status, 0);
+            assert.match(missing.result.stderr,
+                /missing authored glyph shapes.*U\+003D/);
+            assert.deepEqual(readFileSync(missing.output), expected,
+                'missing literal equals cannot replace accepted ink');
+            const invalid = render(dir, `${transported}\r`, format, ink);
+            assert.notEqual(invalid.result.status, 0);
+            assert.deepEqual(readFileSync(invalid.output), expected,
+                'unpaired carriage return cannot replace accepted ink');
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

@@ -83,6 +83,61 @@ fn max_tabbed_source_expands_to_exact_byte_limit() {
 }
 
 #[test]
+fn mixed_transport_breaks_cannot_promote_literal_indented_setext() {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let transported = "\u{feff}a\r\n\tb\u{2028}===\r\nc";
+    let canonical = "a\n    b  \n===\nc";
+    for format in [FlowFormat::Markdown, FlowFormat::Plain] {
+        let source = FlowSource::new(format, transported)
+            .expect("valid BOM, CRLF, tab and Unicode source breaks");
+        assert_eq!(source.text, canonical);
+        for refused in ["\u{feff}", "a\r", "a\rb", "a\0b",
+            "a\u{001f}b", "a\u{007f}b", "a\u{0085}b",
+            "a\u{009f}b"] {
+            assert!(FlowSource::new(format, refused).is_err(),
+                "unsupported source control: {refused:?}");
+        }
+    }
+
+    let tall = ScalarStatistics {
+        maximum: 25_000, mean: 25_000, median: 25_000,
+        minimum: 25_000, standard_deviation: 0,
+    };
+    let statistics = HandwritingStatisticsProfile::baseline(1)
+        .with_glyph("=", DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+        .expect("literal Setext-like marks have authored tall ink");
+    let render = |text: &str| {
+        let source = FlowSource::new(FlowFormat::Markdown, text)
+            .expect("admitted Markdown source");
+        super::layout_flow(
+            &source, &NotebookProfile::default(), Some(&statistics),
+            super::HeadingDecoration::default(),
+        ).expect("all visible marks render as authored text")
+    };
+    let actual = render(transported);
+    let expected = render(canonical);
+    assert_eq!(actual.0.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(),
+    )).collect::<Vec<_>>(), expected.0.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(),
+    )).collect::<Vec<_>>());
+    assert_eq!(actual.0.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(), ["a", "    b", "=== c"]);
+    assert!(actual.1.is_empty(),
+        "a hard break after a literal four-space row cannot create a heading");
+    assert_eq!(actual.0[2].origin_um.1 - actual.0[1].origin_um.1,
+        29_000, "the equal signs remain authored height-bearing ink");
+}
+
+#[test]
 fn literal_indent_before_setext_mark_keeps_its_glyph_pitch() {
     use atrament_handwriting_statistics::{
         Dimension, DimensionStatistics, HandwritingStatisticsProfile,
