@@ -167,10 +167,6 @@ struct ReplaceTargetObservation {
 }
 
 #[cfg(target_os = "linux")]
-#[expect(
-    clippy::missing_trait_methods,
-    reason = "Drop has only its cleanup method"
-)]
 impl Drop for OwnedTemp<'_> {
     fn drop(&mut self) {
         // A competing actor can move or replace the random sibling before
