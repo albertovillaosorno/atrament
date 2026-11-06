@@ -173,6 +173,91 @@ test('ordered continuation checks post-wrap glyph width in PDF/PNG',
         }
     });
 
+test('tabbed ordered marker keeps its measured hang on physical pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-ordered-tabs-'));
+        try {
+            const numerals = ['1', '.'].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '600', '500', '1800', '3000',
+                '250', '#123456',
+            ]);
+            const region = [
+                '--flow-region', '30000', '40000', '32000', '14000',
+            ];
+            const options = [...numerals, ...region];
+            const file = join(dir, 'ordered.md');
+            const original = Buffer.from('\uFEFF1.\taó\r\n', 'utf8');
+            writeFileSync(file, original);
+            const manual = (format, page) => {
+                const output = join(dir, `tab-manual-${format}-${page}`);
+                const args = [
+                    ...base, ...numerals,
+                    '--place-text', '1', '38500', '42500', '1.  a',
+                    '--place-text', '2', '54500', '42500', 'ó',
+                    ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72'] : []),
+                    '--output', output,
+                ];
+                const result = spawnSync('cargo', [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...args,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(result.status, 0, result.stderr);
+                return readFileSync(output);
+            };
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const extra = [
+                        ...options,
+                        ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    ];
+                    const expected = manual(format, page);
+                    for (const [source, flag] of [
+                        ['1.  aó', '--flow-markdown'],
+                        ['1.\taó', '--flow-markdown'],
+                        [file, '--flow-markdown-file'],
+                    ]) {
+                        const { result, output } = render(
+                            dir, source, format, extra, flag, page);
+                        assert.equal(result.status, 0, result.stderr);
+                        assert.deepEqual(readFileSync(output), expected,
+                            `tab-expanded numeral and item ink: ${flag}`);
+                    }
+                    if (format === 'pdf') {
+                        assert.match(expected.toString('latin1'),
+                            /\/Count 2/);
+                        for (const [changed, message] of [
+                            [[...options, '--pages', '1'],
+                                /requires 2 physical pages/],
+                            [[...numerals, '--flow-region',
+                                '30000', '40000', '28000', '14000'],
+                                /label and first glyph exceed/],
+                        ]) {
+                            const refused = render(dir, '1.\taó', format,
+                                changed);
+                            assert.notEqual(refused.result.status, 0);
+                            assert.match(refused.result.stderr, message);
+                            assert.deepEqual(readFileSync(refused.output),
+                                expected, 'invalid layout preserves PDF');
+                        }
+                    } else if (page === 2) {
+                        const refused = render(dir, file, 'png', options,
+                            '--flow-markdown-file', 3);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.deepEqual(readFileSync(refused.output),
+                            expected, 'missing page preserves PNG');
+                    }
+                }
+            }
+            assert.deepEqual(readFileSync(file), original,
+                'BOM and CRLF source remain unchanged');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('soft continued ordered Markdown keeps native page-local ink', () => {
     const dir = mkdtempSync(join(root, '.temp/flow-ordered-soft-'));
     try {

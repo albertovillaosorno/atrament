@@ -1448,3 +1448,18 @@ caller-authored pen strokes byte-for-byte. Insufficient page count, a narrow
 fixed region and an absent PNG page leave the accepted output unchanged.
 This is still export-only Markdown composition; neither saved semantic item
 identities nor the finite P1 notebook acceptance are complete.
+
+## Tab-expanded ordered labels at page boundaries (partial) — 2026-11-06
+
+A native subprocess regression verifies that a tab after an authored `1.`
+marker expands to its source-column stop before the measured list indent is
+computed. The tabbed and two-space spelling, plus a BOM/CRLF Markdown file,
+produce byte-identical two-page PDF and independently selected transparent
+PNG page ink. Both pages match manually placed glyph strokes at their actual
+physical positions; the first item glyph stays with its numeral, and the
+continuation begins beneath the item, not the marker.
+
+An insufficient PDF page selection, a region narrower than the label and
+first glyph, and a nonexistent PNG page preserve previously accepted output.
+Original file bytes remain unchanged. This covers the CLI-only Markdown
+bridge; saved notebook semantic identities remain unimplemented.

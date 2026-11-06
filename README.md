@@ -599,10 +599,13 @@ A source containing only separators refuses until it includes visible text.
 
 Each list item starts on its own row; wrapped continuations
 align beneath the first item glyph after the *measured* numeral, separator
-and any authored spaces. A label too wide to leave room for its first item
-glyph refuses rather than creating an orphan numeral row. Every subsequent
-glyph must also fit that narrower continuation width after wrapping;
-otherwise the native export refuses instead of overflowing its region.
+and any authored spaces. Tabs following numbered labels use the same
+four-column source expansion as other pasted tabs; the expanded spaces count
+toward the physical hanging indent, including on later pages.
+A label too wide to leave room for its first item glyph refuses rather
+than creating an orphan numeral row. Every subsequent glyph must also fit
+that narrower continuation width after wrapping; otherwise the native
+export refuses instead of overflowing its region.
 
 One-row-per-page regressions confirm the hanging indent on page two,
 including a two-digit label with two authored spaces and an opt-in
