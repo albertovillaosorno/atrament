@@ -1052,3 +1052,78 @@ fn escaped_setext_equals_stays_literal_ink_after_body() {
     assert_eq!(super::measured_pitch(&title, Some(&statistics))
         .expect("heading syntax has no equals glyph"), 9_000);
 }
+
+#[test]
+fn unicode_source_breaks_keep_literal_setext_markers_and_exact_pitch() {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let tall = ScalarStatistics {
+        maximum: 25_000, mean: 25_000, median: 25_000,
+        minimum: 25_000, standard_deviation: 0,
+    };
+    let mut statistics = HandwritingStatisticsProfile::baseline(1);
+    for glyph in ["=", "-"] {
+        statistics = statistics.with_glyph(glyph, DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+            .expect("valid tall authored punctuation");
+    }
+    for (source_text, expected_rows, expected_pitch, gap) in [
+        ("a\u{2028}===\na", ["a", "=== a"], 29_000, 0),
+        ("a\u{2029}===\na", ["a", "=== a"], 29_000, 4_000),
+        ("a\u{2028}\\===\na", ["a", "=== a"], 29_000, 0),
+        ("a\u{2029}\\===\na", ["a", "=== a"], 29_000, 4_000),
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, source_text)
+            .expect("Unicode source breaks are structural");
+        let (rows, ornaments, pages) = super::layout_flow(
+            &source, &NotebookProfile::default(), Some(&statistics),
+            super::HeadingDecoration::default(),
+        ).expect("literal punctuation remains written ink");
+        assert_eq!(pages, 1);
+        assert!(ornaments.is_empty(), "no invented Setext underline");
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>(), expected_rows, "{source_text:?}");
+        assert_eq!(super::measured_pitch(&source, Some(&statistics))
+            .expect("literal glyph height is measurable"), expected_pitch);
+        assert_eq!(rows[1].origin_um.1 - rows[0].origin_um.1,
+            expected_pitch + gap, "{source_text:?}");
+    }
+    for (source_text, expected_rows, rule) in [
+        ("a\u{2028}---\na", ["a", "a"], true),
+        ("a\u{2029}---\na", ["a", "a"], true),
+        ("a\u{2028}\\---\na", ["a", "--- a"], false),
+        ("a\u{2029}\\---\na", ["a", "--- a"], false),
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, source_text)
+            .expect("Unicode breaks preserve thematic syntax and escapes");
+        let (rows, ornaments, _) = super::layout_flow(
+            &source, &NotebookProfile::default(), Some(&statistics),
+            super::HeadingDecoration::default(),
+        ).expect("thematic rules or literal hyphens render");
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>(), expected_rows, "{source_text:?}");
+        assert_eq!(ornaments.len(), usize::from(rule),
+            "only an unescaped thematic separator has an ornament");
+        let expected_pitch = if rule { 9_000 } else { 29_000 };
+        assert_eq!(super::measured_pitch(&source, Some(&statistics))
+            .expect("rendered ink determines physical pitch"),
+            expected_pitch, "{source_text:?}");
+    }
+    let heading = FlowSource::new(FlowFormat::Markdown, "a\n===\na")
+        .expect("Setext title has no authored equals mark");
+    let (rows, ornaments, _) = super::layout_flow(
+        &heading, &NotebookProfile::default(), Some(&statistics),
+        super::HeadingDecoration::default(),
+    ).expect("actual Setext syntax draws a heading rule");
+    assert_eq!(rows.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(), ["a", "a"]);
+    assert_eq!(ornaments.len(), 1);
+    assert_eq!(super::measured_pitch(&heading, Some(&statistics))
+        .expect("syntax must not inflate the pitch"), 9_000);
+}

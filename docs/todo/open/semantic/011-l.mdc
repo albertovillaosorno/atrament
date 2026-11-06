@@ -1197,3 +1197,21 @@ syntax. Native PDF/transparent PNG comparisons prove both indented and
 unindented escapes equal the same authored text, with atomic refusal when
 an exact equals glyph is absent. Other inline Markdown escapes and full
 semantic notebook persistence remain outside this limited CLI parser.
+
+## Unicode source breaks before Setext marks (partial) — 2026-11-05
+
+A native regression now distinguishes a line/paragraph separator before
+`===` from an ordinary soft Markdown line break. U+2028 forces a hard row,
+while U+2029 ends the paragraph; neither may promote the preceding text to
+a Setext heading. Those literal equals marks still require authored ink,
+and a 25-mm glyph-height override must reserve 29-mm physical row pitch.
+An ordinary `a\n===` source still uses heading syntax and no equals glyph.
+An unescaped `---` following a structural break becomes a thematic rule,
+whereas `\---` remains exact authored dash ink with the same 29-mm pitch.
+
+Real native PDF and transparent PNG exports independently verify two physical
+pages in a one-row fixed region, exact first/second-page authored ink,
+LF-equivalent source bytes, and unchanged accepted files after missing-glyph
+or insufficient-page refusal. This adds an interoperation regression for
+pasted Unicode source, not a persistent semantic Markdown document; the
+finite saved-notebook acceptance criterion remains open.

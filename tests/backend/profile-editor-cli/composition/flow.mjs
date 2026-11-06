@@ -2662,3 +2662,83 @@ test('escaped Setext equals exports literal native ink, not a title', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('Unicode breaks before Setext marks retain two-page native ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-unicode-setext-'));
+    try {
+        const statistics = join(dir, 'tall-equal.json');
+        const configured = spawnSync('cargo', [
+            'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+            'handwriting', '--set-glyph', '=', 'height',
+            '25000', '25000', '25000', '25000', '0',
+        ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+        assert.equal(configured.status, 0, configured.stderr);
+        writeFileSync(statistics, configured.stdout);
+        const region = ['--flow-region', '30000', '40000',
+            '100000', '35000'];
+        const ink = [
+            ...region, '--handwriting-profile', statistics,
+            '--glyph-stroke', '=', '600', '500', '1800', '3000',
+            '250', '#123456',
+        ];
+        const source = 'a\u2028===\na';
+        const paragraph = 'a\u2029===\na';
+        const canonical = 'a  \n===\na';
+        const plainParagraph = 'a\n\n===\na';
+        for (const format of ['pdf', 'png']) {
+            const selected = format === 'pdf'
+                ? [...ink, '--pages', '2'] : ink;
+            const accepted = render(dir, source, format, selected);
+            assert.equal(accepted.result.status, 0,
+                accepted.result.stderr);
+            const bytes = readFileSync(accepted.output);
+            if (format === 'pdf') {
+                assert.match(bytes.toString('latin1'), /\/Count 2/);
+            } else {
+                const first = render(dir, 'a', 'png', ink);
+                assert.equal(first.result.status, 0, first.result.stderr);
+                assert.deepEqual(bytes, readFileSync(first.output),
+                    'page one must contain only the original body row');
+                const second = render(dir, source, 'png', ink,
+                    '--flow-markdown', 2);
+                assert.equal(second.result.status, 0,
+                    second.result.stderr);
+                const pageTwo = readFileSync(second.output);
+                const alone = render(dir, '=== a', 'png', ink);
+                assert.equal(alone.result.status, 0, alone.result.stderr);
+                assert.deepEqual(pageTwo, readFileSync(alone.output),
+                    'page two must write the exact literal equals glyphs');
+            }
+            for (const equivalent of [canonical, paragraph, plainParagraph]) {
+                const actual = render(dir, equivalent, format, selected);
+                assert.equal(actual.result.status, 0,
+                    actual.result.stderr);
+                assert.deepEqual(readFileSync(actual.output), bytes,
+                    'Unicode breaks must match explicit source boundaries');
+            }
+            const missing = render(dir, source, format,
+                [...region, '--handwriting-profile', statistics]);
+            assert.notEqual(missing.result.status, 0);
+            assert.match(missing.result.stderr,
+                /missing authored glyph shapes.*U\+003D/);
+            assert.deepEqual(readFileSync(missing.output), bytes,
+                'missing literal punctuation cannot replace accepted ink');
+            if (format === 'pdf') {
+                const short = render(dir, source, 'pdf',
+                    [...ink, '--pages', '1']);
+                assert.notEqual(short.result.status, 0);
+                assert.match(short.result.stderr, /page/i);
+                assert.deepEqual(readFileSync(short.output), bytes,
+                    'one-page selection cannot replace two-page PDF');
+            }
+            const actualSetext = render(dir, 'a\n===\na', format,
+                [...region, '--handwriting-profile', statistics]);
+            assert.equal(actualSetext.result.status, 0,
+                actualSetext.result.stderr);
+            assert.notDeepEqual(readFileSync(actualSetext.output), bytes,
+                'only adjacent ordinary lines permit Setext promotion');
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
