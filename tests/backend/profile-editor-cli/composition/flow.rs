@@ -2454,18 +2454,20 @@ fn compressed_following_word_wraps_without_phantom_trailing_space()
     use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
     let mut stats = HandwritingStatisticsProfile::baseline(107);
-    for (dimension, mean) in [
-        (Dimension::Width, 12_000),
-        (Dimension::LetterSpacing, -10_000),
-    ] {
-        stats = stats.with_glyph("ó", DimensionStatistics {
-            dimension,
-            statistics: ScalarStatistics {
-                minimum: mean, maximum: mean, mean, median: mean,
-                standard_deviation: 0,
-            },
-        }, &UnicodeGraphemeSegmentation)
-            .map_err(|error| format!("{error:?}"))?;
+    for glyph in ["ó", "o\u{301}"] {
+        for (dimension, mean) in [
+            (Dimension::Width, 12_000),
+            (Dimension::LetterSpacing, -10_000),
+        ] {
+            stats = stats.with_glyph(glyph, DimensionStatistics {
+                dimension,
+                statistics: ScalarStatistics {
+                    minimum: mean, maximum: mean, mean, median: mean,
+                    standard_deviation: 0,
+                },
+            }, &UnicodeGraphemeSegmentation)
+                .map_err(|error| format!("{error:?}"))?;
+        }
     }
     // Its 2-mm advance fits after "a ", but the 12-mm ink contour
     // requires a fresh row. No printable line should retain the separator.
@@ -2510,6 +2512,18 @@ fn compressed_following_word_wraps_without_phantom_trailing_space()
         assert_eq!(pages, 1);
         assert_eq!(one.len(), 1);
         assert_eq!(one[0].text, "a ó");
+
+        let decomposed = FlowSource::new(format,
+            "a o\u{301}o\u{301}")?;
+        let (nfd, _, nfd_pages) = super::layout_flow_with_region(
+            &decomposed, &NotebookProfile::default(), Some(&stats),
+            super::HeadingDecoration::default(), Some(
+                super::FlowRegion { width: 24_800, ..region }
+            ),
+        )?;
+        assert_eq!(nfd_pages, 2);
+        assert_eq!(nfd.iter().map(|run| run.text.as_str())
+            .collect::<Vec<_>>(), ["a", "o\u{301}o\u{301}"]);
     }
 
     // An ordered item reserves its measured numeral/space hang. The same

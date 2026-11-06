@@ -1556,9 +1556,9 @@ next physical row. This avoids both a phantom trailing space on the preceding
 row and an unnecessary split inside a word that fits on its own fresh row.
 
 A red-before/green-after Rust regression checks plain and Markdown inputs,
-exact contour-clearance thresholds, ordered-list hanging indents, and
-row/page identities. Native PDF and transparent PNG acceptance compares a
-two-page compressed-accent example byte-for-byte with independently placed
-ink, and checks that missing
+exact contour-clearance thresholds, ordered-list hanging indents, NFC/NFD
+accent identities, and row/page identities. Native PDF and transparent PNG
+acceptance compares both exact Unicode forms of a two-page compressed-accent
+example byte-for-byte with independently placed ink, and checks that missing
 Unicode glyphs cannot replace accepted outputs. This remains caller-authored
 CLI flow, not saved semantic notebook pagination or a general Markdown engine.
