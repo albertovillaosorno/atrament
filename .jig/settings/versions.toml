@@ -7,7 +7,7 @@ stable = "0.4.3"
 
 [authority.getrandom.freshness]
 integrity_kind = "provider-response-sha256"
-maximum_age_days = 30
+maximum_age_days = 1
 provider = "crates-io"
 source = "https://crates.io/api/v1/crates/getrandom"
 
@@ -18,8 +18,14 @@ selector = "workspace.dependencies.getrandom"
 template = "={version}"
 
 [authority.git]
-current = "2.54.0"
-stable = "2.54.0"
+current = "2.56.0"
+stable = "2.56.0"
+
+[authority.git.freshness]
+integrity_kind = "provider-response-sha256"
+maximum_age_days = 1
+provider = "kernel-git-index"
+source = "https://www.kernel.org/pub/software/scm/git/"
 
 [authority.git.projection.tool]
 kind = "tool"
@@ -42,7 +48,7 @@ stable = "0.31.3"
 
 [authority.nix.freshness]
 integrity_kind = "provider-response-sha256"
-maximum_age_days = 30
+maximum_age_days = 1
 provider = "crates-io"
 source = "https://crates.io/api/v1/crates/nix"
 
@@ -53,8 +59,8 @@ selector = "workspace.dependencies.nix.version"
 template = "={version}"
 
 [authority.pnpm]
-current = "12.15.0"
-stable = "12.15.0"
+current = "12.18.0"
+stable = "12.18.0"
 
 [authority.pnpm.freshness]
 integrity_kind = "provider-response-sha256"
@@ -68,8 +74,8 @@ target = "pnpm"
 template = "pnpm@{version}"
 
 [authority.python]
-current = "3.14.8"
-stable = "3.14.8"
+current = "3.14.6"
+stable = "3.14.6"
 
 [authority.python.projection.tool]
 kind = "tool"
@@ -77,8 +83,8 @@ target = "python"
 template = "{version}"
 
 [authority.rust-stable]
-current = "1.97.1"
-stable = "1.97.1"
+current = "1.99.1"
+stable = "1.99.1"
 
 [authority.rust-stable.projection.tool]
 kind = "tool"

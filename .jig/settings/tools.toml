@@ -2,10 +2,10 @@ domain = "tools"
 schema_version = 1
 
 [entry.git.linux]
-path = ".dependencies/git/2.54.0/bin/git"
+path = ".dependencies/git/2.56.0/bin/git"
 
 [entry.rust_stable_cargo.linux]
-path = ".dependencies/rust/1.97.1/bin/cargo"
+path = ".dependencies/rust/1.99.1/bin/cargo"
 
 [entry.python.linux]
-path = ".dependencies/python/3.14.8/bin/python"
+path = ".dependencies/python/3.14.6/bin/python"
