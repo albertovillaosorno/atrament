@@ -2908,6 +2908,90 @@ fn empty_quote_separator_keeps_visible_paragraphs_on_physical_pages()
     Ok(())
 }
 
+#[test]
+fn wrapped_list_marker_stays_with_first_continuation_when_page_has_room()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 35_000, height: 23_000,
+    };
+    for (list, continuation) in [
+        ("- aaaaaa aaaaaa", "aaaaaa"),
+        ("12) aa aa", "aa"),
+        ("- [x] aaaaaa aaaaaa", "aaaaaa"),
+        ("- aaaaaaa", "a"),
+        ("12) aaa", "a"),
+        ("- [x] aaaaaaa", "a"),
+    ] {
+        let source = FlowSource::new(
+            FlowFormat::Markdown, &format!("p\n{list}"),
+        )?;
+        let render = |height| -> Result<_, String> {
+            super::layout_flow_with_region(
+                &source, &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(),
+                Some(super::FlowRegion { height, ..region }),
+            )
+        };
+        let (rows, marks, pages) = render(region.height)?;
+        assert_eq!(pages, 2, "{list}");
+        assert_eq!(rows.len(), 3, "{list}");
+        assert_eq!(rows.iter().map(|row| (
+            row.page, row.origin_um.1,
+        )).collect::<Vec<_>>(), [
+            (1, 42_500), (2, 42_500), (2, 51_500),
+        ], "{list}");
+        assert_eq!(rows[2].text, continuation, "{list}");
+        assert!(marks.iter().all(|mark| mark.page == 2), "{list}");
+
+        // A page with three rows fits the source and its full marker;
+        // the two-row guard must not introduce a gratuitous page turn.
+        let (fitting, _, fitting_pages) = render(32_000)?;
+        assert_eq!(fitting_pages, 1, "{list}");
+        assert_eq!(fitting.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 1, 1], "{list}");
+
+        // A one-row page cannot hold two rows. Ordinary pagination must
+        // still admit this item instead of refusing it as impossible.
+        let (single, _, single_pages) = render(14_000)?;
+        assert_eq!(single_pages, 3, "{list}");
+        assert_eq!(single.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 2, 3], "{list}");
+    }
+    Ok(())
+}
+
+#[test]
+fn heading_first_row_guard_takes_priority_over_list_continuation_guard()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for (prefix, height, pages) in [
+        ("", 23_000, &[1, 1, 2][..]),
+        ("a  \n", 32_000, &[1, 1, 1, 2][..]),
+    ] {
+        let source = FlowSource::new(
+            FlowFormat::Markdown,
+            &format!("{prefix}# a\n- aaaaaa aaaaaa"),
+        )?;
+        let (rows, ornaments, total) = super::layout_flow_with_region(
+            &source, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )?;
+        assert_eq!(total, 2);
+        assert_eq!(rows.iter().map(|run| run.page)
+            .collect::<Vec<_>>(), pages, "{prefix:?}");
+        assert!(ornaments.iter().all(|mark| mark.page == 1),
+            "heading and bullet marks must accompany page-one text");
+    }
+    Ok(())
+}
+
 fn visible_graphemes(text: &str) -> Result<Vec<&str>, String> {
     let mut result = Vec::new();
     let mut remaining = text;

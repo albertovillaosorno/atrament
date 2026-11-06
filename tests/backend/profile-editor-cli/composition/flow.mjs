@@ -4291,3 +4291,142 @@ test('compressed compound graphemes survive three native physical pages',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('wrapped list markers move with native PDF and page-local PNG ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-list-orphan-'));
+        try {
+            const region = [
+                '--flow-region', '30000', '40000', '35000', '23000',
+            ];
+            const numeralInk = ['1', '2', ')'].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '600', '500', '1800', '3000',
+                '250', '#123456',
+            ]);
+            const bullet = [
+                '--ink-line', '2', '34100', '44700',
+                '35800', '44700', '450', '#1E304A',
+            ];
+            const task = [
+                ['33900', '43700', '36400', '43700', '350'],
+                ['36400', '43700', '36400', '46200', '350'],
+                ['36400', '46200', '33900', '46200', '350'],
+                ['33900', '46200', '33900', '43700', '350'],
+                ['34350', '44950', '35000', '45850', '450'],
+                ['35000', '45850', '36150', '44100', '450'],
+            ].flatMap((line) => [
+                '--ink-line', '2', ...line, '#1E304A',
+            ]);
+            const examples = [
+                {
+                    source: 'a\n- aaaaaa aaaaaa',
+                    rows: ['aaaaaa', 'aaaaaa'], x: '38500',
+                    ink: bullet,
+                },
+                {
+                    source: 'a\n12) aa aa',
+                    rows: ['12) aa', 'aa'], x: '54500',
+                    ink: [],
+                },
+                {
+                    source: 'a\n- [x] aaaaaa aaaaaa',
+                    rows: ['aaaaaa', 'aaaaaa'], x: '38500',
+                    ink: task,
+                },
+            ];
+            for (const [index, example] of examples.entries()) {
+                const manualInk = [
+                    '--place-text', '1', '32500', '42500', 'a',
+                    '--place-text', '2', '38500', '42500', example.rows[0],
+                    '--place-text', '2', example.x, '51500', example.rows[1],
+                    ...example.ink,
+                ];
+                for (const format of ['pdf', 'png']) {
+                    for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                        const options = [...region, ...numeralInk,
+                            ...(format === 'pdf' ? ['--pages', '2'] : [])];
+                        const actual = render(dir, example.source, format,
+                            options, '--flow-markdown', page);
+                        assert.equal(actual.result.status, 0,
+                            actual.result.stderr);
+                        const accepted = readFileSync(actual.output);
+                        const reference = join(dir,
+                            `list-${index}-${format}-${page}`);
+                        const expected = spawnSync(cargo, [
+                            'run', '--quiet', '-p',
+                            'atrament_profile_editor_cli', '--',
+                            ...base, ...numeralInk, ...manualInk,
+                            ...(format === 'pdf' ? ['--pages', '2'] : []),
+                            '--export-paper', format,
+                            ...(format === 'png'
+                                ? ['--png-page', String(page), '--dpi', '72']
+                                : []),
+                            '--output', reference,
+                        ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                        assert.equal(expected.status, 0, expected.stderr);
+                        assert.deepEqual(accepted, readFileSync(reference),
+                            `list ${index} page ${page} ${format} ink`);
+                        if (format === 'pdf') {
+                            assert.match(accepted.toString('latin1'),
+                                /\/Count 2/);
+                        }
+                        const refused = render(dir, example.source, format,
+                            [...options, ...(format === 'pdf'
+                                ? ['--pages', '1'] : [])],
+                            '--flow-markdown', format === 'pdf' ? 1 : 3);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.deepEqual(readFileSync(refused.output), accepted,
+                            `list ${index} failed export keeps ${format}`);
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('native heading remains attached to first wrapped list row', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-heading-list-'));
+    try {
+        const source = 'a\n# a\n- aaaaaa aaaaaa';
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '32000',
+            '--heading-style', 'underline',
+        ];
+        const manual = [
+            '--place-text', '1', '32500', '42500', 'a',
+            '--place-text', '1', '32500', '51500', 'a',
+            '--place-text', '1', '38500', '60500', 'aaaaaa',
+            '--place-text', '2', '38500', '42500', 'aaaaaa',
+            '--ink-line', '1', '32500', '58200',
+            '36500', '58200', '550', '#1E304A',
+            '--ink-line', '1', '34100', '62700',
+            '35800', '62700', '450', '#1E304A',
+        ];
+        for (const format of ['pdf', 'png']) {
+            for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                const actual = render(dir, source, format, [
+                    ...region, ...(format === 'pdf'
+                        ? ['--pages', '2'] : []),
+                ], '--flow-markdown', page);
+                assert.equal(actual.result.status, 0, actual.result.stderr);
+                const reference = join(dir, `heading-list-${format}-${page}`);
+                const expected = spawnSync(cargo, [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...base, ...manual,
+                    ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72'] : []),
+                    '--output', reference,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(expected.status, 0, expected.stderr);
+                assert.deepEqual(readFileSync(actual.output),
+                    readFileSync(reference),
+                    `heading and bullet page ${page} ${format} ink`);
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

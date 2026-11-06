@@ -455,6 +455,7 @@ struct FollowingInkSpacing {
 struct Layout<'model> {
     bottom: u32,
     heading: HeadingDecoration,
+    last_visible_heading: bool,
     left: u32,
     lines: Vec<TextRun>,
     ornaments: Vec<NotebookInkLine>,
@@ -537,27 +538,27 @@ impl Layout<'_> {
         Ok(())
     }
 
-    fn keep_heading_with_next(
+    fn keep_first_row_with_next(
         &mut self, following: FollowingInkSpacing,
     ) -> Result<(), String> {
         self.flush_blank_rows()?;
         let top = self.top.checked_add(INSET_UM)
-            .ok_or("heading top inset overflow")?;
+            .ok_or("flow keep-row top inset overflow")?;
         let bottom = self.bottom.checked_sub(INSET_UM)
-            .ok_or("heading bottom inset overflow")?;
+            .ok_or("flow keep-row bottom inset overflow")?;
         let rows = u32::try_from(following.blank_rows)
-            .map_err(|_error| "heading blank-row budget overflow")?
+            .map_err(|_error| "flow blank-row budget overflow")?
             .checked_add(u32::try_from(following.heading_rows)
-                .map_err(|_error| "heading chain-row budget overflow")?)
+                .map_err(|_error| "flow chain-row budget overflow")?)
             .and_then(|rows| rows.checked_add(2))
-            .ok_or("heading following-row budget overflow")?;
+            .ok_or("flow following-row budget overflow")?;
         let gaps = u32::try_from(following.paragraph_gaps)
-            .map_err(|_error| "heading paragraph-gap budget overflow")?
+            .map_err(|_error| "flow paragraph-gap budget overflow")?
             .checked_mul(PARAGRAPH_GAP_UM)
-            .ok_or("heading paragraph-gap budget overflow")?;
+            .ok_or("flow paragraph-gap budget overflow")?;
         let needed = self.pitch.checked_mul(rows)
             .and_then(|value| value.checked_add(gaps))
-            .ok_or("heading following-row budget overflow")?;
+            .ok_or("flow following-row budget overflow")?;
         // If one sheet cannot hold this full span, fall back to normal
         // pagination instead of refusing valid short paper outright.
         if top.checked_add(needed).is_none_or(|end| end > bottom) {
@@ -570,6 +571,25 @@ impl Layout<'_> {
                 return Err("flow exceeds 32 physical pages".into());
             }
             self.y = top;
+        }
+        Ok(())
+    }
+
+    // A list's first physical row carries its marker. If the item needs a
+    // continuation, keep at least those first two rows on one sheet when a
+    // fresh sheet can fit them; never forbid a valid one-row paper region.
+    fn keep_wrapped_list_start(
+        &mut self, style: LineStyle, first: bool,
+    ) -> Result<(), String> {
+        // The preceding title already reserved this first list row.
+        // Do not orphan that heading in order to keep two list rows.
+        if first && !self.last_visible_heading && matches!(style,
+            LineStyle::Bullet | LineStyle::Ordered | LineStyle::Task(_)) {
+            self.keep_first_row_with_next(FollowingInkSpacing {
+                blank_rows: 0,
+                heading_rows: 0,
+                paragraph_gaps: 0,
+            })?;
         }
         Ok(())
     }
@@ -624,6 +644,7 @@ impl Layout<'_> {
                 // even when the first word itself needs grapheme wrapping.
                 && !(first && ordered_marker == Some(row.as_str()))
             {
+                self.keep_wrapped_list_start(style, first)?;
                 self.write_row(take(&mut row), start_x, width, style, first)?;
                 start_continuation(first, &mut start_x, &mut cap, hang)?;
                 first = false;
@@ -649,6 +670,7 @@ impl Layout<'_> {
                             "heading exceeds one-line fixed region".into()
                         );
                     }
+                    self.keep_wrapped_list_start(style, first)?;
                     self.write_row(
                         take(&mut row), start_x, width, style, first,
                     )?;
@@ -838,6 +860,7 @@ impl Layout<'_> {
             });
         }
         self.write_list_marker(style, first, start_x, y)?;
+        self.last_visible_heading = matches!(style, LineStyle::Heading(_));
         self.lines.push(TextRun {
             heading_ink: if matches!(style, LineStyle::Heading(_)) {
                 self.heading.glyph_ink()
@@ -868,6 +891,7 @@ impl Layout<'_> {
             width_um: 400,
             rgb: [30, 48, 74],
         });
+        self.last_visible_heading = false;
         self.y = y.checked_add(self.pitch)
             .ok_or("separator row advance overflow")?;
         Ok(())
@@ -1427,7 +1451,7 @@ fn handle_markdown_setext<'text>(
         return Ok(false);
     };
     if let Some(gap) = following_heading_gap(following) {
-        layout.keep_heading_with_next(gap)?;
+        layout.keep_first_row_with_next(gap)?;
     }
     layout.layout_line(&take(paragraph), LineStyle::Heading(level))?;
     Ok(true)
@@ -1695,6 +1719,7 @@ fn initialize_layout<'model>(
     };
     Ok(Layout {
         heading,
+        last_visible_heading: false,
         statistics,
         lines: Vec::new(),
         ornaments: Vec::new(),
@@ -1846,7 +1871,7 @@ pub(super) fn layout_flow_with_region(
             flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
             if matches!(style, LineStyle::Heading(_))
                 && let Some(gap) = following_heading_gap(source_lines.clone()) {
-                layout.keep_heading_with_next(gap)?;
+                layout.keep_first_row_with_next(gap)?;
             }
             if source.format == FlowFormat::Markdown
                 && matches!(style,

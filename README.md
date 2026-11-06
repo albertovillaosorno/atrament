@@ -554,8 +554,11 @@ can create a new page. Headings and lists end ordinary paragraphs.
 A list item may soft-continue with a two- or three-space-indented ordinary
 line, preserving one bullet, checkbox or numbered hanging indent after
 wrapping; four-space indentation remains literal and nested lists are not
-supported. Two trailing source spaces end a list item before any
-subsequent indented body row; pasted Unicode line separators do the same.
+supported. When the item wraps, its first row and marker stay with the first
+continuation row if the selected sheet can hold both, unless that would
+orphan a preceding heading. A one-row region still paginates normally.
+Two trailing source spaces end a list item before any subsequent indented
+body row; pasted Unicode line separators do the same.
 
 Adjacent `>` quote lines form one soft-wrapped quoted paragraph, with the
 same two-space hard-break and blank-paragraph rules. A Markdown

@@ -1630,3 +1630,23 @@ Markdown separators, including indented and CRLF source, and proves invalid
 blocks cannot replace a previously accepted export. This is a restricted
 CLI-only blockquote refinement, not saved semantic paragraph identities,
 nested quotes or completion of the P1 notebook acceptance criterion.
+
+## First-row list continuation guard (partial) — 2026-11-06
+
+The native CLI now moves a wrapped unordered, ordered or checkbox list's
+first row and its physical marker to the next sheet when only one row is
+left on the current sheet and two rows can fit together on a fresh sheet.
+It reuses the existing first-row placement guard, but a preceding heading's
+first-following-row guarantee takes priority if the two guards conflict.
+The list guard never refuses otherwise-valid one-row fixed rectangles.
+Further list continuation rows may still cross physical pages; this is not
+full keep-together or persistent list semantics.
+
+Red-before/green-after Rust tests check exact page-local text origins,
+marker pages, intra-word wraps, one-row fallback, and heading precedence.
+Native CLI subprocess acceptance compares actual two-page vector PDF and
+selected-page transparent PNG bytes against independently placed authored
+glyphs, dashes and checked boxes. A separate heading/list native replay
+checks the earlier heading priority. Too-small PDF page selections and
+absent PNG pages refuse without replacing accepted files. The
+saved-notebook P1 criterion remains open.
