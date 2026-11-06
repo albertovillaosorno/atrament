@@ -1578,3 +1578,17 @@ This guards against introducing phantom page-height changes from Markdown
 syntax, not a claim of complete Markdown support, saved semantic notebook
 content or the finite P1 acceptance. Existing PDF/PNG tests remain the
 independent exporter verification.
+
+## Nominal contour clearance across mixed source flow (partial) — 2026-11-06
+
+A deterministic Rust property regression compiles 8,000 short plain-text and
+restricted Markdown source combinations into the same fixed physical region.
+It deliberately compresses the letter advances for ASCII numerals and exact
+NFC/NFD Spanish accents while preserving their 12-mm physical contours.
+For every accepted row, an independent walker checks each grapheme's farthest
+nominal advance or contour-plus-clearance against the actual right inset.
+Both indented text and later-page rows must be exercised, rather than merely
+counting admitted source strings. The underlying word preflight is unchanged;
+this adds complementary horizontal coverage to the existing row-pitch audit.
+Real PDF/PNG regression coverage remains separate, and saved semantic
+notebook identities and the finite P1 acceptance are still unfinished.

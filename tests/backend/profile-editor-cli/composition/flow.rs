@@ -2654,3 +2654,132 @@ fn measured_pitch_matches_emitted_ink_for_mixed_sources()
     assert!(admitted > 1_000, "too few admitted source sequences");
     Ok(())
 }
+
+// Independently traverse accepted row ink, without using the word wrapper's
+// preflight calculation. A compressed advance is not the contour edge.
+fn nominal_row_right_clearance(
+    run: &super::TextRun,
+    stats: &atrament_handwriting_statistics::HandwritingStatisticsProfile,
+    right: u32,
+) -> Result<(), String> {
+    let mut cursor = run.origin_um.0;
+    let mut remaining = run.text.as_str();
+    while !remaining.is_empty() {
+        let (grapheme, rest) = super::first_grapheme(remaining)?;
+        remaining = rest;
+        let (advance, contour) =
+            super::GlyphOverlay::flow_advance_um(grapheme, Some(stats))?;
+        let furthest = cursor.checked_add(advance.max(
+            contour.checked_add(800)
+                .ok_or("nominal contour clearance overflow")?,
+        )).ok_or("nominal contour position overflow")?;
+        if furthest > right {
+            return Err(format!(
+                "{run:?}, {grapheme:?}: edge {furthest} beyond {right}"
+            ));
+        }
+        cursor = cursor.checked_add(advance)
+            .ok_or("nominal glyph advance overflow")?;
+    }
+    Ok(())
+}
+
+#[test]
+fn compressed_mixed_flow_keeps_every_nominal_contour_inside_its_region()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(91);
+    for glyph in ["a", "\u{f3}", "o\u{301}", "1", ".", "2", ")"] {
+        for (dimension, value) in [
+            (Dimension::Width, 12_000i32),
+            (Dimension::LetterSpacing, -10_000i32),
+        ] {
+            stats = stats.with_glyph(glyph, DimensionStatistics {
+                dimension,
+                statistics: ScalarStatistics {
+                    minimum: value, maximum: value, mean: value,
+                    median: value, standard_deviation: 0,
+                },
+            }, &UnicodeGraphemeSegmentation)
+                .map_err(|error| format!("{error:?}"))?;
+        }
+    }
+    let snippets = [
+        "a \u{f3}", "\u{f3}\u{f3}", "o\u{301}o\u{301}", "a a",
+        "1. a \u{f3}", "12) a \u{f3}", "- a \u{f3}",
+        "> a \u{f3}", "# a \u{f3}", "a  \u{f3}",
+        "a\\", "  \u{f3}",
+        "  a", "    a", "## a", "- [x] \u{f3}", "a\u{2028}\u{f3}",
+        "---", "===", "```,", "```", "\u{f3} a \u{f3}", "", "\t\u{f3}",
+    ];
+    let region = super::FlowRegion {
+        left: 30_000u32, top: 40_000u32,
+        width: 55_000u32, height: 35_000u32,
+    };
+    let right = region.left + region.width - super::EXTRA_RIGHT_UM;
+    let paper = NotebookProfile::default();
+    let mut rng_seed = 0x1234_5678u64;
+    let snippet_count = u64::try_from(snippets.len())
+        .map_err(|error| format!(
+            "snippet count exceeds u64: {error}"
+        ))?;
+    let mut admitted = 0usize;
+    let mut second_page_rows = 0usize;
+    let mut indented_rows = 0usize;
+    for index in 0usize..8_000usize {
+        let mut source_lines = Vec::new();
+        for _ in 0..(2usize + index.rem_euclid(5)) {
+            rng_seed ^= rng_seed << 13u32;
+            rng_seed ^= rng_seed >> 7u32;
+            rng_seed ^= rng_seed << 17u32;
+            let position = usize::try_from(
+                rng_seed.rem_euclid(snippet_count),
+            ).map_err(|error| format!(
+                "snippet index exceeds usize: {error}"
+            ))?;
+            source_lines.push(*snippets.get(position)
+                .ok_or("snippet index out of bounds")?);
+        }
+        let raw = source_lines.join("\n");
+        let format = if index.rem_euclid(4) == 0 {
+            FlowFormat::Plain
+        } else {
+            FlowFormat::Markdown
+        };
+        let Ok(source) = FlowSource::new(format, &raw) else {
+            continue;
+        };
+        let Ok((runs, _, _)) = super::layout_flow_with_region(
+            &source, &paper, Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        ) else {
+            continue;
+        };
+        for run in runs {
+            if run.page > 1 {
+                second_page_rows += 1;
+            }
+            if run.origin_um.0 > region.left + super::INSET_UM {
+                indented_rows += 1;
+            }
+            nominal_row_right_clearance(&run, &stats, right).map_err(
+                |error| format!("case {index}, {raw:?}, {format:?}: {error}"),
+            )?;
+        }
+        admitted += 1;
+    }
+    if admitted <= 1_000 || second_page_rows == 0 || indented_rows == 0 {
+        return Err(format!(
+            "insufficient accepted compressed flow coverage: \
+             {admitted} sources, {second_page_rows} page-two rows, \
+             {indented_rows} indented rows"
+        ));
+    }
+    Ok(())
+}
