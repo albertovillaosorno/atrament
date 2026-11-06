@@ -30,7 +30,7 @@ const headingOptions = [
 function render(dir, source, format, extra = [],
     flowFlag = '--flow-markdown', pngPage = 1) {
     const output = join(dir, `flow-${format}.output`);
-    const heading = flowFlag === '--flow-markdown'
+    const heading = flowFlag.startsWith('--flow-markdown')
         && !extra.includes('--heading-style') ? headingOptions : [];
     const args = [...base, ...heading, ...extra, flowFlag, source,
         '--export-paper', format, '--output', output, '--replace'];
@@ -2851,3 +2851,82 @@ test('plain Unicode grapheme wraps preserve authored PDF and PNG ink', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('joined Unicode fallback keeps Markdown glyph ink on exact pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-emoji-fallback-'));
+        try {
+            const joined = '👩‍🏫';
+            const source = `# a\n- ${joined} ó\n> o\u0301 a`;
+            const authored = '# a\n- a ó\n> o\u0301 a';
+            const region = ['--flow-region', '30000', '40000',
+                '100000', '14000'];
+            const fallback = ['--fallback-glyph', joined, 'a'];
+            const singleRows = ['# a', '- a ó', '> o\u0301 a'];
+            for (let page = 1; page <= 3; page += 1) {
+                const projected = render(dir, source, 'png',
+                    [...region, ...fallback], '--flow-markdown', page);
+                assert.equal(projected.result.status, 0,
+                    projected.result.stderr);
+                const pageInk = readFileSync(projected.output);
+                const independent = render(dir, singleRows[page - 1],
+                    'png', region);
+                assert.equal(independent.result.status, 0,
+                    independent.result.stderr);
+                assert.deepEqual(pageInk, readFileSync(independent.output),
+                    `page ${page} must use the exact selected pen contours`);
+            }
+            const accepted = render(dir, source, 'pdf',
+                [...region, ...fallback, '--pages', '3']);
+            assert.equal(accepted.result.status, 0,
+                accepted.result.stderr);
+            const pdf = readFileSync(accepted.output);
+            assert.match(pdf.toString('latin1'), /\/Count 3/);
+            const substituted = render(dir, authored, 'pdf',
+                [...region, '--pages', '3']);
+            assert.equal(substituted.result.status, 0,
+                substituted.result.stderr);
+            assert.deepEqual(readFileSync(substituted.output), pdf,
+                'joined grapheme fallback must equal authored replacement');
+
+            const file = join(dir, 'original.md');
+            const transported = `\uFEFF${source.replaceAll('\n', '\r\n')}`;
+            writeFileSync(file, transported, 'utf8');
+            const loaded = render(dir, file, 'pdf',
+                [...region, ...fallback, '--pages', '3'],
+                '--flow-markdown-file');
+            assert.equal(loaded.result.status, 0,
+                loaded.result.stderr);
+            assert.deepEqual(readFileSync(loaded.output), pdf,
+                'BOM/CRLF file transport must not change Unicode page ink');
+            assert.equal(readFileSync(file, 'utf8'), transported,
+                'caller-selected input remains unchanged');
+
+            for (const options of [
+                [...region, '--pages', '3'],
+                [...region, ...fallback, '--pages', '2'],
+            ]) {
+                const refused = render(dir, source, 'pdf', options);
+                assert.notEqual(refused.result.status, 0);
+                if (options.includes('--fallback-glyph')) {
+                    assert.match(refused.result.stderr,
+                        /requires 3 physical pages/);
+                } else {
+                    assert.match(refused.result.stderr,
+                        /missing authored glyph shapes/);
+                    assert.match(refused.result.stderr, /U\+1F469/);
+                }
+                assert.deepEqual(readFileSync(refused.output), pdf,
+                    'refusal must preserve the previously exported PDF');
+            }
+            const priorPng = readFileSync(join(dir, 'flow-png.output'));
+            const empty = render(dir, source, 'png',
+                [...region, ...fallback], '--flow-markdown', 4);
+            assert.notEqual(empty.result.status, 0);
+            assert.match(empty.result.stderr, /selected PNG page is empty/);
+            assert.deepEqual(readFileSync(empty.output), priorPng,
+                'invalid page selection preserves the accepted PNG');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

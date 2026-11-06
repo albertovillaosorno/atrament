@@ -1256,3 +1256,18 @@ and decomposed `o` plus acute strokes, byte-for-byte. The test also verifies
 that an insufficient page selection refuses without replacing the prior PDF.
 This strengthens the existing CLI-only flow and exact glyph contract; it
 does not persist notebook blocks or supply missing glyph outlines.
+
+## Joined Unicode fallback across Markdown pages (partial) — 2026-11-06
+
+A native subprocess regression combines an exact joined `👩‍🏫` grapheme,
+Spanish `ó`, decomposed `o` with combining acute, an ATX title, a bullet and
+a quote across three one-row physical regions. Its explicit caller-selected
+emoji-to-`a` glyph fallback produces byte-identical PDF and page-local PNG
+ink to an independently authored replacement; no implicit shape is invented.
+
+A BOM/CRLF Markdown file must reproduce the inline PDF, including the title
+marker style. The test helper now selects equivalent heading defaults for
+inline and file-based Markdown rather than accidentally comparing distinct
+ornament configurations. Missing emoji ink, an insufficient PDF page count
+and a non-existent PNG page all refuse without replacing accepted exports.
+These guarantees remain limited to CLI flow, not persisted notebook blocks.
