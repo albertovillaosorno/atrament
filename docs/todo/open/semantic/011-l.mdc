@@ -1383,3 +1383,20 @@ Insufficient one-page PDF selection, a too-narrow continuation and an absent
 third PNG page all refuse without replacing previously accepted output.
 This is page-boundary evidence for existing CLI geometry, not a persisted
 semantic notebook model or completion of ATR-P2-011.
+
+## Statistical ordered-label advances across physical pages — 2026-11-06
+
+A native PDF/PNG subprocess regression now tests a two-digit ordered item
+with extra authored separator space and an opt-in per-digit letter-spacing
+mean. Unlike a one-digit nominal-width label, the measured two-digit marker
+shifts its text hanging indent by the full statistical glyph advance. On a
+one-row-per-page fixed rectangle, the profiled item continues on page two;
+without the selected handwriting profile, its ordinary 4-mm advances fit
+on page one.
+
+Both page-local transparent PNG exports and the actual two-page vector PDF
+match independently placed author-supplied glyph strokes byte-for-byte. An
+insufficient PDF page count, a fixed region too narrow even for the first
+item glyph, and a non-existent third PNG page refuse without replacing the
+last accepted output. This verifies existing CLI-only wrapping and
+measurement, not persistent list identities or full semantic acceptance.

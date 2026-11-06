@@ -604,8 +604,11 @@ glyph refuses rather than creating an orphan numeral row. Every subsequent
 glyph must also fit that narrower continuation width after wrapping;
 otherwise the native export refuses instead of overflowing its region.
 
-A one-row-per-page regression confirms the same hanging indent on page two,
-with exact PDF and transparent PNG ink and atomic invalid-page refusal.
+One-row-per-page regressions confirm the hanging indent on page two,
+including a two-digit label with two authored spaces and an opt-in
+per-digit letter-spacing override. They compare native PDF and transparent
+PNG ink to independently placed glyphs and preserve accepted exports on
+invalid page counts or regions.
 
 Quote text is inset 6 mm and gets a 0.4-mm vertical ink rule on each
 physical row, including wrapped continuations; the `>` marker itself needs

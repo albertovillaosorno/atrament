@@ -173,6 +173,103 @@ test('ordered continuation checks post-wrap glyph width in PDF/PNG',
         }
     });
 
+test('two-digit ordered labels use statistical spacing across PDF pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-ordered-spacing-'));
+        try {
+            const statistics = join(dir, 'digit-spacing.json');
+            const configured = spawnSync('cargo', [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+                'handwriting', '--set-glyph', '1', 'letter_spacing',
+                '9000', '9000', '9000', '9000', '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(statistics, configured.stdout);
+            const numeralInk = ['1', '0', ')'].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '600', '500', '1800', '3000',
+                '250', '#123456',
+            ]);
+            const source = '10)  aó';
+            // The 16.3-mm profiled label and two 4-mm spaces give a
+            // 24.3-mm hanging indent. The 29-mm text cap holds only
+            // the first item glyph. Default advances fit both.
+            const region = [
+                '--flow-region', '30000', '40000', '39000', '14000',
+            ];
+            const extras = [...numeralInk, ...region];
+            const baseline = render(dir, source, 'pdf',
+                [...extras, '--pages', '1']);
+            assert.equal(baseline.result.status, 0,
+                baseline.result.stderr);
+            assert.match(readFileSync(baseline.output)
+                .toString('latin1'), /\/Count 1/,
+            'unmodified digit advances fit a single physical row');
+
+            const scaled = [
+                '--handwriting-profile', statistics, ...extras,
+            ];
+            const manuallyPlaced = (format, page) => {
+                const output = join(dir, `spacing-manual-${format}-${page}`);
+                const args = [...base, ...numeralInk,
+                    '--handwriting-profile', statistics,
+                    '--place-text', '1', '38500', '42500', '10)  a',
+                    '--place-text', '2', '62800', '42500', 'ó',
+                    ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    '--export-paper', format, '--output', output];
+                if (format === 'png') {
+                    args.push('--png-page', String(page), '--dpi', '72');
+                }
+                const result = spawnSync('cargo', [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...args,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(result.status, 0, result.stderr);
+                return readFileSync(output);
+            };
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const actual = render(dir, source, format, [
+                        ...scaled,
+                        ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    ], '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    assert.deepEqual(accepted, manuallyPlaced(format, page),
+                        `page ${page} ${format} uses the full label advance`);
+                    if (format === 'pdf') {
+                        assert.match(accepted.toString('latin1'), /\/Count 2/);
+                        const refusedCases = [
+                            [[...scaled, '--pages', '1'],
+                                /flow requires 2 physical pages/],
+                            [['--handwriting-profile', statistics,
+                                ...numeralInk, '--flow-region',
+                                '30000', '40000', '35000', '14000'],
+                                /ordered list label and first glyph exceed/],
+                        ];
+                        for (const [options, diagnostic] of refusedCases) {
+                            const refused = render(dir, source, format,
+                                options);
+                            assert.notEqual(refused.result.status, 0,
+                                'invalid page count or narrow label refuses');
+                            assert.match(refused.result.stderr, diagnostic);
+                            assert.deepEqual(readFileSync(refused.output),
+                                accepted, 'refusal preserves prior PDF ink');
+                        }
+                    } else if (page === 2) {
+                        const refused = render(dir, source, format,
+                            scaled, '--flow-markdown', 3);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.deepEqual(readFileSync(refused.output),
+                            accepted, 'missing PNG page preserves last page');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('notebook CLI help advertises real Markdown task shapes', () => {
     const help = spawnSync('cargo', [
         'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
