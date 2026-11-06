@@ -3059,21 +3059,35 @@ fn native_explicit_path_closure_preserves_unicode_and_refuses_atomically() {
         assert_eq!(fs::read(&destination_path).expect("output"),
             b"preserved output");
     }
-    for end_x in [1700, 1701] {
-        let mut test = args(&[
-            "--glyph-stroke", "o", "500", "800", "900", "1200",
-            "250", "#243647",
-            "--glyph-stroke", "o", "900", "1200",
-            &end_x.to_string(), "800", "250", "#243647",
-            "--close-path", "o", "1",
+    for (end_x, permitted) in [(1699, true), (1700, true), (1701, false)] {
+        let proposed_closure = args(&[
+            "--glyph-stroke",
+            "o",
+            "500",
+            "800",
+            "900",
+            "1200",
+            "250",
+            "#243647",
+            "--glyph-stroke",
+            "o",
+            "900",
+            "1200",
+            &end_x.to_string(),
+            "800",
+            "250",
+            "#243647",
+            "--close-path",
+            "o",
+            "1",
         ]);
-        let result = execute_glyph_library(&test);
-        if end_x == 1700 {
-            assert!(result.is_ok(), "exactly 1200 um gap is permitted");
-        } else {
-            assert!(result.is_err(), "1201 um gap refuses");
-        }
-        test.clear();
+        let result = execute_glyph_library(&proposed_closure);
+        assert_eq!(
+            result.is_ok(),
+            permitted,
+            "closure gap {} um must match the admission boundary",
+            end_x - 500
+        );
     }
     // The closing bridge cannot bypass the shared v1 4096-row budget.
     let mut full = args(&[
