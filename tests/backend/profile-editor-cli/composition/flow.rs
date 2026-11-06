@@ -1725,3 +1725,70 @@ fn mixed_handwriting_metrics_keep_unicode_inside_paged_markdown()
     }
     Ok(())
 }
+
+#[test]
+fn mixed_markdown_pitch_matches_rendered_ink_at_fence_and_list_edges()
+    -> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let parts = [
+        "a", "a  ", "a\\", "a  b", "# a", "## a", "a\n===",
+        "===", "---", "\\===", "> a", "> a  ", "  a", "    a",
+        "- a", "- [x] a", "1. a", "  ===", "~~~", "~~~rs",
+        "```", "```rs", "", "  ", "a\u{2028}b", "a\u{2029}b",
+        "ó", "o\u{301}", "ñ",
+    ];
+    let paper = NotebookProfile::default();
+    let mut tested = 0usize;
+    for tall_glyph in ["=", "-", "#", ">", "\\", "`", "~", "a",
+        "ó", "o\u{301}", "ñ"] {
+        let tall = ScalarStatistics {
+            minimum: 25_000, maximum: 25_000, mean: 25_000,
+            median: 25_000, standard_deviation: 0,
+        };
+        let statistics = HandwritingStatisticsProfile::baseline(0)
+            .with_glyph(tall_glyph, DimensionStatistics {
+                dimension: Dimension::Height, statistics: tall,
+            }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+        let mut seed = 0x83e1_7ca5u32;
+        for sample in 0..512usize {
+            let mut source_text = String::new();
+            for line in 0..5 {
+                seed = seed.wrapping_mul(1_664_525)
+                    .wrapping_add(1_013_904_223);
+                if line != 0 { source_text.push('\n'); }
+                source_text.push_str(parts[((seed >> 8) as usize)
+                    % parts.len()]);
+            }
+            let Ok(source) = FlowSource::new(FlowFormat::Markdown,
+                &source_text) else { continue };
+            let Ok((rows, _, _)) = super::layout_flow(
+                &source, &paper, Some(&statistics),
+                super::HeadingDecoration::default(),
+            ) else { continue };
+            let mut visible = false;
+            for row in &rows {
+                let mut remaining = row.text.as_str();
+                while !remaining.is_empty() {
+                    let (grapheme, rest) = super::first_grapheme(remaining)?;
+                    visible |= grapheme == tall_glyph;
+                    remaining = rest;
+                }
+            }
+            let expected = if visible { 29_000 } else { 9_000 };
+            let pitch = super::measured_pitch(&source, Some(&statistics))?;
+            assert_eq!(pitch, expected,
+                "sample {sample}, glyph {tall_glyph:?}, \
+                 source {source_text:?}, actual rows {rows:?}");
+            tested += 1;
+        }
+    }
+    assert!(tested > 900, "insufficient admitted Markdown cases");
+    Ok(())
+}

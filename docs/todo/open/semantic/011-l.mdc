@@ -1304,3 +1304,16 @@ explicitly placed author-supplied pen strokes at measured page coordinates;
 requesting only one page refuses without replacing a valid PDF. This is
 regression evidence for the existing Rust export-only path, not a persisted
 semantic notebook or a full statistical handwriting model.
+
+## Mixed Markdown fence/list row-pitch boundary replay — 2026-11-06
+
+A native deterministic regression now compares statistical row pitch with
+**exact rendered Unicode graphemes** across more than 900 admitted five-part
+Markdown combinations. Mixed Setext markers, fenced code, headings, tasks,
+quotes, indentation, escapes, pasted Unicode separators and NFC/NFD
+Spanish accents must contribute glyph height only when they produce real
+text runs. Eleven independent tall-glyph profiles test literal versus
+structural punctuation without a second Markdown parser.
+
+This guards the existing CLI-only renderer; it does not persist semantic
+blocks or satisfy the finite saved-notebook acceptance criterion.
