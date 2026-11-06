@@ -1463,3 +1463,18 @@ An insufficient PDF page selection, a region narrower than the label and
 first glyph, and a nonexistent PNG page preserve previously accepted output.
 Original file bytes remain unchanged. This covers the CLI-only Markdown
 bridge; saved notebook semantic identities remain unimplemented.
+
+## Compressed ordered-marker contour preflight (partial) — 2026-11-06
+
+The Rust CLI now checks each numeral and delimiter's measured contour
+before arranging any ordered-list row, rather than relying only on the
+marker sum of advances and the first item glyph. Strongly negative authored
+letter spacing can make a glyph's actual contour wider than its advance.
+An invalid narrow fixed region now receives the specific inseparable-label
+overflow diagnostic rather than a later generic glyph-width failure.
+
+A red-before/green-after native regression checks both an overwide numeral
+and an overwide period against the same one-row region, and confirms the
+complete `1. a` item fits when the caller deliberately widens the region.
+The existing CLI-only flow still does not persist semantic list identities
+or complete the finite P1 saved-notebook acceptance criterion.

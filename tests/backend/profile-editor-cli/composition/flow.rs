@@ -2229,3 +2229,55 @@ fn varied_ordered_labels_keep_unicode_within_physical_page_regions()
     }
     Ok(())
 }
+
+#[test]
+fn ordered_marker_contours_are_preflighted_before_hanging_indent()
+    -> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let source = FlowSource::new(FlowFormat::Markdown, "1. a")?;
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 22_000, height: 20_000,
+    };
+    // Positive 12-mm glyph contours with a 2-mm advance are valid
+    // statistics. A nominal-width-only label test would admit these even
+    // though the pen extends beyond a narrow 12-mm first-row cap.
+    for glyph in ["1", "."] {
+        let mut stats = HandwritingStatisticsProfile::baseline(61);
+        for (dimension, mean) in [
+            (Dimension::Width, 12_000),
+            (Dimension::LetterSpacing, -10_000),
+        ] {
+            stats = stats.with_glyph(glyph, DimensionStatistics {
+                dimension,
+                statistics: ScalarStatistics {
+                    minimum: mean, maximum: mean, mean, median: mean,
+                    standard_deviation: 0,
+                },
+            }, &UnicodeGraphemeSegmentation)
+                .map_err(|error| format!("{error:?}"))?;
+        }
+        let error = super::layout_flow_with_region(
+            &source, &NotebookProfile::default(), Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        ).expect_err("the marker contour exceeds the first row's cap");
+        assert!(error.contains("ordered list label and first glyph exceed"),
+            "refuse the whole label before partial {glyph:?} rows: {error}");
+
+        let wider = super::FlowRegion { width: 27_000, ..region };
+        let (rows, ornaments, pages) = super::layout_flow_with_region(
+            &source, &NotebookProfile::default(), Some(&stats),
+            super::HeadingDecoration::default(), Some(wider),
+        )?;
+        assert_eq!(pages, 1);
+        assert!(ornaments.is_empty());
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].text, "1. a");
+    }
+    Ok(())
+}

@@ -976,7 +976,21 @@ fn measured_ordered_label<'text>(
     let spaces = after.bytes().take_while(|byte| *byte == b' ')
         .count().checked_add(1)
         .ok_or("ordered label spacing overflow")?;
-    let (_, marker_width) = measured_word(marker, statistics)?;
+    let (marker_glyphs, marker_width) = measured_word(marker, statistics)?;
+    // A compressed advance can be shorter than the actual pen contour.
+    // Reserve the whole numeral and delimiter before laying out any row;
+    // they must never wrap away from the first item glyph.
+    let mut marker_offset = 0u32;
+    for (_, advance, slot) in marker_glyphs {
+        if marker_offset.checked_add(slot).is_none_or(|end| end > cap) {
+            return Err(
+                "ordered list label and first glyph exceed horizontal region"
+                    .into()
+            );
+        }
+        marker_offset = marker_offset.checked_add(advance)
+            .ok_or("ordered label advance overflow")?;
+    }
     let indent = u32::try_from(spaces)
         .map_err(|_error| "ordered label spacing overflow")?
         .checked_mul(4_000)
