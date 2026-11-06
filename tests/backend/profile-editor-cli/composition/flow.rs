@@ -2120,7 +2120,7 @@ fn varied_ordered_labels_keep_unicode_within_physical_page_regions()
         }
     }
     let region = super::FlowRegion {
-        left: 30_000, top: 40_000, width: 60_000, height: 14_000,
+        left: 30_000, top: 40_000, width: 120_000, height: 14_000,
     };
     let paper = NotebookProfile::default();
     let first_x = region.left + 8_500;
@@ -2128,19 +2128,21 @@ fn varied_ordered_labels_keep_unicode_within_physical_page_regions()
     let mut seed = 0x8b29_7a45u32;
     let mut admitted = 0usize;
     let mut page_rows = 0usize;
-    let mut label_lengths = [0usize; 3];
-    for sample in 0..256usize {
+    let mut label_lengths = [0usize; 9];
+    // All admitted Markdown marker lengths, including the nine-digit edge.
+    // Keep only one physical row per page so wraps test page-local origin.
+    for sample in 0..540usize {
         seed = seed.wrapping_mul(1_664_525)
             .wrapping_add(1_013_904_223);
-        let magnitude = sample % 3;
-        let digits = ([1u32, 10, 100][magnitude]
-            + seed % [9u32, 90, 900][magnitude]).to_string();
+        let magnitude = sample % 9;
+        let first = 10u32.pow(magnitude as u32);
+        let digits = (first + seed % (first * 9)).to_string();
         let marker = format!("{digits}{}", if sample % 2 == 0 {
             '.'
         } else { ')' });
         let spaces = 1 + sample % 4;
         let mut body = String::new();
-        for _ in 0..24 {
+        for _ in 0..40 {
             seed = seed.wrapping_mul(1_664_525)
                 .wrapping_add(1_013_904_223);
             body.push_str(glyphs[12 + (seed as usize % 4)]);
@@ -2218,8 +2220,8 @@ fn varied_ordered_labels_keep_unicode_within_physical_page_regions()
         admitted += 1;
         label_lengths[magnitude] += 1;
     }
-    if label_lengths.iter().any(|&count| count < 20)
-        || admitted < 100 || page_rows < 300 {
+    if label_lengths.iter().any(|&count| count < 40)
+        || admitted < 450 || page_rows < 900 {
         return Err(format!(
             "insufficient ordered-label coverage: {label_lengths:?}, \
              {admitted} admitted sources and {page_rows} physical rows"

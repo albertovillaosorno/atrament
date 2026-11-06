@@ -1403,7 +1403,7 @@ measurement, not persistent list identities or full semantic acceptance.
 
 ## Varied numbered-marker page clearance (partial) — 2026-11-06
 
-A seeded native regression now exercises 256 one-to-three-digit ordered
+A seeded native regression now exercises 540 one-to-nine-digit ordered
 labels with alternate `.`/`)` separators, one to four authored spaces,
 independently configured glyph widths and letter spacing, and exact NFC/NFD
 Spanish body ink. Each admitted source must preserve all rendered graphemes,
