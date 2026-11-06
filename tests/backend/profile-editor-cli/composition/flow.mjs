@@ -1550,6 +1550,64 @@ test('code fences keep literal Unicode ink and physical hard line breaks',
         }
     });
 
+test('interior empty quote markers preserve real page-local PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-quote-gap-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '55000', '15000'];
+            const alternatives = [
+                '> a\n>\n> ó',
+                '> a\n> \n> ó',
+                '  > a\n  >\n  > ó',
+                '> a\r\n>\r\n> ó',
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const reference = render(dir, '> a\n\n> ó',
+                        format, region, '--flow-markdown', page);
+                    assert.equal(reference.result.status, 0,
+                        reference.result.stderr);
+                    const expected = readFileSync(reference.output);
+                    if (format === 'pdf') {
+                        assert.equal((expected.toString('latin1')
+                            .match(/\/Type \/Page\b/g) ?? []).length, 2,
+                            'both quote paragraphs need real physical pages');
+                    }
+                    for (const source of alternatives) {
+                        const actual = render(dir, source, format,
+                            region, '--flow-markdown', page);
+                        assert.equal(actual.result.status, 0,
+                            `${source}: ${actual.result.stderr}`);
+                        assert.deepEqual(readFileSync(actual.output), expected,
+                            `${source} must preserve page ${page} ${format}`);
+                    }
+                    for (const source of [
+                        '>', '>\n> a', '> a\n>', '> a\n>\na',
+                        '> a\n>\n>\n> ó',
+                    ]) {
+                        const rejected = render(dir, source, format,
+                            region, '--flow-markdown', page);
+                        assert.notEqual(rejected.result.status, 0, source);
+                        assert.match(rejected.result.stderr,
+                            /empty Markdown block refused/, source);
+                        assert.deepEqual(readFileSync(rejected.output),
+                            expected, 'refusal preserves selected export');
+                    }
+                    const plain = render(dir, '> a\n>\n> ó', format,
+                        region, '--flow-text', page);
+                    assert.notEqual(plain.result.status, 0);
+                    assert.match(plain.result.stderr,
+                        /missing authored glyph shapes/);
+                    assert.deepEqual(readFileSync(plain.output), expected,
+                        'plain text cannot consume quote syntax');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('fenced code paginates literal rows and selected page-two PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));

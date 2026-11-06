@@ -1445,6 +1445,45 @@ fn flush_paragraph(
     Ok(())
 }
 
+// Plain blank lines reserve physical rows; Markdown blanks instead
+// flush the current paragraph and defer one collapsed paragraph gap.
+fn handle_source_blank(
+    layout: &mut Layout<'_>, paragraph: &mut String,
+    style: LineStyle, format: FlowFormat, pending_gap: &mut bool,
+) -> Result<(), String> {
+    if format == FlowFormat::Plain {
+        layout.blank_row()
+    } else {
+        flush_paragraph(layout, paragraph, style)?;
+        *pending_gap = layout.row_count > 0;
+        Ok(())
+    }
+}
+
+// A syntactic blank quote separates two pending, nonempty quoted
+// paragraphs. It is not a physical row and cannot invent a standalone
+// empty block or silently consume a literal plain-text >.
+fn admit_empty_quote_gap<'text>(
+    layout: &mut Layout<'_>, paragraph: &mut String,
+    previous: LineStyle, format: FlowFormat, style: LineStyle,
+    following: impl Iterator<Item = &'text str>,
+) -> Result<(), String> {
+    let next = following.into_iter().next();
+    if format != FlowFormat::Markdown
+        || !matches!(style, LineStyle::Quote)
+        || !matches!(previous, LineStyle::Quote)
+        || paragraph.is_empty()
+        || !next.is_some_and(|line| {
+            let (next_style, body) = markdown_line(line);
+            matches!(next_style, LineStyle::Quote)
+                && !body.trim_matches(' ').is_empty()
+        })
+    {
+        return Err("empty Markdown block refused".into());
+    }
+    flush_paragraph(layout, paragraph, previous)
+}
+
 // Four or more leading ASCII spaces are literal physical placement, not
 // Markdown soft continuation. They neither absorb a pending paragraph nor
 // gain a synthetic joining space before their first authored glyph.
@@ -1742,12 +1781,8 @@ pub(super) fn layout_flow_with_region(
         }
         let raw = input_line.trim_end_matches(' ');
         if raw.is_empty() {
-            if source.format == FlowFormat::Plain {
-                layout.blank_row()?;
-            } else {
-                flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
-                pending_gap = layout.row_count > 0;
-            }
+            handle_source_blank(&mut layout, &mut paragraph,
+                paragraph_style, source.format, &mut pending_gap)?;
             continue;
         }
         if pending_gap {
@@ -1770,7 +1805,11 @@ pub(super) fn layout_flow_with_region(
             continue;
         }
         if body.trim_matches(' ').is_empty() {
-            return Err("empty Markdown block refused".into());
+            admit_empty_quote_gap(&mut layout, &mut paragraph,
+                paragraph_style, source.format, style,
+                source_lines.clone())?;
+            pending_gap = layout.row_count > 0;
+            continue;
         }
         if source.format == FlowFormat::Markdown
             && layout_literal_indented_row(&mut layout, &mut paragraph,

@@ -628,9 +628,12 @@ Quote text is inset 6 mm and gets a 0.4-mm vertical ink rule on each
 physical row, including wrapped continuations; the `>` marker itself needs
 no authored glyph.
 
-Empty quote blocks refuse. Bounded backtick and tilde code fences (three
-or more identical marks, up to three initial spaces) preserve literal
-handwriting lines, including physical blank rows and source punctuation.
+A single bare `>` between visible quoted paragraphs inserts the same 4-mm
+gap as an empty Markdown line, without a synthetic quote-bar row. Isolated,
+repeated, leading and trailing empty quote markers refuse. Bounded backtick
+and tilde code fences (three or more identical marks, up to three initial
+spaces) preserve literal handwriting lines, including physical blank rows
+and source punctuation.
 
 An opening fence may have one short ASCII language tag, but no monospace
 font or syntax highlighting is invented. Fence characters are syntax;

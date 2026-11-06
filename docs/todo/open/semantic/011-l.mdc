@@ -1612,3 +1612,21 @@ strokes byte-for-byte. A request for too few PDF pages or a nonexistent PNG
 page refuses without replacing the last accepted output. These are
 CLI-only layout and native-export tests; persisted semantic text blocks and
 the finite two-page saved-notebook criterion remain open.
+
+## Interior blank blockquote paragraph separator (partial) — 2026-11-06
+
+The Rust CLI now accepts a single Markdown `>` line (with optional ASCII
+spacing or up to three leading spaces) only between two nonempty quoted
+paragraphs. It consumes no physical writing row, but adds the same 4-mm
+paragraph gap as an empty Markdown line. Quote rules remain attached only to
+visible text rows, with the selected fixed rectangle and page boundaries
+unchanged. Isolated, leading, trailing, repeated or non-quote-followed empty
+quote markers still refuse; fenced and plain-text `>` remain literal ink.
+
+Native Rust tests check exact quoted text coordinates and vertical rules
+across two physical pages. A separate subprocess regression compares actual
+vector PDF and page-selected transparent PNG byte output with existing blank
+Markdown separators, including indented and CRLF source, and proves invalid
+blocks cannot replace a previously accepted export. This is a restricted
+CLI-only blockquote refinement, not saved semantic paragraph identities,
+nested quotes or completion of the P1 notebook acceptance criterion.

@@ -2867,6 +2867,47 @@ fn paged_plain_flow_preserves_every_visible_grapheme_in_source_order()
     Ok(())
 }
 
+#[test]
+fn empty_quote_separator_keeps_visible_paragraphs_on_physical_pages()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 55_000, height: 15_000,
+    };
+    let render = |text| -> Result<_, String> {
+        let source = FlowSource::new(FlowFormat::Markdown, text)?;
+        super::layout_flow_with_region(
+            &source, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(region),
+        )
+    };
+    let separated = render("> a\n>\n> ó")?;
+    let blank = render("> a\n\n> ó")?;
+    assert_eq!(separated.0.len(), 2);
+    assert_eq!(separated.2, 2);
+    assert_eq!(separated.0.iter().map(|row| (
+        row.text.as_str(), row.origin_um, row.page,
+    )).collect::<Vec<_>>(), [
+        ("a", (38_500, 42_500), 1),
+        ("ó", (38_500, 42_500), 2),
+    ]);
+    assert_eq!(separated.0.iter().map(|row| (
+        row.text.as_str(), row.origin_um, row.page,
+    )).collect::<Vec<_>>(), blank.0.iter().map(|row| (
+        row.text.as_str(), row.origin_um, row.page,
+    )).collect::<Vec<_>>());
+    assert_eq!(separated.1.len(), 2);
+    assert_eq!(separated.1, blank.1);
+    for source in [">", ">\n> a", "> a\n>",
+        "> a\n>\na", "> a\n>\n>\n> ó"] {
+        let error = render(source)
+            .expect_err("only a single interior empty quote is admitted");
+        assert!(error.contains("empty Markdown block"), "{source:?}: {error}");
+    }
+    Ok(())
+}
+
 fn visible_graphemes(text: &str) -> Result<Vec<&str>, String> {
     let mut result = Vec::new();
     let mut remaining = text;
