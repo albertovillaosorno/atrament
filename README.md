@@ -603,8 +603,13 @@ and any authored spaces. A label too wide to leave room for its first item
 glyph refuses rather than creating an orphan numeral row. Every subsequent
 glyph must also fit that narrower continuation width after wrapping;
 otherwise the native export refuses instead of overflowing its region.
+
+A one-row-per-page regression confirms the same hanging indent on page two,
+with exact PDF and transparent PNG ink and atomic invalid-page refusal.
+
 Quote text is inset 6 mm and gets a 0.4-mm vertical ink rule on each
-physical row, including wrapped continuations; the `>` marker itself needs no authored glyph.
+physical row, including wrapped continuations; the `>` marker itself needs
+no authored glyph.
 
 Empty quote blocks refuse. Bounded backtick and tilde code fences (three
 or more identical marks, up to three initial spaces) preserve literal

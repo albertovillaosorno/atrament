@@ -1369,3 +1369,17 @@ transparent PNG byte-for-byte to independently positioned authored ink,
 and confirms that the narrower region refuses without replacing either
 accepted export. This is a layout/clearance repair in the existing CLI
 subset, not a persisted semantic notebook or completion of ATR-P2-011.
+
+## Ordered hanging indent across physical pages (partial) — 2026-11-06
+
+A native subprocess regression now checks the previously repaired narrow
+ordered-list wrap when a fixed region admits only one physical row per page.
+A 9-mm `ó` follows the authored `1. a` on page two, aligned beneath the
+item text rather than the numeral. The two-page native vector PDF and both
+selected transparent PNG pages are byte-identical to independently placed,
+caller-authored strokes at the exact page-local coordinates.
+
+Insufficient one-page PDF selection, a too-narrow continuation and an absent
+third PNG page all refuse without replacing previously accepted output.
+This is page-boundary evidence for existing CLI geometry, not a persisted
+semantic notebook model or completion of ATR-P2-011.

@@ -109,6 +109,65 @@ test('ordered continuation checks post-wrap glyph width in PDF/PNG',
                         `refused ${format} must retain accepted bytes`);
                 }
             }
+
+            // The same narrow hanging indent must survive a physical page
+            // break, not just a second row of the first sheet. Compare each
+            // page with independently placed exact authored pen strokes.
+            const oneRowRegion = (width) => [
+                '--flow-region', '30000', '40000', String(width), '14000',
+            ];
+            const runs = [
+                '--place-text', '1', '38500', '42500', '1. a',
+                '--place-text', '2', '47600', '42500', 'ó',
+            ];
+            const manual = (format, page) => {
+                const output = join(dir, `ordered-page-${format}-${page}`);
+                const args = [...base, ...ink, ...runs,
+                    ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    '--export-paper', format, '--output', output];
+                if (format === 'png') {
+                    args.push('--png-page', String(page), '--dpi', '72');
+                }
+                const result = spawnSync('cargo', [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...args,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(result.status, 0, result.stderr);
+                return readFileSync(output);
+            };
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const selected = render(dir, '1. aó', format,
+                        [...ink, ...oneRowRegion(29000),
+                            ...(format === 'pdf' ? ['--pages', '2'] : [])],
+                        '--flow-markdown', page);
+                    assert.equal(selected.result.status, 0,
+                        selected.result.stderr);
+                    const bytes = readFileSync(selected.output);
+                    assert.deepEqual(bytes, manual(format, page),
+                        `ordered page ${page} ${format} ink parity`);
+                    if (format === 'pdf') {
+                        assert.match(bytes.toString('latin1'), /\/Count 2/);
+                        for (const options of [
+                            [...oneRowRegion(29000), '--pages', '1'],
+                            [...oneRowRegion(28000), '--pages', '2'],
+                        ]) {
+                            const refused = render(dir, '1. aó', format,
+                                [...ink, ...options]);
+                            assert.notEqual(refused.result.status, 0);
+                            assert.deepEqual(readFileSync(refused.output),
+                                bytes, 'refusal must preserve PDF');
+                        }
+                    } else if (page === 2) {
+                        const refused = render(dir, '1. aó', format,
+                            [...ink, ...oneRowRegion(29000)],
+                            '--flow-markdown', 3);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.deepEqual(readFileSync(refused.output),
+                            bytes, 'missing continuation page retains PNG');
+                    }
+                }
+            }
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
