@@ -43,7 +43,7 @@ import path from "node:path";
 import test from "node:test";
 
 const PINNED_CARGO = path.resolve(
-    ".dependencies/rust/1.97.1/bin/cargo",
+    ".dependencies/rust/1.99.1/bin/cargo",
 );
 const TARGET_DIR = path.resolve(".cache/cargo-target");
 const RUNTIME_BINARY = path.join(TARGET_DIR, "debug", "atrament");

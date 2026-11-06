@@ -2805,7 +2805,7 @@ test("backend registry dependencies remain explicitly reviewed", () => {
         REPOSITORY_ROOT,
         ".dependencies",
         "rust",
-        "1.97.1",
+        "1.99.1",
         "bin",
         "cargo",
     );

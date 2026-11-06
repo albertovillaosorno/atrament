@@ -12,9 +12,10 @@ import test from 'node:test';
 const root = fileURLToPath(new URL(
     '../../../../', import.meta.url,
 ));
+const cargo = join(root, '.dependencies/rust/1.99.1/bin/cargo');
 
 function profiles(...args) {
-    const result = spawnSync('cargo', [
+    const result = spawnSync(cargo, [
         'run', '--offline', '--quiet', '-p', 'atrament_profile_editor_cli',
         '--bin', 'atrament-profiles', '--', ...args,
     ], { cwd: root, timeout: 45_000, maxBuffer: 24 * 1024 * 1024 });

@@ -65,7 +65,7 @@ const FIREFOX_AVAILABLE = process.platform === "linux"
         { stdio: "ignore" },
     ).status === 0;
 const PINNED_CARGO = path.resolve(
-    ".dependencies/rust/1.97.1/bin/cargo",
+    ".dependencies/rust/1.99.1/bin/cargo",
 );
 const TARGET_DIR = path.resolve(".cache/cargo-target");
 const RUNTIME_BINARY = path.join(TARGET_DIR, "debug", "atrament");

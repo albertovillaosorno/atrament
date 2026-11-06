@@ -16,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
+const cargo = join(root, '.dependencies/rust/1.99.1/bin/cargo');
 const base = [
     'notebook', '--printed-sheet', 'false',
     '--glyph-stroke', 'a', '600', '500', '1800', '3000', '250', '#123456',
@@ -37,7 +38,7 @@ function render(dir, source, format, extra = [],
     if (format === 'png') {
         args.push('--png-page', String(pngPage), '--dpi', '72');
     }
-    const result = spawnSync('cargo', [
+    const result = spawnSync(cargo, [
         'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
         ...args,
     ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -56,7 +57,7 @@ test('ordered continuation checks post-wrap glyph width in PDF/PNG',
         const dir = mkdtempSync(join(root, '.temp/flow-ordered-width-'));
         try {
             const statistics = join(dir, 'wide-accent.json');
-            const configured = spawnSync('cargo', [
+            const configured = spawnSync(cargo, [
                 'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
                 'handwriting', '--set-glyph', 'ó', 'width',
                 '9000', '9000', '9000', '9000', '0',
@@ -90,7 +91,7 @@ test('ordered continuation checks post-wrap glyph width in PDF/PNG',
                         ? ['--png-page', '1', '--dpi', '72'] : []),
                     '--output', reference,
                 ];
-                const manual = spawnSync('cargo', [
+                const manual = spawnSync(cargo, [
                     'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                     '--', ...args,
                 ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -128,7 +129,7 @@ test('ordered continuation checks post-wrap glyph width in PDF/PNG',
                 if (format === 'png') {
                     args.push('--png-page', String(page), '--dpi', '72');
                 }
-                const result = spawnSync('cargo', [
+                const result = spawnSync(cargo, [
                     'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                     '--', ...args,
                 ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -200,7 +201,7 @@ test('tabbed ordered marker keeps its measured hang on physical pages',
                         ? ['--png-page', String(page), '--dpi', '72'] : []),
                     '--output', output,
                 ];
-                const result = spawnSync('cargo', [
+                const result = spawnSync(cargo, [
                     'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                     '--', ...args,
                 ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -268,7 +269,7 @@ test('soft continued ordered Markdown keeps native page-local ink', () => {
             '--set-glyph', glyph, 'width',
             ...Array(4).fill(String(width)), '0',
         ]);
-        const edited = spawnSync('cargo', [
+        const edited = spawnSync(cargo, [
             'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
             'handwriting', ...edits,
         ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -297,7 +298,7 @@ test('soft continued ordered Markdown keeps native page-local ink', () => {
                     ? ['--png-page', String(page), '--dpi', '72'] : []),
                 '--output', output,
             ];
-            const result = spawnSync('cargo', [
+            const result = spawnSync(cargo, [
                 'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                 '--', ...args,
             ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -351,7 +352,7 @@ test('two-digit ordered labels use statistical spacing across PDF pages',
         const dir = mkdtempSync(join(root, '.temp/flow-ordered-spacing-'));
         try {
             const statistics = join(dir, 'digit-spacing.json');
-            const configured = spawnSync('cargo', [
+            const configured = spawnSync(cargo, [
                 'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
                 'handwriting', '--set-glyph', '1', 'letter_spacing',
                 '9000', '9000', '9000', '9000', '0',
@@ -392,7 +393,7 @@ test('two-digit ordered labels use statistical spacing across PDF pages',
                 if (format === 'png') {
                     args.push('--png-page', String(page), '--dpi', '72');
                 }
-                const result = spawnSync('cargo', [
+                const result = spawnSync(cargo, [
                     'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                     '--', ...args,
                 ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -455,7 +456,7 @@ test('three-digit ordered labels retain heterogeneous ink across pages',
                 '--set-glyph', glyph, 'width',
                 width, width, width, width, '0',
             ]);
-            const configured = spawnSync('cargo', [
+            const configured = spawnSync(cargo, [
                 'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
                 'handwriting', ...edits,
             ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -491,7 +492,7 @@ test('three-digit ordered labels retain heterogeneous ink across pages',
                 if (format === 'png') {
                     args.push('--png-page', String(page), '--dpi', '72');
                 }
-                const result = spawnSync('cargo', [
+                const result = spawnSync(cargo, [
                     'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                     '--', ...args,
                 ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -581,7 +582,7 @@ test('nine-digit ordering stops at the exact Markdown marker boundary',
                 if (format === 'png') {
                     args.push('--png-page', String(page), '--dpi', '72');
                 }
-                const result = spawnSync('cargo', [
+                const result = spawnSync(cargo, [
                     'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                     '--', ...args,
                 ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -640,7 +641,7 @@ test('nine-digit ordering stops at the exact Markdown marker boundary',
     });
 
 test('notebook CLI help advertises real Markdown task shapes', () => {
-    const help = spawnSync('cargo', [
+    const help = spawnSync(cargo, [
         'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
         'notebook', '--help',
     ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -1580,7 +1581,7 @@ test('invalid marker weights refuse without replacing accepted PDF',
                     '--flow-markdown', '# ó', '--export-paper', 'pdf',
                     '--output', output, '--replace',
                 ];
-                const refused = spawnSync('cargo', [
+                const refused = spawnSync(cargo, [
                     'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                     '--', ...args,
                 ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -2977,7 +2978,7 @@ test('four-space Markdown row before equals measures literal glyph ink',
         const dir = mkdtempSync(join(root, '.temp/setext-literal-pitch-'));
         try {
             const stats = join(dir, 'tall-equal.json');
-            const edited = spawnSync('cargo', [
+            const edited = spawnSync(cargo, [
                 'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
                 'handwriting', '--set-glyph', '=', 'height',
                 '25000', '25000', '25000', '25000', '0',
@@ -3171,7 +3172,7 @@ test('quoted continuation keeps literal Setext-like ink in native PDF/PNG',
         const dir = mkdtempSync(join(root, '.temp/flow-quote-equal-pitch-'));
         try {
             const statistics = join(dir, 'tall-equal.json');
-            const configured = spawnSync('cargo', [
+            const configured = spawnSync(cargo, [
                 'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
                 'handwriting', '--set-glyph', '=', 'height',
                 '25000', '25000', '25000', '25000', '0',
@@ -3255,7 +3256,7 @@ test('Unicode breaks before Setext marks retain two-page native ink', () => {
     const dir = mkdtempSync(join(root, '.temp/flow-unicode-setext-'));
     try {
         const statistics = join(dir, 'tall-equal.json');
-        const configured = spawnSync('cargo', [
+        const configured = spawnSync(cargo, [
             'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
             'handwriting', '--set-glyph', '=', 'height',
             '25000', '25000', '25000', '25000', '0',
@@ -3335,7 +3336,7 @@ test('mixed BOM CRLF tabs and Unicode breaks keep literal native ink', () => {
     const dir = mkdtempSync(join(root, '.temp/flow-mixed-transport-'));
     try {
         const statistics = join(dir, 'tall-equal.json');
-        const configured = spawnSync('cargo', [
+        const configured = spawnSync(cargo, [
             'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
             'handwriting', '--set-glyph', '=', 'height',
             '25000', '25000', '25000', '25000', '0',
@@ -3404,7 +3405,7 @@ test('plain Unicode grapheme wraps preserve authored PDF and PNG ink', () => {
             if (format === 'png') {
                 args.push('--png-page', String(page), '--dpi', '72');
             }
-            const result = spawnSync('cargo', ['run', '--quiet', '-p',
+            const result = spawnSync(cargo, ['run', '--quiet', '-p',
                 'atrament_profile_editor_cli', '--', ...args], {
                 cwd: root, encoding: 'utf8', timeout: 120000,
             });
@@ -3532,7 +3533,7 @@ test('statistical advances wrap native Unicode ink on measured pages', () => {
             '--set-glyph', glyph, dimension,
             value, value, value, value, '0',
         ]);
-        const configured = spawnSync('cargo', [
+        const configured = spawnSync(cargo, [
             'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
             'handwriting', ...edits,
         ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -3557,7 +3558,7 @@ test('statistical advances wrap native Unicode ink on measured pages', () => {
             if (format === 'png') {
                 args.push('--png-page', String(page), '--dpi', '72');
             }
-            const result = spawnSync('cargo', [
+            const result = spawnSync(cargo, [
                 'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                 '--', ...args,
             ], { cwd: root, encoding: 'utf8', timeout: 120000 });
@@ -3606,7 +3607,7 @@ test('signed baseline statistics change native Markdown physical page count',
             const profile = (glyph, baseline) => {
                 const saved = join(dir, `baseline-${glyph === 'a'
                     ? 'ink' : 'syntax'}-${baseline}.json`);
-                const configured = spawnSync('cargo', [
+                const configured = spawnSync(cargo, [
                     'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                     '--', 'handwriting', '--set-glyph', glyph,
                     'baseline_offset', String(baseline), String(baseline),
@@ -3653,7 +3654,7 @@ test('signed baseline statistics change native Markdown physical page count',
             for (const [index, [page, x, ornament]]
                 of expectedInk.entries()) {
                 const output = join(dir, `manual-page-${page}.png`);
-                const manual = spawnSync('cargo', [
+                const manual = spawnSync(cargo, [
                     'run', '--quiet', '-p', 'atrament_profile_editor_cli',
                     '--', ...base, '--handwriting-profile', ink,
                     '--place-text', page, x, '42500', 'a', ...ornament,
