@@ -1271,3 +1271,19 @@ inline and file-based Markdown rather than accidentally comparing distinct
 ornament configurations. Missing emoji ink, an insufficient PDF page count
 and a non-existent PNG page all refuse without replacing accepted exports.
 These guarantees remain limited to CLI flow, not persisted notebook blocks.
+
+## Unicode Markdown block wrapping across pages (partial) — 2026-11-06
+
+A deterministic native regression now measures 256 distinct Markdown sources
+with an ATX heading, an indented continuation of an unordered list item,
+adjacent quoted source lines and soft/hard-broken body paragraphs. Long
+mixtures of exact NFC/NFD Spanish characters, punctuation, mathematics and a
+joined emoji wrap across repeated small physical page regions. An independent
+source-glyph oracle verifies
+that no authored grapheme is split, lost or replaced by Markdown syntax.
+
+The test checks page-local text positions and the separate heading, bullet
+and per-row quote ornaments across more than 3,000 physical text rows.
+This is additional coverage of the existing restricted CLI compiler, not
+full Markdown admission, automatic glyph generation, or persisted notebook
+blocks; the saved-notebook acceptance criterion remains open.

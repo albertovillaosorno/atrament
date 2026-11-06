@@ -1495,3 +1495,110 @@ fn plain_wrapping_preserves_exact_unicode_graphemes_across_pages()
     }
     Ok(())
 }
+
+#[test]
+fn markdown_blocks_preserve_exact_unicode_graphemes_across_pages()
+    -> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let alphabet = ["a", "ó", "o\u{301}", "ñ", "n\u{303}",
+        "👩\u{200d}🏫", "∞", "¿", "¡", "é", "e\u{301}"];
+    let paper = NotebookProfile::default();
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 34_000, height: 25_000,
+    };
+    let mut seed = 0x6721_5badu32;
+    let mut checked_rows = 0usize;
+    for sample in 0..256usize {
+        let mut words = Vec::new();
+        for _ in 0..12 {
+            seed = seed.wrapping_mul(1_664_525)
+                .wrapping_add(1_013_904_223);
+            let length = 5 + usize::try_from(seed % 6)
+                .map_err(|error| error.to_string())?;
+            let mut word = String::new();
+            for _ in 0..length {
+                seed = seed.wrapping_mul(1_664_525)
+                    .wrapping_add(1_013_904_223);
+                let index = usize::try_from(seed)
+                    .map_err(|error| error.to_string())? % alphabet.len();
+                word.push_str(alphabet.get(index)
+                    .ok_or("Unicode test glyph outside inventory")?);
+            }
+            words.push(word);
+        }
+        // List continuations, adjacent quotes and ordinary soft/hard
+        // paragraph breaks must not become authored pen glyphs.
+        let body_break = if sample % 2 == 0 { "\n" } else { "\u{2028}" };
+        let source_text = format!(
+            "# a\n- {} {}\n  {} {}\n> {} {}\n> {} {}\n{} {}{}{} {}",
+            words[0], words[1], words[2], words[3],
+            words[4], words[5], words[6], words[7],
+            words[8], words[9], body_break, words[10], words[11],
+        );
+        let source = FlowSource::new(FlowFormat::Markdown, &source_text)?;
+        let (rows, ornaments, pages) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        )?;
+        if pages < 3 || pages > 32 {
+            return Err(format!(
+                "sample {sample} has unexpected physical page count {pages}"
+            ));
+        }
+        let nonspace = |value: &str| -> Result<Vec<String>, String> {
+            let mut remaining = value;
+            let mut glyphs = Vec::new();
+            while !remaining.is_empty() {
+                let (glyph, rest) = super::first_grapheme(remaining)?;
+                if glyph != " " {
+                    glyphs.push(glyph.to_owned());
+                }
+                remaining = rest;
+            }
+            Ok(glyphs)
+        };
+        let mut expected = nonspace("a")?;
+        for word in &words {
+            expected.extend(nonspace(word)?);
+        }
+        let actual = rows.iter().map(|row| nonspace(&row.text))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter().flatten().collect::<Vec<_>>();
+        if actual != expected {
+            return Err(format!(
+                "Markdown sample {sample} lost or split Unicode ink: \
+                 {source_text:?}; rows={rows:?}"
+            ));
+        }
+        if rows.iter().filter(|row| {
+            row.origin_um.0 == region.left + 2_500
+        }).count() < 2
+            || ornaments.iter().filter(|line| line.width_um == 550).count() != 1
+            || ornaments.iter().filter(|line| line.width_um == 450).count() != 1
+            || ornaments.iter().filter(|line| line.width_um == 400).count() < 2
+        {
+            return Err(format!(
+                "sample {sample} lost body, heading, bullet or quote ink"
+            ));
+        }
+        for row in rows {
+            if !(1..=pages).contains(&row.page)
+                || ![region.left + 2_500, region.left + 8_500]
+                    .contains(&row.origin_um.0)
+                || row.origin_um.1 < region.top + 2_500
+                || row.origin_um.1 + 9_000 >
+                    region.top + region.height - 2_500 {
+                return Err(format!(
+                    "Markdown sample {sample} escaped physical region: \
+                     {row:?}"
+                ));
+            }
+            checked_rows += 1;
+        }
+    }
+    if checked_rows <= 3_000 {
+        return Err("insufficient Markdown physical wrap coverage".into());
+    }
+    Ok(())
+}
