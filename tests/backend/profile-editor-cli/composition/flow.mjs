@@ -3995,3 +3995,83 @@ test('signed baseline statistics change native Markdown physical page count',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('tall compressed heading page turns preserve exact ATX/Setext PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-tall-heading-'));
+        try {
+            const statistics = join(dir, 'tall-compressed.json');
+            const configured = spawnSync(cargo, [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+                'handwriting', '--set-glyph', 'a', 'width',
+                '12000', '12000', '12000', '12000', '0',
+                '--set-glyph', 'a', 'letter_spacing',
+                '-10000', '-10000', '-10000', '-10000', '0',
+                '--set-glyph', '\u00f3', 'height',
+                '20000', '20000', '20000', '20000', '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(statistics, configured.stdout);
+
+            const source = 'a  \na  \n# aa\n\n\u00f3';
+            const setext = 'a  \na  \naa\n===\n\n\u00f3';
+            const region = [
+                '--handwriting-profile', statistics,
+                '--flow-region', '30000', '40000', '110000', '80000',
+            ];
+            for (const headingStyle of [
+                'underline', 'double-underline', 'marker', 'none',
+            ]) {
+                const options = [...region, '--heading-style', headingStyle];
+                const pdf = render(dir, source, 'pdf', [
+                    ...options, '--pages', '2',
+                ]);
+                assert.equal(pdf.result.status, 0, pdf.result.stderr);
+                const original = readFileSync(pdf.output);
+                assert.match(original.toString('latin1'), /\/Count 2/);
+                const alternate = render(dir, setext, 'pdf', [
+                    ...options, '--pages', '2',
+                ]);
+                assert.equal(alternate.result.status, 0,
+                    alternate.result.stderr);
+                assert.deepEqual(readFileSync(alternate.output), original,
+                    `${headingStyle} Setext and ATX draw identical PDF ink`);
+
+                const pngPages = [];
+                for (const page of [1, 2]) {
+                    const selected = render(dir, source, 'png', options,
+                        '--flow-markdown', page);
+                    assert.equal(selected.result.status, 0,
+                        selected.result.stderr);
+                    const bytes = readFileSync(selected.output);
+                    pngPages.push(bytes);
+                    const alternatePng = render(dir, setext, 'png', options,
+                        '--flow-markdown', page);
+                    assert.equal(alternatePng.result.status, 0,
+                        alternatePng.result.stderr);
+                    assert.deepEqual(readFileSync(alternatePng.output), bytes,
+                        `${headingStyle} page ${page} glyph and mark parity`);
+                }
+                assert.notDeepEqual(pngPages[0], pngPages[1],
+                    'page two has the title and tall-accent body ink');
+
+                const short = render(dir, source, 'pdf', [
+                    ...options, '--pages', '1',
+                ]);
+                assert.notEqual(short.result.status, 0);
+                assert.match(short.result.stderr, /requires 2 physical pages/);
+                assert.deepEqual(readFileSync(short.output), original,
+                    'a refused page budget preserves the valid native PDF');
+
+                const missing = render(dir, source, 'png', options,
+                    '--flow-markdown', 3);
+                assert.notEqual(missing.result.status, 0);
+                assert.match(missing.result.stderr,
+                    /selected PNG page is empty/);
+                assert.deepEqual(readFileSync(missing.output), pngPages[1],
+                    'a missing selected page preserves page-two PNG bytes');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

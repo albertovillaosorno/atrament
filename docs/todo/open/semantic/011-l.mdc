@@ -1529,3 +1529,19 @@ An insufficient PDF page selection, a narrower selected fixed region and an
 absent third PNG page refuse without replacing previously accepted output.
 This remains CLI-only physical layout verification, not persisted semantic
 notebook flow or completion of the P1 acceptance criterion.
+
+## Tall statistical heading rows with compressed contours (partial) — 2026-11-06
+
+A new Rust regression combines a 20-mm accented glyph height, compressed
+12-mm heading contours with 2-mm cursor advances, a paragraph gap and a
+three-row fixed region. Both ATX and Setext headings move from the last
+available first-page row to page two with their first body row. Exact
+page-local glyph origins, 24-mm pitch, 4-mm gap and four heading ornament
+styles are verified; underlines and marker strokes reach the full authored
+contour rather than the shortened advance.
+
+Native subprocess acceptance also verifies byte-identical two-page PDF and
+both transparent PNG page selections across ATX/Setext variants in all four
+styles. A short PDF page count or absent PNG page refuses without replacing
+previously accepted output. This regression confirms the existing CLI-only
+behavior; no saved semantic notebook body or stable block identity is added.

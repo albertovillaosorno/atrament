@@ -2338,3 +2338,105 @@ fn compressed_heading_decoration_covers_actual_authored_contour()
     }
     Ok(())
 }
+
+#[test]
+fn tall_compressed_headings_keep_page_local_contours_and_paragraph_gap()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(97);
+    for (glyph, dimension, mean) in [
+        ("a", Dimension::Width, 12_000),
+        ("a", Dimension::LetterSpacing, -10_000),
+        ("\u{f3}", Dimension::Height, 20_000),
+    ] {
+        stats = stats
+            .with_glyph(
+                glyph,
+                DimensionStatistics {
+                    dimension,
+                    statistics: ScalarStatistics {
+                        minimum: mean,
+                        maximum: mean,
+                        mean,
+                        median: mean,
+                        standard_deviation: 0,
+                    },
+                },
+                &UnicodeGraphemeSegmentation,
+            )
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    // Three 24-mm rows fit on each sheet. The two opening rows leave
+    // room for a title but not its first body row and 4-mm paragraph gap.
+    let region = super::FlowRegion {
+        left: 30_000,
+        top: 40_000,
+        width: 110_000,
+        height: 80_000,
+    };
+    for style in [
+        super::HeadingStyle::Underline,
+        super::HeadingStyle::DoubleUnderline,
+        super::HeadingStyle::Marker,
+        super::HeadingStyle::None,
+    ] {
+        let heading = super::HeadingDecoration {
+            style: Some(style),
+            ..super::HeadingDecoration::default()
+        };
+        for source_text in
+            ["a  \na  \n# aa\n\n\u{f3}", "a  \na  \naa\n===\n\n\u{f3}"]
+        {
+            let source = FlowSource::new(FlowFormat::Markdown, source_text)?;
+            assert_eq!(super::measured_pitch(&source, Some(&stats))?, 24_000);
+            let (rows, ornaments, pages) = super::layout_flow_with_region(
+                &source,
+                &NotebookProfile::default(),
+                Some(&stats),
+                heading,
+                Some(region),
+            )?;
+            assert_eq!(pages, 2, "{source_text:?}");
+            assert_eq!(
+                rows.iter()
+                    .map(|row| (row.page, row.origin_um, row.text.as_str(),))
+                    .collect::<Vec<_>>(),
+                [
+                    (1, (32_500, 42_500), "a"),
+                    (1, (32_500, 66_500), "a"),
+                    (2, (32_500, 42_500), "aa"),
+                    (2, (32_500, 70_500), "\u{f3}"),
+                ]
+            );
+            let expected_widths: &[u32] = match style {
+                super::HeadingStyle::Underline => &[550],
+                super::HeadingStyle::DoubleUnderline => &[550, 550],
+                super::HeadingStyle::Marker => &[1_400; 4],
+                super::HeadingStyle::None => &[],
+            };
+            assert_eq!(
+                ornaments
+                    .iter()
+                    .map(|mark| mark.width_um)
+                    .collect::<Vec<_>>(),
+                expected_widths
+            );
+            for mark in &ornaments {
+                assert_eq!(mark.page, 2);
+                assert_eq!(mark.start_um.0, 32_500);
+                assert_eq!(
+                    mark.end_um.0, 46_500,
+                    "compressed advance must not truncate the contour"
+                );
+                assert!((40_000..120_000).contains(&mark.start_um.1));
+            }
+        }
+    }
+    Ok(())
+}
