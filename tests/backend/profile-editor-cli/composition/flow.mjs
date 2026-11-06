@@ -174,6 +174,66 @@ test('ordered continuation checks post-wrap glyph width in PDF/PNG',
         }
     });
 
+test('compressed ordered marker contours refuse before replacing PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-compressed-'));
+        try {
+            const ink = ['1', '.'].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '600', '500', '1800', '3000',
+                '250', '#123456',
+            ]);
+            const region = (width) => [
+                '--flow-region', '30000', '40000', String(width), '20000',
+            ];
+            for (const glyph of ['1', '.']) {
+                const profile = join(dir, `compressed-${glyph}.json`);
+                const configure = spawnSync(cargo, [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', 'handwriting',
+                    '--set-glyph', glyph, 'width',
+                    ...Array(4).fill('12000'), '0',
+                    '--set-glyph', glyph, 'letter_spacing',
+                    ...Array(4).fill('-10000'), '0',
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(configure.status, 0, configure.stderr);
+                writeFileSync(profile, configure.stdout);
+                const extras = ['--handwriting-profile', profile, ...ink];
+                for (const format of ['pdf', 'png']) {
+                    const accepted = render(dir, '1. a', format,
+                        [...extras, ...region(27000)]);
+                    assert.equal(accepted.result.status, 0,
+                        accepted.result.stderr);
+                    const bytes = readFileSync(accepted.output);
+                    const reference = join(dir, `manual-${glyph}.${format}`);
+                    const args = [
+                        ...base, ...extras,
+                        '--place-text', '1', '38500', '42500', '1. a',
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', '1', '--dpi', '72'] : []),
+                        '--output', reference,
+                    ];
+                    const manual = spawnSync(cargo, [
+                        'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                        '--', ...args,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    assert.deepEqual(bytes, readFileSync(reference),
+                        `compressed ${glyph} ink is physically placed`);
+                    const refused = render(dir, '1. a', format,
+                        [...extras, ...region(22000)]);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.match(refused.result.stderr,
+                        /ordered list label and first glyph exceed/);
+                    assert.deepEqual(readFileSync(refused.output), bytes,
+                        `narrow ${glyph} refusal preserves ${format} output`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('tabbed ordered marker keeps its measured hang on physical pages',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-ordered-tabs-'));

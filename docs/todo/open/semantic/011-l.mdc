@@ -1478,3 +1478,10 @@ and an overwide period against the same one-row region, and confirms the
 complete `1. a` item fits when the caller deliberately widens the region.
 The existing CLI-only flow still does not persist semantic list identities
 or complete the finite P1 saved-notebook acceptance criterion.
+
+A native subprocess acceptance now exports both vector PDF and transparent PNG
+from the compressed `1.` marker, separately varying the numeral and period.
+Each wide-region output is byte-identical to manually placed authored glyphs
+under the same statistics profile. Tightening only the selected rectangle
+must refuse with the ordered-label diagnostic while preserving the last
+accepted PDF or PNG bytes. No profile or source file is rewritten.
