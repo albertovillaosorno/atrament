@@ -35,6 +35,100 @@
 use super::{FlowFormat, FlowSource};
 
 #[test]
+fn ordered_hanging_indent_refuses_glyph_wider_than_continuation()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let region = super::FlowRegion {
+        left: 30_000,
+        top: 40_000,
+        width: 28_000,
+        height: 40_000,
+    };
+    let source = FlowSource::new(FlowFormat::Markdown, "1. aó")
+        .expect("bounded numbered item with exact Unicode ink");
+    let nominal = super::layout_flow_with_region(
+        &source,
+        &NotebookProfile::default(),
+        None,
+        super::HeadingDecoration::default(),
+        Some(region),
+    )
+    .expect("nominal 4-mm glyphs fit the 6-mm continuation");
+    assert_eq!(
+        nominal
+            .0
+            .iter()
+            .map(|run| run.text.as_str())
+            .collect::<Vec<_>>(),
+        ["1. a", "ó"]
+    );
+    assert_eq!(nominal.0[1].origin_um.0, nominal.0[0].origin_um.0 + 12_000);
+
+    let wide = ScalarStatistics {
+        minimum: 9_000,
+        maximum: 9_000,
+        mean: 9_000,
+        median: 9_000,
+        standard_deviation: 0,
+    };
+    let stats = HandwritingStatisticsProfile::baseline(3)
+        .with_glyph(
+            "ó",
+            DimensionStatistics {
+                dimension: Dimension::Width,
+                statistics: wide,
+            },
+            &UnicodeGraphemeSegmentation,
+        )
+        .expect("valid wide authored accent glyph");
+    for text in ["1. aó", "1. a ó"] {
+        let narrow = FlowSource::new(FlowFormat::Markdown, text)?;
+        let refused = super::layout_flow_with_region(
+            &narrow,
+            &NotebookProfile::default(),
+            Some(&stats),
+            super::HeadingDecoration::default(),
+            Some(region),
+        )
+        .expect_err("the wide glyph cannot fit a narrowed continuation");
+        assert!(
+            refused.contains("horizontal printable region"),
+            "explicit refusal rather than overflow for {text:?}: {refused}"
+        );
+
+        let fitting = super::FlowRegion {
+            width: region.width + 1_000,
+            ..region
+        };
+        let accepted = super::layout_flow_with_region(
+            &narrow,
+            &NotebookProfile::default(),
+            Some(&stats),
+            super::HeadingDecoration::default(),
+            Some(fitting),
+        )
+        .expect("one extra millimetre admits the full glyph contour");
+        assert_eq!(accepted.0.len(), 2);
+        assert_eq!(accepted.0[0].text, "1. a");
+        assert_eq!(accepted.0[1].text, "ó");
+        let (_, contour) =
+            super::GlyphOverlay::flow_advance_um("ó", Some(&stats))?;
+        let right_edge = accepted.0[1].origin_um.0 + contour + 800;
+        assert!(
+            right_edge <= fitting.left + fitting.width - 1_500,
+            "wide exact Unicode contour must fit the new width"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 fn measured_words_keep_nfc_nfd_and_joined_unicode_graphemes() {
     let word = "aóo\u{301}👩\u{200d}🏫";
     let (glyphs, width) = super::measured_word(word, None)

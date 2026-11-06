@@ -600,9 +600,11 @@ A source containing only separators refuses until it includes visible text.
 Each list item starts on its own row; wrapped continuations
 align beneath the first item glyph after the *measured* numeral, separator
 and any authored spaces. A label too wide to leave room for its first item
-glyph refuses rather than creating an orphan numeral row. Quote text is
-inset 6 mm and gets a 0.4-mm vertical ink rule on each physical row, including
-wrapped continuations; the `>` marker itself needs no authored glyph.
+glyph refuses rather than creating an orphan numeral row. Every subsequent
+glyph must also fit that narrower continuation width after wrapping;
+otherwise the native export refuses instead of overflowing its region.
+Quote text is inset 6 mm and gets a 0.4-mm vertical ink rule on each
+physical row, including wrapped continuations; the `>` marker itself needs no authored glyph.
 
 Empty quote blocks refuse. Bounded backtick and tilde code fences (three
 or more identical marks, up to three initial spaces) preserve literal

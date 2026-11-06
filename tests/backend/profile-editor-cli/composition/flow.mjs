@@ -51,6 +51,69 @@ function coloredHeadingWidths(bytes) {
     )].map((match) => match[1]);
 }
 
+test('ordered continuation checks post-wrap glyph width in PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-ordered-width-'));
+        try {
+            const statistics = join(dir, 'wide-accent.json');
+            const configured = spawnSync('cargo', [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+                'handwriting', '--set-glyph', 'ó', 'width',
+                '9000', '9000', '9000', '9000', '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(statistics, configured.stdout);
+            const ink = [
+                '--handwriting-profile', statistics,
+                '--glyph-stroke', '1', '600', '500', '1800', '3000',
+                '250', '#123456',
+                '--glyph-stroke', '.', '600', '500', '1800', '3000',
+                '250', '#123456',
+            ];
+            const region = (width) => [
+                '--flow-region', '30000', '40000', String(width), '40000',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const admitted = render(dir, '1. aó', format,
+                    [...ink, ...region(29000)]);
+                assert.equal(admitted.result.status, 0,
+                    admitted.result.stderr);
+                const bytes = readFileSync(admitted.output);
+
+                const reference = join(dir, `ordered-manual.${format}`);
+                const args = [
+                    ...base, ...ink,
+                    '--place-text', '1', '38500', '42500', '1. a',
+                    '--place-text', '1', '47600', '51500', 'ó',
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', '1', '--dpi', '72'] : []),
+                    '--output', reference,
+                ];
+                const manual = spawnSync('cargo', [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...args,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(manual.status, 0, manual.stderr);
+                assert.deepEqual(bytes, readFileSync(reference),
+                    `fitting ordered row matches physical ${format} ink`);
+
+                for (const source of ['1. aó', '1. a ó']) {
+                    const refused = render(dir, source, format,
+                        [...ink, ...region(28000)]);
+                    assert.notEqual(refused.result.status, 0,
+                        'narrow continuation cannot place a wide glyph');
+                    assert.match(refused.result.stderr,
+                        /glyph exceeds horizontal printable region/);
+                    assert.deepEqual(readFileSync(refused.output), bytes,
+                        `refused ${format} must retain accepted bytes`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('notebook CLI help advertises real Markdown task shapes', () => {
     const help = spawnSync('cargo', [
         'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',

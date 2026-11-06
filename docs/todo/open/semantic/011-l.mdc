@@ -1351,3 +1351,21 @@ physical pitch only when their exact grapheme survives as authored ink.
 This is a bounded CLI-only measurement check, not a persisted semantic block
 model or complete saved-notebook flow. The P1 acceptance criterion remains
 open.
+
+## Narrow ordered-list continuation ink refusal (partial) — 2026-11-06
+
+The native compiler now rechecks each glyph's measured horizontal slot
+**after** applying an ordered item's hanging indent on a wrapped row.
+Previously, a wide Spanish accent following a numeral could pass the
+original first-row width check and extend beyond the continuation's
+physical right edge. An explicitly narrow fixed region now refuses the
+overwide glyph rather than silently placing it outside the measured row.
+
+A red-before/green-after Rust unit test covers both mid-word and
+word-boundary wraps with a 9-mm `ó` glyph, exact continuation coordinates,
+and the adjacent one-millimetre-wider region that admits the same content.
+A native subprocess acceptance compares the valid vector PDF and
+transparent PNG byte-for-byte to independently positioned authored ink,
+and confirms that the narrower region refuses without replacing either
+accepted export. This is a layout/clearance repair in the existing CLI
+subset, not a persisted semantic notebook or completion of ATR-P2-011.

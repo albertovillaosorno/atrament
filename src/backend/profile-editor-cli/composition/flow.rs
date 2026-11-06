@@ -635,11 +635,6 @@ impl Layout<'_> {
             )?;
             pending_spaces = 0;
             for (grapheme, advance, slot) in glyphs {
-                if slot > cap {
-                    return Err(
-                        "glyph exceeds horizontal printable region".into()
-                    );
-                }
                 if !row.is_empty()
                     && (width.checked_add(slot).is_none_or(|end| end > cap)
                         || count == MAX_LINE_GRAPHEMES
@@ -660,6 +655,14 @@ impl Layout<'_> {
                     first = false;
                     width = 0;
                     count = 0;
+                }
+                // A numbered item narrows its continuation to the
+                // measured hanging indent. Recheck against that new cap
+                // after a wrap, before accepting the next authored shape.
+                if slot > cap {
+                    return Err(
+                        "glyph exceeds horizontal printable region".into()
+                    );
                 }
                 if grapheme.len() > 384 {
                     return Err("flow grapheme exceeds line byte limit".into());
