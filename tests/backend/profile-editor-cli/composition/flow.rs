@@ -83,6 +83,73 @@ fn max_tabbed_source_expands_to_exact_byte_limit() {
 }
 
 #[test]
+fn grapheme_tab_stops_survive_mixed_unicode_source_breaks() {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let original = concat!(
+        "\u{feff}\u{e9}\tn\u{303}\u{2028}",
+        "\u{1f469}\u{200d}\u{1f3eb}\t=\u{2029}a",
+    );
+    let canonical = "\u{e9}   n\u{303}  \n\u{1f469}\u{200d}\u{1f3eb}   =\n\na";
+    let tall = ScalarStatistics {
+        maximum: 25_000, mean: 25_000, median: 25_000,
+        minimum: 25_000, standard_deviation: 0,
+    };
+    let statistics = HandwritingStatisticsProfile::baseline(1)
+        .with_glyph("=", DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+        .expect("valid height for literal equals glyph");
+    for format in [FlowFormat::Markdown, FlowFormat::Plain] {
+        let pasted = FlowSource::new(format, original)
+            .expect("source with tabs, NFC, NFD and Unicode separators");
+        let equivalent = FlowSource::new(format, canonical)
+            .expect("canonical source with the same exact graphemes");
+        assert_eq!(pasted.text, canonical);
+        assert_eq!(super::measured_pitch(&pasted, Some(&statistics))
+            .expect("literal equals determines row height"), 29_000);
+        let render = |source: &FlowSource| super::layout_flow(
+            source, &NotebookProfile::default(), Some(&statistics),
+            super::HeadingDecoration::default(),
+        ).expect("admitted source fits on the selected physical page");
+        let (rows, ornaments, pages) = render(&pasted);
+        let (expected, expected_ornaments, expected_pages) =
+            render(&equivalent);
+        assert_eq!(rows.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>(), expected.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>());
+        assert_eq!(ornaments, expected_ornaments);
+        assert_eq!(pages, expected_pages);
+        assert_eq!(pages, 1);
+        assert!(ornaments.is_empty(),
+            "a literal equals following an emoji is not heading syntax");
+        let expected_ink = [
+            "\u{e9}   n\u{303}",
+            "\u{1f469}\u{200d}\u{1f3eb}   =",
+            "a",
+        ];
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>(), expected_ink);
+        assert_eq!(rows[1].origin_um.1 - rows[0].origin_um.1,
+            29_000, "line separator must end the first physical row");
+        let after_paragraph = if format == FlowFormat::Markdown {
+            33_000
+        } else {
+            58_000
+        };
+        assert_eq!(rows[2].origin_um.1 - rows[1].origin_um.1,
+            after_paragraph, "paragraph separator keeps source semantics");
+    }
+}
+
+#[test]
 fn mixed_transport_breaks_cannot_promote_literal_indented_setext() {
     use atrament_handwriting_statistics::{
         Dimension, DimensionStatistics, HandwritingStatisticsProfile,
