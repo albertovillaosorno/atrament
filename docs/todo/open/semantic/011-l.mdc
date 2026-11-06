@@ -1515,3 +1515,17 @@ without replacing the last accepted output for either style and codec.
 
 This extends verified CLI decoration behavior but does not persist heading
 styles or complete the two-page semantic notebook acceptance criterion.
+
+## Compressed heading ornaments across a physical page turn — 2026-11-06
+
+Native subprocess acceptance now covers a compressed, two-word heading that
+moves with its first body row to page two after a preceding text row. ATX and
+Setext headings, underline, double-underline and colored marker strokes must
+match independently placed authored ink in the two-page vector PDF and both
+page-local transparent PNGs. An earlier glyph contour determines the full
+ornament extent on the second sheet; page-one ink is unaffected.
+
+An insufficient PDF page selection, a narrower selected fixed region and an
+absent third PNG page refuse without replacing previously accepted output.
+This remains CLI-only physical layout verification, not persisted semantic
+notebook flow or completion of the P1 acceptance criterion.

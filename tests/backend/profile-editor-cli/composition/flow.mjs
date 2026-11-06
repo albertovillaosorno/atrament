@@ -360,6 +360,102 @@ test('compressed multiword headings keep colored ornaments in PDF/PNG',
         }
     });
 
+test('compressed heading ornaments stay on the page with their body',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-heading-pages-'));
+        try {
+            const profile = join(dir, 'compressed-heading.json');
+            const configured = spawnSync(cargo, [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                '--', 'handwriting',
+                '--set-glyph', 'a', 'width',
+                ...Array(4).fill('12000'), '0',
+                '--set-glyph', 'a', 'letter_spacing',
+                ...Array(4).fill('-10000'), '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(profile, configured.stdout);
+            const color = '#D8E69A';
+            const region = (width) => [
+                '--flow-region', '30000', '40000', String(width), '27000',
+            ];
+            const sources = ['a  \n# aa ó\na', 'a  \naa ó\n===\na'];
+            for (const style of ['underline', 'double-underline',
+                'marker']) {
+                const options = [
+                    '--handwriting-profile', profile,
+                    '--heading-style', style, '--heading-color', color,
+                ];
+                const strokes = (style === 'marker'
+                    ? [900, 1900, 2900, 3900].map((lift) => [
+                        '--ink-line', '2', '32500', String(42500 + lift),
+                        '46500', String(42500 + lift), '1400', color,
+                    ])
+                    : (style === 'underline' ? [49200] : [48300, 49200])
+                        .map((y) => [
+                            '--ink-line', '2', '32500', String(y),
+                            '46500', String(y), '550', color,
+                        ])).flat();
+                for (const format of ['pdf', 'png']) {
+                    for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                        const reference = join(dir,
+                            `manual-${style}-${format}-${page}`);
+                        const manual = spawnSync(cargo, [
+                            'run', '--quiet', '-p',
+                            'atrament_profile_editor_cli', '--',
+                            ...base, '--handwriting-profile', profile,
+                            ...strokes,
+                            '--place-text', '1', '32500', '42500', 'a',
+                            '--place-text', '2', '32500', '42500', 'aa ó',
+                            '--place-text', '2', '32500', '51500', 'a',
+                            ...(format === 'pdf' ? ['--pages', '2']
+                                : ['--png-page', String(page), '--dpi', '72']),
+                            '--export-paper', format, '--output', reference,
+                        ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                        assert.equal(manual.status, 0, manual.stderr);
+                        const expected = readFileSync(reference);
+                        for (const source of sources) {
+                            const output = render(dir, source, format,
+                                [...options, ...region(26000)],
+                                '--flow-markdown', page);
+                            assert.equal(output.result.status, 0,
+                                output.result.stderr);
+                            assert.deepEqual(readFileSync(output.output),
+                                expected, `${style} ${format} page ${page}`);
+                        }
+                        if (format === 'pdf') {
+                            assert.match(expected.toString('latin1'),
+                                /\/Count 2/, 'heading moves to page two');
+                            for (const invalid of [
+                                [...region(26000), '--pages', '1'],
+                                region(18000),
+                            ]) {
+                                const refused = render(dir, sources[0],
+                                    format, [...options, ...invalid]);
+                                assert.notEqual(refused.result.status, 0);
+                                assert.deepEqual(readFileSync(refused.output),
+                                    expected, 'refused PDF keeps both pages');
+                            }
+                        } else if (page === 2) {
+                            for (const [width, selectedPage] of [
+                                [18000, 2], [26000, 3],
+                            ]) {
+                                const refused = render(dir, sources[0],
+                                    format, [...options, ...region(width)],
+                                    '--flow-markdown', selectedPage);
+                                assert.notEqual(refused.result.status, 0);
+                                assert.deepEqual(readFileSync(refused.output),
+                                    expected, 'refused PNG retains page two');
+                            }
+                        }
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('tabbed ordered marker keeps its measured hang on physical pages',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-ordered-tabs-'));
