@@ -1866,3 +1866,71 @@ fn signed_baseline_pitch_tracks_only_exact_rendered_unicode_ink()
         "exercise both real Unicode ink and syntax-only markers");
     Ok(())
 }
+
+#[test]
+fn markdown_pitch_agrees_with_actual_ink_for_escaped_and_nested_edges()
+    -> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let parts = [
+        "a", "a  ", "a\\", "a\\\\", "# a", "## a #", "### a ###",
+        "\\# a", "\\- a", "\\===", "\\---", "\\~~~", "\\`a",
+        "a\n===", "a\n---", "=", "===", "---", "* * *", "_ _ _",
+        "~~~", "~~~rs", "~~~~", "```", "```rs", "````", "``",
+        "a  b", "- a", "+ a", "* a", "- [x] a", "- [ ] a",
+        "1. a", "12) a", "1\\. a", "> a", ">a", "> a  ",
+        "  a", "   a", "    a", "   ===", "a\u{2028}a",
+        "a\u{2029}a", "ó", "o\u{301}", "👩\u{200d}🏫", "",
+    ];
+    let paper = NotebookProfile::default();
+    let mut checked = 0;
+    for glyph in ["#", "=", "-", "*", "~", "`", ">", "\\", "a",
+        "ó", "o\u{301}", "👩\u{200d}🏫"] {
+        let height = ScalarStatistics {
+            minimum: 25_000, maximum: 25_000, mean: 25_000,
+            median: 25_000, standard_deviation: 0,
+        };
+        let stats = HandwritingStatisticsProfile::baseline(0)
+            .with_glyph(glyph, DimensionStatistics {
+                dimension: Dimension::Height, statistics: height,
+            }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+        let mut seed = 0x7292_313du32;
+        for sample in 0..480 {
+            let mut text = String::new();
+            for i in 0..7 {
+                seed = seed.wrapping_mul(1_664_525)
+                    .wrapping_add(1_013_904_223);
+                if i != 0 { text.push('\n'); }
+                text.push_str(parts[(seed as usize >> 7) % parts.len()]);
+            }
+            let Ok(source) = FlowSource::new(FlowFormat::Markdown, &text)
+                else { continue };
+            let Ok((rows, _, _)) = super::layout_flow(
+                &source, &paper, Some(&stats),
+                super::HeadingDecoration::default(),
+            ) else { continue };
+            let mut visible = false;
+            for row in &rows {
+                let mut remaining = row.text.as_str();
+                while !remaining.is_empty() {
+                    let (exact, next) = super::first_grapheme(remaining)?;
+                    visible |= exact == glyph;
+                    remaining = next;
+                }
+            }
+            let expected = if visible { 29_000 } else { 9_000 };
+            assert_eq!(super::measured_pitch(&source, Some(&stats))?,
+                expected, "sample {sample}, glyph {glyph:?}, \
+                 source {text:?}, rows {rows:?}");
+            checked += 1;
+        }
+    }
+    assert!(checked > 2_000, "admit enough mixed Markdown sources");
+    Ok(())
+}

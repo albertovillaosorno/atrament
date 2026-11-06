@@ -1337,3 +1337,17 @@ fixed region refuses before replacing the existing PDF; an insufficient page
 selection and absent PNG page also preserve accepted output. These are
 CLI-only statistical flow and geometry guarantees, not persistent notebook
 semantics or completion of ATR-P2-011.
+
+## Escaped Markdown and Unicode row-pitch stress replay — 2026-11-06
+
+A native deterministic regression now compares global statistical row pitch
+against **actually rendered grapheme runs** for more than 2,000 admitted
+seven-part Markdown sources. It exercises escaped block markers, heading and
+Setext edges, fenced literal text, checked tasks, numbered and unordered
+lists, paragraph hard breaks, quotes, NFC/NFD Spanish glyphs and joined
+Unicode emoji. Twelve independent 25-mm height overrides must affect the
+physical pitch only when their exact grapheme survives as authored ink.
+
+This is a bounded CLI-only measurement check, not a persisted semantic block
+model or complete saved-notebook flow. The P1 acceptance criterion remains
+open.
