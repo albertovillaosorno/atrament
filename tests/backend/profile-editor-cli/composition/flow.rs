@@ -1602,3 +1602,126 @@ fn markdown_blocks_preserve_exact_unicode_graphemes_across_pages()
     }
     Ok(())
 }
+
+#[test]
+fn mixed_handwriting_metrics_keep_unicode_inside_paged_markdown()
+    -> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(33);
+    for (glyph, dimension, mean) in [
+        ("a", Dimension::Width, 5_200),
+        ("a", Dimension::LetterSpacing, -1_200),
+        ("ó", Dimension::Width, 6_400),
+        ("ó", Dimension::LetterSpacing, -1_000),
+        ("o\u{301}", Dimension::Width, 3_300),
+        ("o\u{301}", Dimension::LetterSpacing, 1_700),
+        ("👩\u{200d}🏫", Dimension::Width, 8_500),
+        ("👩\u{200d}🏫", Dimension::LetterSpacing, -2_000),
+        ("∞", Dimension::Height, 6_000),
+        ("∞", Dimension::BaselineOffset, 2_000),
+    ] {
+        let value = ScalarStatistics { minimum: mean, maximum: mean,
+            mean, median: mean, standard_deviation: 0 };
+        stats = stats.with_glyph(glyph, DimensionStatistics {
+            dimension, statistics: value,
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let glyphs = ["a", "ó", "o\u{301}", "👩\u{200d}🏫", "∞", "ñ", "¿"];
+    let paper = NotebookProfile::default();
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 37_000, height: 31_000,
+    };
+    let mut seed = 0x475a_39cdu32;
+    let mut checked = 0usize;
+    let mut changed_wrap = 0usize;
+    for sample in 0..256usize {
+        let mut words = Vec::new();
+        for _ in 0..12 {
+            let mut word = String::new();
+            for _ in 0..7 {
+                seed = seed.wrapping_mul(1_664_525)
+                    .wrapping_add(1_013_904_223);
+                word.push_str(glyphs[(seed as usize) % glyphs.len()]);
+            }
+            words.push(word);
+        }
+        let text = format!(
+            "# a\n- {} {}\n  {} {}\n> {} {}\n> {} {}\n{} {}\n{} {}",
+            words[0], words[1], words[2], words[3],
+            words[4], words[5], words[6], words[7],
+            words[8], words[9], words[10], words[11],
+        );
+        let source = FlowSource::new(FlowFormat::Markdown, &text)?;
+        let (rows, marks, pages) = super::layout_flow_with_region(
+            &source, &paper, Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        )?;
+        let (nominal_rows, _, _) = super::layout_flow_with_region(
+            &source, &paper, None,
+            super::HeadingDecoration::default(), Some(region),
+        )?;
+        changed_wrap += usize::from(rows.len() != nominal_rows.len());
+        if pages < 3 || marks.len() < 3 {
+            return Err(format!("sample {sample} missed page ornaments"));
+        }
+        let mut expected = Vec::new();
+        for word in std::iter::once(&"a".to_owned()).chain(words.iter()) {
+            let mut remaining = word.as_str();
+            while !remaining.is_empty() {
+                let (glyph, rest) = super::first_grapheme(remaining)?;
+                expected.push(glyph.to_owned());
+                remaining = rest;
+            }
+        }
+        let mut actual = Vec::new();
+        for row in &rows {
+            if row.page > pages || row.page == 0
+                || row.origin_um.1 < region.top + 2_500
+                || row.origin_um.1 + 12_000 >
+                    region.top + region.height - 2_500 {
+                return Err(format!("sample {sample} bad page row {row:?}"));
+            }
+            let right = region.left + region.width - 1_500;
+            let mut x = row.origin_um.0;
+            let mut remaining = row.text.as_str();
+            while !remaining.is_empty() {
+                let (glyph, rest) = super::first_grapheme(remaining)?;
+                let (advance, contour) = super::GlyphOverlay::flow_advance_um(
+                    glyph, Some(&stats),
+                )?;
+                let endpoint = x.checked_add(advance.max(contour + 800))
+                    .ok_or("row glyph extent overflow")?;
+                if endpoint > right {
+                    return Err(format!(
+                        "sample {sample} exceeded horizontal text region: \
+                         {row:?}; glyph {glyph:?}, endpoint {endpoint}"
+                    ));
+                }
+                if glyph != " " { actual.push(glyph.to_owned()); }
+                x = x.checked_add(advance)
+                    .ok_or("row advance overflow")?;
+                remaining = rest;
+            }
+            checked += 1;
+        }
+        if actual != expected {
+            return Err(format!(
+                "sample {sample} lost mixed-width Unicode: {rows:?}"
+            ));
+        }
+    }
+    if checked < 2_000 || changed_wrap < 100 {
+        return Err(format!(
+            "insufficient mixed-metric coverage: {checked} rows, \
+             {changed_wrap} changed wraps"
+        ));
+    }
+    Ok(())
+}

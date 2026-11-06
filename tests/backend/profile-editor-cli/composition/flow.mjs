@@ -2930,3 +2930,83 @@ test('joined Unicode fallback keeps Markdown glyph ink on exact pages',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('statistical advances wrap native Unicode ink on measured pages', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-mixed-advances-'));
+    try {
+        const statistics = join(dir, 'mixed-width.json');
+        const edits = [
+            ['a', 'width', '6400'],
+            ['a', 'letter_spacing', '-600'],
+            ['ó', 'width', '3300'],
+            ['ó', 'letter_spacing', '700'],
+        ].flatMap(([glyph, dimension, value]) => [
+            '--set-glyph', glyph, dimension,
+            value, value, value, value, '0',
+        ]);
+        const configured = spawnSync('cargo', [
+            'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+            'handwriting', ...edits,
+        ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+        assert.equal(configured.status, 0, configured.stderr);
+        writeFileSync(statistics, configured.stdout);
+        const region = [
+            '--flow-region', '30000', '40000', '34000', '25000',
+        ];
+        const profile = ['--handwriting-profile', statistics];
+        const source = 'aó'.repeat(6) + 'a';
+        const expectedRows = ['aó'.repeat(3), 'aó'.repeat(3), 'a'];
+        const manualRuns = [
+            ['1', '32500', '42500', expectedRows[0]],
+            ['1', '32500', '51500', expectedRows[1]],
+            ['2', '32500', '42500', expectedRows[2]],
+        ].flatMap((values) => ['--place-text', ...values]);
+        const manual = (format, page) => {
+            const output = join(dir, `manual-${format}-${page}.output`);
+            const args = [...base, ...profile, ...manualRuns,
+                ...(format === 'pdf' ? ['--pages', '2'] : []),
+                '--export-paper', format, '--output', output];
+            if (format === 'png') {
+                args.push('--png-page', String(page), '--dpi', '72');
+            }
+            const result = spawnSync('cargo', [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                '--', ...args,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(result.error, undefined, result.error?.message);
+            assert.equal(result.status, 0, result.stderr);
+            return readFileSync(output);
+        };
+        for (const format of ['pdf', 'png']) {
+            for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                const laidOut = render(dir, source, format,
+                    [...region, ...profile], '--flow-text', page);
+                assert.equal(laidOut.result.status, 0,
+                    laidOut.result.stderr);
+                const ink = readFileSync(laidOut.output);
+                assert.deepEqual(ink, manual(format, page),
+                    'statistical glyph advances must match individually '
+                    + `placed ink on physical ${format} page ${page}`);
+                if (format === 'pdf') {
+                    assert.match(ink.toString('latin1'), /\/Count 2/);
+                }
+            }
+        }
+        const acceptedPdf = readFileSync(join(dir, 'flow-pdf.output'));
+        const narrow = render(dir, source, 'pdf',
+            [...region, ...profile, '--pages', '1'], '--flow-text');
+        assert.notEqual(narrow.result.status, 0);
+        assert.match(narrow.result.stderr, /requires 2 physical pages/);
+        assert.deepEqual(readFileSync(narrow.output), acceptedPdf,
+            'an insufficient page request cannot replace accepted ink');
+        const baseline = render(dir, source, 'pdf', region,
+            '--flow-text');
+        assert.equal(baseline.result.status, 0, baseline.result.stderr);
+        const pageCount = readFileSync(baseline.output)
+            .toString('latin1').match(/\/Count (\d+)/)?.[1];
+        assert.equal(pageCount, '1',
+            'nominal advances should use only one page');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

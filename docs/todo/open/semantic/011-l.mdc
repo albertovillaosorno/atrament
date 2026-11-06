@@ -1287,3 +1287,20 @@ and per-row quote ornaments across more than 3,000 physical text rows.
 This is additional coverage of the existing restricted CLI compiler, not
 full Markdown admission, automatic glyph generation, or persisted notebook
 blocks; the saved-notebook acceptance criterion remains open.
+
+## Statistical glyph advances across page boundaries (partial) — 2026-11-06
+
+A deterministic native Markdown regression now varies exact glyph width,
+positive and negative letter spacing, height and baseline offset across
+NFC/NFD Spanish characters, a joined emoji grapheme and mathematical ink.
+It checks 256 mixed heading/list/quote/paragraph sources against the precise
+rendered grapheme sequence, physical text extents and repeated fixed-region
+page bounds. The selected metrics change wrapping relative to nominal advances.
+
+An independent native CLI integration verifies that a 13-grapheme handwritten
+source with mixed per-glyph widths occupies two PDF pages, while default
+4-mm advances occupy one. Both transparent PNG pages are byte-identical to
+explicitly placed author-supplied pen strokes at measured page coordinates;
+requesting only one page refuses without replacing a valid PDF. This is
+regression evidence for the existing Rust export-only path, not a persisted
+semantic notebook or a full statistical handwriting model.
