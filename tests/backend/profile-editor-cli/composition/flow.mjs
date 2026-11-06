@@ -4146,3 +4146,90 @@ test('tall compressed heading page turns preserve exact ATX/Setext PDF and PNG',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('compressed compound graphemes survive three native physical pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-compound-pages-'));
+        try {
+            const profile = join(dir, 'compressed.json');
+            const glyph = '👩‍🔬';
+            const nfd = 'o\u0301';
+            const makeProfile = spawnSync(cargo, [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                '--', 'handwriting',
+                ...[glyph, nfd].flatMap((exact) => [
+                    '--set-glyph', exact, 'width',
+                    ...Array(4).fill('12000'), '0',
+                    '--set-glyph', exact, 'letter_spacing',
+                    ...Array(4).fill('-10000'), '0',
+                ]),
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(makeProfile.status, 0, makeProfile.stderr);
+            writeFileSync(profile, makeProfile.stdout);
+            const emojiStroke = [
+                '--glyph-stroke', glyph, '700', '700', '1600', '2800',
+                '250', '#123456',
+            ];
+            const extra = [
+                ...emojiStroke, '--handwriting-profile', profile,
+                '--flow-region', '30000', '40000', '22000', '14000',
+            ];
+            const expected = [
+                ['1', '32500', '42500', 'a'],
+                ['2', '32500', '42500', glyph],
+                ['3', '32500', '42500', nfd],
+            ];
+            const manual = expected.flatMap(([page, x, y, value]) => [
+                '--place-text', page, x, y, value,
+            ]);
+            const input = `a ${glyph}\n${nfd}`;
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2, 3]) {
+                    const output = render(dir, input, format, [
+                        ...extra, ...(format === 'pdf'
+                            ? ['--pages', '3'] : []),
+                    ], '--flow-text', page);
+                    assert.equal(output.result.status, 0,
+                        output.result.stderr);
+                    const reference = join(dir,
+                        `compound-manual-${format}-${page}`);
+                    const referenceArgs = [
+                        ...base, ...emojiStroke,
+                        '--handwriting-profile', profile, ...manual,
+                        ...(format === 'pdf' ? ['--pages', '3'] : []),
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', reference,
+                    ];
+                    const handwritten = spawnSync(cargo, [
+                        'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                        '--', ...referenceArgs,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(handwritten.status, 0, handwritten.stderr);
+                    assert.deepEqual(readFileSync(output.output),
+                        readFileSync(reference),
+                        `page ${page} ${format} preserves exact pen ink`);
+                }
+            }
+            for (const [format, page] of [['pdf', 1], ['png', 3]]) {
+                const accepted = render(dir, input, format, [
+                    ...extra, ...(format === 'pdf'
+                        ? ['--pages', '3'] : []),
+                ], '--flow-text', page);
+                assert.equal(accepted.result.status, 0,
+                    accepted.result.stderr);
+                const previous = readFileSync(accepted.output);
+                const refused = render(dir, input, format, [
+                    ...extra, ...(format === 'pdf'
+                        ? ['--pages', '2'] : []),
+                ], '--flow-text', format === 'pdf' ? 1 : 4);
+                assert.notEqual(refused.result.status, 0,
+                    'missing page must refuse the output replacement');
+                assert.deepEqual(readFileSync(refused.output), previous);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

@@ -2783,3 +2783,99 @@ fn compressed_mixed_flow_keeps_every_nominal_contour_inside_its_region()
     }
     Ok(())
 }
+
+// A successful plain-text layout may skip whitespace at physical word-wrap
+// boundaries, but must neither lose nor duplicate any authored visible
+// grapheme. Check the admitted, tab-expanded input independently of the
+// page-run writer, including multi-codepoint Unicode and compressed advances.
+#[test]
+fn paged_plain_flow_preserves_every_visible_grapheme_in_source_order()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(117);
+    for glyph in ["a", "ó", "o\u{301}", "👩‍🔬"] {
+        for (dimension, value) in [
+            (Dimension::Width, 12_000),
+            (Dimension::LetterSpacing, -10_000),
+        ] {
+            stats = stats.with_glyph(glyph, DimensionStatistics {
+                dimension,
+                statistics: ScalarStatistics {
+                    minimum: value, maximum: value, mean: value,
+                    median: value, standard_deviation: 0,
+                },
+            }, &UnicodeGraphemeSegmentation)
+                .map_err(|error| format!("{error:?}"))?;
+        }
+    }
+    let snippets = [
+        "a ó", "o\u{301}a", "👩‍🔬 a", "a  a", " ó ", "\tó",
+        "o\u{301}👩‍🔬", "   a", "    a", "# a", "> ó", "a\u{2028}ó",
+        "ó\u{2029}a", "a\t👩‍🔬", "", "   ", "óóóó", "á", "ñ",
+    ];
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 28_000, height: 32_000,
+    };
+    let mut seed = 0x83ac_67e2_dafe_9017_u64;
+    let snippet_count = u64::try_from(snippets.len())
+        .map_err(|_| "source snippet count overflow")?;
+    let mut admitted = 0usize;
+    let mut paged = 0usize;
+    let mut compound = 0usize;
+    for case in 0..6_000usize {
+        let mut selected = Vec::new();
+        for _ in 0..(2 + case % 7) {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let index = usize::try_from(seed % snippet_count)
+                .map_err(|_| "source snippet index overflow")?;
+            selected.push(snippets[index]);
+        }
+        let raw = selected.join("\n");
+        let Ok(source) = FlowSource::new(FlowFormat::Plain, &raw) else {
+            continue;
+        };
+        let Ok((runs, ornaments, pages)) = super::layout_flow_with_region(
+            &source, &NotebookProfile::default(), Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        ) else {
+            continue;
+        };
+        assert!(ornaments.is_empty(), "plain text cannot add ornaments");
+        let authored = visible_graphemes(&source.text)?;
+        let emitted = runs.iter().map(|run| run.text.as_str())
+            .collect::<Vec<_>>().join("\n");
+        assert_eq!(visible_graphemes(&emitted)?, authored,
+            "case {case}, source {raw:?}, pages {pages}, runs {runs:?}");
+        if pages > 1 {
+            paged += 1;
+        }
+        if authored.iter().any(|g| *g == "o\u{301}" || *g == "👩‍🔬") {
+            compound += 1;
+        }
+        admitted += 1;
+    }
+    assert!(admitted > 1_000 && paged > 500 && compound > 500,
+        "coverage: {admitted} admitted, {paged} paged, {compound} compound");
+    Ok(())
+}
+
+fn visible_graphemes(text: &str) -> Result<Vec<&str>, String> {
+    let mut result = Vec::new();
+    let mut remaining = text;
+    while !remaining.is_empty() {
+        let (grapheme, next) = super::first_grapheme(remaining)?;
+        if grapheme != " " && grapheme != "\n" {
+            result.push(grapheme);
+        }
+        remaining = next;
+    }
+    Ok(result)
+}

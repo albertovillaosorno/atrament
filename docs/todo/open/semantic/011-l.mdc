@@ -1593,3 +1593,22 @@ counting admitted source strings. The underlying word preflight is unchanged;
 this adds complementary horizontal coverage to the existing row-pitch audit.
 Real PDF/PNG regression coverage remains separate, and saved semantic
 notebook identities and the finite P1 acceptance are still unfinished.
+
+## Compressed Unicode content conservation across physical pages — 2026-11-06
+
+A deterministic Rust source-flow regression now tries 6,000 bounded plain
+text combinations with tabs, explicit Unicode source breaks, NFC and NFD
+Spanish vowels, and a joined emoji grapheme. Under 12-mm physical glyph
+contours and 2-mm compressed advances, every admitted layout must preserve
+each visible extended grapheme exactly once and in source order across its
+physical page runs. At least 1,000 successful layouts, 500 multipage cases
+and 500 compound-grapheme cases must be observed. Only physical wrap
+whitespace may be elided; authored visible ink is never silently dropped.
+
+An independent native subprocess acceptance renders three sheets of a
+compressed mixed ASCII/emoji/NFD source. Its vector PDF and all three
+selected transparent PNG pages match explicit, page-local caller-authored
+strokes byte-for-byte. A request for too few PDF pages or a nonexistent PNG
+page refuses without replacing the last accepted output. These are
+CLI-only layout and native-export tests; persisted semantic text blocks and
+the finite two-page saved-notebook criterion remain open.
