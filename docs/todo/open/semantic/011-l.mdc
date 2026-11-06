@@ -1317,3 +1317,23 @@ structural punctuation without a second Markdown parser.
 
 This guards the existing CLI-only renderer; it does not persist semantic
 blocks or satisfy the finite saved-notebook acceptance criterion.
+
+## Signed baseline and Markdown syntax row clearance — 2026-11-06
+
+A native Rust regression now checks both maximum positive and negative
+baseline-offset means across 128 source/glyph combinations. Exact authored
+Unicode graphemes, including decomposed accents, a joined emoji and NBSP,
+reserve a 27-mm row when the 20-mm baseline offset reaches a rendered text
+run. Unrendered Markdown heading, list, quote and fence punctuation cannot
+silently inflate the row pitch. Each independently configured glyph is
+checked both as actual ink and as absent or syntactic input.
+
+A separate native subprocess acceptance writes real three-page PDF and
+transparent page-local PNG using a positive baseline offset. Each PNG page
+replays byte-identically from independently placed glyph and ornament ink; a
+negative offset on a syntactic heading marker leaves nominal pagination
+unchanged. An authored negative offset that extends ink outside a selected
+fixed region refuses before replacing the existing PDF; an insufficient page
+selection and absent PNG page also preserve accepted output. These are
+CLI-only statistical flow and geometry guarantees, not persistent notebook
+semantics or completion of ATR-P2-011.

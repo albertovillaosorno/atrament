@@ -3010,3 +3010,117 @@ test('statistical advances wrap native Unicode ink on measured pages', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('signed baseline statistics change native Markdown physical page count',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-signed-baseline-'));
+        try {
+            const profile = (glyph, baseline) => {
+                const saved = join(dir, `baseline-${glyph === 'a'
+                    ? 'ink' : 'syntax'}-${baseline}.json`);
+                const configured = spawnSync('cargo', [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', 'handwriting', '--set-glyph', glyph,
+                    'baseline_offset', String(baseline), String(baseline),
+                    String(baseline), String(baseline), '0',
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(configured.status, 0, configured.stderr);
+                writeFileSync(saved, configured.stdout);
+                return saved;
+            };
+            const ink = profile('a', 20000);
+            const negativeInk = profile('a', -20000);
+            const syntax = profile('#', -20000);
+            const region = ['--flow-region', '30000', '40000',
+                '100000', '34000'];
+            const source = '# a\n- a\n> a';
+            const options = [
+                ...region, '--heading-style', 'none',
+                '--handwriting-profile', ink,
+            ];
+            const pdf = render(dir, source, 'pdf',
+                [...options, '--pages', '3']);
+            assert.equal(pdf.result.status, 0, pdf.result.stderr);
+            const acceptedPdf = readFileSync(pdf.output);
+            assert.match(acceptedPdf.toString('latin1'), /\/Count 3/);
+
+            const pages = [];
+            for (const page of [1, 2, 3]) {
+                const result = render(dir, source, 'png', options,
+                    '--flow-markdown', page);
+                assert.equal(result.result.status, 0, result.result.stderr);
+                pages.push(readFileSync(result.output));
+            }
+            const expectedInk = [
+                ['1', '32500', []],
+                ['2', '38500', [
+                    '--ink-line', '2', '34100', '44700',
+                    '35800', '44700', '450', '#1E304A',
+                ]],
+                ['3', '38500', [
+                    '--ink-line', '3', '35500', '43000',
+                    '35500', '68900', '400', '#1E304A',
+                ]],
+            ];
+            for (const [index, [page, x, ornament]]
+                of expectedInk.entries()) {
+                const output = join(dir, `manual-page-${page}.png`);
+                const manual = spawnSync('cargo', [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...base, '--handwriting-profile', ink,
+                    '--place-text', page, x, '42500', 'a', ...ornament,
+                    '--export-paper', 'png', '--png-page', page,
+                    '--dpi', '72', '--output', output,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(manual.status, 0, manual.stderr);
+                assert.deepEqual(pages[index], readFileSync(output),
+                    `flow page ${page} must match independently placed ink`);
+            }
+            assert.notDeepEqual(pages[0], pages[1],
+                'synthetic bullet mark belongs only to page two');
+            assert.notDeepEqual(pages[1], pages[2],
+                'quote rule belongs only to page three');
+            const repeat = render(dir, source, 'pdf',
+                [...options, '--pages', '3']);
+            assert.equal(repeat.result.status, 0, repeat.result.stderr);
+            assert.deepEqual(readFileSync(repeat.output), acceptedPdf,
+                'signed baseline pagination is deterministic');
+
+            const syntaxOnly = render(dir, source, 'pdf', [
+                ...region, '--heading-style', 'none',
+                '--handwriting-profile', syntax, '--pages', '1',
+            ]);
+            assert.equal(syntaxOnly.result.status, 0,
+                syntaxOnly.result.stderr);
+            assert.match(readFileSync(syntaxOnly.output)
+                .toString('latin1'), /\/Count 1/,
+            'the syntactic # cannot affect native row height');
+
+            const refused = render(dir, source, 'pdf', [
+                ...options, '--pages', '1',
+            ]);
+            assert.notEqual(refused.result.status, 0);
+            assert.match(refused.result.stderr, /requires 3 physical pages/);
+            assert.deepEqual(readFileSync(refused.output),
+                readFileSync(syntaxOnly.output),
+                'page-budget refusal cannot overwrite accepted one-page PDF');
+            const clipped = render(dir, source, 'pdf', [
+                ...region, '--heading-style', 'none',
+                '--handwriting-profile', negativeInk, '--pages', '3',
+            ]);
+            assert.notEqual(clipped.result.status, 0);
+            assert.match(clipped.result.stderr, /flow region ink exceeds/);
+            assert.deepEqual(readFileSync(clipped.output),
+                readFileSync(syntaxOnly.output),
+                'negative-offset ink beyond the region must refuse atomically');
+            const missingPage = render(dir, source, 'png', options,
+                '--flow-markdown', 4);
+            assert.notEqual(missingPage.result.status, 0);
+            assert.match(missingPage.result.stderr,
+                /selected PNG page is empty/);
+            assert.deepEqual(readFileSync(missingPage.output), pages[2],
+                'invalid PNG page cannot replace accepted page three');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

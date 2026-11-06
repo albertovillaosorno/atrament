@@ -1792,3 +1792,77 @@ fn mixed_markdown_pitch_matches_rendered_ink_at_fence_and_list_edges()
     assert!(tested > 900, "insufficient admitted Markdown cases");
     Ok(())
 }
+
+#[test]
+fn signed_baseline_pitch_tracks_only_exact_rendered_unicode_ink()
+    -> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let paper = NotebookProfile::default();
+    let cases = [
+        ("=", -20_000), ("#", 20_000), ("-", -20_000),
+        (">", 20_000), ("`", -20_000), ("o\u{301}", 20_000),
+        ("👩\u{200d}🏫", -20_000), ("\u{00a0}", 20_000),
+    ];
+    let sources = [
+        "a\n===\na", "a  \n===\na", "a\n\\===\na",
+        "# a\n## a\n### a", "\\# a\na", "- a\n  a",
+        "\\- a\na", "> a\n  a", "\\> a\na",
+        "a\n```txt\n===\n```\na", "a\n````\n`\n````\na",
+        "a\n---\na", "a\n\\---\na", "a\no\u{301} 👩\u{200d}🏫",
+        "a\n\u{00a0}\na", "a\n# a\no\u{301} 👩\u{200d}🏫",
+    ];
+    let mut checked = 0usize;
+    let mut tall = 0usize;
+    let mut nominal = 0usize;
+    for (glyph, baseline) in cases {
+        let statistics = ScalarStatistics {
+            minimum: baseline, maximum: baseline, mean: baseline,
+            median: baseline, standard_deviation: 0,
+        };
+        let profile = HandwritingStatisticsProfile::baseline(0)
+            .with_glyph(glyph, DimensionStatistics {
+                dimension: Dimension::BaselineOffset, statistics,
+            }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+        let mut glyph_tall = 0usize;
+        let mut glyph_nominal = 0usize;
+        for text in sources {
+            let source = FlowSource::new(FlowFormat::Markdown, text)?;
+            let (rows, _, _) = super::layout_flow(
+                &source, &paper, Some(&profile),
+                super::HeadingDecoration::default(),
+            )?;
+            let mut rendered = false;
+            for row in &rows {
+                let mut remaining = row.text.as_str();
+                while !remaining.is_empty() {
+                    let (exact, rest) = super::first_grapheme(remaining)?;
+                    rendered |= exact == glyph;
+                    remaining = rest;
+                }
+            }
+            let expected = if rendered { 27_000 } else { 9_000 };
+            let actual = super::measured_pitch(&source, Some(&profile))?;
+            assert_eq!(actual, expected,
+                "signed baseline {baseline} for {glyph:?} in {text:?}, \
+                 rendered rows: {rows:?}");
+            tall += usize::from(rendered);
+            nominal += usize::from(!rendered);
+            glyph_tall += usize::from(rendered);
+            glyph_nominal += usize::from(!rendered);
+            checked += 1;
+        }
+        assert!(glyph_tall > 0 && glyph_nominal > 0,
+            "{glyph:?} must appear as ink and as absent/syntax");
+    }
+    assert_eq!(checked, 128);
+    assert!(tall > 10 && nominal > 25,
+        "exercise both real Unicode ink and syntax-only markers");
+    Ok(())
+}
