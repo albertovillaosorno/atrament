@@ -288,6 +288,78 @@ test('compressed heading ink keeps underline aligned in native PDF/PNG',
         }
     });
 
+test('compressed multiword headings keep colored ornaments in PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-heading-styles-'));
+        try {
+            const profile = join(dir, 'compressed-heading.json');
+            const configured = spawnSync(cargo, [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                '--', 'handwriting',
+                '--set-glyph', 'a', 'width',
+                ...Array(4).fill('12000'), '0',
+                '--set-glyph', 'a', 'letter_spacing',
+                ...Array(4).fill('-10000'), '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(profile, configured.stdout);
+            const color = '#D8E69A';
+            const region = (width) => [
+                '--flow-region', '30000', '40000', String(width), '30000',
+            ];
+            for (const style of ['marker', 'double-underline']) {
+                const options = [
+                    '--handwriting-profile', profile,
+                    '--heading-style', style, '--heading-color', color,
+                ];
+                const ornaments = (style === 'marker'
+                    ? [900, 1900, 2900, 3900].map((lift) => [
+                        '--ink-line', '1', '32500', String(42500 + lift),
+                        '46500', String(42500 + lift), '1400', color,
+                    ])
+                    : [48300, 49200].map((y) => [
+                        '--ink-line', '1', '32500', String(y),
+                        '46500', String(y), '550', color,
+                    ])).flat();
+                for (const format of ['pdf', 'png']) {
+                    const manualOutput = join(dir,
+                        `manual-${style}.${format}`);
+                    const manual = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--',
+                        ...base, '--handwriting-profile', profile,
+                        ...ornaments,
+                        '--place-text', '1', '32500', '42500', 'aa ó',
+                        '--place-text', '1', '32500', '51500', 'a',
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', '1', '--dpi', '72'] : []),
+                        '--output', manualOutput,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    const expected = readFileSync(manualOutput);
+                    for (const source of ['# aa ó\na', 'aa ó\n===\na']) {
+                        const rendered = render(dir, source, format,
+                            [...options, ...region(26000)]);
+                        assert.equal(rendered.result.status, 0,
+                            rendered.result.stderr);
+                        assert.deepEqual(readFileSync(rendered.output),
+                            expected, `${style} ${format}: ${source}`);
+                    }
+                    const refused = render(dir, '# aa ó\na', format,
+                        [...options, ...region(18000)]);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.match(refused.result.stderr,
+                        /heading exceeds one-line fixed region/);
+                    assert.deepEqual(readFileSync(refused.output), expected,
+                        `${style} ${format} refusal preserves accepted ink`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('tabbed ordered marker keeps its measured hang on physical pages',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-ordered-tabs-'));
