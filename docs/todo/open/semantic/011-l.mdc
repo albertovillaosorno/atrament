@@ -1225,3 +1225,18 @@ breaks. Over 3,000 admitted cases check that an unusually tall exact `=`
 glyph determines the native physical pitch if and only if it reaches real
 handwriting text. This is regression coverage for the existing CLI subset,
 not a persisted Markdown document or new grammar feature.
+
+## Mixed Unicode transport and syntax-height replay (partial) — 2026-11-06
+
+A bounded native regression now compares physical Markdown row pitch against
+exact authored graphemes in the **rendered text runs**, not a duplicated
+interpretation of Markdown grammar. Seeded seven-fragment combinations
+exercise LF, CRLF, tabs, Unicode line/paragraph separators and decomposed
+accents across headings, quotes, tasks, fences, thematic rules and escapes.
+Six separately tall, exact punctuation glyphs distinguish syntax from real
+pen ink.
+
+Each admitted case must reserve 29 mm when the authored glyph is
+visible and the 9-mm nominal pitch otherwise. The test guards source
+transport equivalence without adding a second parser or persisting a
+semantic notebook; the full acceptance criterion remains open.

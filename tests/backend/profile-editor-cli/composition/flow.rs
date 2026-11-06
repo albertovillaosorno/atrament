@@ -1343,3 +1343,72 @@ fn markdown_boundary_combinations_measure_only_rendered_equals() {
     }
     assert!(accepted > 3_000, "insufficient valid boundary combinations");
 }
+
+#[test]
+fn markdown_mixed_transport_pitch_matches_exact_rendered_ink()
+    -> Result<(), String> {
+    // Independent rendered runs, not the syntax parser, determine whether
+    // a structural marker contributes physical pen height.
+    use atrament_handwriting_statistics::{Dimension, DimensionStatistics,
+        HandwritingStatisticsProfile, ScalarStatistics};
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+    let tall = ScalarStatistics { maximum: 25_000, mean: 25_000,
+        median: 25_000, minimum: 25_000, standard_deviation: 0 };
+    let fragments = ["a", "===", "--", "---", "~~~", "~~~~", "```", "````",
+        "~~~lang", "  ~~~", "    ~~~", "a  ", "a\\", "a\\\\", "\\===",
+        "  \\===", "  a", "   a", "    a", "> a", "> =", ">", "  > a",
+        "- a", "- [x] a", "  - a", "   - a", "1. a", "  1. a",
+        "# a", "###### a", "#", "# a #", "a\u{2028}=", "a\u{2029}=",
+        "a\t=", "a\r\n=", "a\u{301}=", "", " ", "   ", "=", "~", "`",
+        "\\=", "\\- a", "a\n=", "_ _ _", "> a  ", "  =", "    ="];
+    let paper = NotebookProfile::default();
+    let mut seed = 0x1357_2468u32;
+    for glyph in ["=", "-", "~", "`", ">", "\\"] {
+        let stats = HandwritingStatisticsProfile::baseline(1)
+            .with_glyph(glyph, DimensionStatistics {
+                dimension: Dimension::Height, statistics: tall,
+            }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+        let mut accepted = 0usize;
+        for _ in 0..1_500usize {
+            let mut parts = Vec::new();
+            for _ in 0..7usize {
+                seed = seed.wrapping_mul(1_664_525)
+                    .wrapping_add(1_013_904_223);
+                let index = usize::try_from(seed)
+                    .map_err(|error| error.to_string())?
+                    .rem_euclid(fragments.len());
+                parts.push(*fragments.get(index)
+                    .ok_or("generated fragment outside inventory")?);
+            }
+            let text = parts.join("\n");
+            let source = FlowSource::new(FlowFormat::Markdown, &text)?;
+            let Ok((runs, _, _)) = super::layout_flow(&source, &paper,
+                Some(&stats), super::HeadingDecoration::default())
+                else { continue };
+            let actual = super::measured_pitch(&source, Some(&stats))?;
+            let mut rendered = false;
+            for run in &runs {
+                let mut remaining = run.text.as_str();
+                while !remaining.is_empty() {
+                    let (grapheme, rest) = super::first_grapheme(remaining)?;
+                    rendered |= grapheme == glyph;
+                    remaining = rest;
+                }
+            }
+            let expected = if rendered { 29_000 } else { 9_000 };
+            if actual != expected {
+                return Err(format!(
+                    "glyph={glyph:?} pitch {actual} != {expected}: \
+                     {text:?}; {runs:?}"
+                ));
+            }
+            accepted += 1usize;
+        }
+        if accepted <= 400usize {
+            return Err(format!("insufficient {glyph} source coverage"));
+        }
+    }
+    Ok(())
+}
