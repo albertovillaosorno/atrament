@@ -1249,3 +1249,97 @@ fn unicode_source_breaks_keep_literal_setext_markers_and_exact_pitch() {
     assert_eq!(super::measured_pitch(&heading, Some(&statistics))
         .expect("syntax must not inflate the pitch"), 9_000);
 }
+
+#[test]
+fn markdown_boundary_combinations_measure_only_rendered_equals() {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let tall = ScalarStatistics {
+        maximum: 25_000,
+        mean: 25_000,
+        median: 25_000,
+        minimum: 25_000,
+        standard_deviation: 0,
+    };
+    let statistics = HandwritingStatisticsProfile::baseline(1)
+        .with_glyph(
+            "=",
+            DimensionStatistics {
+                dimension: Dimension::Height,
+                statistics: tall,
+            },
+            &UnicodeGraphemeSegmentation,
+        )
+        .unwrap();
+    let fragments = [
+        "a",
+        "a  ",
+        "## a",
+        "\\===",
+        "===",
+        "---",
+        "> a",
+        "> =",
+        "  =",
+        "    =",
+        "  \\===",
+        "- a",
+        "- [x] a",
+        "1. a",
+        "```",
+        "````",
+        "~~~",
+        "  ~~~",
+        "  > =",
+        "  a",
+        "a\\",
+        "\\#",
+        "\t=",
+        "=",
+        "a\u{2028}",
+        "a\u{2029}",
+        "a\r\n",
+        "  a  ",
+        "  \\---",
+        "a\t=",
+    ];
+    let mut accepted = 0usize;
+    for left in fragments {
+        for right in fragments {
+            for suffix in
+                ["a", "===", "\\===", "> a", "```", "  a", "a  ", "- a"]
+            {
+                let text = format!("{left}\n{right}\n{suffix}\na");
+                let source =
+                    FlowSource::new(FlowFormat::Markdown, &text).unwrap();
+                let Ok((rows, _, _)) = super::layout_flow(
+                    &source,
+                    &NotebookProfile::default(),
+                    Some(&statistics),
+                    super::HeadingDecoration::default(),
+                ) else {
+                    continue;
+                };
+                let rendered = rows.iter().any(|row| row.text.contains('='));
+                let pitch =
+                    super::measured_pitch(&source, Some(&statistics)).unwrap();
+                assert_eq!(
+                    pitch,
+                    if rendered {
+                        29_000
+                    } else {
+                        9_000
+                    },
+                    "source={text:?}, rows={rows:?}"
+                );
+                accepted += 1;
+            }
+        }
+    }
+    assert!(accepted > 3_000, "insufficient valid boundary combinations");
+}

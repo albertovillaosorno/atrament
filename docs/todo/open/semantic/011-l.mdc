@@ -1203,7 +1203,9 @@ semantic notebook persistence remain outside this limited CLI parser.
 A native regression now distinguishes a line/paragraph separator before
 `===` from an ordinary soft Markdown line break. U+2028 forces a hard row,
 while U+2029 ends the paragraph; neither may promote the preceding text to
-a Setext heading. Those literal equals marks still require authored ink,
+a Setext heading.
+
+Those literal equals marks still require authored ink,
 and a 25-mm glyph-height override must reserve 29-mm physical row pitch.
 An ordinary `a\n===` source still uses heading syntax and no equals glyph.
 An unescaped `---` following a structural break becomes a thematic rule,
@@ -1215,3 +1217,11 @@ LF-equivalent source bytes, and unchanged accepted files after missing-glyph
 or insufficient-page refusal. This adds an interoperation regression for
 pasted Unicode source, not a persistent semantic Markdown document; the
 finite saved-notebook acceptance criterion remains open.
+
+A further deterministic boundary regression combines Markdown structural
+markers in two positions with eight possible trailing contexts, including
+Setext candidates, escaped equals, quotes, lists, fences and explicit source
+breaks. Over 3,000 admitted cases check that an unusually tall exact `=`
+glyph determines the native physical pitch if and only if it reaches real
+handwriting text. This is regression coverage for the existing CLI subset,
+not a persisted Markdown document or new grammar feature.
