@@ -35,15 +35,18 @@ implementation was proposed.
 
 ## Acceptance decision
 
-Completed — practical native Rust and localhost UI integration on November 3, 2026.
+Completed — practical native Rust and localhost UI integration on
+November 3, 2026.
 
 Starting the existing Rust runtime with `--profiles-dir EXISTING_DIRECTORY`
 explicitly selects a bounded local profile folder. The authenticated browser
 notebook and handwriting editors expose separate open/save actions for versioned
-native profiles, without persistent browser state or a second application engine.
+native profiles, without persistent browser state or a second application
+engine.
 
 The Rust runtime exposes GET/POST on `/api/notebook/file` and
-`/api/handwriting/file`; POST requires the current bearer, same-origin admission,
+`/api/handwriting/file`; POST requires the current bearer,
+same-origin admission,
 a single simple JSON basename, and either a create-only marker or exact source
 SHA-256 revision. Native adapters reuse bounded reads, canonical validation
 and Linux atomic file commits.
