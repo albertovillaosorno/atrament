@@ -61,15 +61,19 @@
   "graph": {
     "edge_types": {
       "depends-on": "required-by",
+      "member-of-location": "contains-location-member",
+      "contains-location-member": "member-of-location",
       "required-by": "depends-on"
     },
     "edge_lifecycle": [
-      "active"
+      "active",
+      "none"
     ],
     "field_order": [],
     "hub_kinds": [],
     "node_kinds": [
-      "repository-artifact"
+      "repository-artifact",
+      "artifact"
     ],
     "required_groups": [],
     "required_hubs": [],
