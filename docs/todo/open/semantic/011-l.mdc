@@ -1545,3 +1545,20 @@ both transparent PNG page selections across ATX/Setext variants in all four
 styles. A short PDF page count or absent PNG page refuses without replacing
 previously accepted output. This regression confirms the existing CLI-only
 behavior; no saved semantic notebook body or stable block identity is added.
+
+## Contour-aware whole-word wraps (partial) — 2026-11-06
+
+The native CLI now preflights each pending word's farthest visible glyph
+slot, not only the sum of its letter advances, before appending its separating
+space. With strongly compressed statistical letter spacing, a word that fits
+numerically but extends beyond the selected fixed region moves intact to the
+next physical row. This avoids both a phantom trailing space on the preceding
+row and an unnecessary split inside a word that fits on its own fresh row.
+
+A red-before/green-after Rust regression checks plain and Markdown inputs,
+exact contour-clearance thresholds, ordered-list hanging indents, and
+row/page identities. Native PDF and transparent PNG acceptance compares a
+two-page compressed-accent example byte-for-byte with independently placed
+ink, and checks that missing
+Unicode glyphs cannot replace accepted outputs. This remains caller-authored
+CLI flow, not saved semantic notebook pagination or a general Markdown engine.

@@ -52,6 +52,64 @@ function coloredHeadingWidths(bytes) {
     )].map((match) => match[1]);
 }
 
+test('compressed word contours keep whole word on the next PDF/PNG page',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-word-contour-'));
+        try {
+            const profile = join(dir, 'compressed-accent.json');
+            const config = spawnSync(cargo, [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                '--', 'handwriting', '--set-glyph', 'ó', 'width',
+                ...Array(4).fill('12000'), '0',
+                '--set-glyph', 'ó', 'letter_spacing',
+                ...Array(4).fill('-10000'), '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(config.status, 0, config.stderr);
+            writeFileSync(profile, config.stdout);
+            const selected = [
+                '--handwriting-profile', profile,
+                '--flow-region', '30000', '40000', '24800', '14000',
+            ];
+            // Two accents have 4 mm of summed advance but 14.8 mm of
+            // contour clearance. The entire word fits the next sheet,
+            // not after the first word on the current sheet.
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const exportOptions = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const rendered = render(dir, 'a óó', format,
+                        [...selected, ...exportOptions],
+                        '--flow-markdown', page);
+                    assert.equal(rendered.result.status, 0,
+                        rendered.result.stderr);
+                    const accepted = readFileSync(rendered.output);
+                    const reference = join(dir, `word-${page}.${format}`);
+                    const manual = spawnSync(cargo, [
+                        'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                        '--', ...base, '--handwriting-profile', profile,
+                        '--place-text', '1', '32500', '42500', 'a',
+                        '--place-text', '2', '32500', '42500', 'óó',
+                        ...exportOptions, '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72'] : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `page ${page} ${format} uses whole-word wrap`);
+                    const refused = render(dir, 'a óó β', format,
+                        [...selected, ...exportOptions],
+                        '--flow-markdown', page);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.deepEqual(readFileSync(refused.output), accepted,
+                        `missing ink preserves page ${page} ${format}`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('ordered continuation checks post-wrap glyph width in PDF/PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-ordered-width-'));

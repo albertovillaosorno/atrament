@@ -600,7 +600,8 @@ impl Layout<'_> {
             if word.is_empty() {
                 continue;
             }
-            let (glyphs, word_width) = measured_word(word, self.statistics)?;
+            let (glyphs, _advance, word_span) =
+                measured_word(word, self.statistics)?;
             let spaces_um = u32::try_from(pending_spaces)
                 .map_err(|_error| "flow spaces overflow")?
                 .checked_mul(4_000)
@@ -608,7 +609,7 @@ impl Layout<'_> {
             if !row.is_empty()
                 && (width
                     .checked_add(spaces_um)
-                    .and_then(|value| value.checked_add(word_width))
+                    .and_then(|value| value.checked_add(word_span))
                     .is_none_or(|value| value > cap)
                     || count
                         .checked_add(pending_spaces)
@@ -982,7 +983,8 @@ fn measured_ordered_label<'text>(
     let spaces = after.bytes().take_while(|byte| *byte == b' ')
         .count().checked_add(1)
         .ok_or("ordered label spacing overflow")?;
-    let (marker_glyphs, marker_width) = measured_word(marker, statistics)?;
+    let (marker_glyphs, marker_width, _) =
+        measured_word(marker, statistics)?;
     // A compressed advance can be shorter than the actual pen contour.
     // Reserve the whole numeral and delimiter before laying out any row;
     // they must never wrap away from the first item glyph.
@@ -1004,7 +1006,7 @@ fn measured_ordered_label<'text>(
         .ok_or("ordered label advance overflow")?;
     let first_word = after.trim_start_matches(' ')
         .split(' ').next().unwrap_or("");
-    let (glyphs, _) = measured_word(first_word, statistics)?;
+    let (glyphs, _, _) = measured_word(first_word, statistics)?;
     let first_slot = glyphs.first()
         .ok_or("ordered list requires visible item text")?.2;
     if indent.checked_add(first_slot).is_none_or(|end| end > cap) {
@@ -1018,9 +1020,10 @@ fn measured_ordered_label<'text>(
 fn measured_word<'text>(
     word: &'text str,
     statistics: Option<&HandwritingStatisticsProfile>,
-) -> Result<(Vec<MeasuredGrapheme<'text>>, u32), String> {
+) -> Result<(Vec<MeasuredGrapheme<'text>>, u32, u32), String> {
     let mut glyphs = Vec::new();
     let mut width = 0u32;
+    let mut occupied = 0u32;
     let mut remaining = word;
     while !remaining.is_empty() {
         let (grapheme, rest) = first_grapheme(remaining)?;
@@ -1033,12 +1036,17 @@ fn measured_word<'text>(
                 .checked_add(800)
                 .ok_or("glyph contour extent overflow")?,
         );
+        // Word admission must include the farthest physical glyph slot,
+        // including compressed advances. Otherwise a separator is added
+        // before discovering that the next word needs a new row.
+        occupied = occupied.max(width.checked_add(slot)
+            .ok_or("flow word contour overflow")?);
         glyphs.push((grapheme, advance, slot));
         width = width
             .checked_add(advance)
             .ok_or("flow word width overflow")?;
     }
-    Ok((glyphs, width))
+    Ok((glyphs, width, occupied))
 }
 
 // Use the farthest visible glyph edge for heading ornaments. A glyph
