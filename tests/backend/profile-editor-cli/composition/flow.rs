@@ -129,6 +129,66 @@ fn ordered_hanging_indent_refuses_glyph_wider_than_continuation()
 }
 
 #[test]
+fn ordered_soft_continuation_keeps_statistical_hang_across_pages()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(53);
+    for (glyph, width) in [
+        ("1", 5_000), ("2", 5_000), (")", 4_000), ("ó", 9_000),
+    ] {
+        let value = ScalarStatistics {
+            minimum: width, maximum: width, mean: width,
+            median: width, standard_deviation: 0,
+        };
+        stats = stats.with_glyph(glyph, DimensionStatistics {
+            dimension: Dimension::Width, statistics: value,
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 42_000, height: 14_000,
+    };
+    let render = |text: &str, region| -> Result<_, String> {
+        let source = FlowSource::new(FlowFormat::Markdown, text)?;
+        super::layout_flow_with_region(
+            &source, &NotebookProfile::default(), Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        )
+    };
+    let joined = render("12) a\n  ó", region)?;
+    let inline = render("12) a ó", region)?;
+    assert_eq!(joined.2, 2);
+    assert_eq!(joined.0.len(), 2);
+    assert_eq!(joined.0[0].text, "12) a");
+    assert_eq!(joined.0[1].text, "ó");
+    assert_eq!(joined.0[0].origin_um, (38_500, 42_500));
+    assert_eq!(joined.0[1].origin_um, (57_550, 42_500));
+    assert_eq!(joined.0.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2]);
+    assert!(joined.1.is_empty());
+    assert_eq!(joined.0.iter().map(|row| row.text.as_str())
+        .collect::<String>(), "12) aó");
+    assert_eq!(joined.0.iter().map(|row| (&row.text, row.origin_um, row.page))
+        .collect::<Vec<_>>(), inline.0.iter()
+        .map(|row| (&row.text, row.origin_um, row.page))
+        .collect::<Vec<_>>());
+    assert_eq!(joined.1.len(), inline.1.len());
+    assert_eq!(joined.2, inline.2);
+
+    let too_narrow = super::FlowRegion { width: 36_000, ..region };
+    let error = render("12) a\n  ó", too_narrow)
+        .expect_err("the continuation glyph must fit after the hang");
+    assert!(error.contains("horizontal printable region"), "{error}");
+    Ok(())
+}
+
+#[test]
 fn measured_words_keep_nfc_nfd_and_joined_unicode_graphemes() {
     let word = "aóo\u{301}👩\u{200d}🏫";
     let (glyphs, width) = super::measured_word(word, None)

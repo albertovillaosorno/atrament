@@ -616,6 +616,11 @@ An upper-bound regression now compares nine-digit ordered hanging-indents
 against ten-digit literal text on two physical PDF/PNG pages, including exact
 Unicode ink, narrow-region refusal and immutable previously accepted output.
 
+A two-space-indented Markdown source line can soft-continue a numbered item;
+its inline equivalent yields identical native page-local ink. A separate
+real PDF/PNG regression checks a mixed-width `12)` label, accented `ó` on
+page two, measured hanging indent and refusal without replacing prior ink.
+
 Quote text is inset 6 mm and gets a 0.4-mm vertical ink rule on each
 physical row, including wrapped continuations; the `>` marker itself needs
 no authored glyph.

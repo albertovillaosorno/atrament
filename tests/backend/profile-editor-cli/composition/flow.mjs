@@ -173,6 +173,94 @@ test('ordered continuation checks post-wrap glyph width in PDF/PNG',
         }
     });
 
+test('soft continued ordered Markdown keeps native page-local ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-ordered-soft-'));
+    try {
+        const profile = join(dir, 'measured-label.json');
+        const edits = [
+            ['1', 5000], ['2', 5000], [')', 4000], ['ó', 9000],
+        ].flatMap(([glyph, width]) => [
+            '--set-glyph', glyph, 'width',
+            ...Array(4).fill(String(width)), '0',
+        ]);
+        const edited = spawnSync('cargo', [
+            'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+            'handwriting', ...edits,
+        ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+        assert.equal(edited.status, 0, edited.stderr);
+        writeFileSync(profile, edited.stdout);
+        const digits = ['1', '2', ')'].flatMap((glyph) => [
+            '--glyph-stroke', glyph, '600', '500', '1800', '3000',
+            '250', '#123456',
+        ]);
+        const region = (width) => [
+            '--flow-region', '30000', '40000', String(width), '14000',
+        ];
+        const options = [
+            '--handwriting-profile', profile, ...digits, ...region(42000),
+        ];
+        const source = '12) a\n  ó';
+        const manual = (format, page) => {
+            const output = join(dir, `soft-manual-${format}-${page}`);
+            const args = [
+                ...base, '--handwriting-profile', profile, ...digits,
+                '--place-text', '1', '38500', '42500', '12) a',
+                '--place-text', '2', '57550', '42500', 'ó',
+                ...(format === 'pdf' ? ['--pages', '2'] : []),
+                '--export-paper', format,
+                ...(format === 'png'
+                    ? ['--png-page', String(page), '--dpi', '72'] : []),
+                '--output', output,
+            ];
+            const result = spawnSync('cargo', [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                '--', ...args,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(result.status, 0, result.stderr);
+            return readFileSync(output);
+        };
+        for (const format of ['pdf', 'png']) {
+            for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                const flowed = render(dir, source, format,
+                    options, '--flow-markdown', page);
+                assert.equal(flowed.result.status, 0, flowed.result.stderr);
+                const accepted = readFileSync(flowed.output);
+                assert.deepEqual(accepted, manual(format, page),
+                    `soft continuation preserves physical ${format} page`);
+                if (format === 'pdf') {
+                    assert.match(accepted.toString('latin1'), /\/Count 2/);
+                    const same = render(dir, '12) a ó', 'pdf', options);
+                    assert.equal(same.result.status, 0, same.result.stderr);
+                    assert.deepEqual(readFileSync(same.output), accepted,
+                        'inline and source-line soft continuation agree');
+                    const refusals = [
+                        [[...options, '--pages', '1'],
+                            /requires 2 physical pages/],
+                        [['--handwriting-profile', profile, ...digits,
+                            ...region(36000)],
+                            /glyph exceeds horizontal printable region/],
+                    ];
+                    for (const [extra, diagnostic] of refusals) {
+                        const refused = render(dir, source, 'pdf', extra);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.match(refused.result.stderr, diagnostic);
+                        assert.deepEqual(readFileSync(refused.output), accepted,
+                            'refused layout preserves accepted vector PDF');
+                    }
+                } else if (page === 2) {
+                    const missing = render(dir, source, 'png', options,
+                        '--flow-markdown', 3);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        'a nonexistent page cannot replace accepted PNG');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('two-digit ordered labels use statistical spacing across PDF pages',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-ordered-spacing-'));

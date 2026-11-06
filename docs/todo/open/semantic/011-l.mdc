@@ -1433,3 +1433,18 @@ and both transparent PNG pages byte-for-byte. Insufficient PDF page count,
 missing PNG selection and a fixed region too narrow for the nine-digit label
 must refuse without overwriting the last accepted export. The saved semantic
 notebook acceptance remains open.
+
+## Ordered source-line continuation on physical pages (partial) — 2026-11-06
+
+A new native regression checks a two-space-indented Markdown source line
+continuing a measured `12)` ordered item, with different per-glyph widths
+for its digits, delimiter and Spanish `ó`. It confirms the exact two-page
+physical row positions, hanging indent and equivalence to a single-line
+item. The source line boundary does not create an extra list marker or a
+leading whitespace-only physical row. A too-narrow continuation refuses.
+
+Independent native PDF and both transparent PNG page exports match manual
+caller-authored pen strokes byte-for-byte. Insufficient page count, a narrow
+fixed region and an absent PNG page leave the accepted output unchanged.
+This is still export-only Markdown composition; neither saved semantic item
+identities nor the finite P1 notebook acceptance are complete.
