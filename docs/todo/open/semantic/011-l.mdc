@@ -1647,6 +1647,23 @@ marker pages, intra-word wraps, one-row fallback, and heading precedence.
 Native CLI subprocess acceptance compares actual two-page vector PDF and
 selected-page transparent PNG bytes against independently placed authored
 glyphs, dashes and checked boxes. A separate heading/list native replay
-checks the earlier heading priority. Too-small PDF page selections and
-absent PNG pages refuse without replacing accepted files. The
-saved-notebook P1 criterion remains open.
+checks the earlier heading priority.
+
+Too-small PDF page selections and absent PNG pages refuse without replacing
+accepted files. The saved-notebook P1 criterion remains open.
+
+## First-row blockquote continuation guard (partial) — 2026-11-06
+
+The CLI now keeps a wrapped quoted paragraph's first two physical rows on
+one sheet when a fresh page can hold both, moving the two 0.4-mm rules
+with their corresponding text. The preceding heading's one-row guard still
+takes priority; a region that fits only one row uses ordinary pagination.
+Further quote rows may cross pages, and the rule has no semantic identity.
+
+Red-before/green-after Rust tests verify word and grapheme wrapping, exact
+page-local quote bars, heading precedence and one-row fallback. Native
+subprocess acceptance compares independently placed pen segments against
+vector PDF and both selected transparent PNG pages, including heading ink.
+Insufficient PDF page counts, nonexistent PNG pages and missing glyphs
+refuse without changing an accepted output file. This remains CLI-only
+layout; persisted semantic notebook blocks and P1 acceptance are open.

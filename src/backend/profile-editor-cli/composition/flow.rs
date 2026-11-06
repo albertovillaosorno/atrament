@@ -575,16 +575,17 @@ impl Layout<'_> {
         Ok(())
     }
 
-    // A list's first physical row carries its marker. If the item needs a
-    // continuation, keep at least those first two rows on one sheet when a
-    // fresh sheet can fit them; never forbid a valid one-row paper region.
-    fn keep_wrapped_list_start(
+    // Keep a wrapped list's first marker and continuation together; a
+    // wrapped quote has a rule on each row and deserves the same first-row
+    // protection. Never forbid one-row regions or detach a preceding title.
+    fn keep_wrapped_block_start(
         &mut self, style: LineStyle, first: bool,
     ) -> Result<(), String> {
-        // The preceding title already reserved this first list row.
-        // Do not orphan that heading in order to keep two list rows.
+        // The preceding title already reserved the first following row.
+        // Its guarantee takes priority over the two-row continuation guard.
         if first && !self.last_visible_heading && matches!(style,
-            LineStyle::Bullet | LineStyle::Ordered | LineStyle::Task(_)) {
+            LineStyle::Bullet | LineStyle::Ordered | LineStyle::Quote
+                | LineStyle::Task(_)) {
             self.keep_first_row_with_next(FollowingInkSpacing {
                 blank_rows: 0,
                 heading_rows: 0,
@@ -624,8 +625,7 @@ impl Layout<'_> {
                 measured_word(word, self.statistics)?;
             let spaces_um = u32::try_from(pending_spaces)
                 .map_err(|_error| "flow spaces overflow")?
-                .checked_mul(4_000)
-                .ok_or("flow spaces overflow")?;
+                .checked_mul(4_000).ok_or("flow spaces overflow")?;
             if !row.is_empty()
                 && (width
                     .checked_add(spaces_um)
@@ -644,7 +644,7 @@ impl Layout<'_> {
                 // even when the first word itself needs grapheme wrapping.
                 && !(first && ordered_marker == Some(row.as_str()))
             {
-                self.keep_wrapped_list_start(style, first)?;
+                self.keep_wrapped_block_start(style, first)?;
                 self.write_row(take(&mut row), start_x, width, style, first)?;
                 start_continuation(first, &mut start_x, &mut cap, hang)?;
                 first = false;
@@ -666,11 +666,10 @@ impl Layout<'_> {
                             .is_none_or(|length| length > 384))
                 {
                     if matches!(style, LineStyle::Heading(_)) {
-                        return Err(
-                            "heading exceeds one-line fixed region".into()
-                        );
+                        return Err("heading exceeds one-line fixed region"
+                            .into());
                     }
-                    self.keep_wrapped_list_start(style, first)?;
+                    self.keep_wrapped_block_start(style, first)?;
                     self.write_row(
                         take(&mut row), start_x, width, style, first,
                     )?;

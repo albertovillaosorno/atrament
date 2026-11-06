@@ -561,10 +561,14 @@ Two trailing source spaces end a list item before any subsequent indented
 body row; pasted Unicode line separators do the same.
 
 Adjacent `>` quote lines form one soft-wrapped quoted paragraph, with the
-same two-space hard-break and blank-paragraph rules. A Markdown
-heading keeps its first following visible row on the same physical page when
-there is room for both (including an optional 4-mm paragraph gap); an
-ending heading and a sheet too short for two rows remain valid. Long text
+same two-space hard-break and blank-paragraph rules. When a quote wraps, its
+first two physical rows and their separate vertical rules stay on one page
+if a fresh page can hold both. A preceding heading keeps its first quoted
+row instead; one-row regions remain valid and paginate normally.
+
+A Markdown heading keeps its first following visible row on the same physical
+page when there is room for both (including an optional 4-mm paragraph gap);
+an ending heading and a sheet too short for two rows remain valid. Long text
 wraps and paginates automatically (up to 32 physical pages).
 
 The Markdown subset supports single-line `#` through `######` headings;

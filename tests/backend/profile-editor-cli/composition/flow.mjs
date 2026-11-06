@@ -4430,3 +4430,116 @@ test('native heading remains attached to first wrapped list row', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('wrapped quote rules follow native PDF and page-local PNG ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-quote-orphan-'));
+    try {
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '23000',
+        ];
+        for (const [index, source, last] of [
+            [0, 'a\n> aaaaaa aaaaaa', 'aaaaaa'],
+            [1, 'a\n> aaaaaaa', 'a'],
+        ]) {
+            const manual = [
+                '--place-text', '1', '32500', '42500', 'a',
+                '--place-text', '2', '38500', '42500', 'aaaaaa',
+                '--place-text', '2', '38500', '51500', last,
+                '--ink-line', '2', '35500', '43000',
+                '35500', '50900', '400', '#1E304A',
+                '--ink-line', '2', '35500', '52000',
+                '35500', '59900', '400', '#1E304A',
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const extra = [...region, ...(format === 'pdf'
+                        ? ['--pages', '2'] : [])];
+                    const actual = render(dir, source, format,
+                        extra, '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `quote-${index}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--',
+                        ...base, ...manual,
+                        ...(format === 'pdf' ? ['--pages', '2'] : []),
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `quote ${index} page ${page} ${format} ink`);
+                    const refused = render(dir, source, format,
+                        [...extra, ...(format === 'pdf'
+                            ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.deepEqual(readFileSync(refused.output), accepted,
+                        `quote ${index} page selection keeps ${format}`);
+                    const missing = render(dir, `${source} β`, format,
+                        extra, '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0,
+                        'missing glyph must refuse the export');
+                    assert.deepEqual(readFileSync(missing.output), accepted);
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('native heading stays with first wrapped quote rule', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-heading-quote-'));
+    try {
+        const source = 'a\n# a\n> aaaaaa aaaaaa';
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '32000',
+            '--heading-style', 'underline',
+        ];
+        const manual = [
+            '--place-text', '1', '32500', '42500', 'a',
+            '--place-text', '1', '32500', '51500', 'a',
+            '--place-text', '1', '38500', '60500', 'aaaaaa',
+            '--place-text', '2', '38500', '42500', 'aaaaaa',
+            '--ink-line', '1', '32500', '58200',
+            '36500', '58200', '550', '#1E304A',
+            '--ink-line', '1', '35500', '61000',
+            '35500', '68900', '400', '#1E304A',
+            '--ink-line', '2', '35500', '43000',
+            '35500', '50900', '400', '#1E304A',
+        ];
+        for (const format of ['pdf', 'png']) {
+            for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                const actual = render(dir, source, format, [
+                    ...region, ...(format === 'pdf'
+                        ? ['--pages', '2'] : []),
+                ], '--flow-markdown', page);
+                assert.equal(actual.result.status, 0, actual.result.stderr);
+                const reference = join(dir,
+                    `heading-quote-${format}-${page}`);
+                const expected = spawnSync(cargo, [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...base, ...manual,
+                    ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72'] : []),
+                    '--output', reference,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(expected.status, 0, expected.stderr);
+                assert.deepEqual(readFileSync(actual.output),
+                    readFileSync(reference),
+                    `heading and quote page ${page} ${format} ink`);
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

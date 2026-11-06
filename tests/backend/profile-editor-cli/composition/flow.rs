@@ -3004,3 +3004,80 @@ fn visible_graphemes(text: &str) -> Result<Vec<&str>, String> {
     }
     Ok(result)
 }
+
+#[test]
+fn wrapped_quote_rules_stay_with_first_continuation_when_page_has_room()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 35_000, height: 23_000,
+    };
+    for source in ["p\n> aaaaaa aaaaaa", "p\n> aaaaaaa"] {
+        let input = FlowSource::new(FlowFormat::Markdown, source)?;
+        let render = |height| -> Result<_, String> {
+            super::layout_flow_with_region(
+                &input, &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(),
+                Some(super::FlowRegion { height, ..region }),
+            )
+        };
+        let (rows, rules, pages) = render(region.height)?;
+        assert_eq!(pages, 2, "{source:?}");
+        assert_eq!(rows.iter().map(|run| (run.page, run.origin_um))
+            .collect::<Vec<_>>(), [
+                (1, (32_500, 42_500)),
+                (2, (38_500, 42_500)),
+                (2, (38_500, 51_500)),
+            ], "{source:?}");
+        assert_eq!(rules.iter().map(|rule| (
+            rule.page, rule.start_um, rule.end_um,
+        )).collect::<Vec<_>>(), [
+            (2, (35_500, 43_000), (35_500, 50_900)),
+            (2, (35_500, 52_000), (35_500, 59_900)),
+        ], "quote rule stays with each physical text row");
+
+        let (fitting, _, fit_pages) = render(32_000)?;
+        assert_eq!(fit_pages, 1);
+        assert_eq!(fitting.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 1, 1]);
+
+        let (one_row, _, single_pages) = render(14_000)?;
+        assert_eq!(single_pages, 3);
+        assert_eq!(one_row.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 2, 3]);
+    }
+    Ok(())
+}
+
+#[test]
+fn heading_first_row_guard_takes_priority_over_quote_continuation_guard()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for (prefix, height, pages) in [
+        ("", 23_000, &[1, 1, 2][..]),
+        ("a  \n", 32_000, &[1, 1, 1, 2][..]),
+    ] {
+        let source = FlowSource::new(
+            FlowFormat::Markdown,
+            &format!("{prefix}# a\n> aaaaaa aaaaaa"),
+        )?;
+        let (rows, ornaments, total) = super::layout_flow_with_region(
+            &source, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )?;
+        assert_eq!(total, 2);
+        assert_eq!(rows.iter().map(|run| run.page)
+            .collect::<Vec<_>>(), pages, "{prefix:?}");
+        assert_eq!(ornaments.iter().filter(|mark| mark.page == 1).count(),
+            2, "heading ink and first quote rule stay on page one");
+        assert_eq!(ornaments.iter().filter(|mark| mark.page == 2).count(),
+            1, "second quote rule follows the continuation");
+    }
+    Ok(())
+}
