@@ -1412,3 +1412,86 @@ fn markdown_mixed_transport_pitch_matches_exact_rendered_ink()
     }
     Ok(())
 }
+
+#[test]
+fn plain_wrapping_preserves_exact_unicode_graphemes_across_pages()
+    -> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let alphabet = ["a", "\u{f3}", "o\u{301}", "\u{f1}", "n\u{303}",
+        "\u{1f469}\u{200d}\u{1f3eb}", "\u{221e}", "\u{bf}",
+        "\u{a1}", "\u{e9}", "i\u{301}", "="];
+    let paper = NotebookProfile::default();
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 32_000, height: 25_000,
+    };
+    let mut seed = 0x3e6d_5a21u32;
+    let mut positioned_rows = 0usize;
+    for sample in 0usize..512usize {
+        let mut words = Vec::new();
+        for _ in 0usize..9usize {
+            seed = seed.wrapping_mul(1_664_525)
+                .wrapping_add(1_013_904_223);
+            let size = 4usize + usize::try_from(seed.checked_rem(10)
+                .ok_or("invalid seed divisor")?)
+                .map_err(|error| error.to_string())?;
+            let mut word = String::new();
+            for _ in 0usize..size {
+                seed = seed.wrapping_mul(1_664_525)
+                    .wrapping_add(1_013_904_223);
+                let index = usize::try_from(seed)
+                    .map_err(|error| error.to_string())?
+                    .checked_rem(alphabet.len())
+                    .ok_or("invalid alphabet divisor")?;
+                word.push_str(alphabet.get(index)
+                    .ok_or("generated glyph outside alphabet")?);
+            }
+            words.push(word);
+        }
+        let source_text = words.join(" ");
+        let source = FlowSource::new(FlowFormat::Plain, &source_text)?;
+        let (rows, ornaments, pages) = super::layout_flow_with_region(
+            &source, &paper, None, super::HeadingDecoration::default(),
+            Some(region),
+        )?;
+        if !ornaments.is_empty() || pages <= 1 {
+            return Err(format!("sample {sample} did not paginate plain ink"));
+        }
+        let nonspace = |text: &str| -> Result<Vec<String>, String> {
+            let mut remaining = text;
+            let mut exact = Vec::new();
+            while !remaining.is_empty() {
+                let (glyph, rest) = super::first_grapheme(remaining)?;
+                if glyph != " " { exact.push(glyph.to_owned()); }
+                remaining = rest;
+            }
+            Ok(exact)
+        };
+        let expected = nonspace(&source_text)?;
+        let actual = rows.iter().map(|row| nonspace(&row.text))
+            .collect::<Result<Vec<_>, _>>()?
+            .into_iter().flatten().collect::<Vec<_>>();
+        if actual != expected {
+            return Err(format!(
+                "sample {sample} lost or split Unicode graphemes: {actual:?}"
+            ));
+        }
+        for row in rows {
+            if !(1..=pages).contains(&row.page)
+                || row.origin_um.0 != region.left + 2_500
+                || row.origin_um.1 < region.top + 2_500
+                || row.origin_um.1 + 9_000 >
+                    region.top + region.height - 2_500
+                || row.text.is_empty() {
+                return Err(format!(
+                    "sample {sample} placed a row outside the region: {row:?}"
+                ));
+            }
+            positioned_rows += 1;
+        }
+    }
+    if positioned_rows <= 8_000 {
+        return Err("insufficient physical wrap boundaries".into());
+    }
+    Ok(())
+}

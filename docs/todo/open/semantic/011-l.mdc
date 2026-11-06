@@ -1240,3 +1240,19 @@ Each admitted case must reserve 29 mm when the authored glyph is
 visible and the 9-mm nominal pitch otherwise. The test guards source
 transport equivalence without adding a second parser or persisting a
 semantic notebook; the full acceptance criterion remains open.
+
+## Exact Unicode wrapping across physical pages (partial) — 2026-11-06
+
+A deterministic native unit regression now checks 512 plain-text sources
+built from exact NFC/NFD Spanish accents, punctuation, mathematics
+and a joined Unicode emoji grapheme. Each source wraps over
+multiple rows and fixed-region physical pages; the exact rendered grapheme
+sequence must match the source without loss or splitting at row boundaries.
+More than 8,000 positioned text runs are checked independently of ink codecs.
+
+A separate real native export compares a two-page vector PDF and both
+transparent PNG pages with independently placed caller-authored `a`, `ó`
+and decomposed `o` plus acute strokes, byte-for-byte. The test also verifies
+that an insufficient page selection refuses without replacing the prior PDF.
+This strengthens the existing CLI-only flow and exact glyph contract; it
+does not persist notebook blocks or supply missing glyph outlines.

@@ -2792,3 +2792,62 @@ test('mixed BOM CRLF tabs and Unicode breaks keep literal native ink', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('plain Unicode grapheme wraps preserve authored PDF and PNG ink', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-unicode-wrapped-'));
+    try {
+        const glyphs = Array.from({ length: 6 }, () =>
+            ['a', 'ó', 'o\u0301']).flat();
+        const source = glyphs.join('');
+        const rows = [glyphs.slice(0, 7), glyphs.slice(7, 14),
+            glyphs.slice(14)].map((row) => row.join(''));
+        const region = ['--flow-region', '30000', '40000',
+            '33000', '25000'];
+        const manualRuns = [
+            ['1', '32500', '42500', rows[0]],
+            ['1', '32500', '51500', rows[1]],
+            ['2', '32500', '42500', rows[2]],
+        ].flatMap((values) => ['--place-text', ...values]);
+        const manual = (format, page) => {
+            const output = join(dir, `manual-${format}-${page}.output`);
+            const args = [...base, ...manualRuns,
+                ...(format === 'pdf' ? ['--pages', '2'] : []),
+                '--export-paper', format, '--output', output];
+            if (format === 'png') {
+                args.push('--png-page', String(page), '--dpi', '72');
+            }
+            const result = spawnSync('cargo', ['run', '--quiet', '-p',
+                'atrament_profile_editor_cli', '--', ...args], {
+                cwd: root, encoding: 'utf8', timeout: 120000,
+            });
+            assert.equal(result.error, undefined, result.error?.message);
+            assert.equal(result.status, 0, result.stderr);
+            return readFileSync(output);
+        };
+        for (const format of ['pdf', 'png']) {
+            const pages = format === 'png' ? [1, 2] : [1];
+            for (const page of pages) {
+                const generated = render(dir, source, format,
+                    region, '--flow-text', page);
+                assert.equal(generated.result.status, 0,
+                    generated.result.stderr);
+                const actual = readFileSync(generated.output);
+                assert.deepEqual(actual, manual(format, page),
+                    `physical ${format} page ${page} must preserve all `
+                    + 'NFC and NFD source graphemes across row breaks');
+                if (format === 'pdf') {
+                    assert.match(actual.toString('latin1'), /\/Count 2/);
+                }
+            }
+        }
+        const accepted = readFileSync(join(dir, 'flow-pdf.output'));
+        const rejected = render(dir, source, 'pdf',
+            [...region, '--pages', '1'], '--flow-text');
+        assert.notEqual(rejected.result.status, 0);
+        assert.match(rejected.result.stderr, /requires 2 physical pages/);
+        assert.deepEqual(readFileSync(rejected.output), accepted,
+            'a selected one-page export must preserve the existing PDF');
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
