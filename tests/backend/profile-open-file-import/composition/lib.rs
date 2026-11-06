@@ -35,7 +35,6 @@
 #![expect(
     clippy::expect_used,
     clippy::format_collect,
-    clippy::missing_trait_methods,
     clippy::redundant_closure_for_method_calls,
     reason = "test-owned fail-fast and HRTB-borrowed inspection fixtures"
 )]
@@ -1122,7 +1121,7 @@ fn manifest_only_archive_passes_with_zero_non_root_entry_budget() {
                     verified.verified_entry_bytes("manifest.json"),
                     None
                 );
-                assert!(verified.manifest().entries.is_empty());
+                assert_eq!(verified.manifest().entries.len(), 0);
                 (verified.verified_entry_count(), verified.archive_sha256())
             },
         ),

@@ -151,7 +151,7 @@ fn empty_candidate_collection_has_no_implicit_fallback_candidate() {
         candidates: vec![],
         context: context(),
     };
-    assert!(input.candidates.is_empty());
+    assert_eq!(input.candidates, Vec::<Candidate>::new());
 }
 #[test]
 fn complete_planning_input_explicitly_validates_candidate_addressing() {

@@ -351,10 +351,6 @@ fn real_file_commit_then_exact_recovery_and_external_drift() {
     static NEXT: AtomicU64 = AtomicU64::new(0);
 
     struct OwnedDir(PathBuf);
-    #[expect(
-        clippy::missing_trait_methods,
-        reason = "fixture cleanup is only implemented through Drop"
-    )]
     impl Drop for OwnedDir {
         fn drop(&mut self) {
             fs::remove_dir_all(&self.0).expect("remove owned fixture");

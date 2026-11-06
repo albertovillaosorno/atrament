@@ -179,10 +179,9 @@ fn semantic_origin_projection_returns_only_dependent_strokes_in_plan_order() {
         .expect("valid plan seals provenance projection");
     assert_eq!(validated.semantic_origin_stroke_indices(&"span-a"), [0, 2]);
     assert_eq!(validated.semantic_origin_stroke_indices(&"span-b"), [1]);
-    assert!(
-        validated
-            .semantic_origin_stroke_indices(&"span-c")
-            .is_empty()
+    assert_eq!(
+        validated.semantic_origin_stroke_indices(&"span-c"),
+        Vec::<usize>::new(),
     );
 }
 
@@ -365,5 +364,5 @@ fn empty_plan_is_valid_for_content_with_no_handwriting_projection() {
     assert_eq!(validate_stroke_plan(&plan), Ok(()));
     let validated = validate_stroke_plan_view(&plan)
         .expect("empty no-handwriting plan is structurally valid");
-    assert!(validated.strokes().is_empty());
+    assert_eq!(validated.strokes(), &[]);
 }
