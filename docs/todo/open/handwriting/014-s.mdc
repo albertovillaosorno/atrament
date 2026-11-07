@@ -737,3 +737,14 @@ of the valid authored segment.
 CLI-loaded statistics already passed JSON admission. This hardens the direct
 expansion boundary; it does not synthesize glyphs, create a persistent
 handwriting profile link or complete correlated line-level variation.
+
+## Typed exact-glyph fallback admission (partial) — 2026-11-07
+
+Native export now rechecks typed fallback entries for single exact visible
+Unicode graphemes, unique missing-source ownership and the existing 64-entry
+budget. CLI parsing already enforced these constraints, but an unparsed
+Rust `GlyphOverlay` could otherwise silently ignore multi-grapheme mappings
+or select the first of duplicate source mappings. A red-to-green regression
+checks malformed, duplicate and over-budget typed entries and unchanged
+valid one-stroke replay. This remains explicit fallback selection, not
+automatic character-shape synthesis.

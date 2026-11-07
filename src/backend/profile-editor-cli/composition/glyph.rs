@@ -1647,7 +1647,26 @@ impl GlyphOverlay {
                 "and placed text",
             ).into());
         }
-        for fallback in &self.fallbacks {
+        // Sibling typed callers can change fallback entries without going
+        // through --fallback-glyph parsing. Preserve exact Unicode identity
+        // and deterministic single-owner mappings at export admission.
+        if self.fallbacks.len() > MAX_FALLBACKS {
+            return Err("more than 64 glyph fallbacks refused".into());
+        }
+        let boundaries = UnicodeGraphemeSegmentation;
+        for (index, fallback) in self.fallbacks.iter().enumerate() {
+            if !is_exact_visible_grapheme(&fallback.missing, boundaries)
+                || !is_exact_visible_grapheme(&fallback.authored, boundaries)
+                || fallback.missing == fallback.authored {
+                return Err(
+                    "fallback requires two distinct exact visible graphemes"
+                        .into()
+                );
+            }
+            if self.fallbacks.iter().skip(index.saturating_add(1))
+                .any(|entry| entry.missing == fallback.missing) {
+                return Err("duplicate exact glyph fallback".into());
+            }
             if self.strokes.iter()
                 .any(|stroke| stroke.grapheme == fallback.missing)
             {

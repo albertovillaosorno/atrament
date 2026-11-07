@@ -6527,6 +6527,55 @@ fn typed_glyph_expansion_refuses_unvalidated_statistics()
 }
 
 #[test]
+fn typed_fallbacks_require_unique_exact_graphemes()
+-> Result<(), String> {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "a", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--fallback-glyph", &mut args(&[
+        "\u{f3}", "a",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "\u{f3}",
+    ]).iter())?;
+    let accepted = overlay.expand(&[], None)?;
+    if accepted.len() != 1 {
+        return Err("valid exact fallback lost authored ink".into());
+    }
+    for (missing, expected) in [
+        ("ab", "fallback requires two distinct exact visible graphemes"),
+        ("\u{f3}", "duplicate exact glyph fallback"),
+    ] {
+        overlay.fallbacks.push(GlyphFallback {
+            authored: "a".into(), missing: missing.into(),
+        });
+        let outcome = overlay.expand(&[], None);
+        drop(overlay.fallbacks.pop());
+        let Err(error) = outcome else {
+            return Err(format!("invalid typed fallback {missing:?} rendered"));
+        };
+        if error != expected {
+            return Err(format!("unexpected fallback refusal: {error}"));
+        }
+    }
+    overlay.fallbacks.resize_with(65, || GlyphFallback {
+        authored: "a".into(), missing: "\u{f3}".into(),
+    });
+    let Err(error) = overlay.expand(&[], None) else {
+        return Err("typed fallback count bypassed native limit".into());
+    };
+    if error != "more than 64 glyph fallbacks refused" {
+        return Err(format!("unexpected fallback count refusal: {error}"));
+    }
+    overlay.fallbacks.truncate(1);
+    if overlay.expand(&[], None)? != accepted {
+        return Err("invalid fallback changed valid replay".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn double_underlined_headings_keep_tiered_authored_text_and_native_ink() {
     let markdown = "# a\n## a\n### a\n> a\n---\na";
     let source = FlowSource::new(FlowFormat::Markdown, markdown)
