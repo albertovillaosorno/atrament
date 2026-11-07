@@ -668,8 +668,15 @@ separators and their collapsed gaps before the first following visible
 Markdown row, even if that row does not wrap. When the chain plus that row
 fits a new sheet, the complete group starts together instead of leaving
 two separators behind on the previous page. If it cannot fit, the older
-first-rule/next-row reservation remains in force. Ending separator chains
-and headings that already own a rule retain ordinary pagination.
+first-rule/next-row reservation remains in force. Headings that already
+own a rule retain their existing precedence.
+
+A terminal chain of three or more thematic rules can now move entirely to a
+fresh page even without a following text row. Each collapsed 4-mm gap between
+rules moves with its physical pen centerline; no blank tail row is added.
+When the terminal chain exceeds the height of a fresh page, normal fallback
+pagination remains valid. This is still export-only layout, not persistent
+semantic block identity.
 
 A rule that already reserved its first visible row takes priority over a
 following block when the complete group cannot move together. Its next row

@@ -4915,3 +4915,46 @@ fn consecutive_rules_keep_their_first_following_row_across_page_turns()
         .collect::<Vec<_>>(), [1, 1]);
     Ok(())
 }
+
+#[test]
+fn terminal_thematic_rule_chains_move_together_when_one_page_fits()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    // One old row leaves room for only two of three terminal rules.
+    // All three fit on the next sheet and should remain contiguous.
+    let source = "```\na\n```\n---\n***\n___";
+    let (rows, marks, pages) = render(source, 32_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].page, 1);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(), [(2, 47_000), (2, 56_000), (2, 65_000)]);
+    // Each collapsed Markdown gap between rules survives the move.
+    let (rows, marks, pages) = render(
+        "```\na\n```\n---\n\n***\n\n___", 40_000,
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows[0].page, 1);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(), [(2, 47_000), (2, 60_000), (2, 73_000)]);
+    // Three-rule chains cannot all fit on a two-row sheet, so the
+    // ordinary split remains available without refusing valid content.
+    let (rows, marks, pages) = render(source, 23_000)?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows[0].page, 1);
+    assert_eq!(marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [2, 2, 3]);
+    Ok(())
+}

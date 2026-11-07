@@ -2018,9 +2018,11 @@ fn take_following_setext<'text>(
 // thematic rule and its consecutive rules. A rule chain must account
 // for each rule's physical row and collapsed gap before its first body
 // row, rather than reserving just the next separator. No printable
-// content after terminal rules means there is no chain to reserve.
+// content after terminal rules means there is no *following* ink, but
+// the rules themselves remain physical rows that can stay together.
 fn following_gap<'text>(
     lines: impl Iterator<Item = &'text str>, include_rules: bool,
+    include_terminal_rules: bool,
 ) -> Option<FollowingInkSpacing> {
     let mut following = FollowingInkSpacing {
         blank_rows: 0,
@@ -2079,9 +2081,10 @@ fn following_gap<'text>(
             return Some(following);
         }
     }
-    // Terminal titles are printable ink; terminal rule-only chains do
-    // not reserve a nonexistent following body. Ignore trailing blanks.
-    (following.intermediate_rows > 0 && (!include_rules || saw_non_rule))
+    // Terminal titles and rule-only chains are printable ink, even
+    // when no later body row exists. Ignore trailing source blanks.
+    (following.intermediate_rows > 0
+        && (!include_rules || saw_non_rule || include_terminal_rules))
         .then_some(FollowingInkSpacing {
             blank_rows: following.blank_rows,
             intermediate_rows: following.intermediate_rows.saturating_sub(1),
@@ -2103,7 +2106,7 @@ fn handle_markdown_setext<'text>(
         return Ok(false);
     };
     if !layout.last_visible_rule
-        && let Some(gap) = following_gap(following, false) {
+        && let Some(gap) = following_gap(following, false, false) {
         let _: bool = layout.keep_first_row_with_next(gap)?;
     }
     layout.layout_line(&take(paragraph), LineStyle::Heading(level), false)?;
@@ -2133,17 +2136,18 @@ fn layout_thematic_separator<'text>(
     flush_paragraph(layout, paragraph, previous)?;
     let reserved_next = if !layout.last_visible_heading
         && !layout.last_visible_rule {
-        // Prefer the complete rule chain plus its first visible ink.
-        // When that cannot fit a fresh sheet, retain the older first-
-        // rule/next-row pairing rather than detaching later rules.
-        let full = match following_gap(following.clone(), true) {
+        // Prefer the complete rule chain plus its first visible ink,
+        // or all terminal rules when no later text follows. When that
+        // cannot fit a fresh sheet, retain the older first-rule/next-
+        // row pairing rather than detaching later rules.
+        let full = match following_gap(following.clone(), true, true) {
             Some(gap) => layout.keep_first_row_with_next(gap)?,
             None => false,
         };
         if full {
             true
         } else {
-            match following_gap(following, false) {
+            match following_gap(following, false, false) {
                 Some(gap) => layout.keep_first_row_with_next(gap)?,
                 None => false,
             }
@@ -2152,6 +2156,20 @@ fn layout_thematic_separator<'text>(
         false
     };
     layout.write_separator(reserved_next)
+}
+
+// Heading-first-ink reservation remains separate from free thematic
+// rules, which may instead own a terminal sequence of printable marks.
+fn reserve_heading_first_row<'text>(
+    layout: &mut Layout<'_>, style: LineStyle,
+    following: impl Iterator<Item = &'text str>,
+) -> Result<(), String> {
+    if matches!(style, LineStyle::Heading(_))
+        && !layout.last_visible_rule
+        && let Some(gap) = following_gap(following, false, false) {
+        let _: bool = layout.keep_first_row_with_next(gap)?;
+    }
+    Ok(())
 }
 
 // Plain blank lines reserve physical rows; Markdown blanks instead
@@ -2558,11 +2576,9 @@ pub(super) fn layout_flow_with_region(
             }
         } else {
             flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
-            if matches!(style, LineStyle::Heading(_))
-                && !layout.last_visible_rule
-                && let Some(gap) = following_gap(source_lines.clone(), false) {
-                let _: bool = layout.keep_first_row_with_next(gap)?;
-            }
+            reserve_heading_first_row(
+                &mut layout, style, source_lines.clone(),
+            )?;
             if source.format == FlowFormat::Markdown
                 && matches!(style,
                     LineStyle::Bullet | LineStyle::Ordered | LineStyle::Task(_))

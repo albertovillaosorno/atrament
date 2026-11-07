@@ -2049,3 +2049,19 @@ blanks replay byte-for-byte; missing authored glyphs cannot replace output.
 Existing preceding-heading ownership, fenced physical rows and groups too
 tall for a fresh page retain their prior behavior. This still does not save
 semantic notebook body blocks or complete the open P1 acceptance criterion.
+
+## Terminal thematic-rule chains (partial) — 2026-11-07
+
+The Markdown CLI now keeps a terminal run of three or more free thematic
+rules together on a fresh physical sheet when earlier independent ink would
+otherwise split the rules, even with no following paragraph. Each collapsed
+4-mm source gap retains its measured offset; terminal source blanks do not
+add an invisible physical row. An over-tall chain retains the existing
+short-sheet fallback and earlier heading ownership remains authoritative.
+
+A failing-before-fix Rust geometry regression verifies two-page centerlines,
+interior gaps and short-sheet pagination. Independent native PDF and both
+transparent PNG page references verify exact source-authored paper/ink bytes,
+including equivalent rule syntax, CRLF, repeated blank-line collapse and
+atomic refusal when pages or glyphs cannot be admitted. No notebook body is
+persisted and the P1 fixed-region acceptance criterion remains open.
