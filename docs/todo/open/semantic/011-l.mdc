@@ -2200,3 +2200,21 @@ Native CLI acceptance adds physical PDF and both selected transparent PNG
 parity cases, including independent handwritten glyph and quote-bar ink
 on a roomy sheet. No new quote rows, saved semantic blocks or general
 CommonMark parser are implied.
+
+## Chained quoted paragraphs and physical-output verification — 2026-11-07
+
+A further deterministic native Rust regression compares 11,520 pairs of
+three-quote Markdown paragraphs across eight physical region heights, five
+prefixes, four suffixes, six first-gap and six second-gap spellings, and
+both single-row and wrapped accented middle paragraphs. It verifies exact
+page-local glyph origin, ornament ink and physical page count. Collapsed
+ordinary blanks and interleaved synthetic empty quote markers retain the
+same independent 4-mm gaps, even across page boundaries.
+
+A native CLI acceptance independently places three authored quote glyphs
+and all three bars on two physical pages; generated vector PDF and both
+72-DPI transparent PNG sheets match exact output bytes. Six alternate
+spacing, indentation and CRLF spellings replay identically, and invalid
+page selections or unauthored glyphs preserve the last accepted file.
+These are regression protections for the existing CLI-only flow, not a
+persisted semantic notebook implementation or completion of P1 acceptance.

@@ -6861,3 +6861,79 @@ test('equivalent mixed Markdown syntax preserves native pages and ink',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('chained blank quote paragraphs match native PDF and both PNG pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-quote-chain-'));
+        try {
+            const source = '> a\n\n> ó\n\n> a';
+            const region = [
+                '--flow-region', '30000', '40000', '35000', '27000',
+            ];
+            const manual = [
+                '--place-text', '1', '38500', '42500', 'a',
+                '--place-text', '1', '38500', '55500', 'ó',
+                '--place-text', '2', '38500', '42500', 'a',
+                '--ink-line', '1', '35500', '43000',
+                '35500', '50900', '400', '#1E304A',
+                '--ink-line', '1', '35500', '56000',
+                '35500', '63900', '400', '#1E304A',
+                '--ink-line', '2', '35500', '43000',
+                '35500', '50900', '400', '#1E304A',
+            ];
+            const alternatives = [
+                '> a\n>\n> ó\n>\n> a',
+                '> a\n>\n\n> ó\n\n>\n> a',
+                '> a\n\n>\n> ó\n>\n\n> a',
+                '> a\n>\n\n>\n> ó\n>\n\n>\n> a',
+                '  > a\n  >\n\n> ó\n\n>\n  > a',
+                source.replaceAll('\n', '\r\n'),
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const pages = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const actual = render(dir, source, format,
+                        [...region, ...pages], '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const manualPath = join(dir,
+                        `chained-quote-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--', ...base,
+                        ...manual, ...pages, '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []), '--output', manualPath,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(manualPath),
+                        `three quote rows physically match page ${page}`);
+                    for (const variant of alternatives) {
+                        const replay = render(dir, variant, format,
+                            [...region, ...pages], '--flow-markdown', page);
+                        assert.equal(replay.result.status, 0,
+                            replay.result.stderr);
+                        assert.deepEqual(readFileSync(replay.output), accepted,
+                            `chained gaps preserve ${format} page ${page}`);
+                    }
+                    const missing = render(dir, `${source}\n> β`, format,
+                        [...region, ...pages], '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        'missing glyph must not replace selected export');
+                    const invalid = render(dir, source, format,
+                        [...region, ...pages,
+                            ...(format === 'pdf' ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(invalid.result.status, 0);
+                    assert.deepEqual(readFileSync(invalid.output), accepted,
+                        'invalid page selection preserves selected export');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

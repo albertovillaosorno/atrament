@@ -795,6 +795,11 @@ no authored glyph.
 Bare `>` lines between visible quoted paragraphs insert the same single
 4-mm gap as an empty Markdown line. Multiple markers may interleave with
 ordinary blank source lines without adding quote-bar rows or extra gaps.
+Native regressions now verify two independent interior quote gaps, including
+wrapped accents, short physical sheets, and exact two-page PDF/transparent
+PNG against independently placed ink. Invalid selected pages or missing glyphs
+cannot replace an accepted export.
+
 Isolated, leading, trailing and non-quote-followed empty quote markers still
 refuse. Bounded backtick and tilde code fences (three or more identical marks,
 up to three initial spaces) preserve literal handwriting lines, including

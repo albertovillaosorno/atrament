@@ -5560,3 +5560,60 @@ fn quoted_blank_markers_match_collapsed_markdown_gaps_across_pages()
     }
     Ok(())
 }
+
+#[test]
+fn chained_empty_quotes_share_exact_collapsed_gaps_across_pages()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let prefixes = ["", "a\n\n", "# a\n\n", "---\n", "> a\n\n"];
+    let suffixes = ["", "\n\na", "\n\n# a", "\n---\na"];
+    let gaps = ["\n\n", "\n>\n", "\n>\n\n", "\n\n>\n",
+        "\n>\n\n>\n", "\n  >\n\n> \n"];
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000, width: 35_000, height,
+            }),
+        )
+    };
+    let ink = |rows: &[super::TextRun]| rows.iter().map(|row| (
+        row.page, row.origin_um, row.text.clone(), row.heading_ink,
+    )).collect::<Vec<_>>();
+    let repeated = "\u{f3}".repeat(5);
+    let wrapped_middle = format!("{repeated} {repeated} {repeated}");
+    for height in [14_000, 18_000, 23_000, 32_000, 41_000,
+        50_000, 59_000, 100_000] {
+        for prefix in prefixes {
+            for suffix in suffixes {
+                for middle in ["\u{f3}", wrapped_middle.as_str()] {
+                    let canonical = format!(
+                        "{prefix}> a\n\n> {middle}\n\n> a{suffix}"
+                    );
+                    let reference = render(&canonical, height)?;
+                    for first_gap in gaps {
+                        for last_gap in gaps {
+                            let candidate = format!(
+                                "{prefix}> a{first_gap}> {middle}\
+                                 {last_gap}> a{suffix}"
+                            );
+                            let actual = render(&candidate, height)?;
+                            if actual.2 != reference.2
+                                || ink(&actual.0) != ink(&reference.0)
+                                || actual.1 != reference.1 {
+                                return Err(format!(
+                                    "chained quote gap changed physical ink: \
+                                     height={height}, {candidate:?}"
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
