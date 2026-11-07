@@ -2065,3 +2065,19 @@ transparent PNG page references verify exact source-authored paper/ink bytes,
 including equivalent rule syntax, CRLF, repeated blank-line collapse and
 atomic refusal when pages or glyphs cannot be admitted. No notebook body is
 persisted and the P1 fixed-region acceptance criterion remains open.
+
+## Terminal heading and thematic-rule groups (partial) — 2026-11-07
+
+An unattached ATX or Setext heading now reserves two or more following
+terminal thematic rules on one physical sheet when the entire measured group
+fits. Separate collapsed 4-mm source gaps after the heading and between rules
+retain their exact page-local pen coordinates. Earlier independent ink remains
+on its prior sheet; an existing heading/rule reservation is not detached.
+
+A failing-before-fix Rust geometry regression checks both heading spellings,
+two- and three-rule chains, actual underline/rule centerlines, distinct gaps
+and short-sheet fallback. Independent native PDF and both transparent PNG
+page references verify byte-exact pen output, alternative separator syntax,
+LF/CRLF and blank-line collapse. Invalid page requests and missing authored
+glyphs preserve the earlier accepted export. This does not persist semantic
+blocks or complete the P1 two-page saved-notebook acceptance criterion.

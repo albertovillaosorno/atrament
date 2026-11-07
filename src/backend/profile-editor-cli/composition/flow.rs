@@ -2097,7 +2097,7 @@ fn following_gap<'text>(
 fn handle_markdown_setext<'text>(
     layout: &mut Layout<'_>, paragraph: &mut String,
     style: LineStyle, input_line: &str,
-    following: impl Iterator<Item = &'text str>,
+    following: impl Iterator<Item = &'text str> + Clone,
 ) -> Result<bool, String> {
     if paragraph.is_empty() || !matches!(style, LineStyle::Body) {
         return Ok(false);
@@ -2105,10 +2105,9 @@ fn handle_markdown_setext<'text>(
     let Some(level) = markdown_setext_level(input_line) else {
         return Ok(false);
     };
-    if !layout.last_visible_rule
-        && let Some(gap) = following_gap(following, false, false) {
-        let _: bool = layout.keep_first_row_with_next(gap)?;
-    }
+    reserve_heading_first_row(
+        layout, LineStyle::Heading(level), following,
+    )?;
     layout.layout_line(&take(paragraph), LineStyle::Heading(level), false)?;
     Ok(true)
 }
@@ -2158,16 +2157,42 @@ fn layout_thematic_separator<'text>(
     layout.write_separator(reserved_next)
 }
 
-// Heading-first-ink reservation remains separate from free thematic
-// rules, which may instead own a terminal sequence of printable marks.
+// Only actual free terminal rules, not intervening text or a new code
+// fence, may extend a heading's first-ink reservation to its last mark.
+fn terminal_rule_chain<'text>(
+    following: impl Iterator<Item = &'text str>,
+) -> bool {
+    let mut count = 0usize;
+    for line in following {
+        if line.trim_end_matches(' ').is_empty() {
+            continue;
+        }
+        if !matches!(markdown_line(line).0, LineStyle::Separator) {
+            return false;
+        }
+        count = count.saturating_add(1);
+    }
+    count >= 2
+}
+
+// A free heading and its trailing rules remain together if the group
+// fits one page. Otherwise keep the older first-following-ink priority.
+// Do not extend a title already owned by a preceding title or rule.
 fn reserve_heading_first_row<'text>(
     layout: &mut Layout<'_>, style: LineStyle,
-    following: impl Iterator<Item = &'text str>,
+    following: impl Iterator<Item = &'text str> + Clone,
 ) -> Result<(), String> {
     if matches!(style, LineStyle::Heading(_))
-        && !layout.last_visible_rule
-        && let Some(gap) = following_gap(following, false, false) {
-        let _: bool = layout.keep_first_row_with_next(gap)?;
+        && !layout.last_visible_rule {
+        if !layout.last_visible_heading
+            && terminal_rule_chain(following.clone())
+            && let Some(group) = following_gap(following.clone(), true, true)
+            && layout.keep_first_row_with_next(group)? {
+            return Ok(());
+        }
+        if let Some(gap) = following_gap(following, false, false) {
+            let _: bool = layout.keep_first_row_with_next(gap)?;
+        }
     }
     Ok(())
 }

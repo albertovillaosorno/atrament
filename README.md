@@ -678,10 +678,20 @@ When the terminal chain exceeds the height of a fresh page, normal fallback
 pagination remains valid. This is still export-only layout, not persistent
 semantic block identity.
 
+A free ATX or Setext heading can now reserve a trailing run of two or more
+Markdown thematic rules as one group. If all physical rows and their distinct
+collapsed 4-mm gaps fit a new sheet, they move together after independent ink.
+Short sheets fall back to the prior heading/first-rule pairing; an earlier
+heading or rule retains its ownership, and intervening text or fences do not
+join this terminal group.
+
+Exact native PDF/PNG heading and rule ink moves without inventing blank
+trailing rows. This is export-only pagination.
+
 A rule that already reserved its first visible row takes priority over a
 following block when the complete group cannot move together. Its next row
 still stays attached when that smaller reservation fits; later continuation
-rows may paginate normally. Heading and second-rule precedence is unchanged.
+rows may paginate normally. Other heading/second-rule precedence is unchanged.
 
 A Markdown heading keeps its first following visible row on the same physical
 page when there is room for both (including an optional 4-mm paragraph gap);

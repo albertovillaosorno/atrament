@@ -6387,3 +6387,88 @@ test('terminal thematic-rule chains keep exact native PDF and PNG ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('terminal heading and thematic rules share exact native PDF and PNG pages',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-heading-terminal-'));
+    try {
+        for (const scenario of [
+            {
+                source: '```\na\n```\n# a\n---\n***\n___',
+                height: '41000', centers: [56000, 65000, 74000],
+            },
+            {
+                source: '```\na\n```\n# a\n\n---\n\n***\n\n___',
+                height: '53000', centers: [60000, 73000, 86000],
+            },
+        ]) {
+            const region = [
+                '--flow-region', '30000', '40000', '35000',
+                scenario.height, '--heading-style', 'underline',
+            ];
+            const manual = [
+                '--place-text', '1', '32500', '42500', 'a',
+                '--place-text', '2', '32500', '42500', 'a',
+                '--ink-line', '2', '32500', '49200',
+                '36500', '49200', '550', '#1E304A',
+                ...scenario.centers.flatMap((y) => [
+                    '--ink-line', '2', '32500', String(y),
+                    '63500', String(y), '400', '#1E304A',
+                ]),
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const options = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const actual = render(dir, scenario.source, format,
+                        [...region, ...options], '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `heading-rules-${scenario.height}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--', ...base,
+                        ...manual, ...options, '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []), '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `terminal heading+rules ${format} page ${page}`);
+                    for (const variant of [
+                        scenario.source.replace('# a', 'a\n==='),
+                        scenario.source.replace('---', '- - -')
+                            .replace('***', '* * *'),
+                        scenario.source.replace('\n\n', '\n\n\n'),
+                        scenario.source.replaceAll('\n', '\r\n'),
+                    ]) {
+                        const replay = render(dir, variant, format,
+                            [...region, ...options], '--flow-markdown', page);
+                        assert.equal(replay.result.status, 0,
+                            replay.result.stderr);
+                        assert.deepEqual(readFileSync(replay.output), accepted,
+                            `equivalent heading+rules ${format}`);
+                    }
+                    const invalid = render(dir, scenario.source, format,
+                        [...region, ...options,
+                            ...(format === 'pdf' ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(invalid.result.status, 0);
+                    assert.deepEqual(readFileSync(invalid.output), accepted,
+                        'invalid page selection preserves accepted bytes');
+                    const missing = render(dir,
+                        `${scenario.source}\nβ`, format,
+                        [...region, ...options], '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        'missing glyph preserves accepted bytes');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

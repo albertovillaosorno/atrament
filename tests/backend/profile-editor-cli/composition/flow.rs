@@ -4958,3 +4958,66 @@ fn terminal_thematic_rule_chains_move_together_when_one_page_fits()
         .collect::<Vec<_>>(), [2, 2, 3]);
     Ok(())
 }
+
+#[test]
+fn terminal_rule_chain_stays_with_unattached_heading_when_group_fits()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    // Four grouped rows fit on a new sheet, not after the fenced ink.
+    // The title and all three ending separator marks must follow it.
+    for title in ["# a", "a\n==="] {
+        let source = format!("```\na\n```\n{title}\n---\n***\n___");
+        let (rows, marks, pages) = render(&source, 41_000)?;
+        assert_eq!(pages, 2, "{title}");
+        assert_eq!(rows.iter().map(|row| (row.page, row.origin_um.1))
+            .collect::<Vec<_>>(), [(1, 42_500), (2, 42_500)],
+            "{title}");
+        assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+            .collect::<Vec<_>>(),
+            [(2, 49_200), (2, 56_000), (2, 65_000), (2, 74_000)],
+            "{title}");
+    }
+    // A shorter terminal pair should move too when only two of the
+    // required three physical rows remain after the preceding ink.
+    let (rows, marks, pages) = render(
+        "```\na\n```\n# a\n---\n***", 32_000,
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| (row.page, row.origin_um.1))
+        .collect::<Vec<_>>(), [(1, 42_500), (2, 42_500)]);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(),
+        [(2, 49_200), (2, 56_000), (2, 65_000)]);
+    // Preserve independent 4-mm gaps, including one after the heading.
+    let spaced = "```\na\n```\n# a\n\n---\n\n***\n\n___";
+    let (rows, marks, pages) = render(spaced, 53_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| (row.page, row.origin_um.1))
+        .collect::<Vec<_>>(), [(1, 42_500), (2, 42_500)]);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(),
+        [(2, 49_200), (2, 60_000), (2, 73_000), (2, 86_000)]);
+    // A three-row sheet cannot contain the entire heading/rule group.
+    // Preserve the older first-ink reservation rather than refusing.
+    let (rows, marks, pages) = render(
+        "```\na\n```\n# a\n---\n***\n___", 32_000,
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 1]);
+    assert_eq!(marks.iter().map(|mark| mark.page).collect::<Vec<_>>(),
+        [1, 1, 2, 2]);
+    Ok(())
+}
