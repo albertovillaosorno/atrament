@@ -688,6 +688,14 @@ join this terminal group.
 Exact native PDF/PNG heading and rule ink moves without inventing blank
 trailing rows. This is export-only pagination.
 
+A free chain of adjacent ATX/Setext headings also stays with its final one
+or more thematic rules when the entire measured group fits a fresh sheet.
+This prevents a short terminal rule from being left on a later page after
+independent earlier ink. All intervening collapsed 4-mm gaps remain in
+place; fenced content, intervening body text, prior reservations and groups
+too tall for a fresh sheet retain their earlier fallback. Exact native
+PDF and both PNG pages match manually placed ink in regression tests.
+
 A rule that already reserved its first visible row takes priority over a
 following block when the complete group cannot move together. Its next row
 still stays attached when that smaller reservation fits; later continuation

@@ -2157,22 +2157,32 @@ fn layout_thematic_separator<'text>(
     layout.write_separator(reserved_next)
 }
 
-// Only actual free terminal rules, not intervening text or a new code
-// fence, may extend a heading's first-ink reservation to its last mark.
+// Free terminal heading rows may precede the final rules. Reserve the
+// whole fitting title/rule group, never a fenced row or an intervening
+// paragraph/list/quote, and do not treat Setext underline ink as a rule.
 fn terminal_rule_chain<'text>(
     following: impl Iterator<Item = &'text str>,
 ) -> bool {
-    let mut count = 0usize;
-    for line in following {
+    let mut rules = 0usize;
+    let mut lookahead = following.peekable();
+    while let Some(line) = lookahead.next() {
         if line.trim_end_matches(' ').is_empty() {
             continue;
         }
-        if !matches!(markdown_line(line).0, LineStyle::Separator) {
-            return false;
+        let (style, body) = markdown_line(line);
+        match style {
+            LineStyle::Separator => rules = rules.saturating_add(1),
+            LineStyle::Heading(_) if rules == 0 => {},
+            LineStyle::Body if rules == 0
+                && take_following_setext(line, body.as_ref(),
+                    &mut lookahead) => {},
+            LineStyle::Body | LineStyle::Bullet | LineStyle::Heading(_)
+            | LineStyle::Ordered | LineStyle::Quote | LineStyle::Task(_) => {
+                return false;
+            }
         }
-        count = count.saturating_add(1);
     }
-    count >= 2
+    rules > 0
 }
 
 // A free heading and its trailing rules remain together if the group

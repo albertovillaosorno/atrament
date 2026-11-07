@@ -2081,3 +2081,25 @@ page references verify byte-exact pen output, alternative separator syntax,
 LF/CRLF and blank-line collapse. Invalid page requests and missing authored
 glyphs preserve the earlier accepted export. This does not persist semantic
 blocks or complete the P1 two-page saved-notebook acceptance criterion.
+
+## Adjacent terminal headings and rules (partial) — 2026-11-07
+
+A free adjacent ATX/Setext heading chain followed by one or more terminal
+thematic rules now reserves the entire measured group before printing its
+first title. When earlier independent ink leaves insufficient space but the
+group fits a fresh sheet, all heading rows, native underlines and rule
+centerlines move together rather than orphaning the last separator.
+
+A failing-before-fix Rust geometry regression checks a one-rule tail,
+two-rule tails, multiple heading levels, a Setext second title, individual
+4-mm collapsed gaps and a short-sheet fallback that preserves the older
+heading-first-row behavior. Native CLI comparison independently places the
+exact glyph and ornament segments on two-page PDF and both 72-DPI PNG
+sheets. Alternative rule syntax, Setext equivalents, repeated blanks and
+CRLF replay byte-for-byte. Invalid page selection and missing visible
+glyphs still refuse without replacing accepted output.
+
+Fences, intervening non-heading blocks, existing heading/rule ownership and
+oversized chains are not pulled into the new group. This remains bounded
+CLI-only flow; persisted semantic blocks and the P1 end-to-end criterion
+are still unfinished.

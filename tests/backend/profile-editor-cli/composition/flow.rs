@@ -5021,3 +5021,121 @@ fn terminal_rule_chain_stays_with_unattached_heading_when_group_fits()
         [1, 1, 2, 2]);
     Ok(())
 }
+
+#[test]
+fn terminal_single_rule_stays_with_free_heading_when_pair_fits()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    // The previous fenced row leaves one space on a two-row page.
+    // The free terminal title and its one separator fit the next page.
+    for title in ["# a", "a\n==="] {
+        let source = format!("```\na\n```\n{title}\n---");
+        let (rows, marks, pages) = render(&source, 23_000)?;
+        assert_eq!(pages, 2, "{title}");
+        assert_eq!(rows.iter().map(|row| (row.page, row.origin_um.1))
+            .collect::<Vec<_>>(), [(1, 42_500), (2, 42_500)],
+            "{title}");
+        assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+            .collect::<Vec<_>>(), [(2, 49_200), (2, 56_000)],
+            "{title}");
+    }
+    // A collapsed Markdown gap after the title must move with the ink.
+    let (rows, marks, pages) = render(
+        "```\na\n```\n# a\n\n---", 27_000,
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 2]);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(), [(2, 49_200), (2, 60_000)]);
+    // A one-row sheet cannot hold the group; retain normal pagination.
+    let (rows, marks, pages) = render(
+        "```\na\n```\n# a\n---", 14_000,
+    )?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 2]);
+    assert_eq!(marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [2, 3]);
+    Ok(())
+}
+
+
+#[test]
+fn adjacent_terminal_heading_and_rule_chains_move_when_group_fits()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    let source = "```\na\n```\n# a\n## a\n---\n***";
+    let (rows, marks, pages) = render(source, 41_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| (row.page, row.origin_um.1))
+        .collect::<Vec<_>>(),
+        [(1, 42_500), (2, 42_500), (2, 51_500)]);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(),
+        [(2, 49_200), (2, 58_200), (2, 65_000), (2, 74_000)]);
+    // Each Markdown paragraph gap remains measured after relocation.
+    let spaced = "```\na\n```\n# a\n\n## a\n\n---\n\n***";
+    let (rows, marks, pages) = render(spaced, 53_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| (row.page, row.origin_um.1))
+        .collect::<Vec<_>>(),
+        [(1, 42_500), (2, 42_500), (2, 55_500)]);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(),
+        [(2, 49_200), (2, 62_200), (2, 73_000), (2, 86_000)]);
+    // One terminal separator also belongs with both titles when all
+    // three rows fit on a new, not the currently occupied, sheet.
+    let (rows, marks, pages) = render(
+        "```\na\n```\n# a\n## a\n---", 32_000,
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 2, 2]);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(),
+        [(2, 49_200), (2, 58_200), (2, 65_000)]);
+    // Setext is a title row, not an additional separator row.
+    let (rows, marks, pages) = render(
+        "```\na\n```\n# a\na\n===\n---\n***", 41_000,
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 2, 2]);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(),
+        [(2, 49_200), (2, 58_200), (2, 65_000), (2, 74_000)]);
+    // The whole chain is too tall for a three-row sheet. Preserve
+    // heading-first-ink fallback and paginate the remaining last rule.
+    let (rows, marks, pages) = render(source, 32_000)?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 2, 2]);
+    assert_eq!(marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [2, 2, 2, 3]);
+    Ok(())
+}
