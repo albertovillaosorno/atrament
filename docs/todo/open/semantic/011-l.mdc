@@ -1959,3 +1959,26 @@ missing glyphs do not overwrite accepted output.
 
 The behavior is still export-only. It does not provide persistent semantic
 block identities or complete fixed-region notebook authoring.
+
+## Page-fitting thematic rules and wrapped blocks (partial) — 2026-11-07
+
+An independent Markdown thematic separator and the entire subsequent
+wrapped paragraph, bullet/checkbox/numbered item or quote now relocate
+together when the group fits a fresh physical sheet. The separator owns a
+real measured row but no text run, so the bounded Rust mover accounts for
+that leading row and preserves the rule's native pen centerline. One
+collapsed 4-mm paragraph gap after the separator also moves intact.
+
+A failing-before-fix Rust geometry regression covers three wrapped rows,
+a two-row quote after repeated blank-source gaps, independent earlier ink,
+precise separator and quote-bar positions, numbered hanging indentation,
+no unnecessary relocation, short-sheet fallback and prior-heading priority.
+Two independent CLI reference tests compare exact PDF and both selected
+72-DPI transparent PNG pages for quote and authored-number ink, including
+rule and quote strokes. Alternate separator syntax, LF/CRLF and repeated
+blank-source gaps replay byte-for-byte; invalid page selection and missing
+glyphs leave accepted output unchanged.
+
+Fenced physical blank rows, groups that do not fit one sheet, and
+heading-attached thematic rules retain existing behavior. No saved notebook
+body or persistent semantic block identities are introduced.

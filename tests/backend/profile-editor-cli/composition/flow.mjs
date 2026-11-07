@@ -5828,3 +5828,166 @@ test('numbered list below blank-separated titles keeps native hanging ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('thematic rule and fitting wrapped block match native PDF/PNG ink',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-rule-full-block-'));
+    try {
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '41000',
+        ];
+        const numberGlyphs = [
+            '--glyph-stroke', '1', '600', '500', '1800', '3000',
+            '250', '#123456',
+            '--glyph-stroke', '.', '600', '500', '1800', '3000',
+            '250', '#123456',
+        ];
+        const rule = [
+            '--ink-line', '2', '32500', '47000', '63500', '47000',
+            '400', '#1E304A',
+        ];
+        for (const { label, body, glyphs, rows, bars } of [
+            {
+                label: 'quote',
+                body: '> aaaaaa aaaaaa aaaaaa',
+                glyphs: [],
+                rows: [51500, 60500, 69500].flatMap((y) => [
+                    '--place-text', '2', '38500', String(y), 'aaaaaa',
+                ]),
+                bars: [52000, 61000, 70000].flatMap((y) => [
+                    '--ink-line', '2', '35500', String(y),
+                    '35500', String(y + 7900), '400', '#1E304A',
+                ]),
+            },
+            {
+                label: 'number',
+                body: '1. a a a a a',
+                glyphs: numberGlyphs,
+                rows: [
+                    '--place-text', '2', '38500', '51500', '1. a a',
+                    '--place-text', '2', '50500', '60500', 'a a',
+                    '--place-text', '2', '50500', '69500', 'a',
+                ],
+                bars: [],
+            },
+        ]) {
+            const source = `\`\`\`\na\n\`\`\`\n---\n${body}`;
+            const manual = [
+                '--place-text', '1', '32500', '42500', 'a',
+                ...rows, ...rule, ...bars,
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const options = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const actual = render(dir, source, format,
+                        [...region, ...glyphs, ...options],
+                        '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        `${label}: ${actual.result.stderr}`);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `rule-${label}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--', ...base,
+                        ...glyphs, ...manual, ...options,
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `${label} ${format} page ${page} precise ink`);
+                    for (const variant of [
+                        source.replace('---', '***'),
+                        source.replace('---', '___'),
+                        source.replaceAll('\n', '\r\n'),
+                    ]) {
+                        const replay = render(dir, variant, format,
+                            [...region, ...glyphs, ...options],
+                            '--flow-markdown', page);
+                        assert.equal(replay.result.status, 0,
+                            replay.result.stderr);
+                        assert.deepEqual(readFileSync(replay.output), accepted,
+                            `${label} ${format} syntax parity`);
+                    }
+                    const refused = render(dir, source, format,
+                        [...region, ...glyphs, ...options,
+                            ...(format === 'pdf'
+                                ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.deepEqual(readFileSync(refused.output), accepted,
+                        `${label} invalid page must preserve output`);
+                    const missing = render(dir, `${source} β`, format,
+                        [...region, ...glyphs, ...options],
+                        '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        `${label} missing glyph must preserve output`);
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('collapsed gap after fitting rule preserves exact PDF/PNG geometry',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-rule-gap-block-'));
+    try {
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '36000',
+        ];
+        const source = '```\na\n```\n---\n\n> aaaaaa aaaaaa';
+        const manual = [
+            '--place-text', '1', '32500', '42500', 'a',
+            '--place-text', '2', '38500', '55500', 'aaaaaa',
+            '--place-text', '2', '38500', '64500', 'aaaaaa',
+            '--ink-line', '2', '32500', '47000', '63500', '47000',
+            '400', '#1E304A',
+            '--ink-line', '2', '35500', '56000', '35500', '63900',
+            '400', '#1E304A',
+            '--ink-line', '2', '35500', '65000', '35500', '72900',
+            '400', '#1E304A',
+        ];
+        for (const format of ['pdf', 'png']) {
+            for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                const options = format === 'pdf' ? ['--pages', '2'] : [];
+                const actual = render(dir, source, format,
+                    [...region, ...options], '--flow-markdown', page);
+                assert.equal(actual.result.status, 0, actual.result.stderr);
+                const accepted = readFileSync(actual.output);
+                const reference = join(dir,
+                    `rule-gap-${format}-${page}`);
+                const expected = spawnSync(cargo, [
+                    'run', '--quiet', '-p',
+                    'atrament_profile_editor_cli', '--', ...base,
+                    ...manual, ...options,
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72']
+                        : []),
+                    '--output', reference,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(expected.status, 0, expected.stderr);
+                assert.deepEqual(accepted, readFileSync(reference));
+                for (const variant of [
+                    source.replace('\n\n> ', '\n\n\n> '),
+                    source.replaceAll('\n', '\r\n'),
+                ]) {
+                    const replay = render(dir, variant, format,
+                        [...region, ...options], '--flow-markdown', page);
+                    assert.equal(replay.result.status, 0, replay.result.stderr);
+                    assert.deepEqual(readFileSync(replay.output), accepted);
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

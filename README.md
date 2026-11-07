@@ -621,8 +621,8 @@ Repeated blank source lines collapse identically.
 Native underline/marker, list and quote strokes move with their original rows,
 as do numbered hanging indents. An earlier heading or thematic rule reservation
 is never detached; fenced physical blank rows, oversize groups, short sheets
-and literal content keep normal pagination. This remains an export-only CLI rule, not persisted
-notebook structure.
+and literal content keep normal pagination. This remains an export-only CLI
+rule, not persisted notebook structure.
 
 A standalone Markdown thematic rule also stays with its first following
 visible row when a fresh sheet can hold both, including intervening blank
@@ -630,10 +630,21 @@ paragraph gaps or fenced-code rows. A heading before the rule takes priority
 when both pairings cannot fit. An ending rule and one-row regions retain
 ordinary pagination; this is not full block keep-together.
 
+A Markdown thematic rule and its complete immediately following wrapped
+paragraph, list item or quote can now relocate together when the full group
+fits on a fresh physical sheet and independent ink remains on the previous
+sheet. One collapsed 4-mm Markdown paragraph gap after the rule travels with
+the group. The separator's exact native pen line and each quote/list mark
+retain their row offsets, including numbered hanging indents.
+
+Fenced blank rows, oversize groups, a preceding heading's reservation and
+literal flow retain earlier behavior. This is CLI-only, not persisted
+semantic structure.
+
 A rule that already reserved its first visible row takes priority over a
-following wrapped paragraph, list, quote, ATX/Setext heading or second rule.
-Those later blocks may continue normally on a subsequent page rather than
-orphaning the rule.
+following block when the complete group cannot move together. Its next row
+still stays attached when that smaller reservation fits; later continuation
+rows may paginate normally. Heading and second-rule precedence is unchanged.
 
 A Markdown heading keeps its first following visible row on the same physical
 page when there is room for both (including an optional 4-mm paragraph gap);

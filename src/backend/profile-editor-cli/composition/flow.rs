@@ -52,6 +52,7 @@ const INSET_UM: u32 = 2_500;
 const EXTRA_RIGHT_UM: u32 = 1_500;
 const PARAGRAPH_GAP_UM: u32 = 4_000;
 const DEFAULT_PITCH_UM: u32 = 9_000;
+const SEPARATOR_CENTER_UM: u32 = 4_500;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
@@ -503,10 +504,15 @@ impl Layout<'_> {
             run_start, mark_start, heading_before_block,
             style, protect_body,
         )?;
-        self.keep_fitting_block_together(
-            run_start, mark_start, preceding_reservation,
-            style, protect_body, &[],
+        self.keep_rule_with_fitting_block(
+            run_start, mark_start, heading_before_block,
+            preceding_reservation, style, protect_body,
         )?;
+        if !preceding_reservation {
+            self.keep_fitting_block_together(
+                run_start, mark_start, style, protect_body, &[], false,
+            )?;
+        }
         if Self::balance_tail_eligible(style, protect_body) {
             self.balance_wrapped_tail(run_start, mark_start, style)?;
         }
@@ -717,26 +723,35 @@ impl Layout<'_> {
     // or rule's reserved next row takes priority.
     fn keep_fitting_block_together(
         &mut self, first_run: usize, first_ornament: usize,
-        preceding_reservation: bool, style: LineStyle, protect_body: bool,
-        gaps_after: &[(usize, u32)],
+        style: LineStyle, protect_body: bool,
+        gaps_after: &[(usize, u32)], leading_rule: bool,
     ) -> Result<(), String> {
-        if preceding_reservation
-            || !Self::balance_tail_eligible(style, protect_body) {
+        if !Self::balance_tail_eligible(style, protect_body) {
             return Ok(());
         }
         let runs = self.lines.get(first_run..)
             .ok_or("flow short-block origin out of bounds")?;
-        let count = runs.len();
+        let prefix_rows = usize::from(leading_rule);
+        let count = runs.len().checked_add(prefix_rows)
+            .ok_or("flow short-block size overflow")?;
         if count < 3 {
             return Ok(());
         }
         let first = runs.first()
             .ok_or("flow short-block missing first row")?;
-        let (old_page, first_y) = (first.page, first.origin_um.1);
+        let (old_page, first_y) = if leading_rule {
+            let rule = self.ornaments.get(first_ornament)
+                .ok_or("flow short-block missing leading rule")?;
+            (rule.page, rule.start_um.1.checked_sub(SEPARATOR_CENTER_UM)
+                .ok_or("flow leading-rule origin underflow")?)
+        } else {
+            (first.page, first.origin_um.1)
+        };
         let new_page = old_page.checked_add(1)
             .ok_or("flow short-block page overflow")?;
         let old_rows = runs.iter().take_while(|row| row.page == old_page)
-            .count();
+            .count().checked_add(prefix_rows)
+            .ok_or("flow short-block old-row count overflow")?;
         let top = self.top.checked_add(INSET_UM)
             .ok_or("flow short-block top inset overflow")?;
         let bottom = self.bottom.checked_sub(INSET_UM)
@@ -762,15 +777,17 @@ impl Layout<'_> {
         // The block must be a contiguous two-page split. Never pull an
         // older row, or a later page's ink, into this replacement sheet.
         for (index, run) in runs.iter().enumerate() {
-            let (page, origin) = if index < old_rows {
+            let grouped_index = index.checked_add(prefix_rows)
+                .ok_or("flow short-block row index overflow")?;
+            let (page, origin) = if grouped_index < old_rows {
                 (old_page, first_y)
             } else {
                 (new_page, top)
             };
-            let row_index = if index < old_rows {
-                index
+            let row_index = if grouped_index < old_rows {
+                grouped_index
             } else {
-                index.saturating_sub(old_rows)
+                grouped_index.saturating_sub(old_rows)
             };
             let row_offset = Self::fitting_row_offset(
                 self.pitch, row_index,
@@ -781,41 +798,17 @@ impl Layout<'_> {
                 return Ok(());
             }
         }
-        for mark in self.ornaments.get_mut(first_ornament..)
-            .ok_or("flow short-block mark origin out of bounds")? {
-            // Bullets, checkboxes and quote bars lie within their owning
-            // text row. Preserve their exact local offsets when moving it.
-            let index = runs.iter().position(|row| {
-                let within = |y: u32| {
-                    row.origin_um.1 <= y
-                        && row.origin_um.1.checked_add(self.pitch)
-                            .is_some_and(|end| y < end)
-                };
-                row.page == mark.page
-                    && within(mark.start_um.1) && within(mark.end_um.1)
-            }).ok_or("flow short-block mark row mismatch")?;
-            let old_y = runs.get(index)
-                .ok_or("flow short-block mark owner disappeared")?
-                .origin_um.1;
-            let new_y = top.checked_add(Self::fitting_row_offset(
-                self.pitch, index, gaps_after,
-            )?).ok_or("flow short-block mark position overflow")?;
-            let translate = |value: u32| -> Result<u32, String> {
-                value.checked_sub(old_y)
-                    .and_then(|offset| new_y.checked_add(offset))
-                    .ok_or_else(|| {
-                        "flow short-block mark position overflow".into()
-                    })
-            };
-            mark.start_um.1 = translate(mark.start_um.1)?;
-            mark.end_um.1 = translate(mark.end_um.1)?;
-            mark.page = new_page;
-        }
+        self.move_fitting_block_marks(
+            first_run, first_ornament, leading_rule, (new_page, top),
+            first_y, gaps_after,
+        )?;
         let rows = self.lines.get_mut(first_run..)
             .ok_or("flow short-block rows disappeared")?;
         for (index, row) in rows.iter_mut().enumerate() {
+            let grouped_index = index.checked_add(prefix_rows)
+                .ok_or("flow short-block row index overflow")?;
             let offset = Self::fitting_row_offset(
-                self.pitch, index, gaps_after,
+                self.pitch, grouped_index, gaps_after,
             )?;
             row.page = new_page;
             row.origin_um.1 = top.checked_add(offset)
@@ -939,8 +932,72 @@ impl Layout<'_> {
             gaps.push((last, gap));
         }
         self.keep_fitting_block_together(
-            heading_index, first_heading_mark, false, style, protect_body,
-            &gaps,
+            heading_index, first_heading_mark, style, protect_body,
+            &gaps, false,
+        )
+    }
+
+    // Keep a thematic rule and its complete wrapped block together when
+    // that span fits a fresh sheet and earlier independent ink remains.
+    // The rule owns a measured row but no TextRun; reuse the physical
+    // mover with one virtual leading row, preserving its centerline.
+    fn keep_rule_with_fitting_block(
+        &mut self,
+        first_run: usize,
+        first_mark: usize,
+        heading_before_block: bool,
+        preceding_reservation: bool,
+        style: LineStyle,
+        protect_body: bool,
+    ) -> Result<(), String> {
+        if !preceding_reservation
+            || heading_before_block
+            || !Self::balance_tail_eligible(style, protect_body)
+        {
+            return Ok(());
+        }
+        let Some(mark_index) = first_mark.checked_sub(1) else {
+            return Ok(());
+        };
+        let rule = self
+            .ornaments
+            .get(mark_index)
+            .ok_or("flow preceding-rule mark out of bounds")?;
+        let Some(first) = self.lines.get(first_run) else {
+            return Ok(());
+        };
+        let Some(rule_y) = rule.start_um.1.checked_sub(SEPARATOR_CENTER_UM)
+        else {
+            return Ok(());
+        };
+        // Do not mistake a heading underline or quote rule for a
+        // separator. Fenced blank rows and collapsed paragraph gaps
+        // also break the candidate group without losing their ink.
+        let Some(after_rule) = rule_y.checked_add(self.pitch) else {
+            return Err("flow leading-rule spacing overflow".into());
+        };
+        let Some(gap) = first.origin_um.1.checked_sub(after_rule) else {
+            return Ok(());
+        };
+        if rule.width_um != 400
+            || rule.start_um.1 != rule.end_um.1
+            || rule.page != first.page
+            || !matches!(gap, 0 | PARAGRAPH_GAP_UM)
+        {
+            return Ok(());
+        }
+        let gaps = if gap == 0 {
+            &[][..]
+        } else {
+            &[(0, gap)][..]
+        };
+        self.keep_fitting_block_together(
+            first_run,
+            mark_index,
+            style,
+            protect_body,
+            gaps,
+            true,
         )
     }
 
@@ -1099,6 +1156,66 @@ impl Layout<'_> {
             return Err("flow horizontal printable region too narrow".into());
         }
         Ok((start_x, cap))
+    }
+
+    fn move_fitting_block_marks(
+        &mut self, first_run: usize, first_ornament: usize,
+        leading_rule: bool, destination: (usize, u32),
+        first_y: u32, gaps_after: &[(usize, u32)],
+    ) -> Result<(), String> {
+        let (new_page, top) = destination;
+        let prefix_rows = usize::from(leading_rule);
+        let runs = self.lines.get(first_run..)
+            .ok_or("flow short-block origin out of bounds")?;
+        for (mark_index, mark) in self.ornaments.get_mut(first_ornament..)
+            .ok_or("flow short-block mark origin out of bounds")?
+            .iter_mut().enumerate() {
+            // A leading thematic rule has a physical row but no text run.
+            // Its synthetic centerline must travel with the body rows.
+            if leading_rule && mark_index == 0 {
+                let relocate = |value: u32| -> Result<u32, String> {
+                    value.checked_sub(first_y)
+                        .and_then(|offset| top.checked_add(offset))
+                        .ok_or_else(|| {
+                            "flow leading-rule position overflow".into()
+                        })
+                };
+                mark.start_um.1 = relocate(mark.start_um.1)?;
+                mark.end_um.1 = relocate(mark.end_um.1)?;
+                mark.page = new_page;
+                continue;
+            }
+            // Bullets, checkboxes and quote bars lie within their owning
+            // text row. Preserve their exact local offsets when moving it.
+            let index = runs.iter().position(|row| {
+                let within = |y: u32| {
+                    row.origin_um.1 <= y
+                        && row.origin_um.1.checked_add(self.pitch)
+                            .is_some_and(|end| y < end)
+                };
+                row.page == mark.page
+                    && within(mark.start_um.1) && within(mark.end_um.1)
+            }).ok_or("flow short-block mark row mismatch")?;
+            let old_y = runs.get(index)
+                .ok_or("flow short-block mark owner disappeared")?
+                .origin_um.1;
+            let new_y = top.checked_add(Self::fitting_row_offset(
+                self.pitch, index.checked_add(prefix_rows)
+                    .ok_or("flow short-block mark index overflow")?,
+                gaps_after,
+            )?).ok_or("flow short-block mark position overflow")?;
+            let translate = |value: u32| -> Result<u32, String> {
+                value.checked_sub(old_y)
+                    .and_then(|offset| new_y.checked_add(offset))
+                    .ok_or_else(|| {
+                        "flow short-block mark position overflow".into()
+                    })
+            };
+            mark.start_um.1 = translate(mark.start_um.1)?;
+            mark.end_um.1 = translate(mark.end_um.1)?;
+            mark.page = new_page;
+        }
+        Ok(())
     }
 
     // Record a title's first run and ornament at the start of a chain.
@@ -1290,7 +1407,7 @@ impl Layout<'_> {
     fn write_separator(&mut self, reserved_next: bool) -> Result<(), String> {
         let (start_x, cap) = self.line_measurements(LineStyle::Body)?;
         let y = self.begin_row()?;
-        let rule_y = y.checked_add(4_500)
+        let rule_y = y.checked_add(SEPARATOR_CENTER_UM)
             .ok_or("separator center overflow")?;
         let end_x = start_x.checked_add(cap.min(60_000))
             .ok_or("separator horizontal overflow")?;

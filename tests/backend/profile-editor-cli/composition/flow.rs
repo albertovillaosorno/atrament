@@ -4195,6 +4195,97 @@ fn blank_separated_heading_and_fitting_block_preserve_gap_and_ink()
 }
 
 #[test]
+fn thematic_rule_and_fitting_wrapped_block_move_as_one_group()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(),
+            None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000,
+                top: 40_000,
+                width: 35_000,
+                height,
+            }),
+        )
+    };
+    for (body, first_x, continuation_x) in [
+        ("> aaaaaa aaaaaa aaaaaa", 38_500, 38_500),
+        ("- aaaaaa aaaaaa aaaaaa", 38_500, 38_500),
+        ("1. a a a a a", 38_500, 50_500),
+        ("aaaaaa aaaaaa aaaaaa", 32_500, 32_500),
+    ] {
+        let source = format!("```\na\n```\n---\n{body}");
+        let (rows, marks, pages) = render(&source, 41_000)?;
+        assert_eq!(pages, 2, "{body}");
+        assert_eq!(
+            rows.iter().map(|run| run.page).collect::<Vec<_>>(),
+            [1, 2, 2, 2],
+            "{body}"
+        );
+        assert_eq!(
+            rows.iter().map(|run| run.origin_um.1).collect::<Vec<_>>(),
+            [42_500, 51_500, 60_500, 69_500]
+        );
+        assert_eq!(rows[1].origin_um.0, first_x);
+        assert_eq!(rows[2].origin_um.0, continuation_x);
+        assert_eq!(marks[0].page, 2, "rule must travel with body");
+        assert_eq!(marks[0].start_um, (32_500, 47_000));
+        assert_eq!(marks[0].end_um, (63_500, 47_000));
+        assert!(marks.iter().all(|mark| mark.page == 2));
+    }
+    // One collapsed 4-mm source gap belongs after the rule's physical
+    // row, even when the complete two-row quote moves to the next sheet.
+    for source in [
+        "```\na\n```\n---\n\n> aaaaaa aaaaaa",
+        "```\na\n```\n---\n\n\n> aaaaaa aaaaaa",
+    ] {
+        let (rows, marks, pages) = render(source, 36_000)?;
+        assert_eq!(pages, 2);
+        assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(), [
+            1, 2, 2
+        ]);
+        assert_eq!(
+            rows.iter().map(|row| row.origin_um.1).collect::<Vec<_>>(),
+            [42_500, 55_500, 64_500]
+        );
+        assert_eq!(marks[0].page, 2);
+        assert_eq!(marks[0].start_um, (32_500, 47_000));
+        assert_eq!(
+            marks
+                .iter()
+                .skip(1)
+                .map(|bar| bar.start_um.1)
+                .collect::<Vec<_>>(),
+            [56_000, 65_000]
+        );
+    }
+    // An unoccupied sheet needs no artificial relocation.
+    let (rows, marks, pages) = render("---\n> aaaaaa aaaaaa aaaaaa", 41_000)?;
+    assert_eq!(pages, 1);
+    assert!(rows.iter().all(|row| row.page == 1));
+    assert_eq!(marks[0].page, 1);
+
+    // Rule and block must really fit together, or normal pagination wins.
+    let (rows, marks, _) =
+        render("```\na\n```\n---\n> aaaaaa aaaaaa aaaaaa", 32_000)?;
+    assert_eq!(rows[0].page, 1);
+    assert_eq!(marks[0].page, 1);
+
+    // An earlier heading reserved the rule's first row: it is not free
+    // to travel with just the subsequent quote.
+    let (rows, marks, _) =
+        render("```\na\n```\n# a\n---\n> aaaaaa aaaaaa aaaaaa", 41_000)?;
+    assert_eq!(rows[1].page, 1);
+    assert_eq!(marks[1].page, 1);
+    Ok(())
+}
+
+#[test]
 fn adjacent_heading_chain_and_fitting_block_can_move_as_one_group()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;
