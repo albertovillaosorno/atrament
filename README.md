@@ -611,19 +611,17 @@ there. Earlier heading/rule pairings win; blocks larger than one physical
 sheet retain normal pagination and terminal-row balance. The 128-row CLI
 limit is unchanged, and this does not persist semantic notebook blocks.
 
-An immediately preceding Markdown heading, or a contiguous chain of
-adjacent headings, can move with a complete two-or-more-row paragraph, list
-item or quote when all rows fit one fresh sheet and independent ink remains
-on the original sheet. Native underline/marker and list/quote strokes move
-with their owning rows, as do numbered hanging indents. An earlier heading
-or thematic rule reservation is never detached; oversize blocks, short
-sheets and literal content keep normal pagination.
+An immediately preceding Markdown heading, or a chain of ATX/Setext
+headings, can move with a complete two-or-more-row paragraph, list item or
+quote when the full group fits one fresh sheet and independent ink remains
+on the original sheet. Each collapsed 4-mm Markdown blank-line gap *between*
+headings or before the following wrapped block is measured and preserved.
+Repeated blank source lines collapse identically.
 
-A collapsed Markdown blank-line gap between the last heading and its
-following wrapped block also moves with the group when the extra 4 mm fits.
-Repeated blank source lines collapse identically, but gaps *between* a
-series of headings and fenced physical blank rows do not acquire this
-whole-group behavior. This remains an export-only CLI rule, not persisted
+Native underline/marker, list and quote strokes move with their original rows,
+as do numbered hanging indents. An earlier heading or thematic rule reservation
+is never detached; fenced physical blank rows, oversize groups, short sheets
+and literal content keep normal pagination. This remains an export-only CLI rule, not persisted
 notebook structure.
 
 A standalone Markdown thematic rule also stays with its first following

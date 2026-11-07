@@ -4359,6 +4359,121 @@ fn adjacent_heading_chain_and_fitting_block_can_move_as_one_group()
 }
 
 #[test]
+fn blank_separated_heading_chain_moves_with_fitting_wrapped_block()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration {
+                style: Some(super::HeadingStyle::Marker),
+                ..super::HeadingDecoration::default()
+            },
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    // Both gaps are distinct 4-mm collapsed Markdown paragraph gaps:
+    // one inside the heading chain and one before its wrapped quote.
+    for subtitle in ["## a", "a\n==="] {
+        let source = format!(
+            "```\na\na\n```\n# a\n\n{subtitle}\n\n> aaaaaa aaaaaa aaaaaa",
+        );
+        let (rows, marks, pages) = render(&source, 59_000)?;
+        assert_eq!(pages, 2, "{subtitle}");
+        assert_eq!(rows.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 1, 2, 2, 2, 2, 2]);
+        assert_eq!(rows.iter().skip(2).map(|row| row.origin_um.1)
+            .collect::<Vec<_>>(), [42_500, 55_500, 68_500, 77_500, 86_500]);
+        assert!(marks.iter().all(|mark| mark.page == 2));
+        let title_marks = if subtitle == "## a" { 7 } else { 8 };
+        assert_eq!(marks.iter().skip(title_marks)
+            .map(|mark| (mark.start_um.1, mark.end_um.1))
+            .collect::<Vec<_>>(), [
+                (69_000, 76_900), (78_000, 85_900), (87_000, 94_900),
+            ]);
+        // Multiple source blanks collapse exactly like one blank.
+        let repeated = source.replace("\n\n", "\n\n\n");
+        let replay = render(&repeated, 59_000)?;
+        assert_eq!(replay.0.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>(), rows.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>());
+        assert_eq!(replay.1, marks);
+    }
+    // The same internal and terminal gaps preserve authored numbered
+    // hanging indents, synthetic bullets and checked-box strokes.
+    for marker in ["", "- ", "- [x] ", "1. "] {
+        let body = if marker == "1. " {
+            "1. a a a a a".to_owned()
+        } else {
+            format!("{marker}aaaaaa aaaaaa aaaaaa")
+        };
+        let source = format!(
+            "```\na\na\n```\n# a\n\n## a\n\n{body}",
+        );
+        let (rows, marks, pages) = render(&source, 59_000)?;
+        assert_eq!(pages, 2, "{marker}");
+        assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(), [
+            1, 1, 2, 2, 2, 2, 2,
+        ], "{marker}");
+        assert_eq!(rows.iter().skip(2).map(|row| row.origin_um.1)
+            .collect::<Vec<_>>(), [
+                42_500, 55_500, 68_500, 77_500, 86_500,
+            ], "{marker}");
+        assert!(marks.iter().all(|mark| mark.page == 2), "{marker}");
+        if marker == "1. " {
+            assert_eq!(rows[4].text, "1. a a");
+            assert_eq!(rows[5].origin_um.0, 50_500);
+            assert_eq!(rows[6].origin_um.0, 50_500);
+        }
+    }
+    // Three titles with two *interior* gaps still travel with every
+    // wrapped continuation when their combined 66 mm fits a new sheet.
+    let (rows, marks, pages) = render(
+        "```\na\na\n```\n# a\n\n## a\n\n### a\n\n> aaaaaa aaaaaa aaaaaa",
+        71_000,
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(), [
+        1, 1, 2, 2, 2, 2, 2, 2,
+    ]);
+    assert_eq!(rows.iter().skip(2).map(|row| row.origin_um.1)
+        .collect::<Vec<_>>(), [
+            42_500, 55_500, 68_500, 81_500, 90_500, 99_500,
+        ]);
+    assert!(marks.iter().all(|mark| mark.page == 2));
+
+    // A fenced physical blank row is not a collapsed paragraph gap.
+    let (rows, _, _) = render(
+        "```\na\na\n```\n# a\n```\n\n```\n## a\n> aaaaaa aaaaaa aaaaaa",
+        59_000,
+    )?;
+    assert_eq!(rows[2].page, 1);
+    // A thematic rule still owns its following heading and prevents
+    // the later heading/block from pulling it off the original page.
+    let (rows, _, _) = render(
+        "```\na\n```\n---\n# a\n\n## a\n> aaaaaa aaaaaa aaaaaa",
+        59_000,
+    )?;
+    assert_eq!(rows[1].page, 1);
+    // A fresh sheet that cannot fit the gaps and whole block falls
+    // back to the prior first-row pagination, never silently clipping.
+    let (rows, _, pages) = render(
+        "```\na\na\n```\n# a\n\n## a\n\n> aaaaaa aaaaaa aaaaaa",
+        50_000,
+    )?;
+    assert!(pages >= 2);
+    assert_eq!(rows.len(), 7);
+    Ok(())
+}
+
+#[test]
 fn heading_block_compaction_preserves_prior_reservations_and_short_sheets()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

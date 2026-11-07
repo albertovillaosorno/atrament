@@ -505,7 +505,7 @@ impl Layout<'_> {
         )?;
         self.keep_fitting_block_together(
             run_start, mark_start, preceding_reservation,
-            style, protect_body, (0, 0),
+            style, protect_body, &[],
         )?;
         if Self::balance_tail_eligible(style, protect_body) {
             self.balance_wrapped_tail(run_start, mark_start, style)?;
@@ -641,26 +641,23 @@ impl Layout<'_> {
         Ok(self.y)
     }
 
-    // A relocated heading/block group may retain one collapsed paragraph
-    // gap after its last title. All ink, row and page cursor offsets
-    // share this measurement; a split page starts without the gap.
+    // A relocated heading/block group retains every collapsed 4-mm gap
+    // between titles and before the block. All ink, row and page cursor
+    // offsets share these checked measurements; page turns omit the gaps.
     fn fitting_row_offset(
-        pitch: u32,
-        index: usize,
-        gap_after: (usize, u32),
+        pitch: u32, index: usize, gaps_after: &[(usize, u32)],
     ) -> Result<u32, String> {
         let rows = u32::try_from(index)
             .map_err(|_error| "flow short-block row index overflow")?;
-        pitch
-            .checked_mul(rows)
-            .and_then(|offset| {
-                offset.checked_add(if index <= gap_after.0 {
-                    0
-                } else {
-                    gap_after.1
-                })
-            })
-            .ok_or_else(|| "flow short-block row offset overflow".into())
+        let mut offset = pitch.checked_mul(rows)
+            .ok_or("flow short-block row offset overflow")?;
+        for &(after, gap) in gaps_after {
+            if index > after {
+                offset = offset.checked_add(gap)
+                    .ok_or("flow short-block row offset overflow")?;
+            }
+        }
+        Ok(offset)
     }
 
     // Delay empty physical rows until real ink follows them. This keeps
@@ -721,7 +718,7 @@ impl Layout<'_> {
     fn keep_fitting_block_together(
         &mut self, first_run: usize, first_ornament: usize,
         preceding_reservation: bool, style: LineStyle, protect_body: bool,
-        gap_after: (usize, u32),
+        gaps_after: &[(usize, u32)],
     ) -> Result<(), String> {
         if preceding_reservation
             || !Self::balance_tail_eligible(style, protect_body) {
@@ -744,10 +741,13 @@ impl Layout<'_> {
             .ok_or("flow short-block top inset overflow")?;
         let bottom = self.bottom.checked_sub(INSET_UM)
             .ok_or("flow short-block bottom inset overflow")?;
+        let total_gap = gaps_after.iter().try_fold(0u32, |sum, &(_, gap)| {
+            sum.checked_add(gap).ok_or("flow short-block gap overflow")
+        })?;
         let block_height = self.pitch.checked_mul(
             u32::try_from(count)
                 .map_err(|_error| "flow short-block size overflow")?
-        ).and_then(|height| height.checked_add(gap_after.1))
+        ).and_then(|height| height.checked_add(total_gap))
             .ok_or("flow short-block height overflow")?;
         let earlier_rows = self.lines.get(..first_run)
             .ok_or("flow short-block earlier rows out of bounds")?;
@@ -774,7 +774,7 @@ impl Layout<'_> {
             };
             let row_offset = Self::fitting_row_offset(
                 self.pitch, row_index,
-                if index < old_rows { gap_after } else { (0, 0) },
+                if index < old_rows { gaps_after } else { &[] },
             )?;
             if run.page != page
                 || origin.checked_add(row_offset) != Some(run.origin_um.1) {
@@ -798,7 +798,7 @@ impl Layout<'_> {
                 .ok_or("flow short-block mark owner disappeared")?
                 .origin_um.1;
             let new_y = top.checked_add(Self::fitting_row_offset(
-                self.pitch, index, gap_after,
+                self.pitch, index, gaps_after,
             )?).ok_or("flow short-block mark position overflow")?;
             let translate = |value: u32| -> Result<u32, String> {
                 value.checked_sub(old_y)
@@ -815,7 +815,7 @@ impl Layout<'_> {
             .ok_or("flow short-block rows disappeared")?;
         for (index, row) in rows.iter_mut().enumerate() {
             let offset = Self::fitting_row_offset(
-                self.pitch, index, gap_after,
+                self.pitch, index, gaps_after,
             )?;
             row.page = new_page;
             row.origin_um.1 = top.checked_add(offset)
@@ -848,9 +848,9 @@ impl Layout<'_> {
         let Some(last_heading_index) = first_run.checked_sub(1) else {
             return Ok(());
         };
-        // A pair of adjacent headings may share a complete fitting body.
-        // Never undo the first title's reservation with a thematic rule,
-        // or pull a blank-separated title chain through this bounded path.
+        // A chain of headings may share a complete fitting body, even
+        // across collapsed Markdown paragraph gaps. Never undo the first
+        // title's reservation with an earlier heading or thematic rule.
         let (heading_index, chain_mark) = if self.heading_attached_to_prior {
             let Some(chain) = self.heading_chain else {
                 return Ok(());
@@ -907,11 +907,40 @@ impl Layout<'_> {
                 })
                 .unwrap_or(first_mark)
         };
-        let gap_row = last_heading_index.checked_sub(heading_index)
-            .ok_or("flow heading chain index underflow")?;
+        // Only title rows can belong to this candidate chain. Measure
+        // each interior collapsed gap independently; a fenced physical
+        // blank row has an entire pitch and therefore cannot be moved.
+        let mut gaps = Vec::new();
+        let titles = self.lines.get(heading_index..first_run)
+            .ok_or("flow heading chain out of bounds")?;
+        for (index, pair) in titles.windows(2).enumerate() {
+            let [earlier, later] = pair else {
+                return Err("flow heading chain missing title".into());
+            };
+            if earlier.page != heading.page || later.page != heading.page {
+                return Ok(());
+            }
+            let after = earlier.origin_um.1.checked_add(self.pitch)
+                .ok_or("flow heading chain spacing overflow")?;
+            let Some(interior_gap) = later.origin_um.1.checked_sub(after)
+            else {
+                return Ok(());
+            };
+            if !matches!(interior_gap, 0 | PARAGRAPH_GAP_UM) {
+                return Ok(());
+            }
+            if interior_gap != 0 {
+                gaps.push((index, interior_gap));
+            }
+        }
+        if gap != 0 {
+            let last = last_heading_index.checked_sub(heading_index)
+                .ok_or("flow heading chain index underflow")?;
+            gaps.push((last, gap));
+        }
         self.keep_fitting_block_together(
             heading_index, first_heading_mark, false, style, protect_body,
-            (gap_row, gap),
+            &gaps,
         )
     }
 
@@ -1072,9 +1101,10 @@ impl Layout<'_> {
         Ok((start_x, cap))
     }
 
-    // Record a title's first run and ornament only when beginning a new
-    // adjacent chain. A source gap or physical page break ends the chain,
-    // while a preceding title/rule keeps its earlier reservation.
+    // Record a title's first run and ornament at the start of a chain.
+    // Adjacent rows or one collapsed Markdown paragraph gap may connect
+    // titles. Fenced blank rows and physical page breaks end the chain;
+    // an earlier title/rule still keeps its reservation.
     fn remember_heading_chain(&mut self, style: LineStyle, y: u32) {
         if !matches!(style, LineStyle::Heading(_)) {
             return;
@@ -1082,7 +1112,9 @@ impl Layout<'_> {
         let continues = self.last_visible_heading
             && self.lines.last().is_some_and(|prior| {
                 prior.page == self.page
-                    && prior.origin_um.1.checked_add(self.pitch) == Some(y)
+                    && prior.origin_um.1.checked_add(self.pitch)
+                        .and_then(|after| y.checked_sub(after))
+                        .is_some_and(|gap| matches!(gap, 0 | PARAGRAPH_GAP_UM))
             });
         if !continues {
             self.heading_chain = Some(HeadingChain {

@@ -1921,9 +1921,9 @@ ornament, quote bar, numbered hanging indent and physical cursor moves
 with its original text row.
 
 The first title cannot be detached from an earlier heading or thematic rule
-reservation, even when another title is adjacent afterward. Intervening
-blank gaps *between* titles, fenced physical blank rows, blocks too tall
-for one sheet and short-page fallback retain previous pagination.
+reservation, even when another title is adjacent afterward. Fenced physical
+blank rows, blocks too tall for one sheet and short-page fallback retain
+previous pagination.
 
 A failing-before-change Rust geometry test now verifies two adjacent ATX or
 Setext titles with three-row body/list/quote variants, precise relocated
@@ -1937,3 +1937,25 @@ glyphs refuse without overwriting the accepted output.
 
 No semantic notebook content is persisted and the P1 end-to-end acceptance
 criterion remains unfulfilled.
+
+## Blank-separated heading chains retain complete wrapped blocks (partial)
+
+Collapsed blank source lines *between* two or more ATX/Setext titles can now
+travel with the headings and their entire following page-fitting Markdown
+block. The bounded physical mover accounts for each internal 4-mm gap and
+an optional last-title-to-body gap independently. It retains native marker
+strokes, quote bars and exact physical row spacing; repeated source blanks
+continue to collapse to one gap at each location.
+
+A failing-before-change Rust geometry regression now covers two- and
+three-title chains, multiple interior gaps, ATX and Setext, original row
+order, native ornament positions, preceding thematic-rule reservations,
+fenced physical blank rows and short-sheet fallback. An independent CLI
+reference matches vector PDF and both selected transparent PNG pages for
+two- and three-title quote chains, plus an authored numbered-list label and
+exact continuation hanging indents across both heading gaps. Mixed Setext,
+CRLF and repeated blanks replay identically. Invalid page selections or
+missing glyphs do not overwrite accepted output.
+
+The behavior is still export-only. It does not provide persistent semantic
+block identities or complete fixed-region notebook authoring.
