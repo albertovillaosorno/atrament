@@ -611,20 +611,20 @@ there. Earlier heading/rule pairings win; blocks larger than one physical
 sheet retain normal pagination and terminal-row balance. The 128-row CLI
 limit is unchanged, and this does not persist semantic notebook blocks.
 
-An immediately preceding Markdown heading may now move together with a
-complete two-or-more-row paragraph, list item or quote when the combined
-heading and block fit on one fresh sheet and independent ink remains on the
-original sheet. Its underline/marker and the block's list or quote strokes
-move with their authored rows. A heading already attached to an earlier
-heading or thematic rule is not moved, and one-row blocks, oversize blocks
-and narrow sheets retain their earlier pagination.
+An immediately preceding Markdown heading, or a contiguous chain of
+adjacent headings, can move with a complete two-or-more-row paragraph, list
+item or quote when all rows fit one fresh sheet and independent ink remains
+on the original sheet. Native underline/marker and list/quote strokes move
+with their owning rows, as do numbered hanging indents. An earlier heading
+or thematic rule reservation is never detached; oversize blocks, short
+sheets and literal content keep normal pagination.
 
-A collapsed Markdown blank-line gap between a heading and its following
-wrapped block also moves with the complete group when the extra 4 mm fits
-on the fresh sheet.
-Repeated blank source lines collapse identically; fenced physical blank rows
-are not part of this pairing. This remains an export-only CLI rule, not
-persisted notebook structure.
+A collapsed Markdown blank-line gap between the last heading and its
+following wrapped block also moves with the group when the extra 4 mm fits.
+Repeated blank source lines collapse identically, but gaps *between* a
+series of headings and fenced physical blank rows do not acquire this
+whole-group behavior. This remains an export-only CLI rule, not persisted
+notebook structure.
 
 A standalone Markdown thematic rule also stays with its first following
 visible row when a fresh sheet can hold both, including intervening blank

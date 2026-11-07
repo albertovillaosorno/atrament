@@ -1909,3 +1909,31 @@ requests cannot replace accepted output bytes.
 Fenced physical blank rows, oversized groups and prior heading/rule
 attachments retain existing constraints. This is CLI-only physical layout;
 persisted notebook semantics and full fixed-region editing remain open.
+
+## Adjacent heading chains and page-fitting blocks (partial) — 2026-11-07
+
+A contiguous sequence of two or more ATX/Setext headings can now move with
+its next complete two-or-more-row Markdown paragraph, bullet/checkbox,
+numbered item or quote when the whole group fits a fresh page. The last
+title may have one collapsed 4-mm blank-source gap before the block; this
+gap is measured after the last heading, not after the first. Every heading
+ornament, quote bar, numbered hanging indent and physical cursor moves
+with its original text row.
+
+The first title cannot be detached from an earlier heading or thematic rule
+reservation, even when another title is adjacent afterward. Intervening
+blank gaps *between* titles, fenced physical blank rows, blocks too tall
+for one sheet and short-page fallback retain previous pagination.
+
+A failing-before-change Rust geometry test now verifies two adjacent ATX or
+Setext titles with three-row body/list/quote variants, precise relocated
+row and bar coordinates, collapsed-gap placement, earlier rule and heading
+priority, following-title cursor and short-sheet fallback. Independent
+native CLI reference compositions match two-page vector PDF and both
+selected 72-DPI transparent PNG pages for quote and numbered rows, including
+an authored numeral label. Identical Setext alternatives, CRLF and repeated
+blank separators replay byte-for-byte; invalid page selections and missing
+glyphs refuse without overwriting the accepted output.
+
+No semantic notebook content is persisted and the P1 end-to-end acceptance
+criterion remains unfulfilled.

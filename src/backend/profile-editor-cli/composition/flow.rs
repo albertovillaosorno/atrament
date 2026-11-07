@@ -452,11 +452,22 @@ struct FollowingInkSpacing {
     paragraph_gaps: usize,
 }
 
+// An adjacent chain can own a complete page-fitting block only if its
+// first title was not already attached to an earlier heading or rule.
+#[derive(Clone, Copy)]
+struct HeadingChain {
+    attached_to_prior: bool,
+    first_mark: usize,
+    first_run: usize,
+}
+
 struct Layout<'model> {
     bottom: u32,
     heading: HeadingDecoration,
     // Whether the last heading was itself bound to an earlier title/rule.
     heading_attached_to_prior: bool,
+    // Adjacent title chain for later whole-block pagination.
+    heading_chain: Option<HeadingChain>,
     last_visible_heading: bool,
     // True only if the preceding rule actually reserved its next ink row.
     last_visible_rule: bool,
@@ -494,10 +505,13 @@ impl Layout<'_> {
         )?;
         self.keep_fitting_block_together(
             run_start, mark_start, preceding_reservation,
-            style, protect_body, 0,
+            style, protect_body, (0, 0),
         )?;
         if Self::balance_tail_eligible(style, protect_body) {
             self.balance_wrapped_tail(run_start, mark_start, style)?;
+        }
+        if !matches!(style, LineStyle::Heading(_)) {
+            self.heading_chain = None;
         }
         Ok(())
     }
@@ -627,17 +641,26 @@ impl Layout<'_> {
         Ok(self.y)
     }
 
-    // A relocated block may retain a collapsed paragraph gap after its
-    // first heading row. All ink, row and page cursor offsets share this
-    // exact measurement; fresh-page continuation rows start without a gap.
+    // A relocated heading/block group may retain one collapsed paragraph
+    // gap after its last title. All ink, row and page cursor offsets
+    // share this measurement; a split page starts without the gap.
     fn fitting_row_offset(
-        pitch: u32, index: usize, gap_after_first: u32,
+        pitch: u32,
+        index: usize,
+        gap_after: (usize, u32),
     ) -> Result<u32, String> {
         let rows = u32::try_from(index)
             .map_err(|_error| "flow short-block row index overflow")?;
-        pitch.checked_mul(rows).and_then(|offset| {
-            offset.checked_add(if index == 0 { 0 } else { gap_after_first })
-        }).ok_or_else(|| "flow short-block row offset overflow".into())
+        pitch
+            .checked_mul(rows)
+            .and_then(|offset| {
+                offset.checked_add(if index <= gap_after.0 {
+                    0
+                } else {
+                    gap_after.1
+                })
+            })
+            .ok_or_else(|| "flow short-block row offset overflow".into())
     }
 
     // Delay empty physical rows until real ink follows them. This keeps
@@ -698,7 +721,7 @@ impl Layout<'_> {
     fn keep_fitting_block_together(
         &mut self, first_run: usize, first_ornament: usize,
         preceding_reservation: bool, style: LineStyle, protect_body: bool,
-        gap_after_first: u32,
+        gap_after: (usize, u32),
     ) -> Result<(), String> {
         if preceding_reservation
             || !Self::balance_tail_eligible(style, protect_body) {
@@ -724,7 +747,7 @@ impl Layout<'_> {
         let block_height = self.pitch.checked_mul(
             u32::try_from(count)
                 .map_err(|_error| "flow short-block size overflow")?
-        ).and_then(|height| height.checked_add(gap_after_first))
+        ).and_then(|height| height.checked_add(gap_after.1))
             .ok_or("flow short-block height overflow")?;
         let earlier_rows = self.lines.get(..first_run)
             .ok_or("flow short-block earlier rows out of bounds")?;
@@ -751,7 +774,7 @@ impl Layout<'_> {
             };
             let row_offset = Self::fitting_row_offset(
                 self.pitch, row_index,
-                if index < old_rows { gap_after_first } else { 0 },
+                if index < old_rows { gap_after } else { (0, 0) },
             )?;
             if run.page != page
                 || origin.checked_add(row_offset) != Some(run.origin_um.1) {
@@ -775,7 +798,7 @@ impl Layout<'_> {
                 .ok_or("flow short-block mark owner disappeared")?
                 .origin_um.1;
             let new_y = top.checked_add(Self::fitting_row_offset(
-                self.pitch, index, gap_after_first,
+                self.pitch, index, gap_after,
             )?).ok_or("flow short-block mark position overflow")?;
             let translate = |value: u32| -> Result<u32, String> {
                 value.checked_sub(old_y)
@@ -792,7 +815,7 @@ impl Layout<'_> {
             .ok_or("flow short-block rows disappeared")?;
         for (index, row) in rows.iter_mut().enumerate() {
             let offset = Self::fitting_row_offset(
-                self.pitch, index, gap_after_first,
+                self.pitch, index, gap_after,
             )?;
             row.page = new_page;
             row.origin_um.1 = top.checked_add(offset)
@@ -809,48 +832,86 @@ impl Layout<'_> {
     // was itself reserved by a preceding title or thematic rule. Reuse the
     // bounded block mover so its native decorations follow their text rows.
     fn keep_heading_with_fitting_block(
-        &mut self, first_run: usize, first_mark: usize,
-        heading_before_block: bool, style: LineStyle, protect_body: bool,
+        &mut self,
+        first_run: usize,
+        first_mark: usize,
+        heading_before_block: bool,
+        style: LineStyle,
+        protect_body: bool,
     ) -> Result<(), String> {
-        if !heading_before_block || self.heading_attached_to_prior
+        if !heading_before_block
             || self.lines.len().saturating_sub(first_run) < 2
-            || !Self::balance_tail_eligible(style, protect_body) {
+            || !Self::balance_tail_eligible(style, protect_body)
+        {
             return Ok(());
         }
-        let Some(heading_index) = first_run.checked_sub(1) else {
+        let Some(last_heading_index) = first_run.checked_sub(1) else {
             return Ok(());
         };
-        let heading = self.lines.get(heading_index)
+        // A pair of adjacent headings may share a complete fitting body.
+        // Never undo the first title's reservation with a thematic rule,
+        // or pull a blank-separated title chain through this bounded path.
+        let (heading_index, chain_mark) = if self.heading_attached_to_prior {
+            let Some(chain) = self.heading_chain else {
+                return Ok(());
+            };
+            if chain.attached_to_prior || chain.first_run >= last_heading_index
+            {
+                return Ok(());
+            }
+            (chain.first_run, Some(chain.first_mark))
+        } else {
+            (last_heading_index, None)
+        };
+        let heading = self
+            .lines
+            .get(heading_index)
             .ok_or("flow heading block origin out of bounds")?;
-        let first = self.lines.get(first_run)
+        let last_heading = self
+            .lines
+            .get(last_heading_index)
+            .ok_or("flow heading block has no final title")?;
+        let first = self
+            .lines
+            .get(first_run)
             .ok_or("flow heading block has no first row")?;
         // Only immediate continuation or a collapsed Markdown paragraph
         // gap can join the heading. Fenced blank rows, earlier structural
         // reservations and a page boundary remain separate.
-        let Some(after_heading) = heading.origin_um.1.checked_add(self.pitch)
+        let Some(after_heading) =
+            last_heading.origin_um.1.checked_add(self.pitch)
         else {
             return Err("flow heading block spacing overflow".into());
         };
         let Some(gap) = first.origin_um.1.checked_sub(after_heading) else {
             return Ok(());
         };
-        if heading.page != first.page
-            || !matches!(gap, 0 | PARAGRAPH_GAP_UM) {
+        if heading.page != first.page || !matches!(gap, 0 | PARAGRAPH_GAP_UM) {
             return Ok(());
         }
         let heading_y = heading.origin_um.1;
-        let heading_end = heading_y.checked_add(self.pitch)
+        let heading_end = heading_y
+            .checked_add(self.pitch)
             .ok_or("flow heading ornament boundary overflow")?;
-        let first_heading_mark = self.ornaments.get(..first_mark)
-            .ok_or("flow heading marks out of bounds")?
-            .iter().position(|mark| {
-                mark.page == heading.page
-                    && (heading_y..heading_end).contains(&mark.start_um.1)
-                    && (heading_y..heading_end).contains(&mark.end_um.1)
-            }).unwrap_or(first_mark);
+        let first_heading_mark = if let Some(mark) = chain_mark {
+            mark
+        } else {
+            self.ornaments
+                .get(..first_mark)
+                .ok_or("flow heading marks out of bounds")?
+                .iter()
+                .position(|mark| {
+                    mark.page == heading.page
+                        && (heading_y..heading_end).contains(&mark.start_um.1)
+                        && (heading_y..heading_end).contains(&mark.end_um.1)
+                })
+                .unwrap_or(first_mark)
+        };
+        let gap_row = last_heading_index.checked_sub(heading_index)
+            .ok_or("flow heading chain index underflow")?;
         self.keep_fitting_block_together(
             heading_index, first_heading_mark, false, style, protect_body,
-            gap,
+            (gap_row, gap),
         )
     }
 
@@ -1011,6 +1072,28 @@ impl Layout<'_> {
         Ok((start_x, cap))
     }
 
+    // Record a title's first run and ornament only when beginning a new
+    // adjacent chain. A source gap or physical page break ends the chain,
+    // while a preceding title/rule keeps its earlier reservation.
+    fn remember_heading_chain(&mut self, style: LineStyle, y: u32) {
+        if !matches!(style, LineStyle::Heading(_)) {
+            return;
+        }
+        let continues = self.last_visible_heading
+            && self.lines.last().is_some_and(|prior| {
+                prior.page == self.page
+                    && prior.origin_um.1.checked_add(self.pitch) == Some(y)
+            });
+        if !continues {
+            self.heading_chain = Some(HeadingChain {
+                attached_to_prior: self.last_visible_rule
+                    || self.last_visible_heading,
+                first_mark: self.ornaments.len(),
+                first_run: self.lines.len(),
+            });
+        }
+    }
+
     fn write_last_row(
         &mut self, row: String, start_x: u32, width: u32,
         style: LineStyle, first: bool,
@@ -1072,6 +1155,7 @@ impl Layout<'_> {
             );
         }
         let y = self.begin_row()?;
+        self.remember_heading_chain(style, y);
         if let LineStyle::Heading(level) = style {
             // A compressed letter advance may end well before its visible
             // glyph contour. Decorations must cover actual authored ink,
@@ -1186,6 +1270,7 @@ impl Layout<'_> {
             rgb: [30, 48, 74],
         });
         self.last_visible_heading = false;
+        self.heading_chain = None;
         self.last_visible_rule = reserved_next;
         self.y = y.checked_add(self.pitch)
             .ok_or("separator row advance overflow")?;
@@ -2052,6 +2137,7 @@ fn initialize_layout<'model>(
     Ok(Layout {
         heading,
         heading_attached_to_prior: false,
+        heading_chain: None,
         last_visible_heading: false,
         last_visible_rule: false,
         statistics,

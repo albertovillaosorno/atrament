@@ -4195,6 +4195,170 @@ fn blank_separated_heading_and_fitting_block_preserve_gap_and_ink()
 }
 
 #[test]
+fn adjacent_heading_chain_and_fitting_block_can_move_as_one_group()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(),
+            None,
+            super::HeadingDecoration {
+                style: Some(super::HeadingStyle::Marker),
+                ..super::HeadingDecoration::default()
+            },
+            Some(super::FlowRegion {
+                left: 30_000,
+                top: 40_000,
+                width: 35_000,
+                height,
+            }),
+        )
+    };
+    for second in ["## a", "a\n==="] {
+        for marker in ["", "- ", "- [x] ", "> ", "1. "] {
+            let body = if marker == "1. " {
+                "1. a a a a a".to_owned()
+            } else {
+                format!("{marker}aaaaaa aaaaaa aaaaaa")
+            };
+            let source = format!("```\na\n```\n# a\n{second}\n{body}");
+            let (rows, marks, pages) = render(&source, 50_000)?;
+            assert_eq!(pages, 2, "{second} / {marker}");
+            assert_eq!(rows.len(), 6, "{second} / {marker}");
+            assert_eq!(
+                rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+                [1, 2, 2, 2, 2, 2],
+                "two adjacent titles should travel with fitting body"
+            );
+            assert_eq!(
+                rows.iter()
+                    .skip(1)
+                    .map(|row| row.origin_um.1)
+                    .collect::<Vec<_>>(),
+                [42_500, 51_500, 60_500, 69_500, 78_500]
+            );
+            assert!(marks.iter().all(|mark| mark.page == 2));
+        }
+    }
+    // A collapsed gap belongs after the *last* heading, not after the
+    // first. Its 4-mm offset must move with all three body rows and bars.
+    for second in ["## a", "a\n---"] {
+        for marker in ["", "> ", "- [x] ", "1. "] {
+            let body = if marker == "1. " {
+                "1. a a a a a".to_owned()
+            } else {
+                format!("{marker}aaaaaa aaaaaa aaaaaa")
+            };
+            let source = format!("```\na\n```\n# a\n{second}\n\n{body}");
+            let (rows, marks, pages) = render(&source, 54_000)?;
+            assert_eq!(pages, 2, "{second} / {marker}");
+            assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(), [
+                1, 2, 2, 2, 2, 2
+            ]);
+            assert_eq!(
+                rows.iter()
+                    .skip(1)
+                    .map(|row| row.origin_um.1)
+                    .collect::<Vec<_>>(),
+                [42_500, 51_500, 64_500, 73_500, 82_500]
+            );
+            assert!(marks.iter().all(|mark| mark.page == 2));
+            if marker == "> " {
+                assert_eq!(marks.len(), 10);
+                assert_eq!(
+                    marks
+                        .iter()
+                        .skip(7)
+                        .map(|bar| (bar.start_um.1, bar.end_um.1,))
+                        .collect::<Vec<_>>(),
+                    [(65_000, 72_900), (74_000, 81_900), (83_000, 90_900),]
+                );
+            }
+        }
+    }
+    let (rows, _, pages) = render(
+        "```\na\n```\n# a\n## a\n\n> aaaaaa aaaaaa aaaaaa\n# a",
+        54_000,
+    )?;
+    assert_eq!(pages, 3);
+    assert_eq!(
+        rows.last().expect("following heading").origin_um,
+        (32_500, 42_500),
+        "page cursor follows relocated ink"
+    );
+
+    // An earlier rule owns the first heading. Do not detach that row.
+    let (rows, _, _) =
+        render("```\na\n```\n---\n# a\n## a\naaaaaa aaaaaa aaaaaa", 50_000)?;
+    assert_eq!(rows[1].page, 1);
+
+    // Three adjacent titles and a two-row quote are five physical rows.
+    // When one independent row is already present, move all five rows.
+    let (rows, marks, pages) =
+        render("```\na\n```\n# a\n## a\n### a\n> aaaaaa aaaaaa", 50_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(), [
+        1, 2, 2, 2, 2, 2
+    ]);
+    assert_eq!(marks.len(), 11);
+    assert!(marks.iter().all(|mark| mark.page == 2));
+
+    // A chain of two headings and exactly two body rows also stays whole.
+    let (rows, _, pages) =
+        render("```\na\n```\n# a\n## a\n> aaaaaa aaaaaa", 41_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(), [
+        1, 2, 2, 2, 2
+    ]);
+
+    // Heading-style none still moves original authored ink with no marks.
+    let (rows, marks, _) = super::layout_flow_with_region(
+        &FlowSource::new(
+            FlowFormat::Markdown,
+            "```\na\n```\n# a\n## a\naaaaaa aaaaaa aaaaaa",
+        )?,
+        &NotebookProfile::default(),
+        None,
+        super::HeadingDecoration {
+            style: Some(super::HeadingStyle::None),
+            ..super::HeadingDecoration::default()
+        },
+        Some(super::FlowRegion {
+            left: 30_000,
+            top: 40_000,
+            width: 35_000,
+            height: 50_000,
+        }),
+    )?;
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(), [
+        1, 2, 2, 2, 2, 2
+    ]);
+    assert!(marks.is_empty());
+
+    // A prior title separated by one collapsed 4-mm gap owns the next
+    // heading row; relocating a later contiguous suffix would detach it.
+    let (rows, _, pages) = render(
+        "```\na\n```\n# a\n\n## a\n### a\naaaaaa aaaaaa aaaaaa",
+        59_000,
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(
+        rows[1].page, rows[2].page,
+        "blank-separated title cannot be orphaned by suffix movement"
+    );
+
+    // The chain cannot relocate when five rows will not fit a new sheet.
+    let (rows, marks, pages) =
+        render("```\na\n```\n# a\n## a\naaaaaa aaaaaa aaaaaa", 41_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.len(), 6);
+    assert_eq!(marks.len(), 7);
+    Ok(())
+}
+
+#[test]
 fn heading_block_compaction_preserves_prior_reservations_and_short_sheets()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

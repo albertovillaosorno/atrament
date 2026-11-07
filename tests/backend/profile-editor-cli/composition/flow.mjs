@@ -5441,3 +5441,202 @@ test('blank-separated numbered heading keeps hanging ink in PDF/PNG',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('adjacent heading chain and fitting block match physical PDF/PNG',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-heading-chain-block-'));
+    try {
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '50000',
+        ];
+        const headingMarks = [
+            ...[900, 1900, 2900, 3900].flatMap((lift) => [
+                '--ink-line', '2', '32500', String(42500 + lift),
+                '36500', String(42500 + lift), '1400', '#F8DE91',
+            ]),
+            ...[1000, 2000, 3000].flatMap((lift) => [
+                '--ink-line', '2', '32500', String(51500 + lift),
+                '36500', String(51500 + lift), '1150', '#F8DE91',
+            ]),
+        ];
+        const digits = [
+            '--glyph-stroke', '1', '600', '500', '1800', '3000',
+            '250', '#123456',
+            '--glyph-stroke', '.', '600', '500', '1800', '3000',
+            '250', '#123456',
+        ];
+        for (const { label, body, extra, rows, ornaments } of [
+            {
+                label: 'quote',
+                body: '> aaaaaa aaaaaa aaaaaa',
+                extra: [],
+                rows: [
+                    ['38500', '60500', 'aaaaaa'],
+                    ['38500', '69500', 'aaaaaa'],
+                    ['38500', '78500', 'aaaaaa'],
+                ],
+                ornaments: [61000, 70000, 79000].flatMap((top) => [
+                    '--ink-line', '2', '35500', String(top),
+                    '35500', String(top + 7900), '400', '#1E304A',
+                ]),
+            },
+            {
+                label: 'number',
+                body: '1. a a a a a',
+                extra: digits,
+                rows: [
+                    ['38500', '60500', '1. a a'],
+                    ['50500', '69500', 'a a'],
+                    ['50500', '78500', 'a'],
+                ],
+                ornaments: [],
+            },
+        ]) {
+            const source = `\`\`\`\na\n\`\`\`\n# a\n## a\n${body}`;
+            const manual = [
+                '--place-text', '1', '32500', '42500', 'a',
+                '--place-text', '2', '32500', '42500', 'a',
+                '--place-text', '2', '32500', '51500', 'a',
+                ...rows.flatMap(([x, y, value]) => [
+                    '--place-text', '2', x, y, value,
+                ]),
+                ...headingMarks, ...ornaments,
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const options = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const actual = render(dir, source, format,
+                        [...extra, ...region, ...options],
+                        '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `chain-${label}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--', ...base,
+                        ...extra, ...manual, ...options,
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `${label} ${format} page ${page} physical ink`);
+                    const setext = source.replace('## a', 'a\n---');
+                    const replay = render(dir, setext, format,
+                        [...extra, ...region, ...options],
+                        '--flow-markdown', page);
+                    assert.equal(replay.result.status, 0,
+                        replay.result.stderr);
+                    assert.deepEqual(readFileSync(replay.output), accepted,
+                        `${label} Setext subtitle retains identical ink`);
+                    const refused = render(dir, source, format,
+                        [...extra, ...region, ...options,
+                            ...(format === 'pdf'
+                                ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.deepEqual(readFileSync(refused.output), accepted,
+                        `${label} invalid page keeps prior ${format}`);
+                    const missing = render(dir, `${source} β`, format,
+                        [...extra, ...region, ...options],
+                        '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        `${label} missing glyph keeps prior ${format}`);
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('adjacent heading chain keeps collapsed body gap in native PDF/PNG',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-chain-body-gap-'));
+    try {
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '54000',
+        ];
+        const source = '```\na\n```\n# a\n## a\n\n'
+            + '> aaaaaa aaaaaa aaaaaa';
+        const markers = [
+            ...[900, 1900, 2900, 3900].flatMap((lift) => [
+                '--ink-line', '2', '32500', String(42500 + lift),
+                '36500', String(42500 + lift), '1400', '#F8DE91',
+            ]),
+            ...[1000, 2000, 3000].flatMap((lift) => [
+                '--ink-line', '2', '32500', String(51500 + lift),
+                '36500', String(51500 + lift), '1150', '#F8DE91',
+            ]),
+        ];
+        const manual = [
+            '--place-text', '1', '32500', '42500', 'a',
+            '--place-text', '2', '32500', '42500', 'a',
+            '--place-text', '2', '32500', '51500', 'a',
+            ...[64500, 73500, 82500].flatMap((y) => [
+                '--place-text', '2', '38500', String(y), 'aaaaaa',
+            ]),
+            ...markers,
+            ...[65000, 74000, 83000].flatMap((top) => [
+                '--ink-line', '2', '35500', String(top),
+                '35500', String(top + 7900), '400', '#1E304A',
+            ]),
+        ];
+        for (const format of ['pdf', 'png']) {
+            for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                const options = format === 'pdf' ? ['--pages', '2'] : [];
+                const rendered = render(dir, source, format,
+                    [...region, ...options], '--flow-markdown', page);
+                assert.equal(rendered.result.status, 0,
+                    rendered.result.stderr);
+                const accepted = readFileSync(rendered.output);
+                const reference = join(dir, `chain-gap-${format}-${page}`);
+                const expected = spawnSync(cargo, [
+                    'run', '--quiet', '-p',
+                    'atrament_profile_editor_cli', '--',
+                    ...base, ...manual, ...options,
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72']
+                        : []),
+                    '--output', reference,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(expected.status, 0, expected.stderr);
+                assert.deepEqual(accepted, readFileSync(reference),
+                    `${format} page ${page} exact chain gap ink`);
+                for (const variant of [
+                    source.replace('\n\n> ', '\n\n\n> '),
+                    source.replaceAll('\n', '\r\n'),
+                    source.replace('## a', 'a\n---'),
+                ]) {
+                    const replay = render(dir, variant, format,
+                        [...region, ...options], '--flow-markdown', page);
+                    assert.equal(replay.result.status, 0,
+                        replay.result.stderr);
+                    assert.deepEqual(readFileSync(replay.output), accepted,
+                        `collapsed gap replay for ${format} page ${page}`);
+                }
+                const rejected = render(dir, source, format,
+                    [...region, ...options,
+                        ...(format === 'pdf'
+                            ? ['--pages', '1'] : [])],
+                    '--flow-markdown', format === 'pdf' ? 1 : 3);
+                assert.notEqual(rejected.result.status, 0);
+                assert.deepEqual(readFileSync(rejected.output), accepted);
+                const missing = render(dir, `${source} β`, format,
+                    [...region, ...options], '--flow-markdown', page);
+                assert.notEqual(missing.result.status, 0);
+                assert.deepEqual(readFileSync(missing.output), accepted);
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
