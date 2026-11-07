@@ -2320,3 +2320,19 @@ vector PDF and both 72-DPI transparent PNG pages. Zero width, zero height,
 overflowed coordinates and an out-of-margins rectangle each refuse without
 replacing the accepted output bytes. The existing parser and typed bounds
 share the same positive-area error.
+
+## Reusable typed-flow source admission (partial) — 2026-11-07
+
+The Rust layout entry point now rechecks the canonical bounded flow source
+before measuring physical rows. A sibling typed caller that constructs or
+mutates `FlowSource` cannot bypass the original 4,096-byte limit, control
+character refusal, or LF/CRLF, tab and Unicode-separator normalization.
+Malformed input refuses before creating layout rows, while the CLI's already
+admitted plain-text and Markdown sources retain their existing geometry.
+
+A red-to-green Rust regression covers oversized text, embedded controls,
+unnormalized CRLF, tabs and Unicode line separators. It also preserves the
+one-signature BOM rule: the first source BOM is metadata, but a second BOM
+is literal Unicode authored content, not stripped again on revalidation.
+This hardens the CLI-only typed boundary; it does not persist notebook blocks
+or complete the semantic notebook acceptance criterion.

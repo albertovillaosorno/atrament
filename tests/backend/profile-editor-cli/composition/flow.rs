@@ -76,6 +76,45 @@ fn typed_flow_regions_reject_zero_area_before_ink_validation()
 }
 
 #[test]
+fn typed_flow_source_must_retain_bounded_canonical_admission()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "a\u{2028}ó",
+    )?;
+    assert_eq!(source.text, "a  \nó");
+    let literal_bom = FlowSource::new(
+        FlowFormat::Plain, "\u{feff}\u{feff}a",
+    )?;
+    assert_eq!(literal_bom.text, "\u{feff}a");
+    let _literal = super::layout_flow_with_region(
+        &literal_bom, &paper, None,
+        super::HeadingDecoration::default(), None,
+    )?;
+    let _accepted = super::layout_flow_with_region(
+        &source, &paper, None, super::HeadingDecoration::default(), None,
+    )?;
+
+    for (text, expected) in [
+        ("a".repeat(4_097), "flow text needs 1..4096 UTF-8 bytes"),
+        ("a\u{0007}".into(), "flow text needs 1..4096 UTF-8 bytes"),
+        ("a\r\nó".into(), "flow source needs canonical normalized text"),
+        ("a\tó".into(), "flow source needs canonical normalized text"),
+        ("a\u{2028}ó".into(), "flow source needs canonical normalized text"),
+    ] {
+        let forged = FlowSource { format: FlowFormat::Markdown, text };
+        let error = super::layout_flow_with_region(
+            &forged, &paper, None,
+            super::HeadingDecoration::default(), None,
+        ).expect_err("unadmitted typed flow must not reach physical layout");
+        assert!(error.contains(expected), "unexpected refusal: {error}");
+    }
+    Ok(())
+}
+
+#[test]
 fn ordered_hanging_indent_refuses_glyph_wider_than_continuation()
 -> Result<(), String> {
     use atrament_handwriting_statistics::{

@@ -154,23 +154,17 @@ impl FlowRegion {
 }
 
 impl FlowSource {
-    /// Read a caller-chosen regular text file using the existing bounded
-    /// profile file reader, without creating any implicit saved notebook.
-    pub(super) fn from_file(
-        format: FlowFormat, path: &str,
+    fn admit(
+        format: FlowFormat, source: &str, strip_bom: bool,
     ) -> Result<Self, String> {
-        let bytes = super::read_notebook_input(path, MAX_FLOW_BYTES)?;
-        let source = String::from_utf8(bytes)
-            .map_err(|_error| "flow file must be UTF-8")?;
-        Self::new(format, &source)
-    }
-
-    pub(super) fn new(
-        format: FlowFormat, source: &str,
-    ) -> Result<Self, String> {
-        // A leading UTF-8 signature is transport metadata, not ink.
-        // Keep the byte cap on the *original* input, including its BOM.
-        let admitted = source.strip_prefix('\u{feff}').unwrap_or(source);
+        // Exactly one leading UTF-8 signature is transport metadata.
+        // Once admitted, another leading BOM is literal authored ink.
+        // Keep the original-input byte cap, including any signature.
+        let admitted = if strip_bom {
+            source.strip_prefix('\u{feff}').unwrap_or(source)
+        } else {
+            source
+        };
         if admitted.is_empty()
             || source.len() > MAX_FLOW_BYTES
             || !admitted.chars().any(|ch| !matches!(ch,
@@ -244,6 +238,35 @@ impl FlowSource {
             }
         }
         Ok(Self { format, text: expanded })
+    }
+
+    /// Read a caller-chosen regular text file using the existing bounded
+    /// profile file reader, without creating any implicit saved notebook.
+    pub(super) fn from_file(
+        format: FlowFormat, path: &str,
+    ) -> Result<Self, String> {
+        let bytes = super::read_notebook_input(path, MAX_FLOW_BYTES)?;
+        let source = String::from_utf8(bytes)
+            .map_err(|_error| "flow file must be UTF-8")?;
+        Self::new(format, &source)
+    }
+
+    pub(super) fn new(
+        format: FlowFormat, source: &str,
+    ) -> Result<Self, String> {
+        Self::admit(format, source, true)
+    }
+
+    // Sibling typed callers can construct or mutate a FlowSource without
+    // going through the CLI parser. Re-admit its already-normalized bytes
+    // before physical layout; do not let that bypass the 4096-byte,
+    // visible-text, control-character or source-normalization boundaries.
+    fn validate_canonical(&self) -> Result<(), String> {
+        let admitted = Self::admit(self.format, &self.text, false)?;
+        if admitted.text != self.text {
+            return Err("flow source needs canonical normalized text".into());
+        }
+        Ok(())
     }
 }
 
@@ -2383,6 +2406,7 @@ fn measured_pitch(
     source: &FlowSource,
     statistics: Option<&HandwritingStatisticsProfile>,
 ) -> Result<u32, String> {
+    source.validate_canonical()?;
     let mut pitch = DEFAULT_PITCH_UM;
     let mut fence = None;
     let mut pending_setext = false;
