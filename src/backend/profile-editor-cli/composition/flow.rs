@@ -575,17 +575,18 @@ impl Layout<'_> {
         Ok(())
     }
 
-    // Keep a wrapped list's first marker and continuation together; a
-    // wrapped quote has a rule on each row and deserves the same first-row
-    // protection. Never forbid one-row regions or detach a preceding title.
+    // A wrapped Markdown paragraph, list or quote should keep its first
+    // two rows together when possible. Literal code and plain lines retain
+    // their exact row boundaries. Never detach a preceding heading.
     fn keep_wrapped_block_start(
-        &mut self, style: LineStyle, first: bool,
+        &mut self, style: LineStyle, first: bool, protect_body: bool,
     ) -> Result<(), String> {
         // The preceding title already reserved the first following row.
         // Its guarantee takes priority over the two-row continuation guard.
-        if first && !self.last_visible_heading && matches!(style,
-            LineStyle::Bullet | LineStyle::Ordered | LineStyle::Quote
-                | LineStyle::Task(_)) {
+        if first && !self.last_visible_heading
+            && (protect_body && matches!(style, LineStyle::Body)
+                || matches!(style, LineStyle::Bullet | LineStyle::Ordered
+                    | LineStyle::Quote | LineStyle::Task(_))) {
             self.keep_first_row_with_next(FollowingInkSpacing {
                 blank_rows: 0,
                 heading_rows: 0,
@@ -596,7 +597,7 @@ impl Layout<'_> {
     }
 
     fn layout_line(
-        &mut self, content: &str, style: LineStyle,
+        &mut self, content: &str, style: LineStyle, protect_body: bool,
     ) -> Result<(), String> {
         let (mut start_x, mut cap) = self.line_measurements(style)?;
         let (hang, ordered_marker) = if matches!(style, LineStyle::Ordered) {
@@ -644,7 +645,7 @@ impl Layout<'_> {
                 // even when the first word itself needs grapheme wrapping.
                 && !(first && ordered_marker == Some(row.as_str()))
             {
-                self.keep_wrapped_block_start(style, first)?;
+                self.keep_wrapped_block_start(style, first, protect_body)?;
                 self.write_row(take(&mut row), start_x, width, style, first)?;
                 start_continuation(first, &mut start_x, &mut cap, hang)?;
                 first = false;
@@ -669,7 +670,7 @@ impl Layout<'_> {
                         return Err("heading exceeds one-line fixed region"
                             .into());
                     }
-                    self.keep_wrapped_block_start(style, first)?;
+                    self.keep_wrapped_block_start(style, first, protect_body)?;
                     self.write_row(
                         take(&mut row), start_x, width, style, first,
                     )?;
@@ -1452,7 +1453,7 @@ fn handle_markdown_setext<'text>(
     if let Some(gap) = following_heading_gap(following) {
         layout.keep_first_row_with_next(gap)?;
     }
-    layout.layout_line(&take(paragraph), LineStyle::Heading(level))?;
+    layout.layout_line(&take(paragraph), LineStyle::Heading(level), false)?;
     Ok(true)
 }
 
@@ -1462,7 +1463,7 @@ fn flush_paragraph(
     layout: &mut Layout<'_>, paragraph: &mut String, style: LineStyle,
 ) -> Result<(), String> {
     if !paragraph.is_empty() {
-        layout.layout_line(paragraph, style)?;
+        layout.layout_line(paragraph, style, true)?;
         paragraph.clear();
     }
     Ok(())
@@ -1518,7 +1519,7 @@ fn layout_literal_indented_row(
         return Ok(false);
     }
     flush_paragraph(layout, paragraph, previous)?;
-    layout.layout_line(body, style)?;
+    layout.layout_line(body, style, false)?;
     Ok(true)
 }
 
@@ -1609,7 +1610,7 @@ fn handle_markdown_code_line(
     if input_line.trim_matches(' ').is_empty() {
         layout.blank_row()?;
     } else {
-        layout.layout_line(input_line, LineStyle::Body)?;
+        layout.layout_line(input_line, LineStyle::Body, false)?;
     }
     Ok(true)
 }
@@ -1879,7 +1880,7 @@ pub(super) fn layout_flow_with_region(
                 queue_list_item(&mut layout, &mut paragraph,
                     &mut paragraph_style, style, body, hard_break)?;
             } else {
-                layout.layout_line(body, style)?;
+                layout.layout_line(body, style, false)?;
             }
         }
     }

@@ -3081,3 +3081,57 @@ fn heading_first_row_guard_takes_priority_over_quote_continuation_guard()
     }
     Ok(())
 }
+
+#[test]
+fn wrapped_markdown_paragraph_starter_keeps_its_second_physical_row()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 35_000, height: 23_000,
+    };
+    for source in ["a  \naaaaaa aaaaaa", "a  \naaaaaaaa"] {
+        let input = FlowSource::new(FlowFormat::Markdown, source)?;
+        let render = |height| -> Result<_, String> {
+            super::layout_flow_with_region(
+                &input, &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(),
+                Some(super::FlowRegion { height, ..region }),
+            )
+        };
+        let (rows, marks, pages) = render(region.height)?;
+        assert_eq!(pages, 2, "{source:?}");
+        assert!(marks.is_empty());
+        assert_eq!(rows.iter().map(|row| (row.page, row.origin_um.1))
+            .collect::<Vec<_>>(), [
+                (1, 42_500), (2, 42_500), (2, 51_500),
+            ], "{source:?}");
+        let (fitting, _, fit_pages) = render(32_000)?;
+        assert_eq!(fit_pages, 1);
+        assert_eq!(fitting.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 1, 1]);
+        let (single, _, single_pages) = render(14_000)?;
+        assert_eq!(single_pages, 3);
+        assert_eq!(single.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 2, 3]);
+    }
+
+    // A heading wins the first-row reservation. A code fence and plain
+    // source lines are literal rows rather than Markdown paragraphs.
+    for (source, format, expected) in [
+        ("# a\naaaaaa aaaaaa", FlowFormat::Markdown, [1, 1, 2]),
+        ("a\n```\naaaaaa aaaaaa\n```", FlowFormat::Markdown,
+            [1, 1, 2]),
+        ("a\naaaaaa aaaaaa", FlowFormat::Plain, [1, 1, 2]),
+    ] {
+        let input = FlowSource::new(format, source)?;
+        let (rows, _, pages) = super::layout_flow_with_region(
+            &input, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(region),
+        )?;
+        assert_eq!(pages, 2);
+        assert_eq!(rows.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), expected, "{source:?}");
+    }
+    Ok(())
+}

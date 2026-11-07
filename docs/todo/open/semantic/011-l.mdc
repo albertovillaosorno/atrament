@@ -1667,3 +1667,21 @@ vector PDF and both selected transparent PNG pages, including heading ink.
 Insufficient PDF page counts, nonexistent PNG pages and missing glyphs
 refuse without changing an accepted output file. This remains CLI-only
 layout; persisted semantic notebook blocks and P1 acceptance are open.
+
+## First-row ordinary paragraph continuation guard (partial) — 2026-11-06
+
+A wrapped ordinary Markdown paragraph now keeps its first two physical rows
+on one sheet when a fresh page can hold both. The guard applies to pending
+soft-joined Markdown body paragraphs, not literal fenced-code rows,
+four-space-indented rows or independent plain-text lines. A preceding
+heading's first-following-row guarantee takes priority, and a region that
+fits only one row still paginates normally. Later paragraph rows may cross
+pages; this does not introduce persisted semantic paragraph identities.
+
+A red-before/green-after Rust regression verifies exact physical origins for
+word and grapheme wrapping, fully fitting and one-row regions, heading
+precedence and literal-row separation. Native CLI subprocess acceptance
+compares two-page vector PDF and both selected transparent PNG pages with
+independently placed authored glyph strokes. Invalid PDF/PNG page selections
+and missing glyphs refuse without replacing accepted files. The saved
+notebook P1 acceptance criterion remains open.

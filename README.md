@@ -566,6 +566,12 @@ first two physical rows and their separate vertical rules stay on one page
 if a fresh page can hold both. A preceding heading keeps its first quoted
 row instead; one-row regions remain valid and paginate normally.
 
+A wrapped ordinary Markdown paragraph also keeps its first two physical
+rows together when a fresh page can fit them. Literal fenced code,
+four-space-indented rows and plain-text lines keep their existing physical
+breaks. A preceding heading's first-row guarantee takes priority, and a
+one-row region still paginates normally.
+
 A Markdown heading keeps its first following visible row on the same physical
 page when there is room for both (including an optional 4-mm paragraph gap);
 an ending heading and a sheet too short for two rows remain valid. Long text
