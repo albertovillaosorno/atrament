@@ -130,6 +130,51 @@ fn typed_flow_region_checks_pen_clearance_at_every_edge()
 }
 
 #[test]
+fn typed_flow_region_rejects_invalid_ink_before_export()
+-> Result<(), String> {
+    use atrament_notebook_paper_cli::NotebookInkLine;
+    use atrament_notebook_profile::NotebookProfile;
+
+    let printable = NotebookProfile::default().printable_rect_um()?;
+    let region = super::FlowRegion {
+        left: printable.0 + 10_000,
+        top: printable.1 + 10_000,
+        width: 20_000,
+        height: 20_000,
+    };
+    let pen = NotebookInkLine {
+        page: 1,
+        start_um: (region.left + 1_000, region.top + 1_000),
+        end_um: (region.left + 10_000, region.top + 10_000),
+        width_um: 80,
+        rgb: [30, 48, 74],
+    };
+    for width in [80, 1_500] {
+        region.validate_ink(printable, &[NotebookInkLine {
+            width_um: width, ..pen
+        }])?;
+    }
+    for invalid in [
+        NotebookInkLine { width_um: 0, ..pen },
+        NotebookInkLine { width_um: 79, ..pen },
+        NotebookInkLine { width_um: 1_501, ..pen },
+        NotebookInkLine { width_um: u32::MAX, ..pen },
+        NotebookInkLine { page: 0, ..pen },
+        NotebookInkLine { page: 33, ..pen },
+        NotebookInkLine { page: usize::MAX, ..pen },
+        NotebookInkLine { end_um: pen.start_um, ..pen },
+    ] {
+        let Err(error) = region.validate_ink(printable, &[invalid]) else {
+            return Err(format!("invalid pen accepted: {invalid:?}"));
+        };
+        if error != "flow region ink needs valid page, width and endpoints" {
+            return Err(format!("unexpected ink refusal: {error}"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_flow_source_must_retain_bounded_canonical_admission()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

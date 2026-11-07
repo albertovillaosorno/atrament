@@ -2359,3 +2359,16 @@ those combinations.
 A red-to-green Rust regression checks both boundaries, valid endpoint scales
 and plain-text compatibility. This is still export-only heading ink; semantic
 block styles and persisted notebook flow are unfinished.
+
+## Typed fixed-region pen-material admission (partial) — 2026-11-07
+
+The reusable Rust fixed-region ink validator now refuses pen widths outside
+80–1500 um, page zero or beyond the 32-page physical limit, and zero-length
+strokes before checking endpoint clearance. The downstream native PDF/PNG
+writers already imposed these boundaries, but direct typed callers could
+previously pass malformed strokes through fixed-region validation.
+
+A failing-before-fix Rust regression exercises zero, under-minimum, over-limit
+and overflowing widths; invalid page indices; coincident endpoints; and both
+valid width endpoints. This keeps typed physical validation aligned with the
+export contract, without adding semantic notebook persistence.

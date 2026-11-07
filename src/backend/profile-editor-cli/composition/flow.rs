@@ -132,6 +132,14 @@ impl FlowRegion {
     ) -> Result<(), String> {
         let (left, top, right, bottom) = self.bounds_within(printable)?;
         for line in ink {
+            if !(1..=MAX_PAGES).contains(&line.page)
+                || !(80..=1_500).contains(&line.width_um)
+                || line.start_um == line.end_um {
+                return Err(concat!(
+                    "flow region ink needs valid page, ",
+                    "width and endpoints",
+                ).into());
+            }
             let clearance = line.width_um.div_ceil(2);
             let inside = |(x, y): (u32, u32)| {
                 x.checked_sub(clearance).is_some_and(|edge| edge >= left)
