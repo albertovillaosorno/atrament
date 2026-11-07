@@ -4144,6 +4144,24 @@ fn blank_separated_heading_and_fitting_block_preserve_gap_and_ink()
     assert_eq!(rows[4].origin_um.1, 42_500);
     assert!(marks.iter().any(|mark| mark.page == 3));
 
+    // Authored decimal labels stay on the first moved body row. The
+    // continuation remains aligned under text, not under the numeral.
+    let (rows, marks, pages) = render(
+        "```\na\n```\n# a\n\n1. a a a a a", 45_000,
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 2, 2, 2, 2]);
+    assert_eq!(rows.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(), ["a", "a", "1. a a", "a a", "a"]);
+    assert_eq!(rows.iter().map(|row| row.origin_um)
+        .collect::<Vec<_>>(), [
+            (32_500, 42_500), (32_500, 42_500),
+            (38_500, 55_500), (50_500, 64_500), (50_500, 73_500),
+        ]);
+    assert_eq!(marks.len(), 4);
+    assert!(marks.iter().all(|mark| mark.page == 2));
+
     // No independent ink means no relocation or blank-page invention.
     let (rows, marks, pages) = render(
         "# a\n\n> aaaaaa aaaaaa", 36_000,

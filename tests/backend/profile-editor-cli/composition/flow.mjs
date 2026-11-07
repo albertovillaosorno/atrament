@@ -5363,3 +5363,81 @@ test('blank-separated headings and quotes retain 4-mm gap in PDF/PNG',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('blank-separated numbered heading keeps hanging ink in PDF/PNG',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-heading-number-gap-'));
+    try {
+        const digits = [
+            '--glyph-stroke', '1', '600', '500', '1800', '3000',
+            '250', '#123456',
+            '--glyph-stroke', '.', '600', '500', '1800', '3000',
+            '250', '#123456',
+        ];
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '45000',
+        ];
+        const source = '```\na\n```\n# a\n\n1. a a a a a';
+        const marker = [900, 1900, 2900, 3900].flatMap(
+            (lift) => [
+                '--ink-line', '2', '32500', String(42500 + lift),
+                '36500', String(42500 + lift), '1400', '#F8DE91',
+            ]);
+        const manual = [
+            '--place-text', '1', '32500', '42500', 'a',
+            '--place-text', '2', '32500', '42500', 'a',
+            '--place-text', '2', '38500', '55500', '1. a a',
+            '--place-text', '2', '50500', '64500', 'a a',
+            '--place-text', '2', '50500', '73500', 'a',
+            ...marker,
+        ];
+        for (const format of ['pdf', 'png']) {
+            for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                const exportOptions = format === 'pdf'
+                    ? ['--pages', '2'] : [];
+                const actual = render(dir, source, format,
+                    [...digits, ...region, ...exportOptions],
+                    '--flow-markdown', page);
+                assert.equal(actual.result.status, 0,
+                    actual.result.stderr);
+                const accepted = readFileSync(actual.output);
+                const reference = join(dir,
+                    `number-gap-${format}-${page}`);
+                const expected = spawnSync(cargo, [
+                    'run', '--quiet', '-p',
+                    'atrament_profile_editor_cli', '--',
+                    ...base, ...digits, ...manual, ...exportOptions,
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72']
+                        : []),
+                    '--output', reference,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(expected.status, 0, expected.stderr);
+                assert.deepEqual(accepted, readFileSync(reference),
+                    `${format} page ${page} exact numbered handwriting`);
+                const replay = render(dir,
+                    source.replace('\n\n1.', '\n\n\n1.'), format,
+                    [...digits, ...region, ...exportOptions],
+                    '--flow-markdown', page);
+                assert.equal(replay.result.status, 0,
+                    replay.result.stderr);
+                assert.deepEqual(readFileSync(replay.output), accepted);
+                const refused = render(dir, source, format,
+                    [...digits, ...region, ...exportOptions,
+                        ...(format === 'pdf'
+                            ? ['--pages', '1'] : [])],
+                    '--flow-markdown', format === 'pdf' ? 1 : 3);
+                assert.notEqual(refused.result.status, 0);
+                assert.deepEqual(readFileSync(refused.output), accepted);
+                const missing = render(dir, `${source} β`, format,
+                    [...digits, ...region, ...exportOptions],
+                    '--flow-markdown', page);
+                assert.notEqual(missing.result.status, 0);
+                assert.deepEqual(readFileSync(missing.output), accepted);
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

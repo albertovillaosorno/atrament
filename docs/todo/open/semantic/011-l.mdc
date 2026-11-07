@@ -1899,6 +1899,13 @@ heading marker, quote rules and text strokes. LF/CRLF and collapsed blanks
 have byte-identical output, while invalid page selections or missing glyphs
 do not overwrite accepted files.
 
+An additional numbered-list regression confirms that exact authored
+numerals remain on the first relocated item row and continuation strokes
+retain their measured hanging indent. Independent native PDF and both PNG
+pages match handwritten reference geometry, including heading-marker ink.
+Repeated blank lines replay identically; invalid page or missing-glyph
+requests cannot replace accepted output bytes.
+
 Fenced physical blank rows, oversized groups and prior heading/rule
 attachments retain existing constraints. This is CLI-only physical layout;
 persisted notebook semantics and full fixed-region editing remain open.
