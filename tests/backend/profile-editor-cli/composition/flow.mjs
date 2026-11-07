@@ -6125,3 +6125,110 @@ test('thematic rule and reserved heading chain move with native PDF/PNG ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('consecutive thematic rules retain fitting native PDF/PNG groups',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-rule-chain-'));
+    try {
+        const scenarios = [
+            {
+                label: 'quoted-rule-chain',
+                source: '```\na\n```\n---\n***\n> aaaaaa aaaaaa aaaaaa',
+                height: '50000',
+                titles: [],
+                rules: [47000, 56000],
+                quoteRows: [60500, 69500, 78500],
+                variations: (source) => [
+                    source.replace('---', '___'),
+                    source.replaceAll('\n', '\r\n'),
+                ],
+            },
+            {
+                label: 'gapped-rule-heading-quote',
+                source: '```\na\n```\n---\n\n***\n# a\n> aaaaaa aaaaaa aaaaaa',
+                height: '63000',
+                titles: [64500],
+                rules: [47000, 60000],
+                quoteRows: [73500, 82500, 91500],
+                variations: (source) => [
+                    source.replace('---', '___'),
+                    source.replace('\n\n', '\n\n\n'),
+                    source.replaceAll('\n', '\r\n'),
+                ],
+            },
+        ];
+        for (const scenario of scenarios) {
+            const region = [
+                '--flow-region', '30000', '40000', '35000', scenario.height,
+            ];
+            const manual = [
+                '--place-text', '1', '32500', '42500', 'a',
+                ...scenario.titles.flatMap((y) => [
+                    '--place-text', '2', '32500', String(y), 'a',
+                ]),
+                ...scenario.quoteRows.flatMap((y) => [
+                    '--place-text', '2', '38500', String(y), 'aaaaaa',
+                ]),
+                ...scenario.rules.flatMap((y) => [
+                    '--ink-line', '2', '32500', String(y),
+                    '63500', String(y), '400', '#1E304A',
+                ]),
+                ...scenario.titles.flatMap((y) =>
+                    [900, 1900, 2900, 3900].flatMap((lift) => [
+                        '--ink-line', '2', '32500', String(y + lift),
+                        '36500', String(y + lift), '1400', '#F8DE91',
+                    ])),
+                ...scenario.quoteRows.flatMap((y) => [
+                    '--ink-line', '2', '35500', String(y + 500),
+                    '35500', String(y + 8400), '400', '#1E304A',
+                ]),
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const options = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const actual = render(dir, scenario.source, format,
+                        [...region, ...options], '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        `${scenario.label}: ${actual.result.stderr}`);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `${scenario.label}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--', ...base,
+                        ...manual, ...options, '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `${scenario.label} native ${format} ${page}`);
+                    for (const variant of
+                        scenario.variations(scenario.source)) {
+                        const replay = render(dir, variant, format,
+                            [...region, ...options], '--flow-markdown', page);
+                        assert.equal(replay.result.status, 0,
+                            replay.result.stderr);
+                        assert.deepEqual(readFileSync(replay.output), accepted,
+                            `${scenario.label} equivalent rule syntax`);
+                    }
+                    const badPage = render(dir, scenario.source, format,
+                        [...region, ...options,
+                            ...(format === 'pdf' ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(badPage.result.status, 0);
+                    assert.deepEqual(readFileSync(badPage.output), accepted);
+                    const missing = render(dir, `${scenario.source} β`, format,
+                        [...region, ...options], '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted);
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

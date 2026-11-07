@@ -2006,3 +2006,24 @@ Fenced physical blanks, page-spanning heading chains, groups taller than one
 sheet, and prior structural reservations retain their earlier behavior.
 This is an export-only Markdown pagination refinement, not saved semantic
 notebook blocks or completion of the open P1 acceptance criterion.
+
+## Consecutive thematic-rule chains and fitting blocks (partial) — 2026-11-07
+
+The Markdown CLI now treats consecutive free thematic rules as a measured,
+run-less chain when they precede a page-fitting wrapped paragraph, list item
+or quote, optionally through one or more ATX/Setext headings. A fresh sheet
+can carry the complete group without stranding any separator on the earlier
+sheet. The generalized mover tracks each native separator centerline and
+counts each distinct collapsed 4-mm gap between rules and later titles/text.
+
+A failing-before-fix Rust geometry test checks two and three separators,
+quote bars, a following heading underline, repeated blank-source gaps,
+physical cursor positions and short-sheet fallback. The earlier rule's
+first-row reservation still wins if the full group cannot fit. An independent
+CLI reference verifies exact two-page PDF and both selected 72-DPI PNG pages
+against separately authored separator, heading marker and quote ink. CRLF,
+alternate rule symbols and collapsed blanks replay byte-for-byte; invalid
+page requests and missing glyphs preserve accepted export files.
+
+This is bounded CLI-only flow, not a saved semantic notebook, general
+fixed-region editing or completion of the open P1 acceptance criterion.

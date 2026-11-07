@@ -652,6 +652,17 @@ Existing earlier-heading reservations, fenced physical blanks, oversized
 groups and short-sheet fallback remain unchanged. This is not a persisted
 semantic notebook or general multi-block page fitting.
 
+Consecutive Markdown thematic rules now also travel together with a complete
+page-fitting wrapped paragraph, list item or quote, optionally through a
+heading chain. Each separator contributes its own measured physical row;
+collapsed 4-mm gaps between separators remain distinct from gaps before
+headings or body text. The native pen centerlines and accompanying quote or
+heading ink retain their exact page-local offsets.
+
+The earlier first-row reservation still wins when the complete chain cannot
+fit one sheet. This remains CLI-only pagination without persisted semantic
+block identity.
+
 A rule that already reserved its first visible row takes priority over a
 following block when the complete group cannot move together. Its next row
 still stays attached when that smaller reservation fits; later continuation

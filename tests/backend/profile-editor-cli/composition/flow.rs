@@ -4286,6 +4286,89 @@ fn thematic_rule_and_fitting_wrapped_block_move_as_one_group()
 }
 
 #[test]
+fn consecutive_thematic_rules_keep_their_fitting_wrapped_quote()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    let source = "```\na\n```\n---\n***\n> aaaaaa aaaaaa aaaaaa";
+    let (rows, marks, pages) = render(source, 50_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 2, 2, 2]);
+    assert_eq!(rows.iter().skip(1).map(|row| row.origin_um.1)
+        .collect::<Vec<_>>(), [60_500, 69_500, 78_500]);
+    assert_eq!(marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [2, 2, 2, 2, 2]);
+    assert_eq!(marks.iter().take(2).map(|mark| mark.start_um.1)
+        .collect::<Vec<_>>(), [47_000, 56_000]);
+    assert_eq!(marks.iter().skip(2).map(|mark| mark.start_um.1)
+        .collect::<Vec<_>>(), [61_000, 70_000, 79_000]);
+    // Independent gaps between separators are preserved. Repeated
+    // source blanks collapse to the same native physical ink.
+    let spaced = "```\na\n```\n---\n\n***\n> aaaaaa aaaaaa aaaaaa";
+    let (rows, marks, pages) = render(spaced, 54_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2, 2, 2]);
+    assert_eq!(rows.iter().skip(1).map(|row| row.origin_um.1)
+        .collect::<Vec<_>>(), [64_500, 73_500, 82_500]);
+    assert_eq!(marks.iter().map(|mark| mark.start_um.1)
+        .collect::<Vec<_>>(), [47_000, 60_000, 65_000, 74_000, 83_000]);
+    let repeated = spaced.replace("\n\n", "\n\n\n");
+    let (again, again_marks, again_pages) = render(&repeated, 54_000)?;
+    assert_eq!(again_pages, pages);
+    assert_eq!(again_marks, marks);
+    assert_eq!(again.iter().map(|run| (run.page, run.origin_um,
+        run.text.as_str())).collect::<Vec<_>>(),
+        rows.iter().map(|run| (run.page, run.origin_um,
+            run.text.as_str())).collect::<Vec<_>>());
+    // The same measured mover supports more than two separators and
+    // independent collapsed gaps without inventing text-run owners.
+    let triple = "```\na\n```\n---\n\n***\n\n___\n> aaaaaa aaaaaa";
+    let (rows, marks, pages) = render(triple, 58_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2, 2]);
+    assert_eq!(rows.iter().skip(1).map(|row| row.origin_um.1)
+        .collect::<Vec<_>>(), [77_500, 86_500]);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(), [(2, 47_000), (2, 60_000),
+            (2, 73_000), (2, 78_000), (2, 87_000)]);
+    // A complete rule chain can also own a heading and its entire
+    // wrapped block, without leaving either physical separator behind.
+    let with_heading = "```\na\n```\n---\n***\n# a\n> aaaaaa aaaaaa aaaaaa";
+    let (rows, marks, pages) = render(with_heading, 59_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2, 2, 2, 2]);
+    assert_eq!(rows.iter().skip(1).map(|row| row.origin_um.1)
+        .collect::<Vec<_>>(), [60_500, 69_500, 78_500, 87_500]);
+    assert_eq!(marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [2, 2, 2, 2, 2, 2]);
+    assert_eq!(marks.iter().map(|mark| mark.start_um.1)
+        .collect::<Vec<_>>(), [47_000, 56_000, 67_200,
+            70_000, 79_000, 88_000]);
+    // A chain too tall for a fresh page retains the earlier first-row
+    // pairing; no impossible all-or-nothing group is forced.
+    let (rows, marks, pages) = render(source, 41_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(marks[0].page, marks[1].page);
+    assert_eq!(rows[0].page, 1);
+    Ok(())
+}
+
+#[test]
 fn thematic_rule_heading_chain_and_fitting_block_keep_their_full_group()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

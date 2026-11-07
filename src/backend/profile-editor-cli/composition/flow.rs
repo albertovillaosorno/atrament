@@ -462,7 +462,15 @@ struct HeadingChain {
     first_run: usize,
     // A free thematic rule may reserve this chain's first title. Keep
     // that measured, run-less row with the whole group if it fits.
-    leading_rule_mark: Option<usize>,
+    leading_rules: Option<RuleChain>,
+}
+
+// Thematic rules have physical rows but no text runs. A reserved chain
+// keeps their marks together until its next heading or wrapped block.
+#[derive(Clone, Copy)]
+struct RuleChain {
+    count: usize,
+    first_mark: usize,
 }
 
 struct Layout<'model> {
@@ -483,6 +491,7 @@ struct Layout<'model> {
     pitch: u32,
     right: u32,
     row_count: usize,
+    rule_chain: Option<RuleChain>,
     statistics: Option<&'model HandwritingStatisticsProfile>,
     top: u32,
     y: u32,
@@ -508,12 +517,12 @@ impl Layout<'_> {
             style, protect_body,
         )?;
         self.keep_rule_with_fitting_block(
-            run_start, mark_start, heading_before_block,
+            run_start, heading_before_block,
             preceding_reservation, style, protect_body,
         )?;
         if !preceding_reservation {
             self.keep_fitting_block_together(
-                run_start, mark_start, style, protect_body, &[], false,
+                run_start, mark_start, style, protect_body, &[], 0,
             )?;
         }
         if Self::balance_tail_eligible(style, protect_body) {
@@ -521,6 +530,7 @@ impl Layout<'_> {
         }
         if !matches!(style, LineStyle::Heading(_)) {
             self.heading_chain = None;
+            self.rule_chain = None;
         }
         Ok(())
     }
@@ -650,41 +660,27 @@ impl Layout<'_> {
         Ok(self.y)
     }
 
-    // Only title rows may join this candidate. Account for the rule's
-    // virtual row and each interior collapsed gap; physical fenced rows,
-    // unrelated ornaments and page turns must not be pulled along.
+    // Only title rows may join this candidate. Account for every rule's
+    // virtual row and each collapsed gap; physical fenced rows, unrelated
+    // ornaments and page turns must not be pulled along.
     fn fitting_heading_gaps(
         &self, heading_index: usize, first_run: usize,
-        last_heading_index: usize, leading_rule_mark: Option<usize>,
+        last_heading_index: usize, leading_rules: Option<RuleChain>,
         body_gap: u32,
     ) -> Result<Option<Vec<(usize, u32)>>, String> {
         let heading = self.lines.get(heading_index)
             .ok_or("flow heading chain missing first title")?;
-        let mut gaps = Vec::new();
-        let leading_rule = usize::from(leading_rule_mark.is_some());
-        if let Some(mark_index) = leading_rule_mark {
-            let rule = self.ornaments.get(mark_index)
-                .ok_or("flow heading leading-rule mark out of bounds")?;
-            let Some(rule_y) = rule.start_um.1
-                .checked_sub(SEPARATOR_CENTER_UM) else {
+        let prefix_rows = leading_rules.map_or(0, |chain| chain.count);
+        let mut gaps = if let Some(chain) = leading_rules {
+            let Some(gaps) = self.fitting_rule_gaps(
+                chain, heading.page, heading.origin_um.1,
+            )? else {
                 return Ok(None);
             };
-            let after_rule = rule_y.checked_add(self.pitch)
-                .ok_or("flow heading leading-rule spacing overflow")?;
-            let Some(rule_gap) = heading.origin_um.1.checked_sub(after_rule)
-            else {
-                return Ok(None);
-            };
-            if rule.width_um != 400 || rule.start_um.1 != rule.end_um.1
-                || rule.page != heading.page
-                || !matches!(rule_gap, 0 | PARAGRAPH_GAP_UM)
-            {
-                return Ok(None);
-            }
-            if rule_gap != 0 {
-                gaps.push((0, rule_gap));
-            }
-        }
+            gaps
+        } else {
+            Vec::new()
+        };
         let titles = self.lines.get(heading_index..first_run)
             .ok_or("flow heading chain out of bounds")?;
         for (index, pair) in titles.windows(2).enumerate() {
@@ -704,14 +700,14 @@ impl Layout<'_> {
                 return Ok(None);
             }
             if interior_gap != 0 {
-                let gap_index = index.checked_add(leading_rule)
+                let gap_index = index.checked_add(prefix_rows)
                     .ok_or("flow heading gap index overflow")?;
                 gaps.push((gap_index, interior_gap));
             }
         }
         if body_gap != 0 {
             let last = last_heading_index.checked_sub(heading_index)
-                .and_then(|index| index.checked_add(leading_rule))
+                .and_then(|index| index.checked_add(prefix_rows))
                 .ok_or("flow heading chain index overflow")?;
             gaps.push((last, body_gap));
         }
@@ -735,6 +731,63 @@ impl Layout<'_> {
             }
         }
         Ok(offset)
+    }
+
+    // Consecutive separator marks are run-less measured rows. Admit only
+    // horizontal 0.4-mm rules on one page with collapsed 0/4-mm gaps;
+    // fenced physical blanks and earlier page turns break the group.
+    fn fitting_rule_gaps(
+        &self, chain: RuleChain, page: usize, following_y: u32,
+    ) -> Result<Option<Vec<(usize, u32)>>, String> {
+        let end = chain.first_mark.checked_add(chain.count)
+            .ok_or("flow rule-chain length overflow")?;
+        let rules = self.ornaments.get(chain.first_mark..end)
+            .ok_or("flow rule-chain marks out of bounds")?;
+        let mut gaps = Vec::new();
+        let mut previous_y: Option<u32> = None;
+        for (index, rule) in rules.iter().enumerate() {
+            let Some(rule_y) = rule.start_um.1
+                .checked_sub(SEPARATOR_CENTER_UM) else {
+                return Ok(None);
+            };
+            if rule.page != page || rule.width_um != 400
+                || rule.start_um.1 != rule.end_um.1 {
+                return Ok(None);
+            }
+            if let Some(prior_y) = previous_y {
+                let after = prior_y.checked_add(self.pitch)
+                    .ok_or("flow rule-chain spacing overflow")?;
+                let Some(gap) = rule_y.checked_sub(after) else {
+                    return Ok(None);
+                };
+                if !matches!(gap, 0 | PARAGRAPH_GAP_UM) {
+                    return Ok(None);
+                }
+                if gap != 0 {
+                    let before = index.checked_sub(1)
+                        .ok_or("flow rule-chain gap index underflow")?;
+                    gaps.push((before, gap));
+                }
+            }
+            previous_y = Some(rule_y);
+        }
+        let Some(last_rule_y) = previous_y else {
+            return Ok(None);
+        };
+        let after = last_rule_y.checked_add(self.pitch)
+            .ok_or("flow rule-chain final spacing overflow")?;
+        let Some(gap) = following_y.checked_sub(after) else {
+            return Ok(None);
+        };
+        if !matches!(gap, 0 | PARAGRAPH_GAP_UM) {
+            return Ok(None);
+        }
+        if gap != 0 {
+            let last = chain.count.checked_sub(1)
+                .ok_or("flow rule-chain final gap index underflow")?;
+            gaps.push((last, gap));
+        }
+        Ok(Some(gaps))
     }
 
     // Delay empty physical rows until real ink follows them. This keeps
@@ -795,14 +848,14 @@ impl Layout<'_> {
     fn keep_fitting_block_together(
         &mut self, first_run: usize, first_ornament: usize,
         style: LineStyle, protect_body: bool,
-        gaps_after: &[(usize, u32)], leading_rule: bool,
+        gaps_after: &[(usize, u32)], leading_rules: usize,
     ) -> Result<(), String> {
         if !Self::balance_tail_eligible(style, protect_body) {
             return Ok(());
         }
         let runs = self.lines.get(first_run..)
             .ok_or("flow short-block origin out of bounds")?;
-        let prefix_rows = usize::from(leading_rule);
+        let prefix_rows = leading_rules;
         let count = runs.len().checked_add(prefix_rows)
             .ok_or("flow short-block size overflow")?;
         if count < 3 {
@@ -810,7 +863,7 @@ impl Layout<'_> {
         }
         let first = runs.first()
             .ok_or("flow short-block missing first row")?;
-        let (old_page, first_y) = if leading_rule {
+        let (old_page, first_y) = if leading_rules > 0 {
             let rule = self.ornaments.get(first_ornament)
                 .ok_or("flow short-block missing leading rule")?;
             (rule.page, rule.start_um.1.checked_sub(SEPARATOR_CENTER_UM)
@@ -862,7 +915,7 @@ impl Layout<'_> {
             };
             let row_offset = Self::fitting_row_offset(
                 self.pitch, row_index,
-                if index < old_rows { gaps_after } else { &[] },
+                if grouped_index < old_rows { gaps_after } else { &[] },
             )?;
             if run.page != page
                 || origin.checked_add(row_offset) != Some(run.origin_um.1) {
@@ -870,8 +923,8 @@ impl Layout<'_> {
             }
         }
         self.move_fitting_block_marks(
-            first_run, first_ornament, leading_rule, (new_page, top),
-            first_y, gaps_after,
+            first_run, first_ornament, leading_rules, (new_page, top),
+            gaps_after,
         )?;
         let rows = self.lines.get_mut(first_run..)
             .ok_or("flow short-block rows disappeared")?;
@@ -915,19 +968,19 @@ impl Layout<'_> {
         // Move the full chain, including a preceding free thematic rule
         // when that rule reserved its first title. A chain already owned
         // by another heading or a non-free rule must remain in place.
-        let (heading_index, chain_mark, leading_rule_mark) =
+        let (heading_index, chain_mark, leading_rules) =
             if self.heading_attached_to_prior {
                 let Some(chain) = self.heading_chain else {
                     return Ok(());
                 };
                 if (chain.attached_to_prior
-                        && chain.leading_rule_mark.is_none())
+                        && chain.leading_rules.is_none())
                     || chain.first_run > last_heading_index
                 {
                     return Ok(());
                 }
                 (chain.first_run, Some(chain.first_mark),
-                    chain.leading_rule_mark)
+                    chain.leading_rules)
             } else {
                 (last_heading_index, None, None)
             };
@@ -961,8 +1014,8 @@ impl Layout<'_> {
         let heading_end = heading_y
             .checked_add(self.pitch)
             .ok_or("flow heading ornament boundary overflow")?;
-        let first_heading_mark = if let Some(mark) = leading_rule_mark {
-            mark
+        let first_heading_mark = if let Some(chain) = leading_rules {
+            chain.first_mark
         } else if let Some(mark) = chain_mark {
             mark
         } else {
@@ -979,14 +1032,14 @@ impl Layout<'_> {
         };
         let Some(gaps) = self.fitting_heading_gaps(
             heading_index, first_run, last_heading_index,
-            leading_rule_mark, gap,
+            leading_rules, gap,
         )? else {
             return Ok(());
         };
-        let leading_rule = leading_rule_mark.is_some();
+        let prefix_rows = leading_rules.map_or(0, |chain| chain.count);
         self.keep_fitting_block_together(
             heading_index, first_heading_mark, style, protect_body,
-            &gaps, leading_rule,
+            &gaps, prefix_rows,
         )
     }
 
@@ -997,7 +1050,6 @@ impl Layout<'_> {
     fn keep_rule_with_fitting_block(
         &mut self,
         first_run: usize,
-        first_mark: usize,
         heading_before_block: bool,
         preceding_reservation: bool,
         style: LineStyle,
@@ -1009,48 +1061,20 @@ impl Layout<'_> {
         {
             return Ok(());
         }
-        let Some(mark_index) = first_mark.checked_sub(1) else {
+        let Some(chain) = self.rule_chain else {
             return Ok(());
         };
-        let rule = self
-            .ornaments
-            .get(mark_index)
-            .ok_or("flow preceding-rule mark out of bounds")?;
         let Some(first) = self.lines.get(first_run) else {
             return Ok(());
         };
-        let Some(rule_y) = rule.start_um.1.checked_sub(SEPARATOR_CENTER_UM)
-        else {
+        let Some(gaps) = self.fitting_rule_gaps(
+            chain, first.page, first.origin_um.1,
+        )? else {
             return Ok(());
-        };
-        // Do not mistake a heading underline or quote rule for a
-        // separator. Fenced blank rows and collapsed paragraph gaps
-        // also break the candidate group without losing their ink.
-        let Some(after_rule) = rule_y.checked_add(self.pitch) else {
-            return Err("flow leading-rule spacing overflow".into());
-        };
-        let Some(gap) = first.origin_um.1.checked_sub(after_rule) else {
-            return Ok(());
-        };
-        if rule.width_um != 400
-            || rule.start_um.1 != rule.end_um.1
-            || rule.page != first.page
-            || !matches!(gap, 0 | PARAGRAPH_GAP_UM)
-        {
-            return Ok(());
-        }
-        let gaps = if gap == 0 {
-            &[][..]
-        } else {
-            &[(0, gap)][..]
         };
         self.keep_fitting_block_together(
-            first_run,
-            mark_index,
-            style,
-            protect_body,
-            gaps,
-            true,
+            first_run, chain.first_mark, style, protect_body,
+            &gaps, chain.count,
         )
     }
 
@@ -1213,28 +1237,27 @@ impl Layout<'_> {
 
     fn move_fitting_block_marks(
         &mut self, first_run: usize, first_ornament: usize,
-        leading_rule: bool, destination: (usize, u32),
-        first_y: u32, gaps_after: &[(usize, u32)],
+        leading_rules: usize, destination: (usize, u32),
+        gaps_after: &[(usize, u32)],
     ) -> Result<(), String> {
         let (new_page, top) = destination;
-        let prefix_rows = usize::from(leading_rule);
+        let prefix_rows = leading_rules;
         let runs = self.lines.get(first_run..)
             .ok_or("flow short-block origin out of bounds")?;
         for (mark_index, mark) in self.ornaments.get_mut(first_ornament..)
             .ok_or("flow short-block mark origin out of bounds")?
             .iter_mut().enumerate() {
-            // A leading thematic rule has a physical row but no text run.
-            // Its synthetic centerline must travel with the body rows.
-            if leading_rule && mark_index == 0 {
-                let relocate = |value: u32| -> Result<u32, String> {
-                    value.checked_sub(first_y)
-                        .and_then(|offset| top.checked_add(offset))
-                        .ok_or_else(|| {
-                            "flow leading-rule position overflow".into()
-                        })
-                };
-                mark.start_um.1 = relocate(mark.start_um.1)?;
-                mark.end_um.1 = relocate(mark.end_um.1)?;
+            // Every leading thematic rule has its own physical row but
+            // no TextRun. Recreate its centerline at the measured offset.
+            if mark_index < leading_rules {
+                let offset = Self::fitting_row_offset(
+                    self.pitch, mark_index, gaps_after,
+                )?;
+                let center = top.checked_add(offset)
+                    .and_then(|row| row.checked_add(SEPARATOR_CENTER_UM))
+                    .ok_or("flow leading-rule position overflow")?;
+                mark.start_um.1 = center;
+                mark.end_um.1 = center;
                 mark.page = new_page;
                 continue;
             }
@@ -1292,8 +1315,8 @@ impl Layout<'_> {
                     || self.last_visible_heading,
                 first_mark: self.ornaments.len(),
                 first_run: self.lines.len(),
-                leading_rule_mark: if self.last_visible_rule {
-                    self.ornaments.len().checked_sub(1)
+                leading_rules: if self.last_visible_rule {
+                    self.rule_chain
                 } else {
                     None
                 },
@@ -1478,7 +1501,25 @@ impl Layout<'_> {
         });
         self.last_visible_heading = false;
         self.heading_chain = None;
-        self.last_visible_rule = reserved_next;
+        let continuing = self.last_visible_rule;
+        self.rule_chain = if continuing {
+            let chain = self.rule_chain
+                .ok_or("flow reserved rule chain missing")?;
+            Some(RuleChain {
+                count: chain.count.checked_add(1)
+                    .ok_or("flow rule-chain count overflow")?,
+                ..chain
+            })
+        } else if reserved_next {
+            Some(RuleChain {
+                count: 1,
+                first_mark: self.ornaments.len().checked_sub(1)
+                    .ok_or("flow rule-chain mark missing")?,
+            })
+        } else {
+            None
+        };
+        self.last_visible_rule = reserved_next || continuing;
         self.y = y.checked_add(self.pitch)
             .ok_or("separator row advance overflow")?;
         Ok(())
@@ -2345,6 +2386,7 @@ fn initialize_layout<'model>(
         heading,
         heading_attached_to_prior: false,
         heading_chain: None,
+        rule_chain: None,
         last_visible_heading: false,
         last_visible_rule: false,
         statistics,
