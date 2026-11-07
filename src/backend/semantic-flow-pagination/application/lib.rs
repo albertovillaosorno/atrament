@@ -201,6 +201,16 @@ fn page_regions(
     revision: &AcceptedRevision,
     start_page_index: usize,
 ) -> PageRegionsResult {
+    // Flow placements start at their owning page, but accepted page
+    // identities are global: earlier pages cannot alias later placements.
+    let mut page_ids = BTreeSet::new();
+    for page in &revision.notebook.pages {
+        if !page_ids.insert(page.id) {
+            return Err(SemanticPaginationError::Pagination(
+                PaginationError::DuplicatePageIdentity { page: page.id },
+            ));
+        }
+    }
     let mut profiles = BTreeMap::new();
     for profile in &revision.notebook.page_profiles {
         if profiles.insert(profile.id, profile).is_some() {

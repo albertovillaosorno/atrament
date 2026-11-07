@@ -1005,6 +1005,55 @@ fn defensive_duplicate_accepted_page_identity_cannot_alias_placements() {
 }
 
 #[test]
+fn flow_on_later_page_rejects_identity_aliasing_an_earlier_page() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    assert_eq!(fixture.notebook.pages.len(), 2);
+    let [first, second] = fixture.notebook.pages.as_mut_slice() else {
+        return;
+    };
+    second.flows.append(&mut first.flows);
+    let mut session = SemanticNotebookSessionService::default();
+    let outcome = session.accept(fixture.notebook);
+    assert!(matches!(outcome, AcceptanceOutcome::Accepted { .. }));
+    let AcceptanceOutcome::Accepted { mapping, revision } = outcome else {
+        return;
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let second_page = accepted_for(&mapping, fixture.page_two);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+    assert!(session.current().is_some());
+    let Some(accepted) = session.current().cloned() else {
+        return;
+    };
+    let result = paginate_revision(&accepted, &measured);
+    assert!(result.is_ok());
+    let Ok(plan) = result else {
+        return;
+    };
+    assert_eq!(
+        plan.placements.first().map(|place| place.page),
+        Some(second_page),
+    );
+
+    // The selected flow starts on page two. A page identity collision with
+    // the earlier, excluded page must still refuse globally.
+    let mut corrupted = accepted.clone();
+    let Some(first_page) = corrupted.notebook.pages.first_mut() else {
+        return;
+    };
+    first_page.id = second_page;
+    assert_eq!(
+        paginate_revision(&corrupted, &measured),
+        Err(SemanticPaginationError::Pagination(
+            PaginationError::DuplicatePageIdentity { page: second_page },
+        )),
+    );
+    assert_eq!(session.current(), Some(&accepted));
+}
+
+#[test]
 fn defensive_missing_profile_never_falls_back_to_arbitrary_geometry() {
     let ids = IdentityAllocator::new();
     let fixture = candidate_fixture(&ids);

@@ -2444,3 +2444,18 @@ checks matching and conflicting geometries, including accepted-session
 non-mutation. Multiple real pages may still reference one unique shared
 profile; the existing large shared-profile regression remains green. This is
 another defensive typed boundary, not persisted text or full notebook export.
+
+## Global page-identity admission for later-page flows (partial) — 2026-11-07
+
+The revision-bound paginator now checks physical page identities across the
+entire accepted notebook before deriving the selected flow's page regions.
+A selected flow can start on page two or later, but its physical page cannot
+silently alias an earlier excluded page in a directly malformed typed
+revision. The independent paginator still validates its supplied regions.
+
+A failing-before-fix regression moves an accepted flow to page two, confirms
+the ordinary placement, then duplicates page two's identity on page one and
+expects the existing typed duplicate-page refusal without changing accepted
+session state. Empty flows still require no page geometry. This defensive
+admission does not create persisted semantic content or complete notebook
+PDF/PNG integration.
