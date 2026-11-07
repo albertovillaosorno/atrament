@@ -7022,6 +7022,13 @@ test('intervening Markdown block cannot authorize empty quote gap export',
                 ['fenced code', '> a\n```\na\n```\n>\n> ó'],
                 ['empty fence', '> a\n```\n```\n>\n> ó'],
                 ['heading and blank', '> a\n# a\n\n>\n> ó'],
+                ['ordinary paragraph', '> a\na\n>\n> ó'],
+                ['Setext heading', '> a\na\n===\n>\n> ó'],
+                ['numbered item', '> a\n1. a\n>\n> ó'],
+                ['numbered continuation',
+                    '> a\n1. a\n  a\n>\n> ó'],
+                ['checked task', '> a\n- [x] a\n>\n> ó'],
+                ['escaped quote', '> a\n\\> a\n>\n> ó'],
             ];
             for (const format of ['pdf', 'png']) {
                 for (const page of format === 'pdf' ? [1] : [1, 2]) {
@@ -7127,3 +7134,43 @@ test('hard-break-only quote cannot become a silent separator in PDF/PNG',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('Setext and ATX quoted gaps retain identical physical PDF/PNG', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-quote-heading-'));
+    try {
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '32000',
+        ];
+        const pairs = [
+            ['# a\n> a\n>\n> ó', 'a\n===\n> a\n>\n> ó'],
+            ['## a\n> a\n>\n> ó', 'a\n---\n> a\n>\n> ó'],
+            ['---\n# a\n> a\n>\n> ó',
+                '---\na\n===\n> a\n>\n> ó'],
+        ];
+        for (const format of ['pdf', 'png']) {
+            for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                const extra = [...region,
+                    ...(format === 'pdf' ? ['--pages', '2'] : [])];
+                for (const [atx, setext] of pairs) {
+                    for (const newline of ['\n', '\r\n']) {
+                        const first = render(dir,
+                            atx.replaceAll('\n', newline),
+                            format, extra, '--flow-markdown', page);
+                        assert.equal(first.result.status, 0,
+                            first.result.stderr);
+                        const accepted = readFileSync(first.output);
+                        const second = render(dir,
+                            setext.replaceAll('\n', newline),
+                            format, extra, '--flow-markdown', page);
+                        assert.equal(second.result.status, 0,
+                            second.result.stderr);
+                        assert.deepEqual(readFileSync(second.output),
+                            accepted, `${format} page ${page}: ${atx}`);
+                    }
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

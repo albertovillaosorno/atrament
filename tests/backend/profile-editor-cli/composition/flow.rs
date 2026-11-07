@@ -5779,3 +5779,126 @@ fn unicode_hard_breaks_match_source_newlines_in_literal_fences()
     }
     Ok(())
 }
+
+#[test]
+fn empty_quote_separators_respect_every_intervening_block_kind()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 35_000, height: 23_000,
+    };
+    let render = |source: &str| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(region),
+        )
+    };
+    let boundaries = [
+        ("body", "b"),
+        ("soft body", "b\nb"),
+        ("explicit body break", "b\\"),
+        ("Setext H1", "b\n==="),
+        ("Setext H2", "b\n---"),
+        ("ordered item", "1. b"),
+        ("ordered continuation", "1. b\n  b"),
+        ("checked task", "- [x] b"),
+        ("unordered item", "* b"),
+        ("escaped heading", "\\# b"),
+        ("escaped quote", "\\> b"),
+        ("literal four-space ink", "    b"),
+        ("fenced tilde ink", "~~~\nb\n~~~"),
+        ("empty fenced tilde", "~~~\n~~~"),
+        ("fenced quoted-looking ink", "```\n> b\n```"),
+    ];
+    for (label, intervening) in boundaries {
+        for newline in ["\n", "\r\n"] {
+            for separator in [">", "> ", "  >", "  >  "] {
+                let source = format!(
+                    "> a\n{intervening}\n{separator}\n> \u{f3}"
+                ).replace('\n', newline);
+                let Err(error) = render(&source) else {
+                    return Err(format!(
+                        "{label} did not end quote adjacency: {source:?}"
+                    ));
+                };
+                if !error.contains("empty Markdown block refused") {
+                    return Err(format!(
+                        "wrong {label} refusal for {source:?}: {error}"
+                    ));
+                }
+            }
+        }
+    }
+    for quoted in ["> a", "> a\n> b", "> a\n  b",
+        "> a\\", "> a  "] {
+        for newline in ["\n", "\r\n"] {
+            let marker = format!("{quoted}\n>\n> \u{f3}").replace('\n', newline);
+            let blank = format!("{quoted}\n\n> \u{f3}").replace('\n', newline);
+            let first = render(&marker)?;
+            let second = render(&blank)?;
+            let rows = |runs: &[super::TextRun]| runs.iter()
+                .map(|row| (row.page, row.origin_um, row.text.clone(),
+                    row.heading_ink))
+                .collect::<Vec<_>>();
+            if rows(&first.0) != rows(&second.0)
+                || first.1 != second.1 || first.2 != second.2 {
+                return Err(format!(
+                    "valid quoted gap changed physical ink: {marker:?}"
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn setext_atx_equivalence_survives_quoted_paragraph_gaps()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for (prefix, title_atx, title_setext) in [
+        ("", "# a", "a\n==="),
+        ("", "## a", "a\n---"),
+        ("a\n\n", "# a", "a\n==="),
+        ("- a\n", "# a", "a\n==="),
+        ("> a\n", "# a", "a\n==="),
+        ("---\n", "# a", "a\n==="),
+    ] {
+        for height in [14_000, 18_000, 23_000, 32_000, 41_000,
+            50_000, 59_000] {
+            for gap in ["", "\n"] {
+                for quote in ["> a\n>\n> \u{f3}", "> a\n\n> \u{f3}",
+                    "> a\n  b\n>\n> \u{f3}"] {
+                    let render = |title: &str| -> Result<_, String> {
+                        let text = format!("{prefix}{title}\n{gap}{quote}");
+                        super::layout_flow_with_region(
+                            &FlowSource::new(FlowFormat::Markdown, &text)?,
+                            &NotebookProfile::default(), None,
+                            super::HeadingDecoration::default(),
+                            Some(super::FlowRegion {
+                                left: 30_000, top: 40_000,
+                                width: 35_000, height,
+                            }),
+                        )
+                    };
+                    let left = render(title_atx)?;
+                    let right = render(title_setext)?;
+                    let ink = |rows: &[super::TextRun]| rows.iter().map(|row| (
+                        row.page, row.origin_um, row.text.clone(),
+                        row.heading_ink,
+                    )).collect::<Vec<_>>();
+                    if ink(&left.0) != ink(&right.0)
+                        || left.1 != right.1 || left.2 != right.2 {
+                        return Err(format!(
+                            "ATX/Setext quote-gap mismatch: prefix={prefix:?}, \
+                             height={height}, gap={gap:?}, quote={quote:?}"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}

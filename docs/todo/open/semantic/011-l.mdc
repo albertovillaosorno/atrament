@@ -2265,3 +2265,22 @@ CRLF source, two physical pages, vector PDF and both transparent PNG pages,
 asserting the invalid requests never replace the earlier accepted files.
 An uninterrupted quoted gap still produces its original 13-mm row pitch.
 These remain CLI-only flow guarantees, not saved semantic block adjacency.
+
+## Cross-block quote admission and title syntax parity — 2026-11-07
+
+A new deterministic Rust matrix refuses empty quote markers following
+ordinary paragraphs, either Setext title level, ordered items and
+continuations, checked tasks, escaped literal markers, and fenced or
+indented source. It tests four syntactic empty markers and both LF/CRLF
+source conventions, while retaining physical equality with ordinary
+blank lines after genuine quote continuations.
+
+A second Rust matrix checks 252 ATX/Setext equivalent title and quote-gap
+combinations over seven physical region heights, with prior body, list,
+quote or separator ink where applicable. Native export acceptance matches
+ATX/Setext variants across vector PDF and both selected transparent PNG
+pages, including a leading thematic rule and LF/CRLF line endings.
+Additional native refusals check that nonquoted structural boundaries
+cannot overwrite previously accepted PDF/PNG output. These tests extend
+CLI physical flow evidence only; saved semantic block identities, history
+and full first-release acceptance remain unfinished.

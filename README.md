@@ -812,7 +812,16 @@ cannot replace an accepted export.
 Isolated, leading, trailing and non-quote-followed empty quote markers still
 refuse. An intervening heading, thematic rule, literal indented row or fenced
 block also ends quoted adjacency: an empty `>` after such a block refuses even
-if a preceding paragraph was quoted.
+if a preceding paragraph was quoted. Native refusal coverage also includes
+ordinary prose, Setext titles, ordered items and their continuations, checked
+tasks, and escaped literal markers. The original PDF and both selected PNG
+pages remain unchanged when these inputs are refused, including LF/CRLF.
+
+Equivalent ATX and Setext titles followed by a legal quoted paragraph gap
+produce byte-identical two-page PDF and transparent PNG ink. A separate
+bounded Rust matrix checks matching physical coordinates across quoted gap
+variants and page heights. These are export-only regressions, not semantic
+notebook persistence.
 
 A quoted line containing only a final backslash (the Markdown hard-break
 marker) also refuses: it is not an empty `>` separator and cannot silently
