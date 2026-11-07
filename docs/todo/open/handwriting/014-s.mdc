@@ -723,3 +723,17 @@ add two detached marks. The printed glyphs and default fill remain intact.
 Browser SVG and native TSV tests, live Firefox downloads and Rust PDF/PNG
 export confirm exact placement, identity and atomic missing-glyph refusal.
 A persistent connected alphabet or correlated handwriting remains open.
+
+## Typed glyph expansion statistics admission (partial) — 2026-11-07
+
+Direct Rust glyph placement now revalidates the selected statistics profile
+before producing pen segments. A sibling typed caller cannot bypass saved
+profile admission with an unsupported version, duplicate global dimension,
+out-of-range mean or invalid Unicode override identity. The focused native
+regression first reproduced an invalid version rendering authored ink, then
+confirmed atomic refusal of all four mutated profiles and unchanged replay
+of the valid authored segment.
+
+CLI-loaded statistics already passed JSON admission. This hardens the direct
+expansion boundary; it does not synthesize glyphs, create a persistent
+handwriting profile link or complete correlated line-level variation.

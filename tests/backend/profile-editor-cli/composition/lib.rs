@@ -6466,6 +6466,67 @@ fn seeded_variation_keeps_exact_nfd_fallback_and_applies_selected_means() {
 }
 
 #[test]
+fn typed_glyph_expansion_refuses_unvalidated_statistics()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, GlyphStatistics, HandwritingStatisticsProfile,
+    };
+
+    const OUTSIDE_BOUNDS: i32 = 1_000_000;
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "a", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "a",
+    ]).iter())?;
+    let baseline = HandwritingStatisticsProfile::baseline(42);
+    let admitted = overlay.expand(&[], Some(&baseline))?;
+    if admitted.len() != 1 {
+        return Err("valid typed expansion lost authored pen ink".into());
+    }
+
+    let mut stale = baseline.clone();
+    stale.version = "unsupported-statistics-version".into();
+    let inherited = baseline.globals.first().copied()
+        .ok_or("missing baseline statistics")?;
+    let mut duplicate = baseline.clone();
+    duplicate.globals.push(inherited);
+    let mut outside = baseline.clone();
+    let width = outside.globals.iter_mut()
+        .find(|entry| entry.dimension == Dimension::Width)
+        .ok_or("missing baseline width")?;
+    width.statistics.minimum = OUTSIDE_BOUNDS;
+    width.statistics.maximum = OUTSIDE_BOUNDS;
+    width.statistics.mean = OUTSIDE_BOUNDS;
+    width.statistics.median = OUTSIDE_BOUNDS;
+    let mut malformed_key = baseline;
+    malformed_key.glyphs.push(GlyphStatistics {
+        grapheme: "ab".into(),
+        parameters: vec![inherited],
+    });
+    for (label, invalid, expected) in [
+        ("version", stale, "UnsupportedVersion"),
+        ("duplicate", duplicate, "DuplicateGlobal"),
+        ("width", outside, "OutsideDimensionBounds"),
+        ("grapheme", malformed_key, "InvalidGrapheme"),
+    ] {
+        let Err(error) = overlay.expand(&[], Some(&invalid)) else {
+            return Err(format!("unvalidated {label} profile rendered ink"));
+        };
+        if !error.contains("invalid glyph handwriting statistics")
+            || !error.contains(expected) {
+            return Err(format!("unexpected {label} refusal: {error}"));
+        }
+    }
+    if overlay.expand(&[], Some(&HandwritingStatisticsProfile::baseline(42)))?
+        != admitted {
+        return Err("invalid typed expansion changed replay".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn double_underlined_headings_keep_tiered_authored_text_and_native_ink() {
     let markdown = "# a\n## a\n### a\n> a\n---\na";
     let source = FlowSource::new(FlowFormat::Markdown, markdown)

@@ -537,6 +537,10 @@ impl GlyphOverlay {
         &self, manual: &[NotebookInkLine],
         statistics: Option<&HandwritingStatisticsProfile>,
     ) -> Result<Vec<NotebookInkLine>, String> {
+        // A typed sibling can supply a mutated profile without passing
+        // through the CLI's saved-JSON decoder. Refuse malformed versions,
+        // duplicate dimensions or unbounded means before placing any ink.
+        validate_glyph_statistics(statistics)?;
         self.validate_pairing()?;
         let mut expanded = manual.to_vec();
         let mut missing = Vec::new();
@@ -1668,6 +1672,17 @@ impl GlyphOverlay {
         }
         Ok(())
     }
+}
+
+fn validate_glyph_statistics(
+    statistics: Option<&HandwritingStatisticsProfile>,
+) -> Result<(), String> {
+    if let Some(profile) = statistics {
+        profile.validate(&UnicodeGraphemeSegmentation).map_err(|error| {
+            format!("invalid glyph handwriting statistics: {error:?}")
+        })?;
+    }
+    Ok(())
 }
 
 /// Consecutive matching pen segments form a candidate path; only the
