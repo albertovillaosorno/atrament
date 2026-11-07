@@ -742,3 +742,70 @@ fn missing_or_invalid_profile_never_falls_back_to_arbitrary_bounds() {
         }),
     );
 }
+
+fn verify_duplicate_fixed_region_authority_refusal() -> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("valid fixed-region fixture was refused".into());
+    };
+    let page = accepted_for(&mapping, fixture.page_one);
+    let object = accepted_for(&mapping, fixture.block);
+    let profile = accepted_for(&mapping, fixture.profile_one);
+    let checked = placement(revision, page, object, rect(35_000, 20_000, 1, 1));
+    let accepted = session
+        .current()
+        .ok_or("accepted revision missing")?
+        .clone();
+    if validate_fixed_placement(&accepted, checked)
+        != Ok(FixedRegionLayoutResult::WithinBounds { object, page })
+    {
+        return Err("valid fixed region was refused".into());
+    }
+
+    let mut repeated_page = accepted.clone();
+    repeated_page
+        .notebook
+        .pages
+        .get_mut(1)
+        .ok_or("second page missing")?
+        .id = page;
+    if validate_fixed_placement(&repeated_page, checked)
+        != Err(FixedRegionLayoutError::DuplicatePageIdentity { page })
+    {
+        return Err("repeated accepted page identity was not refused".into());
+    }
+    for conflicting_geometry in [false, true] {
+        let mut repeated_profile = accepted.clone();
+        let second = repeated_profile
+            .notebook
+            .page_profiles
+            .get_mut(1)
+            .ok_or("second page profile missing")?;
+        second.id = profile;
+        if conflicting_geometry {
+            second.geometry = geometry(40_000);
+        }
+        if validate_fixed_placement(&repeated_profile, checked)
+            != Err(FixedRegionLayoutError::DuplicatePageProfileIdentity {
+                profile,
+            })
+        {
+            return Err(format!(
+                "profile alias conflicting={conflicting_geometry} accepted"
+            ));
+        }
+    }
+    if session.current() != Some(&accepted) {
+        return Err("fixed-region checks mutated accepted state".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn fixed_regions_refuse_ambiguous_accepted_page_and_profile_owners() {
+    assert_eq!(verify_duplicate_fixed_region_authority_refusal(), Ok(()));
+}

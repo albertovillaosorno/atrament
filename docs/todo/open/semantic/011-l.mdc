@@ -2536,3 +2536,18 @@ references (such as a page's profile or a constraint's target) remain valid
 references rather than extra owners. This is defensive typed admission, not
 arbitrary whole-document identity validation, persistent Markdown layout or
 the required semantic notebook-to-PDF/PNG path.
+
+## Fixed-region accepted page/profile ambiguity refusal — 2026-11-07
+
+The revision-bound fixed-region validator now checks physical page and paper
+profile identities for duplicates before resolving any fixed block's page or
+printable rectangle. Directly malformed accepted revisions previously used
+the first page/profile match and could validate ink against arbitrarily
+chosen physical geometry. Duplicate page identities and duplicate paper
+profile identities now return distinct typed errors, even when the profile
+geometries happen to agree.
+
+A failing-before-fix Rust regression covers repeated pages and matching or
+conflicting profile geometry while preserving the accepted session and valid
+fixed-region placement. This is defensive fixed-area boundary validation,
+not a solver, saved semantic body, or full export implementation.

@@ -33,6 +33,7 @@
 
 //! Accepted semantic binding for post-placement fixed-region bounds checking.
 
+use std::collections::BTreeSet;
 use std::fmt::Debug;
 
 use atrament_diagnostic::{
@@ -93,6 +94,16 @@ pub enum FixedRegionLayoutResult {
 pub enum FixedRegionLayoutError {
     /// Physical rectangle coordinate arithmetic cannot be represented.
     Bounds(BoundsError),
+    /// Two accepted pages share one identity, making ownership ambiguous.
+    DuplicatePageIdentity {
+        /// Colliding physical page identity.
+        page: AcceptedIdentity,
+    },
+    /// Two paper profiles share one identity, making geometry ambiguous.
+    DuplicatePageProfileIdentity {
+        /// Colliding physical page-profile identity.
+        profile: AcceptedIdentity,
+    },
     /// Accepted page profile is structurally invalid.
     InvalidPageProfile {
         /// Stable accepted page using the invalid physical profile.
@@ -138,7 +149,8 @@ pub enum FixedRegionLayoutError {
 /// # Errors
 ///
 /// Returns a typed failure for stale revision binding, unknown page or object,
-/// missing or invalid page-profile authority, or unrepresentable coordinates.
+/// missing, invalid or ambiguous page-profile authority, duplicate page
+/// identities, or unrepresentable coordinates.
 pub fn validate_fixed_placement(
     revision: &AcceptedRevision,
     placement: AcceptedFixedPlacement,
@@ -148,6 +160,24 @@ pub fn validate_fixed_placement(
             accepted: revision.id,
             placement: placement.revision,
         });
+    }
+    // This is normally guaranteed by candidate acceptance. Direct typed
+    // revisions must also reject ambiguous first-match page/profile lookups.
+    let mut page_ids = BTreeSet::new();
+    for page in &revision.notebook.pages {
+        if !page_ids.insert(page.id) {
+            return Err(FixedRegionLayoutError::DuplicatePageIdentity {
+                page: page.id,
+            });
+        }
+    }
+    let mut profile_ids = BTreeSet::new();
+    for profile in &revision.notebook.page_profiles {
+        if !profile_ids.insert(profile.id) {
+            return Err(FixedRegionLayoutError::DuplicatePageProfileIdentity {
+                profile: profile.id,
+            });
+        }
     }
     let Some(page) = revision
         .notebook
