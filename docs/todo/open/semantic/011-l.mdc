@@ -2218,3 +2218,19 @@ spacing, indentation and CRLF spellings replay identically, and invalid
 page selections or unauthored glyphs preserve the last accepted file.
 These are regression protections for the existing CLI-only flow, not a
 persisted semantic notebook implementation or completion of P1 acceptance.
+
+## Hard-break cross-block native export regression — 2026-11-07
+
+A new Rust equivalence regression checks that two trailing ASCII spaces
+and a single final backslash preserve physical rows and ornaments across
+ordinary paragraphs, quotes, bullets, ordered items and checkbox tasks.
+It varies preceding headings, rules and constrained page heights, without
+broadening the bounded Markdown grammar. Unicode line separators in literal
+fences are also compared with explicit newline-separated code rows.
+
+The quoted hard-break case additionally matches independently authored
+page-local ink in a real two-sheet vector PDF and both transparent PNG
+pages, byte for byte, including CRLF and Unicode separator variants.
+Invalid glyphs, PDF counts and PNG page selections cannot overwrite an
+accepted output. These tests add coverage only; the source and results
+remain export-only CLI state, not a saved semantic notebook.

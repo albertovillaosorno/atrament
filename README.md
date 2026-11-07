@@ -546,6 +546,15 @@ flow refuses instead of silently moving that glyph to another row or page.
 
 Paired trailing backslashes remain literal and need authored glyphs.
 
+Native Rust regression coverage now compares two-space and trailing-backslash
+hard breaks through ordinary paragraphs, quotes, unordered/numbered lists and
+checkbox tasks across one- and multi-row physical regions. A separate literal
+fence regression confirms pasted Unicode line separators retain the same
+physical code rows. The two-page quoted case also matches independently
+placed native PDF ink and both transparent PNG sheets byte for byte, including
+CRLF and Unicode break spellings; invalid glyphs or page selections preserve
+an existing export. These are export-only guarantees, not persisted blocks.
+
 Consecutive Markdown blank lines collapse to one 4-mm paragraph gap, with
 leading/trailing blanks ignored. Plain-text blank lines instead
 reserve full physical writing rows; they count toward the 128-row limit and

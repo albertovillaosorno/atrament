@@ -6937,3 +6937,72 @@ test('chained blank quote paragraphs match native PDF and both PNG pages',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('quoted hard-break variants preserve independent two-page PDF/PNG ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-quote-break-pages-'));
+        try {
+            const source = '> a\\\n> ó';
+            const region = [
+                '--flow-region', '30000', '40000', '35000', '14000',
+            ];
+            const manual = [
+                '--place-text', '1', '38500', '42500', 'a',
+                '--place-text', '2', '38500', '42500', 'ó',
+                '--ink-line', '1', '35500', '43000',
+                '35500', '50900', '400', '#1E304A',
+                '--ink-line', '2', '35500', '43000',
+                '35500', '50900', '400', '#1E304A',
+            ];
+            const variants = [
+                '> a  \n> ó', '> a\u2028> ó',
+                source.replaceAll('\n', '\r\n'),
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const pages = format === 'pdf' ? ['--pages', '2'] : [];
+                    const options = [...region, ...pages];
+                    const actual = render(dir, source, format,
+                        options, '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `quote-break-manual-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--', ...base,
+                        ...manual, ...pages, '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []), '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `physical quote ink, ${format} page ${page}`);
+                    for (const variant of variants) {
+                        const replay = render(dir, variant, format,
+                            options, '--flow-markdown', page);
+                        assert.equal(replay.result.status, 0,
+                            replay.result.stderr);
+                        assert.deepEqual(readFileSync(replay.output), accepted,
+                            `same quoted ink for ${variant} in ${format}`);
+                    }
+                    const missing = render(dir, `${source}\n> β`, format,
+                        options, '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        'missing glyph must preserve selected export');
+                    const invalid = render(dir, source, format,
+                        [...options, ...(format === 'pdf'
+                            ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(invalid.result.status, 0);
+                    assert.deepEqual(readFileSync(invalid.output), accepted,
+                        'invalid page selection preserves accepted output');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

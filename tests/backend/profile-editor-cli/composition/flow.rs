@@ -5617,3 +5617,76 @@ fn chained_empty_quotes_share_exact_collapsed_gaps_across_pages()
     }
     Ok(())
 }
+
+#[test]
+fn markdown_hard_break_forms_match_across_structural_page_boundaries()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let examples = [
+        ("a", "b", "a\\\nb", "a  \nb"),
+        ("> a", "> b", "> a\\\n> b", "> a  \n> b"),
+        ("- a", "  b", "- a\\\n  b", "- a  \n  b"),
+        ("1. a", "  b", "1. a\\\n  b", "1. a  \n  b"),
+        ("- [x] a", "  b", "- [x] a\\\n  b", "- [x] a  \n  b"),
+    ];
+    let visual = |rows: &[super::TextRun]| rows.iter().map(|row| (
+        row.page, row.origin_um, row.text.clone(), row.heading_ink,
+    )).collect::<Vec<_>>();
+    for (first, last, slash, spaces) in examples {
+        for height in [14_000, 18_000, 23_000, 32_000, 41_000] {
+            for prefix in ["", "# a\n", "a\\\n", "---\n"] {
+                let render = |source: &str| -> Result<_, String> {
+                    super::layout_flow_with_region(
+                        &FlowSource::new(FlowFormat::Markdown, source)?,
+                        &NotebookProfile::default(), None,
+                        super::HeadingDecoration::default(),
+                        Some(super::FlowRegion {
+                            left: 30_000, top: 40_000,
+                            width: 35_000, height,
+                        }),
+                    )
+                };
+                let reference = render(&format!("{prefix}{spaces}"))?;
+                let candidate = render(&format!("{prefix}{slash}"))?;
+                if candidate.2 != reference.2
+                    || visual(&candidate.0) != visual(&reference.0)
+                    || candidate.1 != reference.1 {
+                    return Err(format!(
+                        "hard break mismatch {first:?} / {last:?} at \
+                         height={height}, prefix={prefix:?}"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn unicode_hard_breaks_match_source_newlines_in_literal_fences()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let source = |text: &str| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, text)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height: 14_000,
+            }),
+        )
+    };
+    let reference = source("```\na\nb\n```")?;
+    let unicode = source("```\na\u{2028}b\n```")?;
+    let geometry = |rows: &[super::TextRun]| rows.iter().map(|run| (
+        run.text.clone(), run.page, run.origin_um,
+    )).collect::<Vec<_>>();
+    if geometry(&unicode.0) != geometry(&reference.0)
+        || unicode.1 != reference.1 || unicode.2 != reference.2 {
+        return Err("Unicode fence line break changed physical ink".into());
+    }
+    Ok(())
+}
