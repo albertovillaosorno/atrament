@@ -2566,3 +2566,20 @@ A failing-before-fix app regression and an independent domain regression
 cover the ambiguity cases with preserved accepted session state. This is
 not a complete global duplicate identity graph validator or saved notebook
 to-PDF/PNG compiler.
+
+## Shared selected-owner collision guard (partial) — 2026-11-07
+
+Fixed-region placement now refuses a selected block identity reused by any
+other semantic owner, not only by another block. A failing-before-fix native
+regression covers later same-page flow, nested inline span, notebook root and
+paper-profile aliases in directly malformed accepted revisions.
+
+One iterative semantic-domain owner traversal now backs both fixed-region and
+revision-bound measured-flow identity admission. It distinguishes structural
+owners from references and retains the existing typed duplicate refusals.
+Model regressions cover non-owner references, nested figure/formula/inline
+owners and cross-flow aliases.
+
+Valid geometry and accepted session state stay unchanged. This is not
+whole-notebook candidate acceptance, persisted semantic body layout or the
+required notebook-to-PDF/PNG integration.

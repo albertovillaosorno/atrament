@@ -32,24 +32,26 @@
 
 //! Semantic notebook model regression tests.
 
+use std::collections::BTreeSet;
+use std::num::NonZeroU32;
+
 use atrament_mathematics_source as _;
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation,
     PageProfile as PhysicalPageProfile, PaperMarkAppearance, PaperMarkJoin,
     PaperMarkLayer, PaperPattern, Rect, SheetSize,
 };
-use std::num::NonZeroU32;
-
 use atrament_semantic_notebook::{
     Asset, Block, BlockContent, Constraint, ConstraintKind, ExtensionData,
-    Figure, Flow, IdentityAllocator, InlineSpan, List, ListItem, Notebook,
+    Figure, Flow, Formula, FormulaMode, IdentityAllocator, InlineSpan, List,
+    ListItem, Notebook,
     OutputProfile, Page, PaperProfile, Provenance, ProvenanceKind,
     SemanticBlockKind, SemanticIdentityDescriptor, SemanticIdentityKind,
     SemanticIdentityPathEntry, Style,
     Table, TableCell, TableCellSpan, TableGridError,
     TableLogicalCellPlacement, TableRow, TableRowRole,
     UnresolvedBlock, UnresolvedReason, semantic_block, semantic_block_page,
-    semantic_block_identity_is_ambiguous,
+    semantic_block_identity_is_ambiguous, semantic_duplicate_owner_among,
     semantic_identity_descriptor, semantic_identity_kind,
     semantic_identity_path,
 };
@@ -1689,4 +1691,81 @@ fn verify_block_ambiguity_nested_and_cross_page() -> Result<(), &'static str> {
 #[test]
 fn semantic_block_ambiguity_checks_nested_and_cross_page_owners() {
     assert_eq!(verify_block_ambiguity_nested_and_cross_page(), Ok(()));
+}
+
+fn verify_selected_owner_cross_kind() -> Result<(), &'static str> {
+    let rule = |id| Block {
+        content: BlockContent::Rule,
+        extensions: vec![],
+        id,
+        provenance: None,
+        style: None,
+    };
+    let mut notebook = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: 1u32,
+        output_profiles: vec![],
+        page_profiles: vec![],
+        pages: vec![Page {
+            flows: vec![Flow {
+                blocks: vec![rule(5), rule(6)],
+                id: 4,
+            }],
+            id: 3,
+            paper_profile: 2,
+        }],
+        provenance: vec![],
+        styles: vec![],
+    };
+    let selected = BTreeSet::from([5u32]);
+    ambiguity_fixture_block_mut(&mut notebook, 0, 0)
+        .ok_or("first block missing")?
+        .style = Some(5);
+    if semantic_duplicate_owner_among(&notebook, &selected).is_some() {
+        return Err("reference incorrectly counted as semantic owner");
+    }
+    notebook
+        .pages
+        .first_mut()
+        .ok_or("page missing")?
+        .flows
+        .push(Flow { id: 5, blocks: vec![] });
+    if semantic_duplicate_owner_among(&notebook, &selected) != Some(5) {
+        return Err("later flow alias was missed");
+    }
+    let page = notebook.pages.first_mut().ok_or("page missing")?;
+    let _removed = page.flows.pop();
+    for content in [
+        BlockContent::Paragraph(vec![InlineSpan {
+            id: 5,
+            provenance: None,
+            style: None,
+            text: String::from("nested span"),
+        }]),
+        BlockContent::Figure(Figure {
+            asset: None,
+            caption: vec![],
+            id: 5,
+        }),
+        BlockContent::Mathematics(Formula {
+            id: 5,
+            mode: FormulaMode::Display,
+            source: String::from("x"),
+        }),
+    ] {
+        ambiguity_fixture_block_mut(&mut notebook, 0, 1)
+            .ok_or("sibling block missing")?
+            .content = content;
+        if semantic_duplicate_owner_among(&notebook, &selected) != Some(5) {
+            return Err("nested leaf owner alias was missed");
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn selected_semantic_owner_collision_checks_non_block_kinds() {
+    assert_eq!(verify_selected_owner_cross_kind(), Ok(()));
 }

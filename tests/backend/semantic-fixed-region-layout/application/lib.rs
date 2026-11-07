@@ -893,3 +893,79 @@ fn verify_duplicate_fixed_object_refusal() -> Result<(), String> {
 fn fixed_region_refuses_ambiguous_nested_or_cross_page_block_owner() {
     assert_eq!(verify_duplicate_fixed_object_refusal(), Ok(()));
 }
+
+fn verify_fixed_object_structural_alias_refusal() -> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("valid fixed-region fixture was refused".into());
+    };
+    let page = accepted_for(&mapping, fixture.page_one);
+    let object = accepted_for(&mapping, fixture.block);
+    let checked = placement(revision, page, object, rect(35_000, 20_000, 1, 1));
+    let accepted = session.current().ok_or("revision missing")?.clone();
+    for case in 0u8..4 {
+        let mut malformed = accepted.clone();
+        match case {
+            0 => malformed
+                .notebook
+                .pages
+                .first_mut()
+                .ok_or("first page missing")?
+                .flows
+                .push(Flow {
+                    blocks: vec![],
+                    id: object,
+                }),
+            1 => {
+                let container = malformed
+                    .notebook
+                    .pages
+                    .first_mut()
+                    .and_then(|owning_page| owning_page.flows.first_mut())
+                    .and_then(|flow| flow.blocks.get_mut(1))
+                    .ok_or("callout missing")?;
+                let BlockContent::Callout(children) = &mut container.content
+                else {
+                    return Err("callout missing".into());
+                };
+                children.first_mut().ok_or("nested block missing")?.content =
+                    BlockContent::Paragraph(vec![
+                        atrament_semantic_notebook::InlineSpan {
+                            id: object,
+                            provenance: None,
+                            style: None,
+                            text: "aliased caption".into(),
+                        },
+                    ]);
+            },
+            2 => malformed.notebook.id = object,
+            3 => {
+                malformed
+                    .notebook
+                    .page_profiles
+                    .get_mut(1)
+                    .ok_or("second profile missing")?
+                    .id = object
+            },
+            _ => return Err("unexpected alias case".into()),
+        }
+        if validate_fixed_placement(&malformed, checked)
+            != Err(FixedRegionLayoutError::DuplicateObjectIdentity { object })
+        {
+            return Err(format!("structural alias {case} not refused"));
+        }
+    }
+    if session.current() != Some(&accepted) {
+        return Err("fixed-region validation mutated accepted revision".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn fixed_region_rejects_selected_block_alias_of_other_semantic_owner() {
+    assert_eq!(verify_fixed_object_structural_alias_refusal(), Ok(()));
+}

@@ -35,7 +35,9 @@
 //! Typed semantic notebook values for candidate and accepted application state.
 
 use std::cell::Cell;
+use std::collections::BTreeSet;
 use std::num::{NonZeroU32, NonZeroU64};
+use std::ops::ControlFlow;
 
 pub use atrament_mathematics_source::{
     FormulaMode, MathSyntaxError, MathSyntaxErrorKind,
@@ -865,6 +867,132 @@ where
         }
     }
     None
+}
+
+/// Find one selected semantic identity owned by multiple structural nodes.
+///
+/// Only identities in `selected` are counted. The walk is iterative across
+/// nested blocks, lists, tables, inline text, figures and formulas; references
+/// to styles, assets, provenance or page profiles are not additional owners.
+/// Candidate acceptance normally enforces uniqueness, but directly supplied
+/// typed notebooks must not silently grant first-match ownership precedence.
+#[must_use]
+pub fn semantic_duplicate_owner_among<Identity>(
+    notebook: &Notebook<Identity>,
+    selected: &BTreeSet<Identity>,
+) -> Option<Identity>
+where
+    Identity: Copy + Ord,
+{
+    let mut seen = BTreeSet::new();
+    let result = visit_semantic_owner_ids(notebook, |identity| {
+        if selected.contains(&identity) && !seen.insert(identity) {
+            ControlFlow::Break(identity)
+        } else {
+            ControlFlow::Continue(())
+        }
+    });
+    match result {
+        ControlFlow::Break(duplicate) => Some(duplicate),
+        ControlFlow::Continue(()) => None,
+    }
+}
+
+fn visit_semantic_owner_ids<Identity>(
+    notebook: &Notebook<Identity>,
+    mut visit: impl FnMut(Identity) -> ControlFlow<Identity>,
+) -> ControlFlow<Identity>
+where
+    Identity: Copy,
+{
+    visit(notebook.id)?;
+    for asset in &notebook.assets {
+        visit(asset.id)?;
+    }
+    for constraint in &notebook.constraints {
+        visit(constraint.id)?;
+    }
+    for profile in &notebook.output_profiles {
+        visit(profile.id)?;
+    }
+    for profile in &notebook.page_profiles {
+        visit(profile.id)?;
+    }
+    for provenance in &notebook.provenance {
+        visit(provenance.id)?;
+    }
+    for style in &notebook.styles {
+        visit(style.id)?;
+    }
+    for page in &notebook.pages {
+        visit(page.id)?;
+        for flow in &page.flows {
+            visit(flow.id)?;
+            let mut pending = flow.blocks.iter().collect::<Vec<_>>();
+            while let Some(block) = pending.pop() {
+                visit_semantic_block_owners(block, &mut pending, &mut visit)?;
+            }
+        }
+    }
+    ControlFlow::Continue(())
+}
+
+fn visit_semantic_block_owners<'notebook, Identity>(
+    block: &'notebook Block<Identity>,
+    pending: &mut Vec<&'notebook Block<Identity>>,
+    visit: &mut impl FnMut(Identity) -> ControlFlow<Identity>,
+) -> ControlFlow<Identity>
+where
+    Identity: Copy,
+{
+    visit(block.id)?;
+    match &block.content {
+        BlockContent::Callout(children) | BlockContent::Freeform(children) => {
+            pending.extend(children);
+        },
+        BlockContent::List(list) => {
+            visit(list.id)?;
+            for item in &list.items {
+                visit(item.id)?;
+                pending.extend(&item.blocks);
+            }
+        },
+        BlockContent::Table(table) => {
+            visit(table.id)?;
+            for row in &table.rows {
+                visit(row.id)?;
+                for cell in &row.cells {
+                    visit(cell.id)?;
+                    pending.extend(&cell.blocks);
+                }
+            }
+        },
+        BlockContent::Citation(spans)
+        | BlockContent::Date(spans)
+        | BlockContent::Definition(spans)
+        | BlockContent::Footnote(spans)
+        | BlockContent::Heading(spans)
+        | BlockContent::Label(spans)
+        | BlockContent::MarginNote(spans)
+        | BlockContent::Paragraph(spans)
+        | BlockContent::Quotation(spans)
+        | BlockContent::SourceNote(spans) => {
+            for span in spans {
+                visit(span.id)?;
+            }
+        },
+        BlockContent::Figure(figure) => {
+            visit(figure.id)?;
+            for span in &figure.caption {
+                visit(span.id)?;
+            }
+        },
+        BlockContent::Mathematics(formula) => {
+            visit(formula.id)?;
+        },
+        BlockContent::Rule | BlockContent::Unresolved(_) => {},
+    }
+    ControlFlow::Continue(())
 }
 
 /// Detect ambiguous block ownership in a directly supplied notebook snapshot.

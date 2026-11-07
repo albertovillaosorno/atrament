@@ -41,8 +41,8 @@ use atrament_flow_pagination::{
     MeasuredFlowUnit, PageRegion, PaginationError, PaginationPlan, paginate,
 };
 use atrament_semantic_notebook::{
-    AcceptedIdentity, AcceptedRevision, Block, BlockContent,
-    PhysicalPageProfileError, RevisionIdentity,
+    AcceptedIdentity, AcceptedRevision, Block, PhysicalPageProfileError,
+    RevisionIdentity, semantic_duplicate_owner_among,
 };
 
 /// Complete measured-flow plan whose owners and pages are accepted identities.
@@ -269,105 +269,24 @@ fn validate_selected_owner_identities(
     blocks: &[Block<AcceptedIdentity>],
     flow: AcceptedIdentity,
 ) -> Result<(), SemanticPaginationError> {
-    let mut selected_blocks = BTreeSet::new();
+    // Preserve selected-flow duplicate precedence before scanning the full
+    // notebook for cross-kind or cross-flow owner aliases.
+    let mut selected = BTreeSet::new();
     for block in blocks {
-        if !selected_blocks.insert(block.id) {
+        if !selected.insert(block.id) {
             return Err(SemanticPaginationError::DuplicateBlockIdentity {
                 flow,
                 block: block.id,
             });
         }
     }
-    // Measured owners are globally accepted semantic identities. Check
-    // notebook/page/profile owners, then nested blocks, containers and
-    // leaf content; none can shadow a selected top-level measured block.
-    let mut seen_selected = BTreeSet::new();
-    let mut check_owner = |identity| {
-        if selected_blocks.contains(&identity)
-            && !seen_selected.insert(identity)
-        {
-            return Err(SemanticPaginationError::DuplicateBlockIdentity {
-                flow,
-                block: identity,
-            });
-        }
-        Ok(())
-    };
-    check_owner(revision.notebook.id)?;
-    for asset in &revision.notebook.assets {
-        check_owner(asset.id)?;
-    }
-    for constraint in &revision.notebook.constraints {
-        check_owner(constraint.id)?;
-    }
-    for profile in &revision.notebook.output_profiles {
-        check_owner(profile.id)?;
-    }
-    for profile in &revision.notebook.page_profiles {
-        check_owner(profile.id)?;
-    }
-    for provenance in &revision.notebook.provenance {
-        check_owner(provenance.id)?;
-    }
-    for style in &revision.notebook.styles {
-        check_owner(style.id)?;
-    }
-    for page in &revision.notebook.pages {
-        check_owner(page.id)?;
-        for accepted_flow in &page.flows {
-            check_owner(accepted_flow.id)?;
-            let mut pending = accepted_flow.blocks.iter().collect::<Vec<_>>();
-            while let Some(block) = pending.pop() {
-                check_owner(block.id)?;
-                match &block.content {
-                    BlockContent::Callout(children)
-                    | BlockContent::Freeform(children) => {
-                        pending.extend(children);
-                    },
-                    BlockContent::List(list) => {
-                        check_owner(list.id)?;
-                        for item in &list.items {
-                            check_owner(item.id)?;
-                            pending.extend(&item.blocks);
-                        }
-                    },
-                    BlockContent::Table(table) => {
-                        check_owner(table.id)?;
-                        for row in &table.rows {
-                            check_owner(row.id)?;
-                            for cell in &row.cells {
-                                check_owner(cell.id)?;
-                                pending.extend(&cell.blocks);
-                            }
-                        }
-                    },
-                    BlockContent::Citation(spans)
-                    | BlockContent::Date(spans)
-                    | BlockContent::Definition(spans)
-                    | BlockContent::Footnote(spans)
-                    | BlockContent::Heading(spans)
-                    | BlockContent::Label(spans)
-                    | BlockContent::MarginNote(spans)
-                    | BlockContent::Paragraph(spans)
-                    | BlockContent::Quotation(spans)
-                    | BlockContent::SourceNote(spans) => {
-                        for span in spans {
-                            check_owner(span.id)?;
-                        }
-                    },
-                    BlockContent::Figure(figure) => {
-                        check_owner(figure.id)?;
-                        for span in &figure.caption {
-                            check_owner(span.id)?;
-                        }
-                    },
-                    BlockContent::Mathematics(formula) => {
-                        check_owner(formula.id)?;
-                    },
-                    BlockContent::Rule | BlockContent::Unresolved(_) => {},
-                }
-            }
-        }
+    if let Some(block) =
+        semantic_duplicate_owner_among(&revision.notebook, &selected)
+    {
+        return Err(SemanticPaginationError::DuplicateBlockIdentity {
+            flow,
+            block,
+        });
     }
     Ok(())
 }

@@ -49,8 +49,7 @@ use atrament_fixed_region_bounds::{
 use atrament_physical_page_profile::Rect;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, PhysicalPageProfileError,
-    RevisionIdentity, semantic_block_identity_is_ambiguous,
-    semantic_block_page,
+    RevisionIdentity, semantic_block_page, semantic_duplicate_owner_among,
 };
 
 /// One solver-derived fixed rectangle bound to accepted semantic authority.
@@ -197,10 +196,8 @@ pub fn validate_fixed_placement(
     };
     // Reject duplicate owners before page lookup: the first occurrence may
     // belong to another page than the caller's intended fixed placement.
-    if semantic_block_identity_is_ambiguous(
-        &revision.notebook,
-        placement.object,
-    ) {
+    let selected = BTreeSet::from([placement.object]);
+    if semantic_duplicate_owner_among(&revision.notebook, &selected).is_some() {
         return Err(FixedRegionLayoutError::DuplicateObjectIdentity {
             object: placement.object,
         });
