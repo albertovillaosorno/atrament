@@ -41,8 +41,8 @@ use atrament_flow_pagination::{
     MeasuredFlowUnit, PageRegion, PaginationError, PaginationPlan, paginate,
 };
 use atrament_semantic_notebook::{
-    AcceptedIdentity, AcceptedRevision, Block, PhysicalPageProfileError,
-    RevisionIdentity,
+    AcceptedIdentity, AcceptedRevision, Block, BlockContent,
+    PhysicalPageProfileError, RevisionIdentity,
 };
 
 /// Complete measured-flow plan whose owners and pages are accepted identities.
@@ -64,7 +64,7 @@ pub struct RevisionFlowMeasurement {
 /// Typed failure to paginate measurements against one accepted revision.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SemanticPaginationError {
-    /// A selected top-level block identity is repeated in any accepted flow.
+    /// A selected top-level block identity also belongs to another block.
     DuplicateBlockIdentity {
         /// Stable selected flow containing the alias.
         flow: AcceptedIdentity,
@@ -278,19 +278,55 @@ fn validate_measurement_blocks(
             });
         }
     }
-    // Measured owners are globally accepted identities. A different flow
-    // cannot silently reuse a selected top-level block owner.
+    // Measured owners are globally accepted block identities. Traverse
+    // nested semantic blocks as well as top-level flow blocks; a callout,
+    // list item, freeform region or table cell cannot reuse an owner.
     let mut seen_selected = BTreeSet::new();
     for page in &revision.notebook.pages {
         for flow in &page.flows {
-            for block in &flow.blocks {
+            let mut pending = flow.blocks.iter().collect::<Vec<_>>();
+            while let Some(block) = pending.pop() {
                 if selected_blocks.contains(&block.id)
                     && !seen_selected.insert(block.id)
                 {
-                    return Err(SemanticPaginationError::DuplicateBlockIdentity {
-                        flow: measurement.flow,
-                        block: block.id,
-                    });
+                    return Err(
+                        SemanticPaginationError::DuplicateBlockIdentity {
+                            flow: measurement.flow,
+                            block: block.id,
+                        },
+                    );
+                }
+                match &block.content {
+                    BlockContent::Callout(children)
+                    | BlockContent::Freeform(children) => {
+                        pending.extend(children);
+                    },
+                    BlockContent::List(list) => {
+                        for item in &list.items {
+                            pending.extend(&item.blocks);
+                        }
+                    },
+                    BlockContent::Table(table) => {
+                        for row in &table.rows {
+                            for cell in &row.cells {
+                                pending.extend(&cell.blocks);
+                            }
+                        }
+                    },
+                    BlockContent::Citation(_)
+                    | BlockContent::Date(_)
+                    | BlockContent::Definition(_)
+                    | BlockContent::Figure(_)
+                    | BlockContent::Footnote(_)
+                    | BlockContent::Heading(_)
+                    | BlockContent::Label(_)
+                    | BlockContent::MarginNote(_)
+                    | BlockContent::Mathematics(_)
+                    | BlockContent::Paragraph(_)
+                    | BlockContent::Quotation(_)
+                    | BlockContent::Rule
+                    | BlockContent::SourceNote(_)
+                    | BlockContent::Unresolved(_) => {},
                 }
             }
         }

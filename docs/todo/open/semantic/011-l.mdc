@@ -2474,3 +2474,18 @@ to the measured owner. The existing typed duplicate-block error propagates
 without mutating accepted session state. This guards malformed typed input,
 not nested semantic identities, arbitrary document validation or the still
 unfinished persisted notebook-to-PDF/PNG workflow.
+
+## Nested block owner collision refusal (partial) — 2026-11-07
+
+The revision-bound measured paginator now checks selected top-level block
+identities against nested blocks in callouts, freeform regions, list items
+and table cells across all accepted flows. Previously a directly malformed
+revision could reuse a measured top-level block identity inside one of those
+unmeasured nested regions and silently produce an ambiguous physical plan.
+
+An iterative block walk avoids recursively borrowing the nested model or
+mutating the accepted revision. A failing-before-fix Rust regression covers
+all four container families, aliasing a child of the selected owner itself,
+and preserving valid nested blocks and the accepted session. This is bounded
+measurement-identity admission only; it is not recursive nested-content
+measurement, semantic notebook persistence or the required two-page export.

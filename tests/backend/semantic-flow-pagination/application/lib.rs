@@ -1031,6 +1031,182 @@ fn other_flow_cannot_reuse_selected_top_level_block_identity() {
     assert_eq!(session.current(), Some(&accepted));
 }
 
+fn candidate_with_nested_sibling(
+    ids: &IdentityAllocator,
+) -> Result<CandidateFixture, String> {
+    let mut fixture = candidate_fixture(ids);
+    let new_id = || {
+        ids.allocate_candidate()
+            .map_err(|_error| String::from("nested identity exhausted"))
+    };
+    let child = |id| Block {
+        content: BlockContent::Rule,
+        extensions: vec![],
+        id,
+        provenance: None,
+        style: None,
+    };
+    let containers = vec![
+        BlockContent::Callout(vec![child(new_id()?)]),
+        BlockContent::Freeform(vec![child(new_id()?)]),
+        BlockContent::List(List {
+            id: new_id()?,
+            items: vec![ListItem {
+                blocks: vec![child(new_id()?)],
+                id: new_id()?,
+            }],
+            ordered: false,
+        }),
+        BlockContent::Table(Table {
+            id: new_id()?,
+            rows: vec![TableRow {
+                cells: vec![TableCell {
+                    blocks: vec![child(new_id()?)],
+                    id: new_id()?,
+                    span: TableCellSpan::SINGLE,
+                }],
+                id: new_id()?,
+                role: TableRowRole::Body,
+            }],
+        }),
+    ];
+    let blocks = containers
+        .into_iter()
+        .map(|content| {
+            Ok(Block {
+                content,
+                extensions: vec![],
+                id: new_id()?,
+                provenance: None,
+                style: None,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    fixture
+        .notebook
+        .pages
+        .get_mut(1)
+        .ok_or("missing sibling page")?
+        .flows
+        .push(Flow { blocks, id: new_id()? });
+    Ok(fixture)
+}
+
+fn nested_child(
+    content: &mut BlockContent<AcceptedIdentity>,
+) -> Option<&mut Block<AcceptedIdentity>> {
+    match content {
+        BlockContent::Callout(blocks) | BlockContent::Freeform(blocks) => {
+            blocks.first_mut()
+        },
+        BlockContent::List(list) => list
+            .items
+            .first_mut()
+            .and_then(|item| item.blocks.first_mut()),
+        BlockContent::Table(table) => table
+            .rows
+            .first_mut()
+            .and_then(|row| row.cells.first_mut())
+            .and_then(|cell| cell.blocks.first_mut()),
+        BlockContent::Citation(_)
+        | BlockContent::Date(_)
+        | BlockContent::Definition(_)
+        | BlockContent::Figure(_)
+        | BlockContent::Footnote(_)
+        | BlockContent::Heading(_)
+        | BlockContent::Label(_)
+        | BlockContent::MarginNote(_)
+        | BlockContent::Mathematics(_)
+        | BlockContent::Paragraph(_)
+        | BlockContent::Quotation(_)
+        | BlockContent::Rule
+        | BlockContent::SourceNote(_)
+        | BlockContent::Unresolved(_) => None,
+    }
+}
+
+fn verify_nested_block_identity_refusal() -> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_with_nested_sibling(&ids)?;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("distinct nested identities must be accepted".into());
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+    let accepted = session
+        .current()
+        .ok_or("missing accepted revision")?
+        .clone();
+    if paginate_revision(&accepted, &measured).is_err() {
+        return Err("valid nested blocks unexpectedly refused".into());
+    }
+
+    for container_index in 0..4 {
+        let mut malformed = accepted.clone();
+        let container = malformed
+            .notebook
+            .pages
+            .get_mut(1)
+            .and_then(|page| page.flows.first_mut())
+            .and_then(|sibling| sibling.blocks.get_mut(container_index))
+            .ok_or("nested container missing")?;
+        let nested = nested_child(&mut container.content)
+            .ok_or("nested child block missing")?;
+        nested.id = owner;
+        if paginate_revision(&malformed, &measured)
+            != Err(SemanticPaginationError::DuplicateBlockIdentity {
+                flow,
+                block: owner,
+            })
+        {
+            return Err(format!(
+                "nested block family {container_index} aliased measured owner"
+            ));
+        }
+        if session.current() != Some(&accepted) {
+            return Err("nested refusal changed accepted session".into());
+        }
+    }
+
+    // A selected top-level owner must also be distinct from its own child.
+    let mut malformed = accepted.clone();
+    let selected = malformed
+        .notebook
+        .pages
+        .first_mut()
+        .and_then(|page| page.flows.first_mut())
+        .and_then(|selected_flow| selected_flow.blocks.first_mut())
+        .ok_or("selected block missing")?;
+    selected.content = BlockContent::Callout(vec![Block {
+        content: BlockContent::Rule,
+        extensions: vec![],
+        id: owner,
+        provenance: None,
+        style: None,
+    }]);
+    if paginate_revision(&malformed, &measured)
+        != Err(SemanticPaginationError::DuplicateBlockIdentity {
+            flow,
+            block: owner,
+        })
+    {
+        return Err("selected owner's nested child aliased its identity".into());
+    }
+    if session.current() != Some(&accepted) {
+        return Err("selected-child refusal changed accepted session".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn nested_blocks_cannot_alias_a_selected_measured_owner() {
+    assert_eq!(verify_nested_block_identity_refusal(), Ok(()));
+}
+
 #[test]
 fn defensive_duplicate_accepted_page_identity_cannot_alias_placements() {
     let ids = IdentityAllocator::new();
