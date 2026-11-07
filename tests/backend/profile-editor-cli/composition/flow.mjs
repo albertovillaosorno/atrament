@@ -5991,3 +5991,137 @@ test('collapsed gap after fitting rule preserves exact PDF/PNG geometry',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('thematic rule and reserved heading chain move with native PDF/PNG ink',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-rule-heading-chain-'));
+    try {
+        const digitGlyphs = [
+            '--glyph-stroke', '1', '600', '500', '1800', '3000',
+            '250', '#123456',
+            '--glyph-stroke', '.', '600', '500', '1800', '3000',
+            '250', '#123456',
+        ];
+        const scenarios = [
+            {
+                label: 'single-quote',
+                source: '```\na\n```\n---\n# a\n> aaaaaa aaaaaa aaaaaa',
+                height: '50000',
+                glyphs: [],
+                pageOne: [42500],
+                titles: [{ y: 51500, lifts: [900, 1900, 2900, 3900],
+                    width: 1400 }],
+                text: [60500, 69500, 78500].flatMap((y) => [
+                    '--place-text', '2', '38500', String(y), 'aaaaaa',
+                ]),
+                ornaments: [61000, 70000, 79000].flatMap((y) => [
+                    '--ink-line', '2', '35500', String(y), '35500',
+                    String(y + 7900), '400', '#1E304A',
+                ]),
+                variations: (source) => [
+                    source.replace('---', '***'),
+                    source.replaceAll('\n', '\r\n'),
+                ],
+            },
+            {
+                label: 'gapped-number',
+                source: '```\na\na\n```\n---\n\n# a\n\n## a\n\n1. a a a a a',
+                height: '71000',
+                glyphs: digitGlyphs,
+                pageOne: [42500, 51500],
+                titles: [
+                    { y: 55500, lifts: [900, 1900, 2900, 3900],
+                        width: 1400 },
+                    { y: 68500, lifts: [1000, 2000, 3000],
+                        width: 1150 },
+                ],
+                text: [
+                    '--place-text', '2', '38500', '81500', '1. a a',
+                    '--place-text', '2', '50500', '90500', 'a a',
+                    '--place-text', '2', '50500', '99500', 'a',
+                ],
+                ornaments: [],
+                variations: (source) => [
+                    source.replace('---', '___'),
+                    source.replace('## a', 'a\n---'),
+                    source.replaceAll('\n\n', '\n\n\n'),
+                    source.replaceAll('\n', '\r\n'),
+                ],
+            },
+        ];
+        for (const scenario of scenarios) {
+            const region = [
+                '--flow-region', '30000', '40000', '35000', scenario.height,
+            ];
+            const manual = [
+                ...scenario.pageOne.flatMap((y) => [
+                    '--place-text', '1', '32500', String(y), 'a',
+                ]),
+                ...scenario.titles.flatMap(({ y }) => [
+                    '--place-text', '2', '32500', String(y), 'a',
+                ]),
+                ...scenario.text,
+                '--ink-line', '2', '32500', '47000',
+                '63500', '47000', '400', '#1E304A',
+                ...scenario.titles.flatMap(({ y, lifts, width }) =>
+                    lifts.flatMap((lift) => [
+                        '--ink-line', '2', '32500', String(y + lift),
+                        '36500', String(y + lift), String(width), '#F8DE91',
+                    ])),
+                ...scenario.ornaments,
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const options = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const actual = render(dir, scenario.source, format,
+                        [...scenario.glyphs, ...region, ...options],
+                        '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        `${scenario.label}: ${actual.result.stderr}`);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `${scenario.label}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--', ...base,
+                        ...scenario.glyphs, ...manual, ...options,
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `${scenario.label} ${format} page ${page} geometry`);
+                    const variations = scenario.variations(scenario.source);
+                    for (const variant of variations) {
+                        const replay = render(dir, variant, format,
+                            [...scenario.glyphs, ...region, ...options],
+                            '--flow-markdown', page);
+                        assert.equal(replay.result.status, 0,
+                            replay.result.stderr);
+                        assert.deepEqual(readFileSync(replay.output), accepted,
+                            `${scenario.label} equivalent source replay`);
+                    }
+                    const rejected = render(dir, scenario.source, format,
+                        [...scenario.glyphs, ...region, ...options,
+                            ...(format === 'pdf' ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(rejected.result.status, 0);
+                    assert.deepEqual(readFileSync(rejected.output), accepted,
+                        'invalid selected page preserves accepted bytes');
+                    const missing = render(dir, `${scenario.source} β`, format,
+                        [...scenario.glyphs, ...region, ...options],
+                        '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        'missing authored glyph preserves accepted bytes');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

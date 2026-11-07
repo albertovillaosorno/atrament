@@ -460,6 +460,9 @@ struct HeadingChain {
     attached_to_prior: bool,
     first_mark: usize,
     first_run: usize,
+    // A free thematic rule may reserve this chain's first title. Keep
+    // that measured, run-less row with the whole group if it fits.
+    leading_rule_mark: Option<usize>,
 }
 
 struct Layout<'model> {
@@ -647,6 +650,74 @@ impl Layout<'_> {
         Ok(self.y)
     }
 
+    // Only title rows may join this candidate. Account for the rule's
+    // virtual row and each interior collapsed gap; physical fenced rows,
+    // unrelated ornaments and page turns must not be pulled along.
+    fn fitting_heading_gaps(
+        &self, heading_index: usize, first_run: usize,
+        last_heading_index: usize, leading_rule_mark: Option<usize>,
+        body_gap: u32,
+    ) -> Result<Option<Vec<(usize, u32)>>, String> {
+        let heading = self.lines.get(heading_index)
+            .ok_or("flow heading chain missing first title")?;
+        let mut gaps = Vec::new();
+        let leading_rule = usize::from(leading_rule_mark.is_some());
+        if let Some(mark_index) = leading_rule_mark {
+            let rule = self.ornaments.get(mark_index)
+                .ok_or("flow heading leading-rule mark out of bounds")?;
+            let Some(rule_y) = rule.start_um.1
+                .checked_sub(SEPARATOR_CENTER_UM) else {
+                return Ok(None);
+            };
+            let after_rule = rule_y.checked_add(self.pitch)
+                .ok_or("flow heading leading-rule spacing overflow")?;
+            let Some(rule_gap) = heading.origin_um.1.checked_sub(after_rule)
+            else {
+                return Ok(None);
+            };
+            if rule.width_um != 400 || rule.start_um.1 != rule.end_um.1
+                || rule.page != heading.page
+                || !matches!(rule_gap, 0 | PARAGRAPH_GAP_UM)
+            {
+                return Ok(None);
+            }
+            if rule_gap != 0 {
+                gaps.push((0, rule_gap));
+            }
+        }
+        let titles = self.lines.get(heading_index..first_run)
+            .ok_or("flow heading chain out of bounds")?;
+        for (index, pair) in titles.windows(2).enumerate() {
+            let [earlier, later] = pair else {
+                return Err("flow heading chain missing title".into());
+            };
+            if earlier.page != heading.page || later.page != heading.page {
+                return Ok(None);
+            }
+            let after = earlier.origin_um.1.checked_add(self.pitch)
+                .ok_or("flow heading chain spacing overflow")?;
+            let Some(interior_gap) = later.origin_um.1.checked_sub(after)
+            else {
+                return Ok(None);
+            };
+            if !matches!(interior_gap, 0 | PARAGRAPH_GAP_UM) {
+                return Ok(None);
+            }
+            if interior_gap != 0 {
+                let gap_index = index.checked_add(leading_rule)
+                    .ok_or("flow heading gap index overflow")?;
+                gaps.push((gap_index, interior_gap));
+            }
+        }
+        if body_gap != 0 {
+            let last = last_heading_index.checked_sub(heading_index)
+                .and_then(|index| index.checked_add(leading_rule))
+                .ok_or("flow heading chain index overflow")?;
+            gaps.push((last, body_gap));
+        }
+        Ok(Some(gaps))
+    }
+
     // A relocated heading/block group retains every collapsed 4-mm gap
     // between titles and before the block. All ink, row and page cursor
     // offsets share these checked measurements; page turns omit the gaps.
@@ -819,11 +890,11 @@ impl Layout<'_> {
         Ok(())
     }
 
-    // When a complete body/list/quote and its immediately preceding heading
-    // fit a new sheet, move the pair rather than leaving the heading and
-    // initial rows at the foot of the old sheet. Never detach a heading that
-    // was itself reserved by a preceding title or thematic rule. Reuse the
-    // bounded block mover so its native decorations follow their text rows.
+    // When a complete body/list/quote and its preceding heading chain
+    // fit a fresh sheet, move the full group instead of splitting the
+    // title and continuation rows. A free thematic rule may lead the
+    // group, but never detach an earlier reserved title or separator.
+    // Reuse the bounded mover so native ornaments follow their text rows.
     fn keep_heading_with_fitting_block(
         &mut self,
         first_run: usize,
@@ -841,21 +912,25 @@ impl Layout<'_> {
         let Some(last_heading_index) = first_run.checked_sub(1) else {
             return Ok(());
         };
-        // A chain of headings may share a complete fitting body, even
-        // across collapsed Markdown paragraph gaps. Never undo the first
-        // title's reservation with an earlier heading or thematic rule.
-        let (heading_index, chain_mark) = if self.heading_attached_to_prior {
-            let Some(chain) = self.heading_chain else {
-                return Ok(());
+        // Move the full chain, including a preceding free thematic rule
+        // when that rule reserved its first title. A chain already owned
+        // by another heading or a non-free rule must remain in place.
+        let (heading_index, chain_mark, leading_rule_mark) =
+            if self.heading_attached_to_prior {
+                let Some(chain) = self.heading_chain else {
+                    return Ok(());
+                };
+                if (chain.attached_to_prior
+                        && chain.leading_rule_mark.is_none())
+                    || chain.first_run > last_heading_index
+                {
+                    return Ok(());
+                }
+                (chain.first_run, Some(chain.first_mark),
+                    chain.leading_rule_mark)
+            } else {
+                (last_heading_index, None, None)
             };
-            if chain.attached_to_prior || chain.first_run >= last_heading_index
-            {
-                return Ok(());
-            }
-            (chain.first_run, Some(chain.first_mark))
-        } else {
-            (last_heading_index, None)
-        };
         let heading = self
             .lines
             .get(heading_index)
@@ -886,7 +961,9 @@ impl Layout<'_> {
         let heading_end = heading_y
             .checked_add(self.pitch)
             .ok_or("flow heading ornament boundary overflow")?;
-        let first_heading_mark = if let Some(mark) = chain_mark {
+        let first_heading_mark = if let Some(mark) = leading_rule_mark {
+            mark
+        } else if let Some(mark) = chain_mark {
             mark
         } else {
             self.ornaments
@@ -900,40 +977,16 @@ impl Layout<'_> {
                 })
                 .unwrap_or(first_mark)
         };
-        // Only title rows can belong to this candidate chain. Measure
-        // each interior collapsed gap independently; a fenced physical
-        // blank row has an entire pitch and therefore cannot be moved.
-        let mut gaps = Vec::new();
-        let titles = self.lines.get(heading_index..first_run)
-            .ok_or("flow heading chain out of bounds")?;
-        for (index, pair) in titles.windows(2).enumerate() {
-            let [earlier, later] = pair else {
-                return Err("flow heading chain missing title".into());
-            };
-            if earlier.page != heading.page || later.page != heading.page {
-                return Ok(());
-            }
-            let after = earlier.origin_um.1.checked_add(self.pitch)
-                .ok_or("flow heading chain spacing overflow")?;
-            let Some(interior_gap) = later.origin_um.1.checked_sub(after)
-            else {
-                return Ok(());
-            };
-            if !matches!(interior_gap, 0 | PARAGRAPH_GAP_UM) {
-                return Ok(());
-            }
-            if interior_gap != 0 {
-                gaps.push((index, interior_gap));
-            }
-        }
-        if gap != 0 {
-            let last = last_heading_index.checked_sub(heading_index)
-                .ok_or("flow heading chain index underflow")?;
-            gaps.push((last, gap));
-        }
+        let Some(gaps) = self.fitting_heading_gaps(
+            heading_index, first_run, last_heading_index,
+            leading_rule_mark, gap,
+        )? else {
+            return Ok(());
+        };
+        let leading_rule = leading_rule_mark.is_some();
         self.keep_fitting_block_together(
             heading_index, first_heading_mark, style, protect_body,
-            &gaps, false,
+            &gaps, leading_rule,
         )
     }
 
@@ -1239,6 +1292,11 @@ impl Layout<'_> {
                     || self.last_visible_heading,
                 first_mark: self.ornaments.len(),
                 first_run: self.lines.len(),
+                leading_rule_mark: if self.last_visible_rule {
+                    self.ornaments.len().checked_sub(1)
+                } else {
+                    None
+                },
             });
         }
     }

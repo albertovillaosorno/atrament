@@ -4286,6 +4286,96 @@ fn thematic_rule_and_fitting_wrapped_block_move_as_one_group()
 }
 
 #[test]
+fn thematic_rule_heading_chain_and_fitting_block_keep_their_full_group()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration {
+                style: Some(super::HeadingStyle::Marker),
+                ..super::HeadingDecoration::default()
+            },
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    // The rule is reserved by the first heading, so moving only the
+    // heading and body would strand its synthetic physical row.
+    for body in [
+        "> aaaaaa aaaaaa aaaaaa",
+        "- aaaaaa aaaaaa aaaaaa",
+        "1. a a a a a",
+        "aaaaaa aaaaaa aaaaaa",
+    ] {
+        let source = format!("```\na\n```\n---\n# a\n{body}");
+        let (runs, marks, pages) = render(&source, 50_000)?;
+        assert_eq!(pages, 2, "{body}");
+        assert_eq!(runs.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 2, 2, 2, 2], "{body}");
+        assert_eq!(runs.iter().skip(1).map(|row| row.origin_um.1)
+            .collect::<Vec<_>>(), [51_500, 60_500, 69_500, 78_500]);
+        assert_eq!(marks[0].page, 2, "rule stays with its heading");
+        assert_eq!(marks[0].start_um, (32_500, 47_000));
+        assert!(marks.iter().all(|mark| mark.page == 2));
+    }
+    // Rule/heading, heading/heading and final heading/body each own a
+    // distinct collapsed 4-mm gap. Keep all three and the quote bars.
+    for subtitle in ["## a", "a\n==="] {
+        let source = format!(
+            "{}\n\n{subtitle}\n\n> aaaaaa aaaaaa aaaaaa",
+            "```\na\na\n```\n---\n\n# a",
+        );
+        let (runs, marks, pages) = render(&source, 71_000)?;
+        assert_eq!(pages, 2);
+        assert_eq!(runs.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 1, 2, 2, 2, 2, 2]);
+        assert_eq!(runs.iter().skip(2).map(|row| row.origin_um.1)
+            .collect::<Vec<_>>(), [55_500, 68_500, 81_500, 90_500, 99_500]);
+        assert_eq!(marks[0].start_um, (32_500, 47_000));
+        assert!(marks.iter().all(|mark| mark.page == 2));
+        assert_eq!(marks.iter().rev().take(3).map(|bar| bar.start_um.1)
+            .collect::<Vec<_>>(), [100_000, 91_000, 82_000]);
+        let repeated = source.replace("\n\n", "\n\n\n");
+        let (replayed, replay_marks, replay_pages) =
+            render(&repeated, 71_000)?;
+        assert_eq!(replay_pages, pages);
+        assert_eq!(replay_marks, marks);
+        assert_eq!(replayed.iter().map(|row| (row.page, row.origin_um,
+            row.text.as_str())).collect::<Vec<_>>(),
+            runs.iter().map(|row| (row.page, row.origin_um,
+                row.text.as_str())).collect::<Vec<_>>());
+    }
+    // One short sheet cannot hold the entire group: preserve older
+    // first-row reservations rather than splitting or hiding ink.
+    let (runs, marks, pages) = render(
+        "```\na\n```\n---\n# a\n> aaaaaa aaaaaa aaaaaa",
+        41_000,
+    )?;
+    assert_eq!(pages, 2);
+    assert_eq!(runs[1].page, 1);
+    assert_eq!(marks[0].page, 1);
+    // Never detach a rule already reserved by an earlier heading.
+    let (runs, marks, _) = render(
+        "```\na\n```\n# a\n---\n## a\n> aaaaaa aaaaaa aaaaaa",
+        50_000,
+    )?;
+    assert_eq!(runs[1].page, 1);
+    assert!(marks.iter().any(|mark| mark.page == 1));
+    let (runs, marks, pages) = render(
+        "---\n# a\n> aaaaaa aaaaaa aaaaaa", 50_000,
+    )?;
+    assert_eq!(pages, 1);
+    assert!(runs.iter().all(|row| row.page == 1));
+    assert!(marks.iter().all(|mark| mark.page == 1));
+    Ok(())
+}
+
+#[test]
 fn adjacent_heading_chain_and_fitting_block_can_move_as_one_group()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

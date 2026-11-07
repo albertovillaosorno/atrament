@@ -641,6 +641,17 @@ Fenced blank rows, oversize groups, a preceding heading's reservation and
 literal flow retain earlier behavior. This is CLI-only, not persisted
 semantic structure.
 
+A free thematic rule can also travel with a following ATX/Setext heading
+chain and its complete wrapped paragraph, list item or quote when the entire
+measured group fits one new physical sheet. A collapsed 4-mm gap after the
+rule, between titles or before the body stays in its original position.
+Rule ink, heading markers/underlines and list/quote decorations follow their
+own rows, including exact authored numbering and continuation indentation.
+
+Existing earlier-heading reservations, fenced physical blanks, oversized
+groups and short-sheet fallback remain unchanged. This is not a persisted
+semantic notebook or general multi-block page fitting.
+
 A rule that already reserved its first visible row takes priority over a
 following block when the complete group cannot move together. Its next row
 still stays attached when that smaller reservation fits; later continuation

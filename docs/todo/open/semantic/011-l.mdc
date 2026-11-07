@@ -1982,3 +1982,27 @@ glyphs leave accepted output unchanged.
 Fenced physical blank rows, groups that do not fit one sheet, and
 heading-attached thematic rules retain existing behavior. No saved notebook
 body or persistent semantic block identities are introduced.
+
+## Page-fitting thematic rule, heading chain and wrapped block (partial)
+
+A free Markdown thematic rule that reserved its next heading can now travel
+with one or more ATX/Setext headings and their complete two-or-more-row
+paragraph, list item or quote when the entire group fits one fresh physical
+sheet. The rule contributes its real, run-less physical row. Each collapsed
+4-mm paragraph gap after the rule, between titles and before the body counts
+separately and retains its original offset in the relocated physical ink.
+
+A failing-before-change Rust regression checks an independent earlier row,
+single- and two-heading rule groups, all four body/list/quote shapes, exact
+rule and marker coordinates, numbered continuation indentation, repeated
+blank-source gaps, short sheets, prior-heading ownership and unnecessary
+page turns. An independent native CLI reference compares exact two-page PDF
+and both selected transparent PNG outputs for a marker-styled quote and a
+gap-separated two-title numbered list, including real authored numerals,
+rule ink and atomic page/missing-glyph refusals. Alternate rule syntax,
+Setext equivalents and CRLF replay byte-for-byte.
+
+Fenced physical blanks, page-spanning heading chains, groups taller than one
+sheet, and prior structural reservations retain their earlier behavior.
+This is an export-only Markdown pagination refinement, not saved semantic
+notebook blocks or completion of the open P1 acceptance criterion.
