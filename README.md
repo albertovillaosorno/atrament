@@ -709,6 +709,15 @@ separator centerline, ten independent collapsed gaps, level-specific marker
 strokes, and the original short-sheet fallback. Independent native PDF and
 both selected PNG pages match manual authored glyph and rule placement.
 
+A deterministic cross-syntax regression now checks 128 mixed Markdown
+compositions across eight physical region heights and both plain
+underline and marker-heading modes. Equivalent ATX/Setext titles,
+thematic rules, task/bullet syntax, quotes, soft paragraphs and
+literal fences preserve identical page-local glyphs and ornaments.
+Native PDF and both selected PNG pages also replay byte-for-byte
+for a mixed two-page example; refusal preserves existing bytes.
+This is a verification extension, not a new semantic compiler.
+
 A rule that already reserved its first visible row takes priority over a
 following block when the complete group cannot move together. Its next row
 still stays attached when that smaller reservation fits; later continuation

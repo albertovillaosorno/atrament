@@ -5338,3 +5338,81 @@ fn six_level_interleaved_terminal_chain_preserves_page_local_ornaments()
     assert_eq!(short_rows[0].page, 1);
     Ok(())
 }
+
+#[test]
+fn equivalent_markdown_blocks_preserve_layout_across_short_papers()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    // These spellings preserve the same authored content and block types.
+    // A blank boundary between generated blocks avoids turning an ordinary
+    // thematic rule into a Setext title after an unrelated paragraph.
+    let blocks = [
+        ("# a", "a\n==="),
+        ("## a", "a\n---"),
+        ("---", "* * *"),
+        ("a a a a", "a\n a a a"),
+        ("> a a", "  > a a"),
+        ("- a a", "+ a a"),
+        ("```\na\n```", "~~~\na\n~~~"),
+        ("- [x] a", "+ [X] a"),
+        ("# a\n---\n## a", "a\n===\n* * *\na\n---"),
+    ];
+    let heights = [
+        14_000, 23_000, 32_000, 41_000,
+        55_000, 68_000, 90_000, 115_000,
+    ];
+    let mut state = 17_941u64;
+    let choices = u64::try_from(blocks.len())
+        .map_err(|error| format!("block count: {error}"))?;
+    for case in 0..128 {
+        let mut canonical = "```\na\n```\n\n".to_owned();
+        let mut alternative = "~~~\na\n~~~\n\n".to_owned();
+        for index in 0..(case % 8 + 1) {
+            state = state.wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            let block = usize::try_from(state % choices)
+                .map_err(|error| format!("block index: {error}"))?;
+            if index != 0 {
+                canonical.push_str("\n\n");
+                alternative.push_str("\n\n");
+            }
+            canonical.push_str(blocks[block].0);
+            alternative.push_str(blocks[block].1);
+        }
+        let height = heights[case % heights.len()];
+        let render = |text: &str, marker| -> Result<_, String> {
+            let source = FlowSource::new(FlowFormat::Markdown, text)?;
+            super::layout_flow_with_region(
+                &source, &NotebookProfile::default(), None,
+                super::HeadingDecoration {
+                    style: if marker {
+                        Some(super::HeadingStyle::Marker)
+                    } else { None },
+                    ..super::HeadingDecoration::default()
+                },
+                Some(super::FlowRegion {
+                    left: 30_000, top: 40_000,
+                    width: 35_000, height,
+                }),
+            )
+        };
+        for marker in [false, true] {
+            let expected = render(&canonical, marker)?;
+            let actual = render(&alternative, marker)?;
+            let describe = |runs: &[super::TextRun]| {
+                runs.iter().map(|row| (
+                    row.page, row.origin_um, row.text.clone(),
+                    row.heading_ink,
+                )).collect::<Vec<_>>()
+            };
+            assert_eq!(actual.2, expected.2,
+                "page count for case {case}, marker={marker}");
+            assert_eq!(describe(&actual.0), describe(&expected.0),
+                "authored ink for case {case}, marker={marker}");
+            assert_eq!(actual.1, expected.1,
+                "physical ornaments for case {case}, marker={marker}");
+        }
+    }
+    Ok(())
+}

@@ -2137,3 +2137,19 @@ underlines and five separator lines. Equivalent separator spellings and CRLF
 replay byte-for-byte; invalid page selection and missing authored glyphs
 cannot overwrite the prior output. This adds coverage, not new production
 semantics or completion of saved semantic notebook acceptance.
+
+## Mixed Markdown syntax equivalence verification — 2026-11-07
+
+One deterministic native Rust regression now compares 128 independently
+generated block sequences rendered with equivalent Markdown syntax, across
+eight physical flow-region heights and ordinary/marker title treatments.
+It compares exact page counts, page-local authored text and physical
+ornaments rather than only parser tokens. The equivalent families include
+ATX/Setext headings, thematic rules, bullets, checked task items, indented
+quotes, soft paragraphs and literal fenced rows.
+
+A separate native CLI acceptance compares a mixed two-page PDF and both
+selected transparent PNG sheets against alternate Markdown spellings, and
+checks atomic refusal of an unauthored replacement glyph. These tests
+protect existing physical output behavior; they do not add a saved semantic
+notebook, full Markdown parsing or browser text rendering.

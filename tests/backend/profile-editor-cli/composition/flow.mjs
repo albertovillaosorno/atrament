@@ -6743,3 +6743,53 @@ test('all six interleaved heading levels keep exact terminal PDF/PNG ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('equivalent mixed Markdown syntax preserves native pages and ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-markdown-equivalence-'));
+        try {
+            const first = [
+                '```', 'a', '```', '', '# a', '---', '## a', '',
+                '- [x] a a', '', '> a a', '', '- a a',
+            ].join('\n');
+            const second = [
+                '~~~', 'a', '~~~', '', 'a', '===', '* * *',
+                'a', '---', '', '+ [X] a a', '', '  > a a',
+                '', '+ a a',
+            ].join('\n');
+            const region = [
+                '--flow-region', '30000', '40000', '35000', '55000',
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const options = format === 'pdf'
+                        ? [...region, '--pages', '2'] : region;
+                    const expected = render(dir, first, format,
+                        options, '--flow-markdown', page);
+                    assert.equal(expected.result.status, 0,
+                        expected.result.stderr);
+                    const reference = readFileSync(expected.output);
+                    if (format === 'pdf') {
+                        assert.match(reference.toString('latin1'),
+                            /\/Count 2/);
+                    }
+                    const alternate = render(dir, second, format,
+                        options, '--flow-markdown', page);
+                    assert.equal(alternate.result.status, 0,
+                        alternate.result.stderr);
+                    assert.deepEqual(readFileSync(alternate.output), reference,
+                        `equivalent mixed syntax page ${page} ${format}`);
+                    const invalid = second.replace('> a a', '> a z');
+                    const missing = render(dir, invalid, format,
+                        options, '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.match(missing.result.stderr,
+                        /missing authored glyph shapes.*U\+007A/);
+                    assert.deepEqual(readFileSync(missing.output), reference,
+                        'invalid glyph may not replace accepted output');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
