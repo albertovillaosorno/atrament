@@ -2489,3 +2489,18 @@ all four container families, aliasing a child of the selected owner itself,
 and preserving valid nested blocks and the accepted session. This is bounded
 measurement-identity admission only; it is not recursive nested-content
 measurement, semantic notebook persistence or the required two-page export.
+
+## Nested structural-owner collision refusal (partial) — 2026-11-07
+
+The revision-bound Rust paginator now refuses a selected measured block ID
+reused as a list, list item, table, table row or table cell identity. The
+previous nested block walk checked only `Block.id`, so these structural
+owners could silently shadow the measured owner in directly malformed typed
+accepted revisions. The same typed duplicate-block refusal now covers these
+container identities without mutating accepted state.
+
+A red-to-green native regression checks all five structural owner families
+in a separate flow, plus a list/table owner inside the selected block. The
+ordinary valid nested fixture still paginates. This is defensive semantic
+identity admission only, not persisted text measurement, full identity-graph
+validation, or saved notebook-to-PDF/PNG integration.

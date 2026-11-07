@@ -64,7 +64,7 @@ pub struct RevisionFlowMeasurement {
 /// Typed failure to paginate measurements against one accepted revision.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SemanticPaginationError {
-    /// A selected top-level block identity also belongs to another block.
+    /// A selected top-level block identity also names another semantic owner.
     DuplicateBlockIdentity {
         /// Stable selected flow containing the alias.
         flow: AcceptedIdentity,
@@ -278,37 +278,44 @@ fn validate_measurement_blocks(
             });
         }
     }
-    // Measured owners are globally accepted block identities. Traverse
-    // nested semantic blocks as well as top-level flow blocks; a callout,
-    // list item, freeform region or table cell cannot reuse an owner.
+    // Measured owners are globally accepted semantic identities. Traverse
+    // nested blocks and container owners; a list, item, table, row or cell
+    // cannot shadow a selected top-level measured block.
     let mut seen_selected = BTreeSet::new();
+    let mut check_owner = |identity| {
+        if selected_blocks.contains(&identity)
+            && !seen_selected.insert(identity)
+        {
+            return Err(SemanticPaginationError::DuplicateBlockIdentity {
+                flow: measurement.flow,
+                block: identity,
+            });
+        }
+        Ok(())
+    };
     for page in &revision.notebook.pages {
         for flow in &page.flows {
             let mut pending = flow.blocks.iter().collect::<Vec<_>>();
             while let Some(block) = pending.pop() {
-                if selected_blocks.contains(&block.id)
-                    && !seen_selected.insert(block.id)
-                {
-                    return Err(
-                        SemanticPaginationError::DuplicateBlockIdentity {
-                            flow: measurement.flow,
-                            block: block.id,
-                        },
-                    );
-                }
+                check_owner(block.id)?;
                 match &block.content {
                     BlockContent::Callout(children)
                     | BlockContent::Freeform(children) => {
                         pending.extend(children);
                     },
                     BlockContent::List(list) => {
+                        check_owner(list.id)?;
                         for item in &list.items {
+                            check_owner(item.id)?;
                             pending.extend(&item.blocks);
                         }
                     },
                     BlockContent::Table(table) => {
+                        check_owner(table.id)?;
                         for row in &table.rows {
+                            check_owner(row.id)?;
                             for cell in &row.cells {
+                                check_owner(cell.id)?;
                                 pending.extend(&cell.blocks);
                             }
                         }

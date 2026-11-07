@@ -1202,6 +1202,156 @@ fn verify_nested_block_identity_refusal() -> Result<(), String> {
     Ok(())
 }
 
+fn verify_nested_structural_owner_refusal() -> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_with_nested_sibling(&ids)?;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("distinct nested owner identities must be accepted".into());
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+    let accepted = session
+        .current()
+        .ok_or("missing accepted revision")?
+        .clone();
+    if paginate_revision(&accepted, &measured).is_err() {
+        return Err("valid nested structural owners were refused".into());
+    }
+
+    // A measured top-level block ID cannot also name a list, item, table,
+    // row or cell, even when that structural owner is in another flow.
+    for kind in 0usize..5 {
+        let mut malformed = accepted.clone();
+        let container_index = if kind < 2 { 2 } else { 3 };
+        let container = malformed
+            .notebook
+            .pages
+            .get_mut(1)
+            .and_then(|page| page.flows.first_mut())
+            .and_then(|sibling| sibling.blocks.get_mut(container_index))
+            .ok_or("nested container missing")?;
+        let changed = match (&mut container.content, kind) {
+            (BlockContent::List(list), 0) => {
+                list.id = owner;
+                true
+            },
+            (BlockContent::List(list), 1) => {
+                if let Some(item) = list.items.first_mut() {
+                    item.id = owner;
+                    true
+                } else {
+                    false
+                }
+            },
+            (BlockContent::Table(table), 2) => {
+                table.id = owner;
+                true
+            },
+            (BlockContent::Table(table), 3) => {
+                if let Some(row) = table.rows.first_mut() {
+                    row.id = owner;
+                    true
+                } else {
+                    false
+                }
+            },
+            (BlockContent::Table(table), 4) => {
+                if let Some(cell) = table
+                    .rows
+                    .first_mut()
+                    .and_then(|row| row.cells.first_mut())
+                {
+                    cell.id = owner;
+                    true
+                } else {
+                    false
+                }
+            },
+            _ => false,
+        };
+        if !changed {
+            return Err(format!("nested structural owner {kind} missing"));
+        }
+        if paginate_revision(&malformed, &measured)
+            != Err(SemanticPaginationError::DuplicateBlockIdentity {
+                flow,
+                block: owner,
+            })
+        {
+            return Err(format!(
+                "nested structural owner {kind} aliased measured block"
+            ));
+        }
+        if session.current() != Some(&accepted) {
+            return Err("structural-owner refusal changed session".into());
+        }
+    }
+    verify_selected_structural_owner_refusal(
+        &accepted, &measured, flow, owner,
+    )?;
+    if session.current() != Some(&accepted) {
+        return Err("selected structural refusal changed session".into());
+    }
+    Ok(())
+}
+
+fn verify_selected_structural_owner_refusal(
+    accepted: &atrament_semantic_notebook::AcceptedRevision,
+    measured: &RevisionFlowMeasurement,
+    flow: AcceptedIdentity,
+    owner: AcceptedIdentity,
+) -> Result<(), String> {
+    // The selected measured block must not also be the structural owner
+    // of its own content, whether a list or a table.
+    for (kind, index) in [2usize, 3].into_iter().enumerate() {
+        let mut malformed = accepted.clone();
+        let content = malformed
+            .notebook
+            .pages
+            .get(1)
+            .and_then(|page| page.flows.first())
+            .and_then(|sibling| sibling.blocks.get(index))
+            .ok_or("source container missing")?
+            .content
+            .clone();
+        let selected = malformed
+            .notebook
+            .pages
+            .first_mut()
+            .and_then(|page| page.flows.first_mut())
+            .and_then(|selected_flow| selected_flow.blocks.first_mut())
+            .ok_or("selected owner missing")?;
+        selected.content = content;
+        if let BlockContent::List(list) = &mut selected.content {
+            list.id = owner;
+        } else if let BlockContent::Table(table) = &mut selected.content {
+            table.id = owner;
+        } else {
+            return Err("selected container family missing".into());
+        }
+        if paginate_revision(&malformed, measured)
+            != Err(SemanticPaginationError::DuplicateBlockIdentity {
+                flow,
+                block: owner,
+            })
+        {
+            return Err(format!(
+                "selected structural owner {kind} aliased its parent block"
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn nested_structural_owners_cannot_alias_a_measured_block() {
+    assert_eq!(verify_nested_structural_owner_refusal(), Ok(()));
+}
+
 #[test]
 fn nested_blocks_cannot_alias_a_selected_measured_owner() {
     assert_eq!(verify_nested_block_identity_refusal(), Ok(()));
