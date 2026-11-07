@@ -2415,3 +2415,19 @@ Empty flow remains inert and skips unused page authority. Rust regressions
 cover independent/keep-together policies and defensive accepted-state
 non-mutation. This does not yet connect persisted semantic block identities
 to the CLI two-page exporter.
+
+## Duplicate semantic flow and block identity refusal (partial) — 2026-11-07
+
+The revision-bound Rust paginator now rejects ambiguous selected-flow
+identities in a directly malformed accepted revision, rather than silently
+using the first matching flow. Duplicate top-level block identities in that
+selected flow also refuse before interpreting measured fragment owner runs.
+The independent page-identity guard remains in place.
+
+Failing-before-fix Rust regressions cover a repeated flow on the same page or
+on a later page, plus adjacent and nonadjacent repeated block owners. The
+nonadjacent case could previously compile a physically valid but semantically
+ambiguous plan. Ordinary accepted revisions retain their placements, and the
+session's accepted state stays unmodified after each refusal. This adds
+identity-admission protection only; persisted semantic text measurement and
+notebook-to-PDF/PNG integration remain open.

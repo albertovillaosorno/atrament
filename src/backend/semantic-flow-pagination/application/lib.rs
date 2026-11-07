@@ -35,7 +35,7 @@
 
 //! Accepted-flow binding for deterministic measured-flow pagination.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use atrament_flow_pagination::{
     MeasuredFlowUnit, PageRegion, PaginationError, PaginationPlan, paginate,
@@ -64,6 +64,19 @@ pub struct RevisionFlowMeasurement {
 /// Typed failure to paginate measurements against one accepted revision.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SemanticPaginationError {
+    /// Two top-level blocks in the selected accepted flow alias one identity.
+    DuplicateBlockIdentity {
+        /// Stable selected flow containing the alias.
+        flow: AcceptedIdentity,
+        /// Repeated top-level block identity.
+        block: AcceptedIdentity,
+    },
+    /// More than one accepted flow has this identity, so selection is
+    /// ambiguous.
+    DuplicateFlowIdentity {
+        /// Colliding semantic flow identity.
+        flow: AcceptedIdentity,
+    },
     /// Measurement names no top-level semantic flow in the accepted revision.
     FlowNotFound {
         /// Stable semantic flow identity that could not be resolved.
@@ -159,15 +172,24 @@ fn flow_scope(
     revision: &AcceptedRevision,
     target: AcceptedIdentity,
 ) -> Result<FlowScope<'_>, SemanticPaginationError> {
+    let mut found = None;
     for (page_index, page) in revision.notebook.pages.iter().enumerate() {
-        if let Some(flow) = page.flows.iter().find(|flow| flow.id == target) {
-            return Ok(FlowScope {
+        for flow in &page.flows {
+            if flow.id != target {
+                continue;
+            }
+            if found.is_some() {
+                return Err(SemanticPaginationError::DuplicateFlowIdentity {
+                    flow: target,
+                });
+            }
+            found = Some(FlowScope {
                 blocks: &flow.blocks,
                 page_index,
             });
         }
     }
-    Err(SemanticPaginationError::FlowNotFound { flow: target })
+    found.ok_or(SemanticPaginationError::FlowNotFound { flow: target })
 }
 
 fn page_regions(
@@ -227,6 +249,15 @@ fn validate_measurement_blocks(
     blocks: &[Block<AcceptedIdentity>],
     measurement: &RevisionFlowMeasurement,
 ) -> Result<(), SemanticPaginationError> {
+    let mut seen_blocks = BTreeSet::new();
+    for block in blocks {
+        if !seen_blocks.insert(block.id) {
+            return Err(SemanticPaginationError::DuplicateBlockIdentity {
+                flow: measurement.flow,
+                block: block.id,
+            });
+        }
+    }
     let mut previous_owner = None;
     let mut run_index = 0usize;
     for unit in &measurement.units {

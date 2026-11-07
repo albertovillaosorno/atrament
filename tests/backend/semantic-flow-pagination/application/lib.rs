@@ -838,6 +838,125 @@ fn pagination_is_read_only_for_accepted_revision() {
 }
 
 #[test]
+fn defensive_duplicate_flow_identity_cannot_select_an_arbitrary_owner() {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let outcome = session.accept(fixture.notebook);
+    assert!(matches!(outcome, AcceptanceOutcome::Accepted { .. }));
+    let AcceptanceOutcome::Accepted { mapping, revision } = outcome else {
+        return;
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+    assert!(session.current().is_some());
+    let Some(accepted) = session.current().cloned() else {
+        return;
+    };
+    assert!(paginate_revision(&accepted, &measured).is_ok());
+
+    // Normal candidate admission prevents global identity collisions. A
+    // malformed typed accepted revision must not pick the first matching flow.
+    for page_index in [0, 1] {
+        let mut malformed = accepted.clone();
+        assert!(malformed.notebook.pages.len() > page_index);
+        let Some(page) = malformed.notebook.pages.get_mut(page_index) else {
+            return;
+        };
+        page.flows.push(Flow { blocks: vec![], id: flow });
+        assert_eq!(
+            paginate_revision(&malformed, &measured),
+            Err(SemanticPaginationError::DuplicateFlowIdentity { flow }),
+        );
+        assert_eq!(session.current(), Some(&accepted));
+    }
+}
+
+#[test]
+fn defensive_duplicate_block_identity_cannot_alias_measured_owner_runs() {
+    let ids = IdentityAllocator::new();
+    let (mut fixture, second_block) = candidate_two_block_fixture(&ids);
+    let third_candidate = ids.allocate_candidate();
+    assert!(third_candidate.is_ok());
+    let Ok(third_block) = third_candidate else {
+        return;
+    };
+    let maybe_first_flow = fixture
+        .notebook
+        .pages
+        .get_mut(0)
+        .and_then(|page| page.flows.get_mut(0));
+    assert!(maybe_first_flow.is_some());
+    let Some(first_flow) = maybe_first_flow else {
+        return;
+    };
+    first_flow.blocks.push(Block {
+        content: BlockContent::Rule,
+        extensions: vec![],
+        id: third_block,
+        provenance: None,
+        style: None,
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let outcome = session.accept(fixture.notebook);
+    assert!(matches!(outcome, AcceptanceOutcome::Accepted { .. }));
+    let AcceptanceOutcome::Accepted { mapping, revision } = outcome else {
+        return;
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let first = accepted_for(&mapping, fixture.block);
+    let second = accepted_for(&mapping, second_block);
+    let third = accepted_for(&mapping, third_block);
+    assert!(session.current().is_some());
+    let Some(accepted) = session.current().cloned() else {
+        return;
+    };
+
+    for (alias_index, owners) in
+        [(1, [first, first, third]), (2, [first, second, first])]
+    {
+        let mut malformed = accepted.clone();
+        let maybe_block = malformed
+            .notebook
+            .pages
+            .get_mut(0)
+            .and_then(|page| page.flows.get_mut(0))
+            .and_then(|selected_flow| {
+                selected_flow.blocks.get_mut(alias_index)
+            });
+        assert!(maybe_block.is_some());
+        let Some(block) = maybe_block else {
+            return;
+        };
+        block.id = first;
+        let measured = RevisionFlowMeasurement {
+            flow,
+            revision,
+            units: vec![MeasuredFlowUnit {
+                fragments: owners
+                    .into_iter()
+                    .map(|owner| MeasuredFragment {
+                        height: Length::from_micrometres(1),
+                        owner,
+                        width: Length::from_micrometres(1),
+                    })
+                    .collect(),
+                policy: FlowUnitPolicy::Independent,
+            }],
+        };
+        assert_eq!(
+            paginate_revision(&malformed, &measured),
+            Err(SemanticPaginationError::DuplicateBlockIdentity {
+                flow,
+                block: first,
+            }),
+        );
+        assert_eq!(session.current(), Some(&accepted));
+    }
+}
+
+#[test]
 fn defensive_duplicate_accepted_page_identity_cannot_alias_placements() {
     let ids = IdentityAllocator::new();
     let fixture = candidate_fixture(&ids);
