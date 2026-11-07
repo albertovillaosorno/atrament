@@ -2372,3 +2372,15 @@ A failing-before-fix Rust regression exercises zero, under-minimum, over-limit
 and overflowing widths; invalid page indices; coincident endpoints; and both
 valid width endpoints. This keeps typed physical validation aligned with the
 export contract, without adding semantic notebook persistence.
+
+## Typed handwriting-statistics admission at flow layout (partial) — 2026-11-07
+
+The Rust physical-flow entry point now revalidates a supplied handwriting
+statistics profile before measuring any rows. Direct typed callers could
+previously mutate an accepted profile to contain a stale schema version,
+duplicate global dimensions, out-of-range values or invalid grapheme keys
+without triggering the JSON/CLI admission boundary. A failing-before-fix
+Rust regression covers each refusal and the unchanged valid baseline.
+
+This only hardens the existing CLI-only flow compiler. It does not save
+semantic notebook content or complete the P1 acceptance criterion.

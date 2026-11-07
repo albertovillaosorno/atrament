@@ -214,6 +214,58 @@ fn typed_flow_source_must_retain_bounded_canonical_admission()
 }
 
 #[test]
+fn typed_flow_refuses_unvalidated_handwriting_statistics()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, GlyphStatistics, HandwritingStatisticsProfile,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let source = FlowSource::new(FlowFormat::Markdown, "a")?;
+    let baseline = HandwritingStatisticsProfile::baseline(42);
+    let render = |statistics: &HandwritingStatisticsProfile| {
+        super::layout_flow_with_region(
+            &source, &paper, Some(statistics),
+            super::HeadingDecoration::default(), None,
+        )
+    };
+    let _accepted = render(&baseline)?;
+
+    let mut stale = baseline.clone();
+    stale.version = "unsupported-statistics-version".into();
+    let mut duplicate = baseline.clone();
+    duplicate.globals.push(duplicate.globals[0]);
+    let mut outside = baseline.clone();
+    let width = outside.globals.iter_mut()
+        .find(|entry| entry.dimension == Dimension::Width)
+        .ok_or("missing baseline width statistics")?;
+    width.statistics.minimum = 1_000_000;
+    width.statistics.maximum = 1_000_000;
+    width.statistics.mean = 1_000_000;
+    width.statistics.median = 1_000_000;
+    let mut invalid_key = baseline.clone();
+    invalid_key.glyphs.push(GlyphStatistics {
+        grapheme: "ab".into(),
+        parameters: vec![baseline.globals[0]],
+    });
+    for (label, candidate, reason) in [
+        ("version", stale, "UnsupportedVersion"),
+        ("duplicate", duplicate, "DuplicateGlobal"),
+        ("dimension bounds", outside, "OutsideDimensionBounds"),
+        ("grapheme", invalid_key, "InvalidGrapheme"),
+    ] {
+        let error = render(&candidate)
+            .expect_err("unvalidated typed statistics reached flow layout");
+        if !error.contains("invalid flow handwriting statistics")
+            || !error.contains(reason) {
+            return Err(format!("{label}: unexpected refusal: {error}"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_heading_decoration_cannot_bypass_cli_admission()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

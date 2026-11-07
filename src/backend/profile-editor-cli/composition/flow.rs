@@ -40,6 +40,7 @@ use std::slice::Iter;
 use atrament_handwriting_statistics::{Dimension, HandwritingStatisticsProfile};
 use atrament_notebook_paper_cli::NotebookInkLine;
 use atrament_notebook_profile::NotebookProfile;
+use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 use super::glyph::first_grapheme;
 use super::{GlyphOverlay, HeadingInk, TextRun};
@@ -2423,6 +2424,7 @@ fn measured_pitch(
     statistics: Option<&HandwritingStatisticsProfile>,
 ) -> Result<u32, String> {
     source.validate_canonical()?;
+    validate_flow_statistics(statistics)?;
     let mut pitch = DEFAULT_PITCH_UM;
     let mut fence = None;
     let mut pending_setext = false;
@@ -2579,6 +2581,19 @@ pub(super) fn layout_flow(
     decoration: HeadingDecoration,
 ) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
     layout_flow_with_region(source, profile, statistics, decoration, None)
+}
+
+// Typed callers can mutate an otherwise admitted statistics profile.
+// Recheck its bounded dimension and grapheme contract before layout.
+fn validate_flow_statistics(
+    statistics: Option<&HandwritingStatisticsProfile>,
+) -> Result<(), String> {
+    if let Some(profile) = statistics {
+        profile.validate(&UnicodeGraphemeSegmentation).map_err(|error| {
+            format!("invalid flow handwriting statistics: {error:?}")
+        })?;
+    }
+    Ok(())
 }
 
 /// An optional fixed rectangle constrains every page's text and decoration.
