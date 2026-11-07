@@ -704,6 +704,11 @@ moves with its own heading and rule ink. This applies only when no intervening
 body/list/quote or fenced content breaks the terminal sequence, and a fresh
 sheet can hold the full group. Short-sheet fallback remains unchanged.
 
+A separate six-level regression checks every title underline weight and
+separator centerline, ten independent collapsed gaps, level-specific marker
+strokes, and the original short-sheet fallback. Independent native PDF and
+both selected PNG pages match manual authored glyph and rule placement.
+
 A rule that already reserved its first visible row takes priority over a
 following block when the complete group cannot move together. Its next row
 still stays attached when that smaller reservation fits; later continuation

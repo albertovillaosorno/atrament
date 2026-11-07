@@ -5220,3 +5220,121 @@ fn terminal_interleaved_titles_and_rules_keep_measured_ink_together()
         .collect::<Vec<_>>(), [1, 1, 2]);
     Ok(())
 }
+
+#[test]
+fn six_level_interleaved_terminal_chain_preserves_page_local_ornaments()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let source = concat!(
+        "```\na\n```\n# a\n---\n## a\n***\n### a\n___\n",
+        "#### a\n* * *\n##### a\n- - -\n###### a",
+    );
+    let render = |text: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, text)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    // Eleven terminal physical rows fit a fresh sheet, but not the ten
+    // rows left after a separate fenced row. All six title levels and
+    // five separators must relocate together with their own ink.
+    let (rows, marks, pages) = render(source, 104_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.len(), 7);
+    assert_eq!(rows.iter().map(|row| (row.page, row.origin_um.1))
+        .collect::<Vec<_>>(), [
+            (1, 42_500), (2, 42_500), (2, 60_500),
+            (2, 78_500), (2, 96_500), (2, 114_500),
+            (2, 132_500),
+        ]);
+    assert_eq!(marks.iter().map(|mark| (
+        mark.page, mark.start_um.1, mark.width_um,
+    )).collect::<Vec<_>>(), [
+        (2, 49_200, 550), (2, 56_000, 400),
+        (2, 67_200, 420), (2, 74_000, 400),
+        (2, 85_200, 300), (2, 92_000, 400),
+        (2, 103_200, 240), (2, 110_000, 400),
+        (2, 121_200, 180), (2, 128_000, 400),
+        (2, 139_200, 120),
+    ]);
+    // Each repeated blank source line collapses to one 4-mm gap.
+    // Ten independent gaps plus eleven rows fit exactly on page two.
+    let tail = source.strip_prefix("```\na\n```\n")
+        .ok_or("terminal chain source prefix missing")?;
+    let spaced = format!("```\na\n```\n{}", tail.replace('\n', "\n\n"));
+    let (spaced_rows, spaced_marks, spaced_pages) =
+        render(&spaced, 144_000)?;
+    assert_eq!(spaced_pages, 2);
+    assert_eq!(spaced_rows.iter().map(|row| (row.page, row.origin_um.1))
+        .collect::<Vec<_>>(), [
+            (1, 42_500), (2, 42_500), (2, 68_500),
+            (2, 94_500), (2, 120_500), (2, 146_500),
+            (2, 172_500),
+        ]);
+    assert_eq!(spaced_marks.iter().map(|mark| mark.start_um.1)
+        .collect::<Vec<_>>(), [
+            49_200, 60_000, 75_200, 86_000, 101_200, 112_000,
+            127_200, 138_000, 153_200, 164_000, 179_200,
+        ]);
+    let repeated = spaced.replace("\n\n", "\n\n\n");
+    let (again_rows, again_marks, again_pages) =
+        render(&repeated, 144_000)?;
+    assert_eq!(again_pages, spaced_pages);
+    assert_eq!(again_marks, spaced_marks);
+    assert_eq!(again_rows.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(),
+    )).collect::<Vec<_>>(), spaced_rows.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(),
+    )).collect::<Vec<_>>());
+
+    // The same physical move must retain all six marker hierarchies,
+    // including the finer level-five and level-six strokes.
+    let (marker_rows, marker_marks, marker_pages) =
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration {
+                style: Some(super::HeadingStyle::Marker),
+                ..super::HeadingDecoration::default()
+            },
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height: 104_000,
+            }),
+        )?;
+    assert_eq!(marker_pages, 2);
+    assert_eq!(marker_rows.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(),
+    )).collect::<Vec<_>>(), rows.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(),
+    )).collect::<Vec<_>>());
+    assert_eq!(marker_marks.iter().map(|mark| (
+        mark.page, mark.start_um.1, mark.width_um,
+    )).collect::<Vec<_>>(), [
+        (2, 43_400, 1400), (2, 44_400, 1400),
+        (2, 45_400, 1400), (2, 46_400, 1400),
+        (2, 56_000, 400),
+        (2, 61_500, 1150), (2, 62_500, 1150),
+        (2, 63_500, 1150), (2, 74_000, 400),
+        (2, 79_900, 950), (2, 80_900, 950),
+        (2, 92_000, 400),
+        (2, 98_100, 760), (2, 99_000, 760),
+        (2, 110_000, 400),
+        (2, 116_500, 620), (2, 128_000, 400),
+        (2, 135_300, 500),
+    ]);
+    // If the whole chain cannot fit one sheet, the existing first-row
+    // reservation remains in charge; valid narrow paper is not refused.
+    let (short_rows, short_marks, short_pages) = render(source, 32_000)?;
+    assert!(short_pages > 2);
+    assert_eq!(short_rows.len(), 7);
+    assert_eq!(short_marks.len(), 11);
+    assert_eq!(short_rows[0].page, 1);
+    Ok(())
+}

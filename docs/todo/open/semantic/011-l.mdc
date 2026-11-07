@@ -2120,3 +2120,20 @@ pen lines as reference for vector PDF and both transparent PNG pages. They
 verify alternate heading/rule syntax, CRLF, blank collapse and atomic refusal
 of invalid page selections or unauthored glyphs. The broader persisted
 semantic notebook and P1 acceptance criterion remain unfinished.
+
+## Six-level terminal grouping verification — 2026-11-07
+
+Additional native regression evidence now exercises an eleven-row terminal
+chain with all six ATX title levels alternating with five thematic rules.
+The exact underline width, separator centerline, physical row ownership and
+short-sheet fallback agree with the previously admitted bounded compiler.
+Ten distinct collapsed 4-mm gaps also replay identically when repeated
+blank lines are supplied, while a marker-style variant retains every tier's
+native stroke positions and weights after relocation.
+
+An independent CLI acceptance compares a complete two-page vector PDF and
+both selected transparent PNG pages against manually placed title glyphs,
+underlines and five separator lines. Equivalent separator spellings and CRLF
+replay byte-for-byte; invalid page selection and missing authored glyphs
+cannot overwrite the prior output. This adds coverage, not new production
+semantics or completion of saved semantic notebook acceptance.

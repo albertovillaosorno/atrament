@@ -6663,3 +6663,83 @@ test('interleaved terminal headings and separators keep exact PDF/PNG ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('all six interleaved heading levels keep exact terminal PDF/PNG ink',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-six-title-levels-'));
+    try {
+        const source = [
+            '```', 'a', '```', '# a', '---', '## a', '***',
+            '### a', '___', '#### a', '* * *', '##### a',
+            '- - -', '###### a',
+        ].join('\n');
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '104000',
+            '--heading-style', 'underline',
+        ];
+        const headingY = [42500, 60500, 78500, 96500, 114500, 132500];
+        const widths = [550, 420, 300, 240, 180, 120];
+        const ruleY = [56000, 74000, 92000, 110000, 128000];
+        const manual = [
+            '--place-text', '1', '32500', '42500', 'a',
+            ...headingY.flatMap((y) => [
+                '--place-text', '2', '32500', String(y), 'a',
+            ]),
+            ...headingY.flatMap((y, i) => [
+                '--ink-line', '2', '32500', String(y + 6700),
+                '36500', String(y + 6700), String(widths[i]), '#1E304A',
+                ...(i < ruleY.length ? [
+                    '--ink-line', '2', '32500', String(ruleY[i]),
+                    '63500', String(ruleY[i]), '400', '#1E304A',
+                ] : []),
+            ]),
+        ];
+        for (const format of ['pdf', 'png']) {
+            for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                const pages = format === 'pdf' ? ['--pages', '2'] : [];
+                const extra = [...region, ...pages];
+                const actual = render(dir, source, format,
+                    extra, '--flow-markdown', page);
+                assert.equal(actual.result.status, 0, actual.result.stderr);
+                const accepted = readFileSync(actual.output);
+                const reference = join(dir, `six-level-${format}-${page}`);
+                const expected = spawnSync(cargo, [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...base, ...manual, ...pages,
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72'] : []),
+                    '--output', reference,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(expected.status, 0, expected.stderr);
+                assert.deepEqual(accepted, readFileSync(reference),
+                    `six heading levels page ${page} ${format}`);
+                for (const variant of [
+                    source.replace('***', '* * *').replace('___', '_ _ _'),
+                    source.replaceAll('\n', '\r\n'),
+                ]) {
+                    const replay = render(dir, variant, format,
+                        extra, '--flow-markdown', page);
+                    assert.equal(replay.result.status, 0,
+                        replay.result.stderr);
+                    assert.deepEqual(readFileSync(replay.output), accepted,
+                        `equivalent six-title ${format} page ${page}`);
+                }
+                const invalid = render(dir, source, format,
+                    [...extra, ...(format === 'pdf'
+                        ? ['--pages', '1'] : [])],
+                    '--flow-markdown', format === 'pdf' ? 1 : 3);
+                assert.notEqual(invalid.result.status, 0);
+                assert.deepEqual(readFileSync(invalid.output), accepted,
+                    'invalid selected sheet preserves native output');
+                const missing = render(dir, `${source}\nβ`, format,
+                    extra, '--flow-markdown', page);
+                assert.notEqual(missing.result.status, 0);
+                assert.deepEqual(readFileSync(missing.output), accepted,
+                    'unauthored glyph cannot replace native output');
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
