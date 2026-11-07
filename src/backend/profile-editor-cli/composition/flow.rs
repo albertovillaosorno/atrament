@@ -601,6 +601,7 @@ impl Layout<'_> {
     fn layout_line(
         &mut self, content: &str, style: LineStyle, protect_body: bool,
     ) -> Result<(), String> {
+        let first_run = self.lines.len();
         let (mut start_x, mut cap) = self.line_measurements(style)?;
         let (hang, ordered_marker) = if matches!(style, LineStyle::Ordered) {
             let (indent, marker) = measured_ordered_label(
@@ -705,6 +706,46 @@ impl Layout<'_> {
             }
             self.write_row(row, start_x, width, style, first)?;
         }
+        if protect_body && matches!(style, LineStyle::Body) {
+            self.balance_body_tail(first_run)?;
+        }
+        Ok(())
+    }
+
+    // For ordinary Markdown paragraphs, do not leave a single terminal
+    // physical row on a fresh page when the preceding page contains at
+    // least three rows of this same paragraph. Move only its last two
+    // undecorated rows, preserving the first-two-row and heading/rule
+    // reservations as well as all literal source row boundaries.
+    fn balance_body_tail(&mut self, first_run: usize) -> Result<(), String> {
+        let runs = &mut self.lines[first_run..];
+        if runs.len() < 4 {
+            return Ok(());
+        }
+        let last = runs.len() - 1;
+        let previous_page = runs[last - 1].page;
+        let page = runs[last].page;
+        let top = self.top.checked_add(INSET_UM)
+            .ok_or("flow body-tail top inset overflow")?;
+        let bottom = self.bottom.checked_sub(INSET_UM)
+            .ok_or("flow body-tail bottom inset overflow")?;
+        let second_y = top.checked_add(self.pitch)
+            .ok_or("flow body-tail row overflow")?;
+        if top.checked_add(self.pitch.checked_mul(2)
+                .ok_or("flow body-tail height overflow")?)
+                .is_none_or(|end| end > bottom)
+            || previous_page.checked_add(1) != Some(page)
+            || runs[last - 2].page != previous_page
+            || runs[last - 3].page != previous_page
+            || runs[last].origin_um.1 != top
+        {
+            return Ok(());
+        }
+        runs[last - 1].page = page;
+        runs[last - 1].origin_um.1 = top;
+        runs[last].origin_um.1 = second_y;
+        self.y = self.y.checked_add(self.pitch)
+            .ok_or("flow body-tail cursor overflow")?;
         Ok(())
     }
 

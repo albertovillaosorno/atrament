@@ -1710,6 +1710,7 @@ A thematic rule may be reserved with the first row of a wrapped body, list,
 quote, ATX/Setext heading, or adjacent thematic rule. Once reserved, that
 following row cannot be pulled to a later sheet by its own two-row guard.
 Earlier heading/rule pairings win; later physical rows paginate as normal.
+
 If the whole rule/title/body span cannot fit on a fresh sheet, the heading
 retains its own first-body-row guard rather than a fictitious reservation.
 The constrained 23-mm example now retains the rule and the first wrapped
@@ -1720,3 +1721,22 @@ ATX/Setext heading and adjacent rule precedence. Real CLI PDF and all
 three selected PNG pages match independently positioned physical strokes.
 Invalid page selections and missing glyphs refuse without replacing output.
 This is still a partial semantic-flow feature, not persisted notebook state.
+
+## Long body-paragraph terminal-row balance (partial) — 2026-11-06
+
+The native CLI now rebalances the final two rows of a long, ordinary Markdown
+body paragraph when its last row would otherwise be alone on a new sheet.
+The preceding page must contain at least three physical rows from the same
+paragraph and the fresh page must fit two rows. This preserves the existing
+first-two-row guard and any preceding title/rule reservation without moving
+independent plaintext, indented literal, list, quoted or fenced-code rows.
+
+A red-before/green-after Rust regression verifies four-, five- and seven-row
+paragraphs on exact physical page coordinates, narrow-sheet fallback and
+heading priority. Native PDF and both selected transparent PNG pages match
+independently authored text ink with the new split. Invalid page selection
+and missing glyph refusal preserve previously accepted output bytes.
+
+This remains bounded CLI-only pagination, not persisted semantic paragraph
+state, and may shift subsequent block placement. The P1 saved notebook
+acceptance criterion remains open.

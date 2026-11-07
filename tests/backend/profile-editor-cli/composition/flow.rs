@@ -3281,3 +3281,108 @@ fn thematic_rule_pair_takes_priority_over_following_block_orphan_guards()
         .collect::<Vec<_>>(), [1, 3]);
     Ok(())
 }
+
+#[test]
+fn long_markdown_body_balances_a_lone_final_row_when_previous_page_has_three()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, format, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(format, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000, width: 35_000, height,
+            }),
+        )
+    };
+    for (count, expected) in [
+        (4, vec![1, 1, 2, 2]),
+        (5, vec![1, 1, 1, 2, 2]),
+        (7, vec![1, 1, 1, 2, 2, 3, 3]),
+    ] {
+        let source = vec!["aaaaaa"; count].join(" ");
+        let (rows, marks, pages) = render(&source, FlowFormat::Markdown,
+            32_000)?;
+        assert_eq!(rows.len(), count);
+        assert!(marks.is_empty());
+        assert_eq!(pages, *expected.last().unwrap_or(&0));
+        assert_eq!(rows.iter().map(|run| run.page).collect::<Vec<_>>(),
+            expected, "{count} wrapped rows");
+        for page in 1..=pages {
+            let origins = rows.iter().filter(|row| row.page == page)
+                .map(|row| row.origin_um.1).collect::<Vec<_>>();
+            assert_eq!(origins,
+                (0..origins.len()).map(|index| 42_500 + index as u32
+                    * 9_000).collect::<Vec<_>>());
+        }
+    }
+
+    // A two-row sheet cannot leave two rows on the prior sheet and
+    // move two to the new sheet; retain its original physical splits.
+    let five = vec!["aaaaaa"; 5].join(" ");
+    let (short, _, short_pages) = render(&five, FlowFormat::Markdown,
+        23_000)?;
+    assert_eq!(short_pages, 3);
+    assert_eq!(short.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 1, 2, 2, 3]);
+
+    // Plain physical lines and literal fenced Markdown rows never gain
+    // this paragraph-tail optimization.
+    for (source, format) in [
+        (vec!["aaaaaa"; 4].join("\n"), FlowFormat::Plain),
+        (format!("```\n{}\n```", vec!["aaaaaa"; 4].join("\n")),
+            FlowFormat::Markdown),
+    ] {
+        let (rows, _, pages) = render(&source, format, 32_000)?;
+        assert_eq!(pages, 2);
+        assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+            [1, 1, 1, 2], "{source:?}");
+    }
+
+    // A single long word follows the same rule after grapheme wrapping;
+    // no punctuation or grapheme may disappear in the moved last pair.
+    let long_word = "a".repeat(22);
+    let (word_rows, _, word_pages) = render(&long_word,
+        FlowFormat::Markdown, 32_000)?;
+    assert_eq!(word_pages, 2);
+    assert_eq!(word_rows.iter().map(|row| (row.page, row.text.len()))
+        .collect::<Vec<_>>(), [(1, 7), (1, 7), (2, 7), (2, 1)]);
+    assert_eq!(word_rows.iter().map(|row| row.text.as_str())
+        .collect::<String>(), long_word);
+
+    // A later paragraph starts at the real repositioned cursor rather
+    // than overwriting the second row on the rebalanced last sheet.
+    let with_following = format!("{}\n\na", vec!["aaaaaa"; 4].join(" "));
+    let (continued, _, continued_pages) = render(&with_following,
+        FlowFormat::Markdown, 32_000)?;
+    assert_eq!(continued_pages, 3);
+    assert_eq!(continued.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 1, 2, 2, 3]);
+
+    // Decorated quote/list blocks keep their original row placement.
+    for source in [
+        format!("- {}", vec!["aaaaaa"; 4].join(" ")),
+        format!("> {}", vec!["aaaaaa"; 4].join(" ")),
+    ] {
+        let (rows, marks, pages) = render(&source,
+            FlowFormat::Markdown, 32_000)?;
+        assert_eq!(pages, 2);
+        assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+            [1, 1, 1, 2], "{source:?}");
+        assert!(!marks.is_empty());
+    }
+
+    // A heading retains its first following body row. Later rows may
+    // rebalance without changing the heading or its underline.
+    let source = format!("# a\n{}", vec!["aaaaaa"; 6].join(" "));
+    let (rows, marks, pages) = render(&source, FlowFormat::Markdown,
+        32_000)?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 1, 1, 2, 2, 3, 3]);
+    assert_eq!(marks.len(), 1);
+    assert_eq!(marks[0].page, 1);
+    Ok(())
+}
