@@ -7174,3 +7174,79 @@ test('Setext and ATX quoted gaps retain identical physical PDF/PNG', () => {
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('wrapped quotes follow ATX and Setext titles on physical PDF/PNG pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-setext-wrap-'));
+        try {
+            const region = [
+                '--flow-region', '30000', '40000', '35000', '32000',
+                '--heading-style', 'underline',
+            ];
+            const sources = [
+                'a\n\n# a\n> a a a a a a',
+                'a\n\na\n===\n> a a a a a a',
+                'a\r\n\r\na\r\n===\r\n  > a a a a a a',
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const exportOptions = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const first = render(dir, sources[0], format,
+                        [...region, ...exportOptions],
+                        '--flow-markdown', page);
+                    assert.equal(first.result.status, 0, first.result.stderr);
+                    const accepted = readFileSync(first.output);
+                    for (const source of sources.slice(1)) {
+                        const alternate = render(dir, source, format,
+                            [...region, ...exportOptions],
+                            '--flow-markdown', page);
+                        assert.equal(alternate.result.status, 0,
+                            alternate.result.stderr);
+                        assert.deepEqual(readFileSync(alternate.output),
+                            accepted, `title syntax / page ${page}`);
+                    }
+                    const target = join(dir,
+                        `manually-placed-quote-${page}.${format}`);
+                    const manual = spawnSync(cargo, [
+                        'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                        '--', ...base,
+                        '--place-text', '1', '32500', '42500', 'a',
+                        '--place-text', '2', '32500', '42500', 'a',
+                        '--place-text', '2', '38500', '51500', 'a a a',
+                        '--place-text', '2', '38500', '60500', 'a a a',
+                        '--ink-line', '2', '32500', '49200',
+                        '36500', '49200', '550', '#1E304A',
+                        '--ink-line', '2', '35500', '52000',
+                        '35500', '59900', '400', '#1E304A',
+                        '--ink-line', '2', '35500', '61000',
+                        '35500', '68900', '400', '#1E304A',
+                        ...exportOptions,
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', target,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0, manual.stderr);
+                    assert.deepEqual(accepted, readFileSync(target),
+                        `independently placed page ${page} ${format}`);
+                    for (const invalid of [
+                        'a\n\n# a\n> a a a a a a\n> \\',
+                        'a\n\n# a\n> a a a a a a\n>\n---',
+                    ]) {
+                        const refused = render(dir, invalid, format,
+                            [...region, ...exportOptions],
+                            '--flow-markdown', page);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.match(refused.result.stderr,
+                            /empty Markdown block refused/);
+                        assert.deepEqual(readFileSync(refused.output),
+                            accepted, 'invalid quote cannot replace ink');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

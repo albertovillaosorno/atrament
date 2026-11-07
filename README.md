@@ -820,8 +820,14 @@ pages remain unchanged when these inputs are refused, including LF/CRLF.
 Equivalent ATX and Setext titles followed by a legal quoted paragraph gap
 produce byte-identical two-page PDF and transparent PNG ink. A separate
 bounded Rust matrix checks matching physical coordinates across quoted gap
-variants and page heights. These are export-only regressions, not semantic
-notebook persistence.
+variants and page heights.
+
+A further 1,152-case cross-product validates
+wrapped quote rows after ATX/Setext titles, hard breaks and collapsed gaps
+under short physical regions and alternate heading ink treatments. One
+independent native PDF/two-PNG test pins the exact page-two title, underline
+and both quote bars; malformed empty quote syntax cannot overwrite exports.
+These are export-only regressions, not semantic notebook persistence.
 
 A quoted line containing only a final backslash (the Markdown hard-break
 marker) also refuses: it is not an empty `>` separator and cannot silently

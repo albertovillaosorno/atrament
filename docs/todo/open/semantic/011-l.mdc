@@ -2284,3 +2284,21 @@ Additional native refusals check that nonquoted structural boundaries
 cannot overwrite previously accepted PDF/PNG output. These tests extend
 CLI physical flow evidence only; saved semantic block identities, history
 and full first-release acceptance remain unfinished.
+
+## Wrapped quote and title physical-page verification — 2026-11-07
+
+A native Rust cross-product now compares all page-local text positions,
+ornaments and page counts across 1,152 pairs of ATX and equivalent Setext
+headings followed by wrapped quote content. Variants include single
+backslash/two-space quote hard breaks, interleaved blank and empty `>`
+paragraph separators, four preceding block forms, eight constrained
+region heights and normal/marker heading ink. It covers both real page
+turns and multiple quote continuation rows without introducing grammar.
+
+A second native acceptance compares the actual two-page vector PDF and
+both 72-DPI transparent PNG pages against separately placed first-page
+body ink, a second-page title/underline, two wrapped quote rows and their
+exact physical quote bars. ATX, Setext, indentation and CRLF spellings
+replay byte-identically. Invalid trailing quote markers refuse without
+replacing selected exports. This remains a CLI-only regression and does
+not close the persisted semantic notebook acceptance criterion.

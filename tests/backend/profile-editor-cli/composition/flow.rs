@@ -5834,7 +5834,8 @@ fn empty_quote_separators_respect_every_intervening_block_kind()
     for quoted in ["> a", "> a\n> b", "> a\n  b",
         "> a\\", "> a  "] {
         for newline in ["\n", "\r\n"] {
-            let marker = format!("{quoted}\n>\n> \u{f3}").replace('\n', newline);
+            let marker = format!("{quoted}\n>\n> \u{f3}")
+                .replace('\n', newline);
             let blank = format!("{quoted}\n\n> \u{f3}").replace('\n', newline);
             let first = render(&marker)?;
             let second = render(&blank)?;
@@ -5899,6 +5900,81 @@ fn setext_atx_equivalence_survives_quoted_paragraph_gaps()
                 }
             }
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn wrapped_quoted_hard_breaks_and_gaps_keep_setext_title_geometry()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let placement = |source: &str, height: u32,
+        decoration: super::HeadingDecoration| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &paper, None, decoration,
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    let geometry = |rows: &[super::TextRun]| rows.iter().map(|run| (
+        run.text.clone(), run.page, run.origin_um, run.heading_ink,
+    )).collect::<Vec<_>>();
+    let mut turns = 0;
+    let mut wrapped = 0;
+    for (atx, setext) in [
+        ("# a", "a\n==="),
+        ("## a", "a\n---"),
+    ] {
+        for preceding in ["", "a\n\n", "---\n", "- a\n"] {
+            for body in [
+                "> a a a a a a a a a a",
+                "> a a a a\\\n> a a a a a a",
+                "> a a a a  \n> a a a a a a",
+            ] {
+                for separator in ["\n", ">\n", ">\n\n>\n"] {
+                    let suffix = format!("{body}\n{separator}> ó a a a a a a");
+                    for height in [14_000, 18_000, 23_000, 32_000,
+                        41_000, 50_000, 59_000, 72_000] {
+                        for marker in [false, true] {
+                            let decoration = super::HeadingDecoration {
+                                style: marker.then_some(
+                                    super::HeadingStyle::Marker,
+                                ),
+                                ..super::HeadingDecoration::default()
+                            };
+                            let first = placement(&format!(
+                                "{preceding}{atx}\n{suffix}"
+                            ), height, decoration)?;
+                            let second = placement(&format!(
+                                "{preceding}{setext}\n{suffix}"
+                            ), height, decoration)?;
+                            if geometry(&first.0) != geometry(&second.0)
+                                || first.1 != second.1 || first.2 != second.2 {
+                                return Err(format!(
+                                    "ATX/Setext wrapped quote mismatch: \
+                                     {preceding:?}, {atx:?}, {suffix:?}, \
+                                     height={height}, marker={marker}"
+                                ));
+                            }
+                            turns += usize::from(first.2 > 1);
+                            wrapped += usize::from(first.0.iter().any(|row| {
+                                row.origin_um.0 == 38_500 && row.text.len() > 2
+                            }));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    if turns <= 100 || wrapped <= 100 {
+        return Err(format!(
+            "insufficient page turns ({turns}) or wrapped quotes ({wrapped})"
+        ));
     }
     Ok(())
 }
