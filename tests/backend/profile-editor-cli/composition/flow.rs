@@ -35,6 +35,47 @@
 use super::{FlowFormat, FlowSource};
 
 #[test]
+fn typed_flow_regions_reject_zero_area_before_ink_validation()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let printable = paper.printable_rect_um()?;
+    let region = super::FlowRegion {
+        left: printable.0,
+        top: printable.1,
+        width: 14_000,
+        height: 14_000,
+    };
+    let _: (u32, u32, u32, u32) = region.bounds_within(printable)?;
+    region.validate_ink(printable, &[])?;
+    let source = FlowSource::new(FlowFormat::Markdown, "a")?;
+    for invalid in [
+        super::FlowRegion { width: 0, ..region },
+        super::FlowRegion { height: 0, ..region },
+    ] {
+        let boundary = invalid
+            .bounds_within(printable)
+            .expect_err("zero area cannot be a printable rectangle");
+        assert_eq!(boundary, "flow region width and height must be positive");
+        let ink = invalid
+            .validate_ink(printable, &[])
+            .expect_err("empty ink cannot validate an invalid rectangle");
+        assert_eq!(ink, boundary);
+        let layout = super::layout_flow_with_region(
+            &source,
+            &paper,
+            None,
+            super::HeadingDecoration::default(),
+            Some(invalid),
+        )
+        .expect_err("zero area refuses before measuring content");
+        assert_eq!(layout, boundary);
+    }
+    Ok(())
+}
+
+#[test]
 fn ordered_hanging_indent_refuses_glyph_wider_than_continuation()
 -> Result<(), String> {
     use atrament_handwriting_statistics::{

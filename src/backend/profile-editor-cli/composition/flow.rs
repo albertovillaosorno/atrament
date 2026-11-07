@@ -83,6 +83,11 @@ impl FlowRegion {
     fn bounds_within(
         self, printable: (u32, u32, u32, u32),
     ) -> Result<(u32, u32, u32, u32), String> {
+        if self.width == 0 || self.height == 0 {
+            return Err(
+                "flow region width and height must be positive".into()
+            );
+        }
         let right = self.left.checked_add(self.width)
             .ok_or("flow region right edge overflows micrometres")?;
         let bottom = self.top.checked_add(self.height)

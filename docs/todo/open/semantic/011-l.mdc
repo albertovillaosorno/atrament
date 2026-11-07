@@ -2302,3 +2302,15 @@ exact physical quote bars. ATX, Setext, indentation and CRLF spellings
 replay byte-identically. Invalid trailing quote markers refuse without
 replacing selected exports. This remains a CLI-only regression and does
 not close the persisted semantic notebook acceptance criterion.
+
+## Typed zero-area fixed-region refusal (partial) — 2026-11-07
+
+The Rust `FlowRegion` boundary now rejects zero width or height before
+accepting even an empty ink slice. Previously, CLI argument parsing refused
+zero dimensions, but direct typed callers could pass a degenerate rectangle
+through the reusable bounds and empty-ink validation. A failing-before-fix
+native regression checks both axes, validates the same explicit error through
+bounds, ink admission and layout, and preserves valid nonempty regions.
+
+This tightens the existing export-only fixed-region contract; it does not
+persist semantic notebook blocks or complete the P1 acceptance criterion.
