@@ -2459,3 +2459,18 @@ expects the existing typed duplicate-page refusal without changing accepted
 session state. Empty flows still require no page geometry. This defensive
 admission does not create persisted semantic content or complete notebook
 PDF/PNG integration.
+
+## Cross-flow top-level block identity refusal (partial) — 2026-11-07
+
+The revision-bound paginator now verifies that each selected top-level block
+identity is not also used by a top-level block in another accepted flow.
+Measurement ownership must remain unambiguous across all pages even if the
+other flow is not being paginated. Duplicate blocks within the selected flow
+continue to refuse before interpreting measured owner order.
+
+A failing-before-fix regression starts with two distinct accepted flows and
+valid placement, then aliases the unselected flow's top-level block identity
+to the measured owner. The existing typed duplicate-block error propagates
+without mutating accepted session state. This guards malformed typed input,
+not nested semantic identities, arbitrary document validation or the still
+unfinished persisted notebook-to-PDF/PNG workflow.

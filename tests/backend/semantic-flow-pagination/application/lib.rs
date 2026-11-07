@@ -968,6 +968,70 @@ fn defensive_duplicate_block_identity_cannot_alias_measured_owner_runs() {
 }
 
 #[test]
+fn other_flow_cannot_reuse_selected_top_level_block_identity() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let candidate_other_flow = ids.allocate_candidate();
+    let candidate_other_block = ids.allocate_candidate();
+    assert!(candidate_other_flow.is_ok() && candidate_other_block.is_ok());
+    let (Ok(other_flow), Ok(other_block)) =
+        (candidate_other_flow, candidate_other_block)
+    else {
+        return;
+    };
+    let Some(page_two) = fixture.notebook.pages.get_mut(1) else {
+        return;
+    };
+    page_two.flows.push(Flow {
+        blocks: vec![Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: other_block,
+            provenance: None,
+            style: None,
+        }],
+        id: other_flow,
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let outcome = session.accept(fixture.notebook);
+    assert!(matches!(outcome, AcceptanceOutcome::Accepted { .. }));
+    let AcceptanceOutcome::Accepted { mapping, revision } = outcome else {
+        return;
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+    assert!(session.current().is_some());
+    let Some(accepted) = session.current().cloned() else {
+        return;
+    };
+    assert!(paginate_revision(&accepted, &measured).is_ok());
+
+    // The selected flow's measured owner must not also name an unmeasured
+    // block owned by a different accepted flow.
+    let mut malformed = accepted.clone();
+    let maybe_other = malformed
+        .notebook
+        .pages
+        .get_mut(1)
+        .and_then(|page| page.flows.first_mut())
+        .and_then(|sibling_flow| sibling_flow.blocks.first_mut());
+    assert!(maybe_other.is_some());
+    let Some(other) = maybe_other else {
+        return;
+    };
+    other.id = owner;
+    assert_eq!(
+        paginate_revision(&malformed, &measured),
+        Err(SemanticPaginationError::DuplicateBlockIdentity {
+            flow,
+            block: owner,
+        }),
+    );
+    assert_eq!(session.current(), Some(&accepted));
+}
+
+#[test]
 fn defensive_duplicate_accepted_page_identity_cannot_alias_placements() {
     let ids = IdentityAllocator::new();
     let fixture = candidate_fixture(&ids);

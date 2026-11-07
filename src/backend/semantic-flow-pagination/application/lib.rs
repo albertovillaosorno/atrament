@@ -64,7 +64,7 @@ pub struct RevisionFlowMeasurement {
 /// Typed failure to paginate measurements against one accepted revision.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum SemanticPaginationError {
-    /// Two top-level blocks in the selected accepted flow alias one identity.
+    /// A selected top-level block identity is repeated in any accepted flow.
     DuplicateBlockIdentity {
         /// Stable selected flow containing the alias.
         flow: AcceptedIdentity,
@@ -163,7 +163,7 @@ pub fn paginate_revision(
         });
     }
     let scope = flow_scope(revision, measurement.flow)?;
-    validate_measurement_blocks(scope.blocks, measurement)?;
+    validate_measurement_blocks(revision, scope.blocks, measurement)?;
     if scope.blocks.is_empty() {
         return paginate(&[], &measurement.units)
             .map_err(SemanticPaginationError::Pagination);
@@ -265,16 +265,34 @@ fn measurement_owner_error(
 }
 
 fn validate_measurement_blocks(
+    revision: &AcceptedRevision,
     blocks: &[Block<AcceptedIdentity>],
     measurement: &RevisionFlowMeasurement,
 ) -> Result<(), SemanticPaginationError> {
-    let mut seen_blocks = BTreeSet::new();
+    let mut selected_blocks = BTreeSet::new();
     for block in blocks {
-        if !seen_blocks.insert(block.id) {
+        if !selected_blocks.insert(block.id) {
             return Err(SemanticPaginationError::DuplicateBlockIdentity {
                 flow: measurement.flow,
                 block: block.id,
             });
+        }
+    }
+    // Measured owners are globally accepted identities. A different flow
+    // cannot silently reuse a selected top-level block owner.
+    let mut seen_selected = BTreeSet::new();
+    for page in &revision.notebook.pages {
+        for flow in &page.flows {
+            for block in &flow.blocks {
+                if selected_blocks.contains(&block.id)
+                    && !seen_selected.insert(block.id)
+                {
+                    return Err(SemanticPaginationError::DuplicateBlockIdentity {
+                        flow: measurement.flow,
+                        block: block.id,
+                    });
+                }
+            }
         }
     }
     let mut previous_owner = None;
