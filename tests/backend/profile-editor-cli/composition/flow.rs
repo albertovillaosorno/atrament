@@ -3135,3 +3135,74 @@ fn wrapped_markdown_paragraph_starter_keeps_its_second_physical_row()
     }
     Ok(())
 }
+
+#[test]
+fn thematic_rule_stays_with_following_markdown_ink_when_sheet_has_room()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 35_000, height: 32_000,
+    };
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion { height, ..region }),
+        )
+    };
+    let (rows, rules, pages) = render("a\n\n---\na", region.height)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| (row.page, row.origin_um))
+        .collect::<Vec<_>>(), [
+            (1, (32_500, 42_500)), (2, (32_500, 51_500)),
+        ]);
+    assert_eq!(rules.iter().map(|rule| (
+        rule.page, rule.start_um, rule.end_um,
+    )).collect::<Vec<_>>(), [
+        (2, (32_500, 47_000), (63_500, 47_000)),
+    ], "a thematic rule must not orphan its next visible row");
+
+    // An ending rule has no following ink to keep, and must stay on
+    // the already fitting page instead of forcing a gratuitous turn.
+    let (ending, ending_rules, ending_pages) =
+        render("a\n\n---", region.height)?;
+    assert_eq!(ending_pages, 1);
+    assert_eq!(ending.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1]);
+    assert_eq!(ending_rules[0].page, 1);
+
+    // Collapsed Markdown gaps and literal fenced-code blank rows must
+    // count before reserving the next printable row after a rule.
+    for (source, expected_y) in [
+        ("a\n\n---\n\na", 55_500),
+        ("a\n\n---\n```\n\na\n```", 60_500),
+    ] {
+        let (code_rows, code_rules, code_pages) =
+            render(source, region.height)?;
+        assert_eq!(code_pages, 2, "{source:?}");
+        assert_eq!(code_rows.iter().map(|row| (row.page, row.origin_um.1))
+            .collect::<Vec<_>>(), [(1, 42_500), (2, expected_y)],
+            "{source:?}");
+        assert_eq!(code_rules[0].page, 2, "{source:?}");
+    }
+
+    // A preceding heading keeps its first following rule; the rule may
+    // not detach that pair to favor its own next-row association.
+    let (heading, marks, heading_pages) = render("# a\n---\na", 23_000)?;
+    assert_eq!(heading_pages, 2);
+    assert_eq!(heading.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2]);
+    assert_eq!(marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [1, 1]);
+
+    // A single-row sheet cannot hold a rule and another ink row.
+    let (single, single_marks, single_pages) =
+        render("a\n\n---\na", 14_000)?;
+    assert_eq!(single_pages, 3);
+    assert_eq!(single.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 3]);
+    assert_eq!(single_marks[0].page, 2);
+    Ok(())
+}

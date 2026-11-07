@@ -1685,3 +1685,21 @@ compares two-page vector PDF and both selected transparent PNG pages with
 independently placed authored glyph strokes. Invalid PDF/PNG page selections
 and missing glyphs refuse without replacing accepted files. The saved
 notebook P1 acceptance criterion remains open.
+
+## Thematic-rule first-following-row guard (partial) — 2026-11-06
+
+The native CLI now reserves a standalone Markdown thematic rule and its first
+following visible physical row together when a new sheet can fit the span.
+Collapsed paragraph gaps and literal fenced-code blank rows count toward the
+reservation. A preceding heading's first-following-row guarantee wins if the
+pairings conflict; a final rule is never moved for nonexistent ink, and a
+one-row fixed region keeps ordinary pagination. No persisted block identity
+or full rule/paragraph keep-together semantics are introduced.
+
+A red-before/green-after Rust regression verifies exact rule and text pages,
+terminal-rule behavior, gap/fence spacing, heading precedence and one-row
+fallback. Native CLI subprocess acceptance compares a two-page vector PDF
+and both selected transparent PNG pages with independently placed authored
+glyph strokes and a measured horizontal pen line. Invalid PDF/PNG selections
+and missing glyphs refuse without replacing accepted output. The P1 saved
+semantic-notebook completion criterion remains open.

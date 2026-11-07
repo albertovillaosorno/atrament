@@ -572,6 +572,12 @@ four-space-indented rows and plain-text lines keep their existing physical
 breaks. A preceding heading's first-row guarantee takes priority, and a
 one-row region still paginates normally.
 
+A standalone Markdown thematic rule also stays with its first following
+visible row when a fresh sheet can hold both, including intervening blank
+paragraph gaps or fenced-code rows. A heading before the rule takes priority
+when both pairings cannot fit. An ending rule and one-row regions retain
+ordinary pagination; this is not full block keep-together.
+
 A Markdown heading keeps its first following visible row on the same physical
 page when there is room for both (including an optional 4-mm paragraph gap);
 an ending heading and a sheet too short for two rows remain valid. Long text

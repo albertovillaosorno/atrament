@@ -1469,6 +1469,21 @@ fn flush_paragraph(
     Ok(())
 }
 
+// A thematic rule begins a new visual block. Keep the rule with its
+// next printed row if that fits on a fresh sheet, but never detach it
+// from a preceding heading that reserved the rule as its first row.
+fn layout_thematic_separator<'text>(
+    layout: &mut Layout<'_>, paragraph: &mut String,
+    previous: LineStyle, following: impl Iterator<Item = &'text str>,
+) -> Result<(), String> {
+    flush_paragraph(layout, paragraph, previous)?;
+    if !layout.last_visible_heading
+        && let Some(gap) = following_heading_gap(following) {
+        layout.keep_first_row_with_next(gap)?;
+    }
+    layout.write_separator()
+}
+
 // Plain blank lines reserve physical rows; Markdown blanks instead
 // flush the current paragraph and defer one collapsed paragraph gap.
 fn handle_source_blank(
@@ -1825,8 +1840,8 @@ pub(super) fn layout_flow_with_region(
             (parsed_body.as_ref(), false)
         };
         if matches!(style, LineStyle::Separator) {
-            flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
-            layout.write_separator()?;
+            layout_thematic_separator(&mut layout, &mut paragraph,
+                paragraph_style, source_lines.clone())?;
             continue;
         }
         if body.trim_matches(' ').is_empty() {
