@@ -7250,3 +7250,44 @@ test('wrapped quotes follow ATX and Setext titles on physical PDF/PNG pages',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('invalid fixed rectangles preserve accepted PDF and selected PNG pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-fixed-region-'));
+        try {
+            const cases = [
+                [['30000', '40000', '0', '14000'], /must be positive/],
+                [['30000', '40000', '14000', '0'], /must be positive/],
+                [['30000', '40000', '4294967295', '14000'],
+                    /right edge overflows/],
+                [['30000', '40000', '14000', '4294967295'],
+                    /bottom edge overflows/],
+                [['0', '40000', '14000', '14000'],
+                    /fit within printable paper margins/],
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const extra = format === 'pdf' ? ['--pages', '2'] : [];
+                    const accepted = render(dir, 'a\n# a', format,
+                        ['--flow-region', '30000', '40000',
+                            '14000', '14000', ...extra],
+                        '--flow-markdown', page);
+                    assert.equal(accepted.result.status, 0,
+                        accepted.result.stderr);
+                    const original = readFileSync(accepted.output);
+                    for (const [dimensions, diagnostic] of cases) {
+                        const refused = render(dir, 'a\n# a', format,
+                            ['--flow-region', ...dimensions, ...extra],
+                            '--flow-markdown', page);
+                        assert.notEqual(refused.result.status, 0,
+                            `${format} page ${page}: ${dimensions}`);
+                        assert.match(refused.result.stderr, diagnostic);
+                        assert.deepEqual(readFileSync(refused.output), original,
+                            `region ${dimensions} changed ${format}/${page}`);
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

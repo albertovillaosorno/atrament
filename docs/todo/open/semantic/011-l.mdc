@@ -2314,3 +2314,9 @@ bounds, ink admission and layout, and preserves valid nonempty regions.
 
 This tightens the existing export-only fixed-region contract; it does not
 persist semantic notebook blocks or complete the P1 acceptance criterion.
+
+A follow-up native CLI acceptance renders an independently selected two-page
+vector PDF and both 72-DPI transparent PNG pages. Zero width, zero height,
+overflowed coordinates and an out-of-margins rectangle each refuse without
+replacing the accepted output bytes. The existing parser and typed bounds
+share the same positive-area error.
