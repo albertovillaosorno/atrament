@@ -2168,3 +2168,18 @@ selected transparent PNG sheets against alternate Markdown spellings, and
 checks atomic refusal of an unauthored replacement glyph. These tests
 protect existing physical output behavior; they do not add a saved semantic
 notebook, full Markdown parsing or browser text rendering.
+
+## Empty blockquote gap physical-spacing correction — 2026-11-07
+
+Consecutive syntactic empty quote markers now share one pending 4-mm gap
+before the next visible quoted paragraph. Previously, the layout cursor
+consumed the gap before parsing each additional empty marker, introducing
+4 mm of unintended space per marker on a roomy physical sheet. Earlier
+page-break tests masked this by resetting the cursor on the next page.
+
+A failing-before-fix Rust regression checks exact two-row coordinates on a
+single page, quote-bar positions, 100 consecutive markers, indentation and
+CRLF. A native CLI acceptance compares PDF and transparent PNG bytes with
+independently placed glyph strokes and quote-rule lines, and replays every
+accepted spelling exactly. Prior two-page behavior remains covered. This
+is still CLI-only layout; it does not persist semantic notebook content.

@@ -2554,10 +2554,6 @@ pub(super) fn layout_flow_with_region(
                 paragraph_style, source.format, &mut pending_gap)?;
             continue;
         }
-        if pending_gap {
-            layout.add_gap()?;
-            pending_gap = false;
-        }
         let (style, parsed_body) = if source.format == FlowFormat::Markdown {
             markdown_line(input_line)
         } else {
@@ -2568,16 +2564,24 @@ pub(super) fn layout_flow_with_region(
         } else {
             (parsed_body.as_ref(), false)
         };
-        if matches!(style, LineStyle::Separator) {
-            layout_thematic_separator(&mut layout, &mut paragraph,
-                paragraph_style, source_lines.clone())?;
-            continue;
-        }
-        if body.trim_matches(' ').is_empty() {
+        // A syntactic empty quote extends an already pending paragraph
+        // gap; it does not consume one before creating another. A thematic
+        // separator, by contrast, is real ink and receives the pending gap.
+        if body.trim_matches(' ').is_empty()
+            && !matches!(style, LineStyle::Separator) {
             admit_empty_quote_gap(&mut layout, &mut paragraph,
                 paragraph_style, source.format, style,
                 source_lines.clone())?;
             pending_gap = layout.row_count > 0;
+            continue;
+        }
+        if pending_gap {
+            layout.add_gap()?;
+            pending_gap = false;
+        }
+        if matches!(style, LineStyle::Separator) {
+            layout_thematic_separator(&mut layout, &mut paragraph,
+                paragraph_style, source_lines.clone())?;
             continue;
         }
         if source.format == FlowFormat::Markdown

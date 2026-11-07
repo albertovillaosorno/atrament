@@ -2922,6 +2922,55 @@ fn empty_quote_separator_keeps_visible_paragraphs_on_physical_pages()
 }
 
 #[test]
+fn consecutive_empty_quote_markers_do_not_stack_visible_paragraph_gaps()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 55_000, height: 40_000,
+    };
+    let render = |text| -> Result<_, String> {
+        let source = FlowSource::new(FlowFormat::Markdown, text)?;
+        super::layout_flow_with_region(
+            &source, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(), Some(region),
+        )
+    };
+    let reference = render("> a\n\n> ó")?;
+    assert_eq!(reference.2, 1);
+    assert_eq!(reference.0.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(),
+    )).collect::<Vec<_>>(), [
+        (1, (38_500, 42_500), "a"),
+        (1, (38_500, 55_500), "ó"),
+    ]);
+    let many = format!("> a\n{}> ó", ">\n".repeat(100));
+    for source in [
+        "> a\n>\n> ó", "> a\n>\n>\n>\n> ó",
+        "> a\n> \n  >\n> ó", "> a\n\n>\n> ó",
+        "> a\r\n>\r\n>\r\n> ó",
+    ] {
+        let actual = render(source)?;
+        assert_eq!(actual.0.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>(), reference.0.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>(), "{source:?}: rows");
+        assert_eq!(actual.1, reference.1, "{source:?}: quote rules");
+        assert_eq!(actual.2, reference.2, "{source:?}: pages");
+    }
+    let actual = render(&many)?;
+    assert_eq!(actual.0.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(),
+    )).collect::<Vec<_>>(), reference.0.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(),
+    )).collect::<Vec<_>>(), "100 empty markers change physical rows");
+    assert_eq!(actual.1, reference.1);
+    assert_eq!(actual.2, reference.2);
+    Ok(())
+}
+
+#[test]
 fn wrapped_list_marker_stays_with_first_continuation_when_page_has_room()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

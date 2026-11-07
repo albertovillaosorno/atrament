@@ -794,11 +794,11 @@ no authored glyph.
 
 One or more consecutive bare `>` lines between visible quoted paragraphs
 insert the same single 4-mm gap as an empty Markdown line, without synthetic
-quote-bar rows. Isolated, leading, trailing and non-quote-followed empty quote
-markers still refuse. Bounded backtick
-and tilde code fences (three or more identical marks, up to three initial
-spaces) preserve literal handwriting lines, including physical blank rows
-and source punctuation.
+quote-bar rows or accumulating an extra gap for each marker on a roomy page.
+Isolated, leading, trailing and non-quote-followed empty quote markers still
+refuse. Bounded backtick and tilde code fences (three or more identical marks,
+up to three initial spaces) preserve literal handwriting lines, including
+physical blank rows and source punctuation.
 
 An opening fence may have one short ASCII language tag, but no monospace
 font or syntax highlighting is invented. Fence characters are syntax;

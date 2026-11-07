@@ -1611,6 +1611,58 @@ test('interior empty quote markers preserve real page-local PDF and PNG',
         }
     });
 
+test('repeated empty quote markers consume only one physical gap',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/markdown-quote-gap-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '55000', '40000'];
+            const alternatives = [
+                '> a\n>\n> ó',
+                '> a\n>\n>\n>\n> ó',
+                `> a\n${'>\n'.repeat(100)}> ó`,
+                '> a\n> \n  >\n> ó',
+                '> a\n\n>\n> ó',
+                '> a\r\n>\r\n>\r\n> ó',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const reference = render(dir, '> a\n\n> ó', format,
+                    region);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                const manual = join(dir, `quote-gap-manual-${format}`);
+                const marks = [
+                    '--place-text', '1', '38500', '42500', 'a',
+                    '--place-text', '1', '38500', '55500', 'ó',
+                    '--ink-line', '1', '35500', '43000',
+                    '35500', '50900', '400', '#1E304A',
+                    '--ink-line', '1', '35500', '56000',
+                    '35500', '63900', '400', '#1E304A',
+                ];
+                const composed = spawnSync(cargo, [
+                    'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                    '--', ...base, ...marks, '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', '1', '--dpi', '72'] : []),
+                    '--output', manual,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(composed.status, 0, composed.stderr);
+                assert.deepEqual(expected, readFileSync(manual),
+                    `single gap matches explicit ${format} physical ink`);
+                for (const source of alternatives) {
+                    const actual = render(dir, source, format, region);
+                    assert.equal(actual.result.status, 0,
+                        `${source}: ${actual.result.stderr}`);
+                    assert.deepEqual(readFileSync(actual.output), expected,
+                        `${source} adds no extra physical gap to ${format}`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('fenced code paginates literal rows and selected page-two PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));
