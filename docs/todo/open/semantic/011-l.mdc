@@ -2551,3 +2551,18 @@ A failing-before-fix Rust regression covers repeated pages and matching or
 conflicting profile geometry while preserving the accepted session and valid
 fixed-region placement. This is defensive fixed-area boundary validation,
 not a solver, saved semantic body, or full export implementation.
+
+## Duplicate selected fixed-block owner refusal — 2026-11-07
+
+Fixed-region validation now refuses a placed semantic block identity appearing
+more than once in the accepted notebook, including a second page, a sibling
+block, or a nested callout. Previously first-match semantic block-page lookup
+could accept ambiguous geometry in a malformed directly supplied revision.
+The semantic model exposes a reusable read-only ambiguity query based on its
+existing iterative nested-block walker; ordinary first-match inspection
+behavior remains unchanged, and valid nested blocks remain placeable.
+
+A failing-before-fix app regression and an independent domain regression
+cover the ambiguity cases with preserved accepted session state. This is
+not a complete global duplicate identity graph validator or saved notebook
+to-PDF/PNG compiler.

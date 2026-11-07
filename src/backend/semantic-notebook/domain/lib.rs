@@ -867,6 +867,41 @@ where
     None
 }
 
+/// Detect ambiguous block ownership in a directly supplied notebook snapshot.
+///
+/// Checks the whole notebook, including nested callouts, freeform blocks,
+/// lists and tables, without adopting first-match identity precedence.
+/// Candidate admission normally prohibits duplicate semantic owners, but a
+/// downstream layout boundary must also detect malformed typed revisions.
+#[must_use]
+pub fn semantic_block_identity_is_ambiguous<Identity>(
+    notebook: &Notebook<Identity>,
+    target: Identity,
+) -> bool
+where
+    Identity: Copy + Eq,
+{
+    let mut seen = false;
+    for page in &notebook.pages {
+        for flow in &page.flows {
+            let mut duplicate = false;
+            visit_semantic_block_matches(&flow.blocks, target, |_block| {
+                if seen {
+                    duplicate = true;
+                    true
+                } else {
+                    seen = true;
+                    false
+                }
+            });
+            if duplicate {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// Resolve the accepted page structurally containing one semantic block.
 ///
 /// Non-block identities and missing targets return `None`. The lookup follows
@@ -1554,6 +1589,23 @@ fn semantic_blocks_by_identity<Identity>(
 where
     Identity: Copy + Eq,
 {
+    let mut found = None;
+    visit_semantic_block_matches(root_blocks, target, |block| {
+        found = Some(block);
+        true
+    });
+    found
+}
+
+// Shared iterative traversal for the first-match lookup and defensive
+// duplicate checks. Returning true from the visitor stops at that match.
+fn visit_semantic_block_matches<'notebook, Identity>(
+    root_blocks: &'notebook [Block<Identity>],
+    target: Identity,
+    mut visitor: impl FnMut(&'notebook Block<Identity>) -> bool,
+) where
+    Identity: Copy + Eq,
+{
     let mut stack = vec![SemanticBlockLookupFrame::Blocks(root_blocks)];
     while let Some(frame) = stack.pop() {
         match frame {
@@ -1564,8 +1616,8 @@ where
                 if !remaining.is_empty() {
                     stack.push(SemanticBlockLookupFrame::Blocks(remaining));
                 }
-                if block.id == target {
-                    return Some(block);
+                if block.id == target && visitor(block) {
+                    return;
                 }
                 match &block.content {
                     BlockContent::Callout(children)
@@ -1645,7 +1697,6 @@ where
             },
         }
     }
-    None
 }
 
 fn semantic_blocks_descriptor<Identity>(

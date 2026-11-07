@@ -49,6 +49,7 @@ use atrament_semantic_notebook::{
     Table, TableCell, TableCellSpan, TableGridError,
     TableLogicalCellPlacement, TableRow, TableRowRole,
     UnresolvedBlock, UnresolvedReason, semantic_block, semantic_block_page,
+    semantic_block_identity_is_ambiguous,
     semantic_identity_descriptor, semantic_identity_kind,
     semantic_identity_path,
 };
@@ -1601,4 +1602,91 @@ fn unresolved_semantics_and_extensions_are_preserved_exactly() {
         std::slice::from_ref(&extension),
     );
     assert_eq!(block.extensions, [extension]);
+}
+
+fn ambiguity_fixture_block_mut(
+    notebook: &mut Notebook<u32>,
+    page: usize,
+    block: usize,
+) -> Option<&mut Block<u32>> {
+    notebook.pages.get_mut(page)?
+        .flows.first_mut()?
+        .blocks.get_mut(block)
+}
+
+fn verify_block_ambiguity_nested_and_cross_page() -> Result<(), &'static str> {
+    let rule = |id| Block {
+        content: BlockContent::Rule,
+        extensions: vec![],
+        id,
+        provenance: None,
+        style: None,
+    };
+    let mut notebook = Notebook {
+        assets: vec![],
+        constraints: vec![],
+        extensions: vec![],
+        id: 1u32,
+        output_profiles: vec![],
+        page_profiles: vec![],
+        pages: vec![
+            Page {
+                flows: vec![Flow {
+                    blocks: vec![rule(5), rule(6)],
+                    id: 4,
+                }],
+                id: 3,
+                paper_profile: 2,
+            },
+            Page {
+                flows: vec![Flow {
+                    blocks: vec![rule(9)],
+                    id: 8,
+                }],
+                id: 7,
+                paper_profile: 2,
+            },
+        ],
+        provenance: vec![],
+        styles: vec![],
+    };
+    if semantic_block_identity_is_ambiguous(&notebook, 5)
+        || semantic_block_identity_is_ambiguous(&notebook, 99)
+        || semantic_block_page(&notebook, 5) != Some(3)
+    {
+        return Err("valid block was ambiguous or missing");
+    }
+
+    ambiguity_fixture_block_mut(&mut notebook, 1, 0)
+        .ok_or("second page block missing")?
+        .id = 5;
+    if !semantic_block_identity_is_ambiguous(&notebook, 5) {
+        return Err("duplicate block was not reported");
+    }
+    ambiguity_fixture_block_mut(&mut notebook, 1, 0)
+        .ok_or("second page block missing")?
+        .id = 9;
+
+    ambiguity_fixture_block_mut(&mut notebook, 0, 1)
+        .ok_or("sibling block missing")?
+        .id = 5;
+    if !semantic_block_identity_is_ambiguous(&notebook, 5) {
+        return Err("duplicate block was not reported");
+    }
+    let sibling = ambiguity_fixture_block_mut(&mut notebook, 0, 1)
+        .ok_or("sibling block missing")?;
+    sibling.id = 6;
+    sibling.content = BlockContent::Callout(vec![rule(5)]);
+    if !semantic_block_identity_is_ambiguous(&notebook, 5) {
+        return Err("duplicate block was not reported");
+    }
+    if semantic_block_identity_is_ambiguous(&notebook, 6) {
+        return Err("distinct callout owner became ambiguous");
+    }
+    Ok(())
+}
+
+#[test]
+fn semantic_block_ambiguity_checks_nested_and_cross_page_owners() {
+    assert_eq!(verify_block_ambiguity_nested_and_cross_page(), Ok(()));
 }

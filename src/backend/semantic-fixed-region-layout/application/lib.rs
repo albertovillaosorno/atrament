@@ -49,7 +49,8 @@ use atrament_fixed_region_bounds::{
 use atrament_physical_page_profile::Rect;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, PhysicalPageProfileError,
-    RevisionIdentity, semantic_block_page,
+    RevisionIdentity, semantic_block_identity_is_ambiguous,
+    semantic_block_page,
 };
 
 /// One solver-derived fixed rectangle bound to accepted semantic authority.
@@ -94,6 +95,11 @@ pub enum FixedRegionLayoutResult {
 pub enum FixedRegionLayoutError {
     /// Physical rectangle coordinate arithmetic cannot be represented.
     Bounds(BoundsError),
+    /// Two semantic blocks share the placed object's identity.
+    DuplicateObjectIdentity {
+        /// Repeated semantic block identity.
+        object: AcceptedIdentity,
+    },
     /// Two accepted pages share one identity, making ownership ambiguous.
     DuplicatePageIdentity {
         /// Colliding physical page identity.
@@ -149,8 +155,8 @@ pub enum FixedRegionLayoutError {
 /// # Errors
 ///
 /// Returns a typed failure for stale revision binding, unknown page or object,
-/// missing, invalid or ambiguous page-profile authority, duplicate page
-/// identities, or unrepresentable coordinates.
+/// missing or ambiguous page/profile/block authority, invalid physical
+/// geometry, or unrepresentable coordinates.
 pub fn validate_fixed_placement(
     revision: &AcceptedRevision,
     placement: AcceptedFixedPlacement,
@@ -189,6 +195,16 @@ pub fn validate_fixed_placement(
             page: placement.page,
         });
     };
+    // Reject duplicate owners before page lookup: the first occurrence may
+    // belong to another page than the caller's intended fixed placement.
+    if semantic_block_identity_is_ambiguous(
+        &revision.notebook,
+        placement.object,
+    ) {
+        return Err(FixedRegionLayoutError::DuplicateObjectIdentity {
+            object: placement.object,
+        });
+    }
     let object_is_block_on_page =
         semantic_block_page(&revision.notebook, placement.object)
             == Some(placement.page);
