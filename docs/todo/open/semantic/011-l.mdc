@@ -1859,3 +1859,20 @@ authored quote rows and quote rules.
 Short page selections and missing glyphs refuse without replacing accepted
 output. Persisted semantic blocks and general multi-block keep-together
 remain outside this slice; the P1 task stays open.
+
+## Two-row heading and wrapped block attachment (partial) — 2026-11-06
+
+When a heading plus exactly two wrapped body/list/quote rows fits on a fresh
+sheet but would otherwise split after the first body row, the CLI now moves
+all three physical rows together. Earlier independent ink remains on its
+sheet. The heading underline/marker, unordered/checkbox strokes and each
+quote bar follow their original rows; numbered hanging indents are intact.
+
+This also applies after an explicit hard break in an earlier paragraph. The
+heading-first-row guarantee still holds when a sheet has fewer than three
+rows; earlier heading/rule pairing and blank-separated or literal sources
+retain their established precedence. The existing Rust variable block tests
+now cover two rows, plus page-one/page-two ornament ownership and short-sheet
+fallback. Native PDF and both selected transparent PNG pages match
+independently placed text and decoration strokes; invalid selections and
+missing glyphs refuse atomically. No semantic notebook is persisted.

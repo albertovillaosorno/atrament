@@ -2969,7 +2969,7 @@ fn heading_first_row_guard_takes_priority_over_list_continuation_guard()
 
     for (prefix, height, pages) in [
         ("", 23_000, &[1, 1, 2][..]),
-        ("a  \n", 32_000, &[1, 1, 1, 2][..]),
+        ("a  \n", 32_000, &[1, 2, 2, 2][..]),
     ] {
         let source = FlowSource::new(
             FlowFormat::Markdown,
@@ -2986,8 +2986,9 @@ fn heading_first_row_guard_takes_priority_over_list_continuation_guard()
         assert_eq!(total, 2);
         assert_eq!(rows.iter().map(|run| run.page)
             .collect::<Vec<_>>(), pages, "{prefix:?}");
-        assert!(ornaments.iter().all(|mark| mark.page == 1),
-            "heading and bullet marks must accompany page-one text");
+        let heading_page = if prefix.is_empty() { 1 } else { 2 };
+        assert!(ornaments.iter().all(|mark| mark.page == heading_page),
+            "heading and bullet marks follow their authored block");
     }
     Ok(())
 }
@@ -3057,7 +3058,7 @@ fn heading_first_row_guard_takes_priority_over_quote_continuation_guard()
 
     for (prefix, height, pages) in [
         ("", 23_000, &[1, 1, 2][..]),
-        ("a  \n", 32_000, &[1, 1, 1, 2][..]),
+        ("a  \n", 32_000, &[1, 2, 2, 2][..]),
     ] {
         let source = FlowSource::new(
             FlowFormat::Markdown,
@@ -3074,10 +3075,11 @@ fn heading_first_row_guard_takes_priority_over_quote_continuation_guard()
         assert_eq!(total, 2);
         assert_eq!(rows.iter().map(|run| run.page)
             .collect::<Vec<_>>(), pages, "{prefix:?}");
+        let page_one_marks = if prefix.is_empty() { 2 } else { 0 };
         assert_eq!(ornaments.iter().filter(|mark| mark.page == 1).count(),
-            2, "heading ink and first quote rule stay on page one");
+            page_one_marks, "heading and quote ink share a page");
         assert_eq!(ornaments.iter().filter(|mark| mark.page == 2).count(),
-            1, "second quote rule follows the continuation");
+            3 - page_one_marks, "quote rules follow their body rows");
     }
     Ok(())
 }
@@ -4098,14 +4100,23 @@ fn heading_block_compaction_preserves_prior_reservations_and_short_sheets()
         assert!(marks.iter().any(|mark| mark.page == 1), "{source}");
         assert!(rows.iter().any(|row| row.page == 2), "{source}");
     }
-    // Two body rows retain the older first-row reservation, and a body
-    // too large to join its heading uses ordinary physical pagination.
+    // A heading and two physical body rows can join on a fresh sheet.
+    // One- or two-row sheets cannot fit the full three-row group.
     let two = "```\na\n```\n# a\naaaaaa aaaaaa";
-    let (rows, _, pages) = render(two, 32_000,
+    let (rows, marks, pages) = render(two, 32_000,
         super::HeadingDecoration::default())?;
     assert_eq!(pages, 2);
     assert_eq!(rows.iter().map(|row| row.page)
-        .collect::<Vec<_>>(), [1, 1, 1, 2]);
+        .collect::<Vec<_>>(), [1, 2, 2, 2]);
+    assert_eq!(marks.len(), 1);
+    assert_eq!(marks[0].page, 2);
+    let (rows, marks, pages) = render(two, 23_000,
+        super::HeadingDecoration::default())?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2, 2, 3]);
+    assert_eq!(marks[0].page, 2);
+    // A body too large to join its heading uses normal pagination.
     let source = format!("```\na\n```\n# a\n{body}");
     let (rows, marks, pages) = render(&source, 32_000,
         super::HeadingDecoration::default())?;
@@ -4134,7 +4145,7 @@ fn heading_and_variable_page_fitting_blocks_preserve_full_row_order()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;
 
-    for count in [3usize, 4, 6, 8, 12] {
+    for count in [2usize, 3, 4, 6, 8, 12] {
         let height = 5_000 + u32::try_from(count + 1)
             .map_err(|error| error.to_string())? * 9_000;
         for prior in [1usize, count / 2, count - 1] {

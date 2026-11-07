@@ -801,7 +801,7 @@ impl Layout<'_> {
         heading_before_block: bool, style: LineStyle, protect_body: bool,
     ) -> Result<(), String> {
         if !heading_before_block || self.heading_attached_to_prior
-            || self.lines.len().saturating_sub(first_run) < 3
+            || self.lines.len().saturating_sub(first_run) < 2
             || !Self::balance_tail_eligible(style, protect_body) {
             return Ok(());
         }
