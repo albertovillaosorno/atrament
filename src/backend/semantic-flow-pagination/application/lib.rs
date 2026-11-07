@@ -264,38 +264,38 @@ fn measurement_owner_error(
     SemanticPaginationError::MeasuredBlockNotInFlow { flow, owner }
 }
 
-fn validate_measurement_blocks(
+fn validate_selected_owner_identities(
     revision: &AcceptedRevision,
     blocks: &[Block<AcceptedIdentity>],
-    measurement: &RevisionFlowMeasurement,
+    flow: AcceptedIdentity,
 ) -> Result<(), SemanticPaginationError> {
     let mut selected_blocks = BTreeSet::new();
     for block in blocks {
         if !selected_blocks.insert(block.id) {
             return Err(SemanticPaginationError::DuplicateBlockIdentity {
-                flow: measurement.flow,
+                flow,
                 block: block.id,
             });
         }
     }
     // Measured owners are globally accepted semantic identities. Traverse
-    // nested blocks and container owners; a list, item, table, row or cell
-    // cannot shadow a selected top-level measured block.
+    // nested blocks, container owners and leaf content identities; none
+    // can shadow a selected top-level measured block.
     let mut seen_selected = BTreeSet::new();
     let mut check_owner = |identity| {
         if selected_blocks.contains(&identity)
             && !seen_selected.insert(identity)
         {
             return Err(SemanticPaginationError::DuplicateBlockIdentity {
-                flow: measurement.flow,
+                flow,
                 block: identity,
             });
         }
         Ok(())
     };
     for page in &revision.notebook.pages {
-        for flow in &page.flows {
-            let mut pending = flow.blocks.iter().collect::<Vec<_>>();
+        for accepted_flow in &page.flows {
+            let mut pending = accepted_flow.blocks.iter().collect::<Vec<_>>();
             while let Some(block) = pending.pop() {
                 check_owner(block.id)?;
                 match &block.content {
@@ -320,24 +320,45 @@ fn validate_measurement_blocks(
                             }
                         }
                     },
-                    BlockContent::Citation(_)
-                    | BlockContent::Date(_)
-                    | BlockContent::Definition(_)
-                    | BlockContent::Figure(_)
-                    | BlockContent::Footnote(_)
-                    | BlockContent::Heading(_)
-                    | BlockContent::Label(_)
-                    | BlockContent::MarginNote(_)
-                    | BlockContent::Mathematics(_)
-                    | BlockContent::Paragraph(_)
-                    | BlockContent::Quotation(_)
-                    | BlockContent::Rule
-                    | BlockContent::SourceNote(_)
-                    | BlockContent::Unresolved(_) => {},
+                    BlockContent::Citation(spans)
+                    | BlockContent::Date(spans)
+                    | BlockContent::Definition(spans)
+                    | BlockContent::Footnote(spans)
+                    | BlockContent::Heading(spans)
+                    | BlockContent::Label(spans)
+                    | BlockContent::MarginNote(spans)
+                    | BlockContent::Paragraph(spans)
+                    | BlockContent::Quotation(spans)
+                    | BlockContent::SourceNote(spans) => {
+                        for span in spans {
+                            check_owner(span.id)?;
+                        }
+                    },
+                    BlockContent::Figure(figure) => {
+                        check_owner(figure.id)?;
+                        for span in &figure.caption {
+                            check_owner(span.id)?;
+                        }
+                    },
+                    BlockContent::Mathematics(formula) => {
+                        check_owner(formula.id)?;
+                    },
+                    BlockContent::Rule | BlockContent::Unresolved(_) => {},
                 }
             }
         }
     }
+    Ok(())
+}
+
+fn validate_measurement_blocks(
+    revision: &AcceptedRevision,
+    blocks: &[Block<AcceptedIdentity>],
+    measurement: &RevisionFlowMeasurement,
+) -> Result<(), SemanticPaginationError> {
+    validate_selected_owner_identities(
+        revision, blocks, measurement.flow,
+    )?;
     let mut previous_owner = None;
     let mut run_index = 0usize;
     for unit in &measurement.units {

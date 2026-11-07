@@ -2504,3 +2504,19 @@ in a separate flow, plus a list/table owner inside the selected block. The
 ordinary valid nested fixture still paginates. This is defensive semantic
 identity admission only, not persisted text measurement, full identity-graph
 validation, or saved notebook-to-PDF/PNG integration.
+
+## Leaf semantic-owner collision refusal (partial) — 2026-11-07
+
+The revision-bound paginator now checks inline-span IDs in all ten text
+content families, figure IDs and caption-span IDs, and mathematics formula
+IDs as well as nested block and container ownership. These owners previously
+passed through the measured-block validation unchecked, so directly malformed
+accepted revisions could reuse one measured block ID across independent
+semantic leaf owners. The existing typed duplicate-block error now refuses
+the collision without mutating session authority.
+
+A red-to-green regression covers 13 other-flow leaf identities and three
+selected-block self-collisions, plus the valid nested baseline. This still
+protects only selected measured-owner identity admission; arbitrary global
+identity graph validation, persisted semantic text measurement, and saved
+notebook-to-PDF/PNG remain open.

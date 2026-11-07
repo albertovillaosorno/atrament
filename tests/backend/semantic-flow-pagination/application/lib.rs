@@ -1352,6 +1352,147 @@ fn nested_structural_owners_cannot_alias_a_measured_block() {
     assert_eq!(verify_nested_structural_owner_refusal(), Ok(()));
 }
 
+fn verify_leaf_semantic_owner_refusal() -> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_with_nested_sibling(&ids)?;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("valid nested fixture was refused".into());
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+    let accepted = session
+        .current()
+        .ok_or("accepted revision missing")?
+        .clone();
+    if paginate_revision(&accepted, &measured).is_err() {
+        return Err("valid nested fixture did not paginate".into());
+    }
+    // Reuse a child ID that becomes unowned when replacing its callout.
+    let Some(BlockContent::Callout(children)) = accepted
+        .notebook
+        .pages
+        .get(1)
+        .and_then(|page| page.flows.first())
+        .and_then(|sibling| sibling.blocks.first())
+        .map(|block| &block.content)
+    else {
+        return Err("source callout missing".into());
+    };
+    let spare = children.first().ok_or("child identity missing")?.id;
+    let span = InlineSpan {
+        id: owner,
+        provenance: None,
+        style: None,
+        text: String::from("x"),
+    };
+    let cases = [
+        BlockContent::Citation(vec![span.clone()]),
+        BlockContent::Date(vec![span.clone()]),
+        BlockContent::Definition(vec![span.clone()]),
+        BlockContent::Footnote(vec![span.clone()]),
+        BlockContent::Heading(vec![span.clone()]),
+        BlockContent::Label(vec![span.clone()]),
+        BlockContent::MarginNote(vec![span.clone()]),
+        BlockContent::Paragraph(vec![span.clone()]),
+        BlockContent::Quotation(vec![span.clone()]),
+        BlockContent::SourceNote(vec![span.clone()]),
+        BlockContent::Figure(Figure {
+            asset: None,
+            caption: vec![],
+            id: owner,
+        }),
+        BlockContent::Figure(Figure {
+            asset: None,
+            caption: vec![span],
+            id: spare,
+        }),
+        BlockContent::Mathematics(Formula {
+            id: owner,
+            mode: FormulaMode::Display,
+            source: String::from("x"),
+        }),
+    ];
+    for (case, content) in cases.into_iter().enumerate() {
+        let mut malformed = accepted.clone();
+        let container = malformed
+            .notebook
+            .pages
+            .get_mut(1)
+            .and_then(|page| page.flows.first_mut())
+            .and_then(|sibling| sibling.blocks.first_mut())
+            .ok_or("source container missing")?;
+        container.content = content;
+        if paginate_revision(&malformed, &measured)
+            != Err(SemanticPaginationError::DuplicateBlockIdentity {
+                flow,
+                block: owner,
+            })
+        {
+            return Err(format!("leaf owner {case} was not refused"));
+        }
+        if session.current() != Some(&accepted) {
+            return Err("leaf owner refusal mutated accepted state".into());
+        }
+    }
+    verify_selected_leaf_owner_refusal(&accepted, &measured, flow, owner)?;
+    Ok(())
+}
+
+fn verify_selected_leaf_owner_refusal(
+    accepted: &atrament_semantic_notebook::AcceptedRevision,
+    measured: &RevisionFlowMeasurement,
+    flow: AcceptedIdentity,
+    owner: AcceptedIdentity,
+) -> Result<(), String> {
+    let cases = [
+        BlockContent::Paragraph(vec![InlineSpan {
+            id: owner,
+            provenance: None,
+            style: None,
+            text: String::from("x"),
+        }]),
+        BlockContent::Figure(Figure {
+            asset: None,
+            caption: vec![],
+            id: owner,
+        }),
+        BlockContent::Mathematics(Formula {
+            id: owner,
+            mode: FormulaMode::Display,
+            source: String::from("x"),
+        }),
+    ];
+    for (case, content) in cases.into_iter().enumerate() {
+        let mut malformed = accepted.clone();
+        let selected = malformed
+            .notebook
+            .pages
+            .first_mut()
+            .and_then(|page| page.flows.first_mut())
+            .and_then(|selected_flow| selected_flow.blocks.first_mut())
+            .ok_or("selected block missing")?;
+        selected.content = content;
+        if paginate_revision(&malformed, measured)
+            != Err(SemanticPaginationError::DuplicateBlockIdentity {
+                flow,
+                block: owner,
+            })
+        {
+            return Err(format!("selected leaf owner {case} was not refused"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn leaf_semantic_owners_cannot_alias_a_measured_block() {
+    assert_eq!(verify_leaf_semantic_owner_refusal(), Ok(()));
+}
+
 #[test]
 fn nested_blocks_cannot_alias_a_selected_measured_owner() {
     assert_eq!(verify_nested_block_identity_refusal(), Ok(()));
