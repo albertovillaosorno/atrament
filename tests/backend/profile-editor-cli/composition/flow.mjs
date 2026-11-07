@@ -7007,6 +7007,54 @@ test('quoted hard-break variants preserve independent two-page PDF/PNG ink',
         }
     });
 
+test('intervening Markdown block cannot authorize empty quote gap export',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-quote-boundary-'));
+        try {
+            const valid = '> a\n>\n> ó';
+            const region = [
+                '--flow-region', '30000', '40000', '35000', '14000',
+            ];
+            const boundaries = [
+                ['rule', '> a\n---\n>\n> ó'],
+                ['heading', '> a\n# a\n>\n> ó'],
+                ['indented text', '> a\n    a\n>\n> ó'],
+                ['fenced code', '> a\n```\na\n```\n>\n> ó'],
+                ['empty fence', '> a\n```\n```\n>\n> ó'],
+                ['heading and blank', '> a\n# a\n\n>\n> ó'],
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const options = [
+                        ...region,
+                        ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    ];
+                    const accepted = render(dir, valid, format,
+                        options, '--flow-markdown', page);
+                    assert.equal(accepted.result.status, 0,
+                        accepted.result.stderr);
+                    const original = readFileSync(accepted.output);
+                    for (const [boundary, sourceText] of boundaries) {
+                        for (const newline of ['\n', '\r\n']) {
+                            const refused = render(dir,
+                                sourceText.replaceAll('\n', newline),
+                                format, options, '--flow-markdown', page);
+                            assert.notEqual(refused.result.status, 0,
+                                `${boundary} ${format} ${page} ${newline}`);
+                            assert.match(refused.result.stderr,
+                                /empty Markdown block refused/);
+                            assert.deepEqual(readFileSync(refused.output),
+                                original,
+                                `${boundary}: ${format} page ${page}`);
+                        }
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('hard-break-only quote cannot become a silent separator in PDF/PNG',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-quote-empty-break-'));

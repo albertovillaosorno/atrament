@@ -2250,3 +2250,18 @@ PDF and both transparent PNG pages to independently placed glyph strokes
 and quote bars; invalid backslash-only variants cannot replace accepted
 output. This is still export-only syntax admission, not persisted semantic
 notebook body content or completion of P1 acceptance.
+
+## Quoted adjacency after structural blocks — 2026-11-07
+
+A failing-before-fix Rust regression exposed a stale quote paragraph style
+across headings, thematic rules, literal four-space lines and fenced code.
+The later empty `>` could be admitted as a 4-mm separator even though its
+immediately preceding ink was not quoted. The compiler now resets its
+pending style at every such boundary and refuses that empty marker rather
+than discarding source syntax.
+
+One native regression exercises these interrupted markers across LF and
+CRLF source, two physical pages, vector PDF and both transparent PNG pages,
+asserting the invalid requests never replace the earlier accepted files.
+An uninterrupted quoted gap still produces its original 13-mm row pitch.
+These remain CLI-only flow guarantees, not saved semantic block adjacency.

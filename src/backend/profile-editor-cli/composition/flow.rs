@@ -2129,10 +2129,10 @@ fn flush_paragraph(
 // from a preceding title or rule that reserved this first row.
 fn layout_thematic_separator<'text>(
     layout: &mut Layout<'_>, paragraph: &mut String,
-    previous: LineStyle,
+    previous: &mut LineStyle,
     following: impl Iterator<Item = &'text str> + Clone,
 ) -> Result<(), String> {
-    flush_paragraph(layout, paragraph, previous)?;
+    flush_paragraph(layout, paragraph, *previous)?;
     let reserved_next = if !layout.last_visible_heading
         && !layout.last_visible_rule {
         // Prefer the complete rule chain plus its first visible ink,
@@ -2154,7 +2154,9 @@ fn layout_thematic_separator<'text>(
     } else {
         false
     };
-    layout.write_separator(reserved_next)
+    layout.write_separator(reserved_next)?;
+    *previous = LineStyle::Separator;
+    Ok(())
 }
 
 // Terminal headings may alternate with thematic rules. Reserve the full
@@ -2263,13 +2265,14 @@ fn admit_empty_quote_gap<'text>(
 // gain a synthetic joining space before their first authored glyph.
 fn layout_literal_indented_row(
     layout: &mut Layout<'_>, paragraph: &mut String,
-    previous: LineStyle, raw: &str, style: LineStyle, body: &str,
+    previous: &mut LineStyle, raw: &str, style: LineStyle, body: &str,
 ) -> Result<bool, String> {
     if !matches!(style, LineStyle::Body) || !raw.starts_with("    ") {
         return Ok(false);
     }
-    flush_paragraph(layout, paragraph, previous)?;
+    flush_paragraph(layout, paragraph, *previous)?;
     layout.layout_line(body, style, false)?;
+    *previous = LineStyle::Body;
     Ok(true)
 }
 
@@ -2341,18 +2344,21 @@ fn queue_list_item(
 fn handle_markdown_code_line(
     layout: &mut Layout<'_>,
     paragraph: &mut String,
-    paragraph_style: LineStyle,
+    paragraph_style: &mut LineStyle,
     pending_gap: &mut bool,
     fence: &mut Option<(u8, usize)>,
     input_line: &str,
 ) -> Result<bool, String> {
     if markdown_fence_transition(fence, input_line) {
-        flush_paragraph(layout, paragraph, paragraph_style)?;
+        flush_paragraph(layout, paragraph, *paragraph_style)?;
+        *paragraph_style = LineStyle::Body;
         return Ok(true);
     }
     if fence.is_none() {
         return Ok(false);
     }
+    // Fenced lines are literal body ink, never a quoted paragraph.
+    *paragraph_style = LineStyle::Body;
     if *pending_gap {
         layout.add_gap()?;
         *pending_gap = false;
@@ -2550,7 +2556,8 @@ pub(super) fn layout_flow_with_region(
     while let Some(input_line) = source_lines.next() {
         if source.format == FlowFormat::Markdown
             && handle_markdown_code_line(&mut layout, &mut paragraph,
-                paragraph_style, &mut pending_gap, &mut fence, input_line)? {
+                &mut paragraph_style, &mut pending_gap, &mut fence,
+                input_line)? {
             continue;
         }
         if source.format == FlowFormat::Markdown
@@ -2585,18 +2592,17 @@ pub(super) fn layout_flow_with_region(
             pending_gap = layout.row_count > 0;
             continue;
         }
-        if pending_gap {
+        if take(&mut pending_gap) {
             layout.add_gap()?;
-            pending_gap = false;
         }
         if matches!(style, LineStyle::Separator) {
             layout_thematic_separator(&mut layout, &mut paragraph,
-                paragraph_style, source_lines.clone())?;
+                &mut paragraph_style, source_lines.clone())?;
             continue;
         }
         if source.format == FlowFormat::Markdown
             && layout_literal_indented_row(&mut layout, &mut paragraph,
-                paragraph_style, input_line, style, body)? {
+                &mut paragraph_style, input_line, style, body)? {
             continue;
         }
         if source.format == FlowFormat::Markdown
@@ -2638,6 +2644,7 @@ pub(super) fn layout_flow_with_region(
                     &mut paragraph_style, style, body, hard_break)?;
             } else {
                 layout.layout_line(body, style, false)?;
+                paragraph_style = style;
             }
         }
     }

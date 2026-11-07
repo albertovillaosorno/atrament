@@ -5619,6 +5619,52 @@ fn chained_empty_quotes_share_exact_collapsed_gaps_across_pages()
 }
 
 #[test]
+fn empty_quote_separator_requires_uninterrupted_quoted_ink()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let render = |text: &str| -> Result<_, String> {
+        let source = FlowSource::new(FlowFormat::Markdown, text)?;
+        super::layout_flow(
+            &source, &paper, None, super::HeadingDecoration::default(),
+        )
+    };
+    for (boundary, invalid) in [
+        ("thematic rule", "> a\n---\n>\n> b"),
+        ("ATX heading", "> a\n# c\n>\n> b"),
+        ("literal indented row", "> a\n    c\n>\n> b"),
+        ("fenced code", "> a\n```\nc\n```\n>\n> b"),
+        ("empty fenced code", "> a\n```\n```\n>\n> b"),
+    ] {
+        match render(invalid) {
+            Err(error) if error.contains("empty Markdown block refused") => {},
+            Err(error) => return Err(format!(
+                "unexpected {boundary} refusal: {error}"
+            )),
+            Ok(_) => return Err(format!(
+                "empty quote crossed {boundary}: {invalid:?}"
+            )),
+        }
+    }
+    for valid in [
+        "> a\n>\n> b",
+        "> a\n\n>\n> b",
+        "> a  \n>\n> b",
+    ] {
+        let (rows, bars, pages) = render(valid)?;
+        if pages != 1 || rows.len() != 2 || bars.len() != 2
+            || rows[1].origin_um.1.checked_sub(rows[0].origin_um.1)
+                != Some(13_000) {
+            return Err(format!(
+                "legitimate quote gap lost: {valid:?}: {rows:?}"
+            ));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn hard_break_only_quote_line_cannot_masquerade_as_empty_separator()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

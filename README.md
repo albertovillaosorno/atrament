@@ -810,7 +810,11 @@ PNG against independently placed ink. Invalid selected pages or missing glyphs
 cannot replace an accepted export.
 
 Isolated, leading, trailing and non-quote-followed empty quote markers still
-refuse. A quoted line containing only a final backslash (the Markdown hard-break
+refuse. An intervening heading, thematic rule, literal indented row or fenced
+block also ends quoted adjacency: an empty `>` after such a block refuses even
+if a preceding paragraph was quoted.
+
+A quoted line containing only a final backslash (the Markdown hard-break
 marker) also refuses: it is not an empty `>` separator and cannot silently
 replace authored text with a 4-mm gap. Native tests assert the rejected input
 cannot replace an existing PDF or PNG, including on two physical sheets.
