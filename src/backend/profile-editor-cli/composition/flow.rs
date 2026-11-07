@@ -560,86 +560,6 @@ impl Layout<'_> {
         Ok(())
     }
 
-    // A three-row Markdown block can otherwise leave a lone third row
-    // on the following sheet even though all three fit there. Relocate
-    // the whole block only if the old sheet retains earlier visible ink;
-    // never detach a heading/rule from its reserved first following row.
-    fn keep_three_row_block_together(
-        &mut self, first_run: usize, first_ornament: usize,
-        preceding_reservation: bool, style: LineStyle, protect_body: bool,
-    ) -> Result<(), String> {
-        if preceding_reservation
-            || !Self::balance_tail_eligible(style, protect_body) {
-            return Ok(());
-        }
-        let runs = self.lines.get(first_run..)
-            .ok_or("flow short-block origin out of bounds")?;
-        if runs.len() != 3 {
-            return Ok(());
-        }
-        let (old_page, first_y) = (runs[0].page, runs[0].origin_um.1);
-        let (second_page, second_y) = (runs[1].page, runs[1].origin_um.1);
-        let (new_page, third_y) = (runs[2].page, runs[2].origin_um.1);
-        let top = self.top.checked_add(INSET_UM)
-            .ok_or("flow short-block top inset overflow")?;
-        let bottom = self.bottom.checked_sub(INSET_UM)
-            .ok_or("flow short-block bottom inset overflow")?;
-        let pitch_twice = self.pitch.checked_mul(2)
-            .ok_or("flow short-block height overflow")?;
-        let pitch_thrice = self.pitch.checked_mul(3)
-            .ok_or("flow short-block height overflow")?;
-        if second_page != old_page
-            || old_page.checked_add(1) != Some(new_page)
-            || first_y.checked_add(self.pitch) != Some(second_y)
-            || third_y != top
-            || top.checked_add(pitch_thrice)
-                .is_none_or(|end| end > bottom)
-            || (!self.lines[..first_run].iter()
-                .any(|run| run.page == old_page)
-                && !self.ornaments[..first_ornament].iter()
-                    .any(|mark| mark.page == old_page)) {
-            return Ok(());
-        }
-        let new_second_y = top.checked_add(self.pitch)
-            .ok_or("flow short-block second-row overflow")?;
-        let new_third_y = top.checked_add(pitch_twice)
-            .ok_or("flow short-block third-row overflow")?;
-        for mark in self.ornaments.get_mut(first_ornament..)
-            .ok_or("flow short-block mark origin out of bounds")? {
-            // Rule and checkbox strokes lie within their owning row.
-            // Relocate them alongside the corresponding text glyphs.
-            let (old_y, new_y) = if mark.page == old_page {
-                if mark.start_um.1 < second_y {
-                    (first_y, top)
-                } else {
-                    (second_y, new_second_y)
-                }
-            } else if mark.page == new_page {
-                (third_y, new_third_y)
-            } else {
-                return Err("flow short-block mark page mismatch".into());
-            };
-            let translate = |value: u32| -> Result<u32, String> {
-                value.checked_sub(old_y)
-                    .and_then(|offset| new_y.checked_add(offset))
-                    .ok_or("flow short-block mark position overflow".into())
-            };
-            mark.start_um.1 = translate(mark.start_um.1)?;
-            mark.end_um.1 = translate(mark.end_um.1)?;
-            mark.page = new_page;
-        }
-        let rows = self.lines.get_mut(first_run..)
-            .ok_or("flow short-block rows disappeared")?;
-        for (row, y) in rows.iter_mut()
-            .zip([top, new_second_y, new_third_y]) {
-            row.page = new_page;
-            row.origin_um.1 = y;
-        }
-        self.y = top.checked_add(pitch_thrice)
-            .ok_or("flow short-block cursor overflow")?;
-        Ok(())
-    }
-
     fn begin_row(&mut self) -> Result<u32, String> {
         self.flush_blank_rows()?;
         self.consume_row()
@@ -736,6 +656,119 @@ impl Layout<'_> {
         Ok(true)
     }
 
+    // A short Markdown block can fit in full on the next sheet even if
+    // its first two or three rows fit on the current sheet. Relocate the
+    // complete three/four-row block only if the old sheet retains earlier
+    // ink. A heading or rule's reserved next row takes priority.
+    fn keep_short_block_together(
+        &mut self, first_run: usize, first_ornament: usize,
+        preceding_reservation: bool, style: LineStyle, protect_body: bool,
+    ) -> Result<(), String> {
+        if preceding_reservation
+            || !Self::balance_tail_eligible(style, protect_body) {
+            return Ok(());
+        }
+        let runs = self.lines.get(first_run..)
+            .ok_or("flow short-block origin out of bounds")?;
+        let count = runs.len();
+        if !(3..=4).contains(&count) {
+            return Ok(());
+        }
+        let first = runs.first()
+            .ok_or("flow short-block missing first row")?;
+        let (old_page, first_y) = (first.page, first.origin_um.1);
+        let new_page = old_page.checked_add(1)
+            .ok_or("flow short-block page overflow")?;
+        let old_rows = runs.iter().take_while(|row| row.page == old_page)
+            .count();
+        let top = self.top.checked_add(INSET_UM)
+            .ok_or("flow short-block top inset overflow")?;
+        let bottom = self.bottom.checked_sub(INSET_UM)
+            .ok_or("flow short-block bottom inset overflow")?;
+        let block_height = self.pitch.checked_mul(
+            u32::try_from(count)
+                .map_err(|_error| "flow short-block size overflow")?
+        ).ok_or("flow short-block height overflow")?;
+        let earlier_rows = self.lines.get(..first_run)
+            .ok_or("flow short-block earlier rows out of bounds")?;
+        let earlier_marks = self.ornaments.get(..first_ornament)
+            .ok_or("flow short-block earlier marks out of bounds")?;
+        if old_rows < 2 || old_rows >= count
+            || top.checked_add(block_height).is_none_or(|end| end > bottom)
+            || (!earlier_rows.iter().any(|run| run.page == old_page)
+                && !earlier_marks.iter().any(|mark| mark.page == old_page)) {
+            return Ok(());
+        }
+        // The block must be a contiguous two-page split. Never pull an
+        // older row, or a later page's ink, into this replacement sheet.
+        for (index, run) in runs.iter().enumerate() {
+            let (page, origin) = if index < old_rows {
+                (old_page, first_y)
+            } else {
+                (new_page, top)
+            };
+            let row_index = if index < old_rows {
+                index
+            } else {
+                index.saturating_sub(old_rows)
+            };
+            let row_offset = self.pitch.checked_mul(
+                u32::try_from(row_index)
+                    .map_err(|_error| "flow short-block offset overflow")?
+            ).ok_or("flow short-block offset overflow")?;
+            if run.page != page
+                || origin.checked_add(row_offset) != Some(run.origin_um.1) {
+                return Ok(());
+            }
+        }
+        for mark in self.ornaments.get_mut(first_ornament..)
+            .ok_or("flow short-block mark origin out of bounds")? {
+            // Bullets, checkboxes and quote bars lie within their owning
+            // text row. Preserve their exact local offsets when moving it.
+            let index = runs.iter().position(|row| {
+                let within = |y: u32| {
+                    row.origin_um.1 <= y
+                        && row.origin_um.1.checked_add(self.pitch)
+                            .is_some_and(|end| y < end)
+                };
+                row.page == mark.page
+                    && within(mark.start_um.1) && within(mark.end_um.1)
+            }).ok_or("flow short-block mark row mismatch")?;
+            let old_y = runs.get(index)
+                .ok_or("flow short-block mark owner disappeared")?
+                .origin_um.1;
+            let new_y = top.checked_add(self.pitch.checked_mul(
+                u32::try_from(index)
+                    .map_err(|_error| "flow short-block mark index overflow")?
+            ).ok_or("flow short-block mark offset overflow")?)
+                .ok_or("flow short-block mark position overflow")?;
+            let translate = |value: u32| -> Result<u32, String> {
+                value.checked_sub(old_y)
+                    .and_then(|offset| new_y.checked_add(offset))
+                    .ok_or_else(|| {
+                        "flow short-block mark position overflow".into()
+                    })
+            };
+            mark.start_um.1 = translate(mark.start_um.1)?;
+            mark.end_um.1 = translate(mark.end_um.1)?;
+            mark.page = new_page;
+        }
+        let rows = self.lines.get_mut(first_run..)
+            .ok_or("flow short-block rows disappeared")?;
+        for (index, row) in rows.iter_mut().enumerate() {
+            let offset = self.pitch.checked_mul(
+                u32::try_from(index)
+                    .map_err(|_error| "flow short-block row index overflow")?
+            ).ok_or("flow short-block row offset overflow")?;
+            row.page = new_page;
+            row.origin_um.1 = top.checked_add(offset)
+                .ok_or("flow short-block row position overflow")?;
+        }
+        self.y = top.checked_add(block_height)
+            .ok_or("flow short-block cursor overflow")?;
+        Ok(())
+    }
+
     // A wrapped Markdown paragraph, list or quote should keep its first
     // two rows together when possible. Literal code and plain lines retain
     // their exact row boundaries. Never detach a preceding title or rule.
@@ -760,19 +793,13 @@ impl Layout<'_> {
     fn layout_line(
         &mut self, content: &str, style: LineStyle, protect_body: bool,
     ) -> Result<(), String> {
-        let first_run = self.lines.len();
-        let first_ornament = self.ornaments.len();
+        let (run_start, mark_start) = (self.lines.len(), self.ornaments.len());
         let preceding_reservation =
             self.last_visible_heading || self.last_visible_rule;
         let (mut start_x, mut cap) = self.line_measurements(style)?;
-        let (hang, ordered_marker) = if matches!(style, LineStyle::Ordered) {
-            let (indent, marker) = measured_ordered_label(
-                content, cap, self.statistics,
-            )?;
-            (indent, Some(marker))
-        } else {
-            (0, None)
-        };
+        let (hang, ordered_marker) = ordered_hang_and_label(
+            style, content, cap, self.statistics,
+        )?;
         let mut row = String::new();
         let mut width = 0u32;
         let mut count = 0usize;
@@ -863,12 +890,12 @@ impl Layout<'_> {
             }
         }
         self.write_last_row(row, start_x, width, style, first)?;
-        self.keep_three_row_block_together(
-            first_run, first_ornament, preceding_reservation,
+        self.keep_short_block_together(
+            run_start, mark_start, preceding_reservation,
             style, protect_body,
         )?;
         if Self::balance_tail_eligible(style, protect_body) {
-            self.balance_wrapped_tail(first_run, first_ornament, style)?;
+            self.balance_wrapped_tail(run_start, mark_start, style)?;
         }
         Ok(())
     }
@@ -1175,6 +1202,22 @@ fn start_continuation(
             .ok_or("ordered continuation position overflow")?;
     }
     Ok(())
+}
+
+// A non-numbered block has no authored marker or hanging indent.
+// Numbered labels retain their measured width and exact glyph source.
+fn ordered_hang_and_label<'text>(
+    style: LineStyle, content: &'text str, cap: u32,
+    statistics: Option<&HandwritingStatisticsProfile>,
+) -> Result<(u32, Option<&'text str>), String> {
+    if matches!(style, LineStyle::Ordered) {
+        let (indent, marker) = measured_ordered_label(
+            content, cap, statistics,
+        )?;
+        Ok((indent, Some(marker)))
+    } else {
+        Ok((0, None))
+    }
 }
 
 // Keep the authored marker and at least the first body glyph together.

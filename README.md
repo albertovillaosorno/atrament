@@ -590,6 +590,13 @@ This never breaks a preceding title/rule reservation or moves literal code,
 indented rows or independent plain-text lines. Two-row sheets retain their
 normal pagination, and following content starts after the relocated block.
 
+A four-row wrapped Markdown block likewise moves intact when a fresh sheet
+fits all four rows, one or two earlier visible rows remain on the previous
+sheet, and its original layout would split two-plus-two or three-plus-one.
+Decorative quote bars, bullets and checkboxes move with their owner rows.
+Preceding title/rule reservations still win; sheets with fewer than four
+rows use ordinary breaks and the existing terminal-row balance instead.
+
 A standalone Markdown thematic rule also stays with its first following
 visible row when a fresh sheet can hold both, including intervening blank
 paragraph gaps or fenced-code rows. A heading before the rule takes priority

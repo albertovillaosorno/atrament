@@ -3587,3 +3587,106 @@ fn three_row_markdown_blocks_move_together_without_detaching_prior_ink()
         .collect::<Vec<_>>(), [1, 2, 2, 3]);
     Ok(())
 }
+
+#[test]
+fn four_row_markdown_blocks_relocate_all_ink_when_new_sheet_fits()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000, width: 35_000, height,
+            }),
+        )
+    };
+    // With one or two earlier code rows, the four-row block initially
+    // splits 3+1 or 2+2. The next sheet fits all four physical rows.
+    for prior_rows in 1..=2 {
+        let prefix = format!("```\n{}\n```\n", vec!["a"; prior_rows].join("\n"));
+        for (block, mark_count) in [
+            ("aaaaaa aaaaaa aaaaaa aaaaaa", 0),
+            ("- aaaaaa aaaaaa aaaaaa aaaaaa", 1),
+            ("- [ ] aaaaaa aaaaaa aaaaaa aaaaaa", 4),
+            ("- [x] aaaaaa aaaaaa aaaaaa aaaaaa", 6),
+            ("> aaaaaa aaaaaa aaaaaa aaaaaa", 4),
+            ("1. a a a a a a a a", 0),
+        ] {
+            let source = format!("{prefix}{block}");
+            let (rows, marks, pages) = render(&source, 41_000)?;
+            assert_eq!(pages, 2, "{prior_rows}: {block}");
+            assert_eq!(rows.len(), prior_rows + 4, "{block}");
+            assert_eq!(rows[..prior_rows].iter().map(|row| row.page)
+                .collect::<Vec<_>>(), vec![1; prior_rows], "{block}");
+            assert_eq!(rows[prior_rows..].iter().map(|row| (
+                row.page, row.origin_um.1,
+            )).collect::<Vec<_>>(), [
+                (2, 42_500), (2, 51_500), (2, 60_500), (2, 69_500),
+            ], "{prior_rows}: {block}");
+            assert_eq!(marks.len(), mark_count, "{block}");
+            assert!(marks.iter().all(|mark| mark.page == 2), "{block}");
+            if block.starts_with("> ") {
+                assert_eq!(marks.iter().map(|bar| (
+                    bar.start_um.1, bar.end_um.1,
+                )).collect::<Vec<_>>(), [
+                    (43_000, 50_900), (52_000, 59_900),
+                    (61_000, 68_900), (70_000, 77_900),
+                ]);
+            } else if block.starts_with("- [") {
+                assert!(marks.iter().all(|mark| {
+                    (43_700..=46_200).contains(&mark.start_um.1)
+                        && (43_700..=46_200).contains(&mark.end_um.1)
+                }), "checkbox ink belongs to relocated first row");
+            } else if block.starts_with("- ") {
+                assert_eq!((marks[0].start_um, marks[0].end_um),
+                    ((34_100, 44_700), (35_800, 44_700)));
+            } else if block.starts_with("1. ") {
+                assert_eq!(rows[prior_rows].origin_um.0, 38_500);
+                assert!(rows[prior_rows + 1..].iter()
+                    .all(|row| row.origin_um.0 == 50_500));
+            }
+        }
+    }
+
+    // The relocated last row advances the physical cursor. The next
+    // visible heading belongs on page three rather than overwriting it.
+    let source = "```\na\n```\naaaaaa aaaaaa aaaaaa aaaaaa\n# a";
+    let (rows, marks, pages) = render(source, 41_000)?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2, 2, 2, 2, 3]);
+    assert_eq!(rows[5].origin_um, (32_500, 42_500));
+    assert_eq!(marks.len(), 1);
+    assert_eq!(marks[0].page, 3);
+
+    // A preceding heading or rule must remain paired with its first
+    // quote row. The short-block relocation must not undo its reservation.
+    for source in [
+        "# a\n> aaaaaa aaaaaa aaaaaa aaaaaa",
+        "---\n> aaaaaa aaaaaa aaaaaa aaaaaa",
+    ] {
+        let (rows, marks, pages) = render(source, 41_000)?;
+        assert_eq!(pages, 2, "{source}");
+        assert_eq!(rows[0].page, 1);
+        assert_eq!(rows[1].page, 1);
+        let quote_marks = marks.iter()
+            .filter(|mark| mark.start_um.0 == 35_500)
+            .collect::<Vec<_>>();
+        assert_eq!(quote_marks.len(), 4);
+        assert_eq!(quote_marks[0].page, 1);
+    }
+
+    // A three-row or shorter sheet cannot contain four rows. Preserve
+    // the established two-row tail balance rather than forcing relocation.
+    let (rows, marks, pages) = render(
+        "> aaaaaa aaaaaa aaaaaa aaaaaa", 32_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 1, 2, 2]);
+    assert_eq!(marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [1, 1, 2, 2]);
+    Ok(())
+}

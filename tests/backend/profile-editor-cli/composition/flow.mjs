@@ -4923,3 +4923,95 @@ test('short wrapped Markdown blocks move as complete native PDF/PNG ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('four-row Markdown blocks relocate complete native PDF/PNG ink',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-four-row-'));
+    try {
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '41000',
+        ];
+        const earlierInk = [
+            '--place-text', '1', '32500', '42500', 'a',
+        ];
+        const box = [
+            ['33900', '43700', '36400', '43700'],
+            ['36400', '43700', '36400', '46200'],
+            ['36400', '46200', '33900', '46200'],
+            ['33900', '46200', '33900', '43700'],
+        ].flatMap((points) => [
+            '--ink-line', '2', ...points, '350', '#1E304A',
+        ]);
+        const check = [
+            '--ink-line', '2', '34350', '44950',
+            '35000', '45850', '450', '#1E304A',
+            '--ink-line', '2', '35000', '45850',
+            '36150', '44100', '450', '#1E304A',
+        ];
+        for (const [kind, marker, x, ornaments] of [
+            ['body', '', '32500', []],
+            ['bullet', '- ', '38500', [
+                '--ink-line', '2', '34100', '44700',
+                '35800', '44700', '450', '#1E304A',
+            ]],
+            ['checkbox', '- [x] ', '38500', [...box, ...check]],
+            ['quote', '> ', '38500', [1, 2, 3, 4].flatMap((row) => {
+                const y = 43000 + (row - 1) * 9000;
+                return [
+                    '--ink-line', '2', '35500', String(y),
+                    '35500', String(y + 7900), '400', '#1E304A',
+                ];
+            })],
+        ]) {
+            const source = `\`\`\`\na\n\`\`\`\n${marker}`
+                + Array(4).fill('aaaaaa').join(' ');
+            const manual = [...earlierInk, ...[42500, 51500, 60500, 69500]
+                .flatMap((y) => [
+                    '--place-text', '2', x, String(y), 'aaaaaa',
+                ]), ...ornaments];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const exportOptions = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const actual = render(dir, source, format,
+                        [...region, ...exportOptions],
+                        '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `four-${kind}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--',
+                        ...base, ...manual, ...exportOptions,
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `${kind} ${format} page ${page} native ink parity`);
+                    const refused = render(dir, source, format,
+                        [...region, ...exportOptions,
+                            ...(format === 'pdf'
+                                ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.deepEqual(readFileSync(refused.output), accepted,
+                        `${kind} ${format} rejected page is atomic`);
+                    const missing = render(dir, `${source} β`, format,
+                        [...region, ...exportOptions],
+                        '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        `${kind} ${format} missing glyph is atomic`);
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

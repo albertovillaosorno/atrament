@@ -1782,3 +1782,21 @@ match independently positioned glyph and ornament strokes on both pages;
 invalid page selections and missing glyphs refuse without replacing an
 accepted output. This remains CLI-only layout: no saved semantic notebook
 or general keep-together constraint has been added, and P1 remains open.
+
+## Four-row Markdown block keep-together (partial) — 2026-11-06
+
+The CLI now relocates an exactly four-row Markdown paragraph, bullet,
+checkbox, numbered item or quote as one group when an earlier visible row
+remains on its original sheet, the current split is 2+2 or 3+1 and the
+next physical sheet accommodates all four rows. Earlier fence ink stays
+in place; the first row's list/checkbox marks and all quote bars shift
+with their authored text and the following page cursor advances correctly.
+
+Heading and thematic-rule pairing takes priority over relocation, and
+three-row or shorter sheets retain their established pagination. Rust tests
+exercise both split shapes, exact row coordinates, decoration geometry,
+ordered hanging indents, the following heading and priority/fallback cases.
+Native PDF and transparent PNG output match independently placed glyphs
+and ornament strokes; invalid page selection and missing glyphs preserve
+accepted output. This is still CLI-only flow, not persisted semantic
+notebook layout or completion of the P1 task.
