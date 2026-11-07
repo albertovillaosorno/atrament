@@ -494,7 +494,7 @@ impl Layout<'_> {
         )?;
         self.keep_fitting_block_together(
             run_start, mark_start, preceding_reservation,
-            style, protect_body,
+            style, protect_body, 0,
         )?;
         if Self::balance_tail_eligible(style, protect_body) {
             self.balance_wrapped_tail(run_start, mark_start, style)?;
@@ -627,6 +627,19 @@ impl Layout<'_> {
         Ok(self.y)
     }
 
+    // A relocated block may retain a collapsed paragraph gap after its
+    // first heading row. All ink, row and page cursor offsets share this
+    // exact measurement; fresh-page continuation rows start without a gap.
+    fn fitting_row_offset(
+        pitch: u32, index: usize, gap_after_first: u32,
+    ) -> Result<u32, String> {
+        let rows = u32::try_from(index)
+            .map_err(|_error| "flow short-block row index overflow")?;
+        pitch.checked_mul(rows).and_then(|offset| {
+            offset.checked_add(if index == 0 { 0 } else { gap_after_first })
+        }).ok_or_else(|| "flow short-block row offset overflow".into())
+    }
+
     // Delay empty physical rows until real ink follows them. This keeps
     // deliberate interior spacing without exporting blank trailing pages
     // or exhausting line/page budgets on invisible end-of-source rows.
@@ -685,6 +698,7 @@ impl Layout<'_> {
     fn keep_fitting_block_together(
         &mut self, first_run: usize, first_ornament: usize,
         preceding_reservation: bool, style: LineStyle, protect_body: bool,
+        gap_after_first: u32,
     ) -> Result<(), String> {
         if preceding_reservation
             || !Self::balance_tail_eligible(style, protect_body) {
@@ -710,7 +724,8 @@ impl Layout<'_> {
         let block_height = self.pitch.checked_mul(
             u32::try_from(count)
                 .map_err(|_error| "flow short-block size overflow")?
-        ).ok_or("flow short-block height overflow")?;
+        ).and_then(|height| height.checked_add(gap_after_first))
+            .ok_or("flow short-block height overflow")?;
         let earlier_rows = self.lines.get(..first_run)
             .ok_or("flow short-block earlier rows out of bounds")?;
         let earlier_marks = self.ornaments.get(..first_ornament)
@@ -734,10 +749,10 @@ impl Layout<'_> {
             } else {
                 index.saturating_sub(old_rows)
             };
-            let row_offset = self.pitch.checked_mul(
-                u32::try_from(row_index)
-                    .map_err(|_error| "flow short-block offset overflow")?
-            ).ok_or("flow short-block offset overflow")?;
+            let row_offset = Self::fitting_row_offset(
+                self.pitch, row_index,
+                if index < old_rows { gap_after_first } else { 0 },
+            )?;
             if run.page != page
                 || origin.checked_add(row_offset) != Some(run.origin_um.1) {
                 return Ok(());
@@ -759,11 +774,9 @@ impl Layout<'_> {
             let old_y = runs.get(index)
                 .ok_or("flow short-block mark owner disappeared")?
                 .origin_um.1;
-            let new_y = top.checked_add(self.pitch.checked_mul(
-                u32::try_from(index)
-                    .map_err(|_error| "flow short-block mark index overflow")?
-            ).ok_or("flow short-block mark offset overflow")?)
-                .ok_or("flow short-block mark position overflow")?;
+            let new_y = top.checked_add(Self::fitting_row_offset(
+                self.pitch, index, gap_after_first,
+            )?).ok_or("flow short-block mark position overflow")?;
             let translate = |value: u32| -> Result<u32, String> {
                 value.checked_sub(old_y)
                     .and_then(|offset| new_y.checked_add(offset))
@@ -778,10 +791,9 @@ impl Layout<'_> {
         let rows = self.lines.get_mut(first_run..)
             .ok_or("flow short-block rows disappeared")?;
         for (index, row) in rows.iter_mut().enumerate() {
-            let offset = self.pitch.checked_mul(
-                u32::try_from(index)
-                    .map_err(|_error| "flow short-block row index overflow")?
-            ).ok_or("flow short-block row offset overflow")?;
+            let offset = Self::fitting_row_offset(
+                self.pitch, index, gap_after_first,
+            )?;
             row.page = new_page;
             row.origin_um.1 = top.checked_add(offset)
                 .ok_or("flow short-block row position overflow")?;
@@ -812,11 +824,18 @@ impl Layout<'_> {
             .ok_or("flow heading block origin out of bounds")?;
         let first = self.lines.get(first_run)
             .ok_or("flow heading block has no first row")?;
-        // Ignore syntactic intervening structures, breaks or a heading
-        // separated from its first body row by a physical page boundary.
+        // Only immediate continuation or a collapsed Markdown paragraph
+        // gap can join the heading. Fenced blank rows, earlier structural
+        // reservations and a page boundary remain separate.
+        let Some(after_heading) = heading.origin_um.1.checked_add(self.pitch)
+        else {
+            return Err("flow heading block spacing overflow".into());
+        };
+        let Some(gap) = first.origin_um.1.checked_sub(after_heading) else {
+            return Ok(());
+        };
         if heading.page != first.page
-            || heading.origin_um.1.checked_add(self.pitch)
-                != Some(first.origin_um.1) {
+            || !matches!(gap, 0 | PARAGRAPH_GAP_UM) {
             return Ok(());
         }
         let heading_y = heading.origin_um.1;
@@ -831,6 +850,7 @@ impl Layout<'_> {
             }).unwrap_or(first_mark);
         self.keep_fitting_block_together(
             heading_index, first_heading_mark, false, style, protect_body,
+            gap,
         )
     }
 

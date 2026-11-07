@@ -5272,3 +5272,94 @@ test('heading and two- or three-row quotes export together on PDF/PNG',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('blank-separated headings and quotes retain 4-mm gap in PDF/PNG',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-heading-gap-'));
+    try {
+        for (const count of [2, 3]) {
+            const region = [
+                '--flow-region', '30000', '40000', '35000',
+                String(9000 * (count + 1) + 9000),
+            ];
+            const headingMarker = [900, 1900, 2900, 3900].flatMap(
+                (lift) => [
+                    '--ink-line', '2', '32500', String(42500 + lift),
+                    '36500', String(42500 + lift), '1400', '#F8DE91',
+                ]);
+            const quoteBars = Array.from({ length: count }, (_, i) => {
+                const y = 56000 + i * 9000;
+                return [
+                    '--ink-line', '2', '35500', String(y),
+                    '35500', String(y + 7900), '400', '#1E304A',
+                ];
+            }).flat();
+            const manual = [
+                '--place-text', '1', '32500', '42500', 'a',
+                '--place-text', '2', '32500', '42500', 'a',
+                ...Array.from({ length: count }, (_, i) => [
+                    '--place-text', '2', '38500',
+                    String(55500 + i * 9000), 'aaaaaa',
+                ]).flat(),
+                ...headingMarker, ...quoteBars,
+            ];
+            const source = '```\na\n```\n# a\n\n> '
+                + Array(count).fill('aaaaaa').join(' ');
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const exportOptions = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const actual = render(dir, source, format,
+                        [...region, ...exportOptions],
+                        '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `heading-gap-${count}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--',
+                        ...base, ...manual, ...exportOptions,
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `${count} ${format} page ${page} gap geometry`);
+                    for (const variation of [
+                        source.replace('\n\n> ', '\n\n\n> '),
+                        source.replaceAll('\n', '\r\n'),
+                    ]) {
+                        const replay = render(dir, variation, format,
+                            [...region, ...exportOptions],
+                            '--flow-markdown', page);
+                        assert.equal(replay.result.status, 0,
+                            replay.result.stderr);
+                        assert.deepEqual(readFileSync(replay.output), accepted,
+                            `${count} ${format} page ${page} gap collapse`);
+                    }
+                    const refused = render(dir, source, format,
+                        [...region, ...exportOptions,
+                            ...(format === 'pdf'
+                                ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.deepEqual(readFileSync(refused.output), accepted,
+                        `${count} ${format} invalid page stays atomic`);
+                    const missing = render(dir, `${source} β`, format,
+                        [...region, ...exportOptions],
+                        '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        `${count} ${format} missing glyph stays atomic`);
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

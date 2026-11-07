@@ -1851,6 +1851,7 @@ splitting the remainder unnecessarily.
 A heading already paired with an earlier heading or thematic rule cannot be
 pulled away. Two-row body blocks, intervening physical gaps, over-tall blocks,
 shorter sheets and literal/plain rows retain the existing layout rules.
+
 Three Rust geometry regressions cover ATX and Setext headings,
 three-to-twelve-row body blocks, supported decorations, page cursors,
 heading-style none, prior pairing and fallback. Native PDF plus both
@@ -1871,8 +1872,33 @@ quote bar follow their original rows; numbered hanging indents are intact.
 This also applies after an explicit hard break in an earlier paragraph. The
 heading-first-row guarantee still holds when a sheet has fewer than three
 rows; earlier heading/rule pairing and blank-separated or literal sources
-retain their established precedence. The existing Rust variable block tests
+retain their established precedence.
+
+The existing Rust variable block tests
 now cover two rows, plus page-one/page-two ornament ownership and short-sheet
 fallback. Native PDF and both selected transparent PNG pages match
 independently placed text and decoration strokes; invalid selections and
 missing glyphs refuse atomically. No semantic notebook is persisted.
+
+## Blank-separated heading and block keep-together (partial) — 2026-11-07
+
+The native Markdown flow can now move a heading and its complete subsequent
+wrapped paragraph, bullet/checkbox item or quote despite one or more empty
+source lines between them. Those lines collapse to the existing 4-mm gap,
+which is included in the one-sheet fit check and retained after relocation.
+Earlier independently printed ink stays put and native heading/quote/list
+ornaments move with their owner rows. This extends the earlier rule which
+required no intervening blank lines.
+
+Rust geometry tests cover ATX/Setext titles, two-to-six-row body blocks,
+repeated blank-line collapse, exact moved ink and 4-mm positions, earlier
+rule precedence, following-title cursor placement, short-sheet fallback
+and no-gratuitous-page behavior.
+Independent native PDF plus selected transparent PNG pages confirm precise
+heading marker, quote rules and text strokes. LF/CRLF and collapsed blanks
+have byte-identical output, while invalid page selections or missing glyphs
+do not overwrite accepted files.
+
+Fenced physical blank rows, oversized groups and prior heading/rule
+attachments retain existing constraints. This is CLI-only physical layout;
+persisted notebook semantics and full fixed-region editing remain open.

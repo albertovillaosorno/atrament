@@ -4072,6 +4072,111 @@ fn heading_and_complete_wrapped_block_move_together_after_independent_ink()
 }
 
 #[test]
+fn blank_separated_heading_and_fitting_block_preserve_gap_and_ink()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration {
+                style: Some(super::HeadingStyle::Marker),
+                ..super::HeadingDecoration::default()
+            },
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    for count in [2usize, 3, 4, 6] {
+        let height = 9_000 * u32::try_from(count + 1)
+            .map_err(|error| error.to_string())? + 9_000;
+        for heading in ["# a", "## a", "a\n==="] {
+            for marker in ["", "- ", "- [x] ", "> "] {
+                let block = format!(
+                    "{marker}{}", vec!["aaaaaa"; count].join(" "),
+                );
+                for blanks in ["\n\n", "\n\n\n"] {
+                    let source = format!(
+                        "```\na\n```\n{heading}{blanks}{block}",
+                    );
+                    let (rows, marks, pages) = render(&source, height)?;
+                    assert_eq!(pages, 2, "{count} {heading} {marker}");
+                    assert_eq!(rows.len(), count + 2);
+                    assert_eq!(rows[0].page, 1);
+                    for (index, row) in rows.iter().skip(1).enumerate() {
+                        assert_eq!(row.page, 2,
+                            "{count} {heading} {marker}");
+                        let gap = if index > 0 { 4_000 } else { 0 };
+                        assert_eq!(row.origin_um.1,
+                            42_500 + 9_000 * u32::try_from(index)
+                                .map_err(|error| error.to_string())? + gap);
+                    }
+                    assert!(marks.iter().all(|mark| mark.page == 2));
+                    if marker == "> " {
+                        assert_eq!(marks.len(), count +
+                            if heading == "## a" { 3 } else { 4 });
+                        for (index, mark) in marks.iter()
+                            .skip(if heading == "## a" { 3 } else { 4 })
+                            .enumerate() {
+                            let y = 56_000 + 9_000 *
+                                u32::try_from(index)
+                                    .map_err(|error| error.to_string())?;
+                            assert_eq!(mark.start_um.1, y);
+                            assert_eq!(mark.end_um.1, y + 7_900);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // A later title starts after the relocated final row and cannot
+    // overwrite the collapsed-gap group on its full second sheet.
+    let (rows, marks, pages) = render(
+        "```\na\n```\n# a\n\n> aaaaaa aaaaaa\n# a", 36_000,
+    )?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 2, 2, 2, 3]);
+    assert_eq!(rows[4].origin_um.1, 42_500);
+    assert!(marks.iter().any(|mark| mark.page == 3));
+
+    // No independent ink means no relocation or blank-page invention.
+    let (rows, marks, pages) = render(
+        "# a\n\n> aaaaaa aaaaaa", 36_000,
+    )?;
+    assert_eq!(pages, 1);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 1, 1]);
+    assert!(marks.iter().all(|mark| mark.page == 1));
+
+    // A short sheet cannot hold the complete group; normal heading-first
+    // spacing and page breaks continue without moving the whole block.
+    let (rows, bars, pages) = render(
+        "```\na\n```\n# a\n\n> aaaaaa aaaaaa", 32_000,
+    )?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 2, 2, 3]);
+    assert_eq!(bars.iter().filter(|bar| bar.start_um.0 == 35_500)
+        .count(), 2);
+
+    // A heading already attached to a rule must keep that precedence.
+    let (rows, marks, pages) = render(
+        "```\na\n```\n---\n# a\n\n> aaaaaa aaaaaa", 36_000,
+    )?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows[0].page, 1);
+    assert_eq!(rows[1].page, 2);
+    assert!(marks.iter().filter(|mark| mark.start_um.0 != 35_500)
+        .all(|mark| mark.page == 2));
+    Ok(())
+}
+
+#[test]
 fn heading_block_compaction_preserves_prior_reservations_and_short_sheets()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

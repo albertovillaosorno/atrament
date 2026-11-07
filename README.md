@@ -616,9 +616,15 @@ complete two-or-more-row paragraph, list item or quote when the combined
 heading and block fit on one fresh sheet and independent ink remains on the
 original sheet. Its underline/marker and the block's list or quote strokes
 move with their authored rows. A heading already attached to an earlier
-heading or thematic rule is not moved, and one-row blocks, blank-separated
-titles, oversize blocks and narrow sheets retain their earlier pagination.
-This remains an export-only CLI rule, not persisted notebook structure.
+heading or thematic rule is not moved, and one-row blocks, oversize blocks
+and narrow sheets retain their earlier pagination.
+
+A collapsed Markdown blank-line gap between a heading and its following
+wrapped block also moves with the complete group when the extra 4 mm fits
+on the fresh sheet.
+Repeated blank source lines collapse identically; fenced physical blank rows
+are not part of this pairing. This remains an export-only CLI rule, not
+persisted notebook structure.
 
 A standalone Markdown thematic rule also stays with its first following
 visible row when a fresh sheet can hold both, including intervening blank
