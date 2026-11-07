@@ -581,6 +581,15 @@ the block's first two rows or a preceding heading/rule reservation. Two-row
 or shorter regions, fenced code, literal indentation and plain text retain
 their previous breaks.
 
+A three-row wrapped Markdown paragraph, bullet, checkbox, numbered item or
+quote also stays together on the next sheet when its first two rows would
+otherwise fit on the previous sheet, the next sheet can fit all three, and
+the previous sheet has other visible ink. Bullet/checkbox marks and quote
+bars move with their associated rows; numbered hanging indents are unchanged.
+This never breaks a preceding title/rule reservation or moves literal code,
+indented rows or independent plain-text lines. Two-row sheets retain their
+normal pagination, and following content starts after the relocated block.
+
 A standalone Markdown thematic rule also stays with its first following
 visible row when a fresh sheet can hold both, including intervening blank
 paragraph gaps or fenced-code rows. A heading before the rule takes priority

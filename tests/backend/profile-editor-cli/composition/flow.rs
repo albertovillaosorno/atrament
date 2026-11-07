@@ -3487,3 +3487,103 @@ fn long_markdown_decorated_blocks_balance_lone_tail_with_ink_marks()
     }
     Ok(())
 }
+
+#[test]
+fn three_row_markdown_blocks_move_together_without_detaching_prior_ink()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000, width: 35_000, height,
+            }),
+        )
+    };
+    // A literal code row precedes each block; only two more physical
+    // rows fit on the first sheet. A fresh sheet holds the complete block.
+    for (block, expected, mark_count) in [
+        ("aaaaaa aaaaaa aaaaaa", ["aaaaaa", "aaaaaa", "aaaaaa"], 0),
+        ("- aaaaaa aaaaaa aaaaaa", ["aaaaaa", "aaaaaa", "aaaaaa"], 1),
+        ("- [ ] aaaaaa aaaaaa aaaaaa",
+            ["aaaaaa", "aaaaaa", "aaaaaa"], 4),
+        ("- [x] aaaaaa aaaaaa aaaaaa",
+            ["aaaaaa", "aaaaaa", "aaaaaa"], 6),
+        ("> aaaaaa aaaaaa aaaaaa", ["aaaaaa", "aaaaaa", "aaaaaa"], 3),
+        ("1. a a a a a", ["1. a a", "a a", "a"], 0),
+    ] {
+        let source = format!("```\na\n```\n{block}");
+        let (rows, marks, pages) = render(&source, 32_000)?;
+        assert_eq!(pages, 2, "{block}");
+        assert_eq!(rows.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 2, 2, 2], "{block}");
+        assert_eq!(rows.iter().map(|row| row.origin_um.1)
+            .collect::<Vec<_>>(), [42_500, 42_500, 51_500, 60_500],
+            "{block}");
+        assert_eq!(rows[1..].iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>(), expected, "{block}");
+        assert_eq!(marks.len(), mark_count, "{block}");
+        assert!(marks.iter().all(|mark| mark.page == 2), "{block}");
+        if block.starts_with("> ") {
+            assert_eq!(marks.iter().map(|bar| (
+                bar.start_um.1, bar.end_um.1,
+            )).collect::<Vec<_>>(), [
+                (43_000, 50_900),
+                (52_000, 59_900),
+                (61_000, 68_900),
+            ]);
+        } else if block.starts_with("- [") {
+            assert!(marks.iter().all(|mark| {
+                (43_700..=46_200).contains(&mark.start_um.1)
+                    && (43_700..=46_200).contains(&mark.end_um.1)
+            }), "checkbox belongs to its relocated first row: {block}");
+        } else if block.starts_with("- ") {
+            assert_eq!((marks[0].start_um, marks[0].end_um),
+                ((34_100, 44_700), (35_800, 44_700)));
+        } else if block.starts_with("1. ") {
+            assert_eq!(rows[1].origin_um.0, 38_500);
+            assert_eq!(rows[2].origin_um.0, 50_500);
+            assert_eq!(rows[3].origin_um.0, 50_500);
+        }
+    }
+
+    // After relocation, the next block starts on page three instead
+    // of being written over the relocated third row.
+    let source = "```\na\n```\naaaaaa aaaaaa aaaaaa\n# a";
+    let (rows, heading_ink, pages) = render(source, 32_000)?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2, 2, 2, 3]);
+    assert_eq!(rows[4].origin_um, (32_500, 42_500));
+    assert_eq!(heading_ink.len(), 1);
+    assert_eq!(heading_ink[0].page, 3);
+
+    // A preceding title or thematic rule reserves its first quote row.
+    // Moving the whole quote would violate that higher-priority pairing.
+    for source in [
+        "# a\n> aaaaaa aaaaaa aaaaaa",
+        "---\n> aaaaaa aaaaaa aaaaaa",
+    ] {
+        let (rows, bars, pages) = render(source, 32_000)?;
+        assert_eq!(pages, 2, "{source:?}");
+        let quoted = rows.iter().filter(|row| row.text == "aaaaaa")
+            .collect::<Vec<_>>();
+        assert_eq!(quoted.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 1, 2], "{source:?}");
+        let quotes = bars.iter().filter(|bar| bar.start_um.0 == 35_500)
+            .collect::<Vec<_>>();
+        assert_eq!(quotes.iter().map(|bar| bar.page)
+            .collect::<Vec<_>>(), [1, 1, 2], "{source:?}");
+    }
+
+    // Two-row sheets cannot admit a complete three-row block.
+    let (short, _, short_pages) = render(
+        "```\na\n```\n- aaaaaa aaaaaa aaaaaa", 23_000)?;
+    assert_eq!(short_pages, 3);
+    assert_eq!(short.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2, 2, 3]);
+    Ok(())
+}

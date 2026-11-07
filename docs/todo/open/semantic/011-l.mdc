@@ -1761,3 +1761,24 @@ PNG-page and missing-glyph refusals preserve prior accepted output bytes.
 Literal fenced and indented rows and independent plaintext remain unchanged.
 This only rebalances the final two rows within a CLI-compiled Markdown block;
 it does not add persisted semantic notebook identity or complete the P1 task.
+
+## Three-row Markdown block keep-together (partial) — 2026-11-06
+
+The native CLI now avoids a two-plus-one split for exactly three-row
+wrapped Markdown paragraphs, bullets, checkboxes, numbered items and quotes.
+When a fresh sheet holds three rows and earlier visible ink remains on the
+previous sheet, all three physical rows move to the fresh sheet together.
+Quote bars and first-row list/checkbox marks move with their original text;
+numbered continuations retain their measured hanging indent.
+
+Preceding heading and thematic-rule reservations take priority. Sheets that
+hold only two rows, fenced/literal source and independent plaintext preserve
+the existing page boundaries. The code also advances the next block cursor
+past the relocated third row rather than overwriting earlier ink.
+
+Rust regression tests check exact pages, baseline coordinates and quote,
+checkbox, bullet and numbered marks. Native PDF and transparent PNG bytes
+match independently positioned glyph and ornament strokes on both pages;
+invalid page selections and missing glyphs refuse without replacing an
+accepted output. This remains CLI-only layout: no saved semantic notebook
+or general keep-together constraint has been added, and P1 remains open.

@@ -560,6 +560,86 @@ impl Layout<'_> {
         Ok(())
     }
 
+    // A three-row Markdown block can otherwise leave a lone third row
+    // on the following sheet even though all three fit there. Relocate
+    // the whole block only if the old sheet retains earlier visible ink;
+    // never detach a heading/rule from its reserved first following row.
+    fn keep_three_row_block_together(
+        &mut self, first_run: usize, first_ornament: usize,
+        preceding_reservation: bool, style: LineStyle, protect_body: bool,
+    ) -> Result<(), String> {
+        if preceding_reservation
+            || !Self::balance_tail_eligible(style, protect_body) {
+            return Ok(());
+        }
+        let runs = self.lines.get(first_run..)
+            .ok_or("flow short-block origin out of bounds")?;
+        if runs.len() != 3 {
+            return Ok(());
+        }
+        let (old_page, first_y) = (runs[0].page, runs[0].origin_um.1);
+        let (second_page, second_y) = (runs[1].page, runs[1].origin_um.1);
+        let (new_page, third_y) = (runs[2].page, runs[2].origin_um.1);
+        let top = self.top.checked_add(INSET_UM)
+            .ok_or("flow short-block top inset overflow")?;
+        let bottom = self.bottom.checked_sub(INSET_UM)
+            .ok_or("flow short-block bottom inset overflow")?;
+        let pitch_twice = self.pitch.checked_mul(2)
+            .ok_or("flow short-block height overflow")?;
+        let pitch_thrice = self.pitch.checked_mul(3)
+            .ok_or("flow short-block height overflow")?;
+        if second_page != old_page
+            || old_page.checked_add(1) != Some(new_page)
+            || first_y.checked_add(self.pitch) != Some(second_y)
+            || third_y != top
+            || top.checked_add(pitch_thrice)
+                .is_none_or(|end| end > bottom)
+            || (!self.lines[..first_run].iter()
+                .any(|run| run.page == old_page)
+                && !self.ornaments[..first_ornament].iter()
+                    .any(|mark| mark.page == old_page)) {
+            return Ok(());
+        }
+        let new_second_y = top.checked_add(self.pitch)
+            .ok_or("flow short-block second-row overflow")?;
+        let new_third_y = top.checked_add(pitch_twice)
+            .ok_or("flow short-block third-row overflow")?;
+        for mark in self.ornaments.get_mut(first_ornament..)
+            .ok_or("flow short-block mark origin out of bounds")? {
+            // Rule and checkbox strokes lie within their owning row.
+            // Relocate them alongside the corresponding text glyphs.
+            let (old_y, new_y) = if mark.page == old_page {
+                if mark.start_um.1 < second_y {
+                    (first_y, top)
+                } else {
+                    (second_y, new_second_y)
+                }
+            } else if mark.page == new_page {
+                (third_y, new_third_y)
+            } else {
+                return Err("flow short-block mark page mismatch".into());
+            };
+            let translate = |value: u32| -> Result<u32, String> {
+                value.checked_sub(old_y)
+                    .and_then(|offset| new_y.checked_add(offset))
+                    .ok_or("flow short-block mark position overflow".into())
+            };
+            mark.start_um.1 = translate(mark.start_um.1)?;
+            mark.end_um.1 = translate(mark.end_um.1)?;
+            mark.page = new_page;
+        }
+        let rows = self.lines.get_mut(first_run..)
+            .ok_or("flow short-block rows disappeared")?;
+        for (row, y) in rows.iter_mut()
+            .zip([top, new_second_y, new_third_y]) {
+            row.page = new_page;
+            row.origin_um.1 = y;
+        }
+        self.y = top.checked_add(pitch_thrice)
+            .ok_or("flow short-block cursor overflow")?;
+        Ok(())
+    }
+
     fn begin_row(&mut self) -> Result<u32, String> {
         self.flush_blank_rows()?;
         self.consume_row()
@@ -682,6 +762,8 @@ impl Layout<'_> {
     ) -> Result<(), String> {
         let first_run = self.lines.len();
         let first_ornament = self.ornaments.len();
+        let preceding_reservation =
+            self.last_visible_heading || self.last_visible_rule;
         let (mut start_x, mut cap) = self.line_measurements(style)?;
         let (hang, ordered_marker) = if matches!(style, LineStyle::Ordered) {
             let (indent, marker) = measured_ordered_label(
@@ -781,6 +863,10 @@ impl Layout<'_> {
             }
         }
         self.write_last_row(row, start_x, width, style, first)?;
+        self.keep_three_row_block_together(
+            first_run, first_ornament, preceding_reservation,
+            style, protect_body,
+        )?;
         if Self::balance_tail_eligible(style, protect_body) {
             self.balance_wrapped_tail(first_run, first_ornament, style)?;
         }

@@ -4846,3 +4846,80 @@ test('long wrapped quote and bullet tails preserve page-local PDF/PNG ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('short wrapped Markdown blocks move as complete native PDF/PNG ink',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-short-block-'));
+    try {
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '32000',
+        ];
+        const manualPrefix = [
+            '--place-text', '1', '32500', '42500', 'a',
+        ];
+        for (const [kind, prefix, x, ornament] of [
+            ['body', '', '32500', []],
+            ['bullet', '- ', '38500', [
+                '--ink-line', '2', '34100', '44700',
+                '35800', '44700', '450', '#1E304A',
+            ]],
+            ['quote', '> ', '38500', [1, 2, 3].flatMap((row) => {
+                const start = 43000 + (row - 1) * 9000;
+                return [
+                    '--ink-line', '2', '35500', String(start),
+                    '35500', String(start + 7900), '400', '#1E304A',
+                ];
+            })],
+        ]) {
+            const source = `\`\`\`\na\n\`\`\`\n${prefix}`
+                + 'aaaaaa aaaaaa aaaaaa';
+            const manual = [...manualPrefix, ...[42500, 51500, 60500]
+                .flatMap((y) => [
+                    '--place-text', '2', x, String(y), 'aaaaaa',
+                ]), ...ornament];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const exportOptions = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const actual = render(dir, source, format,
+                        [...region, ...exportOptions],
+                        '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `short-${kind}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--',
+                        ...base, ...manual, ...exportOptions,
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `${kind} ${format} page ${page} ink parity`);
+                    const refused = render(dir, source, format,
+                        [...region, ...exportOptions,
+                            ...(format === 'pdf'
+                                ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.deepEqual(readFileSync(refused.output), accepted,
+                        `${kind} ${format} rejected page is atomic`);
+                    const missing = render(dir, `${source} β`, format,
+                        [...region, ...exportOptions],
+                        '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        `${kind} ${format} missing glyph is atomic`);
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
