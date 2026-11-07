@@ -2520,3 +2520,19 @@ selected-block self-collisions, plus the valid nested baseline. This still
 protects only selected measured-owner identity admission; arbitrary global
 identity graph validation, persisted semantic text measurement, and saved
 notebook-to-PDF/PNG remain open.
+
+## Notebook-level semantic-owner collision refusal (partial) — 2026-11-07
+
+The revision-bound measured-flow paginator now refuses a selected measured
+block identity reused by the notebook root; any physical page or flow; an
+output or paper profile; or an asset, constraint, provenance or style owner.
+Earlier checks already covered selected top-level blocks and nested semantic
+structure, but directly malformed accepted revisions could alias the same
+block identity to an independent notebook-level owner without a diagnostic.
+
+A failing-before-fix Rust regression covers all nine owner families while
+preserving valid pagination and the original accepted session. Semantic
+references (such as a page's profile or a constraint's target) remain valid
+references rather than extra owners. This is defensive typed admission, not
+arbitrary whole-document identity validation, persistent Markdown layout or
+the required semantic notebook-to-PDF/PNG path.

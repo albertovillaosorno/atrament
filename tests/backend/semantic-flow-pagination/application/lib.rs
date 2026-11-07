@@ -47,10 +47,11 @@ use atrament_semantic_flow_pagination::{
     RevisionFlowMeasurement, SemanticPaginationError, paginate_revision,
 };
 use atrament_semantic_notebook::{
-    AcceptedIdentity, Block, BlockContent, CandidateIdentity, Figure, Flow,
-    Formula, FormulaMode, IdentityAllocator, InlineSpan, List, ListItem,
-    Notebook, Page, PaperProfile, Table, TableCell, TableCellSpan, TableRow,
-    TableRowRole, UnresolvedBlock, UnresolvedReason,
+    AcceptedIdentity, Asset, Block, BlockContent, CandidateIdentity,
+    Constraint, ConstraintKind, Figure, Flow, Formula, FormulaMode,
+    IdentityAllocator, InlineSpan, List, ListItem, Notebook, OutputProfile,
+    Page, PaperProfile, Provenance, ProvenanceKind, Style, Table, TableCell,
+    TableCellSpan, TableRow, TableRowRole, UnresolvedBlock, UnresolvedReason,
 };
 use atrament_semantic_notebook_port::{
     AcceptanceOutcome, PageProfileEditOutcome, SemanticNotebookSession,
@@ -1491,6 +1492,106 @@ fn verify_selected_leaf_owner_refusal(
 #[test]
 fn leaf_semantic_owners_cannot_alias_a_measured_block() {
     assert_eq!(verify_leaf_semantic_owner_refusal(), Ok(()));
+}
+
+fn verify_notebook_level_owner_aliases() -> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("valid notebook fixture was refused".into());
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+    let accepted = session
+        .current()
+        .ok_or("accepted revision missing")?
+        .clone();
+    if paginate_revision(&accepted, &measured).is_err() {
+        return Err("valid notebook fixture did not paginate".into());
+    }
+    // These are semantic owners, not references such as `paper_profile`
+    // or `Constraint.target`. Normal candidate admission prevents aliases;
+    // mutate a cloned accepted value to exercise the typed layout boundary.
+    for case in 0u8..9 {
+        let mut malformed = accepted.clone();
+        match case {
+            0 => malformed.notebook.id = owner,
+            1 => malformed
+                .notebook
+                .pages
+                .get_mut(0)
+                .ok_or("first page missing")?
+                .id = owner,
+            2 => malformed
+                .notebook
+                .pages
+                .get_mut(1)
+                .ok_or("second page missing")?
+                .flows
+                .push(Flow {
+                    id: owner,
+                    blocks: vec![],
+                }),
+            3 => {
+                malformed
+                    .notebook
+                    .page_profiles
+                    .get_mut(0)
+                    .ok_or("first profile missing")?
+                    .id = owner;
+                malformed
+                    .notebook
+                    .pages
+                    .get_mut(0)
+                    .ok_or("first page missing")?
+                    .paper_profile = owner;
+            },
+            4 => malformed.notebook.assets.push(Asset {
+                id: owner,
+                media_type: String::from("image/png"),
+            }),
+            5 => malformed.notebook.constraints.push(Constraint {
+                id: owner,
+                kind: ConstraintKind::Layout,
+                target: owner,
+            }),
+            6 => malformed.notebook.output_profiles.push(OutputProfile {
+                id: owner,
+                name: String::from("print"),
+            }),
+            7 => malformed.notebook.provenance.push(Provenance {
+                id: owner,
+                kind: ProvenanceKind::Supplied,
+                reference: None,
+            }),
+            8 => malformed.notebook.styles.push(Style {
+                id: owner,
+                name: String::from("body"),
+            }),
+            _ => return Err("unsupported owner case".into()),
+        }
+        if paginate_revision(&malformed, &measured)
+            != Err(SemanticPaginationError::DuplicateBlockIdentity {
+                flow,
+                block: owner,
+            })
+        {
+            return Err(format!("notebook owner family {case} was not refused"));
+        }
+        if session.current() != Some(&accepted) {
+            return Err("owner refusal mutated accepted session".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn notebook_level_owners_cannot_alias_a_measured_block() {
+    assert_eq!(verify_notebook_level_owner_aliases(), Ok(()));
 }
 
 #[test]

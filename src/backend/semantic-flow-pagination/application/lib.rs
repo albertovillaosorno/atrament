@@ -278,9 +278,9 @@ fn validate_selected_owner_identities(
             });
         }
     }
-    // Measured owners are globally accepted semantic identities. Traverse
-    // nested blocks, container owners and leaf content identities; none
-    // can shadow a selected top-level measured block.
+    // Measured owners are globally accepted semantic identities. Check
+    // notebook/page/profile owners, then nested blocks, containers and
+    // leaf content; none can shadow a selected top-level measured block.
     let mut seen_selected = BTreeSet::new();
     let mut check_owner = |identity| {
         if selected_blocks.contains(&identity)
@@ -293,8 +293,29 @@ fn validate_selected_owner_identities(
         }
         Ok(())
     };
+    check_owner(revision.notebook.id)?;
+    for asset in &revision.notebook.assets {
+        check_owner(asset.id)?;
+    }
+    for constraint in &revision.notebook.constraints {
+        check_owner(constraint.id)?;
+    }
+    for profile in &revision.notebook.output_profiles {
+        check_owner(profile.id)?;
+    }
+    for profile in &revision.notebook.page_profiles {
+        check_owner(profile.id)?;
+    }
+    for provenance in &revision.notebook.provenance {
+        check_owner(provenance.id)?;
+    }
+    for style in &revision.notebook.styles {
+        check_owner(style.id)?;
+    }
     for page in &revision.notebook.pages {
+        check_owner(page.id)?;
         for accepted_flow in &page.flows {
+            check_owner(accepted_flow.id)?;
             let mut pending = accepted_flow.blocks.iter().collect::<Vec<_>>();
             while let Some(block) = pending.pop() {
                 check_owner(block.id)?;
