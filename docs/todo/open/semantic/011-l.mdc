@@ -2234,3 +2234,19 @@ pages, byte for byte, including CRLF and Unicode separator variants.
 Invalid glyphs, PDF counts and PNG page selections cannot overwrite an
 accepted output. These tests add coverage only; the source and results
 remain export-only CLI state, not a saved semantic notebook.
+
+## Hard-break-only quote delimiter admission — 2026-11-07
+
+A quote row whose sole visible candidate is a final single backslash no
+longer masquerades as an empty `>` delimiter after Markdown hard-break
+syntax removes that backslash. The restricted compiler admits only an
+actually empty quote marker as a collapsed 4-mm gap between visible
+quoted paragraphs; malformed backslash-only rows refuse explicitly.
+
+A failing-before-fix Rust regression checks four rejected line spellings
+against three genuine quote separators and their exact 13-mm physical
+row displacement. Native CLI acceptance compares valid two-page vector
+PDF and both transparent PNG pages to independently placed glyph strokes
+and quote bars; invalid backslash-only variants cannot replace accepted
+output. This is still export-only syntax admission, not persisted semantic
+notebook body content or completion of P1 acceptance.

@@ -5619,6 +5619,49 @@ fn chained_empty_quotes_share_exact_collapsed_gaps_across_pages()
 }
 
 #[test]
+fn hard_break_only_quote_line_cannot_masquerade_as_empty_separator()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let render = |text: &str| -> Result<_, String> {
+        let source = FlowSource::new(FlowFormat::Markdown, text)?;
+        super::layout_flow(
+            &source, &paper, None, super::HeadingDecoration::default(),
+        )
+    };
+    for valid in [">a\n>\n>b", ">a\n>  \n>b", ">a\n>\n\n>b"] {
+        let (rows, bars, pages) = render(valid)?;
+        let texts = rows.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>();
+        let first = rows.first().ok_or("missing first quoted row")?;
+        let second = rows.get(1).ok_or("missing second quoted row")?;
+        if pages != 1 || texts != ["a", "b"] || bars.len() != 2
+            || second.origin_um.1.checked_sub(first.origin_um.1)
+                != Some(13_000) {
+            return Err(format!(
+                "unexpected physical quote spacing for {valid:?}: {rows:?}"
+            ));
+        }
+    }
+    for invalid in [
+        ">a\n>\\\n>b", ">a\n> \\\n>b",
+        ">a\n>\\  \n>b", ">a\n  >\\\n>b",
+    ] {
+        match render(invalid) {
+            Err(error) if error.contains("empty Markdown block refused") => {},
+            Err(error) => return Err(format!(
+                "unexpected refusal for {invalid:?}: {error}"
+            )),
+            Ok(_) => return Err(format!(
+                "backslash-only quote unexpectedly admitted: {invalid:?}"
+            )),
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn markdown_hard_break_forms_match_across_structural_page_boundaries()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;

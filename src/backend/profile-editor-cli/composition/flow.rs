@@ -2228,8 +2228,13 @@ fn handle_source_blank(
 fn admit_empty_quote_gap<'text>(
     layout: &mut Layout<'_>, paragraph: &mut String,
     previous: LineStyle, format: FlowFormat, style: LineStyle,
-    following: impl Iterator<Item = &'text str>,
+    original_body: &str, following: impl Iterator<Item = &'text str>,
 ) -> Result<(), String> {
+    // A line whose sole backslash became a hard-break marker is not an
+    // empty quote delimiter. Do not silently turn its syntax into a gap.
+    if !original_body.trim_matches(' ').is_empty() {
+        return Err("empty Markdown block refused".into());
+    }
     // The source byte cap bounds this lookahead even for a long series
     // of virtual blank markers. Stop before any unrelated block or row.
     // Ordinary blank lines and empty quote markers are the same
@@ -2576,7 +2581,7 @@ pub(super) fn layout_flow_with_region(
             && !matches!(style, LineStyle::Separator) {
             admit_empty_quote_gap(&mut layout, &mut paragraph,
                 paragraph_style, source.format, style,
-                source_lines.clone())?;
+                parsed_body.as_ref(), source_lines.clone())?;
             pending_gap = layout.row_count > 0;
             continue;
         }

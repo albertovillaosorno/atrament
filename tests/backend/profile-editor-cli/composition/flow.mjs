@@ -7006,3 +7006,76 @@ test('quoted hard-break variants preserve independent two-page PDF/PNG ink',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('hard-break-only quote cannot become a silent separator in PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-quote-empty-break-'));
+        try {
+            const source = '> a\n>\n> ó';
+            const region = [
+                '--flow-region', '30000', '40000', '35000', '14000',
+            ];
+            const manual = [
+                '--place-text', '1', '38500', '42500', 'a',
+                '--place-text', '2', '38500', '42500', 'ó',
+                '--ink-line', '1', '35500', '43000',
+                '35500', '50900', '400', '#1E304A',
+                '--ink-line', '2', '35500', '43000',
+                '35500', '50900', '400', '#1E304A',
+            ];
+            const valid = [
+                '> a\n>  \n> ó',
+                '> a\n>\n\n> ó',
+                source.replaceAll('\n', '\r\n'),
+            ];
+            const invalid = [
+                '> a\n>\\\n> ó',
+                '> a\n> \\\n> ó',
+                '> a\n>\\  \n> ó',
+                '> a\n  >\\\n> ó',
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const pages = format === 'pdf' ? ['--pages', '2'] : [];
+                    const options = [...region, ...pages];
+                    const actual = render(dir, source, format,
+                        options, '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `quote-empty-break-reference-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--', ...base,
+                        ...manual, ...pages, '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []), '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `manual physical quote ink, ${format} page ${page}`);
+                    for (const sourceText of valid) {
+                        const replay = render(dir, sourceText, format,
+                            options, '--flow-markdown', page);
+                        assert.equal(replay.result.status, 0,
+                            replay.result.stderr);
+                        assert.deepEqual(readFileSync(replay.output), accepted,
+                            'valid empty quote separators retain exact ink');
+                    }
+                    for (const sourceText of invalid) {
+                        const refused = render(dir, sourceText, format,
+                            options, '--flow-markdown', page);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.match(refused.result.stderr,
+                            /empty Markdown block refused/);
+                        assert.deepEqual(readFileSync(refused.output), accepted,
+                            'backslash-only quote must never replace output');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

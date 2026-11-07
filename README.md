@@ -810,7 +810,11 @@ PNG against independently placed ink. Invalid selected pages or missing glyphs
 cannot replace an accepted export.
 
 Isolated, leading, trailing and non-quote-followed empty quote markers still
-refuse. Bounded backtick and tilde code fences (three or more identical marks,
+refuse. A quoted line containing only a final backslash (the Markdown hard-break
+marker) also refuses: it is not an empty `>` separator and cannot silently
+replace authored text with a 4-mm gap. Native tests assert the rejected input
+cannot replace an existing PDF or PNG, including on two physical sheets.
+Bounded backtick and tilde code fences (three or more identical marks,
 up to three initial spaces) preserve literal handwriting lines, including
 physical blank rows and source punctuation.
 
