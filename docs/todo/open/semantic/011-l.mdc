@@ -1838,3 +1838,24 @@ tall for one sheet continues through the existing normal pagination and
 tail-balancing rules, and literal/plain content does not acquire semantic
 keep-together behavior. This is still CLI-only, not a persisted semantic
 notebook or completion of the P1 task.
+
+## Page-fitting heading and wrapped block pairing (partial) — 2026-11-06
+
+The Markdown CLI can now move a heading and its immediately following
+three-or-more-row paragraph, bullet/checkbox/numbered item or quote onto one
+fresh page, when the entire heading-plus-block fits and independent ink
+remains on the earlier sheet. This retains heading ornament and body stroke
+coordinates instead of keeping only the title and the first body row while
+splitting the remainder unnecessarily.
+
+A heading already paired with an earlier heading or thematic rule cannot be
+pulled away. Two-row body blocks, intervening physical gaps, over-tall blocks,
+shorter sheets and literal/plain rows retain the existing layout rules.
+Three Rust geometry regressions cover ATX and Setext headings,
+three-to-twelve-row body blocks, supported decorations, page cursors,
+heading-style none, prior pairing and fallback. Native PDF plus both
+selected transparent PNG pages match an independently placed heading marker,
+authored quote rows and quote rules.
+Short page selections and missing glyphs refuse without replacing accepted
+output. Persisted semantic blocks and general multi-block keep-together
+remain outside this slice; the P1 task stays open.

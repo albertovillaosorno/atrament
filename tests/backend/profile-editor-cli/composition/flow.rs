@@ -3606,7 +3606,9 @@ fn four_row_markdown_blocks_relocate_all_ink_when_new_sheet_fits()
     // With one or two earlier code rows, the four-row block initially
     // splits 3+1 or 2+2. The next sheet fits all four physical rows.
     for prior_rows in 1..=2 {
-        let prefix = format!("```\n{}\n```\n", vec!["a"; prior_rows].join("\n"));
+        let prefix = format!(
+            "```\n{}\n```\n", vec!["a"; prior_rows].join("\n"),
+        );
         for (block, mark_count) in [
             ("aaaaaa aaaaaa aaaaaa aaaaaa", 0),
             ("- aaaaaa aaaaaa aaaaaa aaaaaa", 1),
@@ -3979,5 +3981,195 @@ fn page_fitting_markdown_blocks_preserve_precedence_cursor_and_fallback()
     assert_eq!(bars.len(), 8);
     assert!(bars.iter().any(|bar| bar.page == 1));
     assert!(bars.iter().any(|bar| bar.page == 2));
+    Ok(())
+}
+
+#[test]
+fn heading_and_complete_wrapped_block_move_together_after_independent_ink()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height, decoration| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None, decoration,
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    let marker = super::HeadingDecoration {
+        style: Some(super::HeadingStyle::Marker),
+        ..super::HeadingDecoration::default()
+    };
+    let variants = [
+        ("aaaaaa aaaaaa aaaaaa", 0, 32_500),
+        ("- aaaaaa aaaaaa aaaaaa", 1, 38_500),
+        ("- [ ] aaaaaa aaaaaa aaaaaa", 4, 38_500),
+        ("- [x] aaaaaa aaaaaa aaaaaa", 6, 38_500),
+        ("> aaaaaa aaaaaa aaaaaa", 3, 38_500),
+        ("1. a a a a a", 0, 38_500),
+    ];
+    for heading in ["# a", "## a", "a\n==="] {
+        for (block, mark_count, first_x) in variants {
+            let source = format!("```\na\n```\n{heading}\n{block}");
+            let (rows, marks, pages) = render(&source, 41_000, marker)?;
+            assert_eq!(pages, 2, "{heading} / {block}");
+            assert_eq!(rows.len(), 5, "{heading} / {block}");
+            assert_eq!(rows.iter().map(|row| row.page)
+                .collect::<Vec<_>>(), [1, 2, 2, 2, 2],
+                "{heading} / {block}");
+            assert_eq!(rows.iter().map(|row| row.origin_um.1)
+                .collect::<Vec<_>>(),
+                [42_500, 42_500, 51_500, 60_500, 69_500]);
+            assert_eq!(rows[1].origin_um.0, 32_500);
+            assert_eq!(rows[2].origin_um.0, first_x);
+            assert_eq!(marks.len(), mark_count
+                + if heading == "## a" { 3 } else { 4 });
+            assert!(marks.iter().all(|mark| mark.page == 2));
+            let heading_ink = if heading == "## a" { 3 } else { 4 };
+            assert!(marks[..heading_ink].iter().all(|mark| {
+                (43_000..47_000).contains(&mark.start_um.1)
+                    && mark.start_um.1 == mark.end_um.1
+            }));
+            if block.starts_with('>') {
+                assert_eq!(marks[heading_ink..].iter().map(|bar| (
+                    bar.start_um.1, bar.end_um.1,
+                )).collect::<Vec<_>>(), [
+                    (52_000, 59_900), (61_000, 68_900),
+                    (70_000, 77_900),
+                ]);
+            } else if block.starts_with("- [") {
+                assert!(marks[heading_ink..].iter().all(|mark| {
+                    (52_700..=55_200).contains(&mark.start_um.1)
+                        && (52_700..=55_200).contains(&mark.end_um.1)
+                }));
+            } else if block.starts_with("- ") {
+                assert_eq!(marks[heading_ink].start_um, (34_100, 53_700));
+            } else if block.starts_with("1. ") {
+                assert_eq!(rows[2].text, "1. a a");
+                assert!(rows[3..].iter().all(|row| {
+                    row.origin_um.0 == 50_500
+                }));
+            }
+        }
+    }
+
+    // A following heading cannot overwrite the relocated last body row.
+    let source = "```\na\n```\n# a\naaaaaa aaaaaa aaaaaa\n# a";
+    let (rows, marks, pages) = render(source, 41_000,
+        super::HeadingDecoration::default())?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2, 2, 2, 2, 3]);
+    assert_eq!(rows[5].origin_um, (32_500, 42_500));
+    assert_eq!(marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [2, 3]);
+    Ok(())
+}
+
+#[test]
+fn heading_block_compaction_preserves_prior_reservations_and_short_sheets()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height, decoration| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None, decoration,
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    let body = "aaaaaa aaaaaa aaaaaa";
+    // A title already reserved by an earlier rule or another title does
+    // not detach from it to move with its whole following paragraph.
+    for source in [
+        format!("```\na\n```\n---\n# a\n{body}"),
+        format!("```\na\n```\n# a\n## a\n{body}"),
+    ] {
+        let (rows, marks, pages) = render(&source, 41_000,
+            super::HeadingDecoration::default())?;
+        assert_eq!(pages, 2, "{source}");
+        assert_eq!(rows[1].page, 1, "{source}");
+        assert!(marks.iter().any(|mark| mark.page == 1), "{source}");
+        assert!(rows.iter().any(|row| row.page == 2), "{source}");
+    }
+    // Two body rows retain the older first-row reservation, and a body
+    // too large to join its heading uses ordinary physical pagination.
+    let two = "```\na\n```\n# a\naaaaaa aaaaaa";
+    let (rows, _, pages) = render(two, 32_000,
+        super::HeadingDecoration::default())?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 1, 1, 2]);
+    let source = format!("```\na\n```\n# a\n{body}");
+    let (rows, marks, pages) = render(&source, 32_000,
+        super::HeadingDecoration::default())?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 1, 1, 2, 2]);
+    assert_eq!(marks.len(), 1);
+    assert_eq!(marks[0].page, 1);
+
+    // No ornamental stroke is invented under a heading-style none.
+    // The heading remains real glyph ink and moves with its body.
+    let decoration = super::HeadingDecoration {
+        style: Some(super::HeadingStyle::None),
+        ..super::HeadingDecoration::default()
+    };
+    let (rows, marks, pages) = render(&source, 41_000, decoration)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2, 2, 2, 2]);
+    assert!(marks.is_empty());
+    Ok(())
+}
+
+#[test]
+fn heading_and_variable_page_fitting_blocks_preserve_full_row_order()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for count in [3usize, 4, 6, 8, 12] {
+        let height = 5_000 + u32::try_from(count + 1)
+            .map_err(|error| error.to_string())? * 9_000;
+        for prior in [1usize, count / 2, count - 1] {
+            let prefix = format!(
+                "```\n{}\n```\n# a\n", vec!["a"; prior].join("\n"),
+            );
+            for marker in ["", "> ", "- "] {
+                let source = format!(
+                    "{prefix}{marker}{}", vec!["aaaaaa"; count].join(" "),
+                );
+                let (rows, marks, pages) = super::layout_flow_with_region(
+                    &FlowSource::new(FlowFormat::Markdown, &source)?,
+                    &NotebookProfile::default(), None,
+                    super::HeadingDecoration::default(),
+                    Some(super::FlowRegion {
+                        left: 30_000, top: 40_000,
+                        width: 35_000, height,
+                    }),
+                )?;
+                assert_eq!(pages, 2, "{count}, {prior}, {marker}");
+                assert_eq!(rows.len(), prior + count + 1);
+                assert!(rows.iter().take(prior)
+                    .all(|row| row.page == 1));
+                for (index, row) in rows.iter().skip(prior).enumerate() {
+                    assert_eq!(row.page, 2);
+                    assert_eq!(row.origin_um.1, 42_500 +
+                        u32::try_from(index)
+                            .map_err(|error| error.to_string())? * 9_000);
+                }
+                assert_eq!(marks.len(), 1 + if marker == "> " {
+                    count
+                } else if marker == "- " { 1 } else { 0 });
+                assert!(marks.iter().all(|mark| mark.page == 2));
+            }
+        }
+    }
     Ok(())
 }

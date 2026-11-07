@@ -455,6 +455,8 @@ struct FollowingInkSpacing {
 struct Layout<'model> {
     bottom: u32,
     heading: HeadingDecoration,
+    // Whether the last heading was itself bound to an earlier title/rule.
+    heading_attached_to_prior: bool,
     last_visible_heading: bool,
     // True only if the preceding rule actually reserved its next ink row.
     last_visible_rule: bool,
@@ -478,6 +480,25 @@ impl Layout<'_> {
             .y
             .checked_add(PARAGRAPH_GAP_UM)
             .ok_or("paragraph gap overflow")?;
+        Ok(())
+    }
+
+    fn arrange_wrapped_block(
+        &mut self, run_start: usize, mark_start: usize,
+        heading_before_block: bool, preceding_reservation: bool,
+        style: LineStyle, protect_body: bool,
+    ) -> Result<(), String> {
+        self.keep_heading_with_fitting_block(
+            run_start, mark_start, heading_before_block,
+            style, protect_body,
+        )?;
+        self.keep_fitting_block_together(
+            run_start, mark_start, preceding_reservation,
+            style, protect_body,
+        )?;
+        if Self::balance_tail_eligible(style, protect_body) {
+            self.balance_wrapped_tail(run_start, mark_start, style)?;
+        }
         Ok(())
     }
 
@@ -770,6 +791,49 @@ impl Layout<'_> {
         Ok(())
     }
 
+    // When a complete body/list/quote and its immediately preceding heading
+    // fit a new sheet, move the pair rather than leaving the heading and
+    // initial rows at the foot of the old sheet. Never detach a heading that
+    // was itself reserved by a preceding title or thematic rule. Reuse the
+    // bounded block mover so its native decorations follow their text rows.
+    fn keep_heading_with_fitting_block(
+        &mut self, first_run: usize, first_mark: usize,
+        heading_before_block: bool, style: LineStyle, protect_body: bool,
+    ) -> Result<(), String> {
+        if !heading_before_block || self.heading_attached_to_prior
+            || self.lines.len().saturating_sub(first_run) < 3
+            || !Self::balance_tail_eligible(style, protect_body) {
+            return Ok(());
+        }
+        let Some(heading_index) = first_run.checked_sub(1) else {
+            return Ok(());
+        };
+        let heading = self.lines.get(heading_index)
+            .ok_or("flow heading block origin out of bounds")?;
+        let first = self.lines.get(first_run)
+            .ok_or("flow heading block has no first row")?;
+        // Ignore syntactic intervening structures, breaks or a heading
+        // separated from its first body row by a physical page boundary.
+        if heading.page != first.page
+            || heading.origin_um.1.checked_add(self.pitch)
+                != Some(first.origin_um.1) {
+            return Ok(());
+        }
+        let heading_y = heading.origin_um.1;
+        let heading_end = heading_y.checked_add(self.pitch)
+            .ok_or("flow heading ornament boundary overflow")?;
+        let first_heading_mark = self.ornaments.get(..first_mark)
+            .ok_or("flow heading marks out of bounds")?
+            .iter().position(|mark| {
+                mark.page == heading.page
+                    && (heading_y..heading_end).contains(&mark.start_um.1)
+                    && (heading_y..heading_end).contains(&mark.end_um.1)
+            }).unwrap_or(first_mark);
+        self.keep_fitting_block_together(
+            heading_index, first_heading_mark, false, style, protect_body,
+        )
+    }
+
     // A wrapped Markdown paragraph, list or quote should keep its first
     // two rows together when possible. Literal code and plain lines retain
     // their exact row boundaries. Never detach a preceding title or rule.
@@ -795,8 +859,9 @@ impl Layout<'_> {
         &mut self, content: &str, style: LineStyle, protect_body: bool,
     ) -> Result<(), String> {
         let (run_start, mark_start) = (self.lines.len(), self.ornaments.len());
+        let heading_before_block = self.last_visible_heading;
         let preceding_reservation =
-            self.last_visible_heading || self.last_visible_rule;
+            heading_before_block || self.last_visible_rule;
         let (mut start_x, mut cap) = self.line_measurements(style)?;
         let (hang, ordered_marker) = ordered_hang_and_label(
             style, content, cap, self.statistics,
@@ -891,14 +956,10 @@ impl Layout<'_> {
             }
         }
         self.write_last_row(row, start_x, width, style, first)?;
-        self.keep_fitting_block_together(
-            run_start, mark_start, preceding_reservation,
-            style, protect_body,
-        )?;
-        if Self::balance_tail_eligible(style, protect_body) {
-            self.balance_wrapped_tail(run_start, mark_start, style)?;
-        }
-        Ok(())
+        self.arrange_wrapped_block(
+            run_start, mark_start, heading_before_block,
+            preceding_reservation, style, protect_body,
+        )
     }
 
     fn line_measurements(
@@ -1068,6 +1129,10 @@ impl Layout<'_> {
             });
         }
         self.write_list_marker(style, first, start_x, y)?;
+        if matches!(style, LineStyle::Heading(_)) {
+            self.heading_attached_to_prior =
+                self.last_visible_heading || self.last_visible_rule;
+        }
         self.last_visible_heading = matches!(style, LineStyle::Heading(_));
         self.last_visible_rule = false;
         self.lines.push(TextRun {
@@ -1966,6 +2031,7 @@ fn initialize_layout<'model>(
     };
     Ok(Layout {
         heading,
+        heading_attached_to_prior: false,
         last_visible_heading: false,
         last_visible_rule: false,
         statistics,

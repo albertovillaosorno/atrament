@@ -611,6 +611,15 @@ there. Earlier heading/rule pairings win; blocks larger than one physical
 sheet retain normal pagination and terminal-row balance. The 128-row CLI
 limit is unchanged, and this does not persist semantic notebook blocks.
 
+An immediately preceding Markdown heading may now move together with a
+complete three-or-more-row paragraph, list item or quote when the combined
+heading and block fit on one fresh sheet and independent ink remains on the
+original sheet. Its underline/marker and the block's list or quote strokes
+move with their authored rows. A heading already attached to an earlier
+heading or thematic rule is not moved, and two-row blocks, blank-separated
+titles, oversize blocks and narrow sheets retain their earlier pagination.
+This remains an export-only CLI rule, not persisted notebook structure.
+
 A standalone Markdown thematic rule also stays with its first following
 visible row when a fresh sheet can hold both, including intervening blank
 paragraph gaps or fenced-code rows. A heading before the rule takes priority
