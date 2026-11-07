@@ -2183,3 +2183,20 @@ CRLF. A native CLI acceptance compares PDF and transparent PNG bytes with
 independently placed glyph strokes and quote-rule lines, and replays every
 accepted spelling exactly. Prior two-page behavior remains covered. This
 is still CLI-only layout; it does not persist semantic notebook content.
+
+## Interleaved quote and ordinary blank separators — 2026-11-07
+
+The bounded CLI Markdown quote gap now accepts blank source lines between
+empty `>` markers when the run begins and ends with visible quoted text.
+All such spellings collapse to one physical 4-mm paragraph gap. A blank
+line no longer prematurely terminates the quote-only lookahead; a heading,
+list, separator, fence or nonquoted body still stops admission. Leading,
+trailing and unrelated empty quote blocks continue to refuse atomically.
+
+A failing-before-fix Rust comparison now exercises five spellings across
+nine page heights, eight prefixes and four suffixes, asserting identical
+page-local glyph ink and ornaments to the ordinary blank-line form.
+Native CLI acceptance adds physical PDF and both selected transparent PNG
+parity cases, including independent handwritten glyph and quote-bar ink
+on a roomy sheet. No new quote rows, saved semantic blocks or general
+CommonMark parser are implied.

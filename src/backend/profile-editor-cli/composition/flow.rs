@@ -2232,7 +2232,12 @@ fn admit_empty_quote_gap<'text>(
 ) -> Result<(), String> {
     // The source byte cap bounds this lookahead even for a long series
     // of virtual blank markers. Stop before any unrelated block or row.
-    let next = following.into_iter().map(markdown_line)
+    // Ordinary blank lines and empty quote markers are the same
+    // collapsed paragraph boundary. Permit them to interleave, but stop
+    // at the first different visible or structural block.
+    let next = following.into_iter()
+        .filter(|line| !line.trim_end_matches(' ').is_empty())
+        .map(markdown_line)
         .find(|(kind, body)| !matches!(kind, LineStyle::Quote)
             || !body.trim_matches(' ').is_empty());
     if format != FlowFormat::Markdown

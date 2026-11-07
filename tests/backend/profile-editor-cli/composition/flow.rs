@@ -5475,3 +5475,88 @@ fn equivalent_markdown_blocks_preserve_layout_across_short_papers()
     }
     Ok(())
 }
+
+#[test]
+fn quoted_blank_markers_match_collapsed_markdown_gaps_across_pages()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let prefixes = [
+        "", "a\n\n", "# a\n", "# a\n\n", "---\n",
+        "```\na\n```\n\n", "# a\n---\n", "> a\n\n",
+    ];
+    let suffixes = ["", "\n\na", "\n# a", "\n\n---\na"];
+    for height in [14_000, 18_000, 23_000, 32_000, 41_000,
+        50_000, 59_000, 72_000, 100_000] {
+        for prefix in prefixes {
+            for suffix in suffixes {
+                let canonical = format!("{prefix}> a\n\n> b{suffix}");
+                let alternatives = [
+                    "> a\n>\n> b", "> a\n>\n\n> b",
+                    "> a\n>\n\n>\n> b",
+                    "> a\n\n>\n> b",
+                    "> a\n>\n\n\n>\n\n> b",
+                ];
+                let render = |text: &str| -> Result<_, String> {
+                    super::layout_flow_with_region(
+                        &FlowSource::new(FlowFormat::Markdown, text)?,
+                        &NotebookProfile::default(), None,
+                        super::HeadingDecoration::default(),
+                        Some(super::FlowRegion {
+                            left: 30_000, top: 40_000,
+                            width: 35_000, height,
+                        }),
+                    )
+                };
+                let expected = render(&canonical)?;
+                let ink = |rows: &[super::TextRun]| {
+                    rows.iter().map(|row| (row.page, row.origin_um,
+                        row.text.clone(), row.heading_ink))
+                        .collect::<Vec<_>>()
+                };
+                for variant in alternatives {
+                    let candidate = format!("{prefix}{variant}{suffix}");
+                    let actual = render(&candidate)?;
+                    if actual.2 != expected.2 {
+                        return Err(format!(
+                            "page count differs for {candidate:?}"
+                        ));
+                    }
+                    if ink(&actual.0) != ink(&expected.0) {
+                        return Err(format!(
+                            "ink rows differ for {candidate:?}"
+                        ));
+                    }
+                    if actual.1 != expected.1 {
+                        return Err(format!(
+                            "ornaments differ for {candidate:?}"
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    let render = |text: &str| -> Result<_, String> {
+        super::layout_flow(
+            &FlowSource::new(FlowFormat::Markdown, text)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+        )
+    };
+    for source in [
+        ">", ">\n\n> a", "> a\n>\n\n",
+        "> a\n>\n\n---\n> b",
+        "> a\n>\n\n# b\n> b",
+        "> a\n>\n\n- b\n> b",
+        "> a\n>\n\n```\n> b\n```\n> c",
+        "a\n\n>\n> b",
+    ] {
+        let error = render(source).err().ok_or_else(|| {
+            format!("empty quote unexpectedly accepted: {source:?}")
+        })?;
+        if !error.contains("empty Markdown block") {
+            return Err(format!("{source:?}: {error}"));
+        }
+    }
+    Ok(())
+}

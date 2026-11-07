@@ -792,9 +792,9 @@ Quote text is inset 6 mm and gets a 0.4-mm vertical ink rule on each
 physical row, including wrapped continuations; the `>` marker itself needs
 no authored glyph.
 
-One or more consecutive bare `>` lines between visible quoted paragraphs
-insert the same single 4-mm gap as an empty Markdown line, without synthetic
-quote-bar rows or accumulating an extra gap for each marker on a roomy page.
+Bare `>` lines between visible quoted paragraphs insert the same single
+4-mm gap as an empty Markdown line. Multiple markers may interleave with
+ordinary blank source lines without adding quote-bar rows or extra gaps.
 Isolated, leading, trailing and non-quote-followed empty quote markers still
 refuse. Bounded backtick and tilde code fences (three or more identical marks,
 up to three initial spaces) preserve literal handwriting lines, including
