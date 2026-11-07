@@ -2431,3 +2431,16 @@ ambiguous plan. Ordinary accepted revisions retain their placements, and the
 session's accepted state stays unmodified after each refusal. This adds
 identity-admission protection only; persisted semantic text measurement and
 notebook-to-PDF/PNG integration remain open.
+
+## Duplicate page-profile identity refusal (partial) — 2026-11-07
+
+A directly malformed accepted revision can no longer provide two physical
+page-profile records under one identity and let the semantic paginator choose
+the first geometry silently. The revision-bound page-profile index now returns
+a typed duplicate-profile error before emitting any measured placement.
+
+A failing-before-fix Rust regression replaces the former first-match test and
+checks matching and conflicting geometries, including accepted-session
+non-mutation. Multiple real pages may still reference one unique shared
+profile; the existing large shared-profile regression remains green. This is
+another defensive typed boundary, not persisted text or full notebook export.

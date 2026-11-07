@@ -77,6 +77,11 @@ pub enum SemanticPaginationError {
         /// Colliding semantic flow identity.
         flow: AcceptedIdentity,
     },
+    /// Two accepted page profiles have the same semantic identity.
+    DuplicatePageProfileIdentity {
+        /// Repeated physical profile identity.
+        profile: AcceptedIdentity,
+    },
     /// Measurement names no top-level semantic flow in the accepted revision.
     FlowNotFound {
         /// Stable semantic flow identity that could not be resolved.
@@ -198,7 +203,11 @@ fn page_regions(
 ) -> PageRegionsResult {
     let mut profiles = BTreeMap::new();
     for profile in &revision.notebook.page_profiles {
-        let _existing = profiles.entry(profile.id).or_insert(profile);
+        if profiles.insert(profile.id, profile).is_some() {
+            return Err(SemanticPaginationError::DuplicatePageProfileIdentity {
+                profile: profile.id,
+            });
+        }
     }
     let remaining_pages =
         revision.notebook.pages.len().saturating_sub(start_page_index);

@@ -561,30 +561,41 @@ fn accepted_page_profile_derives_exact_writable_top_and_page_identity() {
 }
 
 #[test]
-fn defensive_duplicate_profile_keeps_first_match_semantics() {
+fn defensive_duplicate_page_profile_identity_refuses_ambiguous_geometry() {
     let ids = IdentityAllocator::new();
     let fixture = candidate_fixture(&ids);
     let mut session = SemanticNotebookSessionService::default();
-    let AcceptanceOutcome::Accepted { mapping, revision } =
-        session.accept(fixture.notebook)
-    else {
-        panic!("candidate must be accepted");
+    let outcome = session.accept(fixture.notebook);
+    assert!(matches!(outcome, AcceptanceOutcome::Accepted { .. }));
+    let AcceptanceOutcome::Accepted { mapping, revision } = outcome else {
+        return;
     };
     let flow = accepted_for(&mapping, fixture.flow);
     let owner = accepted_for(&mapping, fixture.block);
-    let page_one = accepted_for(&mapping, fixture.page_one);
-    let profile_one = accepted_for(&mapping, fixture.profile_one);
+    let profile = accepted_for(&mapping, fixture.profile_one);
     let measured = measurement(revision, flow, owner, &[(165_000, 1_000)]);
-    let mut defensive = session.current().expect("accepted revision").clone();
-    defensive.notebook.page_profiles.push(PaperProfile {
-        geometry: geometry(40_000),
-        id: profile_one,
-    });
+    assert!(session.current().is_some());
+    let Some(accepted) = session.current().cloned() else {
+        return;
+    };
+    assert!(paginate_revision(&accepted, &measured).is_ok());
 
-    let plan = paginate_revision(&defensive, &measured)
-        .expect("first matching accepted profile remains authoritative");
-    assert_eq!(plan.placements.len(), 1);
-    assert_eq!(plan.placements[0].page, page_one);
+    // A directly malformed revision must not pick the first geometry for a
+    // repeated profile ID, even if the two geometries happen to be equal.
+    for duplicate_geometry in [geometry(20_000), geometry(40_000)] {
+        let mut malformed = accepted.clone();
+        malformed.notebook.page_profiles.push(PaperProfile {
+            geometry: duplicate_geometry,
+            id: profile,
+        });
+        assert_eq!(
+            paginate_revision(&malformed, &measured),
+            Err(SemanticPaginationError::DuplicatePageProfileIdentity {
+                profile,
+            }),
+        );
+        assert_eq!(session.current(), Some(&accepted));
+    }
 }
 
 #[test]
