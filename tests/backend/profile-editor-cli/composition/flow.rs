@@ -76,6 +76,60 @@ fn typed_flow_regions_reject_zero_area_before_ink_validation()
 }
 
 #[test]
+fn typed_flow_region_checks_pen_clearance_at_every_edge()
+-> Result<(), String> {
+    use atrament_notebook_paper_cli::NotebookInkLine;
+    use atrament_notebook_profile::NotebookProfile;
+
+    let printable = NotebookProfile::default().printable_rect_um()?;
+    let region = super::FlowRegion {
+        left: printable.0 + 10_000,
+        top: printable.1 + 10_000,
+        width: 20_000,
+        height: 20_000,
+    };
+    let (left, top, right, bottom) = region.bounds_within(printable)?;
+    // Odd-width strokes need a conservative whole-micrometre clearance.
+    let pen = NotebookInkLine {
+        page: 1,
+        start_um: (left + 201, top + 201),
+        end_um: (right - 201, bottom - 201),
+        width_um: 401,
+        rgb: [30, 48, 74],
+    };
+    region.validate_ink(printable, &[pen])?;
+    for point in [
+        (left + 200, top + 201),
+        (left + 201, top + 200),
+        (right - 200, bottom - 201),
+        (right - 201, bottom - 200),
+    ] {
+        for (start, end) in [(point, pen.end_um), (pen.start_um, point)] {
+            let outside = NotebookInkLine {
+                start_um: start, end_um: end, ..pen
+            };
+            let error = region.validate_ink(printable, &[outside])
+                .err().ok_or("one-micrometre pen cap overflow accepted")?;
+            if !error.contains("flow region ink exceeds") {
+                return Err(format!("unexpected region refusal: {error}"));
+            }
+        }
+    }
+    for invalid in [
+        super::FlowRegion { left: u32::MAX, ..region },
+        super::FlowRegion { top: u32::MAX, ..region },
+        super::FlowRegion { left: printable.0 - 1, ..region },
+        super::FlowRegion { top: printable.1 - 1, ..region },
+    ] {
+        if invalid.bounds_within(printable).is_ok()
+            || invalid.validate_ink(printable, &[pen]).is_ok() {
+            return Err("invalid typed region accepted".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_flow_source_must_retain_bounded_canonical_admission()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;
