@@ -2926,6 +2926,12 @@ fn consecutive_empty_quote_markers_do_not_stack_visible_paragraph_gaps()
 -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;
 
+    fn geometry(runs: &[super::TextRun])
+    -> Vec<(usize, (u32, u32), &str)> {
+        runs.iter().map(|row| (
+            row.page, row.origin_um, row.text.as_str(),
+        )).collect::<Vec<_>>()
+    }
     let region = super::FlowRegion {
         left: 30_000, top: 40_000, width: 55_000, height: 40_000,
     };
@@ -2936,37 +2942,28 @@ fn consecutive_empty_quote_markers_do_not_stack_visible_paragraph_gaps()
             super::HeadingDecoration::default(), Some(region),
         )
     };
-    let reference = render("> a\n\n> ó")?;
-    assert_eq!(reference.2, 1);
-    assert_eq!(reference.0.iter().map(|row| (
-        row.page, row.origin_um, row.text.as_str(),
-    )).collect::<Vec<_>>(), [
+    let reference = render("> a\n\n> \u{f3}")?;
+    if reference.2 != 1 || geometry(&reference.0) != [
         (1, (38_500, 42_500), "a"),
-        (1, (38_500, 55_500), "ó"),
-    ]);
-    let many = format!("> a\n{}> ó", ">\n".repeat(100));
-    for source in [
-        "> a\n>\n> ó", "> a\n>\n>\n>\n> ó",
-        "> a\n> \n  >\n> ó", "> a\n\n>\n> ó",
-        "> a\r\n>\r\n>\r\n> ó",
+        (1, (38_500, 55_500), "\u{f3}"),
     ] {
-        let actual = render(source)?;
-        assert_eq!(actual.0.iter().map(|row| (
-            row.page, row.origin_um, row.text.as_str(),
-        )).collect::<Vec<_>>(), reference.0.iter().map(|row| (
-            row.page, row.origin_um, row.text.as_str(),
-        )).collect::<Vec<_>>(), "{source:?}: rows");
-        assert_eq!(actual.1, reference.1, "{source:?}: quote rules");
-        assert_eq!(actual.2, reference.2, "{source:?}: pages");
+        return Err("single quote gap does not fit at expected rows".into());
     }
-    let actual = render(&many)?;
-    assert_eq!(actual.0.iter().map(|row| (
-        row.page, row.origin_um, row.text.as_str(),
-    )).collect::<Vec<_>>(), reference.0.iter().map(|row| (
-        row.page, row.origin_um, row.text.as_str(),
-    )).collect::<Vec<_>>(), "100 empty markers change physical rows");
-    assert_eq!(actual.1, reference.1);
-    assert_eq!(actual.2, reference.2);
+    let many = format!("> a\n{}> \u{f3}", ">\n".repeat(100));
+    let alternatives = [
+        "> a\n>\n> \u{f3}", "> a\n>\n>\n>\n> \u{f3}",
+        "> a\n> \n  >\n> \u{f3}", "> a\n\n>\n> \u{f3}",
+        "> a\r\n>\r\n>\r\n> \u{f3}",
+    ];
+    for source in alternatives.into_iter().chain([many.as_str()]) {
+        let actual = render(source)?;
+        if geometry(&actual.0) != geometry(&reference.0)
+            || actual.1 != reference.1 || actual.2 != reference.2 {
+            return Err(format!(
+                "quote delimiters must collapse to one physical gap: {source:?}"
+            ));
+        }
+    }
     Ok(())
 }
 
