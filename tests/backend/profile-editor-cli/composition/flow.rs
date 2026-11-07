@@ -3836,3 +3836,148 @@ fn five_row_markdown_blocks_relocate_all_ink_when_new_sheet_fits()
     );
     Ok(())
 }
+
+#[test]
+fn whole_fitting_markdown_blocks_keep_six_to_twelve_rows_together()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(),
+            None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000,
+                top: 40_000,
+                width: 35_000,
+                height,
+            }),
+        )
+    };
+    for (count, priors) in
+        [(6usize, [1usize, 3, 4]), (8, [1, 4, 6]), (12, [1, 6, 10])]
+    {
+        let height = 5_000
+            + u32::try_from(count).map_err(|error| error.to_string())? * 9_000;
+        for prior in priors {
+            let code_rows = vec!["a"; prior].join("\n");
+            let prefix = format!("```\n{code_rows}\n```\n");
+            for (marker, marks_expected) in [
+                ("", 0),
+                ("- ", 1),
+                ("- [ ] ", 4),
+                ("- [x] ", 6),
+                ("> ", count),
+            ] {
+                let words = vec!["aaaaaa"; count].join(" ");
+                let block = format!("{marker}{words}");
+                let (rows, marks, pages) =
+                    render(&format!("{prefix}{block}"), height)?;
+                assert_eq!(pages, 2, "{count} {prior} {marker}");
+                assert_eq!(rows.len(), prior + count);
+                assert!(rows.iter().take(prior).all(|row| row.page == 1));
+                for (index, row) in rows.iter().skip(prior).enumerate() {
+                    let offset = u32::try_from(index)
+                        .map_err(|error| error.to_string())?
+                        * 9_000;
+                    assert_eq!(row.page, 2, "{count} {prior} {marker}");
+                    assert_eq!(row.text, "aaaaaa");
+                    assert_eq!(row.origin_um.1, 42_500 + offset);
+                }
+                assert_eq!(marks.len(), marks_expected);
+                assert!(marks.iter().all(|mark| mark.page == 2));
+                if marker == "> " {
+                    for (index, mark) in marks.iter().enumerate() {
+                        let offset = u32::try_from(index)
+                            .map_err(|error| error.to_string())?
+                            * 9_000;
+                        assert_eq!(mark.start_um.1, 43_000 + offset);
+                        assert_eq!(mark.end_um.1, 50_900 + offset);
+                    }
+                } else if marker.starts_with("- [") {
+                    assert!(marks.iter().all(|mark| {
+                        (43_700..=46_200).contains(&mark.start_um.1)
+                            && (43_700..=46_200).contains(&mark.end_um.1)
+                    }));
+                } else if marker == "- " {
+                    assert_eq!(
+                        marks.first().map(|mark| mark.start_um),
+                        Some((34_100, 44_700))
+                    );
+                    assert_eq!(
+                        marks.first().map(|mark| mark.end_um),
+                        Some((35_800, 44_700))
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn page_fitting_markdown_blocks_preserve_precedence_cursor_and_fallback()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(),
+            None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000,
+                top: 40_000,
+                width: 35_000,
+                height,
+            }),
+        )
+    };
+    // A following block begins after the full relocated final row.
+    let next = format!("```\na\n```\n{}\n# a", ["aaaaaa"; 8].join(" "));
+    let (rows, marks, pages) = render(&next, 77_000)?;
+    assert_eq!(pages, 3);
+    assert_eq!(rows.get(9).map(|row| row.origin_um), Some((32_500, 42_500)));
+    assert_eq!(rows.get(9).map(|row| row.page), Some(3));
+    assert_eq!(marks.len(), 1);
+    assert_eq!(marks.first().map(|mark| mark.page), Some(3));
+
+    // Ordered item continuation uses the measured label's hanging indent.
+    let ordered = format!("```\na\n```\n1. {}", ["a"; 16].join(" "));
+    let (numbered, marks, pages) = render(&ordered, 77_000)?;
+    assert_eq!(pages, 2);
+    assert!(marks.is_empty());
+    assert_eq!(numbered.len(), 9);
+    assert!(numbered.iter().skip(1).all(|row| row.page == 2));
+    assert_eq!(numbered.get(1).map(|row| row.origin_um.0), Some(38_500));
+    assert!(numbered.iter().skip(2).all(|row| row.origin_um.0 == 50_500));
+
+    // A heading or rule still owns its first subsequent row.
+    for title in ["# a", "---"] {
+        let source = format!("{title}\n> {}", ["aaaaaa"; 8].join(" "));
+        let (rows, marks, pages) = render(&source, 77_000)?;
+        assert_eq!(pages, 2);
+        assert_eq!(rows.first().map(|row| row.page), Some(1));
+        assert_eq!(rows.get(1).map(|row| row.page), Some(1));
+        assert!(
+            marks
+                .iter()
+                .any(|bar| bar.page == 1 && bar.start_um.0 == 35_500)
+        );
+    }
+
+    // If a fresh sheet cannot hold the block, preserve normal splitting.
+    let source = format!("```\na\n```\n> {}", ["aaaaaa"; 8].join(" "));
+    let (rows, bars, pages) = render(&source, 68_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.first().map(|row| row.page), Some(1));
+    assert!(rows.iter().skip(1).any(|row| row.page == 1));
+    assert!(rows.iter().skip(1).any(|row| row.page == 2));
+    assert_eq!(bars.len(), 8);
+    assert!(bars.iter().any(|bar| bar.page == 1));
+    assert!(bars.iter().any(|bar| bar.page == 2));
+    Ok(())
+}

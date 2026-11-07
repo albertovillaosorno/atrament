@@ -603,6 +603,14 @@ ink, and the block would split four-plus-one, three-plus-two or two-plus-three.
 Its list marks and quote rules move with the text; heading/rule pairing and
 narrower-page fallback remain unchanged. This is still CLI-only pagination.
 
+The same rule now covers **any complete wrapped Markdown block** of at least
+three physical rows that fits on the next sheet, rather than stopping at five
+rows. It moves a paragraph, list item or quote only when at least two rows
+were initially placed on the previous sheet and independent ink remains
+there. Earlier heading/rule pairings win; blocks larger than one physical
+sheet retain normal pagination and terminal-row balance. The 128-row CLI
+limit is unchanged, and this does not persist semantic notebook blocks.
+
 A standalone Markdown thematic rule also stays with its first following
 visible row when a fresh sheet can hold both, including intervening blank
 paragraph gaps or fenced-code rows. A heading before the rule takes priority

@@ -656,11 +656,12 @@ impl Layout<'_> {
         Ok(true)
     }
 
-    // A short Markdown block can fit in full on the next sheet even if
-    // its first two to four rows fit on the current sheet. Relocate the
-    // complete three-to-five-row block only if the old sheet retains earlier
-    // ink. A heading or rule's reserved next row takes priority.
-    fn keep_short_block_together(
+    // A Markdown block that fits on one fresh sheet should not be split
+    // across two sheets when independent ink occupies its starting page.
+    // The global 128-row budget bounds this check; long blocks that cannot
+    // fit retain ordinary pagination and terminal-row balancing. A heading
+    // or rule's reserved next row takes priority.
+    fn keep_fitting_block_together(
         &mut self, first_run: usize, first_ornament: usize,
         preceding_reservation: bool, style: LineStyle, protect_body: bool,
     ) -> Result<(), String> {
@@ -671,7 +672,7 @@ impl Layout<'_> {
         let runs = self.lines.get(first_run..)
             .ok_or("flow short-block origin out of bounds")?;
         let count = runs.len();
-        if !(3..=5).contains(&count) {
+        if count < 3 {
             return Ok(());
         }
         let first = runs.first()
@@ -890,7 +891,7 @@ impl Layout<'_> {
             }
         }
         self.write_last_row(row, start_x, width, style, first)?;
-        self.keep_short_block_together(
+        self.keep_fitting_block_together(
             run_start, mark_start, preceding_reservation,
             style, protect_body,
         )?;

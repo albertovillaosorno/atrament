@@ -1815,3 +1815,26 @@ confirm text and decoration parity on both pages. Invalid page selection
 and absent glyphs refuse without modifying an accepted output. These are
 limited CLI-owned flow rules, not saved semantic blocks or a completed P1
 notebook compiler.
+
+## Page-fitting Markdown block keep-together (partial) — 2026-11-06
+
+The native CLI's three-to-five-row keep-together rule now applies to any
+complete Markdown paragraph, bullet/checkbox/numbered item or quote that
+fits on a fresh physical sheet. Earlier visible ink must remain on the old
+page, at least two rows of this block must have occupied that page, and a
+preceding heading or thematic-rule first-row reservation retains priority.
+This avoids repeating a separate special case for each new row count.
+
+A failing-before-fix Rust geometry test now passes for six, eight and
+twelve measured rows with multiple split points, preserved earlier code
+ink, relocated quote bars, list and checkbox strokes, numbered hanging
+indents, a following heading's page cursor, and short-sheet fallback.
+Independent eight-row real PDF and transparent PNG compositions match
+manual native glyph/ornament placement on both pages; page-budget,
+PNG selection and missing-glyph refusals leave accepted output unchanged.
+
+The 128-row global bound and page/line limits are unchanged. A block too
+tall for one sheet continues through the existing normal pagination and
+tail-balancing rules, and literal/plain content does not acquire semantic
+keep-together behavior. This is still CLI-only, not a persisted semantic
+notebook or completion of the P1 task.
