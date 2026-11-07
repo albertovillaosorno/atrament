@@ -2402,3 +2402,16 @@ test confirms the error propagates without mutating the accepted notebook.
 This is measurement admission hardening only: it does not connect semantic
 block persistence to the existing CLI-only PDF/PNG rendering pipeline, so
 the two-page semantic notebook acceptance criterion remains open.
+
+## Defensive page identity admission — 2026-11-07
+
+The independent measured-flow paginator now rejects duplicate page identities
+before any placement, even when their physical rectangles differ. A duplicate
+would make two physical pages indistinguishable in the output plan. The
+revision-bound application propagates the same typed failure if a malformed
+accepted-revision value is supplied directly.
+
+Empty flow remains inert and skips unused page authority. Rust regressions
+cover independent/keep-together policies and defensive accepted-state
+non-mutation. This does not yet connect persisted semantic block identities
+to the CLI two-page exporter.

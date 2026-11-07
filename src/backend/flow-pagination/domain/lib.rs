@@ -33,6 +33,8 @@
 
 //! Deterministic pagination for already-measured semantic flow fragments.
 
+use std::collections::BTreeSet;
+
 use atrament_physical_page_profile::{Length, Rect};
 
 /// Policy controlling whether adjacent measured fragments prefer one page.
@@ -98,6 +100,11 @@ pub struct PaginationPlan<Identity, PageIdentity> {
 /// Typed failure to paginate already-measured semantic flow.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum PaginationError<Identity, PageIdentity> {
+    /// Two page regions share one semantic identity, aliasing placements.
+    DuplicatePageIdentity {
+        /// Repeated semantic page identity.
+        page: PageIdentity,
+    },
     /// No remaining page can contain this indivisible measured fragment.
     FragmentDoesNotFitAnyPage {
         /// Stable semantic owner of the unplaceable fragment.
@@ -153,16 +160,16 @@ struct GroupExtent {
 ///
 /// # Errors
 ///
-/// Returns a typed failure for invalid writable regions, zero-height measured
-/// fragments, an indivisible fragment that cannot fit any remaining page, or
-/// exhaustion after a fragment would fit only on a fresh additional page.
+/// Returns a typed failure for invalid writable regions, duplicate page
+/// identities, zero-height fragments, an indivisible fragment that cannot fit
+/// any remaining page, or exhaustion when no later page remains available.
 pub fn paginate<Identity, PageIdentity>(
     pages: &[PageRegion<PageIdentity>],
     units: &[MeasuredFlowUnit<Identity>],
 ) -> PaginationResult<Identity, PageIdentity>
 where
     Identity: Copy,
-    PageIdentity: Copy,
+    PageIdentity: Copy + Ord,
 {
     if units.iter().all(|unit| unit.fragments.is_empty()) {
         return Ok(PaginationPlan {
@@ -403,9 +410,15 @@ fn validate_pages<Identity, PageIdentity>(
     pages: &[PageRegion<PageIdentity>],
 ) -> PlacementResult<Identity, PageIdentity>
 where
-    PageIdentity: Copy,
+    PageIdentity: Copy + Ord,
 {
+    let mut seen = BTreeSet::new();
     for page in pages {
+        if !seen.insert(page.page) {
+            return Err(PaginationError::DuplicatePageIdentity {
+                page: page.page,
+            });
+        }
         let region = page.writable;
         let horizontal_end = region
             .x

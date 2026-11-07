@@ -301,6 +301,7 @@ impl PaginationOutcomeCoverage {
             },
             Err(
                 PaginationError::InvalidPageRegion { .. }
+                | PaginationError::DuplicatePageIdentity { .. }
                 | PaginationError::ZeroHeightFragment { .. },
             ) => {
                 panic!("Cartesian fixtures only construct valid page regions");
@@ -904,6 +905,29 @@ fn invalid_page_region_rejects_before_any_placement() {
     assert_eq!(
         paginate(&pages, &units),
         Err(PaginationError::InvalidPageRegion { page: 9 },)
+    );
+}
+
+#[test]
+fn duplicate_page_identity_refuses_ambiguous_physical_placements() {
+    let pages = [page(9, 0, 100, 100), page(9, 500, 100, 100)];
+    for policy in [
+        FlowUnitPolicy::Independent,
+        FlowUnitPolicy::KeepTogetherWhenPossible,
+    ] {
+        let units =
+            [unit(policy, vec![fragment(1, 20, 60), fragment(2, 20, 60)])];
+        assert_eq!(
+            paginate(&pages, &units),
+            Err(PaginationError::DuplicatePageIdentity { page: 9 }),
+        );
+    }
+
+    // Without measured content, no page identity is projected into output.
+    let empty: [MeasuredFlowUnit<u64>; 0] = [];
+    assert_eq!(
+        paginate(&pages, &empty).map(|plan| plan.placements),
+        Ok(Vec::new()),
     );
 }
 

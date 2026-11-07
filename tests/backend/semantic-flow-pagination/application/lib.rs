@@ -838,6 +838,43 @@ fn pagination_is_read_only_for_accepted_revision() {
 }
 
 #[test]
+fn defensive_duplicate_accepted_page_identity_cannot_alias_placements() {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let outcome = session.accept(fixture.notebook);
+    assert!(matches!(outcome, AcceptanceOutcome::Accepted { .. }));
+    let AcceptanceOutcome::Accepted { mapping, revision } = outcome else {
+        return;
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+    assert!(session.current().is_some());
+    let Some(accepted) = session.current().cloned() else {
+        return;
+    };
+    assert!(paginate_revision(&accepted, &measured).is_ok());
+
+    // Emulate a malformed typed revision; normal candidate admission rejects
+    // duplicate global identities before this downstream boundary.
+    let mut corrupted = accepted.clone();
+    assert!(corrupted.notebook.pages.len() >= 2);
+    let Some(second_page) = corrupted.notebook.pages.get_mut(1) else {
+        return;
+    };
+    second_page.id = page;
+    assert_eq!(
+        paginate_revision(&corrupted, &measured),
+        Err(SemanticPaginationError::Pagination(
+            PaginationError::DuplicatePageIdentity { page },
+        )),
+    );
+    assert_eq!(session.current(), Some(&accepted));
+}
+
+#[test]
 fn defensive_missing_profile_never_falls_back_to_arbitrary_geometry() {
     let ids = IdentityAllocator::new();
     let fixture = candidate_fixture(&ids);
