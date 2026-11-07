@@ -221,6 +221,7 @@ fn typed_flow_refuses_unvalidated_handwriting_statistics()
     };
     use atrament_notebook_profile::NotebookProfile;
 
+    const OUTSIDE_BOUNDS: i32 = 1_000_000;
     let paper = NotebookProfile::default();
     let source = FlowSource::new(FlowFormat::Markdown, "a")?;
     let baseline = HandwritingStatisticsProfile::baseline(42);
@@ -234,20 +235,22 @@ fn typed_flow_refuses_unvalidated_handwriting_statistics()
 
     let mut stale = baseline.clone();
     stale.version = "unsupported-statistics-version".into();
+    let inherited = baseline.globals.first().copied()
+        .ok_or("missing baseline statistics")?;
     let mut duplicate = baseline.clone();
-    duplicate.globals.push(duplicate.globals[0]);
+    duplicate.globals.push(inherited);
     let mut outside = baseline.clone();
     let width = outside.globals.iter_mut()
         .find(|entry| entry.dimension == Dimension::Width)
         .ok_or("missing baseline width statistics")?;
-    width.statistics.minimum = 1_000_000;
-    width.statistics.maximum = 1_000_000;
-    width.statistics.mean = 1_000_000;
-    width.statistics.median = 1_000_000;
-    let mut invalid_key = baseline.clone();
+    width.statistics.minimum = OUTSIDE_BOUNDS;
+    width.statistics.maximum = OUTSIDE_BOUNDS;
+    width.statistics.mean = OUTSIDE_BOUNDS;
+    width.statistics.median = OUTSIDE_BOUNDS;
+    let mut invalid_key = baseline;
     invalid_key.glyphs.push(GlyphStatistics {
         grapheme: "ab".into(),
-        parameters: vec![baseline.globals[0]],
+        parameters: vec![inherited],
     });
     for (label, candidate, reason) in [
         ("version", stale, "UnsupportedVersion"),
@@ -255,8 +258,11 @@ fn typed_flow_refuses_unvalidated_handwriting_statistics()
         ("dimension bounds", outside, "OutsideDimensionBounds"),
         ("grapheme", invalid_key, "InvalidGrapheme"),
     ] {
-        let error = render(&candidate)
-            .expect_err("unvalidated typed statistics reached flow layout");
+        let Err(error) = render(&candidate) else {
+            return Err(format!(
+                "unvalidated typed {label} statistics reached layout"
+            ));
+        };
         if !error.contains("invalid flow handwriting statistics")
             || !error.contains(reason) {
             return Err(format!("{label}: unexpected refusal: {error}"));
