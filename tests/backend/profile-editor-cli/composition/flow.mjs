@@ -4385,7 +4385,7 @@ test('wrapped list markers move with native PDF and page-local PNG ink',
         }
     });
 
-test('native heading remains attached to first wrapped list row', () => {
+test('native heading and both wrapped list rows move as one group', () => {
     const dir = mkdtempSync(join(root, '.temp/flow-heading-list-'));
     try {
         const source = 'a\n# a\n- aaaaaa aaaaaa';
@@ -4395,13 +4395,13 @@ test('native heading remains attached to first wrapped list row', () => {
         ];
         const manual = [
             '--place-text', '1', '32500', '42500', 'a',
-            '--place-text', '1', '32500', '51500', 'a',
-            '--place-text', '1', '38500', '60500', 'aaaaaa',
-            '--place-text', '2', '38500', '42500', 'aaaaaa',
-            '--ink-line', '1', '32500', '58200',
-            '36500', '58200', '550', '#1E304A',
-            '--ink-line', '1', '34100', '62700',
-            '35800', '62700', '450', '#1E304A',
+            '--place-text', '2', '32500', '42500', 'a',
+            '--place-text', '2', '38500', '51500', 'aaaaaa',
+            '--place-text', '2', '38500', '60500', 'aaaaaa',
+            '--ink-line', '2', '32500', '49200',
+            '36500', '49200', '550', '#1E304A',
+            '--ink-line', '2', '34100', '53700',
+            '35800', '53700', '450', '#1E304A',
         ];
         for (const format of ['pdf', 'png']) {
             for (const page of format === 'pdf' ? [1] : [1, 2]) {
@@ -4495,7 +4495,7 @@ test('wrapped quote rules follow native PDF and page-local PNG ink', () => {
     }
 });
 
-test('native heading stays with first wrapped quote rule', () => {
+test('native heading and both wrapped quote rules move as one group', () => {
     const dir = mkdtempSync(join(root, '.temp/flow-heading-quote-'));
     try {
         const source = 'a\n# a\n> aaaaaa aaaaaa';
@@ -4505,15 +4505,15 @@ test('native heading stays with first wrapped quote rule', () => {
         ];
         const manual = [
             '--place-text', '1', '32500', '42500', 'a',
-            '--place-text', '1', '32500', '51500', 'a',
-            '--place-text', '1', '38500', '60500', 'aaaaaa',
-            '--place-text', '2', '38500', '42500', 'aaaaaa',
-            '--ink-line', '1', '32500', '58200',
-            '36500', '58200', '550', '#1E304A',
-            '--ink-line', '1', '35500', '61000',
+            '--place-text', '2', '32500', '42500', 'a',
+            '--place-text', '2', '38500', '51500', 'aaaaaa',
+            '--place-text', '2', '38500', '60500', 'aaaaaa',
+            '--ink-line', '2', '32500', '49200',
+            '36500', '49200', '550', '#1E304A',
+            '--ink-line', '2', '35500', '52000',
+            '35500', '59900', '400', '#1E304A',
+            '--ink-line', '2', '35500', '61000',
             '35500', '68900', '400', '#1E304A',
-            '--ink-line', '2', '35500', '43000',
-            '35500', '50900', '400', '#1E304A',
         ];
         for (const format of ['pdf', 'png']) {
             for (const page of format === 'pdf' ? [1] : [1, 2]) {
