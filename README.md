@@ -597,6 +597,12 @@ Decorative quote bars, bullets and checkboxes move with their owner rows.
 Preceding title/rule reservations still win; sheets with fewer than four
 rows use ordinary breaks and the existing terminal-row balance instead.
 
+A five-row wrapped block similarly moves intact when the next sheet has
+five rows of usable space, the current sheet already contains independent
+ink, and the block would split four-plus-one, three-plus-two or two-plus-three.
+Its list marks and quote rules move with the text; heading/rule pairing and
+narrower-page fallback remain unchanged. This is still CLI-only pagination.
+
 A standalone Markdown thematic rule also stays with its first following
 visible row when a fresh sheet can hold both, including intervening blank
 paragraph gaps or fenced-code rows. A heading before the rule takes priority

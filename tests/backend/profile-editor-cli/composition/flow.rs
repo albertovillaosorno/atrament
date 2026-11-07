@@ -3690,3 +3690,149 @@ fn four_row_markdown_blocks_relocate_all_ink_when_new_sheet_fits()
         .collect::<Vec<_>>(), [1, 1, 2, 2]);
     Ok(())
 }
+
+#[test]
+fn five_row_markdown_blocks_relocate_all_ink_when_new_sheet_fits()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(),
+            None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000,
+                top: 40_000,
+                width: 35_000,
+                height,
+            }),
+        )
+    };
+    // A five-row block otherwise splits 4+1, 3+2, or 2+3 after one,
+    // two, or three earlier literal rows on a five-row physical sheet.
+    for prior_rows in 1..=3 {
+        let prefix =
+            format!("```\n{}\n```\n", vec!["a"; prior_rows].join("\n"));
+        for (block, mark_count) in [
+            ("aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa", 0),
+            ("- aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa", 1),
+            ("- [ ] aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa", 4),
+            ("- [x] aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa", 6),
+            ("> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa", 5),
+            ("1. a a a a a a a a a a", 0),
+        ] {
+            let (rows, marks, pages) =
+                render(&format!("{prefix}{block}"), 50_000)?;
+            assert_eq!(pages, 2, "{prior_rows}: {block}");
+            assert_eq!(rows.len(), prior_rows + 5, "{block}");
+            assert_eq!(
+                rows[..prior_rows]
+                    .iter()
+                    .map(|row| row.page)
+                    .collect::<Vec<_>>(),
+                vec![1; prior_rows],
+                "{block}"
+            );
+            assert_eq!(
+                rows[prior_rows..]
+                    .iter()
+                    .map(|row| (row.page, row.origin_um.1,))
+                    .collect::<Vec<_>>(),
+                [
+                    (2, 42_500),
+                    (2, 51_500),
+                    (2, 60_500),
+                    (2, 69_500),
+                    (2, 78_500),
+                ],
+                "{prior_rows}: {block}"
+            );
+            assert_eq!(marks.len(), mark_count, "{block}");
+            assert!(marks.iter().all(|mark| mark.page == 2), "{block}");
+            if block.starts_with("> ") {
+                assert_eq!(
+                    marks
+                        .iter()
+                        .map(|bar| (bar.start_um.1, bar.end_um.1,))
+                        .collect::<Vec<_>>(),
+                    [
+                        (43_000, 50_900),
+                        (52_000, 59_900),
+                        (61_000, 68_900),
+                        (70_000, 77_900),
+                        (79_000, 86_900),
+                    ]
+                );
+            } else if block.starts_with("- [") {
+                assert!(
+                    marks.iter().all(|mark| {
+                        (43_700..=46_200).contains(&mark.start_um.1)
+                            && (43_700..=46_200).contains(&mark.end_um.1)
+                    }),
+                    "checkbox ink belongs to relocated first row"
+                );
+            } else if block.starts_with("1. ") {
+                assert_eq!(rows[prior_rows].origin_um.0, 38_500);
+                assert!(
+                    rows[prior_rows + 1..]
+                        .iter()
+                        .all(|row| row.origin_um.0 == 50_500)
+                );
+            }
+        }
+    }
+
+    // With no independent ink to preserve, a complete five-row block
+    // simply occupies the first sheet without being relocated.
+    let (alone, bars, pages) =
+        render("> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa", 50_000)?;
+    assert_eq!(pages, 1);
+    assert!(alone.iter().all(|row| row.page == 1));
+    assert_eq!(bars.len(), 5);
+    assert!(bars.iter().all(|mark| mark.page == 1));
+
+    // A following heading must not overwrite the relocated fifth row.
+    let (continued, heading_marks, pages) = render(
+        "```\na\n```\naaaaaa aaaaaa aaaaaa aaaaaa aaaaaa\n# a",
+        50_000,
+    )?;
+    assert_eq!(pages, 3);
+    assert_eq!(continued.iter().map(|row| row.page).collect::<Vec<_>>(), [
+        1, 2, 2, 2, 2, 2, 3
+    ]);
+    assert_eq!(continued[6].origin_um, (32_500, 42_500));
+    assert_eq!(heading_marks.len(), 1);
+    assert_eq!(heading_marks[0].page, 3);
+
+    // Heading/rule pairings take precedence, and short sheets cannot
+    // move a block that does not fit entirely on a new sheet.
+    for source in [
+        "# a\n> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa",
+        "---\n> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa",
+    ] {
+        let (rows, marks, pages) = render(source, 50_000)?;
+        assert_eq!(pages, 2, "{source}");
+        assert_eq!([rows[0].page, rows[1].page], [1, 1]);
+        assert_eq!(
+            marks
+                .iter()
+                .filter(|mark| mark.start_um.0 == 35_500)
+                .map(|mark| mark.page)
+                .collect::<Vec<_>>(),
+            [1, 1, 1, 2, 2]
+        );
+    }
+    let (short, short_marks, pages) =
+        render("> aaaaaa aaaaaa aaaaaa aaaaaa aaaaaa", 41_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(short.iter().map(|row| row.page).collect::<Vec<_>>(), [
+        1, 1, 1, 2, 2
+    ]);
+    assert_eq!(
+        short_marks.iter().map(|mark| mark.page).collect::<Vec<_>>(),
+        [1, 1, 1, 2, 2]
+    );
+    Ok(())
+}
