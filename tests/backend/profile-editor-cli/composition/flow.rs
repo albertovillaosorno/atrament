@@ -4850,3 +4850,68 @@ fn heading_and_variable_page_fitting_blocks_preserve_full_row_order()
     }
     Ok(())
 }
+
+#[test]
+fn consecutive_rules_keep_their_first_following_row_across_page_turns()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    // Three rows fit the new page, but only two remain after the
+    // independent fenced row. Both separators must follow their ink.
+    for following in ["a", "> a", "- a", "# a"] {
+        let source = format!("```\na\n```\n---\n***\n{following}");
+        let (rows, marks, pages) = render(&source, 32_000)?;
+        assert_eq!(pages, 2, "{following}");
+        assert_eq!(rows.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 2], "{following}");
+        assert_eq!(rows[1].origin_um.1, 60_500, "{following}");
+        assert_eq!(marks.iter().take(2)
+            .map(|mark| (mark.page, mark.start_um.1))
+            .collect::<Vec<_>>(), [(2, 47_000), (2, 56_000)],
+            "{following}");
+    }
+    // Each collapsed gap consumes its own 4-mm measured spacing.
+    let spaced = "```\na\n```\n---\n\n***\n\n> a";
+    let (rows, marks, pages) = render(spaced, 40_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        [1, 2]);
+    assert_eq!(rows[1].origin_um.1, 68_500);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(), [(2, 47_000), (2, 60_000),
+            (2, 69_000)]);
+    let repeated = spaced.replace("\n\n", "\n\n\n");
+    let (again, again_marks, again_pages) = render(&repeated, 40_000)?;
+    assert_eq!(again_pages, pages);
+    assert_eq!(again_marks, marks);
+    assert_eq!(again.iter().map(|row| (row.page, row.origin_um,
+        row.text.as_str())).collect::<Vec<_>>(),
+        rows.iter().map(|row| (row.page, row.origin_um,
+            row.text.as_str())).collect::<Vec<_>>());
+    // If even a fresh page cannot hold all three, preserve the
+    // existing first-rule/second-rule reservation instead of refusing.
+    let (fallback, fallback_marks, _) =
+        render("```\na\n```\n---\n***\na", 23_000)?;
+    assert_eq!(fallback.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 3]);
+    assert_eq!(fallback_marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [2, 2]);
+    // Ending separator chains have no future body to reserve.
+    let (trailing, trailing_marks, _) =
+        render("```\na\n```\n---\n***", 32_000)?;
+    assert_eq!(trailing.len(), 1);
+    assert_eq!(trailing_marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [1, 1]);
+    Ok(())
+}

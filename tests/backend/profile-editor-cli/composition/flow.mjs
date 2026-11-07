@@ -6232,3 +6232,77 @@ test('consecutive thematic rules retain fitting native PDF/PNG groups',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('consecutive rules reserve their first following native PDF/PNG row',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-rule-first-ink-'));
+    try {
+        for (const scenario of [
+            {
+                source: '```\na\n```\n---\n***\n> a', height: '32000',
+                rules: [47000, 56000], row: 60500,
+                variants: ['```\na\n```\n___\n* * *\n> a'],
+            },
+            {
+                source: '```\na\n```\n---\n\n***\n\n> a',
+                height: '40000', rules: [47000, 60000], row: 68500,
+                variants: ['```\na\n```\n---\n\n\n***\n\n\n> a'],
+            },
+        ]) {
+            const region = [
+                '--flow-region', '30000', '40000', '35000',
+                scenario.height,
+            ];
+            const manual = [
+                '--place-text', '1', '32500', '42500', 'a',
+                '--place-text', '2', '38500', String(scenario.row), 'a',
+                ...scenario.rules.flatMap((y) => [
+                    '--ink-line', '2', '32500', String(y),
+                    '63500', String(y), '400', '#1E304A',
+                ]),
+                '--ink-line', '2', '35500', String(scenario.row + 500),
+                '35500', String(scenario.row + 8400), '400', '#1E304A',
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const options = format === 'pdf' ? ['--pages', '2'] : [];
+                    const actual = render(dir, scenario.source, format,
+                        [...region, ...options], '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0, actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `rule-first-${scenario.height}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--', ...base,
+                        ...manual, ...options, '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []), '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `rule-chain native ${format} page ${page}`);
+                    for (const variant of [
+                        ...scenario.variants,
+                        scenario.source.replaceAll('\n', '\r\n'),
+                    ]) {
+                        const replay = render(dir, variant, format,
+                            [...region, ...options], '--flow-markdown', page);
+                        assert.equal(replay.result.status, 0,
+                            replay.result.stderr);
+                        assert.deepEqual(readFileSync(replay.output), accepted,
+                            `equivalent rule chain ${format} page ${page}`);
+                    }
+                    const missing = render(dir, `${scenario.source} β`, format,
+                        [...region, ...options], '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        `refusal preserves ${format} page ${page}`);
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

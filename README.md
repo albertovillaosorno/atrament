@@ -663,6 +663,14 @@ The earlier first-row reservation still wins when the complete chain cannot
 fit one sheet. This remains CLI-only pagination without persisted semantic
 block identity.
 
+The rule-chain first-row reservation now also measures *all* consecutive
+separators and their collapsed gaps before the first following visible
+Markdown row, even if that row does not wrap. When the chain plus that row
+fits a new sheet, the complete group starts together instead of leaving
+two separators behind on the previous page. If it cannot fit, the older
+first-rule/next-row reservation remains in force. Ending separator chains
+and headings that already own a rule retain ordinary pagination.
+
 A rule that already reserved its first visible row takes priority over a
 following block when the complete group cannot move together. Its next row
 still stays attached when that smaller reservation fits; later continuation

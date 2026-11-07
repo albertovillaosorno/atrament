@@ -2027,3 +2027,25 @@ page requests and missing glyphs preserve accepted export files.
 
 This is bounded CLI-only flow, not a saved semantic notebook, general
 fixed-region editing or completion of the open P1 acceptance criterion.
+
+## Consecutive rule-chain first-ink reservation (partial) — 2026-11-07
+
+A free thematic rule now measures any consecutive later rules and their
+independent 4-mm paragraph gaps *before* reserving its first following
+visible row. If the chain and that one row fit a fresh physical page,
+the reserve moves the entire group rather than leaving two rule strokes
+on the previous sheet when the body begins on the next. This also works
+for a one-row quote, bullet, ordinary body or heading, without requiring
+a fully wrapped block.
+
+A failing-before-fix Rust regression checks the independent preceding row,
+two physical separator centerlines, quote bars, repeated blank-source gaps,
+short-sheet first-rule fallback and terminal rules with no following ink.
+An independent native CLI reference composes exact two-page vector PDF and
+both transparent PNG pages from explicit pen segments, including both rule
+strokes and quote geometry. Alternate Markdown separators, CRLF and repeated
+blanks replay byte-for-byte; missing authored glyphs cannot replace output.
+
+Existing preceding-heading ownership, fenced physical rows and groups too
+tall for a fresh page retain their prior behavior. This still does not save
+semantic notebook body blocks or complete the open P1 acceptance criterion.
