@@ -2346,3 +2346,16 @@ outside any of the four edges. Overflowed or out-of-margin typed rectangles
 also refuse before ink bounds can be accepted. This verifies the existing
 bounded validator; it does not add persistent notebook layout or make the
 CLI-only semantic task complete.
+
+## Typed heading-option admission at layout (partial) — 2026-11-07
+
+The CLI's bounded heading customization is now revalidated by the typed
+physical-layout entry point. Direct Rust callers cannot construct a marker
+scale outside 50–105 percent (including zero-width marker strokes), an ink
+scale outside 100–250 percent, a contradictory heading setting, or apply
+Markdown-only decoration to plain text. Previously only CLI parsing enforced
+those combinations.
+
+A red-to-green Rust regression checks both boundaries, valid endpoint scales
+and plain-text compatibility. This is still export-only heading ink; semantic
+block styles and persisted notebook flow are unfinished.

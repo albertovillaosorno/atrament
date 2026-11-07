@@ -169,6 +169,85 @@ fn typed_flow_source_must_retain_bounded_canonical_admission()
 }
 
 #[test]
+fn typed_heading_decoration_cannot_bypass_cli_admission()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let paper = NotebookProfile::default();
+    let heading = FlowSource::new(FlowFormat::Markdown, "# a")?;
+    let plain = FlowSource::new(FlowFormat::Plain, "a")?;
+    let render = |source: &FlowSource, decoration| {
+        super::layout_flow_with_region(
+            source, &paper, None, decoration, None,
+        )
+    };
+    let reject = |source: &FlowSource,
+        decoration: super::HeadingDecoration, expected: &str| {
+        match render(source, decoration) {
+            Ok(_) => Err(format!("invalid heading accepted: {expected}")),
+            Err(error) if error == expected => Ok(()),
+            Err(error) => Err(format!(
+                "expected {expected}, received {error}"
+            )),
+        }
+    };
+    for scale in [0, 49, 106, u32::MAX] {
+        reject(&heading, super::HeadingDecoration {
+            style: Some(super::HeadingStyle::Marker),
+            marker_scale: Some(scale),
+            ..super::HeadingDecoration::default()
+        }, "heading marker scale must be 50..105")?;
+    }
+    for scale in [0, 99, 251, u32::MAX] {
+        reject(&heading, super::HeadingDecoration {
+            glyph_scale: Some(scale),
+            ..super::HeadingDecoration::default()
+        }, "heading ink scale must be 100..250")?;
+    }
+    for (decoration, message) in [
+        (super::HeadingDecoration {
+            marker_scale: Some(50),
+            ..super::HeadingDecoration::default()
+        }, "--heading-marker-scale requires --heading-style marker"),
+        (super::HeadingDecoration {
+            style: Some(super::HeadingStyle::None),
+            color: Some([0, 0, 0]),
+            ..super::HeadingDecoration::default()
+        }, "--heading-color cannot accompany --heading-style none"),
+    ] {
+        reject(&heading, decoration, message)?;
+    }
+    reject(&plain, super::HeadingDecoration {
+        style: Some(super::HeadingStyle::Underline),
+        ..super::HeadingDecoration::default()
+    }, "heading customization requires --flow-markdown")?;
+
+    for scale in [50, 105] {
+        let marker = super::HeadingDecoration {
+            style: Some(super::HeadingStyle::Marker),
+            marker_scale: Some(scale),
+            ..super::HeadingDecoration::default()
+        };
+        if render(&heading, marker)?.2 != 1 {
+            return Err(format!("valid marker scale {scale} changed page"));
+        }
+    }
+    for scale in [100, 250] {
+        let ink = super::HeadingDecoration {
+            glyph_scale: Some(scale),
+            ..super::HeadingDecoration::default()
+        };
+        if render(&heading, ink)?.2 != 1 {
+            return Err(format!("valid ink scale {scale} changed page"));
+        }
+    }
+    if render(&plain, super::HeadingDecoration::default())?.2 != 1 {
+        return Err("undecorated plain text refused".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn ordered_hanging_indent_refuses_glyph_wider_than_continuation()
 -> Result<(), String> {
     use atrament_handwriting_statistics::{

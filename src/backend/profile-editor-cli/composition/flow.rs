@@ -400,6 +400,14 @@ impl HeadingDecoration {
     }
 
     pub(super) const fn validate(self) -> Result<(), &'static str> {
+        if let Some(scale) = self.glyph_scale
+            && (scale < 100 || scale > 250) {
+            return Err("heading ink scale must be 100..250");
+        }
+        if let Some(scale) = self.marker_scale
+            && (scale < 50 || scale > 105) {
+            return Err("heading marker scale must be 50..105");
+        }
         if self.marker_scale.is_some()
             && !matches!(self.style, Some(HeadingStyle::Marker)) {
             return Err(
@@ -2494,8 +2502,13 @@ fn measured_pitch(
 fn initialize_layout<'model>(
     profile: &NotebookProfile,
     statistics: Option<&'model HandwritingStatisticsProfile>,
-    heading: HeadingDecoration, region: Option<FlowRegion>, pitch: u32,
+    heading: HeadingDecoration, format: FlowFormat,
+    region: Option<FlowRegion>, pitch: u32,
 ) -> Result<Layout<'model>, String> {
+    heading.validate().map_err(str::to_owned)?;
+    if heading.is_selected() && format != FlowFormat::Markdown {
+        return Err("heading customization requires --flow-markdown".into());
+    }
     let printable = profile.printable_rect_um()?;
     let (left, top, right, bottom) = if let Some(fixed) = region {
         fixed.bounds_within(printable)?
@@ -2572,7 +2585,7 @@ pub(super) fn layout_flow_with_region(
 ) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
     let pitch = measured_pitch(source, statistics)?;
     let mut layout = initialize_layout(
-        profile, statistics, decoration, region, pitch,
+        profile, statistics, decoration, source.format, region, pitch,
     )?;
     // Markdown blank-line runs separate paragraphs once, even after multiple
     // empty source lines; leading and trailing blanks add no physical space.
