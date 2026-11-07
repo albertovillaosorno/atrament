@@ -2222,22 +2222,24 @@ fn handle_source_blank(
     }
 }
 
-// A syntactic blank quote separates two pending, nonempty quoted
-// paragraphs. It is not a physical row and cannot invent a standalone
-// empty block or silently consume a literal plain-text >.
+// Consecutive syntactic blank quotes collapse into one paragraph gap.
+// They need quoted ink on both sides; no empty marker reserves a row or
+// silently consumes an authored plain-text >.
 fn admit_empty_quote_gap<'text>(
     layout: &mut Layout<'_>, paragraph: &mut String,
     previous: LineStyle, format: FlowFormat, style: LineStyle,
     following: impl Iterator<Item = &'text str>,
 ) -> Result<(), String> {
-    let next = following.into_iter().next();
+    // The source byte cap bounds this lookahead even for a long series
+    // of virtual blank markers. Stop before any unrelated block or row.
+    let next = following.into_iter().map(markdown_line)
+        .find(|(kind, body)| !matches!(kind, LineStyle::Quote)
+            || !body.trim_matches(' ').is_empty());
     if format != FlowFormat::Markdown
         || !matches!(style, LineStyle::Quote)
         || !matches!(previous, LineStyle::Quote)
-        || paragraph.is_empty()
-        || !next.is_some_and(|line| {
-            let (next_style, body) = markdown_line(line);
-            matches!(next_style, LineStyle::Quote)
+        || !next.is_some_and(|(kind, body)| {
+            matches!(kind, LineStyle::Quote)
                 && !body.trim_matches(' ').is_empty()
         })
     {

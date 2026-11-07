@@ -2883,6 +2883,9 @@ fn empty_quote_separator_keeps_visible_paragraphs_on_physical_pages()
         )
     };
     let separated = render("> a\n>\n> ó")?;
+    let repeated = render("> a\n>\n> \n  >\n> \u{f3}")?;
+    let many_source = format!("> a\n{}> \u{f3}", ">\n".repeat(100));
+    let many = render(&many_source)?;
     let blank = render("> a\n\n> ó")?;
     assert_eq!(separated.0.len(), 2);
     assert_eq!(separated.2, 2);
@@ -2899,10 +2902,20 @@ fn empty_quote_separator_keeps_visible_paragraphs_on_physical_pages()
     )).collect::<Vec<_>>());
     assert_eq!(separated.1.len(), 2);
     assert_eq!(separated.1, blank.1);
+    let row_geometry = |runs: &[super::TextRun]| runs.iter()
+        .map(|run| (run.page, run.origin_um, run.text.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(row_geometry(&repeated.0), row_geometry(&separated.0));
+    assert_eq!(repeated.1, separated.1);
+    assert_eq!(repeated.2, separated.2);
+    assert_eq!(row_geometry(&many.0), row_geometry(&separated.0));
+    assert_eq!(many.1, separated.1);
+    assert_eq!(many.2, separated.2);
     for source in [">", ">\n> a", "> a\n>",
-        "> a\n>\na", "> a\n>\n>\n> ó"] {
+        "> a\n>\na", "> a\n>\n>\na",
+        "> a\n>\n>\n> ", "> a\n>\n>\n- a"] {
         let error = render(source)
-            .expect_err("only a single interior empty quote is admitted");
+            .expect_err("empty quote run without quoted continuation refused");
         assert!(error.contains("empty Markdown block"), "{source:?}: {error}");
     }
     Ok(())

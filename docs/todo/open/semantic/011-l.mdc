@@ -1615,13 +1615,13 @@ the finite two-page saved-notebook criterion remain open.
 
 ## Interior blank blockquote paragraph separator (partial) — 2026-11-06
 
-The Rust CLI now accepts a single Markdown `>` line (with optional ASCII
-spacing or up to three leading spaces) only between two nonempty quoted
-paragraphs. It consumes no physical writing row, but adds the same 4-mm
-paragraph gap as an empty Markdown line. Quote rules remain attached only to
-visible text rows, with the selected fixed rectangle and page boundaries
-unchanged. Isolated, leading, trailing, repeated or non-quote-followed empty
-quote markers still refuse; fenced and plain-text `>` remain literal ink.
+The Rust CLI accepts a Markdown `>` line (with optional ASCII spacing or up
+to three leading spaces) only between two nonempty quoted paragraphs. It
+consumes no physical writing row, but adds the same 4-mm paragraph gap as an
+empty Markdown line. Quote rules remain attached only to visible text rows,
+with the selected fixed rectangle and page boundaries unchanged. Isolated,
+leading, trailing or non-quote-followed empty quote markers still refuse;
+fenced and plain-text `>` remain literal ink.
 
 Native Rust tests check exact quoted text coordinates and vertical rules
 across two physical pages. A separate subprocess regression compares actual
@@ -1630,6 +1630,21 @@ Markdown separators, including indented and CRLF source, and proves invalid
 blocks cannot replace a previously accepted export. This is a restricted
 CLI-only blockquote refinement, not saved semantic paragraph identities,
 nested quotes or completion of the P1 notebook acceptance criterion.
+
+### Consecutive interior quote markers — 2026-11-07
+
+Two or more adjacent empty quote markers now collapse to the same single 4-mm
+gap as one marker or an ordinary blank Markdown line, provided visible
+quoted ink appears on both sides. The lookahead stops at non-quote content;
+there is no silent acceptance of an empty quote at the start, end or before
+an unrelated block. The 4,096-byte source bound still applies.
+
+Red-to-green Rust geometry covers the exact two-page rows and quote rules.
+Native PDF and page-selected transparent PNG subprocess comparisons check
+multiple empty markers, varied indentation and CRLF against independently
+accepted single-gap output, plus immutable existing exports on refusal.
+This is a bounded CLI-only Markdown extension, not full CommonMark quote
+semantics or a persisted semantic notebook.
 
 ## First-row list continuation guard (partial) — 2026-11-06
 

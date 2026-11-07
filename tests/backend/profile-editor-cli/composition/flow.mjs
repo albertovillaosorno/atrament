@@ -1561,6 +1561,8 @@ test('interior empty quote markers preserve real page-local PDF and PNG',
                 '> a\n> \n> ó',
                 '  > a\n  >\n  > ó',
                 '> a\r\n>\r\n> ó',
+                '> a\n>\n> \n  >\n> ó',
+                '  > a\r\n  >\r\n>\r\n> ó',
             ];
             for (const format of ['pdf', 'png']) {
                 for (const page of format === 'pdf' ? [1] : [1, 2]) {
@@ -1584,7 +1586,8 @@ test('interior empty quote markers preserve real page-local PDF and PNG',
                     }
                     for (const source of [
                         '>', '>\n> a', '> a\n>', '> a\n>\na',
-                        '> a\n>\n>\n> ó',
+                        '> a\n>\n>\na',
+                        '> a\n>\n>\n> ',
                     ]) {
                         const rejected = render(dir, source, format,
                             region, '--flow-markdown', page);
