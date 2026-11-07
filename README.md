@@ -576,7 +576,10 @@ A standalone Markdown thematic rule also stays with its first following
 visible row when a fresh sheet can hold both, including intervening blank
 paragraph gaps or fenced-code rows. A heading before the rule takes priority
 when both pairings cannot fit. An ending rule and one-row regions retain
-ordinary pagination; this is not full block keep-together.
+ordinary pagination; this is not full block keep-together. A rule that already
+reserved its first visible row takes priority over a following wrapped
+paragraph, list, quote, ATX/Setext heading or second rule. Those later blocks
+may continue normally on a subsequent page rather than orphaning the rule.
 
 A Markdown heading keeps its first following visible row on the same physical
 page when there is room for both (including an optional 4-mm paragraph gap);

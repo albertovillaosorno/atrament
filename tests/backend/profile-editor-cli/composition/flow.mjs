@@ -4661,3 +4661,60 @@ test('thematic rule shares its PDF/PNG sheet with following authored ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('rule keeps its first wrapped ink row in native PDF and PNG', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-rule-priority-'));
+    try {
+        const source = 'a\n\n---\naaaaaa aaaaaa';
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '23000',
+        ];
+        const manual = [
+            '--place-text', '1', '32500', '42500', 'a',
+            '--ink-line', '2', '32500', '47000',
+            '63500', '47000', '400', '#1E304A',
+            '--place-text', '2', '32500', '51500', 'aaaaaa',
+            '--place-text', '3', '32500', '42500', 'aaaaaa',
+        ];
+        for (const format of ['pdf', 'png']) {
+            for (const page of format === 'pdf' ? [1] : [1, 2, 3]) {
+                const extra = [...region, ...(format === 'pdf'
+                    ? ['--pages', '3'] : [])];
+                const actual = render(dir, source, format, extra,
+                    '--flow-markdown', page);
+                assert.equal(actual.result.status, 0,
+                    actual.result.stderr);
+                const accepted = readFileSync(actual.output);
+                const reference = join(dir, `priority-${format}-${page}`);
+                const expected = spawnSync(cargo, [
+                    'run', '--quiet', '-p',
+                    'atrament_profile_editor_cli', '--',
+                    ...base, ...manual,
+                    ...(format === 'pdf' ? ['--pages', '3'] : []),
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72']
+                        : []),
+                    '--output', reference,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(expected.status, 0, expected.stderr);
+                assert.deepEqual(accepted, readFileSync(reference),
+                    `first wrapped rule ${format} page ${page}`);
+                const refused = render(dir, source, format,
+                    [...region, ...(format === 'pdf'
+                        ? ['--pages', '2'] : [])],
+                    '--flow-markdown', format === 'pdf' ? 1 : 4);
+                assert.notEqual(refused.result.status, 0);
+                assert.deepEqual(readFileSync(refused.output), accepted,
+                    `short ${format} export preserves accepted ink`);
+                const missing = render(dir, `${source} β`, format,
+                    extra, '--flow-markdown', page);
+                assert.notEqual(missing.result.status, 0);
+                assert.deepEqual(readFileSync(missing.output), accepted,
+                    `missing glyph preserves ${format} page ${page}`);
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

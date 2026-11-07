@@ -1703,3 +1703,20 @@ and both selected transparent PNG pages with independently placed authored
 glyph strokes and a measured horizontal pen line. Invalid PDF/PNG selections
 and missing glyphs refuse without replacing accepted output. The P1 saved
 semantic-notebook completion criterion remains open.
+
+## Thematic-rule pairing precedence (partial) — 2026-11-06
+
+A thematic rule may be reserved with the first row of a wrapped body, list,
+quote, ATX/Setext heading, or adjacent thematic rule. Once reserved, that
+following row cannot be pulled to a later sheet by its own two-row guard.
+Earlier heading/rule pairings win; later physical rows paginate as normal.
+If the whole rule/title/body span cannot fit on a fresh sheet, the heading
+retains its own first-body-row guard rather than a fictitious reservation.
+The constrained 23-mm example now retains the rule and the first wrapped
+body row on page two, with the continuation on page three.
+
+A red-before/green-after Rust regression exercises body, list, quote,
+ATX/Setext heading and adjacent rule precedence. Real CLI PDF and all
+three selected PNG pages match independently positioned physical strokes.
+Invalid page selections and missing glyphs refuse without replacing output.
+This is still a partial semantic-flow feature, not persisted notebook state.

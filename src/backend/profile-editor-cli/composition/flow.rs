@@ -456,6 +456,8 @@ struct Layout<'model> {
     bottom: u32,
     heading: HeadingDecoration,
     last_visible_heading: bool,
+    // True only if the preceding rule actually reserved its next ink row.
+    last_visible_rule: bool,
     left: u32,
     lines: Vec<TextRun>,
     ornaments: Vec<NotebookInkLine>,
@@ -540,7 +542,7 @@ impl Layout<'_> {
 
     fn keep_first_row_with_next(
         &mut self, following: FollowingInkSpacing,
-    ) -> Result<(), String> {
+    ) -> Result<bool, String> {
         self.flush_blank_rows()?;
         let top = self.top.checked_add(INSET_UM)
             .ok_or("flow keep-row top inset overflow")?;
@@ -562,7 +564,7 @@ impl Layout<'_> {
         // If one sheet cannot hold this full span, fall back to normal
         // pagination instead of refusing valid short paper outright.
         if top.checked_add(needed).is_none_or(|end| end > bottom) {
-            return Ok(());
+            return Ok(false);
         }
         if self.y.checked_add(needed).is_none_or(|end| end > bottom) {
             self.page = self.page.checked_add(1)
@@ -572,22 +574,22 @@ impl Layout<'_> {
             }
             self.y = top;
         }
-        Ok(())
+        Ok(true)
     }
 
     // A wrapped Markdown paragraph, list or quote should keep its first
     // two rows together when possible. Literal code and plain lines retain
-    // their exact row boundaries. Never detach a preceding heading.
+    // their exact row boundaries. Never detach a preceding title or rule.
     fn keep_wrapped_block_start(
         &mut self, style: LineStyle, first: bool, protect_body: bool,
     ) -> Result<(), String> {
-        // The preceding title already reserved the first following row.
-        // Its guarantee takes priority over the two-row continuation guard.
-        if first && !self.last_visible_heading
+        // The preceding title or rule already reserved this first row.
+        // Its guarantee takes priority over the continuation guard.
+        if first && !self.last_visible_heading && !self.last_visible_rule
             && (protect_body && matches!(style, LineStyle::Body)
                 || matches!(style, LineStyle::Bullet | LineStyle::Ordered
                     | LineStyle::Quote | LineStyle::Task(_))) {
-            self.keep_first_row_with_next(FollowingInkSpacing {
+            let _: bool = self.keep_first_row_with_next(FollowingInkSpacing {
                 blank_rows: 0,
                 heading_rows: 0,
                 paragraph_gaps: 0,
@@ -861,6 +863,7 @@ impl Layout<'_> {
         }
         self.write_list_marker(style, first, start_x, y)?;
         self.last_visible_heading = matches!(style, LineStyle::Heading(_));
+        self.last_visible_rule = false;
         self.lines.push(TextRun {
             heading_ink: if matches!(style, LineStyle::Heading(_)) {
                 self.heading.glyph_ink()
@@ -877,7 +880,7 @@ impl Layout<'_> {
         Ok(())
     }
 
-    fn write_separator(&mut self) -> Result<(), String> {
+    fn write_separator(&mut self, reserved_next: bool) -> Result<(), String> {
         let (start_x, cap) = self.line_measurements(LineStyle::Body)?;
         let y = self.begin_row()?;
         let rule_y = y.checked_add(4_500)
@@ -892,6 +895,7 @@ impl Layout<'_> {
             rgb: [30, 48, 74],
         });
         self.last_visible_heading = false;
+        self.last_visible_rule = reserved_next;
         self.y = y.checked_add(self.pitch)
             .ok_or("separator row advance overflow")?;
         Ok(())
@@ -1450,8 +1454,9 @@ fn handle_markdown_setext<'text>(
     let Some(level) = markdown_setext_level(input_line) else {
         return Ok(false);
     };
-    if let Some(gap) = following_heading_gap(following) {
-        layout.keep_first_row_with_next(gap)?;
+    if !layout.last_visible_rule
+        && let Some(gap) = following_heading_gap(following) {
+        let _: bool = layout.keep_first_row_with_next(gap)?;
     }
     layout.layout_line(&take(paragraph), LineStyle::Heading(level), false)?;
     Ok(true)
@@ -1471,17 +1476,22 @@ fn flush_paragraph(
 
 // A thematic rule begins a new visual block. Keep the rule with its
 // next printed row if that fits on a fresh sheet, but never detach it
-// from a preceding heading that reserved the rule as its first row.
+// from a preceding title or rule that reserved this first row.
 fn layout_thematic_separator<'text>(
     layout: &mut Layout<'_>, paragraph: &mut String,
     previous: LineStyle, following: impl Iterator<Item = &'text str>,
 ) -> Result<(), String> {
     flush_paragraph(layout, paragraph, previous)?;
-    if !layout.last_visible_heading
-        && let Some(gap) = following_heading_gap(following) {
-        layout.keep_first_row_with_next(gap)?;
-    }
-    layout.write_separator()
+    let reserved_next = if !layout.last_visible_heading
+        && !layout.last_visible_rule {
+        match following_heading_gap(following) {
+            Some(gap) => layout.keep_first_row_with_next(gap)?,
+            None => false,
+        }
+    } else {
+        false
+    };
+    layout.write_separator(reserved_next)
 }
 
 // Plain blank lines reserve physical rows; Markdown blanks instead
@@ -1735,6 +1745,7 @@ fn initialize_layout<'model>(
     Ok(Layout {
         heading,
         last_visible_heading: false,
+        last_visible_rule: false,
         statistics,
         lines: Vec::new(),
         ornaments: Vec::new(),
@@ -1885,8 +1896,9 @@ pub(super) fn layout_flow_with_region(
         } else {
             flush_paragraph(&mut layout, &mut paragraph, paragraph_style)?;
             if matches!(style, LineStyle::Heading(_))
+                && !layout.last_visible_rule
                 && let Some(gap) = following_heading_gap(source_lines.clone()) {
-                layout.keep_first_row_with_next(gap)?;
+                let _: bool = layout.keep_first_row_with_next(gap)?;
             }
             if source.format == FlowFormat::Markdown
                 && matches!(style,

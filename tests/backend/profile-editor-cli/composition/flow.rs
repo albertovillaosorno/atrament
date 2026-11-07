@@ -3206,3 +3206,78 @@ fn thematic_rule_stays_with_following_markdown_ink_when_sheet_has_room()
     assert_eq!(single_marks[0].page, 2);
     Ok(())
 }
+
+#[test]
+fn thematic_rule_pair_takes_priority_over_following_block_orphan_guards()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    for (source, pages) in [
+        ("a\n\n---\naaaaaa aaaaaa", [1, 2, 3]),
+        ("a\n\n---\n- aaaaaa aaaaaa", [1, 2, 3]),
+        ("a\n\n---\n> aaaaaa aaaaaa", [1, 2, 3]),
+        ("a\n\n---\n# a\nb", [1, 3, 3]),
+        ("a\n\n---\na\n===\nb", [1, 3, 3]),
+    ] {
+        let input = FlowSource::new(FlowFormat::Markdown, source)?;
+        let (rows, rules, count) = super::layout_flow_with_region(
+            &input, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height: 23_000,
+            }),
+        )?;
+        assert_eq!(count, 3, "{source:?}");
+        assert_eq!(rows.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), pages, "{source:?}");
+        assert_eq!(rules[0].page, 2, "{source:?}");
+        if source == "a\n\n---\naaaaaa aaaaaa" {
+            assert_eq!(rows.iter().map(|row| (row.page, row.origin_um))
+                .collect::<Vec<_>>(), [
+                    (1, (32_500, 42_500)),
+                    (2, (32_500, 51_500)),
+                    (3, (32_500, 42_500)),
+                ]);
+            assert_eq!(rules[0].start_um, (32_500, 47_000));
+            assert_eq!(rules[0].end_um, (63_500, 47_000));
+        }
+    }
+
+    // With enough room for the whole rule/title/body span, the same
+    // headings stay on the reserved second sheet rather than moving.
+    for source in ["a\n\n---\n# a\nb", "a\n\n---\na\n===\nb"] {
+        let input = FlowSource::new(FlowFormat::Markdown, source)?;
+        let (rows, rules, count) = super::layout_flow_with_region(
+            &input, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height: 32_000,
+            }),
+        )?;
+        assert_eq!(count, 2, "{source:?}");
+        assert_eq!(rows.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 2, 2], "{source:?}");
+        assert_eq!(rules[0].page, 2, "{source:?}");
+    }
+
+    // The first rule owns its following row even when that row is a
+    // second rule; the second rule may not pull away from the first.
+    let input = FlowSource::new(FlowFormat::Markdown,
+        "a\n\n---\n---\na")?;
+    let (rows, rules, count) = super::layout_flow_with_region(
+        &input, &NotebookProfile::default(), None,
+        super::HeadingDecoration::default(),
+        Some(super::FlowRegion {
+            left: 30_000, top: 40_000,
+            width: 35_000, height: 23_000,
+        }),
+    )?;
+    assert_eq!(count, 3);
+    assert_eq!(rules.iter().map(|rule| rule.page)
+        .collect::<Vec<_>>(), [2, 2]);
+    assert_eq!(rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 3]);
+    Ok(())
+}
