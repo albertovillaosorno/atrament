@@ -5139,3 +5139,84 @@ fn adjacent_terminal_heading_and_rule_chains_move_when_group_fits()
         .collect::<Vec<_>>(), [2, 2, 2, 3]);
     Ok(())
 }
+
+#[test]
+fn terminal_interleaved_titles_and_rules_keep_measured_ink_together()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    // The first title and its following rule fit beside the earlier
+    // fenced ink; all three terminal rows fit together on a new page.
+    for ending in ["## a", "a\n==="] {
+        let source = format!("```\na\n```\n# a\n---\n{ending}");
+        let (rows, marks, pages) = render(&source, 32_000)?;
+        assert_eq!(pages, 2, "{ending}");
+        assert_eq!(rows.iter().map(|row| (row.page, row.origin_um.1))
+            .collect::<Vec<_>>(),
+            [(1, 42_500), (2, 42_500), (2, 60_500)], "{ending}");
+        assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+            .collect::<Vec<_>>(),
+            [(2, 49_200), (2, 56_000), (2, 67_200)], "{ending}");
+    }
+    // Consecutive blank lines collapse independently on each side of
+    // the separator without introducing extra physical rows.
+    let spaced = "```\na\n```\n# a\n\n---\n\n## a";
+    let (rows, marks, pages) = render(spaced, 40_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(rows.iter().map(|row| (row.page, row.origin_um.1))
+        .collect::<Vec<_>>(),
+        [(1, 42_500), (2, 42_500), (2, 68_500)]);
+    assert_eq!(marks.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(),
+        [(2, 49_200), (2, 60_000), (2, 75_200)]);
+    let repeated = spaced.replace("\n\n", "\n\n\n");
+    let (again, again_marks, again_pages) = render(&repeated, 40_000)?;
+    assert_eq!(again_pages, pages);
+    assert_eq!(again_marks, marks);
+    assert_eq!(again.iter().map(|row| (row.page, row.origin_um))
+        .collect::<Vec<_>>(), rows.iter().map(|row|
+            (row.page, row.origin_um)).collect::<Vec<_>>());
+    // A two-row sheet cannot fit this group: old heading/next-row
+    // pairing survives instead of refusing valid Markdown content.
+    let (short_rows, short_marks, _) = render(
+        "```\na\n```\n# a\n---\n## a", 23_000,
+    )?;
+    assert_eq!(short_rows.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 2, 3]);
+    assert_eq!(short_marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [2, 2, 3]);
+    // Several alternating titles/rules also remain one terminal group;
+    // each title still receives its proper native underline hierarchy.
+    let (many, ink, count) = render(
+        "```\na\n```\n# a\n---\n## a\n***\n### a", 50_000,
+    )?;
+    assert_eq!(count, 2);
+    assert_eq!(many.iter().map(|row| (row.page, row.origin_um.1))
+        .collect::<Vec<_>>(),
+        [(1, 42_500), (2, 42_500), (2, 60_500), (2, 78_500)]);
+    assert_eq!(ink.iter().map(|mark| (mark.page, mark.start_um.1))
+        .collect::<Vec<_>>(),
+        [(2, 49_200), (2, 56_000), (2, 67_200),
+            (2, 74_000), (2, 85_200)]);
+    // A real following body ends the terminal-only grouping, even if
+    // four rows would fit one fresh sheet with earlier unrelated ink.
+    let (ordinary, ordinary_marks, _) = render(
+        "```\na\n```\n# a\n---\n## a\na", 41_000,
+    )?;
+    assert_eq!(ordinary.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 1, 2, 2]);
+    assert_eq!(ordinary_marks.iter().map(|mark| mark.page)
+        .collect::<Vec<_>>(), [1, 1, 2]);
+    Ok(())
+}

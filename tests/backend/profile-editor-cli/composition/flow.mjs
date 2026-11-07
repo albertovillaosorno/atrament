@@ -6576,3 +6576,90 @@ test('adjacent terminal headings and rules match independent native pages',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('interleaved terminal headings and separators keep exact PDF/PNG ink',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-interleaved-tail-'));
+    try {
+        for (const scenario of [
+            {
+                source: '```\na\n```\n# a\n---\n## a',
+                height: '32000', rule: 56000, second: 60500,
+            },
+            {
+                source: '```\na\n```\n# a\n\n---\n\n## a',
+                height: '40000', rule: 60000, second: 68500,
+            },
+        ]) {
+            const region = [
+                '--flow-region', '30000', '40000', '35000',
+                scenario.height, '--heading-style', 'underline',
+            ];
+            const secondUnderline = scenario.second + 6700;
+            const manual = [
+                '--place-text', '1', '32500', '42500', 'a',
+                '--place-text', '2', '32500', '42500', 'a',
+                '--place-text', '2', '32500', String(scenario.second), 'a',
+                '--ink-line', '2', '32500', '49200',
+                '36500', '49200', '550', '#1E304A',
+                '--ink-line', '2', '32500', String(scenario.rule),
+                '63500', String(scenario.rule), '400', '#1E304A',
+                '--ink-line', '2', '32500', String(secondUnderline),
+                '36500', String(secondUnderline), '420', '#1E304A',
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const options = format === 'pdf'
+                        ? ['--pages', '2'] : [];
+                    const actual = render(dir, scenario.source, format,
+                        [...region, ...options], '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `interleaved-${scenario.height}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--', ...base,
+                        ...manual, ...options, '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []), '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `interleaved terminal ${format} sheet ${page}`);
+                    for (const variant of [
+                        scenario.source.replace('# a', 'a\n==='),
+                        scenario.source.replace('## a', 'a\n---'),
+                        scenario.source.replace('\n---\n', '\n* * *\n'),
+                        scenario.source.replaceAll('\n\n', '\n\n\n'),
+                        scenario.source.replaceAll('\n', '\r\n'),
+                    ]) {
+                        const replay = render(dir, variant, format,
+                            [...region, ...options], '--flow-markdown', page);
+                        assert.equal(replay.result.status, 0,
+                            replay.result.stderr);
+                        assert.deepEqual(readFileSync(replay.output), accepted,
+                            `equivalent interleaved ${format} page ${page}`);
+                    }
+                    const invalid = render(dir, scenario.source, format,
+                        [...region, ...options,
+                            ...(format === 'pdf' ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(invalid.result.status, 0);
+                    assert.deepEqual(readFileSync(invalid.output), accepted,
+                        'invalid selected page cannot replace PDF/PNG');
+                    const missing = render(dir,
+                        `${scenario.source}\nβ`, format,
+                        [...region, ...options], '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        'missing authored glyph cannot replace PDF/PNG');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

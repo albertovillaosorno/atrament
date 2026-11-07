@@ -2157,9 +2157,9 @@ fn layout_thematic_separator<'text>(
     layout.write_separator(reserved_next)
 }
 
-// Free terminal heading rows may precede the final rules. Reserve the
-// whole fitting title/rule group, never a fenced row or an intervening
-// paragraph/list/quote, and do not treat Setext underline ink as a rule.
+// Terminal headings may alternate with thematic rules. Reserve the full
+// fitting title/rule group, never a fenced row or an intervening
+// paragraph/list/quote, and do not count Setext ink as a separate rule.
 fn terminal_rule_chain<'text>(
     following: impl Iterator<Item = &'text str>,
 ) -> bool {
@@ -2172,12 +2172,12 @@ fn terminal_rule_chain<'text>(
         let (style, body) = markdown_line(line);
         match style {
             LineStyle::Separator => rules = rules.saturating_add(1),
-            LineStyle::Heading(_) if rules == 0 => {},
-            LineStyle::Body if rules == 0
-                && take_following_setext(line, body.as_ref(),
-                    &mut lookahead) => {},
-            LineStyle::Body | LineStyle::Bullet | LineStyle::Heading(_)
-            | LineStyle::Ordered | LineStyle::Quote | LineStyle::Task(_) => {
+            LineStyle::Heading(_) => {},
+            LineStyle::Body if take_following_setext(
+                line, body.as_ref(), &mut lookahead,
+            ) => {},
+            LineStyle::Body | LineStyle::Bullet | LineStyle::Ordered
+            | LineStyle::Quote | LineStyle::Task(_) => {
                 return false;
             }
         }

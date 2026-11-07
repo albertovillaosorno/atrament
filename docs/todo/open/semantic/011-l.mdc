@@ -2103,3 +2103,20 @@ Fences, intervening non-heading blocks, existing heading/rule ownership and
 oversized chains are not pulled into the new group. This remains bounded
 CLI-only flow; persisted semantic blocks and the P1 end-to-end criterion
 are still unfinished.
+
+## Interleaved terminal headings and rules (partial) — 2026-11-07
+
+A final sequence of headings and thematic rules may now alternate between
+ATX/Setext titles and rule rows, rather than requiring all headings to precede
+all separators. If the entire measured group fits a fresh sheet, the first
+unattached heading reserves its later rules and titles together, including
+independent collapsed 4-mm gaps on either side of a separator. Fenced or
+ordinary body content still interrupts the terminal grouping.
+
+A failing-before-fix native Rust test confirms heading and rule page-local
+coordinates, Setext equivalence, collapsed repeated blanks and two-row-sheet
+fallback. Independent native CLI comparisons use explicitly placed glyph and
+pen lines as reference for vector PDF and both transparent PNG pages. They
+verify alternate heading/rule syntax, CRLF, blank collapse and atomic refusal
+of invalid page selections or unauthored glyphs. The broader persisted
+semantic notebook and P1 acceptance criterion remain unfinished.

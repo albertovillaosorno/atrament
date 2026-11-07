@@ -696,6 +696,14 @@ place; fenced content, intervening body text, prior reservations and groups
 too tall for a fresh sheet retain their earlier fallback. Exact native
 PDF and both PNG pages match manually placed ink in regression tests.
 
+A terminal Markdown sequence may also alternate free headings and thematic
+rules, such as `# Title`, `---`, `## Subtitle`, without splitting the last
+title from a page-fitting group. A later Setext heading consumes one measured
+row, not an extra rule; each collapsed 4-mm gap on either side of a separator
+moves with its own heading and rule ink. This applies only when no intervening
+body/list/quote or fenced content breaks the terminal sequence, and a fresh
+sheet can hold the full group. Short-sheet fallback remains unchanged.
+
 A rule that already reserved its first visible row takes priority over a
 following block when the complete group cannot move together. Its next row
 still stays attached when that smaller reservation fits; later continuation
