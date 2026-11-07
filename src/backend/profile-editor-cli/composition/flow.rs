@@ -481,6 +481,85 @@ impl Layout<'_> {
         Ok(())
     }
 
+    const fn balance_tail_eligible(
+        style: LineStyle, protect_body: bool,
+    ) -> bool {
+        (protect_body && matches!(style, LineStyle::Body))
+            || matches!(style, LineStyle::Bullet | LineStyle::Ordered
+                | LineStyle::Quote | LineStyle::Task(_))
+    }
+
+    // A long wrapped Markdown block should not leave a single terminal
+    // physical row on a new page if the previous page has three rows of
+    // that same block. The first-two-row and heading/rule reservations
+    // take priority. List markers belong to the unmoved first row; quote
+    // rules must follow both relocated physical continuation rows.
+    fn balance_wrapped_tail(
+        &mut self, first_run: usize, first_ornament: usize,
+        style: LineStyle,
+    ) -> Result<(), String> {
+        let runs = self.lines.get_mut(first_run..)
+            .ok_or("flow block-tail origin out of bounds")?;
+        let run_count = runs.len();
+        if run_count < 4 {
+            return Ok(());
+        }
+        let (last, before_last) = runs.split_last_mut()
+            .ok_or("flow block-tail missing final row")?;
+        let (penultimate, earlier) = before_last.split_last_mut()
+            .ok_or("flow block-tail missing penultimate row")?;
+        let previous_page = penultimate.page;
+        let page = last.page;
+        let top = self.top.checked_add(INSET_UM)
+            .ok_or("flow block-tail top inset overflow")?;
+        let bottom = self.bottom.checked_sub(INSET_UM)
+            .ok_or("flow block-tail bottom inset overflow")?;
+        let second_y = top.checked_add(self.pitch)
+            .ok_or("flow block-tail row overflow")?;
+        if top.checked_add(self.pitch.checked_mul(2)
+                .ok_or("flow block-tail height overflow")?)
+                .is_none_or(|end| end > bottom)
+            || previous_page.checked_add(1) != Some(page)
+            || earlier.len() < 2
+            || !earlier.iter().rev().take(2)
+                .all(|row| row.page == previous_page)
+            || last.origin_um.1 != top
+        {
+            return Ok(());
+        }
+        if matches!(style, LineStyle::Quote) {
+            let bars = self.ornaments.get_mut(first_ornament..)
+                .ok_or("flow quote-bar origin out of bounds")?;
+            if bars.len() != run_count {
+                return Err("flow quote bars do not match physical rows".into());
+            }
+            let (last_bar, earlier_bars) = bars.split_last_mut()
+                .ok_or("flow quote missing final bar")?;
+            let (before_last_bar, _) = earlier_bars.split_last_mut()
+                .ok_or("flow quote missing penultimate bar")?;
+            let relocate = |bar: &mut NotebookInkLine, row_y: u32|
+                -> Result<(), String> {
+                let rule_top = row_y.checked_add(500)
+                    .ok_or("flow quote-tail top overflow")?;
+                let rule_bottom = row_y.checked_add(self.pitch)
+                    .and_then(|end| end.checked_sub(600))
+                    .ok_or("flow quote-tail bottom overflow")?;
+                bar.page = page;
+                bar.start_um.1 = rule_top;
+                bar.end_um.1 = rule_bottom;
+                Ok(())
+            };
+            relocate(before_last_bar, top)?;
+            relocate(last_bar, second_y)?;
+        }
+        penultimate.page = page;
+        penultimate.origin_um.1 = top;
+        last.origin_um.1 = second_y;
+        self.y = self.y.checked_add(self.pitch)
+            .ok_or("flow block-tail cursor overflow")?;
+        Ok(())
+    }
+
     fn begin_row(&mut self) -> Result<u32, String> {
         self.flush_blank_rows()?;
         self.consume_row()
@@ -602,6 +681,7 @@ impl Layout<'_> {
         &mut self, content: &str, style: LineStyle, protect_body: bool,
     ) -> Result<(), String> {
         let first_run = self.lines.len();
+        let first_ornament = self.ornaments.len();
         let (mut start_x, mut cap) = self.line_measurements(style)?;
         let (hang, ordered_marker) = if matches!(style, LineStyle::Ordered) {
             let (indent, marker) = measured_ordered_label(
@@ -700,52 +780,10 @@ impl Layout<'_> {
                 count = count.checked_add(1).ok_or("flow line too long")?;
             }
         }
-        if !row.is_empty() {
-            if matches!(style, LineStyle::Heading(_)) && !first {
-                return Err("heading exceeds one-line fixed region".into());
-            }
-            self.write_row(row, start_x, width, style, first)?;
+        self.write_last_row(row, start_x, width, style, first)?;
+        if Self::balance_tail_eligible(style, protect_body) {
+            self.balance_wrapped_tail(first_run, first_ornament, style)?;
         }
-        if protect_body && matches!(style, LineStyle::Body) {
-            self.balance_body_tail(first_run)?;
-        }
-        Ok(())
-    }
-
-    // For ordinary Markdown paragraphs, do not leave a single terminal
-    // physical row on a fresh page when the preceding page contains at
-    // least three rows of this same paragraph. Move only its last two
-    // undecorated rows, preserving the first-two-row and heading/rule
-    // reservations as well as all literal source row boundaries.
-    fn balance_body_tail(&mut self, first_run: usize) -> Result<(), String> {
-        let runs = &mut self.lines[first_run..];
-        if runs.len() < 4 {
-            return Ok(());
-        }
-        let last = runs.len() - 1;
-        let previous_page = runs[last - 1].page;
-        let page = runs[last].page;
-        let top = self.top.checked_add(INSET_UM)
-            .ok_or("flow body-tail top inset overflow")?;
-        let bottom = self.bottom.checked_sub(INSET_UM)
-            .ok_or("flow body-tail bottom inset overflow")?;
-        let second_y = top.checked_add(self.pitch)
-            .ok_or("flow body-tail row overflow")?;
-        if top.checked_add(self.pitch.checked_mul(2)
-                .ok_or("flow body-tail height overflow")?)
-                .is_none_or(|end| end > bottom)
-            || previous_page.checked_add(1) != Some(page)
-            || runs[last - 2].page != previous_page
-            || runs[last - 3].page != previous_page
-            || runs[last].origin_um.1 != top
-        {
-            return Ok(());
-        }
-        runs[last - 1].page = page;
-        runs[last - 1].origin_um.1 = top;
-        runs[last].origin_um.1 = second_y;
-        self.y = self.y.checked_add(self.pitch)
-            .ok_or("flow body-tail cursor overflow")?;
         Ok(())
     }
 
@@ -776,6 +814,19 @@ impl Layout<'_> {
             return Err("flow horizontal printable region too narrow".into());
         }
         Ok((start_x, cap))
+    }
+
+    fn write_last_row(
+        &mut self, row: String, start_x: u32, width: u32,
+        style: LineStyle, first: bool,
+    ) -> Result<(), String> {
+        if !row.is_empty() {
+            if matches!(style, LineStyle::Heading(_)) && !first {
+                return Err("heading exceeds one-line fixed region".into());
+            }
+            self.write_row(row, start_x, width, style, first)?;
+        }
+        Ok(())
     }
 
     fn write_list_marker(

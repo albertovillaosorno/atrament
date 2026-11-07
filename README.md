@@ -572,12 +572,14 @@ four-space-indented rows and plain-text lines keep their existing physical
 breaks. A preceding heading's first-row guarantee takes priority, and a
 one-row region still paginates normally.
 
-Longer ordinary Markdown paragraphs also avoid a lone final physical row
-when the preceding sheet holds at least three rows of that same paragraph
-and the next sheet can fit its last two rows. This may shift following
-content, but never moves the paragraph's first two rows or a preceding
-heading/rule reservation. Two-row or shorter regions, list and quote rows,
-fenced code, literal indentation and plain text retain their prior breaks.
+Longer wrapped Markdown paragraphs, bullets, numbered/checkbox items and
+quoted paragraphs also avoid a lone final physical row when the preceding
+sheet holds at least three rows of that same block and a fresh sheet can fit
+its last two rows. Quote rules move with the relocated text; list markers
+stay with the first row. This may shift following content, but never moves
+the block's first two rows or a preceding heading/rule reservation. Two-row
+or shorter regions, fenced code, literal indentation and plain text retain
+their previous breaks.
 
 A standalone Markdown thematic rule also stays with its first following
 visible row when a fresh sheet can hold both, including intervening blank

@@ -1740,3 +1740,24 @@ and missing glyph refusal preserve previously accepted output bytes.
 This remains bounded CLI-only pagination, not persisted semantic paragraph
 state, and may shift subsequent block placement. The P1 saved notebook
 acceptance criterion remains open.
+
+## Long decorated Markdown block terminal-row balance (partial) — 2026-11-06
+
+The CLI extends the long ordinary-paragraph terminal-row balance to wrapped
+unordered, numbered, checkbox and quoted blocks. When the previous physical
+sheet has at least three rows of the same block and the next sheet can fit
+two, it moves the penultimate and final rows together rather than orphaning
+one terminal row. Per-row quote bars follow the moved text exactly; bullet
+and checkbox marks stay beside the original first item row. Numbered list
+continuations retain their measured hanging indent on later sheets.
+
+Red-before/green-after Rust tests check quote/checkbox/bullet page-local
+coordinates, checked markers, numbered indentation and multi-page tails,
+following body placement, two-row fallback, and preceding title/rule priority.
+Subprocess acceptance compares native two-page PDF and selected transparent
+PNG bytes to independently placed glyph and ornament strokes. Page-count,
+PNG-page and missing-glyph refusals preserve prior accepted output bytes.
+
+Literal fenced and indented rows and independent plaintext remain unchanged.
+This only rebalances the final two rows within a CLI-compiled Markdown block;
+it does not add persisted semantic notebook identity or complete the P1 task.

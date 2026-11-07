@@ -4775,3 +4775,74 @@ test('long Markdown body balances last PDF and PNG rows without lost ink',
         rmSync(dir, { recursive: true, force: true });
     }
 });
+
+test('long wrapped quote and bullet tails preserve page-local PDF/PNG ink',
+    () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-decorated-tail-'));
+    try {
+        const words = Array(4).fill('aaaaaa').join(' ');
+        const region = [
+            '--flow-region', '30000', '40000', '35000', '32000',
+        ];
+        const quoteBars = [1, 2].flatMap((page) => [
+            '--ink-line', String(page), '35500', '43000',
+            '35500', '50900', '400', '#1E304A',
+            '--ink-line', String(page), '35500', '52000',
+            '35500', '59900', '400', '#1E304A',
+        ]);
+        const bulletMark = [
+            '--ink-line', '1', '34100', '44700',
+            '35800', '44700', '450', '#1E304A',
+        ];
+        const rows = [1, 2].flatMap((page) => [
+            '--place-text', String(page), '38500', '42500', 'aaaaaa',
+            '--place-text', String(page), '38500', '51500', 'aaaaaa',
+        ]);
+        for (const [kind, source, marks] of [
+            ['quote', `> ${words}`, quoteBars],
+            ['bullet', `- ${words}`, bulletMark],
+        ]) {
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const extra = [...region, ...(format === 'pdf'
+                        ? ['--pages', '2'] : [])];
+                    const actual = render(dir, source, format, extra,
+                        '--flow-markdown', page);
+                    assert.equal(actual.result.status, 0,
+                        actual.result.stderr);
+                    const accepted = readFileSync(actual.output);
+                    const reference = join(dir,
+                        `tail-${kind}-${format}-${page}`);
+                    const expected = spawnSync(cargo, [
+                        'run', '--quiet', '-p',
+                        'atrament_profile_editor_cli', '--',
+                        ...base, ...rows, ...marks,
+                        ...(format === 'pdf' ? ['--pages', '2'] : []),
+                        '--export-paper', format,
+                        ...(format === 'png'
+                            ? ['--png-page', String(page), '--dpi', '72']
+                            : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(expected.status, 0, expected.stderr);
+                    assert.deepEqual(accepted, readFileSync(reference),
+                        `balanced ${kind} ${format} page ${page} ink`);
+                    const refused = render(dir, source, format,
+                        [...extra, ...(format === 'pdf'
+                            ? ['--pages', '1'] : [])],
+                        '--flow-markdown', format === 'pdf' ? 1 : 3);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.deepEqual(readFileSync(refused.output), accepted,
+                        `invalid ${kind} page retains ${format}`);
+                    const missing = render(dir, `${source} β`, format,
+                        extra, '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.deepEqual(readFileSync(missing.output), accepted,
+                        `missing ${kind} glyph retains ${format}`);
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});

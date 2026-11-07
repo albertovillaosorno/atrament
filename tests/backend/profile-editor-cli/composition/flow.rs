@@ -3361,7 +3361,8 @@ fn long_markdown_body_balances_a_lone_final_row_when_previous_page_has_three()
     assert_eq!(continued.iter().map(|row| row.page).collect::<Vec<_>>(),
         [1, 1, 2, 2, 3]);
 
-    // Decorated quote/list blocks keep their original row placement.
+    // Decorated quote/list blocks share the same balanced physical
+    // tail as body paragraphs; ornament placement is checked below.
     for source in [
         format!("- {}", vec!["aaaaaa"; 4].join(" ")),
         format!("> {}", vec!["aaaaaa"; 4].join(" ")),
@@ -3370,7 +3371,7 @@ fn long_markdown_body_balances_a_lone_final_row_when_previous_page_has_three()
             FlowFormat::Markdown, 32_000)?;
         assert_eq!(pages, 2);
         assert_eq!(rows.iter().map(|row| row.page).collect::<Vec<_>>(),
-            [1, 1, 1, 2], "{source:?}");
+            [1, 1, 2, 2], "{source:?}");
         assert!(!marks.is_empty());
     }
 
@@ -3384,5 +3385,105 @@ fn long_markdown_body_balances_a_lone_final_row_when_previous_page_has_three()
         [1, 1, 1, 2, 2, 3, 3]);
     assert_eq!(marks.len(), 1);
     assert_eq!(marks[0].page, 1);
+    Ok(())
+}
+
+#[test]
+fn long_markdown_decorated_blocks_balance_lone_tail_with_ink_marks()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let render = |source: &str, height| -> Result<_, String> {
+        super::layout_flow_with_region(
+            &FlowSource::new(FlowFormat::Markdown, source)?,
+            &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 35_000, height,
+            }),
+        )
+    };
+    let words = vec!["aaaaaa"; 4].join(" ");
+    for (source, quote, marker_count) in [
+        (format!("- {words}"), false, 1),
+        (format!("- [ ] {words}"), false, 4),
+        (format!("- [x] {words}"), false, 6),
+        (format!("> {words}"), true, 4),
+    ] {
+        let (rows, marks, pages) = render(&source, 32_000)?;
+        assert_eq!(pages, 2, "{source:?}");
+        assert_eq!(rows.iter().map(|row| row.page)
+            .collect::<Vec<_>>(), [1, 1, 2, 2], "{source:?}");
+        assert_eq!(rows.iter().map(|row| row.origin_um.1)
+            .collect::<Vec<_>>(), [42_500, 51_500, 42_500, 51_500]);
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>(), ["aaaaaa"; 4]);
+        assert_eq!(marks.len(), marker_count, "{source:?}");
+        if quote {
+            assert_eq!(marks.iter().map(|mark| (
+                mark.page, mark.start_um.1, mark.end_um.1,
+            )).collect::<Vec<_>>(), [
+                (1, 43_000, 50_900),
+                (1, 52_000, 59_900),
+                (2, 43_000, 50_900),
+                (2, 52_000, 59_900),
+            ]);
+        } else {
+            assert!(marks.iter().all(|mark| mark.page == 1),
+                "list marker stays with first row");
+        }
+    }
+
+    // The measured numbered hanging indent remains unchanged across
+    // rebalanced pages, including a second tail on page three.
+    let ordered = format!("1. {}", vec!["aaa"; 7].join(" "));
+    let (numbered, no_marks, numbered_pages) = render(&ordered, 32_000)?;
+    assert_eq!(numbered_pages, 3);
+    assert!(no_marks.is_empty());
+    assert_eq!(numbered.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 1, 1, 2, 2, 3, 3]);
+    assert_eq!(numbered[0].text, "1. aaa");
+    assert!(numbered[1..].iter().all(|row| row.text == "aaa"));
+    assert_eq!(numbered[0].origin_um.0, 38_500);
+    assert!(numbered[1..].iter().all(|row| row.origin_um.0 == 50_500));
+
+    // A following block starts after both moved rows, not on top of
+    // the second relocated quote bar and its corresponding text.
+    let (following, rules, pages) = render(&format!("> {words}\na"),
+        32_000)?;
+    assert_eq!(pages, 2);
+    assert_eq!(following.iter().map(|row| (row.page, row.origin_um.1))
+        .collect::<Vec<_>>(), [
+            (1, 42_500), (1, 51_500), (2, 42_500),
+            (2, 51_500), (2, 60_500),
+        ]);
+    assert_eq!(rules.len(), 4);
+
+    // A two-row sheet cannot move a full tail without also disturbing
+    // the first-row widow guard, so it retains its original page breaks.
+    let (short, short_marks, short_pages) = render(
+        &format!("> {}", vec!["aaaaaa"; 5].join(" ")), 23_000)?;
+    assert_eq!(short_pages, 3);
+    assert_eq!(short.iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [1, 1, 2, 2, 3]);
+    assert_eq!(short_marks.iter().map(|rule| rule.page)
+        .collect::<Vec<_>>(), [1, 1, 2, 2, 3]);
+
+    // The first two physical rows of a block still belong to their
+    // preceding title/rule, before any tail balancing can apply.
+    for source in [
+        format!("# a\n> {words}"),
+        format!("a\n\n---\n> {words}"),
+    ] {
+        let (rows, marks, pages) = render(&source, 32_000)?;
+        assert!(pages >= 2, "{source:?}");
+        let quote_rows = rows.iter().filter(|row| row.text == "aaaaaa")
+            .collect::<Vec<_>>();
+        assert_eq!(quote_rows.len(), 4);
+        assert_eq!(quote_rows[0].page, quote_rows[1].page,
+            "reserved first quote row stays with its successor");
+        assert!(!marks.is_empty());
+    }
     Ok(())
 }
