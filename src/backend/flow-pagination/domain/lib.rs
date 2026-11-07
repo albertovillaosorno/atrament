@@ -113,6 +113,11 @@ pub enum PaginationError<Identity, PageIdentity> {
         /// Stable semantic owner waiting for another page.
         owner: Identity,
     },
+    /// A measured fragment has no vertical advance and would overlap ink.
+    ZeroHeightFragment {
+        /// Stable semantic owner of the non-advancing fragment.
+        owner: Identity,
+    },
 }
 
 /// Result of paginating a complete measured flow.
@@ -148,9 +153,9 @@ struct GroupExtent {
 ///
 /// # Errors
 ///
-/// Returns a typed failure for invalid writable regions, an indivisible
-/// fragment that cannot fit any remaining page, or exhaustion after a fragment
-/// would fit only on a fresh additional page.
+/// Returns a typed failure for invalid writable regions, zero-height measured
+/// fragments, an indivisible fragment that cannot fit any remaining page, or
+/// exhaustion after a fragment would fit only on a fresh additional page.
 pub fn paginate<Identity, PageIdentity>(
     pages: &[PageRegion<PageIdentity>],
     units: &[MeasuredFlowUnit<Identity>],
@@ -165,6 +170,15 @@ where
         });
     }
     validate_pages(pages)?;
+    for unit in units {
+        for fragment in &unit.fragments {
+            if fragment.height == Length::ZERO {
+                return Err(PaginationError::ZeroHeightFragment {
+                    owner: fragment.owner,
+                });
+            }
+        }
+    }
     let mut cursor = Cursor {
         page_index: 0,
         used_height: Length::ZERO,

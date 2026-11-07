@@ -2384,3 +2384,21 @@ Rust regression covers each refusal and the unchanged valid baseline.
 
 This only hardens the existing CLI-only flow compiler. It does not save
 semantic notebook content or complete the P1 acceptance criterion.
+
+## Zero-height measured-flow fragment refusal (partial) — 2026-11-07
+
+The side-effect-free Rust paginator now refuses a measured fragment whose
+vertical height is zero, with a typed error retaining its semantic block
+owner. Previously both independent and keep-together units could emit a
+zero-height placement without advancing the page cursor, allowing two
+physical fragments to share an unintended top coordinate. The validation
+covers every supplied unit before placing any fragment; empty flows remain
+valid, and a zero-width, positive-height spacer still reserves its measured
+vertical advance.
+
+A failing-before-fix pure-paginator regression covers zero-height fragments
+in each position and both policies. A revision-bound semantic pagination
+test confirms the error propagates without mutating the accepted notebook.
+This is measurement admission hardening only: it does not connect semantic
+block persistence to the existing CLI-only PDF/PNG rendering pipeline, so
+the two-page semantic notebook acceptance criterion remains open.

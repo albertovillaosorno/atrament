@@ -299,7 +299,10 @@ impl PaginationOutcomeCoverage {
             Err(PaginationError::NoPageAvailable { .. }) => {
                 self.saw_no_page = true;
             },
-            Err(PaginationError::InvalidPageRegion { .. }) => {
+            Err(
+                PaginationError::InvalidPageRegion { .. }
+                | PaginationError::ZeroHeightFragment { .. },
+            ) => {
                 panic!("Cartesian fixtures only construct valid page regions");
             },
         }
@@ -902,6 +905,57 @@ fn invalid_page_region_rejects_before_any_placement() {
         paginate(&pages, &units),
         Err(PaginationError::InvalidPageRegion { page: 9 },)
     );
+}
+
+#[test]
+fn zero_height_fragment_cannot_be_emitted_as_a_page_placement() {
+    let pages = [page(1, 0, 100, 100), page(2, 500, 100, 100)];
+    for policy in [
+        FlowUnitPolicy::Independent,
+        FlowUnitPolicy::KeepTogetherWhenPossible,
+    ] {
+        for (owner, heights) in [
+            (1, [0, 30, 30]),
+            (2, [30, 0, 30]),
+            (3, [30, 30, 0]),
+        ] {
+            let [first, second, third] = heights;
+            let units = [unit(policy, vec![
+                fragment(1, 20, first),
+                fragment(2, 20, second),
+                fragment(3, 20, third),
+            ])];
+            assert_eq!(
+                paginate(&pages, &units),
+                Err(PaginationError::ZeroHeightFragment { owner }),
+            );
+        }
+    }
+}
+
+#[test]
+fn zero_width_positive_height_fragment_reserves_vertical_space() {
+    let pages = [page(1, 500, 100, 100)];
+    let units = [unit(FlowUnitPolicy::Independent, vec![
+        fragment(1, 0, 20),
+        fragment(2, 10, 30),
+    ])];
+    assert_eq!(paginate(&pages, &units).map(|plan| plan.placements), Ok(vec![
+        PlacedFragment {
+            height: Length::from_micrometres(20),
+            owner: 1,
+            page: 1,
+            top: Length::from_micrometres(500),
+            width: Length::ZERO,
+        },
+        PlacedFragment {
+            height: Length::from_micrometres(30),
+            owner: 2,
+            page: 1,
+            top: Length::from_micrometres(520),
+            width: Length::from_micrometres(10),
+        },
+    ]));
 }
 
 #[test]

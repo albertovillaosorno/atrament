@@ -784,6 +784,41 @@ fn accepted_page_profile_edit_changes_fit_only_with_fresh_measurement() {
 }
 
 #[test]
+fn zero_height_measurement_refuses_without_mutating_accepted_revision() {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let outcome = session.accept(fixture.notebook);
+    assert!(matches!(outcome, AcceptanceOutcome::Accepted { .. }));
+    let AcceptanceOutcome::Accepted { mapping, revision } = outcome else {
+        return;
+    };
+    assert!(session.current().is_some());
+    let Some(original) = session.current().cloned() else {
+        return;
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+
+    for width in [0, 100_000] {
+        let invalid = measurement(revision, flow, owner, &[(width, 0)]);
+        assert_eq!(
+            paginate_revision(&original, &invalid),
+            Err(SemanticPaginationError::Pagination(
+                PaginationError::ZeroHeightFragment { owner },
+            )),
+        );
+    }
+    let allowed_gap = measurement(revision, flow, owner, &[(0, 1_000)]);
+    assert_eq!(
+        paginate_revision(&original, &allowed_gap)
+            .map(|plan| plan.placements.len()),
+        Ok(1),
+    );
+    assert_eq!(session.current(), Some(&original));
+}
+
+#[test]
 fn pagination_is_read_only_for_accepted_revision() {
     let ids = IdentityAllocator::new();
     let fixture = candidate_fixture(&ids);
