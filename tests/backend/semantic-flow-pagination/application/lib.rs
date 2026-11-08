@@ -3473,3 +3473,146 @@ fn indexed_fixed_clearance_matches_linear_scan_across_many_measured_rows()
     );
     Ok(())
 }
+
+#[test]
+fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
+-> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let other_flow = ids
+        .allocate_candidate()
+        .map_err(|error| format!("fixed flow: {error:?}"))?;
+    let other_block = ids
+        .allocate_candidate()
+        .map_err(|error| format!("fixed block: {error:?}"))?;
+    let last_page = ids
+        .allocate_candidate()
+        .map_err(|error| format!("third page: {error:?}"))?;
+    fixture.notebook.page_profiles[1].geometry = geometry(40_000);
+    add_unmeasured_flow(&mut fixture, 1, other_flow, other_block)?;
+    fixture.notebook.pages.push(Page {
+        flows: vec![],
+        id: last_page,
+        paper_profile: fixture.profile_one,
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("three-page fixed fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing revision")?;
+    let selected = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let fixed_owner = accepted_for(&mapping, other_block);
+    let first = accepted_for(&mapping, fixture.page_one);
+    let skipped = accepted_for(&mapping, fixture.page_two);
+    let third = accepted_for(&mapping, last_page);
+    let measured = RevisionFlowMeasurement {
+        revision,
+        flow: selected,
+        units: vec![
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    owner,
+                    width: Length::from_micrometres(100_000),
+                    height: Length::from_micrometres(260_000),
+                }],
+                policy: FlowUnitPolicy::Independent,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    owner,
+                    width: Length::from_micrometres(160_000),
+                    height: Length::from_micrometres(20_000),
+                }],
+                policy: FlowUnitPolicy::Independent,
+            },
+        ],
+    };
+    let plan = paginate_revision(accepted, &measured)
+        .map_err(|error| format!("skipped layout refused: {error:?}"))?;
+    assert_eq!(
+        plan.covered_pages()
+            .iter()
+            .map(|page| page.page)
+            .collect::<Vec<_>>(),
+        [first, skipped, third],
+    );
+    assert_eq!(
+        plan.placements()
+            .iter()
+            .map(|row| row.page)
+            .collect::<Vec<_>>(),
+        [first, third]
+    );
+    let writable = plan.covered_pages()[1].writable;
+    let make = |revision: &_, page, object, rectangle| {
+        validate_fixed_placement(revision, AcceptedFixedPlacement {
+            object,
+            page,
+            revision: revision.id,
+            rectangle,
+        })
+        .map_err(|error| format!("checked placement: {error:?}"))
+    };
+    let rectangle = Rect {
+        x: writable.x,
+        y: writable.y,
+        width: Length::from_micrometres(1_000),
+        height: Length::from_micrometres(1_000),
+    };
+    let on_skipped = make(accepted, skipped, fixed_owner, rectangle)?;
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[on_skipped.clone()]),
+        Ok(())
+    );
+
+    // The skipped page is nevertheless covered and owns an exact writable
+    // rectangle; a same-revision defensive mismatch must not be overlooked.
+    let mut conflicting = accepted.clone();
+    conflicting.notebook.page_profiles[1]
+        .geometry
+        .printable_region
+        .width = Length::from_micrometres(185_000);
+    let altered = make(&conflicting, skipped, fixed_owner, rectangle)?;
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[altered.clone()]),
+        Err(FlowFixedRegionError::WritableMismatch {
+            page: skipped,
+            object: fixed_owner,
+        }),
+    );
+
+    let first_writable = plan.covered_pages()[0].writable;
+    let first_collision = make(accepted, first, owner, Rect {
+        x: first_writable.x,
+        y: first_writable.y,
+        width: Length::from_micrometres(1_000),
+        height: Length::from_micrometres(1_000),
+    })?;
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[
+            on_skipped,
+            first_collision.clone(),
+        ]),
+        Err(FlowFixedRegionError::VerticalBandOverlap {
+            page: first,
+            object: owner,
+            fragment_owner: owner,
+            source: atrament_flow_pagination::FragmentSource {
+                unit: 0,
+                fragment: 0,
+            },
+        }),
+    );
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[altered, first_collision]),
+        Err(FlowFixedRegionError::WritableMismatch {
+            page: skipped,
+            object: fixed_owner,
+        }),
+    );
+    assert_eq!(session.current(), Some(accepted));
+    Ok(())
+}

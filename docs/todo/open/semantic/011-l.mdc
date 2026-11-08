@@ -2987,3 +2987,16 @@ A 4,096-case linear physical-band oracle cross-checks the indexed result over
 and overflow. A batch of empty fixed regions followed by a collision checks
 that the first true overlap retains the original source identity. This is a
 layout-inspection optimization, not accepted Markdown measurement or PDF/PNG.
+
+## Covered page without measured rows (partial) — 2026-11-08
+
+A three-page accepted-flow regression now distinguishes covered pages from
+pages actually receiving measured fragments. A narrower intervening page is
+recorded in the immutable covered-page sequence but skipped by flow; a
+separately owned checked fixed region on that page clears the indexed row
+search.
+
+Revalidating the same rectangle against conflicting same-revision
+paper geometry still returns `WritableMismatch` before a later checked
+region's row conflict. Caller-order priority and original source identity remain
+intact. This verifies skipped-page evidence but not general flow/fixed solving.
