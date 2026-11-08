@@ -107,10 +107,7 @@ fn reference_independent(
                     height: fragment.height,
                     owner: fragment.owner,
                     page: current.page,
-                    writable_left: current.writable.x,
-                    writable_width: current.writable.width,
-                    writable_top: current.writable.y,
-                    writable_height: current.writable.height,
+                    writable: current.writable,
                     top: Length::from_micrometres(top),
                     width: fragment.width,
                 });
@@ -412,10 +409,7 @@ fn reference_place_fragment(
                 height: fragment.height,
                 owner: fragment.owner,
                 page: page.page,
-                writable_left: page.writable.x,
-                writable_width: page.writable.width,
-                writable_top: page.writable.y,
-                writable_height: page.writable.height,
+                writable: page.writable,
                 top: Length::from_micrometres(
                     page.writable.y.micrometres() + cursor.used_height,
                 ),
@@ -468,10 +462,7 @@ fn reference_keep_together_fresh(
             height: fragment.height,
             owner: fragment.owner,
             page: page.page,
-            writable_left: page.writable.x,
-            writable_width: page.writable.width,
-            writable_top: page.writable.y,
-            writable_height: page.writable.height,
+            writable: page.writable,
             top: Length::from_micrometres(top),
             width: fragment.width,
         });
@@ -596,10 +587,7 @@ fn reference_prefix_then_keep(
                 height: fragment.height,
                 owner: fragment.owner,
                 page: page.page,
-                writable_left: page.writable.x,
-                writable_width: page.writable.width,
-                writable_top: page.writable.y,
-                writable_height: page.writable.height,
+                writable: page.writable,
                 top: Length::from_micrometres(
                     page.writable.y.micrometres() + cursor.used_height,
                 ),
@@ -725,10 +713,12 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             height: Length::from_micrometres(60),
             owner: 1,
             page: 11,
-            writable_left: Length::from_micrometres(10),
-            writable_width: Length::from_micrometres(100),
-            writable_top: Length::from_micrometres(1_000),
-            writable_height: Length::from_micrometres(100),
+            writable: Rect {
+                height: Length::from_micrometres(100),
+                width: Length::from_micrometres(100),
+                x: Length::from_micrometres(10),
+                y: Length::from_micrometres(1_000),
+            },
             top: Length::from_micrometres(1_000),
             width: Length::from_micrometres(50),
         },
@@ -736,10 +726,12 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             height: Length::from_micrometres(40),
             owner: 2,
             page: 11,
-            writable_left: Length::from_micrometres(10),
-            writable_width: Length::from_micrometres(100),
-            writable_top: Length::from_micrometres(1_000),
-            writable_height: Length::from_micrometres(100),
+            writable: Rect {
+                height: Length::from_micrometres(100),
+                width: Length::from_micrometres(100),
+                x: Length::from_micrometres(10),
+                y: Length::from_micrometres(1_000),
+            },
             top: Length::from_micrometres(1_060),
             width: Length::from_micrometres(80),
         },
@@ -747,10 +739,12 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             height: Length::from_micrometres(20),
             owner: 3,
             page: 12,
-            writable_left: Length::from_micrometres(10),
-            writable_width: Length::from_micrometres(100),
-            writable_top: Length::from_micrometres(2_000),
-            writable_height: Length::from_micrometres(100),
+            writable: Rect {
+                height: Length::from_micrometres(100),
+                width: Length::from_micrometres(100),
+                x: Length::from_micrometres(10),
+                y: Length::from_micrometres(2_000),
+            },
             top: Length::from_micrometres(2_000),
             width: Length::from_micrometres(70),
         },
@@ -775,11 +769,11 @@ fn placed_fragments_retain_each_selected_pages_writable_horizontal_bounds() {
         let plan = paginate(&[first, second], &units).expect("page placements");
         assert_eq!(plan.placements.len(), 3);
         assert_eq!(
-            plan.placements[0].writable_left,
-            Length::from_micrometres(17)
+            plan.placements.first().map(|placed| placed.writable.x),
+            Some(Length::from_micrometres(17))
         );
         assert_eq!(
-            plan.placements.first().map(|placed| placed.writable_width),
+            plan.placements.first().map(|placed| placed.writable.width),
             Some(Length::from_micrometres(100))
         );
         let group_left = if policy == FlowUnitPolicy::Independent {
@@ -806,12 +800,14 @@ fn placed_fragments_retain_each_selected_pages_writable_horizontal_bounds() {
             assert_eq!(
                 plan.placements
                     .get(position + 1)
-                    .map(|placed| placed.writable_width),
+                    .map(|placed| placed.writable.width),
                 Some(Length::from_micrometres(width))
             );
             assert_eq!(
-                plan.placements[position + 1].writable_left,
-                Length::from_micrometres(left)
+                plan.placements
+                    .get(position + 1)
+                    .map(|placed| placed.writable.x),
+                Some(Length::from_micrometres(left))
             );
             assert_eq!(plan.placements[position + 1].page, page);
         }
@@ -844,13 +840,12 @@ fn placed_fragments_retain_page_vertical_bounds_across_layout_policies() {
                 .find(|page| page.page == expected_page)
                 .expect("expected page exists");
             assert_eq!(placement.page, expected_page);
-            assert_eq!(placement.writable_top, source.writable.y);
-            assert_eq!(placement.writable_height, source.writable.height);
-            assert!(placement.top >= placement.writable_top);
+            assert_eq!(placement.writable, source.writable);
+            assert!(placement.top >= placement.writable.y);
             assert!(
                 placement.top.micrometres() + placement.height.micrometres()
-                    <= placement.writable_top.micrometres()
-                        + placement.writable_height.micrometres()
+                    <= placement.writable.y.micrometres()
+                        + placement.writable.height.micrometres()
             );
         }
         assert_eq!(plan.placements[0].top, Length::from_micrometres(310));
@@ -1099,10 +1094,12 @@ fn zero_width_positive_height_fragment_reserves_vertical_space() {
                 height: Length::from_micrometres(20),
                 owner: 1,
                 page: 1,
-                writable_left: Length::from_micrometres(10),
-                writable_width: Length::from_micrometres(100),
-                writable_top: Length::from_micrometres(500),
-                writable_height: Length::from_micrometres(100),
+                writable: Rect {
+                    height: Length::from_micrometres(100),
+                    width: Length::from_micrometres(100),
+                    x: Length::from_micrometres(10),
+                    y: Length::from_micrometres(500),
+                },
                 top: Length::from_micrometres(500),
                 width: Length::ZERO,
             },
@@ -1110,10 +1107,12 @@ fn zero_width_positive_height_fragment_reserves_vertical_space() {
                 height: Length::from_micrometres(30),
                 owner: 2,
                 page: 1,
-                writable_left: Length::from_micrometres(10),
-                writable_width: Length::from_micrometres(100),
-                writable_top: Length::from_micrometres(500),
-                writable_height: Length::from_micrometres(100),
+                writable: Rect {
+                    height: Length::from_micrometres(100),
+                    width: Length::from_micrometres(100),
+                    x: Length::from_micrometres(10),
+                    y: Length::from_micrometres(500),
+                },
                 top: Length::from_micrometres(520),
                 width: Length::from_micrometres(10),
             },

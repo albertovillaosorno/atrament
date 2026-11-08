@@ -88,14 +88,9 @@ pub struct PlacedFragment<Identity, PageIdentity> {
     pub top: Length,
     /// Unchanged measured fragment width.
     pub width: Length,
-    /// Exact vertical writable span, not the measured fragment height.
-    pub writable_height: Length,
-    /// Physical left edge of the page's writable region, not text alignment.
-    pub writable_left: Length,
-    /// Physical top edge of the page's writable region, not fragment top.
-    pub writable_top: Length,
-    /// Exact horizontal writable span, not the measured fragment width.
-    pub writable_width: Length,
+    /// Exact page writable rectangle, not this fragment's measured extent.
+    /// Its origin is physical page geometry, not text alignment.
+    pub writable: Rect,
 }
 
 /// Complete vertical flow pagination result in semantic reading order.
@@ -356,10 +351,7 @@ where
         page: page.page,
         top: Length::from_micrometres(top_micrometres),
         width: fragment.width,
-        writable_left: page.writable.x,
-        writable_width: page.writable.width,
-        writable_top: page.writable.y,
-        writable_height: page.writable.height,
+        writable: page.writable,
     });
     cursor.used_height = Length::from_micrometres(next_used_height);
     Ok(())

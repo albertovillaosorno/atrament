@@ -2668,3 +2668,20 @@ oracles compare both new bounds for every emitted placement.
 This is bounded physical layout metadata. It neither measures glyph ink nor
 persists a semantic body or connects that body to native PDF/PNG output; the
 P1 two-page saved-notebook acceptance criterion remains open.
+
+## Atomic page writable geometry in placements (partial) — 2026-11-07
+
+The measured-flow plan now preserves each selected page's four writable
+bounds as one existing physical `Rect`, rather than separate width, height,
+left and top fields. This prevents a consumer from accidentally combining
+coordinates from different page profiles or mistaking the fragment's measured
+size for its physical page capacity. The placement's existing `top`, `height`
+and `width` still describe the fragment itself, not its writable rectangle.
+
+Pure pagination reference oracles compare the complete rectangle through
+independent and keep-together page turns, and the accepted-revision test
+checks two different paper profiles against their exact physical rectangles.
+The source region is copied without recomputing or changing any pagination
+policy. All 65 focused pure and semantic tests pass. This refines a Rust
+layout contract only; it does not connect persisted semantic notebook text
+to native PDF/PNG export, so the P1 two-page journey remains unfinished.
