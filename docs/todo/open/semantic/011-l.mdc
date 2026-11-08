@@ -2685,3 +2685,13 @@ The source region is copied without recomputing or changing any pagination
 policy. All 65 focused pure and semantic tests pass. This refines a Rust
 layout contract only; it does not connect persisted semantic notebook text
 to native PDF/PNG export, so the P1 two-page journey remains unfinished.
+
+## Session facade retained writable rectangles (partial) — 2026-11-07
+
+The session application lifecycle regression also asserts the exact accepted
+`Rect` returned through `paginate_measured_flow`: the initial profile owns a
+25/20-mm origin and 175/267-mm writable span, narrowing the same profile
+reduces width to 85 mm, and Undo restores the original rectangle. This
+validates the read-only session adapter does not discard page-profile bounds
+or reuse stale geometry after an accepted revision change. The measured
+fragment and semantic persistence-to-native-export gap are unchanged.

@@ -2033,6 +2033,16 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         .expect("base profile must fit measured fragment");
     assert_eq!(plan.placements.len(), 1);
     assert_eq!(plan.placements[0].page, page);
+    let original_writable = Rect {
+        height: Length::from_micrometres(267_000),
+        width: Length::from_micrometres(175_000),
+        x: Length::from_micrometres(25_000),
+        y: Length::from_micrometres(20_000),
+    };
+    assert_eq!(
+        plan.placements.first().map(|placed| placed.writable),
+        Some(original_writable),
+    );
 
     let mut narrowed = physical_page_profile();
     narrowed.printable_region.width = Length::from_micrometres(100_000);
@@ -2062,6 +2072,14 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         .paginate_measured_flow(&measurement(edited, 80_000))
         .expect("fresh narrow measurement must fit edited profile");
     assert_eq!(narrowed_fit.placements[0].page, page);
+    let narrowed_writable = Rect {
+        width: Length::from_micrometres(85_000),
+        ..original_writable
+    };
+    assert_eq!(
+        narrowed_fit.placements.first().map(|placed| placed.writable),
+        Some(narrowed_writable),
+    );
 
     let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
         session.traverse_history(edited, HistoryDirection::Undo)
@@ -2073,6 +2091,10 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         .paginate_measured_flow(&measurement(undone, 100_000))
         .expect("fresh Undo measurement must use restored profile geometry");
     assert_eq!(restored.placements[0].page, page);
+    assert_eq!(
+        restored.placements.first().map(|placed| placed.writable),
+        Some(original_writable),
+    );
 
     let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
         session.traverse_history(undone, HistoryDirection::Redo)
