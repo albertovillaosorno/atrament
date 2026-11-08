@@ -68,8 +68,8 @@ pub struct AcceptedFixedPlacement {
 
 /// Constructor-controlled bounds evidence for one accepted fixed placement.
 ///
-/// The exact checked object, page, rectangle and revision cannot be replaced
-/// by downstream callers. A report with violated edges has complete blocking
+/// The exact checked object, page, rectangle, revision, and accepted writable
+/// region cannot be replaced by callers. Violations have complete blocking
 /// diagnostics; an in-bounds report has none. Neither can be forged as a ready
 /// placement without running `validate_fixed_placement`.
 ///
@@ -87,6 +87,7 @@ pub struct FixedRegionLayoutResult {
     rectangle: Rect,
     report: BoundsReport,
     revision: RevisionIdentity,
+    writable: Rect,
 }
 
 impl FixedRegionLayoutResult {
@@ -130,6 +131,13 @@ impl FixedRegionLayoutResult {
     #[must_use]
     pub const fn revision(&self) -> RevisionIdentity {
         self.revision
+    }
+
+    /// Return the exact accepted page-profile writable rectangle used by this
+    /// check. This bound is distinct from the supplied object rectangle.
+    #[must_use]
+    pub const fn writable(&self) -> Rect {
+        self.writable
     }
 }
 
@@ -301,6 +309,7 @@ pub fn validate_fixed_placement(
         rectangle: placement.rectangle,
         report,
         revision: revision.id,
+        writable,
     })
 }
 

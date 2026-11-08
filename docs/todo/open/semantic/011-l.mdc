@@ -2881,3 +2881,18 @@ regressions use the sealed result accessors.
 This does not seal the upstream solver-derived request or prove that measured
 text and fixed objects share a collision-free page. The accepted notebook
 body-to-native-ink and persistence-to-PDF/PNG bridge are still unfinished.
+
+## Accepted fixed-region writable-space provenance (partial) — 2026-11-07
+
+The sealed fixed-region result now retains the exact accepted page-profile
+writable rectangle used by validation, separate from the solver-derived object
+rectangle. Read-only `writable()` gives an eventual native compositor the
+physical clipping and placement envelope associated with that exact revision
+and page, without recalculating a possibly edited paper profile.
+
+A 20,000-case independent bounds oracle checks both rectangles. Zero-sized
+placements, real export-preflight overflow and session profile edits, profile
+reference retargeting, Undo and Redo verify the writable envelope tracks the
+accepted revision even when the object's requested rectangle is unchanged.
+This remains diagnostic/geometry evidence, not a collision solver or a native
+semantic PDF/PNG export path.

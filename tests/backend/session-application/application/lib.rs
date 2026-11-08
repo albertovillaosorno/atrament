@@ -132,9 +132,11 @@ fn checked_fixed_within(
         application::SessionFixedRegionLayoutError,
     >,
     placement: AcceptedFixedPlacement,
+    expected_writable: Rect,
 ) -> bool {
     result.is_ok_and(|checked| {
         checked.is_within_bounds()
+            && checked.writable() == expected_writable
             && checked.object() == placement.object
             && checked.page() == placement.page
             && checked.rectangle() == placement.rectangle
@@ -1773,6 +1775,9 @@ fn application_routes_fixed_overflow_through_owned_revision() {
 fn page_profile_edits_recompute_live_fixed_region_geometry() {
     let identities = IdentityAllocator::new();
     let (candidate, _) = editable_text_candidate(&identities, "fixed geometry");
+    let original_writable = physical_page_profile()
+        .writable_region()
+        .expect("original physical page region");
     let profile_candidate = candidate.page_profiles[0].id;
     let page_candidate = candidate.pages[0].id;
     let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
@@ -1808,10 +1813,13 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
     assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(revision)),
         placement(revision),
+        original_writable,
     ));
 
     let mut narrowed = physical_page_profile();
     narrowed.outer_margin = Length::from_micrometres(40_000);
+    let narrowed_writable = narrowed.writable_region()
+        .expect("narrowed physical page region");
     let PageProfileEditOutcome::Applied { revision: edited, .. } =
         session.replace_page_profile(revision, profile, narrowed)
     else {
@@ -1833,6 +1841,7 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
         !checked.is_within_bounds(),
         "narrowed profile must overflow the old x coordinate",
     );
+    assert_eq!(checked.writable(), narrowed_writable);
     let edited_diagnostics = checked.diagnostics()
         .expect("complete blocking overflow diagnostics");
     let report = checked.report();
@@ -1859,6 +1868,7 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
     assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(undone)),
         placement(undone),
+        original_writable,
     ));
     assert_eq!(
         session.preflight_layout_for_export(edited, edited_bound),
@@ -1891,6 +1901,7 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
         !checked.is_within_bounds(),
         "Redone narrowed profile must overflow the old x coordinate",
     );
+    assert_eq!(checked.writable(), narrowed_writable);
     let redone_diagnostics = checked.diagnostics()
         .expect("complete blocking overflow diagnostics");
     let report = checked.report();
@@ -2216,6 +2227,10 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     ) = page_profile_reference_candidate(&identities);
     candidate.page_profiles[1].geometry.printable_region.width =
         Length::from_micrometres(100_000);
+    let first_writable = candidate.page_profiles[0].geometry
+        .writable_region().expect("original page profile writable region");
+    let second_writable = candidate.page_profiles[1].geometry
+        .writable_region().expect("alternate page profile writable region");
     let flow_candidate = candidate.pages[0].flows[0].id;
     let block_candidate = candidate.pages[0].flows[0].blocks[0].id;
     let mut session = application::SessionApplication::default();
@@ -2266,6 +2281,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(base)),
         placement(base),
+        first_writable,
     ));
 
     let snapshot = session.command_capability_snapshot();
@@ -2328,6 +2344,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         !checked.is_within_bounds(),
         "retargeted narrow profile must overflow right edge",
     );
+    assert_eq!(checked.writable(), second_writable);
     let edited_diagnostics = checked.diagnostics()
         .expect("complete blocking overflow diagnostics");
     let report = checked.report();
@@ -2355,6 +2372,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(undone)),
         placement(undone),
+        first_writable,
     ));
     assert_eq!(
         session.preflight_layout_for_export(edited, edited_bound),
@@ -2395,6 +2413,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         !checked.is_within_bounds(),
         "Redone narrow profile must overflow right edge",
     );
+    assert_eq!(checked.writable(), second_writable);
     let redone_diagnostics = checked.diagnostics()
         .expect("complete blocking overflow diagnostics");
     let report = checked.report();

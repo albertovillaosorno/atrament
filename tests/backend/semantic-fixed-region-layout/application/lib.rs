@@ -297,6 +297,7 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
         .expect("generated placement keeps accepted authority");
         assert_eq!(actual.revision(), revision, "generated case {case}");
         assert_eq!(actual.rectangle(), rectangle, "generated case {case}");
+        assert_eq!(actual.writable(), writable, "generated case {case}");
         assert_eq!(actual.object(), object, "generated case {case}");
         assert_eq!(actual.page(), page, "generated case {case}");
         assert_eq!(
@@ -465,6 +466,10 @@ fn zero_size_fixed_rectangles_retain_exact_position_and_bounds()
     )
     .map_err(|_| "zero-size rectangle was rejected")?;
     assert_eq!(within.rectangle(), inside);
+    assert_eq!(
+        within.writable(),
+        geometry(20_000).writable_region().expect("fixture writable region"),
+    );
     assert!(matches_within(
         Ok(within),
         placement(revision, page, object, inside),
@@ -477,6 +482,10 @@ fn zero_size_fixed_rectangles_retain_exact_position_and_bounds()
     )
     .map_err(|_| "zero-size overflow placement was rejected")?;
     assert_eq!(overflow.rectangle(), outside);
+    assert_eq!(
+        overflow.writable(),
+        geometry(20_000).writable_region().expect("fixture writable region"),
+    );
     if overflow.is_within_bounds() {
         return Err("out-of-bounds zero-size rectangle did not overflow");
     }
