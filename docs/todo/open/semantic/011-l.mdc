@@ -3000,3 +3000,12 @@ Revalidating the same rectangle against conflicting same-revision
 paper geometry still returns `WritableMismatch` before a later checked
 region's row conflict. Caller-order priority and original source identity remain
 intact. This verifies skipped-page evidence but not general flow/fixed solving.
+
+## Mixed measured-owner fixed collision provenance (partial) — 2026-11-08
+
+A two-block accepted-flow regression verifies that indexed fixed clearance
+retains the exact semantic row owner and `(unit, fragment)` source across
+independent and keep-together measured units. It checks four successive rows,
+including a zero-width, positive-height spacer, a rectangle crossing a row
+boundary and a rectangle touching the final row without overlap. This is
+source-identity evidence only; caller-produced measurements remain required.

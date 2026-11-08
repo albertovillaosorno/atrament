@@ -3616,3 +3616,118 @@ fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
     assert_eq!(session.current(), Some(accepted));
     Ok(())
 }
+
+#[test]
+fn indexed_fixed_clearance_retains_owner_and_unit_fragment_provenance()
+-> Result<(), String> {
+    use atrament_flow_pagination::FragmentSource;
+
+    let ids = IdentityAllocator::new();
+    let (fixture, second_candidate) = candidate_two_block_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("two-block fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing revision")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let first = accepted_for(&mapping, fixture.block);
+    let second = accepted_for(&mapping, second_candidate);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let fragment = |owner, width, height| MeasuredFragment {
+        owner,
+        width: Length::from_micrometres(width),
+        height: Length::from_micrometres(height),
+    };
+    let measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![
+            MeasuredFlowUnit {
+                fragments: vec![fragment(first, 10_000, 20_000)],
+                policy: FlowUnitPolicy::Independent,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![
+                    fragment(second, 10_000, 10_000),
+                    fragment(second, 0, 15_000),
+                ],
+                policy: FlowUnitPolicy::KeepTogetherWhenPossible,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![fragment(second, 10_000, 5_000)],
+                policy: FlowUnitPolicy::Independent,
+            },
+        ],
+    };
+    let plan = paginate_revision(accepted, &measured)
+        .map_err(|error| format!("mixed-unit layout: {error:?}"))?;
+    let expected = [
+        (first, FragmentSource { unit: 0, fragment: 0 }),
+        (second, FragmentSource { unit: 1, fragment: 0 }),
+        (second, FragmentSource { unit: 1, fragment: 1 }),
+        (second, FragmentSource { unit: 2, fragment: 0 }),
+    ];
+    assert_eq!(plan.placements().len(), expected.len());
+    assert_eq!(
+        plan.placements()
+            .iter()
+            .map(|row| (row.owner, row.source))
+            .collect::<Vec<_>>(),
+        expected
+    );
+    let rows = plan.placements();
+    let writable = rows[0].writable;
+    let checked = |top: u64, height: u64| {
+        validate_fixed_placement(accepted, AcceptedFixedPlacement {
+            page,
+            object: second,
+            revision,
+            rectangle: Rect {
+                x: writable.x,
+                y: Length::from_micrometres(top),
+                width: Length::from_micrometres(1_000),
+                height: Length::from_micrometres(height),
+            },
+        })
+        .map_err(|error| format!("fixed placement: {error:?}"))
+    };
+    for (row, (owner, source)) in rows.iter().zip(expected) {
+        assert_eq!(
+            check_fixed_regions_for_flow(&plan, &[checked(
+                row.top.micrometres(),
+                1
+            )?,]),
+            Err(FlowFixedRegionError::VerticalBandOverlap {
+                page,
+                object: second,
+                fragment_owner: owner,
+                source,
+            }),
+        );
+    }
+    // The first crossing row wins even across keep-together fragments;
+    // touching the end of the final row does not collide.
+    let crossing = rows[2]
+        .top
+        .micrometres()
+        .checked_sub(1)
+        .ok_or("preceding row underflow")?;
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[checked(crossing, 2)?]),
+        Err(FlowFixedRegionError::VerticalBandOverlap {
+            page,
+            object: second,
+            fragment_owner: second,
+            source: FragmentSource { unit: 1, fragment: 0 },
+        }),
+    );
+    let final_end = rows[3].top.micrometres() + rows[3].height.micrometres();
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[checked(final_end, 1)?]),
+        Ok(()),
+    );
+    assert_eq!(session.current(), Some(accepted));
+    Ok(())
+}
