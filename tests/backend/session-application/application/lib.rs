@@ -7317,18 +7317,19 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         ),
         Ok(admitted.clone()),
     );
+    let trace = |pair: FixedPairOverlap| {
+        (
+            pair.revision(), pair.flow(), pair.page(),
+            pair.earlier_index(), pair.earlier_object(),
+            pair.later_index(), pair.later_object(),
+        )
+    };
     assert_eq!(
         session.first_fixed_pair_overlap(
             &measurement(revision),
             &[next_to_row, layered],
-        ),
-        Ok(Some(FixedPairOverlap {
-            page,
-            earlier_object: block,
-            later_object: block,
-            earlier_index: 0,
-            later_index: 1,
-        })),
+        ).map(|result| result.map(trace)),
+        Ok(Some((revision, flow, page, 0, block, 1, block))),
     );
     // Boundary touching remains an admissible clear pair, not a collision.
     let touching = placement(
@@ -7459,13 +7460,10 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
                 placement(current, layered.rectangle),
             ],
         );
-        assert_eq!(result, Ok(Some(FixedPairOverlap {
-            page,
-            earlier_object: block,
-            later_object: block,
-            earlier_index: 0,
-            later_index: 1,
-        })));
+        assert_eq!(
+            result.map(|pair| pair.map(trace)),
+            Ok(Some((current, flow, page, 0, block, 1, block))),
+        );
     };
     inspect_fresh(&session, edited);
 

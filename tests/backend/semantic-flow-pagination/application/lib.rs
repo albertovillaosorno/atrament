@@ -3774,10 +3774,8 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
         .into_iter()
         .map(|owner| accepted_for(&mapping, owner))
         .collect::<Vec<_>>();
-    let measured =
-        measurement(revision, accepted_for(&mapping, fixture.flow), block, &[
-            (10_000, 10_000),
-        ]);
+    let flow = accepted_for(&mapping, fixture.flow);
+    let measured = measurement(revision, flow, block, &[(10_000, 10_000)]);
     let plan = paginate_revision(accepted, &measured)
         .map_err(|error| format!("pagination: {error:?}"))?;
     // Page two has independent fixed objects but no measured flow rows.
@@ -3797,6 +3795,13 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
             },
         })
         .map_err(|error| format!("fixed admission: {error:?}"))
+    };
+    let trace = |pair: FixedPairOverlap| {
+        (
+            pair.revision(), pair.flow(), pair.page(),
+            pair.earlier_index(), pair.earlier_object(),
+            pair.later_index(), pair.later_object(),
+        )
     };
     let a = checked(page_two, objects[0], 40_000, 50_000, 10_000, 10_000)?;
     let touch = checked(page_two, objects[1], 50_000, 50_000, 10_000, 10_000)?;
@@ -3818,14 +3823,8 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
             touch.clone(),
             c.clone(),
             zero,
-        ]),
-        Ok(Some(FixedPairOverlap {
-            page: page_two,
-            earlier_object: objects[0],
-            later_object: objects[2],
-            earlier_index: 0,
-            later_index: 2,
-        })),
+        ]).map(|result| result.map(trace)),
+        Ok(Some((revision, flow, page_two, 0, objects[0], 2, objects[2]))),
     );
     // A geometric pair is not a blocking collision without overlap policy.
     assert_eq!(
@@ -3833,14 +3832,9 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
         Ok(())
     );
     assert_eq!(
-        first_fixed_pair_overlap_for_flow(&plan, &[touch, c, a.clone()]),
-        Ok(Some(FixedPairOverlap {
-            page: page_two,
-            earlier_object: objects[1],
-            later_object: objects[2],
-            earlier_index: 0,
-            later_index: 1,
-        })),
+        first_fixed_pair_overlap_for_flow(&plan, &[touch, c, a.clone()])
+            .map(|result| result.map(trace)),
+        Ok(Some((revision, flow, page_two, 0, objects[1], 1, objects[2]))),
     );
     // Invalid evidence takes priority over a pair found earlier in the batch.
     let invalid = checked(page_two, objects[1], 0, 0, 10_000, 10_000)?;
@@ -3916,19 +3910,18 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
                     && common_width > 0
                     && common_height > 0
                 {
-                    expected = Some(FixedPairOverlap {
-                        page,
-                        earlier_object,
-                        later_object,
-                        earlier_index,
-                        later_index,
-                    });
+                    expected = Some((
+                        revision, flow, page,
+                        earlier_index, earlier_object,
+                        later_index, later_object,
+                    ));
                     break 'pairs;
                 }
             }
         }
         let actual = first_fixed_pair_overlap_for_flow(&plan, &regions)
-            .map_err(|error| format!("case {case} refused: {error:?}"))?;
+            .map_err(|error| format!("case {case} refused: {error:?}"))?
+            .map(trace);
         if actual != expected {
             return Err(format!(
                 "fixed pair oracle case {case}: {actual:?} != {expected:?}"

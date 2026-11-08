@@ -152,23 +152,72 @@ pub enum FlowFixedRegionError {
     },
 }
 
-/// First supplied pair of overlapping physical fixed rectangles.
+/// Constructor-controlled evidence of a first fixed-pair overlap.
 ///
 /// This is **inspection**, not a collision-policy decision: fixed shapes may
-/// deliberately layer. Indices identify the exact supplied evidence even when
-/// a caller repeats one semantic owner with multiple proposed rectangles.
+/// deliberately layer. Indices distinguish proposals sharing an object owner;
+/// revision and flow bind the result to the exact checked pagination plan.
+/// Callers cannot forge an apparently validated pair or replace its authority.
+///
+/// ```compile_fail
+/// use atrament_semantic_flow_pagination::FixedPairOverlap;
+/// fn replace_revision(mut pair: FixedPairOverlap) {
+///     pair.revision = pair.revision();
+/// }
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct FixedPairOverlap {
-    /// Index of the earlier rectangle in the supplied slice.
-    pub earlier_index: usize,
-    /// Stable object supplied first.
-    pub earlier_object: AcceptedIdentity,
-    /// Index of the later rectangle in the supplied slice.
-    pub later_index: usize,
-    /// Stable object supplied second.
-    pub later_object: AcceptedIdentity,
-    /// Physical page shared by the two checked fixed rectangles.
-    pub page: AcceptedIdentity,
+    earlier_index: usize,
+    earlier_object: AcceptedIdentity,
+    flow: AcceptedIdentity,
+    later_index: usize,
+    later_object: AcceptedIdentity,
+    page: AcceptedIdentity,
+    revision: RevisionIdentity,
+}
+
+impl FixedPairOverlap {
+    /// Original index of the first submitted rectangle in this pair.
+    #[must_use]
+    pub const fn earlier_index(&self) -> usize {
+        self.earlier_index
+    }
+
+    /// Accepted semantic owner of the first submitted rectangle.
+    #[must_use]
+    pub const fn earlier_object(&self) -> AcceptedIdentity {
+        self.earlier_object
+    }
+
+    /// Accepted selected flow whose measured plan checked these rectangles.
+    #[must_use]
+    pub const fn flow(&self) -> AcceptedIdentity {
+        self.flow
+    }
+
+    /// Original index of the second submitted rectangle in this pair.
+    #[must_use]
+    pub const fn later_index(&self) -> usize {
+        self.later_index
+    }
+
+    /// Accepted semantic owner of the second submitted rectangle.
+    #[must_use]
+    pub const fn later_object(&self) -> AcceptedIdentity {
+        self.later_object
+    }
+
+    /// Accepted physical page where both rectangles intersect.
+    #[must_use]
+    pub const fn page(&self) -> AcceptedIdentity {
+        self.page
+    }
+
+    /// Exact accepted revision that admitted the checked physical plan.
+    #[must_use]
+    pub const fn revision(&self) -> RevisionIdentity {
+        self.revision
+    }
 }
 
 /// Already-measured semantic flow bound to one exact accepted revision.
@@ -443,11 +492,13 @@ pub fn first_fixed_pair_overlap_for_flow(
                 && top < earlier.bottom_um
             {
                 return Ok(Some(FixedPairOverlap {
-                    page: fixed.page(),
-                    earlier_object: earlier.object,
-                    later_object: fixed.object(),
                     earlier_index: earlier.index,
+                    earlier_object: earlier.object,
+                    flow: plan.flow(),
                     later_index,
+                    later_object: fixed.object(),
+                    page: fixed.page(),
+                    revision: plan.revision(),
                 }));
             }
         }

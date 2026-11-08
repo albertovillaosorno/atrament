@@ -3046,3 +3046,17 @@ layering; neither query infers an undeclared overlap policy or Export readiness.
 
 No persisted Markdown body measurement, full fixed solver, handwriting glyph
 production or native semantic PDF/PNG export path is provided by this slice.
+
+## Sealed fixed-pair result provenance (partial) — 2026-11-08
+
+The first checked fixed-pair result now has constructor-controlled fields and
+read-only accessors for accepted revision, selected measured flow, page, both
+fixed semantic owners and original supplied indices. A compile-fail regression
+prevents downstream callers from replacing the validated revision. The physical
+pair oracle also checks accepted flow/revision evidence in all 1,024 cases.
+
+The current-session edit/Undo/Redo regression checks that fresh pair evidence
+belongs to each new revision, rather than treating geometry from an older
+revision as current. Pair inspection remains a possible-overlap observation;
+no undeclared placement policy, saved semantic body metrics or native Export
+capability is inferred.
