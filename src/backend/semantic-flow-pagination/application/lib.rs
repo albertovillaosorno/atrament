@@ -44,6 +44,7 @@ use atrament_flow_pagination::{
     FragmentSource, MeasuredFlowUnit, PageRegion, PaginationError,
     PaginationPlan, PlacedFragment, paginate,
 };
+use atrament_physical_page_profile::{Length, Rect};
 use atrament_semantic_fixed_region_layout::FixedRegionLayoutResult;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Block, PhysicalPageProfileError,
@@ -157,6 +158,8 @@ pub enum FlowFixedRegionError {
 /// This is **inspection**, not a collision-policy decision: fixed shapes may
 /// deliberately layer. Indices distinguish proposals sharing an object owner;
 /// revision and flow bind the result to the exact checked pagination plan.
+/// The returned rectangle is the positive-area physical intersection, not
+/// a collision policy or a modified/approved placement.
 /// Callers cannot forge an apparently validated pair or replace its authority.
 ///
 /// ```compile_fail
@@ -170,6 +173,7 @@ pub struct FixedPairOverlap {
     earlier_index: usize,
     earlier_object: AcceptedIdentity,
     flow: AcceptedIdentity,
+    intersection: Rect,
     later_index: usize,
     later_object: AcceptedIdentity,
     page: AcceptedIdentity,
@@ -193,6 +197,12 @@ impl FixedPairOverlap {
     #[must_use]
     pub const fn flow(&self) -> AcceptedIdentity {
         self.flow
+    }
+
+    /// Exact positive-area intersection in the accepted page's coordinates.
+    #[must_use]
+    pub const fn intersection(&self) -> Rect {
+        self.intersection
     }
 
     /// Original index of the second submitted rectangle in this pair.
@@ -491,10 +501,30 @@ pub fn first_fixed_pair_overlap_for_flow(
                 && earlier.top_um < bottom
                 && top < earlier.bottom_um
             {
+                let shared_left = left.max(earlier.left_um);
+                let shared_top = top.max(earlier.top_um);
+                let overflow = || FlowFixedRegionError::CoordinateOverflow {
+                    page: fixed.page(),
+                    object: fixed.object(),
+                };
+                let shared_width = right
+                    .min(earlier.right_um)
+                    .checked_sub(shared_left)
+                    .ok_or_else(overflow)?;
+                let shared_height = bottom
+                    .min(earlier.bottom_um)
+                    .checked_sub(shared_top)
+                    .ok_or_else(overflow)?;
                 return Ok(Some(FixedPairOverlap {
                     earlier_index: earlier.index,
                     earlier_object: earlier.object,
                     flow: plan.flow(),
+                    intersection: Rect {
+                        x: Length::from_micrometres(shared_left),
+                        y: Length::from_micrometres(shared_top),
+                        width: Length::from_micrometres(shared_width),
+                        height: Length::from_micrometres(shared_height),
+                    },
                     later_index,
                     later_object: fixed.object(),
                     page: fixed.page(),

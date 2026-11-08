@@ -3060,3 +3060,19 @@ belongs to each new revision, rather than treating geometry from an older
 revision as current. Pair inspection remains a possible-overlap observation;
 no undeclared placement policy, saved semantic body metrics or native Export
 capability is inferred.
+
+## Exact fixed-pair intersection evidence (partial) — 2026-11-08
+
+The sealed first-pair overlap observation now also returns the exact
+positive-area physical intersection rectangle in page micrometres. Its
+read-only geometry comes from two already-validated, revision-bound fixed
+placements; it cannot be replaced downstream without rechecking admission.
+The result still carries the accepted flow, revision, page, input indices and
+semantic owners. Edge-touching and empty rectangles return no intersection.
+
+The independent 1,024-case u128 interval oracle now compares the complete
+intersection bounds, not just the chosen pair and authority, while the live
+session regression checks the same physical rectangle across fresh edit,
+Undo and Redo revisions. This supplies diagnostic coordinates only: it does
+not declare fixed layering forbidden, place missing objects, derive measured
+semantic Markdown or authorize native notebook PDF/PNG export.

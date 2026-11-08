@@ -3800,7 +3800,7 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
         (
             pair.revision(), pair.flow(), pair.page(),
             pair.earlier_index(), pair.earlier_object(),
-            pair.later_index(), pair.later_object(),
+            pair.later_index(), pair.later_object(), pair.intersection(),
         )
     };
     let a = checked(page_two, objects[0], 40_000, 50_000, 10_000, 10_000)?;
@@ -3824,7 +3824,15 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
             c.clone(),
             zero,
         ]).map(|result| result.map(trace)),
-        Ok(Some((revision, flow, page_two, 0, objects[0], 2, objects[2]))),
+        Ok(Some((
+            revision, flow, page_two, 0, objects[0], 2, objects[2],
+            Rect {
+                x: Length::from_micrometres(49_999),
+                y: Length::from_micrometres(59_999),
+                width: Length::from_micrometres(1),
+                height: Length::from_micrometres(1),
+            },
+        ))),
     );
     // A geometric pair is not a blocking collision without overlap policy.
     assert_eq!(
@@ -3834,7 +3842,15 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
     assert_eq!(
         first_fixed_pair_overlap_for_flow(&plan, &[touch, c, a.clone()])
             .map(|result| result.map(trace)),
-        Ok(Some((revision, flow, page_two, 0, objects[1], 1, objects[2]))),
+        Ok(Some((
+            revision, flow, page_two, 0, objects[1], 1, objects[2],
+            Rect {
+                x: Length::from_micrometres(50_000),
+                y: Length::from_micrometres(59_999),
+                width: Length::from_micrometres(4_999),
+                height: Length::from_micrometres(1),
+            },
+        ))),
     );
     // Invalid evidence takes priority over a pair found earlier in the batch.
     let invalid = checked(page_two, objects[1], 0, 0, 10_000, 10_000)?;
@@ -3914,6 +3930,22 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
                         revision, flow, page,
                         earlier_index, earlier_object,
                         later_index, later_object,
+                        Rect {
+                            x: Length::from_micrometres(x.max(ex)),
+                            y: Length::from_micrometres(y.max(ey)),
+                            width: Length::from_micrometres(
+                                u64::try_from(common_width)
+                                    .map_err(|error| {
+                                        format!("oracle width: {error}")
+                                    })?,
+                            ),
+                            height: Length::from_micrometres(
+                                u64::try_from(common_height)
+                                    .map_err(|error| {
+                                        format!("oracle height: {error}")
+                                    })?,
+                            ),
+                        },
                     ));
                     break 'pairs;
                 }

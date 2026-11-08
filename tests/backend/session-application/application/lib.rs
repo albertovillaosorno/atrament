@@ -7321,7 +7321,7 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         (
             pair.revision(), pair.flow(), pair.page(),
             pair.earlier_index(), pair.earlier_object(),
-            pair.later_index(), pair.later_object(),
+            pair.later_index(), pair.later_object(), pair.intersection(),
         )
     };
     assert_eq!(
@@ -7329,7 +7329,10 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             &measurement(revision),
             &[next_to_row, layered],
         ).map(|result| result.map(trace)),
-        Ok(Some((revision, flow, page, 0, block, 1, block))),
+        Ok(Some((
+            revision, flow, page, 0, block, 1, block,
+            rectangle(x + 2_500, y + 25_000, 2_500, 5_000),
+        ))),
     );
     // Boundary touching remains an admissible clear pair, not a collision.
     let touching = placement(
@@ -7462,7 +7465,10 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         );
         assert_eq!(
             result.map(|pair| pair.map(trace)),
-            Ok(Some((current, flow, page, 0, block, 1, block))),
+            Ok(Some((
+                current, flow, page, 0, block, 1, block,
+                rectangle(x + 2_500, y + 25_000, 2_500, 5_000),
+            ))),
         );
     };
     inspect_fresh(&session, edited);
