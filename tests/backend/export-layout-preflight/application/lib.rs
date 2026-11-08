@@ -49,7 +49,7 @@ use atrament_physical_page_profile::{
     PaperMarkLayer, PaperPattern, Rect, SheetSize,
 };
 use atrament_semantic_fixed_region_layout::{
-    AcceptedFixedPlacement, FixedRegionLayoutResult, validate_fixed_placement,
+    AcceptedFixedPlacement, validate_fixed_placement,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, Block, BlockContent, CandidateIdentity, Flow,
@@ -207,8 +207,8 @@ fn real_six_mm_fixed_overflow_blocks_export_layout_preflight() {
             y: Length::from_micrometres(270_000),
         },
     );
-    assert!(matches!(layout, FixedRegionLayoutResult::Overflow { .. }));
-    let FixedRegionLayoutResult::Overflow { diagnostics, .. } = layout else {
+    assert!(!layout.is_within_bounds());
+    let Some(diagnostics) = layout.diagnostics() else {
         return;
     };
     let result = admitted!(preflight_layout_for_export(
@@ -423,10 +423,7 @@ fn real_overflow_diagnostics(
         },
     )
     .ok()?;
-    let FixedRegionLayoutResult::Overflow { diagnostics, .. } = layout else {
-        return None;
-    };
-    Some(diagnostics)
+    layout.diagnostics().cloned()
 }
 
 #[test]

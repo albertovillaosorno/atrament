@@ -126,6 +126,23 @@ use atrament_session_application as _;
 const CURRENT_COMMAND_BEHAVIOR_VERSION: CommandBehaviorVersion =
     CommandBehaviorVersion(99);
 
+fn checked_fixed_within(
+    result: Result<
+        FixedRegionLayoutResult,
+        application::SessionFixedRegionLayoutError,
+    >,
+    placement: AcceptedFixedPlacement,
+) -> bool {
+    result.is_ok_and(|checked| {
+        checked.is_within_bounds()
+            && checked.object() == placement.object
+            && checked.page() == placement.page
+            && checked.rectangle() == placement.rectangle
+            && checked.revision() == placement.revision
+            && checked.diagnostics().is_none()
+    })
+}
+
 fn physical_page_profile() -> PageProfile {
     PageProfile {
         binding_edge: BindingEdge::Left,
@@ -1262,12 +1279,13 @@ fn run_process_fixture_child(mode: &str) {
         },
         revision,
     };
-    let FixedRegionLayoutResult::Overflow { diagnostics, report, .. } = session
+    let checked = session
         .validate_fixed_placement(placement)
-        .expect("process fixture fixed placement must validate")
-    else {
-        panic!("process fixture fixed placement must overflow");
-    };
+        .expect("process fixture fixed placement must validate");
+    assert!(!checked.is_within_bounds(), "process fixture must overflow");
+    let diagnostics = checked.diagnostics()
+        .expect("process fixture blocking overflow diagnostics");
+    let report = checked.report();
     assert_eq!(report.violations.len(), 1);
     assert_eq!(report.violations[0].amount.micrometres(), 6_000);
     let bound = RevisionLayoutDiagnostics::bind(revision, &diagnostics)
@@ -1621,10 +1639,10 @@ fn application_routes_fixed_overflow_through_owned_revision() {
     let result = session
         .validate_fixed_placement(placement)
         .expect("current fixed placement must validate");
-    let FixedRegionLayoutResult::Overflow { diagnostics, report, .. } = result
-    else {
-        panic!("fixture must overflow accepted writable bottom");
-    };
+    assert!(!result.is_within_bounds(), "fixture must overflow bottom");
+    let diagnostics = result.diagnostics()
+        .expect("fixture blocking overflow diagnostics");
+    let report = result.report();
     assert_eq!(report.violations.len(), 1);
     assert_eq!(report.violations[0].amount.micrometres(), 6_000);
     assert_eq!(diagnostics.diagnostics.len(), 1);
@@ -1787,15 +1805,10 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
         revision,
     };
 
-    assert_eq!(
+    assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(revision)),
-        Ok(FixedRegionLayoutResult::WithinBounds {
-            object: block,
-            page,
-            rectangle,
-            revision: revision,
-        }),
-    );
+        placement(revision),
+    ));
 
     let mut narrowed = physical_page_profile();
     narrowed.outer_margin = Length::from_micrometres(40_000);
@@ -1813,18 +1826,18 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
             },
         )),
     );
-    let FixedRegionLayoutResult::Overflow {
-        diagnostics: edited_diagnostics,
-        report,
-        rectangle: validated_rectangle,
-        revision: validated_revision,
-        ..
-    } = session
+    let checked = session
         .validate_fixed_placement(placement(edited))
-        .expect("fresh placement must use narrowed profile")
-    else {
-        panic!("narrowed profile must overflow the old x coordinate");
-    };
+        .expect("fresh placement must use narrowed profile");
+    assert!(
+        !checked.is_within_bounds(),
+        "narrowed profile must overflow the old x coordinate",
+    );
+    let edited_diagnostics = checked.diagnostics()
+        .expect("complete blocking overflow diagnostics");
+    let report = checked.report();
+    let validated_rectangle = checked.rectangle();
+    let validated_revision = checked.revision();
     assert_eq!(validated_revision, edited);
     assert_eq!(validated_rectangle, rectangle);
     assert_eq!(report.violations.len(), 1);
@@ -1843,15 +1856,10 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
     else {
         panic!("fixed-profile edit must Undo");
     };
-    assert_eq!(
+    assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(undone)),
-        Ok(FixedRegionLayoutResult::WithinBounds {
-            object: block,
-            page,
-            rectangle,
-            revision: undone,
-        }),
-    );
+        placement(undone),
+    ));
     assert_eq!(
         session.preflight_layout_for_export(edited, edited_bound),
         Err(application::SessionExportLayoutPreflightError::Preflight(
@@ -1876,18 +1884,18 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
             },
         )),
     );
-    let FixedRegionLayoutResult::Overflow {
-        diagnostics: redone_diagnostics,
-        report,
-        rectangle: validated_rectangle,
-        revision: validated_revision,
-        ..
-    } = session
+    let checked = session
         .validate_fixed_placement(placement(redone))
-        .expect("fresh Redo placement must use narrowed profile")
-    else {
-        panic!("Redone narrowed profile must overflow the old x coordinate");
-    };
+        .expect("fresh Redo placement must use narrowed profile");
+    assert!(
+        !checked.is_within_bounds(),
+        "Redone narrowed profile must overflow the old x coordinate",
+    );
+    let redone_diagnostics = checked.diagnostics()
+        .expect("complete blocking overflow diagnostics");
+    let report = checked.report();
+    let validated_rectangle = checked.rectangle();
+    let validated_revision = checked.revision();
     assert_eq!(validated_revision, redone);
     assert_eq!(validated_rectangle, rectangle);
     assert_eq!(report.violations.len(), 1);
@@ -2255,15 +2263,10 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     };
 
     assert!(session.paginate_measured_flow(&measurement(base)).is_ok());
-    assert_eq!(
+    assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(base)),
-        Ok(FixedRegionLayoutResult::WithinBounds {
-            object: block,
-            page,
-            rectangle,
-            revision: base,
-        }),
-    );
+        placement(base),
+    ));
 
     let snapshot = session.command_capability_snapshot();
     let batch = DirectEditBatchProposal {
@@ -2318,18 +2321,18 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             ),
         )),
     );
-    let FixedRegionLayoutResult::Overflow {
-        diagnostics: edited_diagnostics,
-        report,
-        rectangle: validated_rectangle,
-        revision: validated_revision,
-        ..
-    } = session
+    let checked = session
         .validate_fixed_placement(placement(edited))
-        .expect("retargeted placement must use second profile")
-    else {
-        panic!("retargeted narrow profile must overflow right edge");
-    };
+        .expect("retargeted placement must use second profile");
+    assert!(
+        !checked.is_within_bounds(),
+        "retargeted narrow profile must overflow right edge",
+    );
+    let edited_diagnostics = checked.diagnostics()
+        .expect("complete blocking overflow diagnostics");
+    let report = checked.report();
+    let validated_rectangle = checked.rectangle();
+    let validated_revision = checked.revision();
     assert_eq!(validated_revision, edited);
     assert_eq!(validated_rectangle, rectangle);
     assert_eq!(report.violations.len(), 1);
@@ -2349,15 +2352,10 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         panic!("profile-reference edit must Undo");
     };
     assert!(session.paginate_measured_flow(&measurement(undone)).is_ok());
-    assert_eq!(
+    assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(undone)),
-        Ok(FixedRegionLayoutResult::WithinBounds {
-            object: block,
-            page,
-            rectangle,
-            revision: undone,
-        }),
-    );
+        placement(undone),
+    ));
     assert_eq!(
         session.preflight_layout_for_export(edited, edited_bound),
         Err(application::SessionExportLayoutPreflightError::Preflight(
@@ -2390,18 +2388,18 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             },
         )),
     );
-    let FixedRegionLayoutResult::Overflow {
-        diagnostics: redone_diagnostics,
-        report,
-        rectangle: validated_rectangle,
-        revision: validated_revision,
-        ..
-    } = session
+    let checked = session
         .validate_fixed_placement(placement(redone))
-        .expect("Redo placement must use second profile")
-    else {
-        panic!("Redone narrow profile must overflow right edge");
-    };
+        .expect("Redo placement must use second profile");
+    assert!(
+        !checked.is_within_bounds(),
+        "Redone narrow profile must overflow right edge",
+    );
+    let redone_diagnostics = checked.diagnostics()
+        .expect("complete blocking overflow diagnostics");
+    let report = checked.report();
+    let validated_rectangle = checked.rectangle();
+    let validated_revision = checked.revision();
     assert_eq!(validated_revision, redone);
     assert_eq!(validated_rectangle, rectangle);
     assert_eq!(report.violations.len(), 1);

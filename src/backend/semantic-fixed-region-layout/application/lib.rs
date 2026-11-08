@@ -66,54 +66,70 @@ pub struct AcceptedFixedPlacement {
     pub revision: RevisionIdentity,
 }
 
-/// Completed accepted fixed-region bounds result.
+/// Constructor-controlled bounds evidence for one accepted fixed placement.
+///
+/// The exact checked object, page, rectangle and revision cannot be replaced
+/// by downstream callers. A report with violated edges has complete blocking
+/// diagnostics; an in-bounds report has none. Neither can be forged as a ready
+/// placement without running `validate_fixed_placement`.
+///
+/// ```compile_fail
+/// use atrament_semantic_fixed_region_layout::FixedRegionLayoutResult;
+/// fn forge(mut checked: FixedRegionLayoutResult) {
+///     checked.revision = checked.revision();
+/// }
+/// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub enum FixedRegionLayoutResult {
-    /// Derived fixed geometry crosses one or more writable page boundaries.
-    Overflow {
-        /// Complete blocking diagnostics, one for each violated boundary.
-        diagnostics: DiagnosticSet,
-        /// Stable accepted block validated by this result.
-        object: AcceptedIdentity,
-        /// Stable accepted page validated by this result.
-        page: AcceptedIdentity,
-        /// Exact solver-derived rectangle checked against the accepted page.
-        rectangle: Rect,
-        /// Exact physical bounds report behind the diagnostics.
-        report: BoundsReport,
-        /// Accepted revision against which these bounds were checked.
-        revision: RevisionIdentity,
-    },
-    /// Derived fixed geometry remains fully inside the writable page region.
-    WithinBounds {
-        /// Stable accepted block validated by this result.
-        object: AcceptedIdentity,
-        /// Stable accepted page validated by this result.
-        page: AcceptedIdentity,
-        /// Exact solver-derived rectangle checked against the accepted page.
-        rectangle: Rect,
-        /// Accepted revision against which these bounds were checked.
-        revision: RevisionIdentity,
-    },
+pub struct FixedRegionLayoutResult {
+    diagnostics: Option<DiagnosticSet>,
+    object: AcceptedIdentity,
+    page: AcceptedIdentity,
+    rectangle: Rect,
+    report: BoundsReport,
+    revision: RevisionIdentity,
 }
 
 impl FixedRegionLayoutResult {
+    /// Complete blocking diagnostics only when the rectangle overflows.
+    #[must_use]
+    pub const fn diagnostics(&self) -> Option<&DiagnosticSet> {
+        self.diagnostics.as_ref()
+    }
+
+    /// Whether the exact rectangle fits entirely inside the writable page.
+    #[must_use]
+    pub const fn is_within_bounds(&self) -> bool {
+        self.report.is_within_bounds()
+    }
+
+    /// Return the stable accepted block checked by this result.
+    #[must_use]
+    pub const fn object(&self) -> AcceptedIdentity {
+        self.object
+    }
+
+    /// Return the stable accepted page checked by this result.
+    #[must_use]
+    pub const fn page(&self) -> AcceptedIdentity {
+        self.page
+    }
+
     /// Return the unmodified solver-derived rectangle checked on this page.
     #[must_use]
     pub const fn rectangle(&self) -> Rect {
-        match self {
-            Self::Overflow { rectangle, .. }
-            | Self::WithinBounds { rectangle, .. } => *rectangle,
-        }
+        self.rectangle
+    }
+
+    /// Return the complete physical bounds report for the exact rectangle.
+    #[must_use]
+    pub const fn report(&self) -> &BoundsReport {
+        &self.report
     }
 
     /// Return the exact accepted revision that supplied the page geometry.
     #[must_use]
     pub const fn revision(&self) -> RevisionIdentity {
-        match self {
-            Self::Overflow { revision, .. }
-            | Self::WithinBounds { revision, .. } => *revision,
-        }
+        self.revision
     }
 }
 
@@ -273,16 +289,13 @@ pub fn validate_fixed_placement(
     let writable = valid.writable_region();
     let report = check_bounds(writable, placement.rectangle)
         .map_err(FixedRegionLayoutError::Bounds)?;
-    if report.is_within_bounds() {
-        return Ok(FixedRegionLayoutResult::WithinBounds {
-            object: placement.object,
-            page: placement.page,
-            rectangle: placement.rectangle,
-            revision: revision.id,
-        });
-    }
-    Ok(FixedRegionLayoutResult::Overflow {
-        diagnostics: overflow_diagnostics(revision.id, placement, &report),
+    let diagnostics = if report.is_within_bounds() {
+        None
+    } else {
+        Some(overflow_diagnostics(revision.id, placement, &report))
+    };
+    Ok(FixedRegionLayoutResult {
+        diagnostics,
         object: placement.object,
         page: placement.page,
         rectangle: placement.rectangle,

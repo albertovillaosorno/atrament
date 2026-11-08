@@ -2866,3 +2866,18 @@ edits, profile-reference changes, Undo and Redo while revised bounds switch
 between success and blocking overflow. Export preflight still gates only layout
 diagnostics; this does not add a fixed-position solver, semantic content
 measurement, notebook persistence or native PDF/PNG integration.
+
+## Constructor-controlled fixed-region evidence (partial) — 2026-11-07
+
+The validated fixed-region result now hides all writable fields. Successful
+placements expose read-only owner, page, rectangle, revision and a complete
+empty bounds report; overflow additionally exposes complete blocking
+diagnostics through an optional borrowed query. Neither a forged successful
+result nor a modified accepted rectangle can be produced by downstream
+callers through the public API. A Rustdoc compile-fail guard checks private
+revision mutation, while the 20,000-case reference oracle and session Undo/Redo
+regressions use the sealed result accessors.
+
+This does not seal the upstream solver-derived request or prove that measured
+text and fixed objects share a collision-free page. The accepted notebook
+body-to-native-ink and persistence-to-PDF/PNG bridge are still unfinished.

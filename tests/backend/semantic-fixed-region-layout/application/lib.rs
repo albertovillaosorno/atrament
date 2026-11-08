@@ -208,6 +208,19 @@ fn placement(
     }
 }
 
+fn matches_within(
+    result: Result<FixedRegionLayoutResult, FixedRegionLayoutError>,
+    expected: AcceptedFixedPlacement,
+) -> bool {
+    result.is_ok_and(|checked| {
+        checked.is_within_bounds()
+            && checked.object() == expected.object
+            && checked.page() == expected.page
+            && checked.rectangle() == expected.rectangle
+            && checked.revision() == expected.revision
+    })
+}
+
 fn rect(x: u64, y: u64, width: u64, height: u64) -> Rect {
     Rect {
         height: Length::from_micrometres(height),
@@ -284,35 +297,21 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
         .expect("generated placement keeps accepted authority");
         assert_eq!(actual.revision(), revision, "generated case {case}");
         assert_eq!(actual.rectangle(), rectangle, "generated case {case}");
+        assert_eq!(actual.object(), object, "generated case {case}");
+        assert_eq!(actual.page(), page, "generated case {case}");
+        assert_eq!(
+            actual.is_within_bounds(),
+            expected.is_within_bounds(),
+            "bounds result mismatch in generated case {case}",
+        );
+        assert_eq!(actual.report(), &expected, "generated case {case}");
         if expected.is_within_bounds() {
-            assert_eq!(
-                actual,
-                FixedRegionLayoutResult::WithinBounds {
-                    object,
-                    page,
-                    rectangle,
-                    revision,
-                },
-                "within-bounds mismatch in generated case {case}",
-            );
+            assert!(actual.diagnostics().is_none());
             continue;
         }
-        let FixedRegionLayoutResult::Overflow {
-            diagnostics,
-            object: actual_object,
-            page: actual_page,
-            rectangle: actual_rectangle,
-            report,
-            revision: actual_revision,
-        } = actual
-        else {
-            panic!("overflow case {case} must return diagnostics");
-        };
-        assert_eq!(actual_object, object, "generated case {case}");
-        assert_eq!(actual_page, page, "generated case {case}");
-        assert_eq!(actual_revision, revision, "generated case {case}");
-        assert_eq!(actual_rectangle, rectangle, "generated case {case}");
-        assert_eq!(report, expected, "generated case {case}");
+        let diagnostics = actual.diagnostics()
+            .expect("overflow case must return diagnostics");
+        let report = actual.report();
         assert_eq!(diagnostics.completeness, Completeness::Complete);
         assert_eq!(diagnostics.diagnostics.len(), report.violations.len());
         for (diagnostic, violation) in
@@ -383,10 +382,9 @@ fn first_journey_bottom_overflow_produces_exact_blocking_six_mm_diagnostic() {
         ),
     )
     .expect("valid derived placement");
-    let FixedRegionLayoutResult::Overflow { diagnostics, report, .. } = result
-    else {
-        panic!("placement must overflow");
-    };
+    assert!(!result.is_within_bounds(), "placement must overflow");
+    let diagnostics = result.diagnostics().expect("overflow diagnostics");
+    let report = result.report();
     assert_eq!(report.violations.len(), 1);
     assert_eq!(report.violations[0].edge, BoundaryEdge::Bottom);
     assert_eq!(report.violations[0].amount.micrometres(), 6_000);
@@ -436,23 +434,13 @@ fn exact_fit_is_read_only_and_produces_no_diagnostic_result() {
     let page = accepted_for(&mapping, fixture.page_one);
     let object = accepted_for(&mapping, fixture.block);
     let before = session.current().expect("accepted revision").clone();
-    assert_eq!(
-        validate_fixed_placement(
-            &before,
-            placement(
-                revision,
-                page,
-                object,
-                rect(35_000, 20_000, 165_000, 267_000)
-            ),
-        ),
-        Ok(FixedRegionLayoutResult::WithinBounds {
-            object,
-            page,
-            rectangle: rect(35_000, 20_000, 165_000, 267_000),
-            revision,
-        }),
+    let checked = placement(
+        revision, page, object, rect(35_000, 20_000, 165_000, 267_000),
     );
+    assert!(matches_within(
+        validate_fixed_placement(&before, checked),
+        checked,
+    ));
     assert_eq!(session.current(), Some(&before));
 }
 
@@ -477,12 +465,10 @@ fn zero_size_fixed_rectangles_retain_exact_position_and_bounds()
     )
     .map_err(|_| "zero-size rectangle was rejected")?;
     assert_eq!(within.rectangle(), inside);
-    assert_eq!(within, FixedRegionLayoutResult::WithinBounds {
-        object,
-        page,
-        rectangle: inside,
-        revision,
-    });
+    assert!(matches_within(
+        Ok(within),
+        placement(revision, page, object, inside),
+    ));
 
     let outside = rect(0, 0, 0, 0);
     let overflow = validate_fixed_placement(
@@ -491,9 +477,10 @@ fn zero_size_fixed_rectangles_retain_exact_position_and_bounds()
     )
     .map_err(|_| "zero-size overflow placement was rejected")?;
     assert_eq!(overflow.rectangle(), outside);
-    let FixedRegionLayoutResult::Overflow { report, .. } = overflow else {
+    if overflow.is_within_bounds() {
         return Err("out-of-bounds zero-size rectangle did not overflow");
-    };
+    }
+    let report = overflow.report();
     assert_eq!(report.violations.len(), 2);
     assert_eq!(report.violations[0].edge, BoundaryEdge::Left);
     assert_eq!(report.violations[1].edge, BoundaryEdge::Top);
@@ -522,10 +509,9 @@ fn multi_edge_overflow_produces_one_complete_diagnostic_per_edge() {
         ),
     )
     .expect("valid bounds comparison");
-    let FixedRegionLayoutResult::Overflow { diagnostics, report, .. } = result
-    else {
-        panic!("placement must overflow");
-    };
+    assert!(!result.is_within_bounds(), "placement must overflow");
+    let diagnostics = result.diagnostics().expect("overflow diagnostics");
+    let report = result.report();
     let edges = report
         .violations
         .iter()
@@ -586,9 +572,8 @@ fn stale_placement_is_rejected_before_new_page_geometry_is_used() {
         fresh,
     )
     .expect("fresh placement checks new geometry");
-    let FixedRegionLayoutResult::Overflow { report, .. } = result else {
-        panic!("new margin must make the old x coordinate overflow left");
-    };
+    assert!(!result.is_within_bounds(), "new margin must overflow left");
+    let report = result.report();
     assert_eq!(report.violations[0].edge, BoundaryEdge::Left);
     assert_eq!(report.violations[0].amount.micrometres(), 20_000);
 }
@@ -651,18 +636,15 @@ fn nested_block_is_still_owned_by_its_accepted_page() {
     };
     let page = accepted_for(&mapping, fixture.page_one);
     let nested = accepted_for(&mapping, fixture.nested);
-    assert_eq!(
-        validate_fixed_placement(
-            session.current().expect("accepted revision"),
-            placement(revision, page, nested, rect(35_000, 20_000, 1, 1)),
-        ),
-        Ok(FixedRegionLayoutResult::WithinBounds {
-            object: nested,
-            page,
-            rectangle: rect(35_000, 20_000, 1, 1),
-            revision,
-        }),
+    let checked = placement(
+        revision, page, nested, rect(35_000, 20_000, 1, 1),
     );
+    assert!(matches_within(
+        validate_fixed_placement(
+            session.current().expect("accepted revision"), checked,
+        ),
+        checked,
+    ));
 }
 
 #[test]
@@ -695,18 +677,15 @@ fn maximum_depth_block_ownership_is_iterative() {
     };
     let page = accepted_for(&mapping, fixture.page_one);
     let object = accepted_for(&mapping, target);
-    assert_eq!(
-        validate_fixed_placement(
-            session.current().expect("accepted deep revision"),
-            placement(revision, page, object, rect(35_000, 20_000, 1, 1)),
-        ),
-        Ok(FixedRegionLayoutResult::WithinBounds {
-            object,
-            page,
-            rectangle: rect(35_000, 20_000, 1, 1),
-            revision,
-        }),
+    let checked = placement(
+        revision, page, object, rect(35_000, 20_000, 1, 1),
     );
+    assert!(matches_within(
+        validate_fixed_placement(
+            session.current().expect("accepted revision"), checked,
+        ),
+        checked,
+    ));
 }
 
 #[test]
@@ -727,10 +706,9 @@ fn very_large_overflow_amount_is_lossless_in_diagnostic_evidence() {
         placement(revision, page, object, rect(x, 20_000, 1, 1)),
     )
     .expect("maximum right coordinate is representable");
-    let FixedRegionLayoutResult::Overflow { diagnostics, report, .. } = result
-    else {
-        panic!("far-right placement must overflow");
-    };
+    assert!(!result.is_within_bounds(), "far-right placement must overflow");
+    let diagnostics = result.diagnostics().expect("overflow diagnostics");
+    let report = result.report();
     let amount = report.violations[0].amount.micrometres();
     assert!(amount > i64::MAX as u64);
     assert_eq!(
@@ -830,13 +808,7 @@ fn verify_duplicate_fixed_region_authority_refusal() -> Result<(), String> {
         .current()
         .ok_or("accepted revision missing")?
         .clone();
-    if validate_fixed_placement(&accepted, checked)
-        != Ok(FixedRegionLayoutResult::WithinBounds {
-            object,
-            page,
-            rectangle: checked.rectangle,
-            revision,
-        })
+    if !matches_within(validate_fixed_placement(&accepted, checked), checked)
     {
         return Err("valid fixed region was refused".into());
     }
@@ -902,13 +874,7 @@ fn verify_cross_kind_fixed_authority_refusal() -> Result<(), String> {
         .current()
         .ok_or("accepted revision missing")?
         .clone();
-    if validate_fixed_placement(&accepted, checked)
-        != Ok(FixedRegionLayoutResult::WithinBounds {
-            object,
-            page,
-            rectangle: checked.rectangle,
-            revision,
-        })
+    if !matches_within(validate_fixed_placement(&accepted, checked), checked)
     {
         return Err("valid fixed placement was refused".into());
     }
@@ -978,13 +944,7 @@ fn verify_duplicate_fixed_object_refusal() -> Result<(), String> {
         .current()
         .ok_or("accepted revision missing")?
         .clone();
-    if validate_fixed_placement(&accepted, checked)
-        != Ok(FixedRegionLayoutResult::WithinBounds {
-            object,
-            page,
-            rectangle: checked.rectangle,
-            revision,
-        })
+    if !matches_within(validate_fixed_placement(&accepted, checked), checked)
     {
         return Err("valid fixed block was refused".into());
     }
