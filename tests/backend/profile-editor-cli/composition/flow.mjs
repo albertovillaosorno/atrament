@@ -7291,3 +7291,87 @@ test('invalid fixed rectangles preserve accepted PDF and selected PNG pages',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('unprinted Markdown markers cannot inflate native PDF/PNG row pitch',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/syntax-only-pitch-'));
+        try {
+            const statistics = join(dir, 'tall-syntax.json');
+            const height = ['25000', '25000', '25000', '25000', '0'];
+            const configured = spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--', 'handwriting',
+                '--set-glyph', '#', 'height', ...height,
+                '--set-glyph', '-', 'height', ...height,
+                '--set-glyph', '+', 'height', ...height,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(statistics, configured.stdout);
+
+            // 9 mm of physical ink fits exactly between 2.5 mm insets.
+            // If a syntax-only '#' or bullet marker falsely applies its
+            // 25 mm height, neither of these two one-row pages will fit.
+            const region = [
+                '--handwriting-profile', statistics,
+                '--flow-region', '30000', '40000', '40000', '14000',
+                '--heading-style', 'none',
+            ];
+            const firstSource = '# a\n\n- a';
+            const alternateSource = '## a\n\n+ a';
+            const literalHash = '\\# a\n\n- a';
+            const pngPages = [];
+            for (const format of ['pdf', 'png']) {
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const options = format === 'pdf'
+                        ? [...region, '--pages', '2'] : region;
+                    const first = render(dir, firstSource, format,
+                        options, '--flow-markdown', page);
+                    assert.equal(first.result.status, 0, first.result.stderr);
+                    const expected = readFileSync(first.output);
+                    if (format === 'pdf') {
+                        assert.match(expected.toString('latin1'), /\/Count 2/);
+                    } else {
+                        assert.deepEqual(expected.subarray(0, 8),
+                            Buffer.from('89504e470d0a1a0a', 'hex'));
+                        pngPages.push(expected);
+                    }
+                    const alternate = render(dir, alternateSource, format,
+                        options, '--flow-markdown', page);
+                    assert.equal(alternate.result.status, 0,
+                        alternate.result.stderr);
+                    assert.deepEqual(readFileSync(alternate.output), expected,
+                        `${format} page ${page}: syntax does not shift ink`);
+
+                    // An escaped hash really is tall authored ink. It
+                    // cannot fit a 14-mm row, even before glyph approval.
+                    const refused = render(dir, literalHash, format,
+                        options, '--flow-markdown', page);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.match(refused.result.stderr,
+                        /flow line cannot fit printable vertical region/);
+                    assert.deepEqual(readFileSync(refused.output), expected,
+                        'unfit literal ink must not replace output');
+
+                    // With sufficient height, the missing authored hash
+                    // still refuses before changing the selected file.
+                    const roomy = [
+                        '--handwriting-profile', statistics,
+                        '--flow-region', '30000', '40000', '40000',
+                        '35000', '--heading-style', 'none',
+                        ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    ];
+                    const missing = render(dir, literalHash, format,
+                        roomy, '--flow-markdown', page);
+                    assert.notEqual(missing.result.status, 0);
+                    assert.match(missing.result.stderr,
+                        /missing authored glyph shapes.*U\+0023/);
+                    assert.deepEqual(readFileSync(missing.output), expected,
+                        'missing literal glyph must not replace output');
+                }
+            }
+            assert.notDeepEqual(pngPages[0], pngPages[1],
+                'first and second physical sheets contain distinct ink');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

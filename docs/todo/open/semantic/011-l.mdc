@@ -2837,3 +2837,16 @@ rejects an insufficient accepted-fixture count rather than silently treating
 most failed layouts as evidence. This strengthens the existing CLI-only export
 measurement boundary; it does not persist accepted semantic notebook bodies
 or connect their identities to native PDF/transparent PNG output. P1 stays open.
+
+## Native two-page syntax-only pitch parity (partial) — 2026-11-07
+
+A CLI PDF/PNG acceptance test now supplies handwriting statistics with 25-mm
+height overrides for `#`, `-`, and `+` while omitting their glyph shapes.
+Equivalent Markdown heading and bullet marker spellings export identical
+physical two-page PDF and page-local PNG bytes in 14-mm regions, because
+unprinted markers must not change the 9-mm measured body pitch.
+
+An escaped literal hash instead refuses the short region and, with enough
+room, also refuses its missing authored shape. Neither rejection may replace
+the last accepted PDF/PNG bytes. This remains native CLI behavior; the
+revision-owned notebook body-to-PDF/PNG integration is still absent.
