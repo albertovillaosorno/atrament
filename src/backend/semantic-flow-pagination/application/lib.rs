@@ -270,6 +270,21 @@ pub fn check_fixed_regions_for_flow(
     plan: &SemanticPaginationPlan,
     fixed_regions: &[FixedRegionLayoutResult],
 ) -> Result<(), FlowFixedRegionError> {
+    if fixed_regions.is_empty() {
+        return Ok(());
+    }
+    // The paginator visits rows in page order and advances the physical Y
+    // cursor by a strictly positive height. Index once by page: repeated
+    // fixed-region checks must not rescan every row on unrelated pages.
+    let writable_by_page = plan
+        .covered_pages()
+        .iter()
+        .map(|page| (page.page, page.writable))
+        .collect::<BTreeMap<_, _>>();
+    let mut rows_by_page = BTreeMap::<_, Vec<&PlacedFragment<_, _>>>::new();
+    for row in plan.placements() {
+        rows_by_page.entry(row.page).or_default().push(row);
+    }
     for fixed in fixed_regions {
         if fixed.revision() != plan.revision() {
             return Err(FlowFixedRegionError::RevisionMismatch {
@@ -284,9 +299,10 @@ pub fn check_fixed_regions_for_flow(
                 object: fixed.object(),
             });
         }
-        if plan.covered_pages().iter().any(|covered| {
-            covered.page == fixed.page() && covered.writable != fixed.writable()
-        }) {
+        if writable_by_page
+            .get(&fixed.page())
+            .is_some_and(|writable| *writable != fixed.writable())
+        {
             return Err(FlowFixedRegionError::WritableMismatch {
                 page: fixed.page(),
                 object: fixed.object(),
@@ -307,25 +323,35 @@ pub fn check_fixed_regions_for_flow(
                 page: fixed.page(),
                 object: fixed.object(),
             })?;
-        for row in plan
-            .placements()
-            .iter()
-            .filter(|row| row.page == fixed.page())
-        {
-            let row_start = row.top.micrometres();
-            let row_end = row_start
-                .checked_add(row.height.micrometres())
-                .ok_or_else(|| FlowFixedRegionError::CoordinateOverflow {
-                    page: fixed.page(),
-                    object: fixed.object(),
-                })?;
-            if fixed_start < row_end && row_start < fixed_end {
-                return Err(FlowFixedRegionError::VerticalBandOverlap {
-                    page: fixed.page(),
-                    object: fixed.object(),
-                    fragment_owner: row.owner,
-                    source: row.source,
-                });
+        if let Some(rows) = rows_by_page.get(&fixed.page()) {
+            // Positive-height, forward-only placement makes row bottoms
+            // strictly increasing on each page. Start at the first row that
+            // can cross the fixed region, retaining original source order.
+            let first_candidate = rows.partition_point(|row| {
+                row.top
+                    .micrometres()
+                    .saturating_add(row.height.micrometres())
+                    <= fixed_start
+            });
+            for row in rows.get(first_candidate..).unwrap_or(&[]) {
+                let row_start = row.top.micrometres();
+                if row_start >= fixed_end {
+                    break;
+                }
+                let row_end = row_start
+                    .checked_add(row.height.micrometres())
+                    .ok_or_else(|| FlowFixedRegionError::CoordinateOverflow {
+                        page: fixed.page(),
+                        object: fixed.object(),
+                    })?;
+                if fixed_start < row_end {
+                    return Err(FlowFixedRegionError::VerticalBandOverlap {
+                        page: fixed.page(),
+                        object: fixed.object(),
+                        fragment_owner: row.owner,
+                        source: row.source,
+                    });
+                }
             }
         }
     }

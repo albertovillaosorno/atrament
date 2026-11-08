@@ -2971,3 +2971,19 @@ A separate ordered-pair assertion verifies that the first supplied failing
 region determines the typed refusal, whether the first error is physical
 bounds overflow or measured-row overlap. This strengthens defensive geometry
 evidence but does not imply horizontally aligned ink or native Export.
+
+## Indexed measured-row fixed clearance (partial) — 2026-11-08
+
+The accepted-flow fixed-region checker now indexes covered writable pages and
+measured rows once per query. On each page, the paginator's forward-only,
+positive-height rows have strictly increasing bottoms, permitting a bounded
+search for the first possible vertical-band collision instead of rescanning
+all placements for every checked rectangle. Caller-order error precedence,
+revision and bounds refusals, full-width conservative bands, source-fragment
+identity and zero-width spacer reservations remain unchanged.
+
+A 4,096-case linear physical-band oracle cross-checks the indexed result over
+180 measured rows, varied fixed widths/heights, edge and empty rectangles,
+and overflow. A batch of empty fixed regions followed by a collision checks
+that the first true overlap retains the original source identity. This is a
+layout-inspection optimization, not accepted Markdown measurement or PDF/PNG.

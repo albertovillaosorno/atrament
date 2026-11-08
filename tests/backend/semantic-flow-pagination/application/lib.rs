@@ -3321,3 +3321,155 @@ fn fixed_flow_clearance_matches_independent_physical_interval_oracle()
     }
     Ok(())
 }
+
+#[test]
+fn indexed_fixed_clearance_matches_linear_scan_across_many_measured_rows()
+-> Result<(), String> {
+    const CASES: usize = 4_096;
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("indexed fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing accepted revision")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_one);
+    // Distinct physical bands plus a zero-width spacer with positive height.
+    // The spacer reserves a row even though it has no horizontal ink extent.
+    let mut sizes = vec![(15_000, 1_000); 180];
+    sizes[71].0 = 0;
+    sizes[129].1 = 2_000;
+    let measured = measurement(revision, flow, owner, &sizes);
+    let plan = paginate_revision(accepted, &measured)
+        .map_err(|error| format!("indexed pagination: {error:?}"))?;
+    if plan.placements().len() != sizes.len()
+        || plan.placements().iter().any(|row| row.page != page)
+    {
+        return Err("expected all measured rows on first page".into());
+    }
+    let writable = plan.covered_pages()[0].writable;
+    let x = writable.x.micrometres();
+    let y = writable.y.micrometres();
+    let width = writable.width.micrometres();
+    let height = writable.height.micrometres();
+    let mut seed = 0xa83b_25d1_047e_901c;
+    let mut counts = [0usize; 3]; // clear, row overlap, overflow
+    let mut empty_regions = Vec::new();
+    for case in 0..CASES {
+        let a = next_owner_oracle_value(&mut seed);
+        let b = next_owner_oracle_value(&mut seed);
+        let c = next_owner_oracle_value(&mut seed);
+        let d = next_owner_oracle_value(&mut seed);
+        let offset_x = if case % 7 == 0 {
+            width - 100
+        } else {
+            a % width
+        };
+        let offset_y = if case % 9 == 0 {
+            height - 100
+        } else {
+            b % height
+        };
+        let extent_x = if case % 11 == 0 {
+            0
+        } else {
+            c % 14_000
+        };
+        let extent_y = if case % 13 == 0 {
+            0
+        } else {
+            d % 24_000
+        };
+        let region =
+            validate_fixed_placement(accepted, AcceptedFixedPlacement {
+                object: owner,
+                page,
+                revision,
+                rectangle: Rect {
+                    x: Length::from_micrometres(x + offset_x),
+                    y: Length::from_micrometres(y + offset_y),
+                    width: Length::from_micrometres(extent_x),
+                    height: Length::from_micrometres(extent_y),
+                },
+            })
+            .map_err(|error| format!("case {case}: {error:?}"))?;
+        // Independent linear reference: inspect each original physical band
+        // in order, without using the indexed lookup's search logic.
+        let overflow =
+            offset_x + extent_x > width || offset_y + extent_y > height;
+        let overlap = if extent_x == 0 || extent_y == 0 {
+            None
+        } else {
+            plan.placements().iter().find(|row| {
+                let top = row.top.micrometres();
+                row.page == page
+                    && y + offset_y < top + row.height.micrometres()
+                    && top < y + offset_y + extent_y
+            })
+        };
+        let (class, expected) = if overflow {
+            (
+                2,
+                Err(FlowFixedRegionError::FixedRegionOverflow {
+                    page,
+                    object: owner,
+                }),
+            )
+        } else if let Some(row) = overlap {
+            (
+                1,
+                Err(FlowFixedRegionError::VerticalBandOverlap {
+                    page,
+                    object: owner,
+                    fragment_owner: row.owner,
+                    source: row.source,
+                }),
+            )
+        } else {
+            (0, Ok(()))
+        };
+        counts[class] += 1;
+        if check_fixed_regions_for_flow(&plan, &[region.clone()]) != expected {
+            return Err(format!(
+                "linear mismatch at case {case}: {expected:?}"
+            ));
+        }
+        if region.is_within_bounds() && (extent_x == 0 || extent_y == 0) {
+            empty_regions.push(region);
+        }
+    }
+    if counts.iter().any(|count| *count < 100) || empty_regions.len() < 100 {
+        return Err(format!("insufficient interval classes: {counts:?}"));
+    }
+    // Inspect a large ordered set of cleared fixed placements in one call.
+    // The final row collision must retain its original source fragment.
+    let first = &plan.placements()[0];
+    let collision =
+        validate_fixed_placement(accepted, AcceptedFixedPlacement {
+            object: owner,
+            page,
+            revision,
+            rectangle: Rect {
+                x: Length::from_micrometres(x),
+                y: first.top,
+                width: Length::from_micrometres(1_000),
+                height: Length::from_micrometres(1_000),
+            },
+        })
+        .map_err(|error| format!("final collision: {error:?}"))?;
+    empty_regions.push(collision);
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &empty_regions),
+        Err(FlowFixedRegionError::VerticalBandOverlap {
+            page,
+            object: owner,
+            fragment_owner: first.owner,
+            source: first.source,
+        }),
+    );
+    Ok(())
+}
