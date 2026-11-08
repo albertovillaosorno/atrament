@@ -215,9 +215,9 @@ fn empty_accepted_flow_needs_no_page_profile_authority() {
 
     let plan = paginate_revision(&defensive, &measured)
         .expect("empty flow must not require page geometry");
-    assert_eq!(plan.revision, revision);
-    assert_eq!(plan.flow, flow);
-    assert!(plan.placements.is_empty());
+    assert_eq!(plan.revision(), revision);
+    assert_eq!(plan.flow(), flow);
+    assert!(plan.placements().is_empty());
 }
 
 #[test]
@@ -296,17 +296,17 @@ fn measured_inline_block_families_preserve_semantic_order_and_identity() {
         &measured,
     )
     .expect("already-measured inline families must paginate");
-    assert_eq!(plan.revision, revision);
-    assert_eq!(plan.flow, flow);
+    assert_eq!(plan.revision(), revision);
+    assert_eq!(plan.flow(), flow);
     assert_eq!(
-        plan.placements
+        plan.placements()
             .iter()
             .map(|placement| placement.owner)
             .collect::<Vec<_>>(),
         expected,
     );
     assert!(plan
-        .placements
+        .placements()
         .iter()
         .all(|placement| placement.page == page));
 }
@@ -369,9 +369,9 @@ fn measured_list_block_keeps_containing_block_as_pagination_owner() {
     );
     let plan = paginate_revision(accepted, &measured)
         .expect("already-measured list block must paginate");
-    assert_eq!(plan.placements.len(), 2);
+    assert_eq!(plan.placements().len(), 2);
     assert!(plan
-        .placements
+        .placements()
         .iter()
         .all(|placement| placement.owner == owner && placement.page == page));
 }
@@ -527,14 +527,14 @@ fn measured_structured_block_families_preserve_top_level_owner_order() {
     )
     .expect("already-measured structured families must paginate");
     assert_eq!(
-        plan.placements
+        plan.placements()
             .iter()
             .map(|placement| placement.owner)
             .collect::<Vec<_>>(),
         expected,
     );
     assert!(plan
-        .placements
+        .placements()
         .iter()
         .all(|placement| placement.page == page));
     assert_eq!(session.current(), Some(&before));
@@ -558,15 +558,15 @@ fn accepted_page_profile_derives_exact_writable_top_and_page_identity() {
 
     let plan =
         paginate_revision(accepted, &measured).expect("semantic pagination");
-    assert_eq!(plan.placements.len(), 1);
-    assert_eq!(plan.placements[0].owner, owner);
-    assert_eq!(plan.placements[0].page, page_one);
-    assert_eq!(plan.placements[0].top, Length::from_micrometres(20_000));
+    assert_eq!(plan.placements().len(), 1);
+    assert_eq!(plan.placements()[0].owner, owner);
+    assert_eq!(plan.placements()[0].page, page_one);
+    assert_eq!(plan.placements()[0].top, Length::from_micrometres(20_000));
     assert_eq!(
-        plan.placements[0].writable.x,
+        plan.placements()[0].writable.x,
         Length::from_micrometres(35_000)
     );
-    assert_eq!(plan.placements[0].width, Length::from_micrometres(165_000));
+    assert_eq!(plan.placements()[0].width, Length::from_micrometres(165_000));
 }
 
 #[test]
@@ -637,8 +637,8 @@ fn many_pages_can_share_one_cached_page_profile() {
         &measured,
     )
     .expect("shared page profile must preserve pagination");
-    assert_eq!(plan.placements.len(), 1);
-    assert_eq!(plan.placements[0].page, page_one);
+    assert_eq!(plan.placements().len(), 1);
+    assert_eq!(plan.placements()[0].page, page_one);
 }
 
 #[test]
@@ -676,8 +676,8 @@ fn large_page_profile_index_preserves_pagination() {
         &measured,
     )
     .expect("large profile index must preserve pagination");
-    assert_eq!(plan.placements.len(), 1);
-    assert_eq!(plan.placements[0].page, page_one);
+    assert_eq!(plan.placements().len(), 1);
+    assert_eq!(plan.placements()[0].page, page_one);
 }
 
 #[test]
@@ -707,11 +707,11 @@ fn measured_flow_spills_to_next_accepted_page_in_notebook_order() {
         &measured,
     )
     .expect("two-page flow");
-    assert_eq!(plan.placements[0].page, first_page);
-    assert_eq!(plan.placements[1].page, second_page);
-    assert_eq!(plan.placements[1].top, Length::from_micrometres(40_000));
+    assert_eq!(plan.placements()[0].page, first_page);
+    assert_eq!(plan.placements()[1].page, second_page);
+    assert_eq!(plan.placements()[1].top, Length::from_micrometres(40_000));
     assert_eq!(
-        plan.placements.first().map(|placed| placed.writable),
+        plan.placements().first().map(|placed| placed.writable),
         Some(Rect {
             height: Length::from_micrometres(267_000),
             width: Length::from_micrometres(165_000),
@@ -720,7 +720,7 @@ fn measured_flow_spills_to_next_accepted_page_in_notebook_order() {
         }),
     );
     assert_eq!(
-        plan.placements.get(1).map(|placed| placed.writable),
+        plan.placements().get(1).map(|placed| placed.writable),
         Some(Rect {
             height: Length::from_micrometres(247_000),
             width: Length::from_micrometres(145_000),
@@ -802,7 +802,7 @@ fn accepted_page_profile_edit_changes_fit_only_with_fresh_measurement() {
     let shifted =
         paginate_revision(session.current().expect("edited revision"), &fresh)
             .expect("later accepted page still fits");
-    assert_eq!(shifted.placements[0].page, second_page);
+    assert_eq!(shifted.placements()[0].page, second_page);
 
     let PageProfileEditOutcome::Applied {
         revision: narrowed_revision,
@@ -853,7 +853,7 @@ fn zero_height_measurement_refuses_without_mutating_accepted_revision() {
     let allowed_gap = measurement(revision, flow, owner, &[(0, 1_000)]);
     assert_eq!(
         paginate_revision(&original, &allowed_gap)
-            .map(|plan| plan.placements.len()),
+            .map(|plan| plan.placements().len()),
         Ok(1),
     );
     assert_eq!(session.current(), Some(&original));
@@ -1839,7 +1839,7 @@ fn flow_on_later_page_rejects_identity_aliasing_an_earlier_page() {
         return;
     };
     assert_eq!(
-        plan.placements.first().map(|place| place.page),
+        plan.placements().first().map(|place| place.page),
         Some(second_page),
     );
 
@@ -2364,9 +2364,9 @@ fn large_complete_measurement_streams_in_semantic_block_order() {
         &measured,
     )
     .expect("large complete measurement must paginate");
-    assert_eq!(plan.placements.len(), BLOCKS);
-    assert_eq!(plan.placements.first().map(|item| item.owner), Some(first));
-    assert_eq!(plan.placements.last().map(|item| item.owner), Some(last));
+    assert_eq!(plan.placements().len(), BLOCKS);
+    assert_eq!(plan.placements().first().map(|item| item.owner), Some(first));
+    assert_eq!(plan.placements().last().map(|item| item.owner), Some(last));
 }
 
 #[test]
@@ -2483,10 +2483,10 @@ fn repeated_owner_across_measurement_units_remains_one_owner_run() {
         &measured,
     )
     .expect("cross-unit owner run must remain complete");
-    assert_eq!(plan.placements.len(), 3);
-    assert_eq!(plan.placements[0].owner, first);
-    assert_eq!(plan.placements[1].owner, first);
-    assert_eq!(plan.placements[2].owner, second);
+    assert_eq!(plan.placements().len(), 3);
+    assert_eq!(plan.placements()[0].owner, first);
+    assert_eq!(plan.placements()[1].owner, first);
+    assert_eq!(plan.placements()[2].owner, second);
 }
 
 #[test]
@@ -2579,10 +2579,10 @@ fn repeated_fragments_for_one_block_remain_one_semantic_owner_run() {
         &measured,
     )
     .expect("complete ordered measurement");
-    assert_eq!(plan.placements.len(), 3);
-    assert_eq!(plan.placements[0].owner, first);
-    assert_eq!(plan.placements[1].owner, first);
-    assert_eq!(plan.placements[2].owner, second);
+    assert_eq!(plan.placements().len(), 3);
+    assert_eq!(plan.placements()[0].owner, first);
+    assert_eq!(plan.placements()[1].owner, first);
+    assert_eq!(plan.placements()[2].owner, second);
 }
 
 #[test]
@@ -2693,14 +2693,14 @@ fn keep_group_skip_never_backfills_earlier_accepted_page() {
     )
     .expect("accepted page order must remain monotone");
     assert_eq!(
-        plan.placements
+        plan.placements()
             .iter()
             .map(|placement| placement.page)
             .collect::<Vec<_>>(),
         [first_page, third_page, third_page, third_page],
     );
     assert_eq!(
-        plan.placements[3].top,
+        plan.placements()[3].top,
         Length::from_micrometres(100_000),
     );
 }
@@ -2727,10 +2727,10 @@ fn flow_owned_by_second_page_never_backfills_first_page() {
         &measured,
     )
     .expect("second-page flow");
-    assert_eq!(plan.placements.len(), 1);
-    assert_eq!(plan.placements[0].page, second_page);
+    assert_eq!(plan.placements().len(), 1);
+    assert_eq!(plan.placements()[0].page, second_page);
     // The selected flow starts here, not on the preceding notebook page.
-    assert_eq!(plan.covered_pages.iter().map(|p| p.page)
+    assert_eq!(plan.covered_pages().iter().map(|p| p.page)
         .collect::<Vec<_>>(), [second_page]);
 }
 
@@ -2781,7 +2781,7 @@ fn later_page_flow_content_cannot_be_overlaid_by_measured_spill()
     let short = measurement(revision, selected, owner, &[(1, 1)]);
     if paginate_revision(&accepted, &short)
         .map_err(|error| format!("short flow refused: {error:?}"))?
-        .placements.len() != 1 {
+        .placements().len() != 1 {
         return Err("short flow was not on its first page".into());
     }
     let spilling = measurement(revision, selected, owner, &[
@@ -2803,7 +2803,7 @@ fn later_page_flow_content_cannot_be_overlaid_by_measured_spill()
         .blocks.clear();
     let plan = paginate_revision(&cleared, &spilling)
         .map_err(|error| format!("empty peer refused: {error:?}"))?;
-    if plan.placements.get(1).map(|placed| placed.page)
+    if plan.placements().get(1).map(|placed| placed.page)
         != Some(occupied_page) {
         return Err("empty peer did not allow page-two spill".into());
     }
@@ -2911,11 +2911,11 @@ fn occupied_narrow_page_skipped_by_flow_remains_untouched()
         };
         let plan = paginate_revision(&accepted, &measurement)
             .map_err(|error| format!("skipped page refused: {error:?}"))?;
-        if plan.covered_pages.iter().map(|p| p.page)
+        if plan.covered_pages().iter().map(|p| p.page)
             .collect::<Vec<_>>() != [first, skipped, third_page] {
             return Err(format!("covered page sequence mismatch: {policy:?}"));
         }
-        for covered in &plan.covered_pages {
+        for covered in plan.covered_pages() {
             let page = accepted.notebook.pages.iter()
                 .find(|page| page.id == covered.page)
                 .ok_or("covered page not accepted")?;
@@ -2933,12 +2933,12 @@ fn occupied_narrow_page_skipped_by_flow_remains_untouched()
                 ));
             }
         }
-        if plan.placements.len() != 2
-            || plan.placements.first().map(|placed| placed.page)
+        if plan.placements().len() != 2
+            || plan.placements().first().map(|placed| placed.page)
                 != Some(first)
-            || plan.placements.get(1).map(|placed| placed.page)
+            || plan.placements().get(1).map(|placed| placed.page)
                 != Some(third_page)
-            || plan.placements.iter().any(|placed| placed.page == skipped)
+            || plan.placements().iter().any(|placed| placed.page == skipped)
         {
             return Err(format!("skipped-page placement mismatch: {policy:?}"));
         }

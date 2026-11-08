@@ -1245,9 +1245,9 @@ fn run_process_fixture_child(mode: &str) {
     let pagination_plan = session
         .paginate_measured_flow(&measurement)
         .expect("process fixture measured flow must paginate");
-    assert_eq!(pagination_plan.placements.len(), 2);
+    assert_eq!(pagination_plan.placements().len(), 2);
     assert!(pagination_plan
-        .placements
+        .placements()
         .iter()
         .all(|placement| placement.page == page));
 
@@ -1947,9 +1947,9 @@ fn application_routes_measured_pagination_through_owned_revision() {
     let plan = session
         .paginate_measured_flow(&measurement)
         .expect("current measurement must paginate");
-    assert_eq!(plan.placements.len(), 1);
-    assert_eq!(plan.placements[0].owner, block);
-    assert_eq!(plan.placements[0].page, page);
+    assert_eq!(plan.placements().len(), 1);
+    assert_eq!(plan.placements()[0].owner, block);
+    assert_eq!(plan.placements()[0].page, page);
     assert_eq!(session.accepted_revision(), Some(&before));
 
     let TextEditOutcome::Applied { revision: current, .. } =
@@ -2044,10 +2044,10 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     let plan = session
         .paginate_measured_flow(&before)
         .expect("base profile must fit measured fragment");
-    assert_eq!(plan.flow, flow);
-    assert_eq!(plan.revision, revision);
-    assert_eq!(plan.placements.len(), 1);
-    assert_eq!(plan.placements[0].page, page);
+    assert_eq!(plan.flow(), flow);
+    assert_eq!(plan.revision(), revision);
+    assert_eq!(plan.placements().len(), 1);
+    assert_eq!(plan.placements()[0].page, page);
     let original_writable = Rect {
         height: Length::from_micrometres(267_000),
         width: Length::from_micrometres(175_000),
@@ -2055,10 +2055,10 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         y: Length::from_micrometres(20_000),
     };
     assert_eq!(
-        plan.placements.first().map(|placed| placed.writable),
+        plan.placements().first().map(|placed| placed.writable),
         Some(original_writable),
     );
-    assert_eq!(plan.covered_pages, [PageRegion {
+    assert_eq!(plan.covered_pages(), [PageRegion {
         page,
         writable: original_writable,
     }]);
@@ -2090,18 +2090,18 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     let narrowed_fit = session
         .paginate_measured_flow(&measurement(edited, 80_000))
         .expect("fresh narrow measurement must fit edited profile");
-    assert_eq!(narrowed_fit.flow, flow);
-    assert_eq!(narrowed_fit.revision, edited);
-    assert_eq!(narrowed_fit.placements[0].page, page);
+    assert_eq!(narrowed_fit.flow(), flow);
+    assert_eq!(narrowed_fit.revision(), edited);
+    assert_eq!(narrowed_fit.placements()[0].page, page);
     let narrowed_writable = Rect {
         width: Length::from_micrometres(85_000),
         ..original_writable
     };
     assert_eq!(
-        narrowed_fit.placements.first().map(|placed| placed.writable),
+        narrowed_fit.placements().first().map(|placed| placed.writable),
         Some(narrowed_writable),
     );
-    assert_eq!(narrowed_fit.covered_pages, [PageRegion {
+    assert_eq!(narrowed_fit.covered_pages(), [PageRegion {
         page,
         writable: narrowed_writable,
     }]);
@@ -2115,14 +2115,14 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     let restored = session
         .paginate_measured_flow(&measurement(undone, 100_000))
         .expect("fresh Undo measurement must use restored profile geometry");
-    assert_eq!(restored.flow, flow);
-    assert_eq!(restored.revision, undone);
-    assert_eq!(restored.placements[0].page, page);
+    assert_eq!(restored.flow(), flow);
+    assert_eq!(restored.revision(), undone);
+    assert_eq!(restored.placements()[0].page, page);
     assert_eq!(
-        restored.placements.first().map(|placed| placed.writable),
+        restored.placements().first().map(|placed| placed.writable),
         Some(original_writable),
     );
-    assert_eq!(restored.covered_pages, [PageRegion {
+    assert_eq!(restored.covered_pages(), [PageRegion {
         page,
         writable: original_writable,
     }]);
@@ -2143,9 +2143,9 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     let redone_fit = session
         .paginate_measured_flow(&measurement(redone, 80_000))
         .expect("fresh Redo measurement must use narrowed profile");
-    assert_eq!(redone_fit.flow, flow);
-    assert_eq!(redone_fit.revision, redone);
-    assert_eq!(redone_fit.covered_pages, [PageRegion {
+    assert_eq!(redone_fit.flow(), flow);
+    assert_eq!(redone_fit.revision(), redone);
+    assert_eq!(redone_fit.covered_pages(), [PageRegion {
         page,
         writable: narrowed_writable,
     }]);

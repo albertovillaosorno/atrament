@@ -48,19 +48,53 @@ use atrament_semantic_notebook::{
 
 /// Complete measured-flow plan bound to its accepted semantic authority.
 ///
-/// Downstream consumers must compare `revision` with the live accepted state
-/// before using the derived physical geometry. The `flow` identifies which
-/// accepted flow was measured, even when no fragments were placed.
+/// Downstream consumers must compare `revision()` with the live accepted state
+/// before using the derived physical geometry. The `flow()` identifies which
+/// accepted flow was measured, even when no fragments were placed. All fields
+/// are private so consumers cannot overwrite that validation evidence.
+///
+/// ```compile_fail
+/// use atrament_semantic_flow_pagination::SemanticPaginationPlan;
+/// fn forge_revision(mut plan: SemanticPaginationPlan) {
+///     plan.revision = plan.revision();
+/// }
+/// ```
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SemanticPaginationPlan {
-    /// Ordered source-page coverage, including skipped intermediate pages.
-    pub covered_pages: Vec<PageRegion<AcceptedIdentity>>,
-    /// Accepted flow whose measurement produced this plan.
-    pub flow: AcceptedIdentity,
+    // Keep authority and geometry constructor-controlled: callers may inspect
+    // a validated result, but cannot synthesize or change its provenance.
+    covered_pages: Vec<PageRegion<AcceptedIdentity>>,
+    flow: AcceptedIdentity,
+    placements: Vec<PlacedFragment<AcceptedIdentity, AcceptedIdentity>>,
+    revision: RevisionIdentity,
+}
+
+impl SemanticPaginationPlan {
+    /// Ordered accepted page rectangles, including skipped intermediate pages.
+    #[must_use]
+    pub fn covered_pages(&self) -> &[PageRegion<AcceptedIdentity>] {
+        &self.covered_pages
+    }
+
+    /// Exact accepted flow that supplied the measured content.
+    #[must_use]
+    pub const fn flow(&self) -> AcceptedIdentity {
+        self.flow
+    }
+
     /// Ordered physical placements in semantic reading order.
-    pub placements: Vec<PlacedFragment<AcceptedIdentity, AcceptedIdentity>>,
-    /// Accepted revision against which measurement and geometry were checked.
-    pub revision: RevisionIdentity,
+    #[must_use]
+    pub fn placements(
+        &self,
+    ) -> &[PlacedFragment<AcceptedIdentity, AcceptedIdentity>] {
+        &self.placements
+    }
+
+    /// Accepted revision whose geometry and measurements were validated.
+    #[must_use]
+    pub const fn revision(&self) -> RevisionIdentity {
+        self.revision
+    }
 }
 
 /// Already-measured semantic flow bound to one exact accepted revision.

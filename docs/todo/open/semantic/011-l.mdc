@@ -2774,3 +2774,17 @@ Redo outcomes, including page-profile reference changes. Export layout
 preflight also checks provenance on its accepted overflow evidence. No
 solver, persistence, full content measurement, or semantic PDF/PNG exporter
 was added, so ATR-P2-011 remains open.
+
+## Constructor-controlled measured pagination evidence (partial) — 2026-11-07
+
+The accepted-flow result now has private fields with immutable accessors for
+its accepted flow and revision, ordered covered page rectangles, and fragment
+placements. This prevents external callers from assembling an apparently
+validated plan or replacing its owner, revision, or geometry after validation.
+A compile-fail Rustdoc guard proves the revision field is inaccessible, while
+existing semantic/session regressions verify read-only access to the same
+populated, empty, edited, Undo and Redo plans. The caller must still compare
+the admitted revision with live authority before use.
+
+This strengthens a future native export handoff but does not implement
+semantic text measurement, saved notebook content, or PDF/PNG output.
