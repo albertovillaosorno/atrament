@@ -2598,3 +2598,19 @@ matching geometry, successful valid placements and unchanged accepted session
 state. Shared references to one paper profile still work. This only defends
 malformed directly supplied typed revisions; it does not persist semantic
 notebook bodies, compile full Markdown or complete native notebook export.
+
+## Unmeasured peer-flow page occupancy refusal (partial) — 2026-11-07
+
+Revision-bound measured pagination now refuses to return a plan that uses a
+physical page containing another nonempty semantic flow. The selected-flow
+projection owns the full writable rectangle and has no measurements or
+separate reserved area for that peer; silently emitting placements could
+produce overlapping ink on either the starting page or a later spill page.
+The typed failure identifies the page and the unmeasured peer flow.
+
+Red-to-green Rust regressions prove both collisions, preserve successful
+placement when a later occupied page is unused, too narrow to receive ink,
+or its peer flow is empty, and confirm accepted session state does not change.
+This is a conservative single-flow layout admission boundary, not multi-flow
+composition, solved fixed areas, or a saved semantic notebook PDF/PNG exporter.
+P1 remains open.

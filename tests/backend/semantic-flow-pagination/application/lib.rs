@@ -2701,3 +2701,196 @@ fn flow_owned_by_second_page_never_backfills_first_page() {
     assert_eq!(plan.placements.len(), 1);
     assert_eq!(plan.placements[0].page, second_page);
 }
+
+fn add_unmeasured_flow(
+    fixture: &mut CandidateFixture,
+    page_index: usize,
+    flow: CandidateIdentity,
+    block: CandidateIdentity,
+) -> Result<(), String> {
+    let page = fixture.notebook.pages.get_mut(page_index)
+        .ok_or_else(|| format!("missing fixture page {page_index}"))?;
+    page.flows.push(Flow {
+        blocks: vec![Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: block,
+            provenance: None,
+            style: None,
+        }],
+        id: flow,
+    });
+    Ok(())
+}
+
+#[test]
+fn later_page_flow_content_cannot_be_overlaid_by_measured_spill()
+-> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let other_flow = ids.allocate_candidate()
+        .map_err(|_error| "other flow allocation failed")?;
+    let other_block = ids.allocate_candidate()
+        .map_err(|_error| "other block allocation failed")?;
+    add_unmeasured_flow(&mut fixture, 1, other_flow, other_block)?;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("distinct flows must be valid accepted content".into());
+    };
+    let selected = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let occupied_page = accepted_for(&mapping, fixture.page_two);
+    let occupied_flow = accepted_for(&mapping, other_flow);
+    let accepted = session.current()
+        .ok_or("accepted revision missing")?.clone();
+
+    let short = measurement(revision, selected, owner, &[(1, 1)]);
+    if paginate_revision(&accepted, &short)
+        .map_err(|error| format!("short flow refused: {error:?}"))?
+        .placements.len() != 1 {
+        return Err("short flow was not on its first page".into());
+    }
+    let spilling = measurement(revision, selected, owner, &[
+        (100_000, 260_000),
+        (100_000, 20_000),
+    ]);
+    if paginate_revision(&accepted, &spilling)
+        != Err(SemanticPaginationError::UnmeasuredFlowOnPage {
+            page: occupied_page,
+            flow: occupied_flow,
+        }) {
+        return Err("spill over unmeasured flow was not refused".into());
+    }
+
+    let mut cleared = accepted.clone();
+    cleared.notebook.pages.get_mut(1)
+        .and_then(|page| page.flows.first_mut())
+        .ok_or("empty peer flow fixture missing")?
+        .blocks.clear();
+    let plan = paginate_revision(&cleared, &spilling)
+        .map_err(|error| format!("empty peer refused: {error:?}"))?;
+    if plan.placements.get(1).map(|placed| placed.page)
+        != Some(occupied_page) {
+        return Err("empty peer did not allow page-two spill".into());
+    }
+    if session.current() != Some(&accepted) {
+        return Err("pagination mutated accepted session".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn sibling_flow_content_cannot_share_an_unmeasured_writable_region()
+-> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let other_flow = ids.allocate_candidate()
+        .map_err(|_error| "sibling flow allocation failed")?;
+    let other_block = ids.allocate_candidate()
+        .map_err(|_error| "sibling block allocation failed")?;
+    add_unmeasured_flow(&mut fixture, 0, other_flow, other_block)?;
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("multiple distinct flows are valid semantic source".into());
+    };
+    let selected = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let occupied_page = accepted_for(&mapping, fixture.page_one);
+    let occupied_flow = accepted_for(&mapping, other_flow);
+    let accepted = session.current()
+        .ok_or("accepted revision missing")?.clone();
+    let measured = measurement(revision, selected, owner, &[(1, 1)]);
+    if paginate_revision(&accepted, &measured)
+        != Err(SemanticPaginationError::UnmeasuredFlowOnPage {
+            page: occupied_page,
+            flow: occupied_flow,
+        }) {
+        return Err("sibling flow page alias was not refused".into());
+    }
+    if session.current() != Some(&accepted) {
+        return Err("pagination mutated accepted session".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn occupied_narrow_page_skipped_by_flow_remains_untouched()
+-> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let other_flow = ids.allocate_candidate()
+        .map_err(|_error| "unmeasured flow allocation failed")?;
+    let other_block = ids.allocate_candidate()
+        .map_err(|_error| "unmeasured block allocation failed")?;
+    let third_candidate = ids.allocate_candidate()
+        .map_err(|_error| "later empty page allocation failed")?;
+    fixture.notebook.page_profiles.get_mut(1)
+        .ok_or("second paper profile missing")?
+        .geometry = geometry(40_000);
+    add_unmeasured_flow(&mut fixture, 1, other_flow, other_block)?;
+    fixture.notebook.pages.push(Page {
+        flows: vec![],
+        id: third_candidate,
+        paper_profile: fixture.profile_one,
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("an occupied narrow page is valid source authority".into());
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let first = accepted_for(&mapping, fixture.page_one);
+    let skipped = accepted_for(&mapping, fixture.page_two);
+    let third_page = accepted_for(&mapping, third_candidate);
+    let accepted = session.current()
+        .ok_or("accepted revision missing")?.clone();
+
+    for policy in [
+        FlowUnitPolicy::Independent,
+        FlowUnitPolicy::KeepTogetherWhenPossible,
+    ] {
+        let measurement = RevisionFlowMeasurement {
+            flow,
+            revision,
+            units: vec![
+                MeasuredFlowUnit {
+                    fragments: vec![MeasuredFragment {
+                        owner,
+                        width: Length::from_micrometres(100_000),
+                        height: Length::from_micrometres(260_000),
+                    }],
+                    policy: FlowUnitPolicy::Independent,
+                },
+                MeasuredFlowUnit {
+                    fragments: vec![MeasuredFragment {
+                        owner,
+                        width: Length::from_micrometres(160_000),
+                        height: Length::from_micrometres(20_000),
+                    }],
+                    policy,
+                },
+            ],
+        };
+        let plan = paginate_revision(&accepted, &measurement)
+            .map_err(|error| format!("skipped page refused: {error:?}"))?;
+        if plan.placements.len() != 2
+            || plan.placements.first().map(|placed| placed.page)
+                != Some(first)
+            || plan.placements.get(1).map(|placed| placed.page)
+                != Some(third_page)
+            || plan.placements.iter().any(|placed| placed.page == skipped)
+        {
+            return Err(format!("skipped-page placement mismatch: {policy:?}"));
+        }
+    }
+    if session.current() != Some(&accepted) {
+        return Err("pagination mutated accepted session".into());
+    }
+    Ok(())
+}

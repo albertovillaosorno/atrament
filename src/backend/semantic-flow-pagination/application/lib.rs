@@ -129,6 +129,13 @@ pub enum SemanticPaginationError {
     },
     /// Pure measured-flow pagination rejected the derived page sequence.
     Pagination(PaginationError<AcceptedIdentity, AcceptedIdentity>),
+    /// A page receiving measured ink already owns another unmeasured flow.
+    UnmeasuredFlowOnPage {
+        /// Physical page whose full writable region would be shared.
+        page: AcceptedIdentity,
+        /// Another nonempty accepted flow without derived placement here.
+        flow: AcceptedIdentity,
+    },
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -145,13 +152,15 @@ type PageRegionsResult =
 /// The function validates the exact measurement revision and flow first,
 /// verifies every top-level flow block appears in semantic order, derives page
 /// rectangles only from accepted page-profile authority, then delegates those
-/// rectangles to the pure flow paginator.
+/// rectangles to the pure flow paginator. A returned page must not own another
+/// nonempty flow: this single-flow projection has no measurement or reservation
+/// for a peer's physical ink.
 ///
 /// # Errors
 ///
 /// Returns a typed failure for stale measurement, unknown flow or block owner,
-/// incomplete or reordered measurement, invalid page-profile authority, or a
-/// measured-flow pagination failure.
+/// incomplete or reordered measurement, invalid page-profile authority,
+/// unmeasured other flows on occupied pages, or pagination failure.
 pub fn paginate_revision(
     revision: &AcceptedRevision,
     measurement: &RevisionFlowMeasurement,
@@ -169,8 +178,38 @@ pub fn paginate_revision(
             .map_err(SemanticPaginationError::Pagination);
     }
     let pages = page_regions(revision, scope.page_index)?;
-    paginate(&pages, &measurement.units)
-        .map_err(SemanticPaginationError::Pagination)
+    let plan = paginate(&pages, &measurement.units)
+        .map_err(SemanticPaginationError::Pagination)?;
+    reject_unmeasured_page_flows(revision, measurement.flow, &plan)?;
+    Ok(plan)
+}
+
+// This projection owns only one measured flow and the full writable
+// rectangle of each physical page it uses. An unrelated nonempty flow on
+// that page has no reserved region here, so emitting both plans would risk
+// placing two semantic owners into the same physical ink area.
+fn reject_unmeasured_page_flows(
+    revision: &AcceptedRevision,
+    selected_flow: AcceptedIdentity,
+    plan: &SemanticPaginationPlan,
+) -> Result<(), SemanticPaginationError> {
+    let placed_pages = plan.placements.iter()
+        .map(|placement| placement.page)
+        .collect::<BTreeSet<_>>();
+    for page in &revision.notebook.pages {
+        if !placed_pages.contains(&page.id) {
+            continue;
+        }
+        if let Some(flow) = page.flows.iter().find(|flow| {
+            flow.id != selected_flow && !flow.blocks.is_empty()
+        }) {
+            return Err(SemanticPaginationError::UnmeasuredFlowOnPage {
+                page: page.id,
+                flow: flow.id,
+            });
+        }
+    }
+    Ok(())
 }
 
 fn flow_scope(
