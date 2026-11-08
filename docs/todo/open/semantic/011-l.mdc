@@ -3088,3 +3088,16 @@ their raw rectangles still intersect.
 
 This guards against using stale page geometry to announce an authorized fixed
 layout. It is read-only and does not resolve or prohibit layering.
+
+## Fixed-pair intersection after page-reference commands (partial) — 2026-11-08
+
+A separate current-session regression retargets an accepted page to another
+existing page profile through a semantic direct-edit batch. A checked
+7-by-8-mm fixed intersection is available under the original profile, but
+freshly bound narrow-profile proposals refuse overflow before pair inspection.
+Undo restores the exact first-pair coordinates with a new accepted revision;
+Redo refuses again under the narrow profile.
+
+This tests one additional accepted paper-authority transition, not a general
+fixed solver or permission to layer every object. Measurement still comes from
+a trusted caller and semantic body-to-native PDF/PNG is not yet connected.

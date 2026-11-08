@@ -2368,14 +2368,14 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     let second = accepted(second_candidate);
     let flow = accepted(flow_candidate);
     let block = accepted(block_candidate);
-    let measurement = |revision| RevisionFlowMeasurement {
+    let measurement = |revision, width| RevisionFlowMeasurement {
         flow,
         revision,
         units: vec![MeasuredFlowUnit {
             fragments: vec![MeasuredFragment {
                 height: Length::from_micrometres(20_000),
                 owner: block,
-                width: Length::from_micrometres(100_000),
+                width: Length::from_micrometres(width),
             }],
             policy: FlowUnitPolicy::Independent,
         }],
@@ -2392,8 +2392,39 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         rectangle,
         revision,
     };
+    let layered = |revision| AcceptedFixedPlacement {
+        rectangle: Rect {
+            x: Length::from_micrometres(108_000),
+            y: Length::from_micrometres(52_000),
+            width: Length::from_micrometres(10_000),
+            height: Length::from_micrometres(10_000),
+        },
+        ..placement(revision)
+    };
+    let intersection = Rect {
+        x: Length::from_micrometres(108_000),
+        y: Length::from_micrometres(52_000),
+        width: Length::from_micrometres(7_000),
+        height: Length::from_micrometres(8_000),
+    };
+    let assert_pair = |current: &application::SessionApplication, revision| {
+        let pair = current.first_fixed_pair_overlap(
+            &measurement(revision, 100_000),
+            &[placement(revision), layered(revision)],
+        )
+        .expect("profile-reference pair query must be admissible")
+        .expect("wide page must preserve the physical intersection");
+        assert_eq!(pair.revision(), revision);
+        assert_eq!(pair.flow(), flow);
+        assert_eq!(pair.page(), page);
+        assert_eq!(pair.intersection(), intersection);
+        assert_eq!((pair.earlier_index(), pair.later_index()), (0, 1));
+    };
+    assert_pair(&session, base);
 
-    assert!(session.paginate_measured_flow(&measurement(base)).is_ok());
+    assert!(session
+        .paginate_measured_flow(&measurement(base, 100_000))
+        .is_ok());
     assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(base)),
         placement(base),
@@ -2428,7 +2459,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     };
 
     assert_eq!(
-        session.paginate_measured_flow(&measurement(base)),
+        session.paginate_measured_flow(&measurement(base, 100_000)),
         Err(application::SessionPaginationError::Pagination(
             SemanticPaginationError::MeasurementRevisionMismatch {
                 accepted: edited,
@@ -2446,7 +2477,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         )),
     );
     assert_eq!(
-        session.paginate_measured_flow(&measurement(edited)),
+        session.paginate_measured_flow(&measurement(edited, 100_000)),
         Err(application::SessionPaginationError::Pagination(
             SemanticPaginationError::Pagination(
                 PaginationError::FragmentDoesNotFitAnyPage { owner: block },
@@ -2461,6 +2492,17 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         "retargeted narrow profile must overflow right edge",
     );
     assert_eq!(checked.writable(), second_writable);
+    assert_eq!(
+        session.first_fixed_pair_overlap(
+            &measurement(edited, 80_000),
+            &[placement(edited), layered(edited)],
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow {
+                page, object: block,
+            },
+        )),
+    );
     let edited_diagnostics = checked.diagnostics()
         .expect("complete blocking overflow diagnostics");
     let report = checked.report();
@@ -2484,7 +2526,10 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     else {
         panic!("profile-reference edit must Undo");
     };
-    assert!(session.paginate_measured_flow(&measurement(undone)).is_ok());
+    assert!(session
+        .paginate_measured_flow(&measurement(undone, 100_000))
+        .is_ok());
+    assert_pair(&session, undone);
     assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(undone)),
         placement(undone),
@@ -2506,7 +2551,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         panic!("profile-reference edit must Redo");
     };
     assert_eq!(
-        session.paginate_measured_flow(&measurement(redone)),
+        session.paginate_measured_flow(&measurement(redone, 100_000)),
         Err(application::SessionPaginationError::Pagination(
             SemanticPaginationError::Pagination(
                 PaginationError::FragmentDoesNotFitAnyPage { owner: block },
@@ -2530,6 +2575,17 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         "Redone narrow profile must overflow right edge",
     );
     assert_eq!(checked.writable(), second_writable);
+    assert_eq!(
+        session.first_fixed_pair_overlap(
+            &measurement(redone, 80_000),
+            &[placement(redone), layered(redone)],
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow {
+                page, object: block,
+            },
+        )),
+    );
     let redone_diagnostics = checked.diagnostics()
         .expect("complete blocking overflow diagnostics");
     let report = checked.report();
