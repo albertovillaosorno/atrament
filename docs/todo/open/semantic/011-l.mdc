@@ -3159,3 +3159,19 @@ revision binding. Horizontal ink alignment is still not measured: these are
 full-writable-band *possible* conflicts, not actual text-versus-object contact.
 No undeclared fixed solver, persisted semantic measurement or native notebook
 PDF/PNG path is implied by this read-only inspection.
+
+## Fixed-row reports across skipped pages and profile history — 2026-11-08
+
+The complete read-only fixed/row diagnostic now has native regressions for
+three accepted physical pages where the measured flow uses pages one and
+three, but page two is covered without receiving a fragment. A supplied
+fixed region on page two contributes no false row hit. Two first-page
+boxes submitted in reverse vertical order preserve their original fixed
+indices, page identities, source fragments and exact shared intervals.
+Conflicting writable evidence on the skipped page still refuses before
+returning any earlier overlap, regardless of the result cap.
+
+A separate live page-profile resize regression checks empty reports on the
+original wide profile, exact out-of-bounds refusal on the narrowed revision,
+restored empty reports after Undo and restored overflow after Redo. This is
+profile-geometry provenance, not semantic text measurement or export.

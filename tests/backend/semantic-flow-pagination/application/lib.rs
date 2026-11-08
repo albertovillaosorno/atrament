@@ -3691,6 +3691,69 @@ fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
         width: Length::from_micrometres(1_000),
         height: Length::from_micrometres(1_000),
     })?;
+    // The complete diagnostic follows fixed-input order rather than
+    // physical top order, while skipping a covered page without flow rows.
+    let second_collision = make(accepted, first, owner, Rect {
+        x: first_writable.x,
+        y: Length::from_micrometres(
+            first_writable.y.micrometres() + 1_000,
+        ),
+        width: Length::from_micrometres(1_000),
+        height: Length::from_micrometres(1_000),
+    })?;
+    assert_eq!(
+        fixed_row_band_overlaps_for_flow(&plan, &[on_skipped.clone()], 0),
+        Ok(vec![]),
+    );
+    let all = fixed_row_band_overlaps_for_flow(
+        &plan,
+        &[
+            on_skipped.clone(), second_collision.clone(),
+            first_collision.clone(),
+        ],
+        2,
+    ).map_err(|error| format!("cross-page diagnostics: {error:?}"))?;
+    assert_eq!(
+        all.iter().map(|band| (
+            band.revision(), band.flow(), band.fixed_index(),
+            band.page(), band.fragment_owner(), band.source(),
+            band.overlap_top(), band.overlap_height(),
+        )).collect::<Vec<_>>(),
+        [
+            (
+                revision, selected, 1, first, owner,
+                plan.placements()[0].source,
+                Length::from_micrometres(
+                    first_writable.y.micrometres() + 1_000,
+                ),
+                Length::from_micrometres(1_000),
+            ),
+            (
+                revision, selected, 2, first, owner,
+                plan.placements()[0].source, first_writable.y,
+                Length::from_micrometres(1_000),
+            ),
+        ],
+    );
+    assert_eq!(
+        fixed_row_band_overlaps_for_flow(
+            &plan,
+            &[on_skipped.clone(), second_collision, first_collision.clone()],
+            1,
+        ),
+        Err(FlowFixedRegionError::FixedRowLimitExceeded { limit: 1 }),
+    );
+    // The all-bands query validates the skipped page before an earlier
+    // physical conflict can be returned, even with a zero output cap.
+    assert_eq!(
+        fixed_row_band_overlaps_for_flow(
+            &plan, &[first_collision.clone(), altered.clone()], 0,
+        ),
+        Err(FlowFixedRegionError::WritableMismatch {
+            page: skipped,
+            object: fixed_owner,
+        }),
+    );
     assert_eq!(
         check_fixed_regions_for_flow(&plan, &[
             on_skipped,
