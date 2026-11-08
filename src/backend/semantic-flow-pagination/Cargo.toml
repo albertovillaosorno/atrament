@@ -7,6 +7,7 @@ license-file = "../../../LICENSE"
 
 [dependencies]
 atrament_flow_pagination = { workspace = true }
+atrament_semantic_fixed_region_layout = { workspace = true }
 atrament_semantic_notebook = { workspace = true }
 
 [lib]

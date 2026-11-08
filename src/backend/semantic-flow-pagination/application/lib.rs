@@ -12,11 +12,13 @@
 //   - Accepted-revision and accepted-flow binding for measured pagination.
 //   - Derivation of writable page regions from accepted page-profile ownership.
 //   - Completeness and order admission for measured top-level flow blocks.
+//   - Conservative vertical-band inspection of supplied checked fixed regions.
 // - Must-Not:
 //   - Measure text, mutate accepted revisions, invent page geometry, or render.
 // - Allows:
-//   - Inputs: One accepted revision and revision-bound measured flow units.
+//   - Inputs: One accepted revision, measured units, checked fixed bounds.
 //   - Outputs: Typed pagination plan or typed non-mutation failure.
+//   - Outputs: Read-only fixed-vs-flow vertical-band conflict result.
 //   - Side effects: Process-local result allocation only.
 // - Split-When:
 //   - Measurement admission or layout diagnostics become independent services.
@@ -38,9 +40,10 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use atrament_flow_pagination::{
-    MeasuredFlowUnit, PageRegion, PaginationError, PaginationPlan,
-    PlacedFragment, paginate,
+    FragmentSource, MeasuredFlowUnit, PageRegion, PaginationError,
+    PaginationPlan, PlacedFragment, paginate,
 };
+use atrament_semantic_fixed_region_layout::FixedRegionLayoutResult;
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Block, PhysicalPageProfileError,
     RevisionIdentity, semantic_duplicate_owner_among,
@@ -95,6 +98,57 @@ impl SemanticPaginationPlan {
     pub const fn revision(&self) -> RevisionIdentity {
         self.revision
     }
+}
+
+/// Typed reason supplied checked fixed regions cannot share measured row bands.
+///
+/// The measured flow does not choose horizontal ink alignment, so a vertical
+/// overlap is a *possible* collision even when horizontal objects might not
+/// intersect. Callers must not mistake an `Ok` result for complete page
+/// collision admission: only explicitly supplied fixed regions are inspected.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum FlowFixedRegionError {
+    /// A checked physical coordinate unexpectedly cannot be represented.
+    CoordinateOverflow {
+        /// Page with unrepresentable coordinates.
+        page: AcceptedIdentity,
+        /// Fixed object being inspected.
+        object: AcceptedIdentity,
+    },
+    /// The submitted fixed rectangle exceeds its accepted writable region.
+    FixedRegionOverflow {
+        /// Accepted physical page of the fixed object.
+        page: AcceptedIdentity,
+        /// Fixed semantic owner whose checked bounds overflow.
+        object: AcceptedIdentity,
+    },
+    /// Fixed bounds belong to a different semantic revision than the plan.
+    RevisionMismatch {
+        /// Selected measured pagination revision.
+        expected: RevisionIdentity,
+        /// Revision used to validate the fixed object.
+        fixed: RevisionIdentity,
+        /// Stable fixed semantic owner.
+        object: AcceptedIdentity,
+    },
+    /// A fixed rectangle shares a vertical band with a measured flow row.
+    VerticalBandOverlap {
+        /// Physical page where overlap was observed.
+        page: AcceptedIdentity,
+        /// Accepted fixed semantic owner.
+        object: AcceptedIdentity,
+        /// Accepted flow block owning the placed row.
+        fragment_owner: AcceptedIdentity,
+        /// Exact source row whose vertical band overlaps the fixed region.
+        source: FragmentSource,
+    },
+    /// Same-page results disagree about the accepted writable rectangle.
+    WritableMismatch {
+        /// Shared accepted physical page.
+        page: AcceptedIdentity,
+        /// Fixed object checked against conflicting writable bounds.
+        object: AcceptedIdentity,
+    },
 }
 
 /// Already-measured semantic flow bound to one exact accepted revision.
@@ -194,6 +248,89 @@ struct FlowScope<'revision> {
 
 type PageRegionsResult =
     Result<Vec<PageRegion<AcceptedIdentity>>, SemanticPaginationError>;
+
+/// Inspect checked fixed placements for possible overlap with measured flow.
+///
+/// Flow placement reserves each row's full writable horizontal band because
+/// the paginator does not choose actual text X coordinates. A fixed region
+/// touching but not crossing a row boundary is allowed. Zero-width or
+/// zero-height fixed rectangles occupy no ink space. Only placements on
+/// covered pages with measured flow rows are compared; other accepted pages
+/// do not share ink with this plan.
+///
+/// This verifies *only the supplied fixed-region evidence*, not whether all
+/// semantic objects have been measured or supplied. It does not solve
+/// horizontal collisions, relocate objects, or authorize native Export.
+///
+/// # Errors
+///
+/// Returns the first stale, overflowing, inconsistent, or potentially
+/// overlapping fixed region in caller order.
+pub fn check_fixed_regions_for_flow(
+    plan: &SemanticPaginationPlan,
+    fixed_regions: &[FixedRegionLayoutResult],
+) -> Result<(), FlowFixedRegionError> {
+    for fixed in fixed_regions {
+        if fixed.revision() != plan.revision() {
+            return Err(FlowFixedRegionError::RevisionMismatch {
+                expected: plan.revision(),
+                fixed: fixed.revision(),
+                object: fixed.object(),
+            });
+        }
+        if !fixed.is_within_bounds() {
+            return Err(FlowFixedRegionError::FixedRegionOverflow {
+                page: fixed.page(),
+                object: fixed.object(),
+            });
+        }
+        if plan.covered_pages().iter().any(|covered| {
+            covered.page == fixed.page() && covered.writable != fixed.writable()
+        }) {
+            return Err(FlowFixedRegionError::WritableMismatch {
+                page: fixed.page(),
+                object: fixed.object(),
+            });
+        }
+        let rectangle = fixed.rectangle();
+        if rectangle.width.micrometres() == 0
+            || rectangle.height.micrometres() == 0
+        {
+            continue;
+        }
+        // Both operands have been checked for coordinate overflow by their
+        // respective validators. Never infer a horizontal text alignment.
+        let fixed_start = rectangle.y.micrometres();
+        let fixed_end = fixed_start
+            .checked_add(rectangle.height.micrometres())
+            .ok_or_else(|| FlowFixedRegionError::CoordinateOverflow {
+                page: fixed.page(),
+                object: fixed.object(),
+            })?;
+        for row in plan
+            .placements()
+            .iter()
+            .filter(|row| row.page == fixed.page())
+        {
+            let row_start = row.top.micrometres();
+            let row_end = row_start
+                .checked_add(row.height.micrometres())
+                .ok_or_else(|| FlowFixedRegionError::CoordinateOverflow {
+                    page: fixed.page(),
+                    object: fixed.object(),
+                })?;
+            if fixed_start < row_end && row_start < fixed_end {
+                return Err(FlowFixedRegionError::VerticalBandOverlap {
+                    page: fixed.page(),
+                    object: fixed.object(),
+                    fragment_owner: row.owner,
+                    source: row.source,
+                });
+            }
+        }
+    }
+    Ok(())
+}
 
 /// Paginate complete measured semantic flow through accepted page profiles.
 ///

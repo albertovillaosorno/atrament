@@ -43,8 +43,12 @@ use atrament_physical_page_profile::{
     PageProfile as PhysicalPageProfile, PageProfileError, PaperMarkAppearance,
     PaperMarkJoin, PaperMarkLayer, PaperPattern, Rect, SheetSize,
 };
+use atrament_semantic_fixed_region_layout::{
+    AcceptedFixedPlacement, validate_fixed_placement,
+};
 use atrament_semantic_flow_pagination::{
-    RevisionFlowMeasurement, SemanticPaginationError, paginate_revision,
+    FlowFixedRegionError, RevisionFlowMeasurement, SemanticPaginationError,
+    check_fixed_regions_for_flow, paginate_revision,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, Asset, Block, BlockContent, CandidateIdentity,
@@ -2965,5 +2969,191 @@ fn occupied_narrow_page_skipped_by_flow_remains_untouched()
     if session.current() != Some(&accepted) {
         return Err("pagination mutated accepted session".into());
     }
+    Ok(())
+}
+
+#[test]
+fn fixed_regions_inspect_measured_vertical_bands_without_guessing_alignment()
+-> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing revision")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let block = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let later_page = accepted_for(&mapping, fixture.page_two);
+    let measured = measurement(revision, flow, block, &[
+        (20_000, 20_000),
+        (20_000, 20_000),
+        (20_000, 260_000),
+    ]);
+    let plan = paginate_revision(accepted, &measured)
+        .map_err(|error| format!("pagination refused: {error:?}"))?;
+    let first = plan.placements().first().ok_or("first row missing")?;
+    let third = plan.placements().last().ok_or("last row missing")?;
+    if third.page != later_page || first.page != page {
+        return Err("expected overflow onto second page".into());
+    }
+    let fixed = |page, x, y, width, height| {
+        validate_fixed_placement(accepted, AcceptedFixedPlacement {
+            object: block,
+            page,
+            rectangle: Rect {
+                x: Length::from_micrometres(x),
+                y: Length::from_micrometres(y),
+                width: Length::from_micrometres(width),
+                height: Length::from_micrometres(height),
+            },
+            revision,
+        })
+        .map_err(|error| format!("fixed admission failed: {error:?}"))
+    };
+    let writable = first.writable;
+    let top = first.top.micrometres();
+    let x = writable.x.micrometres();
+    let right = x + writable.width.micrometres();
+    let adjacent = fixed(page, x, top + 40_000, 5_000, 10_000)?;
+    let before = fixed(page, x, top, 0, 10_000)?;
+    let empty = fixed(page, x, top, 10_000, 0)?;
+    let far_right = fixed(page, right - 1_000, top + 1, 1_000, 1_000)?;
+    assert!(
+        check_fixed_regions_for_flow(&plan, &[adjacent, before, empty]).is_ok()
+    );
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[far_right]),
+        Err(FlowFixedRegionError::VerticalBandOverlap {
+            page,
+            object: block,
+            fragment_owner: block,
+            source: first.source,
+        }),
+    );
+    let beyond = fixed(
+        page,
+        x,
+        writable.y.micrometres(),
+        writable.width.micrometres() + 1,
+        1_000,
+    )?;
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[beyond]),
+        Err(FlowFixedRegionError::FixedRegionOverflow { page, object: block }),
+    );
+    // A fixed result from a later session revision cannot be substituted.
+    let foreign_revision = (0..3)
+        .map(|_| {
+            ids.allocate_revision()
+                .map_err(|error| format!("id: {error:?}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
+        .find(|candidate| *candidate != revision)
+        .ok_or("expected a fresh revision")?;
+    let mut revised = accepted.clone();
+    revised.id = foreign_revision;
+    let stale = validate_fixed_placement(&revised, AcceptedFixedPlacement {
+        object: block,
+        page,
+        rectangle: Rect {
+            x: Length::from_micrometres(x),
+            y: Length::from_micrometres(top + 40_000),
+            width: Length::from_micrometres(1_000),
+            height: Length::from_micrometres(1_000),
+        },
+        revision: foreign_revision,
+    })
+    .map_err(|error| format!("revised bounds: {error:?}"))?;
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[stale]),
+        Err(FlowFixedRegionError::RevisionMismatch {
+            expected: revision,
+            fixed: foreign_revision,
+            object: block,
+        }),
+    );
+    // A defensive revision with an unchanged identity but changed page
+    // geometry cannot smuggle conflicting writable bounds into this plan.
+    let mut changed_geometry = accepted.clone();
+    changed_geometry.notebook.page_profiles[0]
+        .geometry
+        .printable_region
+        .width = Length::from_micrometres(185_000);
+    let mismatched =
+        validate_fixed_placement(&changed_geometry, AcceptedFixedPlacement {
+            object: block,
+            page,
+            rectangle: Rect {
+                x: Length::from_micrometres(x),
+                y: Length::from_micrometres(top + 40_000),
+                width: Length::from_micrometres(1_000),
+                height: Length::from_micrometres(1_000),
+            },
+            revision,
+        })
+        .map_err(|error| format!("alternate bounds: {error:?}"))?;
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[mismatched]),
+        Err(FlowFixedRegionError::WritableMismatch { page, object: block }),
+    );
+    assert_eq!(session.current(), Some(accepted));
+    Ok(())
+}
+
+#[test]
+fn fixed_regions_on_uncovered_pages_do_not_collide_with_flow_rows()
+-> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let fixed_flow = ids
+        .allocate_candidate()
+        .map_err(|error| format!("fixed flow: {error:?}"))?;
+    let fixed_block = ids
+        .allocate_candidate()
+        .map_err(|error| format!("fixed block: {error:?}"))?;
+    fixture.notebook.pages[1].flows.push(Flow {
+        id: fixed_flow,
+        blocks: vec![Block {
+            id: fixed_block,
+            content: BlockContent::Rule,
+            extensions: vec![],
+            provenance: None,
+            style: None,
+        }],
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("fixture with independent page content refused".into());
+    };
+    let accepted = session.current().ok_or("missing revision")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let block = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_two);
+    let object = accepted_for(&mapping, fixed_block);
+    let measured = measurement(revision, flow, block, &[(20_000, 20_000)]);
+    let plan = paginate_revision(accepted, &measured)
+        .map_err(|error| format!("pagination: {error:?}"))?;
+    assert_eq!(plan.covered_pages().len(), 1);
+    let region = validate_fixed_placement(accepted, AcceptedFixedPlacement {
+        page,
+        object,
+        revision,
+        rectangle: Rect {
+            x: Length::from_micrometres(40_000),
+            y: Length::from_micrometres(30_000),
+            width: Length::from_micrometres(10_000),
+            height: Length::from_micrometres(10_000),
+        },
+    })
+    .map_err(|error| format!("fixed bounds: {error:?}"))?;
+    assert_eq!(check_fixed_regions_for_flow(&plan, &[region]), Ok(()));
+    assert!(check_fixed_regions_for_flow(&plan, &[]).is_ok());
     Ok(())
 }

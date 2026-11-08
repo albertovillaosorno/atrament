@@ -2896,3 +2896,29 @@ reference retargeting, Undo and Redo verify the writable envelope tracks the
 accepted revision even when the object's requested rectangle is unchanged.
 This remains diagnostic/geometry evidence, not a collision solver or a native
 semantic PDF/PNG export path.
+
+## Checked fixed-area versus measured-row clearance (partial) — 2026-11-07
+
+The accepted-flow layout application now offers an explicit read-only
+`check_fixed_regions_for_flow` query over sealed, checked fixed-area results
+and a sealed revision-bound measured pagination plan. It refuses stale fixed
+results, independently overflowing rectangles, or inconsistent same-page
+writable envelopes before comparing coordinates. A fixed region crossing a
+measured row's physical vertical band returns the exact page, fixed owner,
+measured owner and source unit/fragment index; touching row boundaries and
+zero-sized areas are not treated as ink overlap. A fixed object on another
+physical page is not mistaken for a collision with the selected flow.
+
+Because upstream measurement supplies only row width and vertical placement,
+**no horizontal ink X alignment is authoritative**. Clearance therefore
+reserves the full writable horizontal band for each measured row and is
+conservative: horizontally separate shapes can still be flagged. The call
+inspects only the explicitly supplied checked regions, so success cannot
+prove an exhaustive page-wide collision-free layout or authorize Export.
+
+Native regressions cover first-page and page-two measured pagination,
+non-overlapping bounds and exact touching, full-band conflicts even at the
+far-right edge, zero-width/height regions, overflow, stale revision, altered
+page-profile geometry and unrelated fixed content on an unused page. The
+actual accepted semantic body-to-native handwriting/PDF/PNG integration is
+still missing, and ATR-P2-011 remains open.
