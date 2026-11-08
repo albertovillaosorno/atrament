@@ -63,7 +63,7 @@ use atrament_semantic_flow_pagination::{
     FixedPairOverlap, FlowFixedRegionError, RevisionFlowMeasurement,
     SemanticPaginationError, SemanticPaginationPlan,
     check_fixed_regions_for_flow, first_fixed_pair_overlap_for_flow,
-    paginate_revision,
+    fixed_pair_overlaps_for_flow, paginate_revision,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -619,6 +619,30 @@ impl SessionApplication {
         let (plan, checked) =
             self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
         first_fixed_pair_overlap_for_flow(&plan, &checked)
+            .map_err(SessionFlowFixedRegionError::Overlap)
+    }
+
+    /// Inspect all supplied fixed-pair intersections on current authority.
+    ///
+    /// Validation runs for the complete caller-supplied batch before any
+    /// intersections are considered. `max_pairs` is an exact output cap;
+    /// exceeding it refuses without exposing a truncated set of overlaps.
+    /// These records remain nonblocking geometry diagnostics, not permission
+    /// or refusal to layer objects, and cannot authorize native Export.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed missing-session, invalid measurement/placement,
+    /// conservative row-band or fixed-pair result-limit refusal.
+    pub fn fixed_pair_overlaps(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+        max_pairs: usize,
+    ) -> Result<Vec<FixedPairOverlap>, SessionFlowFixedRegionError> {
+        let (plan, checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
+        fixed_pair_overlaps_for_flow(&plan, &checked, max_pairs)
             .map_err(SessionFlowFixedRegionError::Overlap)
     }
 

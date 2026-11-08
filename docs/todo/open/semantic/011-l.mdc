@@ -3115,3 +3115,23 @@ scan oracle now compare the exact refusal interval as well as source identity.
 Edge-touching and zero-area fixed proposals remain clear; upstream accepted
 page and revision checks still run before any conflict is reported. This is
 not a full semantic layout solver or native notebook export implementation.
+
+## Bounded complete fixed-pair inspection (partial) — 2026-11-08
+
+The accepted measured-flow application can now enumerate **all**
+positive-area intersections among caller-supplied checked fixed rectangles.
+Results retain the same sealed accepted revision, selected flow, page,
+semantic owners, original indices and exact physical intersection as the
+existing first-pair observation, ordered by later then earlier input index.
+
+The caller supplies a maximum pair count: exceeding it produces a typed
+refusal **without** a truncated list. Zero is valid only if no supplied pairs
+intersect. Existing full-batch revision, writable-area and conservative
+measured-row checks run before pair enumeration, even with a zero cap.
+
+The current-session read-only handoff has the same bounded query and native
+edit/Undo/Redo evidence. The existing 1,024-case independent u128 oracle now
+compares the **complete** ordered pair list, including boundaries, empty
+regions, different physical pages, original owner/index provenance, exact
+intersections and limit refusal. No fixed layering policy, missing-object
+discovery, semantic body measurement or notebook PDF/PNG export is implied.

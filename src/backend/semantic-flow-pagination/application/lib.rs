@@ -13,7 +13,7 @@
 //   - Derivation of writable page regions from accepted page-profile ownership.
 //   - Completeness and order admission for measured top-level flow blocks.
 //   - Conservative vertical-band inspection of supplied checked fixed regions.
-//   - Read-only first-pair inspection of physically intersecting fixed regions.
+//   - Read-only bounded pair inspection of physically intersecting fixed regions.
 // - Must-Not:
 //   - Measure text, choose fixed overlap policy, mutate revisions, or render.
 // - Allows:
@@ -116,6 +116,11 @@ pub enum FlowFixedRegionError {
         page: AcceptedIdentity,
         /// Fixed object being inspected.
         object: AcceptedIdentity,
+    },
+    /// Complete fixed-pair diagnostics would exceed the caller-supplied cap.
+    FixedPairLimitExceeded {
+        /// Maximum number of complete intersection records admitted.
+        limit: usize,
     },
     /// The submitted fixed rectangle exceeds its accepted writable region.
     FixedRegionOverflow {
@@ -484,6 +489,60 @@ pub fn first_fixed_pair_overlap_for_flow(
     plan: &SemanticPaginationPlan,
     fixed_regions: &[FixedRegionLayoutResult],
 ) -> Result<Option<FixedPairOverlap>, FlowFixedRegionError> {
+    let mut first = None;
+    visit_fixed_pair_overlaps_for_flow(plan, fixed_regions, |pair| {
+        first = Some(pair);
+        false
+    })?;
+    Ok(first)
+}
+
+/// Inspect every supplied positive-area fixed-pair overlap within a cap.
+///
+/// The returned records retain original input indices, semantic owners,
+/// accepted revision/flow, physical page and exact intersection rectangle.
+/// Pairs are ordered by later input index, then earlier input index. This is
+/// read-only geometry evidence: neither a missing proposal nor intentional
+/// layering can be resolved by this query. `max_pairs` bounds the number of
+/// records materialized, and overflow **refuses** rather than silently
+/// truncating diagnostics. A zero cap succeeds only for a clear collection.
+///
+/// # Errors
+///
+/// Revision, geometry and conservative measured-row refusals precede pair
+/// inspection. More than `max_pairs` intersections returns a typed limit
+/// failure with no partial diagnostic result.
+pub fn fixed_pair_overlaps_for_flow(
+    plan: &SemanticPaginationPlan,
+    fixed_regions: &[FixedRegionLayoutResult],
+    max_pairs: usize,
+) -> Result<Vec<FixedPairOverlap>, FlowFixedRegionError> {
+    let mut pairs = Vec::new();
+    let mut exceeded = false;
+    visit_fixed_pair_overlaps_for_flow(plan, fixed_regions, |pair| {
+        if pairs.len() == max_pairs {
+            exceeded = true;
+            return false;
+        }
+        pairs.push(pair);
+        true
+    })?;
+    if exceeded {
+        return Err(FlowFixedRegionError::FixedPairLimitExceeded {
+            limit: max_pairs,
+        });
+    }
+    Ok(pairs)
+}
+
+// The visitor keeps first-only inspection short-circuiting while the bounded
+// collector traverses all pairs. All checked regions are admitted *before*
+// either inspection, including later invalid candidates after a valid pair.
+fn visit_fixed_pair_overlaps_for_flow(
+    plan: &SemanticPaginationPlan,
+    fixed_regions: &[FixedRegionLayoutResult],
+    mut visit: impl FnMut(FixedPairOverlap) -> bool,
+) -> Result<(), FlowFixedRegionError> {
     check_fixed_regions_for_flow(plan, fixed_regions)?;
     // The checked bounds guarantee non-overflowing physical rectangles. Keep
     // explicit arithmetic refusal rather than ever comparing saturated ends.
@@ -531,7 +590,7 @@ pub fn first_fixed_pair_overlap_for_flow(
                     .min(earlier.bottom_um)
                     .checked_sub(shared_top)
                     .ok_or_else(overflow)?;
-                return Ok(Some(FixedPairOverlap {
+                if !visit(FixedPairOverlap {
                     earlier_index: earlier.index,
                     earlier_object: earlier.object,
                     flow: plan.flow(),
@@ -545,7 +604,9 @@ pub fn first_fixed_pair_overlap_for_flow(
                     later_object: fixed.object(),
                     page: fixed.page(),
                     revision: plan.revision(),
-                }));
+                }) {
+                    return Ok(());
+                }
             }
         }
         prior.push(IndexedFixedRectangle {
@@ -557,7 +618,7 @@ pub fn first_fixed_pair_overlap_for_flow(
             top_um: top,
         });
     }
-    Ok(None)
+    Ok(())
 }
 
 /// Paginate complete measured semantic flow through accepted page profiles.

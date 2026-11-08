@@ -7445,6 +7445,36 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             rectangle(x + 2_500, y + 25_000, 2_500, 5_000),
         ))),
     );
+    let third = placement(
+        revision, rectangle(x + 3_500, y + 27_000, 3_000, 6_000),
+    );
+    assert_eq!(
+        session.fixed_pair_overlaps(
+            &measurement(revision), &[next_to_row, layered, third], 3
+        ).map(|pairs| pairs.into_iter().map(trace).collect::<Vec<_>>()),
+        Ok(vec![
+            (
+                revision, flow, page, 0, block, 1, block,
+                rectangle(x + 2_500, y + 25_000, 2_500, 5_000),
+            ),
+            (
+                revision, flow, page, 0, block, 2, block,
+                rectangle(x + 3_500, y + 27_000, 1_500, 3_000),
+            ),
+            (
+                revision, flow, page, 1, block, 2, block,
+                rectangle(x + 3_500, y + 27_000, 3_000, 6_000),
+            ),
+        ]),
+    );
+    assert_eq!(
+        session.fixed_pair_overlaps(
+            &measurement(revision), &[next_to_row, layered, third], 2
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedPairLimitExceeded { limit: 2 }
+        )),
+    );
     // Boundary touching remains an admissible clear pair, not a collision.
     let touching = placement(
         revision, rectangle(x + 5_000, y + 20_000, 1_000, 10_000),
@@ -7525,6 +7555,17 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             )),
         );
         assert_eq!(
+            current_session.fixed_pair_overlaps(
+                &measurement(revision), &[next_to_row, layered], 1
+            ),
+            Err(application::SessionFlowFixedRegionError::Pagination(
+                SemanticPaginationError::MeasurementRevisionMismatch {
+                    accepted: current,
+                    measured: revision,
+                },
+            )),
+        );
+        assert_eq!(
             current_session.first_fixed_pair_overlap(
                 &measurement(revision),
                 &[next_to_row, layered],
@@ -7584,6 +7625,20 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
                 current, flow, page, 0, block, 1, block,
                 rectangle(x + 2_500, y + 25_000, 2_500, 5_000),
             ))),
+        );
+        assert_eq!(
+            current_session.fixed_pair_overlaps(
+                &measurement(current),
+                &[
+                    placement(current, next_to_row.rectangle),
+                    placement(current, layered.rectangle),
+                ],
+                1,
+            ).map(|pairs| pairs.into_iter().map(trace).collect::<Vec<_>>()),
+            Ok(vec![(
+                current, flow, page, 0, block, 1, block,
+                rectangle(x + 2_500, y + 25_000, 2_500, 5_000),
+            )]),
         );
     };
     inspect_fresh(&session, edited);

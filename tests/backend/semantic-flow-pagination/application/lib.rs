@@ -49,7 +49,8 @@ use atrament_semantic_fixed_region_layout::{
 use atrament_semantic_flow_pagination::{
     FixedPairOverlap, FlowFixedRegionError, RevisionFlowMeasurement,
     SemanticPaginationError, check_fixed_regions_for_flow,
-    first_fixed_pair_overlap_for_flow, paginate_revision,
+    first_fixed_pair_overlap_for_flow, fixed_pair_overlaps_for_flow,
+    paginate_revision,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, Asset, Block, BlockContent, CandidateIdentity,
@@ -3871,13 +3872,48 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
             },
         ))),
     );
+    // A complete bounded observation preserves both overlaps at the corner,
+    // including the pair after the existing first-only short circuit.
+    let corners = [a.clone(), touch.clone(), c.clone()];
+    assert_eq!(
+        fixed_pair_overlaps_for_flow(&plan, &corners, 2)
+            .map(|pairs| pairs.into_iter().map(trace).collect::<Vec<_>>()),
+        Ok(vec![
+            (
+                revision, flow, page_two, 0, objects[0], 2, objects[2],
+                Rect {
+                    x: Length::from_micrometres(49_999),
+                    y: Length::from_micrometres(59_999),
+                    width: Length::from_micrometres(1),
+                    height: Length::from_micrometres(1),
+                },
+            ),
+            (
+                revision, flow, page_two, 1, objects[1], 2, objects[2],
+                Rect {
+                    x: Length::from_micrometres(50_000),
+                    y: Length::from_micrometres(59_999),
+                    width: Length::from_micrometres(4_999),
+                    height: Length::from_micrometres(1),
+                },
+            ),
+        ]),
+    );
+    assert_eq!(
+        fixed_pair_overlaps_for_flow(&plan, &corners, 1),
+        Err(FlowFixedRegionError::FixedPairLimitExceeded { limit: 1 }),
+    );
+    assert_eq!(
+        fixed_pair_overlaps_for_flow(&plan, &[a.clone(), touch.clone()], 0),
+        Ok(vec![]),
+    );
     // A geometric pair is not a blocking collision without overlap policy.
     assert_eq!(
         check_fixed_regions_for_flow(&plan, &[a.clone(), c.clone()]),
         Ok(())
     );
     assert_eq!(
-        first_fixed_pair_overlap_for_flow(&plan, &[touch, c, a.clone()])
+        first_fixed_pair_overlap_for_flow(&plan, &[touch, c.clone(), a.clone()])
             .map(|result| result.map(trace)),
         Ok(Some((
             revision, flow, page_two, 0, objects[1], 1, objects[2],
@@ -3892,7 +3928,16 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
     // Invalid evidence takes priority over a pair found earlier in the batch.
     let invalid = checked(page_two, objects[1], 0, 0, 10_000, 10_000)?;
     assert_eq!(
-        first_fixed_pair_overlap_for_flow(&plan, &[a.clone(), a, invalid]),
+        first_fixed_pair_overlap_for_flow(&plan, &[a.clone(), a.clone(), invalid.clone()]),
+        Err(FlowFixedRegionError::FixedRegionOverflow {
+            page: page_two,
+            object: objects[1],
+        }),
+    );
+    assert_eq!(
+        fixed_pair_overlaps_for_flow(
+            &plan, &[a.clone(), c.clone(), invalid], 0
+        ),
         Err(FlowFixedRegionError::FixedRegionOverflow {
             page: page_two,
             object: objects[1],
@@ -3943,8 +3988,8 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
             regions.push(checked(physical_page, owner, x, y, width, height)?);
             geometry.push((physical_page, owner, x, y, width, height));
         }
-        let mut expected = None;
-        'pairs: for later_index in 0..geometry.len() {
+        let mut expected = Vec::new();
+        for later_index in 0..geometry.len() {
             let (page, later_object, x, y, w, h) = geometry[later_index];
             for earlier_index in 0..later_index {
                 let (earlier_page, earlier_object, ex, ey, ew, eh) =
@@ -3963,7 +4008,7 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
                     && common_width > 0
                     && common_height > 0
                 {
-                    expected = Some((
+                    expected.push((
                         revision, flow, page,
                         earlier_index, earlier_object,
                         later_index, later_object,
@@ -3984,17 +4029,36 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
                             ),
                         },
                     ));
-                    break 'pairs;
                 }
             }
         }
         let actual = first_fixed_pair_overlap_for_flow(&plan, &regions)
             .map_err(|error| format!("case {case} refused: {error:?}"))?
             .map(trace);
-        if actual != expected {
+        if actual != expected.first().copied() {
             return Err(format!(
-                "fixed pair oracle case {case}: {actual:?} != {expected:?}"
+                "first pair oracle case {case}: {actual:?} != {expected:?}"
             ));
+        }
+        let all = fixed_pair_overlaps_for_flow(&plan, &regions, 28)
+            .map_err(|error| format!("all pairs case {case}: {error:?}"))?
+            .into_iter().map(trace).collect::<Vec<_>>();
+        if all != expected {
+            return Err(format!(
+                "all pairs oracle case {case}: {all:?} != {expected:?}"
+            ));
+        }
+        assert_eq!(
+            fixed_pair_overlaps_for_flow(&plan, &regions, expected.len())
+                .map(|pairs| pairs.len()),
+            Ok(expected.len()),
+        );
+        if !expected.is_empty() {
+            let limit = expected.len() - 1;
+            assert_eq!(
+                fixed_pair_overlaps_for_flow(&plan, &regions, limit),
+                Err(FlowFixedRegionError::FixedPairLimitExceeded { limit }),
+            );
         }
         if actual.is_some() {
             overlap_cases += 1;
