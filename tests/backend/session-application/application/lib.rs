@@ -66,7 +66,8 @@ use atrament_physical_page_profile::{
     SheetSize,
 };
 use atrament_semantic_flow_pagination::{
-    FixedPairOverlap, FlowFixedRegionError, RevisionFlowMeasurement,
+    FixedPairOverlap, FixedRowBandOverlap, FlowFixedRegionError,
+    RevisionFlowMeasurement,
     SemanticPaginationError, SemanticPaginationPlan,
 };
 use atrament_semantic_fixed_region_layout::{
@@ -7374,6 +7375,12 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         empty_session.first_fixed_pair_overlap(&measurement(revision), &[]),
         Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
     );
+    assert_eq!(
+        empty_session.fixed_row_band_overlaps(
+            &measurement(revision), &[], 0,
+        ),
+        Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
+    );
     let admitted = session
         .paginate_measured_flow_with_fixed_regions(&measurement(revision), &[])
         .map_err(|error| format!("base flow refused: {error:?}"))?;
@@ -7486,6 +7493,54 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         ),
         Ok(None),
     );
+    let trace_band = |band: FixedRowBandOverlap| {
+        (
+            band.revision(), band.flow(), band.page(),
+            band.fixed_index(), band.object(), band.fragment_owner(),
+            band.source(), band.overlap_top(), band.overlap_height(),
+        )
+    };
+    assert_eq!(
+        session.fixed_row_band_overlaps(
+            &measurement(revision), &[next_to_row], 0,
+        ),
+        Ok(vec![]),
+    );
+    assert_eq!(
+        session.fixed_row_band_overlaps(
+            &measurement(revision), &[near_far_edge, near_far_edge], 2,
+        ).map(|bands| bands.into_iter().map(trace_band).collect::<Vec<_>>()),
+        Ok(vec![
+            (
+                revision, flow, page, 0, block, block, row.source,
+                Length::from_micrometres(y + 1),
+                Length::from_micrometres(1_000),
+            ),
+            (
+                revision, flow, page, 1, block, block, row.source,
+                Length::from_micrometres(y + 1),
+                Length::from_micrometres(1_000),
+            ),
+        ]),
+    );
+    assert_eq!(
+        session.fixed_row_band_overlaps(
+            &measurement(revision), &[near_far_edge, near_far_edge], 1,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRowLimitExceeded { limit: 1 },
+        )),
+    );
+    // This complete report validates later fixed bounds before returning any
+    // earlier row conflict; the existing blocking query keeps caller order.
+    assert_eq!(
+        session.fixed_row_band_overlaps(
+            &measurement(revision), &[near_far_edge, outside], 0,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow { page, object: block },
+        )),
+    );
     assert_eq!(
         session.paginate_measured_flow_with_fixed_regions(
             &measurement(revision),
@@ -7555,6 +7610,17 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             )),
         );
         assert_eq!(
+            current_session.fixed_row_band_overlaps(
+                &measurement(revision), &[near_far_edge], 1,
+            ),
+            Err(application::SessionFlowFixedRegionError::Pagination(
+                SemanticPaginationError::MeasurementRevisionMismatch {
+                    accepted: current,
+                    measured: revision,
+                },
+            )),
+        );
+        assert_eq!(
             current_session.fixed_pair_overlaps(
                 &measurement(revision), &[next_to_row, layered], 1
             ),
@@ -7612,6 +7678,19 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
     assert_eq!(fresh.placements(), admitted.placements());
     let inspect_fresh = |current_session: &application::SessionApplication,
                          current| {
+        assert_eq!(
+            current_session.fixed_row_band_overlaps(
+                &measurement(current),
+                &[placement(current, near_far_edge.rectangle)],
+                1,
+            ).map(|bands| bands.into_iter().map(trace_band)
+                .collect::<Vec<_>>()),
+            Ok(vec![(
+                current, flow, page, 0, block, block, row.source,
+                Length::from_micrometres(y + 1),
+                Length::from_micrometres(1_000),
+            )]),
+        );
         let result = current_session.first_fixed_pair_overlap(
             &measurement(current),
             &[

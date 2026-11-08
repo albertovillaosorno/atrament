@@ -3135,3 +3135,27 @@ compares the **complete** ordered pair list, including boundaries, empty
 regions, different physical pages, original owner/index provenance, exact
 intersections and limit refusal. No fixed layering policy, missing-object
 discovery, semantic body measurement or notebook PDF/PNG export is implied.
+
+## Bounded fixed-row diagnostic collection (partial) — 2026-11-08
+
+The accepted measured-flow application now also collects **all** conservative
+fixed-versus-row vertical intersections across caller-supplied checked fixed
+regions. A sealed record retains accepted flow/revision, physical page, fixed
+owner and original input index, measured row owner/unit/fragment, and the exact
+shared vertical top and height in micrometres. Results follow fixed input
+order, then measured physical row order.
+
+The new query validates every submitted fixed rectangle's revision, printable
+bounds and writable envelope before reporting any row conflicts, so later
+invalid geometry cannot be hidden by an earlier overlap. A caller-supplied
+result cap refuses on excess without returning a truncated set; zero is
+allowed only for a clear batch. The existing blocking first-failure checker
+keeps its earlier caller-order refusal semantics and indexed row search.
+
+The 4,096-case independent physical interval oracle now compares all row
+intervals, exact source provenance and limit behavior. Mixed-unit crossing
+rows and current-session text edit/Undo/Redo cover consecutive overlaps and
+revision binding. Horizontal ink alignment is still not measured: these are
+full-writable-band *possible* conflicts, not actual text-versus-object contact.
+No undeclared fixed solver, persisted semantic measurement or native notebook
+PDF/PNG path is implied by this read-only inspection.

@@ -60,10 +60,12 @@ use atrament_media_job_session::{
     WaveformIntermediateIdentity,
 };
 use atrament_semantic_flow_pagination::{
-    FixedPairOverlap, FlowFixedRegionError, RevisionFlowMeasurement,
+    FixedPairOverlap, FixedRowBandOverlap, FlowFixedRegionError,
+    RevisionFlowMeasurement,
     SemanticPaginationError, SemanticPaginationPlan,
     check_fixed_regions_for_flow, first_fixed_pair_overlap_for_flow,
-    fixed_pair_overlaps_for_flow, paginate_revision,
+    fixed_pair_overlaps_for_flow, fixed_row_band_overlaps_for_flow,
+    paginate_revision,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -643,6 +645,30 @@ impl SessionApplication {
         let (plan, checked) =
             self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
         fixed_pair_overlaps_for_flow(&plan, &checked, max_pairs)
+            .map_err(SessionFlowFixedRegionError::Overlap)
+    }
+
+    /// Inspect all supplied fixed-versus-measured-row vertical overlaps.
+    ///
+    /// Every fixed placement is validated against current accepted geometry
+    /// before bounded diagnostics are collected. Overlap coordinates reserve
+    /// the measured row's entire horizontal writable region; these are
+    /// possible conflicts, not measured horizontal ink intersections.
+    /// No partial list is returned when `max_overlaps` is exceeded.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed missing-session, invalid measurement/placement,
+    /// physical geometry or result-limit refusal.
+    pub fn fixed_row_band_overlaps(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+        max_overlaps: usize,
+    ) -> Result<Vec<FixedRowBandOverlap>, SessionFlowFixedRegionError> {
+        let (plan, checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
+        fixed_row_band_overlaps_for_flow(&plan, &checked, max_overlaps)
             .map_err(SessionFlowFixedRegionError::Overlap)
     }
 

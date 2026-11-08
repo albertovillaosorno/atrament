@@ -47,10 +47,11 @@ use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, validate_fixed_placement,
 };
 use atrament_semantic_flow_pagination::{
-    FixedPairOverlap, FlowFixedRegionError, RevisionFlowMeasurement,
+    FixedPairOverlap, FixedRowBandOverlap, FlowFixedRegionError,
+    RevisionFlowMeasurement,
     SemanticPaginationError, check_fixed_regions_for_flow,
     first_fixed_pair_overlap_for_flow, fixed_pair_overlaps_for_flow,
-    paginate_revision,
+    fixed_row_band_overlaps_for_flow, paginate_revision,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, Asset, Block, BlockContent, CandidateIdentity,
@@ -3469,6 +3470,72 @@ fn indexed_fixed_clearance_matches_linear_scan_across_many_measured_rows()
                 "linear mismatch at case {case}: {expected:?}"
             ));
         }
+        // The full-band oracle checks every row, not just the first hit.
+        // Its bounds are computed with u128 physical interval arithmetic.
+        let mut expected_bands = Vec::new();
+        if !overflow && extent_x > 0 && extent_y > 0 {
+            for row in plan.placements() {
+                let start = u128::from(y + offset_y);
+                let end = start + u128::from(extent_y);
+                let row_start = u128::from(row.top.micrometres());
+                let row_end = row_start + u128::from(row.height.micrometres());
+                let shared_start = start.max(row_start);
+                let shared_end = end.min(row_end);
+                if row.page == page && shared_start < shared_end {
+                    expected_bands.push((
+                        revision, flow, page, 0, owner,
+                        row.owner, row.source,
+                        Length::from_micrometres(
+                            u64::try_from(shared_start)
+                                .map_err(|error| format!("top: {error}"))?,
+                        ),
+                        Length::from_micrometres(
+                            u64::try_from(shared_end - shared_start)
+                                .map_err(|error| format!("height: {error}"))?,
+                        ),
+                    ));
+                }
+            }
+        }
+        let trace = |band: FixedRowBandOverlap| {
+            (
+                band.revision(), band.flow(), band.page(),
+                band.fixed_index(), band.object(),
+                band.fragment_owner(), band.source(),
+                band.overlap_top(), band.overlap_height(),
+            )
+        };
+        let actual_bands = fixed_row_band_overlaps_for_flow(
+            &plan, &[region.clone()], sizes.len(),
+        ).map(|bands| bands.into_iter().map(trace).collect::<Vec<_>>());
+        if overflow {
+            assert_eq!(
+                actual_bands,
+                Err(FlowFixedRegionError::FixedRegionOverflow {
+                    page, object: owner,
+                }),
+            );
+        } else if actual_bands != Ok(expected_bands.clone()) {
+            return Err(format!(
+                "all row-band oracle case {case}: {actual_bands:?}"
+            ));
+        } else {
+            assert_eq!(
+                fixed_row_band_overlaps_for_flow(
+                    &plan, &[region.clone()], expected_bands.len(),
+                ).map(|bands| bands.len()),
+                Ok(expected_bands.len()),
+            );
+            if !expected_bands.is_empty() {
+                let limit = expected_bands.len() - 1;
+                assert_eq!(
+                    fixed_row_band_overlaps_for_flow(
+                        &plan, &[region.clone()], limit,
+                    ),
+                    Err(FlowFixedRegionError::FixedRowLimitExceeded { limit }),
+                );
+            }
+        }
         if region.is_within_bounds() && (extent_x == 0 || extent_y == 0) {
             empty_regions.push(region);
         }
@@ -3761,6 +3828,37 @@ fn indexed_fixed_clearance_retains_owner_and_unit_fragment_provenance()
             overlap_top: Length::from_micrometres(crossing),
             overlap_height: Length::from_micrometres(1),
         }),
+    );
+    let two_rows = checked(crossing, 2)?;
+    let all = fixed_row_band_overlaps_for_flow(&plan, &[two_rows], 2)
+        .map_err(|error| format!("crossing query: {error:?}"))?;
+    assert_eq!(all.len(), 2);
+    assert_eq!(
+        all.iter()
+            .map(|band| (
+                band.revision(), band.flow(), band.fixed_index(),
+                band.fragment_owner(), band.source(),
+                band.overlap_top(), band.overlap_height(),
+            ))
+            .collect::<Vec<_>>(),
+        vec![
+            (
+                revision, flow, 0, second,
+                FragmentSource { unit: 1, fragment: 0 },
+                Length::from_micrometres(crossing),
+                Length::from_micrometres(1),
+            ),
+            (
+                revision, flow, 0, second,
+                FragmentSource { unit: 1, fragment: 1 },
+                Length::from_micrometres(crossing + 1),
+                Length::from_micrometres(1),
+            ),
+        ],
+    );
+    assert_eq!(
+        fixed_row_band_overlaps_for_flow(&plan, &[checked(crossing, 2)?], 1),
+        Err(FlowFixedRegionError::FixedRowLimitExceeded { limit: 1 }),
     );
     let final_end = rows[3].top.micrometres() + rows[3].height.micrometres();
     assert_eq!(
