@@ -236,6 +236,68 @@ fn reference_covered_pages(
     panic!("reference placement outside supplied page authority");
 }
 
+// The oracle checks where fragments land. Independently prove that the plan
+// neither drops nor duplicates an input row, and leaves its measured payload
+// untouched even when keep-together skips a page or falls back to splitting.
+fn assert_placement_source_bijection(
+    pages: &[PageRegion<u64>],
+    units: &[MeasuredFlowUnit<u64>],
+    placements: &[PlacedFragment<u64, u64>],
+) {
+    let expected = units
+        .iter()
+        .enumerate()
+        .flat_map(|(unit_index, unit)| {
+            unit.fragments.iter().enumerate().map(
+                move |(fragment_index, fragment)| {
+                    (
+                        unit_index,
+                        fragment_index,
+                        fragment.owner,
+                        fragment.width,
+                        fragment.height,
+                    )
+                },
+            )
+        })
+        .collect::<Vec<_>>();
+    let actual = placements
+        .iter()
+        .map(|placed| {
+            (
+                placed.source.unit,
+                placed.source.fragment,
+                placed.owner,
+                placed.width,
+                placed.height,
+            )
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(actual, expected, "source-to-placement bijection");
+
+    for placed in placements {
+        let expected_page = pages
+            .iter()
+            .find(|page| page.page == placed.page)
+            .expect("placed page must belong to input");
+        assert_eq!(placed.writable, expected_page.writable);
+        assert!(placed.top >= placed.writable.y);
+        assert!(placed.width <= placed.writable.width);
+        let end = placed
+            .top
+            .micrometres()
+            .checked_add(placed.height.micrometres())
+            .expect("placed bottom must be finite");
+        let writable_bottom = placed
+            .writable
+            .y
+            .micrometres()
+            .checked_add(placed.writable.height.micrometres())
+            .expect("writable bottom must be finite");
+        assert!(end <= writable_bottom, "placed row exceeds writable page");
+    }
+}
+
 #[test]
 fn mixed_policy_pagination_matches_reference_oracle() {
     const CASES: usize = 10_000;
@@ -290,6 +352,7 @@ fn mixed_policy_pagination_matches_reference_oracle() {
         let actual = paginate(&pages, &units);
         let expected = reference_mixed_units(&pages, &units);
         if let (Ok(plan), Ok(placements)) = (&actual, &expected) {
+            assert_placement_source_bijection(&pages, &units, &plan.placements);
             saw_success = true;
             assert_eq!(plan.covered_pages,
                 reference_covered_pages(&pages, placements),
