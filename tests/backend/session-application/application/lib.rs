@@ -7467,6 +7467,8 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
                 object: block,
                 fragment_owner: block,
                 source: row.source,
+                overlap_top: Length::from_micrometres(y + 1),
+                overlap_height: Length::from_micrometres(1_000),
             },
         )),
     );
@@ -7490,6 +7492,8 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
                 object: block,
                 fragment_owner: block,
                 source: row.source,
+                overlap_top: Length::from_micrometres(y + 1),
+                overlap_height: Length::from_micrometres(1_000),
             },
         )),
     );

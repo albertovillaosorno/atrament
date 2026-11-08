@@ -143,6 +143,10 @@ pub enum FlowFixedRegionError {
         fragment_owner: AcceptedIdentity,
         /// Exact source row whose vertical band overlaps the fixed region.
         source: FragmentSource,
+        /// Top of the positive-height shared vertical interval on this page.
+        overlap_top: Length,
+        /// Height of the shared interval, without horizontal ink assumptions.
+        overlap_height: Length,
     },
     /// Same-page results disagree about the accepted writable rectangle.
     WritableMismatch {
@@ -435,11 +439,23 @@ pub fn check_fixed_regions_for_flow(
                         object: fixed.object(),
                     })?;
                 if fixed_start < row_end {
+                    let shared_top = fixed_start.max(row_start);
+                    let shared_height = fixed_end
+                        .min(row_end)
+                        .checked_sub(shared_top)
+                        .ok_or_else(|| {
+                            FlowFixedRegionError::CoordinateOverflow {
+                                page: fixed.page(),
+                                object: fixed.object(),
+                            }
+                        })?;
                     return Err(FlowFixedRegionError::VerticalBandOverlap {
                         page: fixed.page(),
                         object: fixed.object(),
                         fragment_owner: row.owner,
                         source: row.source,
+                        overlap_top: Length::from_micrometres(shared_top),
+                        overlap_height: Length::from_micrometres(shared_height),
                     });
                 }
             }

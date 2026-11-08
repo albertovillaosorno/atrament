@@ -3033,6 +3033,8 @@ fn fixed_regions_inspect_measured_vertical_bands_without_guessing_alignment()
             object: block,
             fragment_owner: block,
             source: first.source,
+            overlap_top: Length::from_micrometres(top + 1),
+            overlap_height: Length::from_micrometres(1_000),
         }),
     );
     let beyond = fixed(
@@ -3259,6 +3261,13 @@ fn fixed_flow_clearance_matches_independent_physical_interval_oracle()
                     object: owner,
                     fragment_owner: owner,
                     source: FragmentSource { unit: 0, fragment: 0 },
+                    overlap_top: Length::from_micrometres(
+                        y + offset_y,
+                    ),
+                    overlap_height: Length::from_micrometres(
+                        (offset_y + extent_y).min(10_000)
+                            - offset_y,
+                    ),
                 }),
             )
         } else if second {
@@ -3269,6 +3278,13 @@ fn fixed_flow_clearance_matches_independent_physical_interval_oracle()
                     object: owner,
                     fragment_owner: owner,
                     source: FragmentSource { unit: 0, fragment: 1 },
+                    overlap_top: Length::from_micrometres(
+                        y + offset_y.max(10_000),
+                    ),
+                    overlap_height: Length::from_micrometres(
+                        (offset_y + extent_y).min(25_000)
+                            - offset_y.max(10_000),
+                    ),
                 }),
             )
         } else {
@@ -3312,6 +3328,8 @@ fn fixed_flow_clearance_matches_independent_physical_interval_oracle()
         object: owner,
         fragment_owner: owner,
         source: FragmentSource { unit: 0, fragment: 0 },
+        overlap_top: Length::from_micrometres(y + 1),
+        overlap_height: Length::from_micrometres(1),
     };
     if check_fixed_regions_for_flow(&plan, &[overflow.clone(), collide.clone()])
         != Err(first_refusal)
@@ -3428,6 +3446,17 @@ fn indexed_fixed_clearance_matches_linear_scan_across_many_measured_rows()
                     object: owner,
                     fragment_owner: row.owner,
                     source: row.source,
+                    overlap_top: Length::from_micrometres(
+                        (y + offset_y).max(row.top.micrometres()),
+                    ),
+                    overlap_height: Length::from_micrometres(
+                        (y + offset_y + extent_y)
+                            .min(
+                                row.top.micrometres()
+                                    + row.height.micrometres(),
+                            )
+                            - (y + offset_y).max(row.top.micrometres()),
+                    ),
                 }),
             )
         } else {
@@ -3470,6 +3499,8 @@ fn indexed_fixed_clearance_matches_linear_scan_across_many_measured_rows()
             object: owner,
             fragment_owner: first.owner,
             source: first.source,
+            overlap_top: first.top,
+            overlap_height: Length::from_micrometres(1_000),
         }),
     );
     Ok(())
@@ -3605,6 +3636,8 @@ fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
                 unit: 0,
                 fragment: 0,
             },
+            overlap_top: first_writable.y,
+            overlap_height: Length::from_micrometres(1_000),
         }),
     );
     assert_eq!(
@@ -3705,6 +3738,8 @@ fn indexed_fixed_clearance_retains_owner_and_unit_fragment_provenance()
                 object: second,
                 fragment_owner: owner,
                 source,
+                overlap_top: row.top,
+                overlap_height: Length::from_micrometres(1),
             }),
         );
     }
@@ -3722,6 +3757,8 @@ fn indexed_fixed_clearance_retains_owner_and_unit_fragment_provenance()
             object: second,
             fragment_owner: second,
             source: FragmentSource { unit: 1, fragment: 0 },
+            overlap_top: Length::from_micrometres(crossing),
+            overlap_height: Length::from_micrometres(1),
         }),
     );
     let final_end = rows[3].top.micrometres() + rows[3].height.micrometres();

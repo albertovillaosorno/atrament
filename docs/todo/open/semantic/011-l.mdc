@@ -3101,3 +3101,17 @@ Redo refuses again under the narrow profile.
 This tests one additional accepted paper-authority transition, not a general
 fixed solver or permission to layer every object. Measurement still comes from
 a trusted caller and semantic body-to-native PDF/PNG is not yet connected.
+
+## Exact fixed-versus-flow vertical interval (partial) — 2026-11-08
+
+The existing fixed-versus-measured-flow refusal now includes exact physical
+`overlap_top` and positive `overlap_height` fields in micrometres. They bound
+only the shared vertical interval between the checked fixed rectangle and the
+first conflicting measured row, with the original block and fragment source.
+No horizontal text position is assumed or reported as a physical collision.
+
+The 20,000-case independent physical-interval oracle and 4,096-case indexed
+scan oracle now compare the exact refusal interval as well as source identity.
+Edge-touching and zero-area fixed proposals remain clear; upstream accepted
+page and revision checks still run before any conflict is reported. This is
+not a full semantic layout solver or native notebook export implementation.
