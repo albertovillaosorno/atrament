@@ -3009,3 +3009,24 @@ independent and keep-together measured units. It checks four successive rows,
 including a zero-width, positive-height spacer, a rectangle crossing a row
 boundary and a rectangle touching the final row without overlap. This is
 source-identity evidence only; caller-produced measurements remain required.
+
+## Read-only supplied fixed-pair intersection (partial) — 2026-11-08
+
+The measured-flow layout application can now report the **first** exact
+same-page, positive-area intersection among caller-supplied, already-checked
+fixed rectangles. The read-only result retains both accepted semantic owners,
+physical page and original input indices, including repeated owner proposals.
+Candidate priority follows the later input first, then its earlier partner.
+
+The query requires existing revision-bound fixed-versus-flow clearance first;
+stale, overflowing, inconsistent or row-overlapping checked regions still
+refuse before pair inspection. Boundary touching, zero-area rectangles and
+regions on different pages do not intersect. A 1,024-case independent u128
+physical-intersection oracle cross-checks multi-page proposals, while native
+session coverage preserves intentional overlap between two fixed proposals.
+
+This is **not** a blocking fixed-versus-fixed collision gate. Explicit layering
+and overlap permission have no accepted typed solver authority yet. A first
+candidate pair cannot prove all collisions have been inspected, and `None`
+cannot prove omitted objects or actual ink are clear. Native semantic
+content-to-handwriting PDF/PNG and persistence remain unfinished.

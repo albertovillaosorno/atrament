@@ -7301,6 +7301,18 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         ),
         Ok(admitted.clone()),
     );
+    // Multiple fixed rectangles may intentionally layer: without admitted
+    // overlap policy this handoff must not invent a blanket collision ban.
+    let layered = placement(
+        revision, rectangle(x + 2_500, y + 25_000, 5_000, 10_000),
+    );
+    assert_eq!(
+        session.paginate_measured_flow_with_fixed_regions(
+            &measurement(revision),
+            &[next_to_row, layered],
+        ),
+        Ok(admitted.clone()),
+    );
     assert_eq!(
         session.paginate_measured_flow_with_fixed_regions(
             &measurement(revision),

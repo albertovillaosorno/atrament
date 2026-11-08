@@ -13,8 +13,9 @@
 //   - Derivation of writable page regions from accepted page-profile ownership.
 //   - Completeness and order admission for measured top-level flow blocks.
 //   - Conservative vertical-band inspection of supplied checked fixed regions.
+//   - Read-only first-pair inspection of physically intersecting fixed regions.
 // - Must-Not:
-//   - Measure text, mutate accepted revisions, invent page geometry, or render.
+//   - Measure text, choose fixed overlap policy, mutate revisions, or render.
 // - Allows:
 //   - Inputs: One accepted revision, measured units, checked fixed bounds.
 //   - Outputs: Typed pagination plan or typed non-mutation failure.
@@ -151,6 +152,25 @@ pub enum FlowFixedRegionError {
     },
 }
 
+/// First supplied pair of overlapping physical fixed rectangles.
+///
+/// This is **inspection**, not a collision-policy decision: fixed shapes may
+/// deliberately layer. Indices identify the exact supplied evidence even when
+/// a caller repeats one semantic owner with multiple proposed rectangles.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FixedPairOverlap {
+    /// Index of the earlier rectangle in the supplied slice.
+    pub earlier_index: usize,
+    /// Stable object supplied first.
+    pub earlier_object: AcceptedIdentity,
+    /// Index of the later rectangle in the supplied slice.
+    pub later_index: usize,
+    /// Stable object supplied second.
+    pub later_object: AcceptedIdentity,
+    /// Physical page shared by the two checked fixed rectangles.
+    pub page: AcceptedIdentity,
+}
+
 /// Already-measured semantic flow bound to one exact accepted revision.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct RevisionFlowMeasurement {
@@ -238,6 +258,17 @@ pub enum SemanticPaginationError {
         /// Another nonempty accepted flow without derived placement here.
         flow: AcceptedIdentity,
     },
+}
+
+// Already checked, nonempty physical box indexed for pair inspection.
+#[derive(Clone, Copy)]
+struct IndexedFixedRectangle {
+    bottom_um: u64,
+    index: usize,
+    left_um: u64,
+    object: AcceptedIdentity,
+    right_um: u64,
+    top_um: u64,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -356,6 +387,80 @@ pub fn check_fixed_regions_for_flow(
         }
     }
     Ok(())
+}
+
+/// Find the first physical overlap among supplied checked fixed rectangles.
+///
+/// The existing measured-row clearance and revision/geometry checks run first;
+/// this query then inspects **only** the supplied nonempty fixed rectangles.
+/// A touching boundary or a zero-area rectangle is not an overlap, and boxes
+/// on different pages cannot intersect. Candidate pairs are considered in
+/// caller order, with the later index primary and earlier index secondary.
+///
+/// A returned pair does not imply a blocking collision: explicit layering and
+/// overlap permission belong to a future typed placement solver. `None` does
+/// not prove that omitted objects, actual ink, or other notebook flows clear.
+///
+/// # Errors
+///
+/// Returns the existing typed fixed-vs-flow refusal if submitted evidence is
+/// stale, physically overflowing, inconsistent, or crosses measured rows.
+pub fn first_fixed_pair_overlap_for_flow(
+    plan: &SemanticPaginationPlan,
+    fixed_regions: &[FixedRegionLayoutResult],
+) -> Result<Option<FixedPairOverlap>, FlowFixedRegionError> {
+    check_fixed_regions_for_flow(plan, fixed_regions)?;
+    // The checked bounds guarantee non-overflowing physical rectangles. Keep
+    // explicit arithmetic refusal rather than ever comparing saturated ends.
+    let mut prior_by_page =
+        BTreeMap::<AcceptedIdentity, Vec<IndexedFixedRectangle>>::new();
+    for (later_index, fixed) in fixed_regions.iter().enumerate() {
+        let rect = fixed.rectangle();
+        let width = rect.width.micrometres();
+        let height = rect.height.micrometres();
+        if width == 0 || height == 0 {
+            continue;
+        }
+        let left = rect.x.micrometres();
+        let top = rect.y.micrometres();
+        let right = left.checked_add(width).ok_or_else(|| {
+            FlowFixedRegionError::CoordinateOverflow {
+                page: fixed.page(),
+                object: fixed.object(),
+            }
+        })?;
+        let bottom = top.checked_add(height).ok_or_else(|| {
+            FlowFixedRegionError::CoordinateOverflow {
+                page: fixed.page(),
+                object: fixed.object(),
+            }
+        })?;
+        let prior = prior_by_page.entry(fixed.page()).or_default();
+        for earlier in prior.iter() {
+            if earlier.left_um < right
+                && left < earlier.right_um
+                && earlier.top_um < bottom
+                && top < earlier.bottom_um
+            {
+                return Ok(Some(FixedPairOverlap {
+                    page: fixed.page(),
+                    earlier_object: earlier.object,
+                    later_object: fixed.object(),
+                    earlier_index: earlier.index,
+                    later_index,
+                }));
+            }
+        }
+        prior.push(IndexedFixedRectangle {
+            bottom_um: bottom,
+            index: later_index,
+            left_um: left,
+            object: fixed.object(),
+            right_um: right,
+            top_um: top,
+        });
+    }
+    Ok(None)
 }
 
 /// Paginate complete measured semantic flow through accepted page profiles.

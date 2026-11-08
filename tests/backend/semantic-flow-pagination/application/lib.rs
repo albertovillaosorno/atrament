@@ -47,8 +47,9 @@ use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, validate_fixed_placement,
 };
 use atrament_semantic_flow_pagination::{
-    FlowFixedRegionError, RevisionFlowMeasurement, SemanticPaginationError,
-    check_fixed_regions_for_flow, paginate_revision,
+    FixedPairOverlap, FlowFixedRegionError, RevisionFlowMeasurement,
+    SemanticPaginationError, check_fixed_regions_for_flow,
+    first_fixed_pair_overlap_for_flow, paginate_revision,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, Asset, Block, BlockContent, CandidateIdentity,
@@ -3728,6 +3729,222 @@ fn indexed_fixed_clearance_retains_owner_and_unit_fragment_provenance()
         check_fixed_regions_for_flow(&plan, &[checked(final_end, 1)?]),
         Ok(()),
     );
+    assert_eq!(session.current(), Some(accepted));
+    Ok(())
+}
+
+#[test]
+fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
+-> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let fixed_flow = ids
+        .allocate_candidate()
+        .map_err(|error| format!("id: {error:?}"))?;
+    let owners = (0..3)
+        .map(|_| {
+            ids.allocate_candidate()
+                .map_err(|error| format!("id: {error:?}"))
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    fixture.notebook.pages[1].flows.push(Flow {
+        id: fixed_flow,
+        blocks: owners
+            .iter()
+            .map(|&id| Block {
+                id,
+                content: BlockContent::Rule,
+                extensions: vec![],
+                provenance: None,
+                style: None,
+            })
+            .collect(),
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("fixed-pair fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing revision")?;
+    let page_one = accepted_for(&mapping, fixture.page_one);
+    let page_two = accepted_for(&mapping, fixture.page_two);
+    let block = accepted_for(&mapping, fixture.block);
+    let objects = owners
+        .into_iter()
+        .map(|owner| accepted_for(&mapping, owner))
+        .collect::<Vec<_>>();
+    let measured =
+        measurement(revision, accepted_for(&mapping, fixture.flow), block, &[
+            (10_000, 10_000),
+        ]);
+    let plan = paginate_revision(accepted, &measured)
+        .map_err(|error| format!("pagination: {error:?}"))?;
+    // Page two has independent fixed objects but no measured flow rows.
+    if plan.placements().len() != 1 || plan.covered_pages().len() != 1 {
+        return Err("unexpected physical row placement".into());
+    }
+    let checked = |page, object, x, y, width, height| {
+        validate_fixed_placement(accepted, AcceptedFixedPlacement {
+            object,
+            page,
+            revision,
+            rectangle: Rect {
+                x: Length::from_micrometres(x),
+                y: Length::from_micrometres(y),
+                width: Length::from_micrometres(width),
+                height: Length::from_micrometres(height),
+            },
+        })
+        .map_err(|error| format!("fixed admission: {error:?}"))
+    };
+    let a = checked(page_two, objects[0], 40_000, 50_000, 10_000, 10_000)?;
+    let touch = checked(page_two, objects[1], 50_000, 50_000, 10_000, 10_000)?;
+    let c = checked(page_two, objects[2], 49_999, 59_999, 5_000, 5_000)?;
+    let zero = checked(page_two, objects[1], 40_000, 50_000, 0, 10_000)?;
+    let other_page = checked(page_one, block, 40_000, 50_000, 10_000, 10_000)?;
+    assert_eq!(
+        first_fixed_pair_overlap_for_flow(&plan, &[
+            a.clone(),
+            touch.clone(),
+            zero.clone(),
+            other_page,
+        ]),
+        Ok(None),
+    );
+    assert_eq!(
+        first_fixed_pair_overlap_for_flow(&plan, &[
+            a.clone(),
+            touch.clone(),
+            c.clone(),
+            zero,
+        ]),
+        Ok(Some(FixedPairOverlap {
+            page: page_two,
+            earlier_object: objects[0],
+            later_object: objects[2],
+            earlier_index: 0,
+            later_index: 2,
+        })),
+    );
+    // A geometric pair is not a blocking collision without overlap policy.
+    assert_eq!(
+        check_fixed_regions_for_flow(&plan, &[a.clone(), c.clone()]),
+        Ok(())
+    );
+    assert_eq!(
+        first_fixed_pair_overlap_for_flow(&plan, &[touch, c, a.clone()]),
+        Ok(Some(FixedPairOverlap {
+            page: page_two,
+            earlier_object: objects[1],
+            later_object: objects[2],
+            earlier_index: 0,
+            later_index: 1,
+        })),
+    );
+    // Invalid evidence takes priority over a pair found earlier in the batch.
+    let invalid = checked(page_two, objects[1], 0, 0, 10_000, 10_000)?;
+    assert_eq!(
+        first_fixed_pair_overlap_for_flow(&plan, &[a.clone(), a, invalid]),
+        Err(FlowFixedRegionError::FixedRegionOverflow {
+            page: page_two,
+            object: objects[1],
+        }),
+    );
+    let row_top = plan.placements()[0].top.micrometres();
+    let collision =
+        checked(page_one, block, 40_000, row_top + 1, 1_000, 1_000)?;
+    let overlapping =
+        checked(page_two, objects[0], 40_000, 50_000, 10_000, 10_000)?;
+    assert!(matches!(
+        first_fixed_pair_overlap_for_flow(&plan, &[overlapping, collision]),
+        Err(FlowFixedRegionError::VerticalBandOverlap { .. }),
+    ));
+    // Compare 1,024 independently generated multi-page rectangle batches
+    // against a u128 physical-intersection oracle, including empty boxes.
+    let mut seed = 0x179a_2026_1080_4495_u64;
+    let mut overlap_cases = 0;
+    let mut clear_cases = 0;
+    for case in 0..1_024 {
+        let mut regions = Vec::new();
+        let mut geometry = Vec::new();
+        for index in 0..8 {
+            let mut draw = || {
+                seed = seed
+                    .wrapping_mul(6_364_136_223_846_793_005)
+                    .wrapping_add(1_442_695_040_888_963_407);
+                seed >> 32
+            };
+            let is_first_page = draw() % 2 == 0;
+            let (physical_page, owner) = if is_first_page {
+                (page_one, block)
+            } else {
+                (page_two, objects[index % objects.len()])
+            };
+            let x = 40_000 + draw() % 100_000;
+            let y = 80_000 + draw() % 140_000;
+            let width = if case % 11 == 0 {
+                0
+            } else {
+                draw() % 20_000
+            };
+            let height = if case % 13 == 0 {
+                0
+            } else {
+                draw() % 20_000
+            };
+            regions.push(checked(physical_page, owner, x, y, width, height)?);
+            geometry.push((physical_page, owner, x, y, width, height));
+        }
+        let mut expected = None;
+        'pairs: for later_index in 0..geometry.len() {
+            let (page, later_object, x, y, w, h) = geometry[later_index];
+            for earlier_index in 0..later_index {
+                let (earlier_page, earlier_object, ex, ey, ew, eh) =
+                    geometry[earlier_index];
+                let common_width = (u128::from(x) + u128::from(w))
+                    .min(u128::from(ex) + u128::from(ew))
+                    .saturating_sub(u128::from(x.max(ex)));
+                let common_height = (u128::from(y) + u128::from(h))
+                    .min(u128::from(ey) + u128::from(eh))
+                    .saturating_sub(u128::from(y.max(ey)));
+                if page == earlier_page
+                    && w > 0
+                    && h > 0
+                    && ew > 0
+                    && eh > 0
+                    && common_width > 0
+                    && common_height > 0
+                {
+                    expected = Some(FixedPairOverlap {
+                        page,
+                        earlier_object,
+                        later_object,
+                        earlier_index,
+                        later_index,
+                    });
+                    break 'pairs;
+                }
+            }
+        }
+        let actual = first_fixed_pair_overlap_for_flow(&plan, &regions)
+            .map_err(|error| format!("case {case} refused: {error:?}"))?;
+        if actual != expected {
+            return Err(format!(
+                "fixed pair oracle case {case}: {actual:?} != {expected:?}"
+            ));
+        }
+        if actual.is_some() {
+            overlap_cases += 1;
+        } else {
+            clear_cases += 1;
+        }
+    }
+    if overlap_cases < 100 || clear_cases < 100 {
+        return Err(format!(
+            "pair coverage: yes={overlap_cases}, no={clear_cases}"
+        ));
+    }
     assert_eq!(session.current(), Some(accepted));
     Ok(())
 }
