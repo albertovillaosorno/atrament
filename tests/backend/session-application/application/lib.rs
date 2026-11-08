@@ -2126,6 +2126,51 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         writable: original_writable,
     }]);
 
+    // A distinct fixed box intersects an explicitly positioned measured row
+    // on wide paper, but never overrides the full-width conservative gate.
+    // The same horizontal position escapes the writable edge when paper
+    // narrows, even after a fresh smaller vertical-row measurement.
+    let footprint_box = Rect {
+        x: Length::from_micrometres(100_000),
+        y: Length::from_micrometres(25_000),
+        width: Length::from_micrometres(5_000),
+        height: Length::from_micrometres(5_000),
+    };
+    let footprint_fixed = |revision| AcceptedFixedPlacement {
+        object: block,
+        page,
+        rectangle: footprint_box,
+        revision,
+    };
+    let positions = |revision| plan.placements().iter().map(|row| {
+        RowHorizontalPosition {
+            left: Length::from_micrometres(80_000),
+            page: row.page,
+            revision,
+            source: row.source,
+        }
+    }).collect::<Vec<_>>();
+    let first_source = plan.placements()[0].source;
+    let assert_wide_footprint = |current: &application::SessionApplication,
+                                 current_revision| {
+        let overlaps = current.fixed_row_footprint_overlaps(
+            &measurement(current_revision, 100_000),
+            &[footprint_fixed(current_revision)],
+            &positions(current_revision), 1,
+        ).expect("wide paper should admit positioned row geometry");
+        assert_eq!(overlaps.len(), 1);
+        let collision = overlaps[0];
+        assert_eq!(collision.revision(), current_revision);
+        assert_eq!(collision.flow(), flow);
+        assert_eq!(collision.page(), page);
+        assert_eq!(collision.object(), block);
+        assert_eq!(collision.fragment_owner(), block);
+        assert_eq!(collision.source(), first_source);
+        assert_eq!(collision.fixed_index(), 0);
+        assert_eq!(collision.intersection(), footprint_box);
+    };
+    assert_wide_footprint(&session, revision);
+
     // This explicitly supplied checked rectangle fits the original page but
     // lies to the right of a subsequently narrowed printable rectangle.
     // Its y band never overlaps the admitted two source rows.
@@ -2233,6 +2278,28 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         writable: narrowed_writable,
     }]);
     assert_eq!(
+        session.fixed_row_footprint_overlaps(
+            &measurement(edited, 80_000),
+            &[footprint_fixed(edited)], &positions(edited), 1,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowFootprintOverflow {
+                page, fragment_owner: block, source: first_source,
+            },
+        )),
+    );
+    assert_eq!(
+        session.fixed_row_footprint_overlaps(
+            &measurement(edited, 80_000),
+            &[footprint_fixed(edited)], &positions(revision), 1,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowPositionMismatch {
+                index: 0, page, fragment_owner: block, source: first_source,
+            },
+        )),
+    );
+    assert_eq!(
         session.first_fixed_pair_overlap(
             &measurement(edited, 80_000),
             &[fixed(edited), layered(edited)],
@@ -2300,6 +2367,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         writable: original_writable,
     }]);
     assert_pair(&session, undone, 100_000);
+    assert_wide_footprint(&session, undone);
     assert_eq!(
         session.fixed_row_band_overlaps(
             &measurement(undone, 100_000),
@@ -2338,6 +2406,17 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         page,
         writable: narrowed_writable,
     }]);
+    assert_eq!(
+        session.fixed_row_footprint_overlaps(
+            &measurement(redone, 80_000),
+            &[footprint_fixed(redone)], &positions(redone), 1,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowFootprintOverflow {
+                page, fragment_owner: block, source: first_source,
+            },
+        )),
+    );
     assert_eq!(
         session.first_fixed_pair_overlap(
             &measurement(redone, 80_000),

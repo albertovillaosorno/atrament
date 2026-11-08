@@ -3577,6 +3577,9 @@ fn indexed_fixed_clearance_matches_linear_scan_across_many_measured_rows()
 #[test]
 fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
 -> Result<(), String> {
+    use atrament_semantic_flow_pagination::{
+        RowHorizontalPosition, fixed_row_footprint_overlaps_for_flow,
+    };
     let ids = IdentityAllocator::new();
     let mut fixture = candidate_fixture(&ids);
     let other_flow = ids
@@ -3701,6 +3704,65 @@ fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
         width: Length::from_micrometres(1_000),
         height: Length::from_micrometres(1_000),
     })?;
+    // Explicit X geometry contains only actual measured rows, not a phantom
+    // row on the covered-but-unplaced page. Source identity remains intact
+    // when a later row jumps from the first to the third physical page.
+    let positions = plan.placements().iter().map(|row| RowHorizontalPosition {
+        left: row.writable.x,
+        page: row.page,
+        revision,
+        source: row.source,
+    }).collect::<Vec<_>>();
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, std::slice::from_ref(&on_skipped), &positions, 0,
+        ),
+        Ok(vec![]),
+    );
+    let physical = fixed_row_footprint_overlaps_for_flow(
+        &plan,
+        &[
+            on_skipped.clone(), second_collision.clone(),
+            first_collision.clone(),
+        ],
+        &positions, 2,
+    ).map_err(|error| format!("three-page footprints: {error:?}"))?;
+    assert_eq!(
+        physical.iter().map(|overlap| (
+            overlap.revision(), overlap.flow(), overlap.fixed_index(),
+            overlap.page(), overlap.fragment_owner(), overlap.source(),
+            overlap.intersection(),
+        )).collect::<Vec<_>>(),
+        [
+            (revision, selected, 1, first, owner,
+             plan.placements()[0].source, second_collision.rectangle()),
+            (revision, selected, 2, first, owner,
+             plan.placements()[0].source, first_collision.rectangle()),
+        ],
+    );
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &[first_collision.clone(), altered.clone()],
+            &positions, 0,
+        ),
+        Err(FlowFixedRegionError::WritableMismatch {
+            page: skipped, object: fixed_owner,
+        }),
+    );
+    let mut wrong_page = positions.clone();
+    wrong_page.get_mut(1).ok_or("third-page position missing")?
+        .page = skipped;
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, std::slice::from_ref(&on_skipped), &wrong_page, 0,
+        ),
+        Err(FlowFixedRegionError::RowPositionMismatch {
+            index: 1,
+            page: third,
+            fragment_owner: owner,
+            source: plan.placements()[1].source,
+        }),
+    );
     assert_eq!(
         fixed_row_band_overlaps_for_flow(&plan, &[on_skipped.clone()], 0),
         Ok(vec![]),

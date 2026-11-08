@@ -3197,3 +3197,25 @@ left-positioned measured row. This optional report is **not** proof of glyph
 ink contact or an approved layout policy: row positions remain caller-supplied,
 not derived from saved Markdown or handwriting. No native semantic PDF/PNG
 Export path is established by this change; ATR-P2-011 remains open.
+
+## Positioned row footprints across page-profile history — 2026-11-08
+
+The current-session profile-resize regression also binds the optional physical
+row-footprint report to the accepted paper and revision. The same explicit
+horizontal origin intersects a supplied in-bounds fixed rectangle on the wide
+page, overflows the writable edge with freshly reduced measured widths on the
+narrowed page, and refuses an old row-position revision even with fresh flow.
+Undo restores the exact physical intersection under a fresh revision; Redo
+restores the typed horizontal overflow. The conservative fixed-row gate and
+native handwritten notebook export prerequisites remain unchanged.
+
+## Positioned rows across covered, unplaced pages — 2026-11-08
+
+The three-page layout fixture now verifies positioned-row footprints when an
+occupied narrow page is covered by pagination but contains no selected-flow
+row. Exact X positions belong to only the first and third physical pages;
+the middle page reports no intersection. A stale horizontal position falsely
+claiming that middle page is refused with the expected third-page owner and
+source, and a conflicting checked writable rectangle on the middle page still
+refuses before bounded report collection. This does not change the rule that
+unmeasured occupied page ink must never be overwritten by another flow.
