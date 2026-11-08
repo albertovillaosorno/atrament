@@ -197,6 +197,7 @@ fn real_six_mm_fixed_overflow_blocks_export_layout_preflight() {
             revision: fixture.revision,
         },
     ));
+    assert_eq!(layout.revision(), fixture.revision);
     assert!(matches!(layout, FixedRegionLayoutResult::Overflow { .. }));
     let FixedRegionLayoutResult::Overflow { diagnostics, .. } = layout else {
         return;

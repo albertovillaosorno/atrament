@@ -79,6 +79,8 @@ pub enum FixedRegionLayoutResult {
         page: AcceptedIdentity,
         /// Exact physical bounds report behind the diagnostics.
         report: BoundsReport,
+        /// Accepted revision against which these bounds were checked.
+        revision: RevisionIdentity,
     },
     /// Derived fixed geometry remains fully inside the writable page region.
     WithinBounds {
@@ -86,7 +88,20 @@ pub enum FixedRegionLayoutResult {
         object: AcceptedIdentity,
         /// Stable accepted page validated by this result.
         page: AcceptedIdentity,
+        /// Accepted revision against which these bounds were checked.
+        revision: RevisionIdentity,
     },
+}
+
+impl FixedRegionLayoutResult {
+    /// Return the exact accepted revision that supplied the page geometry.
+    #[must_use]
+    pub const fn revision(&self) -> RevisionIdentity {
+        match self {
+            Self::Overflow { revision, .. }
+            | Self::WithinBounds { revision, .. } => *revision,
+        }
+    }
 }
 
 /// Typed failure before accepted fixed-region bounds can be evaluated.
@@ -249,6 +264,7 @@ pub fn validate_fixed_placement(
         return Ok(FixedRegionLayoutResult::WithinBounds {
             object: placement.object,
             page: placement.page,
+            revision: revision.id,
         });
     }
     Ok(FixedRegionLayoutResult::Overflow {
@@ -256,6 +272,7 @@ pub fn validate_fixed_placement(
         object: placement.object,
         page: placement.page,
         report,
+        revision: revision.id,
     })
 }
 

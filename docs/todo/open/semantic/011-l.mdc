@@ -2758,3 +2758,19 @@ flows and the `SessionApplication` profile edit, Undo and Redo lifecycle. The
 pure measured paginator is unchanged; only the semantic boundary supplies
 accepted identities. This remains read-only metadata, not a content compiler,
 a persistence format, or the required saved semantic notebook PDF/PNG path.
+
+## Revision-bound fixed-region bounds outcomes (partial) — 2026-11-07
+
+Both successful and overflowing fixed-region bounds results now retain the
+exact accepted revision that supplied the physical geometry, in addition to
+the selected page and semantic object. A read-only `revision()` query makes
+that provenance available before a future export adapter trusts a cached
+result. It is not enough to infer revision authority from the page or block
+identities, which can survive a profile edit and history traversal.
+
+Independent fixed-region reference-oracle cases verify the revision on each
+bounds result; the session application tests check normal, edited, Undo and
+Redo outcomes, including page-profile reference changes. Export layout
+preflight also checks provenance on its accepted overflow evidence. No
+solver, persistence, full content measurement, or semantic PDF/PNG exporter
+was added, so ATR-P2-011 remains open.

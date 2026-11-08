@@ -282,10 +282,15 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
             placement(revision, page, object, rectangle),
         )
         .expect("generated placement keeps accepted authority");
+        assert_eq!(actual.revision(), revision, "generated case {case}");
         if expected.is_within_bounds() {
             assert_eq!(
                 actual,
-                FixedRegionLayoutResult::WithinBounds { object, page },
+                FixedRegionLayoutResult::WithinBounds {
+                    object,
+                    page,
+                    revision,
+                },
                 "within-bounds mismatch in generated case {case}",
             );
             continue;
@@ -295,12 +300,14 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
             object: actual_object,
             page: actual_page,
             report,
+            revision: actual_revision,
         } = actual
         else {
             panic!("overflow case {case} must return diagnostics");
         };
         assert_eq!(actual_object, object, "generated case {case}");
         assert_eq!(actual_page, page, "generated case {case}");
+        assert_eq!(actual_revision, revision, "generated case {case}");
         assert_eq!(report, expected, "generated case {case}");
         assert_eq!(diagnostics.completeness, Completeness::Complete);
         assert_eq!(diagnostics.diagnostics.len(), report.violations.len());
@@ -435,7 +442,11 @@ fn exact_fit_is_read_only_and_produces_no_diagnostic_result() {
                 rect(35_000, 20_000, 165_000, 267_000)
             ),
         ),
-        Ok(FixedRegionLayoutResult::WithinBounds { object, page }),
+        Ok(FixedRegionLayoutResult::WithinBounds {
+            object,
+            page,
+            revision,
+        }),
     );
     assert_eq!(session.current(), Some(&before));
 }
@@ -596,7 +607,11 @@ fn nested_block_is_still_owned_by_its_accepted_page() {
             session.current().expect("accepted revision"),
             placement(revision, page, nested, rect(35_000, 20_000, 1, 1)),
         ),
-        Ok(FixedRegionLayoutResult::WithinBounds { object: nested, page }),
+        Ok(FixedRegionLayoutResult::WithinBounds {
+            object: nested,
+            page,
+            revision,
+        }),
     );
 }
 
@@ -635,7 +650,11 @@ fn maximum_depth_block_ownership_is_iterative() {
             session.current().expect("accepted deep revision"),
             placement(revision, page, object, rect(35_000, 20_000, 1, 1)),
         ),
-        Ok(FixedRegionLayoutResult::WithinBounds { object, page }),
+        Ok(FixedRegionLayoutResult::WithinBounds {
+            object,
+            page,
+            revision,
+        }),
     );
 }
 
@@ -761,7 +780,11 @@ fn verify_duplicate_fixed_region_authority_refusal() -> Result<(), String> {
         .ok_or("accepted revision missing")?
         .clone();
     if validate_fixed_placement(&accepted, checked)
-        != Ok(FixedRegionLayoutResult::WithinBounds { object, page })
+        != Ok(FixedRegionLayoutResult::WithinBounds {
+            object,
+            page,
+            revision,
+        })
     {
         return Err("valid fixed region was refused".into());
     }
@@ -828,7 +851,11 @@ fn verify_cross_kind_fixed_authority_refusal() -> Result<(), String> {
         .ok_or("accepted revision missing")?
         .clone();
     if validate_fixed_placement(&accepted, checked)
-        != Ok(FixedRegionLayoutResult::WithinBounds { object, page })
+        != Ok(FixedRegionLayoutResult::WithinBounds {
+            object,
+            page,
+            revision,
+        })
     {
         return Err("valid fixed placement was refused".into());
     }
@@ -899,7 +926,11 @@ fn verify_duplicate_fixed_object_refusal() -> Result<(), String> {
         .ok_or("accepted revision missing")?
         .clone();
     if validate_fixed_placement(&accepted, checked)
-        != Ok(FixedRegionLayoutResult::WithinBounds { object, page })
+        != Ok(FixedRegionLayoutResult::WithinBounds {
+            object,
+            page,
+            revision,
+        })
     {
         return Err("valid fixed block was refused".into());
     }
