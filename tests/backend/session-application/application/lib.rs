@@ -66,8 +66,8 @@ use atrament_physical_page_profile::{
     SheetSize,
 };
 use atrament_semantic_flow_pagination::{
-    FlowFixedRegionError, RevisionFlowMeasurement, SemanticPaginationError,
-    SemanticPaginationPlan,
+    FixedPairOverlap, FlowFixedRegionError, RevisionFlowMeasurement,
+    SemanticPaginationError, SemanticPaginationPlan,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -7259,6 +7259,10 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         ),
         Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
     );
+    assert_eq!(
+        empty_session.first_fixed_pair_overlap(&measurement(revision), &[]),
+        Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
+    );
     let admitted = session
         .paginate_measured_flow_with_fixed_regions(&measurement(revision), &[])
         .map_err(|error| format!("base flow refused: {error:?}"))?;
@@ -7314,6 +7318,30 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         Ok(admitted.clone()),
     );
     assert_eq!(
+        session.first_fixed_pair_overlap(
+            &measurement(revision),
+            &[next_to_row, layered],
+        ),
+        Ok(Some(FixedPairOverlap {
+            page,
+            earlier_object: block,
+            later_object: block,
+            earlier_index: 0,
+            later_index: 1,
+        })),
+    );
+    // Boundary touching remains an admissible clear pair, not a collision.
+    let touching = placement(
+        revision, rectangle(x + 5_000, y + 20_000, 1_000, 10_000),
+    );
+    assert_eq!(
+        session.first_fixed_pair_overlap(
+            &measurement(revision),
+            &[next_to_row, touching],
+        ),
+        Ok(None),
+    );
+    assert_eq!(
         session.paginate_measured_flow_with_fixed_regions(
             &measurement(revision),
             &[near_far_edge]
@@ -7332,6 +7360,26 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             &measurement(revision),
             &[outside]
         ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow { page, object: block },
+        )),
+    );
+    assert_eq!(
+        session.first_fixed_pair_overlap(
+            &measurement(revision),
+            &[next_to_row, near_far_edge],
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::VerticalBandOverlap {
+                page,
+                object: block,
+                fragment_owner: block,
+                source: row.source,
+            },
+        )),
+    );
+    assert_eq!(
+        session.first_fixed_pair_overlap(&measurement(revision), &[outside]),
         Err(application::SessionFlowFixedRegionError::Overlap(
             FlowFixedRegionError::FixedRegionOverflow { page, object: block },
         )),
@@ -7358,6 +7406,30 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             )),
         );
         assert_eq!(
+            current_session.first_fixed_pair_overlap(
+                &measurement(revision),
+                &[next_to_row, layered],
+            ),
+            Err(application::SessionFlowFixedRegionError::Pagination(
+                SemanticPaginationError::MeasurementRevisionMismatch {
+                    accepted: current,
+                    measured: revision,
+                },
+            )),
+        );
+        assert_eq!(
+            current_session.first_fixed_pair_overlap(
+                &measurement(current),
+                &[next_to_row, layered],
+            ),
+            Err(application::SessionFlowFixedRegionError::FixedRegion(
+                FixedRegionLayoutError::RevisionMismatch {
+                    accepted: current,
+                    placement: revision,
+                },
+            )),
+        );
+        assert_eq!(
             current_session.paginate_measured_flow_with_fixed_regions(
                 &measurement(current),
                 &[next_to_row]
@@ -7378,6 +7450,24 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         .map_err(|error| format!("fresh edited placement: {error:?}"))?;
     assert_eq!(fresh.revision(), edited);
     assert_eq!(fresh.placements(), admitted.placements());
+    let inspect_fresh = |current_session: &application::SessionApplication,
+                         current| {
+        let result = current_session.first_fixed_pair_overlap(
+            &measurement(current),
+            &[
+                placement(current, next_to_row.rectangle),
+                placement(current, layered.rectangle),
+            ],
+        );
+        assert_eq!(result, Ok(Some(FixedPairOverlap {
+            page,
+            earlier_object: block,
+            later_object: block,
+            earlier_index: 0,
+            later_index: 1,
+        })));
+    };
+    inspect_fresh(&session, edited);
 
     let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
         session.traverse_history(edited, HistoryDirection::Undo)
@@ -7385,6 +7475,7 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         return Err("Undo refused".into());
     };
     check_stale(&session, undone);
+    inspect_fresh(&session, undone);
     assert_eq!(
         session
             .paginate_measured_flow_with_fixed_regions(&measurement(undone), &[
@@ -7400,6 +7491,7 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         return Err("Redo refused".into());
     };
     check_stale(&session, redone);
+    inspect_fresh(&session, redone);
     assert_eq!(
         session
             .paginate_measured_flow_with_fixed_regions(&measurement(redone), &[

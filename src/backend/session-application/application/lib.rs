@@ -20,7 +20,7 @@
 //     terminal/cleanup observations, plus raw bytes already validated by an
 //     ingestion boundary.
 //   - Outputs: Typed outcomes, read-only pagination and fixed-layout results,
-//     checked cross-layout clearance,
+//     checked cross-layout clearance and first-pair inspection,
 //     borrowed accepted state, and raw asset bytes.
 //   - Side effects: Process-local mutation through owned application services.
 // - Split-When:
@@ -60,8 +60,10 @@ use atrament_media_job_session::{
     WaveformIntermediateIdentity,
 };
 use atrament_semantic_flow_pagination::{
-    FlowFixedRegionError, RevisionFlowMeasurement, SemanticPaginationError,
-    SemanticPaginationPlan, check_fixed_regions_for_flow, paginate_revision,
+    FixedPairOverlap, FlowFixedRegionError, RevisionFlowMeasurement,
+    SemanticPaginationError, SemanticPaginationPlan,
+    check_fixed_regions_for_flow, first_fixed_pair_overlap_for_flow,
+    paginate_revision,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -467,6 +469,27 @@ impl SessionApplication {
             .check_identity_precondition(revision, target, precondition)
     }
 
+    fn checked_measured_flow_and_fixed_regions(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+    ) -> Result<
+        (SemanticPaginationPlan, Vec<FixedRegionLayoutResult>),
+        SessionFlowFixedRegionError,
+    > {
+        let Some(revision) = self.semantic.current() else {
+            return Err(SessionFlowFixedRegionError::NoAcceptedRevision);
+        };
+        let plan = paginate_revision(revision, measurement)
+            .map_err(SessionFlowFixedRegionError::Pagination)?;
+        let checked = fixed
+            .iter()
+            .map(|placement| validate_fixed_placement(revision, *placement))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(SessionFlowFixedRegionError::FixedRegion)?;
+        Ok((plan, checked))
+    }
+
     /// Discover current transport-neutral semantic command behavior.
     #[must_use]
     pub fn command_capability_snapshot(
@@ -573,6 +596,30 @@ impl SessionApplication {
         outcome: MediaJobOutcome,
     ) -> Result<MediaJobCleanupStatus, MediaJobSessionError> {
         self.media.finish_job(job, outcome)
+    }
+
+    /// Inspect the first checked fixed-pair intersection on live authority.
+    ///
+    /// The same revision-bound pagination and accepted fixed-placement
+    /// validator as the combined flow query supplies exact physical geometry.
+    /// Existing fixed-vs-flow clearance errors take priority over detection.
+    /// `Some` identifies a possible intentional layering pair, **not** a
+    /// blocking collision; `None` does not prove omitted objects are clear.
+    /// This operation is read-only and cannot authorize Export.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed refusal for missing authority, stale or invalid flow
+    /// measurements or fixed rectangles, or possible fixed-vs-flow overlap.
+    pub fn first_fixed_pair_overlap(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+    ) -> Result<Option<FixedPairOverlap>, SessionFlowFixedRegionError> {
+        let (plan, checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
+        first_fixed_pair_overlap_for_flow(&plan, &checked)
+            .map_err(SessionFlowFixedRegionError::Overlap)
     }
 
     /// Inspect in-memory semantic Undo and Redo availability.
@@ -686,16 +733,8 @@ impl SessionApplication {
         measurement: &RevisionFlowMeasurement,
         fixed: &[AcceptedFixedPlacement],
     ) -> Result<SemanticPaginationPlan, SessionFlowFixedRegionError> {
-        let Some(revision) = self.semantic.current() else {
-            return Err(SessionFlowFixedRegionError::NoAcceptedRevision);
-        };
-        let plan = paginate_revision(revision, measurement)
-            .map_err(SessionFlowFixedRegionError::Pagination)?;
-        let checked = fixed
-            .iter()
-            .map(|placement| validate_fixed_placement(revision, *placement))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(SessionFlowFixedRegionError::FixedRegion)?;
+        let (plan, checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
         check_fixed_regions_for_flow(&plan, &checked)
             .map_err(SessionFlowFixedRegionError::Overlap)?;
         Ok(plan)

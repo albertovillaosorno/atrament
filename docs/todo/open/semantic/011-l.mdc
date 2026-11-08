@@ -3030,3 +3030,19 @@ and overlap permission have no accepted typed solver authority yet. A first
 candidate pair cannot prove all collisions have been inspected, and `None`
 cannot prove omitted objects or actual ink are clear. Native semantic
 content-to-handwriting PDF/PNG and persistence remain unfinished.
+
+## Current-session fixed-pair inspection handoff (partial) — 2026-11-08
+
+`SessionApplication::first_fixed_pair_overlap` now derives its checked input
+from the **current** accepted revision and the same measured pagination/fixed
+placement admission path as the existing combined clearance query. It returns
+one optional physical overlap pair without changing the accepted notebook.
+
+The live session regression checks missing authority, current overlapping and
+touching proposals, row overlap and physical overflow refusal, stale flow and
+fixed evidence after text edits, and freshly revision-bound results across edit,
+Undo and Redo. The existing combined query still permits intentional fixed
+layering; neither query infers an undeclared overlap policy or Export readiness.
+
+No persisted Markdown body measurement, full fixed solver, handwriting glyph
+production or native semantic PDF/PNG export path is provided by this slice.
