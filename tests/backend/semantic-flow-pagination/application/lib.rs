@@ -3157,3 +3157,167 @@ fn fixed_regions_on_uncovered_pages_do_not_collide_with_flow_rows()
     assert!(check_fixed_regions_for_flow(&plan, &[]).is_ok());
     Ok(())
 }
+
+#[test]
+fn fixed_flow_clearance_matches_independent_physical_interval_oracle()
+-> Result<(), String> {
+    use atrament_flow_pagination::FragmentSource;
+
+    const CASES: usize = 20_000;
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("oracle fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing accepted revision")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let measured = measurement(revision, flow, owner, &[
+        (15_000, 10_000),
+        (15_000, 15_000),
+    ]);
+    let plan = paginate_revision(accepted, &measured)
+        .map_err(|error| format!("reference flow: {error:?}"))?;
+    let writable = plan
+        .covered_pages()
+        .first()
+        .ok_or("no first page writable region")?
+        .writable;
+    let width = writable.width.micrometres();
+    let height = writable.height.micrometres();
+    let x = writable.x.micrometres();
+    let y = writable.y.micrometres();
+    let mut seed = 0x26d7_4a65_9021_5f31;
+    let mut counts = [0usize; 4]; // clear, first-row, second-row, overflow
+    for case in 0..CASES {
+        let r1 = next_owner_oracle_value(&mut seed);
+        let r2 = next_owner_oracle_value(&mut seed);
+        let r3 = next_owner_oracle_value(&mut seed);
+        let r4 = next_owner_oracle_value(&mut seed);
+        let offset_x = if case % 7 == 0 {
+            width - 500
+        } else {
+            r1 % 50_000
+        };
+        let offset_y = if case % 11 == 0 {
+            height - 500
+        } else {
+            r2 % 60_000
+        };
+        let extent_x = if case % 13 == 0 {
+            0
+        } else {
+            r3 % 10_000
+        };
+        let extent_y = if case % 17 == 0 {
+            0
+        } else {
+            r4 % 25_000
+        };
+        let checked =
+            validate_fixed_placement(accepted, AcceptedFixedPlacement {
+                object: owner,
+                page,
+                revision,
+                rectangle: Rect {
+                    x: Length::from_micrometres(x + offset_x),
+                    y: Length::from_micrometres(y + offset_y),
+                    width: Length::from_micrometres(extent_x),
+                    height: Length::from_micrometres(extent_y),
+                },
+            })
+            .map_err(|error| format!("case {case} bounds: {error:?}"))?;
+        // Independent oracle: the first occupied row is [0, 10_000),
+        // the second is [10_000, 25_000), relative to accepted writable Y.
+        // Horizontal placement is *unknown*, so any nonempty width may
+        // intersect those full-width row bands.
+        let overflow =
+            offset_x + extent_x > width || offset_y + extent_y > height;
+        let first = extent_x > 0 && extent_y > 0 && offset_y < 10_000;
+        let second = extent_x > 0
+            && extent_y > 0
+            && offset_y < 25_000
+            && offset_y + extent_y > 10_000;
+        let (class, expected) = if overflow {
+            (
+                3,
+                Err(FlowFixedRegionError::FixedRegionOverflow {
+                    page,
+                    object: owner,
+                }),
+            )
+        } else if first {
+            (
+                1,
+                Err(FlowFixedRegionError::VerticalBandOverlap {
+                    page,
+                    object: owner,
+                    fragment_owner: owner,
+                    source: FragmentSource { unit: 0, fragment: 0 },
+                }),
+            )
+        } else if second {
+            (
+                2,
+                Err(FlowFixedRegionError::VerticalBandOverlap {
+                    page,
+                    object: owner,
+                    fragment_owner: owner,
+                    source: FragmentSource { unit: 0, fragment: 1 },
+                }),
+            )
+        } else {
+            (0, Ok(()))
+        };
+        counts[class] += 1;
+        let actual = check_fixed_regions_for_flow(&plan, &[checked]);
+        if actual != expected {
+            return Err(format!(
+                "case {case}: {actual:?} != {expected:?}"
+            ));
+        }
+    }
+    if counts.iter().any(|count| *count < 600) {
+        return Err(format!("insufficient oracle coverage: {counts:?}"));
+    }
+
+    // Failure order is the order of submitted fixed evidence; an earlier
+    // overflowing rectangle must not be hidden by a later row collision.
+    let rectangle = |x, y, width, height| Rect {
+        x: Length::from_micrometres(x),
+        y: Length::from_micrometres(y),
+        width: Length::from_micrometres(width),
+        height: Length::from_micrometres(height),
+    };
+    let checked = |area| {
+        validate_fixed_placement(accepted, AcceptedFixedPlacement {
+            object: owner,
+            page,
+            rectangle: area,
+            revision,
+        })
+        .map_err(|error| format!("order fixture: {error:?}"))
+    };
+    let overflow = checked(rectangle(x, y, width + 1, 1))?;
+    let collide = checked(rectangle(x, y + 1, 1, 1))?;
+    let first_refusal =
+        FlowFixedRegionError::FixedRegionOverflow { page, object: owner };
+    let second_refusal = FlowFixedRegionError::VerticalBandOverlap {
+        page,
+        object: owner,
+        fragment_owner: owner,
+        source: FragmentSource { unit: 0, fragment: 0 },
+    };
+    if check_fixed_regions_for_flow(&plan, &[overflow.clone(), collide.clone()])
+        != Err(first_refusal)
+        || check_fixed_regions_for_flow(&plan, &[collide, overflow])
+            != Err(second_refusal)
+    {
+        return Err("fixed-region refusal order was not preserved".into());
+    }
+    Ok(())
+}

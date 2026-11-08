@@ -2956,3 +2956,18 @@ revision fails even when a fresh measured flow fits the new paper.
 
 The independent measured rows retain their source indices and revised writable
 regions throughout. These tests do not add content measurement or Export.
+
+## Fixed/flow interval reference oracle (partial) — 2026-11-07
+
+An independent native physical-interval oracle now checks 20,000 seeded
+fixed rectangles against two accepted measured row bands. Its expected
+outcomes are derived directly from synthetic source-row heights and accepted
+writable-region bounds, not from the overlap checker or a previously produced
+error. Coverage requires at least 600 cases each of clearance, first-row
+conflict, second-row conflict and physical overflow; zero-size rectangles,
+touching edges and right-margin overflow all occur in the seeded inputs.
+
+A separate ordered-pair assertion verifies that the first supplied failing
+region determines the typed refusal, whether the first error is physical
+bounds overflow or measured-row overlap. This strengthens defensive geometry
+evidence but does not imply horizontally aligned ink or native Export.
