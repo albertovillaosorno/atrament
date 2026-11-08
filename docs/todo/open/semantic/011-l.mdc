@@ -2805,3 +2805,18 @@ fixtures; accepted semantic flow tests verify a 10,000-fragment run and
 cross-unit repeated owners. This retains physical provenance only: measured
 rows still come from the caller, saved semantic Markdown content is not
 compiled into ink, and the P1 PDF/transparent PNG journey remains open.
+
+
+## Session source-position preservation through history (partial) — 2026-11-07
+
+The native `SessionApplication` pagination regression now retains measured
+source positions through a profile-width edit, Undo and Redo. It admits an
+empty measurement unit before two units sharing one semantic block owner,
+then checks every fresh physical plan keeps source coordinates `(1, 0)` and
+`(2, 0)`, row tops and accepted page identities. A narrowed profile still
+rejects an oversized measured unit, and stale revision-bound measurements
+remain rejected rather than silently substituting geometry.
+
+This validates the existing read-only session boundary after the source-index
+addition. It does not persist the semantic notebook, create measured text
+from edited spans, or connect its physical plans to native PDF/PNG output.

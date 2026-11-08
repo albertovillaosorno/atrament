@@ -66,7 +66,7 @@ use atrament_physical_page_profile::{
     SheetSize,
 };
 use atrament_semantic_flow_pagination::{
-    RevisionFlowMeasurement, SemanticPaginationError,
+    RevisionFlowMeasurement, SemanticPaginationError, SemanticPaginationPlan,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -2030,14 +2030,49 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     let measurement = |revision, width| RevisionFlowMeasurement {
         flow,
         revision,
-        units: vec![MeasuredFlowUnit {
-            fragments: vec![MeasuredFragment {
-                height: Length::from_micrometres(20_000),
-                owner: block,
-                width: Length::from_micrometres(width),
-            }],
-            policy: FlowUnitPolicy::Independent,
-        }],
+        units: vec![
+            MeasuredFlowUnit {
+                fragments: vec![],
+                policy: FlowUnitPolicy::Independent,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    height: Length::from_micrometres(20_000),
+                    owner: block,
+                    width: Length::from_micrometres(width),
+                }],
+                policy: FlowUnitPolicy::Independent,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    height: Length::from_micrometres(30_000),
+                    owner: block,
+                    width: Length::from_micrometres(width / 2),
+                }],
+                policy: FlowUnitPolicy::KeepTogetherWhenPossible,
+            },
+        ],
+    };
+
+    let assert_sources = |plan: &SemanticPaginationPlan| {
+        assert!(plan.placements().iter().all(|placed| placed.page == page));
+        assert_eq!(
+            plan.placements()
+                .iter()
+                .map(|placed| (placed.source.unit, placed.source.fragment))
+                .collect::<Vec<_>>(),
+            [(1, 0), (2, 0)],
+        );
+        assert_eq!(
+            plan.placements()
+                .iter()
+                .map(|placed| placed.top)
+                .collect::<Vec<_>>(),
+            [
+                Length::from_micrometres(20_000),
+                Length::from_micrometres(40_000),
+            ],
+        );
     };
 
     let before = measurement(revision, 100_000);
@@ -2046,7 +2081,8 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         .expect("base profile must fit measured fragment");
     assert_eq!(plan.flow(), flow);
     assert_eq!(plan.revision(), revision);
-    assert_eq!(plan.placements().len(), 1);
+    assert_sources(&plan);
+    assert_eq!(plan.placements().len(), 2);
     assert_eq!(plan.placements()[0].page, page);
     let original_writable = Rect {
         height: Length::from_micrometres(267_000),
@@ -2090,6 +2126,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     let narrowed_fit = session
         .paginate_measured_flow(&measurement(edited, 80_000))
         .expect("fresh narrow measurement must fit edited profile");
+    assert_sources(&narrowed_fit);
     assert_eq!(narrowed_fit.flow(), flow);
     assert_eq!(narrowed_fit.revision(), edited);
     assert_eq!(narrowed_fit.placements()[0].page, page);
@@ -2115,6 +2152,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     let restored = session
         .paginate_measured_flow(&measurement(undone, 100_000))
         .expect("fresh Undo measurement must use restored profile geometry");
+    assert_sources(&restored);
     assert_eq!(restored.flow(), flow);
     assert_eq!(restored.revision(), undone);
     assert_eq!(restored.placements()[0].page, page);
@@ -2143,6 +2181,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     let redone_fit = session
         .paginate_measured_flow(&measurement(redone, 80_000))
         .expect("fresh Redo measurement must use narrowed profile");
+    assert_sources(&redone_fit);
     assert_eq!(redone_fit.flow(), flow);
     assert_eq!(redone_fit.revision(), redone);
     assert_eq!(redone_fit.covered_pages(), [PageRegion {
