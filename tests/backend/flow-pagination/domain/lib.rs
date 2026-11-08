@@ -107,6 +107,7 @@ fn reference_independent(
                     height: fragment.height,
                     owner: fragment.owner,
                     page: current.page,
+                    writable_left: current.writable.x,
                     top: Length::from_micrometres(top),
                     width: fragment.width,
                 });
@@ -408,6 +409,7 @@ fn reference_place_fragment(
                 height: fragment.height,
                 owner: fragment.owner,
                 page: page.page,
+                writable_left: page.writable.x,
                 top: Length::from_micrometres(
                     page.writable.y.micrometres() + cursor.used_height,
                 ),
@@ -460,6 +462,7 @@ fn reference_keep_together_fresh(
             height: fragment.height,
             owner: fragment.owner,
             page: page.page,
+            writable_left: page.writable.x,
             top: Length::from_micrometres(top),
             width: fragment.width,
         });
@@ -584,6 +587,7 @@ fn reference_prefix_then_keep(
                 height: fragment.height,
                 owner: fragment.owner,
                 page: page.page,
+                writable_left: page.writable.x,
                 top: Length::from_micrometres(
                     page.writable.y.micrometres() + cursor.used_height,
                 ),
@@ -709,6 +713,7 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             height: Length::from_micrometres(60),
             owner: 1,
             page: 11,
+            writable_left: Length::from_micrometres(10),
             top: Length::from_micrometres(1_000),
             width: Length::from_micrometres(50),
         },
@@ -716,6 +721,7 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             height: Length::from_micrometres(40),
             owner: 2,
             page: 11,
+            writable_left: Length::from_micrometres(10),
             top: Length::from_micrometres(1_060),
             width: Length::from_micrometres(80),
         },
@@ -723,10 +729,53 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             height: Length::from_micrometres(20),
             owner: 3,
             page: 12,
+            writable_left: Length::from_micrometres(10),
             top: Length::from_micrometres(2_000),
             width: Length::from_micrometres(70),
         },
     ]);
+}
+
+#[test]
+fn placed_fragments_retain_each_selected_pages_writable_left() {
+    let mut first = page(1, 300, 100, 50);
+    first.writable.x = Length::from_micrometres(17);
+    let mut second = page(2, 600, 100, 60);
+    second.writable.x = Length::from_micrometres(83);
+    for policy in [
+        FlowUnitPolicy::Independent,
+        FlowUnitPolicy::KeepTogetherWhenPossible,
+    ] {
+        let units = [
+            unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 30)]),
+            unit(policy, vec![fragment(2, 30, 15), fragment(3, 30, 15)]),
+        ];
+        let plan = paginate(&[first, second], &units).expect("page placements");
+        assert_eq!(plan.placements.len(), 3);
+        assert_eq!(
+            plan.placements[0].writable_left,
+            Length::from_micrometres(17)
+        );
+        let group_left = if policy == FlowUnitPolicy::Independent {
+            [17, 83]
+        } else {
+            [83, 83]
+        };
+        let group_page = if policy == FlowUnitPolicy::Independent {
+            [1, 2]
+        } else {
+            [2, 2]
+        };
+        for (position, (&left, &page)) in
+            group_left.iter().zip(&group_page).enumerate()
+        {
+            assert_eq!(
+                plan.placements[position + 1].writable_left,
+                Length::from_micrometres(left)
+            );
+            assert_eq!(plan.placements[position + 1].page, page);
+        }
+    }
 }
 
 #[test]
@@ -964,22 +1013,27 @@ fn zero_width_positive_height_fragment_reserves_vertical_space() {
         fragment(1, 0, 20),
         fragment(2, 10, 30),
     ])];
-    assert_eq!(paginate(&pages, &units).map(|plan| plan.placements), Ok(vec![
-        PlacedFragment {
-            height: Length::from_micrometres(20),
-            owner: 1,
-            page: 1,
-            top: Length::from_micrometres(500),
-            width: Length::ZERO,
-        },
-        PlacedFragment {
-            height: Length::from_micrometres(30),
-            owner: 2,
-            page: 1,
-            top: Length::from_micrometres(520),
-            width: Length::from_micrometres(10),
-        },
-    ]));
+    assert_eq!(
+        paginate(&pages, &units).map(|plan| plan.placements),
+        Ok(vec![
+            PlacedFragment {
+                height: Length::from_micrometres(20),
+                owner: 1,
+                page: 1,
+                writable_left: Length::from_micrometres(10),
+                top: Length::from_micrometres(500),
+                width: Length::ZERO,
+            },
+            PlacedFragment {
+                height: Length::from_micrometres(30),
+                owner: 2,
+                page: 1,
+                writable_left: Length::from_micrometres(10),
+                top: Length::from_micrometres(520),
+                width: Length::from_micrometres(10),
+            },
+        ])
+    );
 }
 
 #[test]

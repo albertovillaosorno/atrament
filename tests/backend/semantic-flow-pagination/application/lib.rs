@@ -558,6 +558,10 @@ fn accepted_page_profile_derives_exact_writable_top_and_page_identity() {
     assert_eq!(plan.placements[0].owner, owner);
     assert_eq!(plan.placements[0].page, page_one);
     assert_eq!(plan.placements[0].top, Length::from_micrometres(20_000));
+    assert_eq!(
+        plan.placements[0].writable_left,
+        Length::from_micrometres(35_000)
+    );
     assert_eq!(plan.placements[0].width, Length::from_micrometres(165_000));
 }
 
@@ -675,7 +679,8 @@ fn large_page_profile_index_preserves_pagination() {
 #[test]
 fn measured_flow_spills_to_next_accepted_page_in_notebook_order() {
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let mut fixture = candidate_fixture(&ids);
+    fixture.notebook.page_profiles[1].geometry = geometry(40_000);
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(fixture.notebook)
@@ -697,7 +702,15 @@ fn measured_flow_spills_to_next_accepted_page_in_notebook_order() {
     )
     .expect("two-page flow");
     assert_eq!(plan.placements[0].page, first_page);
+    assert_eq!(
+        plan.placements[0].writable_left,
+        Length::from_micrometres(35_000)
+    );
     assert_eq!(plan.placements[1].page, second_page);
+    assert_eq!(
+        plan.placements[1].writable_left,
+        Length::from_micrometres(55_000)
+    );
     assert_eq!(plan.placements[1].top, Length::from_micrometres(20_000));
 }
 

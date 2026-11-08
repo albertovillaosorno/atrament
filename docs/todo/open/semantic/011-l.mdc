@@ -2614,3 +2614,21 @@ or its peer flow is empty, and confirm accepted session state does not change.
 This is a conservative single-flow layout admission boundary, not multi-flow
 composition, solved fixed areas, or a saved semantic notebook PDF/PNG exporter.
 P1 remains open.
+
+## Measured placement writable-left authority (partial) — 2026-11-07
+
+The independent Rust measured-flow paginator now carries each selected
+page's exact writable left coordinate alongside page, top, height and width.
+This prevents a downstream consumer from needing to re-derive that physical
+origin from an unrelated profile or assuming every page has the same binding
+margin. The coordinate is the writable-region origin, **not** a computed
+glyph indent or horizontal alignment.
+
+A failing-before-fix pure-paginator test checks different left positions
+across independent and keep-together page turns. Revision-bound acceptance
+checks that two distinct paper-profile binding margins project their exact
+writable left edges through the accepted semantic plan. The existing
+reference-oracle suite also checks the new field on every placement.
+
+This does not measure semantic text or connect saved notebook content to the
+native PDF/PNG exporter. The P1 two-page saved-notebook criterion remains open.
