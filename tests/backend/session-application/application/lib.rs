@@ -57,7 +57,8 @@ use atrament_media_job_session::{
     MediaJobCleanupStatus, MediaJobOutcome, MediaJobSessionError,
 };
 use atrament_flow_pagination::{
-    FlowUnitPolicy, MeasuredFlowUnit, MeasuredFragment, PaginationError,
+    FlowUnitPolicy, MeasuredFlowUnit, MeasuredFragment, PageRegion,
+    PaginationError,
 };
 use atrament_physical_page_profile::{
     BindingEdge, BorderShape, Length, Orientation, PageProfile,
@@ -2043,6 +2044,10 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         plan.placements.first().map(|placed| placed.writable),
         Some(original_writable),
     );
+    assert_eq!(plan.covered_pages, [PageRegion {
+        page,
+        writable: original_writable,
+    }]);
 
     let mut narrowed = physical_page_profile();
     narrowed.printable_region.width = Length::from_micrometres(100_000);
@@ -2080,6 +2085,10 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         narrowed_fit.placements.first().map(|placed| placed.writable),
         Some(narrowed_writable),
     );
+    assert_eq!(narrowed_fit.covered_pages, [PageRegion {
+        page,
+        writable: narrowed_writable,
+    }]);
 
     let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
         session.traverse_history(edited, HistoryDirection::Undo)
@@ -2095,6 +2104,10 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         restored.placements.first().map(|placed| placed.writable),
         Some(original_writable),
     );
+    assert_eq!(restored.covered_pages, [PageRegion {
+        page,
+        writable: original_writable,
+    }]);
 
     let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
         session.traverse_history(undone, HistoryDirection::Redo)
@@ -2109,6 +2122,13 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
             ),
         )),
     );
+    let redone_fit = session
+        .paginate_measured_flow(&measurement(redone, 80_000))
+        .expect("fresh Redo measurement must use narrowed profile");
+    assert_eq!(redone_fit.covered_pages, [PageRegion {
+        page,
+        writable: narrowed_writable,
+    }]);
 }
 
 #[test]

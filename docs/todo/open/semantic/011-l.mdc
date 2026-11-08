@@ -2716,3 +2716,16 @@ content.
 The contract enables future sheet-order-aware output composition; it does not
 measure semantic text, implement multi-flow composition, or connect accepted
 notebook state to native PDF/PNG export. P1 remains open.
+
+## Session facade covered-page geometry through history (partial) — 2026-11-07
+
+The read-only `SessionApplication::paginate_measured_flow` facade retains the
+ordered page-region metadata produced by measured pagination. A native
+lifecycle regression checks the exact accepted page rectangle before an edit,
+its narrowed geometry after a profile change, the restored rectangle on Undo,
+and the narrowed geometry again on Redo. Oversized and stale measurements
+still refuse without substituting an unrelated accepted revision.
+
+This verifies session authority for page-region metadata, not a persistent
+semantic text compiler or notebook PDF/PNG export pathway. The P1 milestone
+remains open.
