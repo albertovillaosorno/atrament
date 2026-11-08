@@ -885,6 +885,151 @@ fn defensive_duplicate_flow_identity_cannot_select_an_arbitrary_owner() {
     }
 }
 
+fn verify_cross_kind_flow_identity_refusal() -> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("valid candidate was refused".into());
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+    let accepted = session
+        .current()
+        .ok_or("accepted revision missing")?
+        .clone();
+    if paginate_revision(&accepted, &measured).is_err() {
+        return Err("valid flow was refused".into());
+    }
+    for case in 0u8..4 {
+        let mut malformed = accepted.clone();
+        match case {
+            0 => malformed.notebook.id = flow,
+            1 => {
+                malformed
+                    .notebook
+                    .pages
+                    .get_mut(1)
+                    .ok_or("second page missing")?
+                    .id = flow;
+            },
+            2 => {
+                malformed
+                    .notebook
+                    .page_profiles
+                    .get_mut(1)
+                    .ok_or("second profile missing")?
+                    .id = flow;
+            },
+            3 => {
+                malformed
+                    .notebook
+                    .pages
+                    .first_mut()
+                    .and_then(|page| page.flows.first_mut())
+                    .and_then(|selected| selected.blocks.first_mut())
+                    .ok_or("first block missing")?
+                    .id = flow;
+            },
+            _ => return Err("unexpected flow case".into()),
+        }
+        if paginate_revision(&malformed, &measured)
+            != Err(SemanticPaginationError::DuplicateFlowIdentity { flow })
+        {
+            return Err(format!("flow owner alias {case} was not refused"));
+        }
+    }
+    if session.current() != Some(&accepted) {
+        return Err("flow checks mutated accepted state".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn selected_flow_cannot_alias_another_kind_of_semantic_owner() {
+    assert_eq!(verify_cross_kind_flow_identity_refusal(), Ok(()));
+}
+
+fn verify_cross_kind_page_authority_refusal() -> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("valid candidate was refused".into());
+    };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let profile = accepted_for(&mapping, fixture.profile_one);
+    let measured = measurement(revision, flow, owner, &[(1, 1)]);
+    let accepted = session
+        .current()
+        .ok_or("accepted revision missing")?
+        .clone();
+    if paginate_revision(&accepted, &measured).is_err() {
+        return Err("valid page authority was refused".into());
+    }
+    for case in 0u8..4 {
+        let mut malformed = accepted.clone();
+        let expected = match case {
+            0 => {
+                malformed.notebook.id = page;
+                SemanticPaginationError::Pagination(
+                    PaginationError::DuplicatePageIdentity { page },
+                )
+            },
+            1 => {
+                malformed.notebook.assets.push(Asset {
+                    id: page,
+                    media_type: "image/png".into(),
+                });
+                SemanticPaginationError::Pagination(
+                    PaginationError::DuplicatePageIdentity { page },
+                )
+            },
+            2 => {
+                malformed.notebook.id = profile;
+                SemanticPaginationError::DuplicatePageProfileIdentity {
+                    profile,
+                }
+            },
+            3 => {
+                malformed
+                    .notebook
+                    .pages
+                    .get_mut(1)
+                    .ok_or("second page missing")?
+                    .flows
+                    .push(Flow {
+                        blocks: vec![],
+                        id: profile,
+                    });
+                SemanticPaginationError::DuplicatePageProfileIdentity {
+                    profile,
+                }
+            },
+            _ => return Err("unexpected page case".into()),
+        };
+        if paginate_revision(&malformed, &measured) != Err(expected) {
+            return Err(format!("page authority alias {case} was not refused"));
+        }
+    }
+    if session.current() != Some(&accepted) {
+        return Err("page checks mutated accepted state".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn selected_page_and_profile_cannot_alias_other_semantic_owners() {
+    assert_eq!(verify_cross_kind_page_authority_refusal(), Ok(()));
+}
+
 #[test]
 fn defensive_duplicate_block_identity_cannot_alias_measured_owner_runs() {
     let ids = IdentityAllocator::new();

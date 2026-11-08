@@ -810,6 +810,78 @@ fn fixed_regions_refuse_ambiguous_accepted_page_and_profile_owners() {
     assert_eq!(verify_duplicate_fixed_region_authority_refusal(), Ok(()));
 }
 
+fn verify_cross_kind_fixed_authority_refusal() -> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("valid candidate was refused".into());
+    };
+    let page = accepted_for(&mapping, fixture.page_one);
+    let profile = accepted_for(&mapping, fixture.profile_one);
+    let object = accepted_for(&mapping, fixture.block);
+    let checked = placement(revision, page, object, rect(35_000, 20_000, 1, 1));
+    let accepted = session
+        .current()
+        .ok_or("accepted revision missing")?
+        .clone();
+    if validate_fixed_placement(&accepted, checked)
+        != Ok(FixedRegionLayoutResult::WithinBounds { object, page })
+    {
+        return Err("valid fixed placement was refused".into());
+    }
+    for case in 0u8..4 {
+        let mut malformed = accepted.clone();
+        let expected = match case {
+            0 => {
+                malformed.notebook.id = page;
+                FixedRegionLayoutError::DuplicatePageIdentity { page }
+            },
+            1 => {
+                malformed
+                    .notebook
+                    .pages
+                    .get_mut(1)
+                    .and_then(|owning_page| owning_page.flows.first_mut())
+                    .ok_or("second flow missing")?
+                    .id = page;
+                FixedRegionLayoutError::DuplicatePageIdentity { page }
+            },
+            2 => {
+                malformed.notebook.id = profile;
+                FixedRegionLayoutError::DuplicatePageProfileIdentity { profile }
+            },
+            3 => {
+                malformed
+                    .notebook
+                    .pages
+                    .get_mut(1)
+                    .and_then(|owning_page| owning_page.flows.first_mut())
+                    .ok_or("second flow missing")?
+                    .id = profile;
+                FixedRegionLayoutError::DuplicatePageProfileIdentity { profile }
+            },
+            _ => return Err("unexpected fixed authority case".into()),
+        };
+        if validate_fixed_placement(&malformed, checked) != Err(expected) {
+            return Err(format!(
+                "fixed authority alias {case} was not refused"
+            ));
+        }
+    }
+    if session.current() != Some(&accepted) {
+        return Err("fixed checks mutated accepted state".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn fixed_placement_rejects_cross_kind_page_and_profile_aliases() {
+    assert_eq!(verify_cross_kind_fixed_authority_refusal(), Ok(()));
+}
+
 fn verify_duplicate_fixed_object_refusal() -> Result<(), String> {
     let ids = IdentityAllocator::new();
     let fixture = candidate_fixture(&ids);

@@ -2583,3 +2583,18 @@ owners and cross-flow aliases.
 Valid geometry and accepted session state stay unchanged. This is not
 whole-notebook candidate acceptance, persisted semantic body layout or the
 required notebook-to-PDF/PNG integration.
+
+## Cross-kind selected flow/page/profile authority (partial) — 2026-11-07
+
+Measured-flow pagination now refuses a selected flow identity reused by a
+notebook, page, paper profile or block. It also refuses page and paper-profile
+identities reused by other semantic owners before resolving physical regions.
+Fixed-region placement applies the corresponding page/profile guard before
+looking up a placed block's page and geometry. Existing duplicate block
+refusals retain precedence when a selected object shadows a paper profile.
+
+Three failing-before-fix Rust regressions exercise distinct owner kinds,
+matching geometry, successful valid placements and unchanged accepted session
+state. Shared references to one paper profile still work. This only defends
+malformed directly supplied typed revisions; it does not persist semantic
+notebook bodies, compile full Markdown or complete native notebook export.

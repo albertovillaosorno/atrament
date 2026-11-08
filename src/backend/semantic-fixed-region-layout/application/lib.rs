@@ -99,12 +99,12 @@ pub enum FixedRegionLayoutError {
         /// Repeated semantic block identity.
         object: AcceptedIdentity,
     },
-    /// Two accepted pages share one identity, making ownership ambiguous.
+    /// A page identity is reused by another semantic owner.
     DuplicatePageIdentity {
         /// Colliding physical page identity.
         page: AcceptedIdentity,
     },
-    /// Two paper profiles share one identity, making geometry ambiguous.
+    /// A page-profile identity is reused by another semantic owner.
     DuplicatePageProfileIdentity {
         /// Colliding physical page-profile identity.
         profile: AcceptedIdentity,
@@ -184,6 +184,31 @@ pub fn validate_fixed_placement(
             });
         }
     }
+    // Reject duplicate owners before page lookup: the first occurrence may
+    // belong to another page than the caller's intended fixed placement.
+    let selected = BTreeSet::from([placement.object]);
+    if semantic_duplicate_owner_among(&revision.notebook, &selected).is_some() {
+        return Err(FixedRegionLayoutError::DuplicateObjectIdentity {
+            object: placement.object,
+        });
+    }
+    // First-match page and profile authority is unsafe even if the alias
+    // belongs to a different semantic kind. Shared profile references do
+    // not count as additional owners.
+    let mut page_authorities = page_ids.clone();
+    page_authorities.extend(profile_ids);
+    if let Some(identity) =
+        semantic_duplicate_owner_among(&revision.notebook, &page_authorities)
+    {
+        if page_ids.contains(&identity) {
+            return Err(FixedRegionLayoutError::DuplicatePageIdentity {
+                page: identity,
+            });
+        }
+        return Err(FixedRegionLayoutError::DuplicatePageProfileIdentity {
+            profile: identity,
+        });
+    }
     let Some(page) = revision
         .notebook
         .pages
@@ -194,14 +219,6 @@ pub fn validate_fixed_placement(
             page: placement.page,
         });
     };
-    // Reject duplicate owners before page lookup: the first occurrence may
-    // belong to another page than the caller's intended fixed placement.
-    let selected = BTreeSet::from([placement.object]);
-    if semantic_duplicate_owner_among(&revision.notebook, &selected).is_some() {
-        return Err(FixedRegionLayoutError::DuplicateObjectIdentity {
-            object: placement.object,
-        });
-    }
     let object_is_block_on_page =
         semantic_block_page(&revision.notebook, placement.object)
             == Some(placement.page);

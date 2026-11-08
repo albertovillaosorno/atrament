@@ -71,13 +71,13 @@ pub enum SemanticPaginationError {
         /// Repeated top-level block identity.
         block: AcceptedIdentity,
     },
-    /// More than one accepted flow has this identity, so selection is
-    /// ambiguous.
+    /// The selected flow identity is reused by another semantic owner, so
+    /// selection is ambiguous.
     DuplicateFlowIdentity {
         /// Colliding semantic flow identity.
         flow: AcceptedIdentity,
     },
-    /// Two accepted page profiles have the same semantic identity.
+    /// A page-profile identity is reused by another semantic owner.
     DuplicatePageProfileIdentity {
         /// Repeated physical profile identity.
         profile: AcceptedIdentity,
@@ -194,7 +194,21 @@ fn flow_scope(
             });
         }
     }
-    found.ok_or(SemanticPaginationError::FlowNotFound { flow: target })
+    let scope =
+        found.ok_or(SemanticPaginationError::FlowNotFound { flow: target })?;
+    // A unique flow among flows is not authoritative if another semantic
+    // owner (including a page, profile, or block) shadows its identity.
+    if semantic_duplicate_owner_among(
+        &revision.notebook,
+        &BTreeSet::from([target]),
+    )
+    .is_some()
+    {
+        return Err(SemanticPaginationError::DuplicateFlowIdentity {
+            flow: target,
+        });
+    }
+    Ok(scope)
 }
 
 fn page_regions(
@@ -218,6 +232,22 @@ fn page_regions(
                 profile: profile.id,
             });
         }
+    }
+    // A page or paper-profile identity also cannot be owned by another
+    // semantic kind. References to shared paper profiles are not owners.
+    let mut selected = page_ids.clone();
+    selected.extend(profiles.keys().copied());
+    if let Some(identity) =
+        semantic_duplicate_owner_among(&revision.notebook, &selected)
+    {
+        if page_ids.contains(&identity) {
+            return Err(SemanticPaginationError::Pagination(
+                PaginationError::DuplicatePageIdentity { page: identity },
+            ));
+        }
+        return Err(SemanticPaginationError::DuplicatePageProfileIdentity {
+            profile: identity,
+        });
     }
     let remaining_pages =
         revision.notebook.pages.len().saturating_sub(start_page_index);
