@@ -34,8 +34,8 @@
 //! Flow pagination regression tests.
 
 use atrament_flow_pagination::{
-    FlowUnitPolicy, MeasuredFlowUnit, MeasuredFragment, PageRegion,
-    PaginationError, PlacedFragment, paginate,
+    FlowUnitPolicy, FragmentSource, MeasuredFlowUnit, MeasuredFragment,
+    PageRegion, PaginationError, PlacedFragment, paginate,
 };
 use atrament_physical_page_profile::{Length, Rect};
 
@@ -73,7 +73,7 @@ fn reference_independent(
     let mut page_index = 0usize;
     let mut used_height = 0u64;
     let mut placements = Vec::new();
-    for fragment in fragments {
+    for (fragment_index, fragment) in fragments.iter().enumerate() {
         let can_fit_fresh = pages.iter().skip(page_index).any(|page| {
             fragment.width <= page.writable.width
                 && fragment.height <= page.writable.height
@@ -107,6 +107,10 @@ fn reference_independent(
                     height: fragment.height,
                     owner: fragment.owner,
                     page: current.page,
+                    source: FragmentSource {
+                        unit: 0,
+                        fragment: fragment_index,
+                    },
                     writable: current.writable,
                     top: Length::from_micrometres(top),
                     width: fragment.width,
@@ -137,7 +141,7 @@ fn reference_mixed_units(
         used_height: 0,
     };
     let mut placements = Vec::new();
-    for unit in units {
+    for (unit_index, unit) in units.iter().enumerate() {
         if unit.fragments.is_empty() {
             continue;
         }
@@ -145,6 +149,7 @@ fn reference_mixed_units(
             FlowUnitPolicy::Independent => reference_place_group(
                 pages,
                 &unit.fragments,
+                unit_index,
                 &mut cursor,
                 &mut placements,
             )?,
@@ -174,6 +179,7 @@ fn reference_mixed_units(
                     reference_place_group(
                         pages,
                         &unit.fragments,
+                        unit_index,
                         &mut cursor,
                         &mut placements,
                     )?;
@@ -200,6 +206,7 @@ fn reference_mixed_units(
                 reference_place_group(
                     pages,
                     &unit.fragments,
+                    unit_index,
                     &mut cursor,
                     &mut placements,
                 )?;
@@ -409,6 +416,7 @@ struct ReferenceCursor {
 fn reference_place_fragment(
     pages: &[PageRegion<u64>],
     fragment: MeasuredFragment<u64>,
+    source: FragmentSource,
     cursor: &mut ReferenceCursor,
     placements: &mut Vec<PlacedFragment<u64, u64>>,
 ) -> Result<(), PaginationError<u64, u64>> {
@@ -439,6 +447,7 @@ fn reference_place_fragment(
                 height: fragment.height,
                 owner: fragment.owner,
                 page: page.page,
+                source,
                 writable: page.writable,
                 top: Length::from_micrometres(
                     page.writable.y.micrometres() + cursor.used_height,
@@ -456,11 +465,21 @@ fn reference_place_fragment(
 fn reference_place_group(
     pages: &[PageRegion<u64>],
     fragments: &[MeasuredFragment<u64>],
+    unit_index: usize,
     cursor: &mut ReferenceCursor,
     placements: &mut Vec<PlacedFragment<u64, u64>>,
 ) -> Result<(), PaginationError<u64, u64>> {
-    for fragment in fragments {
-        reference_place_fragment(pages, *fragment, cursor, placements)?;
+    for (fragment_index, fragment) in fragments.iter().enumerate() {
+        reference_place_fragment(
+            pages,
+            *fragment,
+            FragmentSource {
+                unit: unit_index,
+                fragment: fragment_index,
+            },
+            cursor,
+            placements,
+        )?;
     }
     Ok(())
 }
@@ -487,11 +506,15 @@ fn reference_keep_together_fresh(
     };
     let mut top = page.writable.y.micrometres();
     let mut placements = Vec::with_capacity(fragments.len());
-    for fragment in fragments {
+    for (fragment_index, fragment) in fragments.iter().enumerate() {
         placements.push(PlacedFragment {
             height: fragment.height,
             owner: fragment.owner,
             page: page.page,
+            source: FragmentSource {
+                unit: 0,
+                fragment: fragment_index,
+            },
             writable: page.writable,
             top: Length::from_micrometres(top),
             width: fragment.width,
@@ -582,7 +605,13 @@ fn reference_prefix_then_keep(
         used_height: 0,
     };
     let mut placements = Vec::new();
-    reference_place_fragment(pages, prefix, &mut cursor, &mut placements)?;
+    reference_place_fragment(
+        pages,
+        prefix,
+        FragmentSource { unit: 0, fragment: 0 },
+        &mut cursor,
+        &mut placements,
+    )?;
     let total_height = fragments
         .iter()
         .map(|fragment| fragment.height.micrometres())
@@ -599,10 +628,14 @@ fn reference_prefix_then_keep(
         .micrometres()
         .saturating_sub(cursor.used_height);
     if total_height <= remaining && maximum_width <= current.writable.width {
-        for fragment in fragments {
+        for (fragment_index, fragment) in fragments.iter().enumerate() {
             reference_place_fragment(
                 pages,
                 *fragment,
+                FragmentSource {
+                    unit: 1,
+                    fragment: fragment_index,
+                },
                 &mut cursor,
                 &mut placements,
             )?;
@@ -620,11 +653,15 @@ fn reference_prefix_then_keep(
     {
         cursor.page_index = page_index;
         cursor.used_height = 0;
-        for fragment in fragments {
+        for (fragment_index, fragment) in fragments.iter().enumerate() {
             placements.push(PlacedFragment {
                 height: fragment.height,
                 owner: fragment.owner,
                 page: page.page,
+                source: FragmentSource {
+                    unit: 1,
+                    fragment: fragment_index,
+                },
                 writable: page.writable,
                 top: Length::from_micrometres(
                     page.writable.y.micrometres() + cursor.used_height,
@@ -635,7 +672,7 @@ fn reference_prefix_then_keep(
         }
         return Ok(placements);
     }
-    reference_place_group(pages, fragments, &mut cursor, &mut placements)?;
+    reference_place_group(pages, fragments, 1, &mut cursor, &mut placements)?;
     Ok(placements)
 }
 
@@ -751,6 +788,7 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
     assert_eq!(plan.placements, vec![
         PlacedFragment {
             height: Length::from_micrometres(60),
+            source: FragmentSource { unit: 0, fragment: 0 },
             owner: 1,
             page: 11,
             writable: Rect {
@@ -764,6 +802,7 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
         },
         PlacedFragment {
             height: Length::from_micrometres(40),
+            source: FragmentSource { unit: 0, fragment: 1 },
             owner: 2,
             page: 11,
             writable: Rect {
@@ -777,6 +816,7 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
         },
         PlacedFragment {
             height: Length::from_micrometres(20),
+            source: FragmentSource { unit: 0, fragment: 2 },
             owner: 3,
             page: 12,
             writable: Rect {
@@ -1158,6 +1198,7 @@ fn zero_width_positive_height_fragment_reserves_vertical_space() {
         Ok(vec![
             PlacedFragment {
                 height: Length::from_micrometres(20),
+                source: FragmentSource { unit: 0, fragment: 0 },
                 owner: 1,
                 page: 1,
                 writable: Rect {
@@ -1171,6 +1212,7 @@ fn zero_width_positive_height_fragment_reserves_vertical_space() {
             },
             PlacedFragment {
                 height: Length::from_micrometres(30),
+                source: FragmentSource { unit: 0, fragment: 1 },
                 owner: 2,
                 page: 1,
                 writable: Rect {
@@ -1212,4 +1254,34 @@ fn overflowing_group_sum_falls_back_to_safe_fragment_pagination() {
     assert_eq!(plan.placements.len(), 2);
     assert_eq!(plan.placements[0].page, 1);
     assert_eq!(plan.placements[1].page, 2);
+}
+
+#[test]
+fn placement_source_tracks_measured_units_across_empty_units_and_skips() {
+    let pages = [
+        page(41, 1_000, 30, 30),
+        page(42, 2_000, 50, 30),
+        page(43, 3_000, 60, 50),
+    ];
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(9, 30, 30)]),
+        unit(FlowUnitPolicy::Independent, vec![]),
+        unit(FlowUnitPolicy::KeepTogetherWhenPossible, vec![
+            fragment(9, 55, 15),
+            fragment(9, 55, 15),
+        ]),
+    ];
+    let plan = paginate(&pages, &units).expect("measured fragments fit");
+    assert_eq!(
+        plan.placements
+            .iter()
+            .map(|placed| (
+                placed.page,
+                placed.source.unit,
+                placed.source.fragment,
+            ))
+            .collect::<Vec<_>>(),
+        [(41, 0, 0), (43, 2, 0), (43, 2, 1)],
+    );
+    assert_eq!(plan.placements[1].owner, plan.placements[0].owner);
 }

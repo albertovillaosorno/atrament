@@ -75,6 +75,18 @@ pub struct PageRegion<PageIdentity> {
     pub writable: Rect,
 }
 
+/// Exact source location in the caller's measured flow units.
+///
+/// Empty units keep their input index; identical block owners in separate
+/// fragments remain distinct across page breaks and keep-together moves.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct FragmentSource {
+    /// Original zero-based fragment index within that unit.
+    pub fragment: usize,
+    /// Original zero-based unit index.
+    pub unit: usize,
+}
+
 /// One page-bound vertical placement of an unchanged measured fragment.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct PlacedFragment<Identity, PageIdentity> {
@@ -84,6 +96,8 @@ pub struct PlacedFragment<Identity, PageIdentity> {
     pub owner: Identity,
     /// Stable semantic page receiving this fragment.
     pub page: PageIdentity,
+    /// Source location of this unchanged measured fragment.
+    pub source: FragmentSource,
     /// Exact absolute physical top coordinate in oriented sheet space.
     pub top: Length,
     /// Unchanged measured fragment width.
@@ -199,7 +213,7 @@ where
         used_height: Length::ZERO,
     };
     let mut placements = Vec::new();
-    for unit in units {
+    for (unit_index, unit) in units.iter().enumerate() {
         if unit.fragments.is_empty() {
             continue;
         }
@@ -208,6 +222,7 @@ where
                 place_independent(
                     pages,
                     &unit.fragments,
+                    unit_index,
                     &mut cursor,
                     &mut placements,
                 )?;
@@ -216,6 +231,7 @@ where
                 place_keep_together_when_possible(
                     pages,
                     &unit.fragments,
+                    unit_index,
                     &mut cursor,
                     &mut placements,
                 )?;
@@ -273,6 +289,7 @@ fn group_fits_region(
 fn place_independent<Identity, PageIdentity>(
     pages: &[PageRegion<PageIdentity>],
     fragments: &[MeasuredFragment<Identity>],
+    unit_index: usize,
     cursor: &mut Cursor,
     placements: &mut Vec<PlacedFragment<Identity, PageIdentity>>,
 ) -> PlacementResult<Identity, PageIdentity>
@@ -280,8 +297,12 @@ where
     Identity: Copy,
     PageIdentity: Copy,
 {
-    for fragment in fragments {
-        place_one(pages, *fragment, cursor, placements)?;
+    for (fragment_index, fragment) in fragments.iter().enumerate() {
+        let source = FragmentSource {
+            unit: unit_index,
+            fragment: fragment_index,
+        };
+        place_one(pages, *fragment, source, cursor, placements)?;
     }
     Ok(())
 }
@@ -289,6 +310,7 @@ where
 fn place_keep_together_when_possible<Identity, PageIdentity>(
     pages: &[PageRegion<PageIdentity>],
     fragments: &[MeasuredFragment<Identity>],
+    unit_index: usize,
     cursor: &mut Cursor,
     placements: &mut Vec<PlacedFragment<Identity, PageIdentity>>,
 ) -> PlacementResult<Identity, PageIdentity>
@@ -297,20 +319,30 @@ where
     PageIdentity: Copy,
 {
     let Some(extent) = complete_group_extent(fragments) else {
-        return place_independent(pages, fragments, cursor, placements);
+        return place_independent(
+            pages, fragments, unit_index, cursor, placements,
+        );
     };
     if let Some(current) = pages.get(cursor.page_index) {
         let remaining = remaining_height(current.writable, cursor.used_height);
         if group_fits_region(extent, current.writable, remaining) {
-            for fragment in fragments {
-                place_on_current(*fragment, *current, cursor, placements)?;
+            for (fragment_index, fragment) in fragments.iter().enumerate() {
+                let source = FragmentSource {
+                    unit: unit_index,
+                    fragment: fragment_index,
+                };
+                place_on_current(
+                    *fragment, source, *current, cursor, placements,
+                )?;
             }
             return Ok(());
         }
     }
 
     let Some(start_index) = cursor.page_index.checked_add(1) else {
-        return place_independent(pages, fragments, cursor, placements);
+        return place_independent(
+            pages, fragments, unit_index, cursor, placements,
+        );
     };
     if let Some((page_index, page)) = pages
         .iter()
@@ -322,17 +354,22 @@ where
     {
         cursor.page_index = page_index;
         cursor.used_height = Length::ZERO;
-        for fragment in fragments {
-            place_on_current(*fragment, *page, cursor, placements)?;
+        for (fragment_index, fragment) in fragments.iter().enumerate() {
+            let source = FragmentSource {
+                unit: unit_index,
+                fragment: fragment_index,
+            };
+            place_on_current(*fragment, source, *page, cursor, placements)?;
         }
         return Ok(());
     }
 
-    place_independent(pages, fragments, cursor, placements)
+    place_independent(pages, fragments, unit_index, cursor, placements)
 }
 
 fn place_on_current<Identity, PageIdentity>(
     fragment: MeasuredFragment<Identity>,
+    source: FragmentSource,
     page: PageRegion<PageIdentity>,
     cursor: &mut Cursor,
     placements: &mut Vec<PlacedFragment<Identity, PageIdentity>>,
@@ -360,6 +397,7 @@ where
         height: fragment.height,
         owner: fragment.owner,
         page: page.page,
+        source,
         top: Length::from_micrometres(top_micrometres),
         width: fragment.width,
         writable: page.writable,
@@ -371,6 +409,7 @@ where
 fn place_one<Identity, PageIdentity>(
     pages: &[PageRegion<PageIdentity>],
     fragment: MeasuredFragment<Identity>,
+    source: FragmentSource,
     cursor: &mut Cursor,
     placements: &mut Vec<PlacedFragment<Identity, PageIdentity>>,
 ) -> PlacementResult<Identity, PageIdentity>
@@ -396,7 +435,9 @@ where
             let remaining =
                 remaining_height(page.writable, cursor.used_height);
             if fragment.height <= remaining {
-                return place_on_current(fragment, *page, cursor, placements);
+                return place_on_current(
+                    fragment, source, *page, cursor, placements,
+                );
             }
         }
         if !advance_cursor(cursor) {

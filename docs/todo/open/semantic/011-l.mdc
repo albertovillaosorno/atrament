@@ -2788,3 +2788,20 @@ the admitted revision with live authority before use.
 
 This strengthens a future native export handoff but does not implement
 semantic text measurement, saved notebook content, or PDF/PNG output.
+
+## Physical placement source-fragment coordinates (partial) — 2026-11-07
+
+Each independently paginated measured fragment now keeps a zero-based
+`FragmentSource` with its exact input unit and fragment index. The coordinate
+survives independent breaks, keep-together moves, empty intervening units and
+repeated semantic block owners. This lets a future notebook ink compositor
+associate each physical placement with the original measured row instead of
+relying on block identity alone or reconstructing flattened measurement order.
+
+A failing-before-fix native test exercises an empty unit and skipped physical
+page with one block owner reused across fragments. Existing independent and
+mixed-policy reference oracles now compare source coordinates in all 16,480
+fixtures; accepted semantic flow tests verify a 10,000-fragment run and
+cross-unit repeated owners. This retains physical provenance only: measured
+rows still come from the caller, saved semantic Markdown content is not
+compiled into ink, and the P1 PDF/transparent PNG journey remains open.

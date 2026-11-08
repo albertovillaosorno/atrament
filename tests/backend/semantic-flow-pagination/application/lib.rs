@@ -2367,6 +2367,18 @@ fn large_complete_measurement_streams_in_semantic_block_order() {
     assert_eq!(plan.placements().len(), BLOCKS);
     assert_eq!(plan.placements().first().map(|item| item.owner), Some(first));
     assert_eq!(plan.placements().last().map(|item| item.owner), Some(last));
+    assert_eq!(
+        plan.placements().first().map(|item| (
+            item.source.unit, item.source.fragment,
+        )),
+        Some((0, 0)),
+    );
+    assert_eq!(
+        plan.placements().last().map(|item| (
+            item.source.unit, item.source.fragment,
+        )),
+        Some((0, BLOCKS - 1)),
+    );
 }
 
 #[test]
@@ -2483,6 +2495,13 @@ fn repeated_owner_across_measurement_units_remains_one_owner_run() {
         &measured,
     )
     .expect("cross-unit owner run must remain complete");
+    assert_eq!(
+        plan.placements()
+            .iter()
+            .map(|placed| (placed.source.unit, placed.source.fragment))
+            .collect::<Vec<_>>(),
+        [(0, 0), (1, 0), (1, 1)],
+    );
     assert_eq!(plan.placements().len(), 3);
     assert_eq!(plan.placements()[0].owner, first);
     assert_eq!(plan.placements()[1].owner, first);
