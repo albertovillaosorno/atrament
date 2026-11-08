@@ -1792,6 +1792,7 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
         Ok(FixedRegionLayoutResult::WithinBounds {
             object: block,
             page,
+            rectangle,
             revision: revision,
         }),
     );
@@ -1815,6 +1816,7 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
     let FixedRegionLayoutResult::Overflow {
         diagnostics: edited_diagnostics,
         report,
+        rectangle: validated_rectangle,
         revision: validated_revision,
         ..
     } = session
@@ -1824,6 +1826,7 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
         panic!("narrowed profile must overflow the old x coordinate");
     };
     assert_eq!(validated_revision, edited);
+    assert_eq!(validated_rectangle, rectangle);
     assert_eq!(report.violations.len(), 1);
     assert_eq!(report.violations[0].amount.micrometres(), 20_000);
     let edited_bound =
@@ -1845,6 +1848,7 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
         Ok(FixedRegionLayoutResult::WithinBounds {
             object: block,
             page,
+            rectangle,
             revision: undone,
         }),
     );
@@ -1875,6 +1879,7 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
     let FixedRegionLayoutResult::Overflow {
         diagnostics: redone_diagnostics,
         report,
+        rectangle: validated_rectangle,
         revision: validated_revision,
         ..
     } = session
@@ -1884,6 +1889,7 @@ fn page_profile_edits_recompute_live_fixed_region_geometry() {
         panic!("Redone narrowed profile must overflow the old x coordinate");
     };
     assert_eq!(validated_revision, redone);
+    assert_eq!(validated_rectangle, rectangle);
     assert_eq!(report.violations.len(), 1);
     assert_eq!(report.violations[0].amount.micrometres(), 20_000);
     let redone_bound =
@@ -2254,6 +2260,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         Ok(FixedRegionLayoutResult::WithinBounds {
             object: block,
             page,
+            rectangle,
             revision: base,
         }),
     );
@@ -2314,6 +2321,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     let FixedRegionLayoutResult::Overflow {
         diagnostics: edited_diagnostics,
         report,
+        rectangle: validated_rectangle,
         revision: validated_revision,
         ..
     } = session
@@ -2323,6 +2331,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         panic!("retargeted narrow profile must overflow right edge");
     };
     assert_eq!(validated_revision, edited);
+    assert_eq!(validated_rectangle, rectangle);
     assert_eq!(report.violations.len(), 1);
     assert_eq!(report.violations[0].amount.micrometres(), 5_000);
     let edited_bound =
@@ -2345,6 +2354,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         Ok(FixedRegionLayoutResult::WithinBounds {
             object: block,
             page,
+            rectangle,
             revision: undone,
         }),
     );
@@ -2383,6 +2393,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     let FixedRegionLayoutResult::Overflow {
         diagnostics: redone_diagnostics,
         report,
+        rectangle: validated_rectangle,
         revision: validated_revision,
         ..
     } = session
@@ -2392,6 +2403,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         panic!("Redone narrow profile must overflow right edge");
     };
     assert_eq!(validated_revision, redone);
+    assert_eq!(validated_rectangle, rectangle);
     assert_eq!(report.violations.len(), 1);
     assert_eq!(report.violations[0].amount.micrometres(), 5_000);
     let redone_bound =

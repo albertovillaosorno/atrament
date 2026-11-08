@@ -77,6 +77,8 @@ pub enum FixedRegionLayoutResult {
         object: AcceptedIdentity,
         /// Stable accepted page validated by this result.
         page: AcceptedIdentity,
+        /// Exact solver-derived rectangle checked against the accepted page.
+        rectangle: Rect,
         /// Exact physical bounds report behind the diagnostics.
         report: BoundsReport,
         /// Accepted revision against which these bounds were checked.
@@ -88,12 +90,23 @@ pub enum FixedRegionLayoutResult {
         object: AcceptedIdentity,
         /// Stable accepted page validated by this result.
         page: AcceptedIdentity,
+        /// Exact solver-derived rectangle checked against the accepted page.
+        rectangle: Rect,
         /// Accepted revision against which these bounds were checked.
         revision: RevisionIdentity,
     },
 }
 
 impl FixedRegionLayoutResult {
+    /// Return the unmodified solver-derived rectangle checked on this page.
+    #[must_use]
+    pub const fn rectangle(&self) -> Rect {
+        match self {
+            Self::Overflow { rectangle, .. }
+            | Self::WithinBounds { rectangle, .. } => *rectangle,
+        }
+    }
+
     /// Return the exact accepted revision that supplied the page geometry.
     #[must_use]
     pub const fn revision(&self) -> RevisionIdentity {
@@ -264,6 +277,7 @@ pub fn validate_fixed_placement(
         return Ok(FixedRegionLayoutResult::WithinBounds {
             object: placement.object,
             page: placement.page,
+            rectangle: placement.rectangle,
             revision: revision.id,
         });
     }
@@ -271,6 +285,7 @@ pub fn validate_fixed_placement(
         diagnostics: overflow_diagnostics(revision.id, placement, &report),
         object: placement.object,
         page: placement.page,
+        rectangle: placement.rectangle,
         report,
         revision: revision.id,
     })

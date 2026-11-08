@@ -283,12 +283,14 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
         )
         .expect("generated placement keeps accepted authority");
         assert_eq!(actual.revision(), revision, "generated case {case}");
+        assert_eq!(actual.rectangle(), rectangle, "generated case {case}");
         if expected.is_within_bounds() {
             assert_eq!(
                 actual,
                 FixedRegionLayoutResult::WithinBounds {
                     object,
                     page,
+                    rectangle,
                     revision,
                 },
                 "within-bounds mismatch in generated case {case}",
@@ -299,6 +301,7 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
             diagnostics,
             object: actual_object,
             page: actual_page,
+            rectangle: actual_rectangle,
             report,
             revision: actual_revision,
         } = actual
@@ -308,6 +311,7 @@ fn accepted_fixed_layout_diagnostics_match_bounds_oracle() {
         assert_eq!(actual_object, object, "generated case {case}");
         assert_eq!(actual_page, page, "generated case {case}");
         assert_eq!(actual_revision, revision, "generated case {case}");
+        assert_eq!(actual_rectangle, rectangle, "generated case {case}");
         assert_eq!(report, expected, "generated case {case}");
         assert_eq!(diagnostics.completeness, Completeness::Complete);
         assert_eq!(diagnostics.diagnostics.len(), report.violations.len());
@@ -445,10 +449,55 @@ fn exact_fit_is_read_only_and_produces_no_diagnostic_result() {
         Ok(FixedRegionLayoutResult::WithinBounds {
             object,
             page,
+            rectangle: rect(35_000, 20_000, 165_000, 267_000),
             revision,
         }),
     );
     assert_eq!(session.current(), Some(&before));
+}
+
+#[test]
+fn zero_size_fixed_rectangles_retain_exact_position_and_bounds()
+-> Result<(), &'static str> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("valid zero-size fixture was refused");
+    };
+    let page = accepted_for(&mapping, fixture.page_one);
+    let object = accepted_for(&mapping, fixture.block);
+    let accepted = session.current().ok_or("accepted revision missing")?;
+    let inside = rect(35_000, 20_000, 0, 0);
+    let within = validate_fixed_placement(
+        accepted,
+        placement(revision, page, object, inside),
+    )
+    .map_err(|_| "zero-size rectangle was rejected")?;
+    assert_eq!(within.rectangle(), inside);
+    assert_eq!(within, FixedRegionLayoutResult::WithinBounds {
+        object,
+        page,
+        rectangle: inside,
+        revision,
+    });
+
+    let outside = rect(0, 0, 0, 0);
+    let overflow = validate_fixed_placement(
+        accepted,
+        placement(revision, page, object, outside),
+    )
+    .map_err(|_| "zero-size overflow placement was rejected")?;
+    assert_eq!(overflow.rectangle(), outside);
+    let FixedRegionLayoutResult::Overflow { report, .. } = overflow else {
+        return Err("out-of-bounds zero-size rectangle did not overflow");
+    };
+    assert_eq!(report.violations.len(), 2);
+    assert_eq!(report.violations[0].edge, BoundaryEdge::Left);
+    assert_eq!(report.violations[1].edge, BoundaryEdge::Top);
+    Ok(())
 }
 
 #[test]
@@ -610,6 +659,7 @@ fn nested_block_is_still_owned_by_its_accepted_page() {
         Ok(FixedRegionLayoutResult::WithinBounds {
             object: nested,
             page,
+            rectangle: rect(35_000, 20_000, 1, 1),
             revision,
         }),
     );
@@ -653,6 +703,7 @@ fn maximum_depth_block_ownership_is_iterative() {
         Ok(FixedRegionLayoutResult::WithinBounds {
             object,
             page,
+            rectangle: rect(35_000, 20_000, 1, 1),
             revision,
         }),
     );
@@ -783,6 +834,7 @@ fn verify_duplicate_fixed_region_authority_refusal() -> Result<(), String> {
         != Ok(FixedRegionLayoutResult::WithinBounds {
             object,
             page,
+            rectangle: checked.rectangle,
             revision,
         })
     {
@@ -854,6 +906,7 @@ fn verify_cross_kind_fixed_authority_refusal() -> Result<(), String> {
         != Ok(FixedRegionLayoutResult::WithinBounds {
             object,
             page,
+            rectangle: checked.rectangle,
             revision,
         })
     {
@@ -929,6 +982,7 @@ fn verify_duplicate_fixed_object_refusal() -> Result<(), String> {
         != Ok(FixedRegionLayoutResult::WithinBounds {
             object,
             page,
+            rectangle: checked.rectangle,
             revision,
         })
     {

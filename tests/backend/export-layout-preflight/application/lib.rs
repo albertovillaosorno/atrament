@@ -198,6 +198,15 @@ fn real_six_mm_fixed_overflow_blocks_export_layout_preflight() {
         },
     ));
     assert_eq!(layout.revision(), fixture.revision);
+    assert_eq!(
+        layout.rectangle(),
+        Rect {
+            height: Length::from_micrometres(23_000),
+            width: Length::from_micrometres(50_000),
+            x: Length::from_micrometres(35_000),
+            y: Length::from_micrometres(270_000),
+        },
+    );
     assert!(matches!(layout, FixedRegionLayoutResult::Overflow { .. }));
     let FixedRegionLayoutResult::Overflow { diagnostics, .. } = layout else {
         return;

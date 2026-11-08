@@ -2850,3 +2850,19 @@ An escaped literal hash instead refuses the short region and, with enough
 room, also refuses its missing authored shape. Neither rejection may replace
 the last accepted PDF/PNG bytes. This remains native CLI behavior; the
 revision-owned notebook body-to-PDF/PNG integration is still absent.
+
+## Fixed-region checked rectangle retention (partial) — 2026-11-07
+
+Accepted fixed-region bounds results now return the exact solver-derived
+rectangle for both successful and overflowing placements, alongside their
+revision, page and object identities. This prevents a future ink compositor
+from having to reconstruct geometry from independent caller state after the
+validated bounds check. The read-only `rectangle()` accessor and 16-region
+boundary oracle retain all four coordinates, including zero-size rectangles,
+without clipping or silently repairing overflow.
+
+Native session regressions verify the original rectangle survives page-profile
+edits, profile-reference changes, Undo and Redo while revised bounds switch
+between success and blocking overflow. Export preflight still gates only layout
+diagnostics; this does not add a fixed-position solver, semantic content
+measurement, notebook persistence or native PDF/PNG integration.
