@@ -2140,6 +2140,38 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         rectangle: fixed_rectangle,
         revision,
     };
+    let layered = |revision| AcceptedFixedPlacement {
+        rectangle: Rect {
+            x: Length::from_micrometres(152_000),
+            y: Length::from_micrometres(102_000),
+            width: Length::from_micrometres(5_000),
+            height: Length::from_micrometres(5_000),
+        },
+        ..fixed(revision)
+    };
+    let intersection = Rect {
+        x: Length::from_micrometres(152_000),
+        y: Length::from_micrometres(102_000),
+        width: Length::from_micrometres(3_000),
+        height: Length::from_micrometres(3_000),
+    };
+    let assert_pair = |current: &application::SessionApplication,
+                       revision,
+                       width| {
+        let pair = current
+            .first_fixed_pair_overlap(
+                &measurement(revision, width),
+                &[fixed(revision), layered(revision)],
+            )
+            .expect("fresh profile must admit fixed-pair inspection")
+            .expect("both fixed rectangles must overlap on the wide page");
+        assert_eq!(pair.revision(), revision);
+        assert_eq!(pair.flow(), flow);
+        assert_eq!(pair.page(), page);
+        assert_eq!(pair.intersection(), intersection);
+        assert_eq!((pair.earlier_index(), pair.later_index()), (0, 1));
+    };
+    assert_pair(&session, revision, 100_000);
     assert_eq!(
         session.paginate_measured_flow_with_fixed_regions(
             &measurement(revision, 100_000),
@@ -2191,6 +2223,17 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         page,
         writable: narrowed_writable,
     }]);
+    assert_eq!(
+        session.first_fixed_pair_overlap(
+            &measurement(edited, 80_000),
+            &[fixed(edited), layered(edited)],
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow {
+                page, object: block,
+            },
+        )),
+    );
 
     assert_eq!(
         session.paginate_measured_flow_with_fixed_regions(
@@ -2235,6 +2278,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         page,
         writable: original_writable,
     }]);
+    assert_pair(&session, undone, 100_000);
 
     assert_eq!(
         session.paginate_measured_flow_with_fixed_regions(
@@ -2265,6 +2309,17 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         page,
         writable: narrowed_writable,
     }]);
+    assert_eq!(
+        session.first_fixed_pair_overlap(
+            &measurement(redone, 80_000),
+            &[fixed(redone), layered(redone)],
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow {
+                page, object: block,
+            },
+        )),
+    );
     assert_eq!(
         session.paginate_measured_flow_with_fixed_regions(
             &measurement(redone, 80_000), &[fixed(redone)]),

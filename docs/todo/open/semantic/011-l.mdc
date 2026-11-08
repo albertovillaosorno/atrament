@@ -3076,3 +3076,15 @@ session regression checks the same physical rectangle across fresh edit,
 Undo and Redo revisions. This supplies diagnostic coordinates only: it does
 not declare fixed layering forbidden, place missing objects, derive measured
 semantic Markdown or authorize native notebook PDF/PNG export.
+
+## Fixed-pair intersection after page-profile changes (partial) — 2026-11-08
+
+The live profile-resize regression also exercises the first-pair physical
+intersection across a valid narrowing edit and Undo/Redo. Two intentional
+layered rectangles produce the same 3-by-3-mm exact intersection on the wide
+writable sheet with a fresh accepted revision. Both narrow-state inspections
+refuse the out-of-bounds first proposal before reporting any pair, even though
+their raw rectangles still intersect.
+
+This guards against using stale page geometry to announce an authorized fixed
+layout. It is read-only and does not resolve or prohibit layering.
