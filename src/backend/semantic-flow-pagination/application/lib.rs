@@ -38,16 +38,30 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use atrament_flow_pagination::{
-    MeasuredFlowUnit, PageRegion, PaginationError, PaginationPlan, paginate,
+    MeasuredFlowUnit, PageRegion, PaginationError, PaginationPlan,
+    PlacedFragment, paginate,
 };
 use atrament_semantic_notebook::{
     AcceptedIdentity, AcceptedRevision, Block, PhysicalPageProfileError,
     RevisionIdentity, semantic_duplicate_owner_among,
 };
 
-/// Complete measured-flow plan whose owners and pages are accepted identities.
-pub type SemanticPaginationPlan =
-    PaginationPlan<AcceptedIdentity, AcceptedIdentity>;
+/// Complete measured-flow plan bound to its accepted semantic authority.
+///
+/// Downstream consumers must compare `revision` with the live accepted state
+/// before using the derived physical geometry. The `flow` identifies which
+/// accepted flow was measured, even when no fragments were placed.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SemanticPaginationPlan {
+    /// Ordered source-page coverage, including skipped intermediate pages.
+    pub covered_pages: Vec<PageRegion<AcceptedIdentity>>,
+    /// Accepted flow whose measurement produced this plan.
+    pub flow: AcceptedIdentity,
+    /// Ordered physical placements in semantic reading order.
+    pub placements: Vec<PlacedFragment<AcceptedIdentity, AcceptedIdentity>>,
+    /// Accepted revision against which measurement and geometry were checked.
+    pub revision: RevisionIdentity,
+}
 
 /// Already-measured semantic flow bound to one exact accepted revision.
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -173,15 +187,22 @@ pub fn paginate_revision(
     }
     let scope = flow_scope(revision, measurement.flow)?;
     validate_measurement_blocks(revision, scope.blocks, measurement)?;
-    if scope.blocks.is_empty() {
-        return paginate(&[], &measurement.units)
-            .map_err(SemanticPaginationError::Pagination);
-    }
-    let pages = page_regions(revision, scope.page_index)?;
-    let plan = paginate(&pages, &measurement.units)
-        .map_err(SemanticPaginationError::Pagination)?;
-    reject_unmeasured_page_flows(revision, measurement.flow, &plan)?;
-    Ok(plan)
+    let plan = if scope.blocks.is_empty() {
+        paginate(&[], &measurement.units)
+            .map_err(SemanticPaginationError::Pagination)?
+    } else {
+        let pages = page_regions(revision, scope.page_index)?;
+        let plan = paginate(&pages, &measurement.units)
+            .map_err(SemanticPaginationError::Pagination)?;
+        reject_unmeasured_page_flows(revision, measurement.flow, &plan)?;
+        plan
+    };
+    Ok(SemanticPaginationPlan {
+        covered_pages: plan.covered_pages,
+        flow: measurement.flow,
+        placements: plan.placements,
+        revision: revision.id,
+    })
 }
 
 // This projection owns only one measured flow and the full writable
@@ -191,7 +212,7 @@ pub fn paginate_revision(
 fn reject_unmeasured_page_flows(
     revision: &AcceptedRevision,
     selected_flow: AcceptedIdentity,
-    plan: &SemanticPaginationPlan,
+    plan: &PaginationPlan<AcceptedIdentity, AcceptedIdentity>,
 ) -> Result<(), SemanticPaginationError> {
     let placed_pages = plan.placements.iter()
         .map(|placement| placement.page)

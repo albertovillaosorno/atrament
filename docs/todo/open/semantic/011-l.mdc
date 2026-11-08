@@ -2743,3 +2743,18 @@ order, and that unused trailing sheets stay excluded.
 These checks strengthen sheet-order evidence only. Persisted semantic content
 still is not measured and rendered to native PDF/PNG by this flow capability;
 the P1 end-to-end acceptance criterion remains open.
+
+## Revision-bound measured-plan provenance (partial) — 2026-11-07
+
+The accepted-flow pagination result now carries the exact accepted revision
+and selected flow identities alongside its existing ordered page rectangles
+and measured fragment placements. This lets a later native export consumer
+check that a cached physical plan still belongs to the current revision and
+intended flow, rather than interpreting geometry or empty placements as
+proof of ownership.
+
+Red-to-green native regression assertions cover empty and populated accepted
+flows and the `SessionApplication` profile edit, Undo and Redo lifecycle. The
+pure measured paginator is unchanged; only the semantic boundary supplies
+accepted identities. This remains read-only metadata, not a content compiler,
+a persistence format, or the required saved semantic notebook PDF/PNG path.

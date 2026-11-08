@@ -215,6 +215,8 @@ fn empty_accepted_flow_needs_no_page_profile_authority() {
 
     let plan = paginate_revision(&defensive, &measured)
         .expect("empty flow must not require page geometry");
+    assert_eq!(plan.revision, revision);
+    assert_eq!(plan.flow, flow);
     assert!(plan.placements.is_empty());
 }
 
@@ -294,6 +296,8 @@ fn measured_inline_block_families_preserve_semantic_order_and_identity() {
         &measured,
     )
     .expect("already-measured inline families must paginate");
+    assert_eq!(plan.revision, revision);
+    assert_eq!(plan.flow, flow);
     assert_eq!(
         plan.placements
             .iter()
