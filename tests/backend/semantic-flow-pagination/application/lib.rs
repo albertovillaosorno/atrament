@@ -711,6 +711,14 @@ fn measured_flow_spills_to_next_accepted_page_in_notebook_order() {
         plan.placements[1].writable_left,
         Length::from_micrometres(55_000)
     );
+    assert_eq!(
+        plan.placements.first().map(|placed| placed.writable_width),
+        Some(Length::from_micrometres(165_000))
+    );
+    assert_eq!(
+        plan.placements.get(1).map(|placed| placed.writable_width),
+        Some(Length::from_micrometres(145_000))
+    );
     assert_eq!(plan.placements[1].top, Length::from_micrometres(20_000));
 }
 

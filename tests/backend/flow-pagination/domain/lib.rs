@@ -108,6 +108,7 @@ fn reference_independent(
                     owner: fragment.owner,
                     page: current.page,
                     writable_left: current.writable.x,
+                    writable_width: current.writable.width,
                     top: Length::from_micrometres(top),
                     width: fragment.width,
                 });
@@ -410,6 +411,7 @@ fn reference_place_fragment(
                 owner: fragment.owner,
                 page: page.page,
                 writable_left: page.writable.x,
+                writable_width: page.writable.width,
                 top: Length::from_micrometres(
                     page.writable.y.micrometres() + cursor.used_height,
                 ),
@@ -463,6 +465,7 @@ fn reference_keep_together_fresh(
             owner: fragment.owner,
             page: page.page,
             writable_left: page.writable.x,
+            writable_width: page.writable.width,
             top: Length::from_micrometres(top),
             width: fragment.width,
         });
@@ -588,6 +591,7 @@ fn reference_prefix_then_keep(
                 owner: fragment.owner,
                 page: page.page,
                 writable_left: page.writable.x,
+                writable_width: page.writable.width,
                 top: Length::from_micrometres(
                     page.writable.y.micrometres() + cursor.used_height,
                 ),
@@ -714,6 +718,7 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             owner: 1,
             page: 11,
             writable_left: Length::from_micrometres(10),
+            writable_width: Length::from_micrometres(100),
             top: Length::from_micrometres(1_000),
             width: Length::from_micrometres(50),
         },
@@ -722,6 +727,7 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             owner: 2,
             page: 11,
             writable_left: Length::from_micrometres(10),
+            writable_width: Length::from_micrometres(100),
             top: Length::from_micrometres(1_060),
             width: Length::from_micrometres(80),
         },
@@ -730,6 +736,7 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             owner: 3,
             page: 12,
             writable_left: Length::from_micrometres(10),
+            writable_width: Length::from_micrometres(100),
             top: Length::from_micrometres(2_000),
             width: Length::from_micrometres(70),
         },
@@ -737,11 +744,12 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
 }
 
 #[test]
-fn placed_fragments_retain_each_selected_pages_writable_left() {
+fn placed_fragments_retain_each_selected_pages_writable_horizontal_bounds() {
     let mut first = page(1, 300, 100, 50);
     first.writable.x = Length::from_micrometres(17);
     let mut second = page(2, 600, 100, 60);
     second.writable.x = Length::from_micrometres(83);
+    second.writable.width = Length::from_micrometres(40);
     for policy in [
         FlowUnitPolicy::Independent,
         FlowUnitPolicy::KeepTogetherWhenPossible,
@@ -756,6 +764,10 @@ fn placed_fragments_retain_each_selected_pages_writable_left() {
             plan.placements[0].writable_left,
             Length::from_micrometres(17)
         );
+        assert_eq!(
+            plan.placements.first().map(|placed| placed.writable_width),
+            Some(Length::from_micrometres(100))
+        );
         let group_left = if policy == FlowUnitPolicy::Independent {
             [17, 83]
         } else {
@@ -766,9 +778,23 @@ fn placed_fragments_retain_each_selected_pages_writable_left() {
         } else {
             [2, 2]
         };
-        for (position, (&left, &page)) in
-            group_left.iter().zip(&group_page).enumerate()
+        let group_width = if policy == FlowUnitPolicy::Independent {
+            [100, 40]
+        } else {
+            [40, 40]
+        };
+        for (position, ((&left, &page), &width)) in group_left
+            .iter()
+            .zip(&group_page)
+            .zip(&group_width)
+            .enumerate()
         {
+            assert_eq!(
+                plan.placements
+                    .get(position + 1)
+                    .map(|placed| placed.writable_width),
+                Some(Length::from_micrometres(width))
+            );
             assert_eq!(
                 plan.placements[position + 1].writable_left,
                 Length::from_micrometres(left)
@@ -1021,6 +1047,7 @@ fn zero_width_positive_height_fragment_reserves_vertical_space() {
                 owner: 1,
                 page: 1,
                 writable_left: Length::from_micrometres(10),
+                writable_width: Length::from_micrometres(100),
                 top: Length::from_micrometres(500),
                 width: Length::ZERO,
             },
@@ -1029,6 +1056,7 @@ fn zero_width_positive_height_fragment_reserves_vertical_space() {
                 owner: 2,
                 page: 1,
                 writable_left: Length::from_micrometres(10),
+                writable_width: Length::from_micrometres(100),
                 top: Length::from_micrometres(520),
                 width: Length::from_micrometres(10),
             },

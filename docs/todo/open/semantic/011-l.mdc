@@ -2632,3 +2632,20 @@ reference-oracle suite also checks the new field on every placement.
 
 This does not measure semantic text or connect saved notebook content to the
 native PDF/PNG exporter. The P1 two-page saved-notebook criterion remains open.
+
+## Measured placement writable-width authority (partial) — 2026-11-07
+
+The independent measured-flow paginator now preserves each selected page's
+exact writable width in every placed fragment, alongside its writable-left
+origin and unchanged measured fragment width. A future horizontal layout
+consumer can derive accepted right/center alignment bounds without guessing
+from the first page or conflating content width with page capacity.
+
+A failing-before-fix pure Rust regression covers independent and
+keep-together page turns where writable origins and widths both differ. The
+revision-bound semantic regression verifies exact width on two accepted
+profiles with different binding margins. Existing independent and mixed-policy
+reference oracles also compare the new field for all placements.
+
+This supplies geometry metadata only: it does not choose horizontal alignment,
+measure Markdown, persist semantic content or complete native PDF/PNG export.
