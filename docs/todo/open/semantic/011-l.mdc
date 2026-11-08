@@ -2820,3 +2820,20 @@ remain rejected rather than silently substituting geometry.
 This validates the existing read-only session boundary after the source-index
 addition. It does not persist the semantic notebook, create measured text
 from edited spans, or connect its physical plans to native PDF/PNG output.
+
+## Emitted-glyph Markdown pitch and region oracle (partial) — 2026-11-07
+
+A deterministic Rust CLI regression now compares the source parser's measured
+row pitch with an independent calculation over the actual emitted Unicode
+graphemes. It covers 480 seeded combinations plus four targeted sources using
+ATX/Setext headings, bullets and tasks, quotes, fenced code, escaped literal
+markers and explicit breaks. Syntactic markers may not inflate row height,
+while genuinely authored punctuation retains its selected height override.
+
+For successfully laid-out sources, the same test checks ordered, nonoverlapping
+physical rows across page turns, exact inset clearance inside a selected
+fixed region and every generated ornament's post-stroke region bounds. It
+rejects an insufficient accepted-fixture count rather than silently treating
+most failed layouts as evidence. This strengthens the existing CLI-only export
+measurement boundary; it does not persist accepted semantic notebook bodies
+or connect their identities to native PDF/transparent PNG output. P1 stays open.

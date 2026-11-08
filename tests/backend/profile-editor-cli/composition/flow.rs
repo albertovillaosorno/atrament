@@ -6294,3 +6294,174 @@ fn wrapped_quoted_hard_breaks_and_gaps_keep_setext_title_geometry()
     }
     Ok(())
 }
+
+// Derive pitch from emitted handwriting independently of Markdown source
+// parsing. Syntax-only markers cannot enlarge the physical row pitch, whereas
+// escaped or code-fenced literal marks remain measured ink.
+fn emitted_glyph_pitch(
+    runs: &[super::TextRun],
+    stats: &atrament_handwriting_statistics::HandwritingStatisticsProfile,
+) -> Result<u32, String> {
+    use atrament_handwriting_statistics::Dimension;
+
+    let mut emitted = 9_000u32;
+    for run in runs {
+        let mut remaining = run.text.as_str();
+        while !remaining.is_empty() {
+            let (glyph, rest) = super::first_grapheme(remaining)?;
+            remaining = rest;
+            if glyph == " " {
+                continue;
+            }
+            let height = stats.statistics_for(glyph, Dimension::Height)
+                .ok_or("emitted glyph height missing")?.mean;
+            let baseline = stats
+                .statistics_for(glyph, Dimension::BaselineOffset)
+                .ok_or("emitted glyph baseline missing")?.mean;
+            let needed = height.checked_add(baseline.abs())
+                .and_then(|combined| combined.checked_add(4_000))
+                .ok_or("emitted glyph pitch overflow")?;
+            emitted = emitted.max(u32::try_from(needed)
+                .map_err(|_error| "emitted glyph pitch refused")?);
+        }
+    }
+    Ok(emitted)
+}
+
+fn verify_mixed_region_placement(
+    runs: &[super::TextRun],
+    marks: &[atrament_notebook_paper_cli::NotebookInkLine],
+    region: super::FlowRegion, printable: (u32, u32, u32, u32),
+    pages: usize, pitch: u32,
+) -> Result<(), String> {
+    region.validate_ink(printable, marks)?;
+    let left_text = region.left.checked_add(2_500)
+        .ok_or("fixed text left inset overflow")?;
+    let right_text = region.left.checked_add(region.width)
+        .ok_or("fixed text right edge overflow")?;
+    let top_text = region.top.checked_add(2_500)
+        .ok_or("fixed text top inset overflow")?;
+    let bottom_text = region.top.checked_add(region.height)
+        .and_then(|bottom| bottom.checked_sub(2_500))
+        .ok_or("fixed text bottom inset overflow")?;
+    let mut last_row: Option<(usize, u32)> = None;
+    for run in runs {
+        let (x, y) = run.origin_um;
+        let valid = (1..=pages).contains(&run.page)
+            && x >= left_text
+            && x < right_text
+            && y >= top_text
+            && y.checked_add(pitch).is_some_and(|end| end <= bottom_text);
+        if !valid {
+            return Err(format!("invalid fixed-region row: {run:?}"));
+        }
+        if let Some((previous_page, previous_y)) = last_row
+            && !(run.page > previous_page || (run.page == previous_page
+                && previous_y.checked_add(pitch).is_some_and(|end| y >= end))) {
+            return Err(format!("overlapping or reordered row: {run:?}"));
+        }
+        last_row = Some((run.page, y));
+    }
+    Ok(())
+}
+
+#[test]
+fn mixed_markdown_source_pitch_matches_every_emitted_glyph()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    const BLOCKS: &[&str] = &[
+        "a a", "# a", "  ## a", "### a", "a\n==", "a\n---",
+        "- a", "+ [x] a", "12) a", "> a\n> a", "\\# a",
+        "12\\. a", "```\n# a\n```", "~~~\n> a\n~~~",
+        "a\\\na", "a  \na", "   a", "    # a", "---", "a\n  a",
+    ];
+    const FIXED: &[&str] = &[
+        // In these two samples only the 'a' glyph is handwritten.
+        "## a\n\n- [x] a\n\n> a\n\n---\n\na\n===",
+        "```\na\n```\n\n~~~\na\n~~~\n\n# a",
+        // These two also handwrite literal punctuation.
+        "\\# a\n\n12) a",
+        "    # a\n\n12\\. a",
+    ];
+    let tall = ScalarStatistics {
+        minimum: 25_000, maximum: 25_000, mean: 25_000,
+        median: 25_000, standard_deviation: 0,
+    };
+    let mut stats = HandwritingStatisticsProfile::baseline(15);
+    for glyph in ["#", ">", "=", "-", "+", "*", "_", "`", "~",
+        "[", "]", "x", "1", "2", ")", ".", "\\"] {
+        stats = stats.with_glyph(glyph, DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let paper = NotebookProfile::default();
+    let printable = paper.printable_rect_um()?;
+    let region = super::FlowRegion {
+        left: printable.0, top: printable.1,
+        width: 110_000, height: 105_000,
+    };
+    let _: (u32, u32, u32, u32) = region.bounds_within(printable)?;
+    let mut seed = 0x71f2_80abu64;
+    let mut fixtures = FIXED.iter().map(ToString::to_string)
+        .collect::<Vec<_>>();
+    for _ in 0..480usize {
+        let mut text = String::new();
+        for index in 0..6usize {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let offset = usize::try_from(seed >> 32u32)
+                .map_err(|_error| "case index overflow")?
+                .checked_rem(BLOCKS.len()).ok_or("empty source inventory")?;
+            let selected = BLOCKS.get(offset)
+                .ok_or("source case out of bounds")?;
+            if index > 0 {
+                text.push_str("\n\n");
+            }
+            text.push_str(selected);
+        }
+        fixtures.push(text);
+    }
+    let mut accepted = 0usize;
+    let mut syntax_only = 0usize;
+    let mut literal_markers = 0usize;
+    for (case, text) in fixtures.iter().enumerate() {
+        let source = FlowSource::new(FlowFormat::Markdown, text)?;
+        let Ok((runs, marks, pages)) = super::layout_flow_with_region(
+            &source, &paper, Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        ) else {
+            // Some adjacent syntactic constructs intentionally refuse.
+            continue;
+        };
+        accepted += 1;
+        let measured = super::measured_pitch(&source, Some(&stats))?;
+        verify_mixed_region_placement(
+            &runs, &marks, region, printable, pages, measured,
+        )?;
+        let emitted = emitted_glyph_pitch(&runs, &stats)?;
+        if measured != emitted {
+            return Err(format!(
+                "case {case} source {text:?}: pitch {measured} != {emitted}"
+            ));
+        }
+        if emitted == 9_000 {
+            syntax_only += 1;
+        } else {
+            literal_markers += 1;
+        }
+    }
+    if accepted <= 400 || syntax_only < 2 || literal_markers < 2 {
+        return Err(format!(
+            "insufficient valid mixed Markdown fixtures: {accepted} cases, \
+            {syntax_only} syntax-only, {literal_markers} literal"
+        ));
+    }
+    Ok(())
+}
