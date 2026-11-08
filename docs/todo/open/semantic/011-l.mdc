@@ -2922,3 +2922,25 @@ far-right edge, zero-width/height regions, overflow, stale revision, altered
 page-profile geometry and unrelated fixed content on an unused page. The
 actual accepted semantic body-to-native handwriting/PDF/PNG integration is
 still missing, and ATR-P2-011 remains open.
+
+## Live session flow/fixed clearance handoff (partial) — 2026-11-07
+
+`SessionApplication::paginate_measured_flow_with_fixed_regions` now binds
+caller-produced measured rows and supplied derived fixed rectangles to one
+current accepted revision. It builds the measured pagination plan, validates
+all submitted fixed objects on the same accepted paper geometry, and rejects
+possible row-band overlaps before returning the sealed physical plan. A
+missing session, stale flow measurements, stale or invalid fixed placements,
+and overlapping or overflowing bounds have distinct typed failure paths.
+
+A session regression checks a successful adjacent fixed region, a potential
+collision at the far writable edge, and independently overflowing geometry.
+It then edits accepted text and traverses Undo and Redo; old measurements
+and old fixed placements always refuse, while freshly rebound values retain
+the expected physical rows and accepted revision. No session state is changed
+by this read-only query.
+
+This is a narrow handoff for **only caller-supplied fixed objects** and
+**caller-measured** flow. It does not find omitted fixed objects, infer text
+X positions, compile saved semantic block spans into handwriting, or save
+notebook PDF/PNG. The P1 native output acceptance gap remains open.

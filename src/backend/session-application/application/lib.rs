@@ -20,6 +20,7 @@
 //     terminal/cleanup observations, plus raw bytes already validated by an
 //     ingestion boundary.
 //   - Outputs: Typed outcomes, read-only pagination and fixed-layout results,
+//     checked cross-layout clearance,
 //     borrowed accepted state, and raw asset bytes.
 //   - Side effects: Process-local mutation through owned application services.
 // - Split-When:
@@ -59,8 +60,8 @@ use atrament_media_job_session::{
     WaveformIntermediateIdentity,
 };
 use atrament_semantic_flow_pagination::{
-    RevisionFlowMeasurement, SemanticPaginationError, SemanticPaginationPlan,
-    paginate_revision,
+    FlowFixedRegionError, RevisionFlowMeasurement, SemanticPaginationError,
+    SemanticPaginationPlan, check_fixed_regions_for_flow, paginate_revision,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -279,6 +280,19 @@ pub enum SessionFixedRegionLayoutError {
     Layout(FixedRegionLayoutError),
     /// Session has no accepted semantic revision for placement binding.
     NoAcceptedRevision,
+}
+
+/// Typed failure to combine flow and checked fixed areas in one live revision.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum SessionFlowFixedRegionError {
+    /// Supplied fixed-region geometry failed accepted placement validation.
+    FixedRegion(FixedRegionLayoutError),
+    /// There is no live accepted revision for the combined layout.
+    NoAcceptedRevision,
+    /// The verified flow row and fixed-region geometry may overlap.
+    Overlap(FlowFixedRegionError),
+    /// Supplied measured flow is stale or cannot be paginated.
+    Pagination(SemanticPaginationError),
 }
 
 /// Typed failure to paginate one measured flow through current session state.
@@ -652,6 +666,39 @@ impl SessionApplication {
         };
         paginate_revision(revision, measurement)
             .map_err(SessionPaginationError::Pagination)
+    }
+
+    /// Inspect one measured flow and supplied fixed regions on live authority.
+    ///
+    /// This operation checks every supplied fixed region against the same
+    /// accepted revision that is used for measured-flow pagination. It refuses
+    /// any possible vertical-band overlap, including boxes at the far side of
+    /// the writable page because horizontal ink alignment is not measured.
+    /// Its success does not assert that all fixed objects were supplied or
+    /// authorize collision-free rendering or native Export.
+    ///
+    /// # Errors
+    ///
+    /// Returns a typed failure for missing current authority, stale or
+    /// invalid measurements/placements, or potential row-band overlap.
+    pub fn paginate_measured_flow_with_fixed_regions(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+    ) -> Result<SemanticPaginationPlan, SessionFlowFixedRegionError> {
+        let Some(revision) = self.semantic.current() else {
+            return Err(SessionFlowFixedRegionError::NoAcceptedRevision);
+        };
+        let plan = paginate_revision(revision, measurement)
+            .map_err(SessionFlowFixedRegionError::Pagination)?;
+        let checked = fixed
+            .iter()
+            .map(|placement| validate_fixed_placement(revision, *placement))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(SessionFlowFixedRegionError::FixedRegion)?;
+        check_fixed_regions_for_flow(&plan, &checked)
+            .map_err(SessionFlowFixedRegionError::Overlap)?;
+        Ok(plan)
     }
 
     /// Inspect explicit Export source, path and layout prerequisites.

@@ -7148,3 +7148,195 @@ fn grapheme_range_edits_respect_redo_asset_byte_lifecycle() {
         }
     }
 }
+
+#[test]
+fn combined_flow_and_fixed_regions_follow_live_session_history()
+-> Result<(), String> {
+    use atrament_semantic_flow_pagination::FlowFixedRegionError;
+
+    let ids = IdentityAllocator::new();
+    let (candidate, span_candidate) =
+        editable_text_candidate(&ids, "revision-bound ink");
+    let source_page = candidate.pages.first().ok_or("missing source page")?;
+    let source_flow = source_page.flows.first().ok_or("missing flow")?;
+    let source_block = source_flow.blocks.first().ok_or("missing block")?;
+    let page_candidate = source_page.id;
+    let flow_candidate = source_flow.id;
+    let block_candidate = source_block.id;
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        return Err("semantic candidate refused".into());
+    };
+    let accepted = |source| {
+        mapping
+            .iter()
+            .find(|entry| entry.candidate == source)
+            .map(|entry| entry.accepted)
+            .ok_or("accepted identity mapping missing")
+    };
+    let page = accepted(page_candidate)?;
+    let flow = accepted(flow_candidate)?;
+    let block = accepted(block_candidate)?;
+    let span = accepted(span_candidate)?;
+    let measurement = |accepted_revision| RevisionFlowMeasurement {
+        flow,
+        revision: accepted_revision,
+        units: vec![MeasuredFlowUnit {
+            fragments: vec![MeasuredFragment {
+                height: Length::from_micrometres(20_000),
+                owner: block,
+                width: Length::from_micrometres(20_000),
+            }],
+            policy: FlowUnitPolicy::Independent,
+        }],
+    };
+    let empty_session = application::SessionApplication::default();
+    assert_eq!(
+        empty_session.paginate_measured_flow_with_fixed_regions(
+            &measurement(revision),
+            &[]
+        ),
+        Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
+    );
+    let admitted = session
+        .paginate_measured_flow_with_fixed_regions(&measurement(revision), &[])
+        .map_err(|error| format!("base flow refused: {error:?}"))?;
+    assert_eq!(admitted.revision(), revision);
+    let row = *admitted.placements().first().ok_or("missing row")?;
+    let rectangle = |x, y, width, height| Rect {
+        x: Length::from_micrometres(x),
+        y: Length::from_micrometres(y),
+        width: Length::from_micrometres(width),
+        height: Length::from_micrometres(height),
+    };
+    let x = row.writable.x.micrometres();
+    let y = row.top.micrometres();
+    let placement = |accepted_revision, bounds| AcceptedFixedPlacement {
+        object: block,
+        page,
+        rectangle: bounds,
+        revision: accepted_revision,
+    };
+    let next_to_row =
+        placement(revision, rectangle(x, y + 20_000, 5_000, 10_000));
+    let near_far_edge = placement(
+        revision,
+        rectangle(
+            x + row.writable.width.micrometres() - 1_000,
+            y + 1,
+            1_000,
+            1_000,
+        ),
+    );
+    let outside = placement(
+        revision,
+        rectangle(x, y, row.writable.width.micrometres() + 1, 1_000),
+    );
+    let accepted_before = session.accepted_revision().cloned();
+    assert_eq!(
+        session.paginate_measured_flow_with_fixed_regions(
+            &measurement(revision),
+            &[next_to_row]
+        ),
+        Ok(admitted.clone()),
+    );
+    assert_eq!(
+        session.paginate_measured_flow_with_fixed_regions(
+            &measurement(revision),
+            &[near_far_edge]
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::VerticalBandOverlap {
+                page,
+                object: block,
+                fragment_owner: block,
+                source: row.source,
+            },
+        )),
+    );
+    assert_eq!(
+        session.paginate_measured_flow_with_fixed_regions(
+            &measurement(revision),
+            &[outside]
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow { page, object: block },
+        )),
+    );
+    assert_eq!(session.accepted_revision(), accepted_before.as_ref());
+
+    let TextEditOutcome::Applied { revision: edited, .. } =
+        session.replace_text(revision, span, "revised".to_owned())
+    else {
+        return Err("text edit refused".into());
+    };
+    let check_stale = |current_session: &application::SessionApplication,
+                       current| {
+        assert_eq!(
+            current_session.paginate_measured_flow_with_fixed_regions(
+                &measurement(revision),
+                &[near_far_edge]
+            ),
+            Err(application::SessionFlowFixedRegionError::Pagination(
+                SemanticPaginationError::MeasurementRevisionMismatch {
+                    accepted: current,
+                    measured: revision,
+                },
+            )),
+        );
+        assert_eq!(
+            current_session.paginate_measured_flow_with_fixed_regions(
+                &measurement(current),
+                &[next_to_row]
+            ),
+            Err(application::SessionFlowFixedRegionError::FixedRegion(
+                FixedRegionLayoutError::RevisionMismatch {
+                    accepted: current,
+                    placement: revision,
+                },
+            )),
+        );
+    };
+    check_stale(&session, edited);
+    let fresh = session
+        .paginate_measured_flow_with_fixed_regions(&measurement(edited), &[
+            placement(edited, next_to_row.rectangle),
+        ])
+        .map_err(|error| format!("fresh edited placement: {error:?}"))?;
+    assert_eq!(fresh.revision(), edited);
+    assert_eq!(fresh.placements(), admitted.placements());
+
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(edited, HistoryDirection::Undo)
+    else {
+        return Err("Undo refused".into());
+    };
+    check_stale(&session, undone);
+    assert_eq!(
+        session
+            .paginate_measured_flow_with_fixed_regions(&measurement(undone), &[
+                placement(undone, next_to_row.rectangle)
+            ])
+            .map_err(|error| format!("Undo bounds: {error:?}"))?
+            .revision(),
+        undone,
+    );
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        return Err("Redo refused".into());
+    };
+    check_stale(&session, redone);
+    assert_eq!(
+        session
+            .paginate_measured_flow_with_fixed_regions(&measurement(redone), &[
+                placement(redone, next_to_row.rectangle)
+            ])
+            .map_err(|error| format!("Redo bounds: {error:?}"))?
+            .revision(),
+        redone,
+    );
+    Ok(())
+}
