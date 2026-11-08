@@ -66,7 +66,8 @@ use atrament_physical_page_profile::{
     SheetSize,
 };
 use atrament_semantic_flow_pagination::{
-    RevisionFlowMeasurement, SemanticPaginationError, SemanticPaginationPlan,
+    FlowFixedRegionError, RevisionFlowMeasurement, SemanticPaginationError,
+    SemanticPaginationPlan,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -2124,6 +2125,29 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         writable: original_writable,
     }]);
 
+    // This explicitly supplied checked rectangle fits the original page but
+    // lies to the right of a subsequently narrowed printable rectangle.
+    // Its y band never overlaps the admitted two source rows.
+    let fixed_rectangle = Rect {
+        x: Length::from_micrometres(150_000),
+        y: Length::from_micrometres(100_000),
+        width: Length::from_micrometres(5_000),
+        height: Length::from_micrometres(5_000),
+    };
+    let fixed = |revision| AcceptedFixedPlacement {
+        object: block,
+        page,
+        rectangle: fixed_rectangle,
+        revision,
+    };
+    assert_eq!(
+        session.paginate_measured_flow_with_fixed_regions(
+            &measurement(revision, 100_000),
+            &[fixed(revision)]
+        ),
+        Ok(plan.clone()),
+    );
+
     let mut narrowed = physical_page_profile();
     narrowed.printable_region.width = Length::from_micrometres(100_000);
     let PageProfileEditOutcome::Applied { revision: edited, .. } =
@@ -2168,6 +2192,28 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         writable: narrowed_writable,
     }]);
 
+    assert_eq!(
+        session.paginate_measured_flow_with_fixed_regions(
+            &measurement(edited, 80_000), &[fixed(edited)]),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow {
+                page, object: block,
+            },
+        )),
+    );
+    assert_eq!(
+        session.paginate_measured_flow_with_fixed_regions(
+            &measurement(edited, 80_000),
+            &[fixed(revision)]
+        ),
+        Err(application::SessionFlowFixedRegionError::FixedRegion(
+            FixedRegionLayoutError::RevisionMismatch {
+                accepted: edited,
+                placement: revision,
+            },
+        )),
+    );
+
     let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
         session.traverse_history(edited, HistoryDirection::Undo)
     else {
@@ -2189,6 +2235,12 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         page,
         writable: original_writable,
     }]);
+
+    assert_eq!(
+        session.paginate_measured_flow_with_fixed_regions(
+            &measurement(undone, 100_000), &[fixed(undone)]),
+        Ok(restored.clone()),
+    );
 
     let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
         session.traverse_history(undone, HistoryDirection::Redo)
@@ -2213,6 +2265,15 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         page,
         writable: narrowed_writable,
     }]);
+    assert_eq!(
+        session.paginate_measured_flow_with_fixed_regions(
+            &measurement(redone, 80_000), &[fixed(redone)]),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow {
+                page, object: block,
+            },
+        )),
+    );
 }
 
 #[test]
@@ -7152,8 +7213,6 @@ fn grapheme_range_edits_respect_redo_asset_byte_lifecycle() {
 #[test]
 fn combined_flow_and_fixed_regions_follow_live_session_history()
 -> Result<(), String> {
-    use atrament_semantic_flow_pagination::FlowFixedRegionError;
-
     let ids = IdentityAllocator::new();
     let (candidate, span_candidate) =
         editable_text_candidate(&ids, "revision-bound ink");

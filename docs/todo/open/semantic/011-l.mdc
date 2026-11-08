@@ -2944,3 +2944,15 @@ This is a narrow handoff for **only caller-supplied fixed objects** and
 **caller-measured** flow. It does not find omitted fixed objects, infer text
 X positions, compile saved semantic block spans into handwriting, or save
 notebook PDF/PNG. The P1 native output acceptance gap remains open.
+
+## Combined clearance tracks physical profile edits (partial) — 2026-11-07
+
+The current-session flow-plus-fixed handoff also has direct paper-profile
+edit, Undo and Redo coverage. A rectangle at a physically separate vertical
+band is admitted on the original wide paper, blocked when the edited paper
+narrows its writable right edge, and admitted again on Undo; Redo restores the
+same exact blocking physical overflow. A fixed placement supplied with the old
+revision fails even when a fresh measured flow fits the new paper.
+
+The independent measured rows retain their source indices and revised writable
+regions throughout. These tests do not add content measurement or Export.
