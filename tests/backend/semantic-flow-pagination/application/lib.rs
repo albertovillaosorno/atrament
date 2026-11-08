@@ -4235,3 +4235,273 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
     assert_eq!(session.current(), Some(accepted));
     Ok(())
 }
+
+#[test]
+fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
+-> Result<(), String> {
+    use atrament_flow_pagination::FragmentSource;
+    use atrament_semantic_flow_pagination::{
+        FixedRowFootprintOverlap, RowHorizontalPosition,
+        fixed_row_footprint_overlaps_for_flow,
+    };
+
+    const CASES: usize = 2_048;
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("positioned-row fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing accepted revision")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let measured = measurement(revision, flow, owner, &[
+        (15_000, 10_000), (0, 10_000), (20_000, 10_000),
+    ]);
+    let plan = paginate_revision(accepted, &measured)
+        .map_err(|error| format!("positioned rows: {error:?}"))?;
+    let region = plan.covered_pages().first()
+        .ok_or("missing covered page")?.writable;
+    let x = region.x.micrometres();
+    let y = region.y.micrometres();
+    let width = region.width.micrometres();
+    let positions = plan.placements().iter().zip([5_000, 12_000, 25_000])
+        .map(|(row, offset)| RowHorizontalPosition {
+            revision,
+            page: row.page,
+            source: row.source,
+            left: Length::from_micrometres(x + offset),
+        }).collect::<Vec<_>>();
+    let trace = |overlap: FixedRowFootprintOverlap| {
+        (
+            overlap.revision(), overlap.flow(), overlap.page(),
+            overlap.fixed_index(), overlap.object(), overlap.fragment_owner(),
+            overlap.source(), overlap.intersection(),
+        )
+    };
+    let checked = |rectangle| {
+        validate_fixed_placement(accepted, AcceptedFixedPlacement {
+            object: owner, page, revision, rectangle,
+        }).map_err(|error| format!("checked fixed box: {error:?}"))
+    };
+    let mut seed = 0x28bc_5a13_191d_d73f;
+    let mut clear = 0;
+    let mut intersects = 0;
+    let mut overflows = 0;
+    for case in 0..CASES {
+        let a = next_owner_oracle_value(&mut seed);
+        let b = next_owner_oracle_value(&mut seed);
+        let c = next_owner_oracle_value(&mut seed);
+        let d = next_owner_oracle_value(&mut seed);
+        let dx = if case % 13 == 0 { width - 500 } else { a % width };
+        let dy = if case % 11 == 0 { 10_000 } else { b % 35_000 };
+        let w = if case % 7 == 0 { 0 } else { c % 30_000 };
+        let h = if case % 9 == 0 { 0 } else { d % 25_000 };
+        let fixed = checked(Rect {
+            x: Length::from_micrometres(x + dx),
+            y: Length::from_micrometres(y + dy),
+            width: Length::from_micrometres(w),
+            height: Length::from_micrometres(h),
+        })?;
+        let actual = fixed_row_footprint_overlaps_for_flow(
+            &plan, std::slice::from_ref(&fixed), &positions, 3,
+        ).map(|all| all.into_iter().map(trace).collect::<Vec<_>>());
+        if dx + w > width {
+            overflows += 1;
+            if actual != Err(FlowFixedRegionError::FixedRegionOverflow {
+                page, object: owner,
+            }) {
+                return Err(format!("case {case} overflow: {actual:?}"));
+            }
+            continue;
+        }
+        // This reference uses independent u128 rectangle arithmetic and
+        // literal measured widths/top offsets, not the row-index visitor.
+        let mut expected = Vec::new();
+        for (row_index, (rx, ry, rw)) in [
+            (5_000u64, 0u64, 15_000u64),
+            (12_000, 10_000, 0),
+            (25_000, 20_000, 20_000),
+        ].into_iter().enumerate() {
+            let left = u128::from(dx).max(u128::from(rx));
+            let right = u128::from(dx + w).min(u128::from(rx + rw));
+            let top = u128::from(dy).max(u128::from(ry));
+            let bottom = u128::from(dy + h).min(u128::from(ry + 10_000));
+            if left < right && top < bottom {
+                expected.push((
+                    revision, flow, page, 0, owner, owner,
+                    FragmentSource { unit: 0, fragment: row_index },
+                    Rect {
+                        x: Length::from_micrometres(x +
+                            u64::try_from(left).map_err(|e| e.to_string())?),
+                        y: Length::from_micrometres(y +
+                            u64::try_from(top).map_err(|e| e.to_string())?),
+                        width: Length::from_micrometres(
+                            u64::try_from(right - left)
+                                .map_err(|e| e.to_string())?,
+                        ),
+                        height: Length::from_micrometres(
+                            u64::try_from(bottom - top)
+                                .map_err(|e| e.to_string())?,
+                        ),
+                    },
+                ));
+            }
+        }
+        if expected.is_empty() { clear += 1; } else { intersects += 1; }
+        if actual != Ok(expected.clone()) {
+            return Err(format!(
+                "case {case} footprint: {actual:?} != {expected:?}"
+            ));
+        }
+        let cap = expected.len().saturating_sub(1);
+        if !expected.is_empty()
+            && fixed_row_footprint_overlaps_for_flow(
+                &plan, &[fixed], &positions, cap,
+            ) != Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
+                limit: cap,
+            })
+        {
+            return Err(format!("case {case} truncated instead of refusing"));
+        }
+    }
+    if clear < 100 || intersects < 100 || overflows < 100 {
+        return Err(format!(
+            "incomplete footprint classes: {clear}/{intersects}/{overflows}"
+        ));
+    }
+
+    let positioned = checked(Rect {
+        x: Length::from_micrometres(x + 10_000),
+        y: Length::from_micrometres(y + 5_000),
+        width: Length::from_micrometres(20_000),
+        height: Length::from_micrometres(30_000),
+    })?;
+    let report = fixed_row_footprint_overlaps_for_flow(
+        &plan, &[positioned.clone(), positioned], &positions, 4,
+    ).map_err(|error| format!("ordered footprint report: {error:?}"))?;
+    assert_eq!(
+        report.iter().map(|overlap| (
+            overlap.fixed_index(), overlap.source().fragment,
+        )).collect::<Vec<_>>(),
+        vec![(0, 0), (0, 2), (1, 0), (1, 2)],
+    );
+    Ok(())
+}
+
+#[test]
+fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
+-> Result<(), String> {
+    use atrament_semantic_flow_pagination::{
+        RowHorizontalPosition, fixed_row_footprint_overlaps_for_flow,
+    };
+
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("positioned-row refusal fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing accepted revision")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let plan = paginate_revision(
+        accepted, &measurement(revision, flow, owner, &[(20_000, 10_000)]),
+    ).map_err(|error| format!("reference measured row: {error:?}"))?;
+    let row = *plan.placements().first().ok_or("missing placed row")?;
+    let x = row.writable.x.micrometres();
+    let y = row.top.micrometres();
+    let w = row.writable.width.micrometres();
+    let check = |rectangle| {
+        validate_fixed_placement(accepted, AcceptedFixedPlacement {
+            object: owner, page, revision, rectangle,
+        }).map_err(|error| format!("checked fixed box: {error:?}"))
+    };
+    let area = |dx, dy, width, height| Rect {
+        x: Length::from_micrometres(x + dx),
+        y: Length::from_micrometres(y + dy),
+        width: Length::from_micrometres(width),
+        height: Length::from_micrometres(height),
+    };
+    let near_far_edge = check(area(w - 1_000, 0, 1_000, 1_000))?;
+    let overlaps = check(area(15_000, 5_000, 10_000, 2_000))?;
+    let invalid = check(area(w - 500, 0, 1_000, 1_000))?;
+    let position = RowHorizontalPosition {
+        revision, page, source: row.source,
+        left: Length::from_micrometres(x),
+    };
+    assert!(check_fixed_regions_for_flow(&plan, &[near_far_edge.clone()])
+        .is_err());
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &[near_far_edge], &[position], 0,
+        ),
+        Ok(vec![]),
+    );
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, std::slice::from_ref(&overlaps), &[position], 1,
+        ).map(|report| report.first().map(|item| item.intersection())),
+        Ok(Some(area(15_000, 5_000, 5_000, 2_000))),
+    );
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, std::slice::from_ref(&overlaps), &[position], 0,
+        ),
+        Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded { limit: 0 }),
+    );
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(&plan, &[], &[], 0),
+        Err(FlowFixedRegionError::RowPositionCountMismatch {
+            expected: 1, supplied: 0,
+        }),
+    );
+    let wrong = RowHorizontalPosition {
+        page: accepted_for(&mapping, fixture.page_two), ..position
+    };
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(&plan, &[], &[wrong], 0),
+        Err(FlowFixedRegionError::RowPositionMismatch {
+            index: 0, page, fragment_owner: owner, source: row.source,
+        }),
+    );
+    let other_revision = loop {
+        let id = ids.allocate_revision()
+            .map_err(|error| format!("revision: {error:?}"))?;
+        if id != revision { break id; }
+    };
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(&plan, &[], &[
+            RowHorizontalPosition { revision: other_revision, ..position }
+        ], 0),
+        Err(FlowFixedRegionError::RowPositionMismatch {
+            index: 0, page, fragment_owner: owner, source: row.source,
+        }),
+    );
+    let outside = RowHorizontalPosition {
+        left: Length::from_micrometres(x + w - 10_000), ..position
+    };
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(&plan, &[], &[outside], 0),
+        Err(FlowFixedRegionError::RowFootprintOverflow {
+            page, fragment_owner: owner, source: row.source,
+        }),
+    );
+    // All fixed geometry wins even when the cap is zero or row X is invalid.
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &[overlaps, invalid], &[outside], 0,
+        ),
+        Err(FlowFixedRegionError::FixedRegionOverflow {
+            page, object: owner,
+        }),
+    );
+    assert_eq!(session.current(), Some(accepted));
+    Ok(())
+}

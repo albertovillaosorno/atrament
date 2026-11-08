@@ -66,8 +66,8 @@ use atrament_physical_page_profile::{
     SheetSize,
 };
 use atrament_semantic_flow_pagination::{
-    FixedPairOverlap, FixedRowBandOverlap, FlowFixedRegionError,
-    RevisionFlowMeasurement,
+    FixedPairOverlap, FixedRowBandOverlap, FixedRowFootprintOverlap,
+    FlowFixedRegionError, RevisionFlowMeasurement, RowHorizontalPosition,
     SemanticPaginationError, SemanticPaginationPlan,
 };
 use atrament_semantic_fixed_region_layout::{
@@ -7421,6 +7421,12 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         ),
         Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
     );
+    assert_eq!(
+        empty_session.fixed_row_footprint_overlaps(
+            &measurement(revision), &[], &[], 0,
+        ),
+        Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
+    );
     let admitted = session
         .paginate_measured_flow_with_fixed_regions(&measurement(revision), &[])
         .map_err(|error| format!("base flow refused: {error:?}"))?;
@@ -7440,6 +7446,18 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         rectangle: bounds,
         revision: accepted_revision,
     };
+    let horizontal_position = |accepted_revision| RowHorizontalPosition {
+        revision: accepted_revision,
+        page,
+        source: row.source,
+        left: Length::from_micrometres(x + 1_000),
+    };
+    let trace_footprint = |overlap: FixedRowFootprintOverlap| (
+        overlap.revision(), overlap.flow(), overlap.page(),
+        overlap.fixed_index(), overlap.object(), overlap.fragment_owner(),
+        overlap.source(), overlap.intersection(),
+    );
+    let positioned_overlap = rectangle(x + 19_000, y + 5_000, 5_000, 2_000);
     let next_to_row =
         placement(revision, rectangle(x, y + 20_000, 5_000, 10_000));
     let near_far_edge = placement(
@@ -7571,6 +7589,36 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             FlowFixedRegionError::FixedRowLimitExceeded { limit: 1 },
         )),
     );
+    // Explicit horizontal row positions make a separate provisional box
+    // inspector more precise, without relaxing conservative band clearance.
+    assert_eq!(
+        session.fixed_row_footprint_overlaps(
+            &measurement(revision), &[near_far_edge],
+            &[horizontal_position(revision)], 0,
+        ),
+        Ok(vec![]),
+    );
+    assert_eq!(
+        session.fixed_row_footprint_overlaps(
+            &measurement(revision),
+            &[placement(revision, positioned_overlap)],
+            &[horizontal_position(revision)], 1,
+        ).map(|all| all.into_iter().map(trace_footprint).collect::<Vec<_>>()),
+        Ok(vec![(
+            revision, flow, page, 0, block, block, row.source,
+            rectangle(x + 19_000, y + 5_000, 2_000, 2_000),
+        )]),
+    );
+    assert_eq!(
+        session.fixed_row_footprint_overlaps(
+            &measurement(revision),
+            &[placement(revision, positioned_overlap)],
+            &[horizontal_position(revision)], 0,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRowFootprintLimitExceeded { limit: 0 },
+        )),
+    );
     // This complete report validates later fixed bounds before returning any
     // earlier row conflict; the existing blocking query keeps caller order.
     assert_eq!(
@@ -7650,6 +7698,19 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             )),
         );
         assert_eq!(
+            current_session.fixed_row_footprint_overlaps(
+                &measurement(revision),
+                &[placement(revision, positioned_overlap)],
+                &[horizontal_position(revision)], 1,
+            ),
+            Err(application::SessionFlowFixedRegionError::Pagination(
+                SemanticPaginationError::MeasurementRevisionMismatch {
+                    accepted: current,
+                    measured: revision,
+                },
+            )),
+        );
+        assert_eq!(
             current_session.fixed_row_band_overlaps(
                 &measurement(revision), &[near_far_edge], 1,
             ),
@@ -7718,6 +7779,29 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
     assert_eq!(fresh.placements(), admitted.placements());
     let inspect_fresh = |current_session: &application::SessionApplication,
                          current| {
+        assert_eq!(
+            current_session.fixed_row_footprint_overlaps(
+                &measurement(current),
+                &[placement(current, positioned_overlap)],
+                &[horizontal_position(revision)], 1,
+            ),
+            Err(application::SessionFlowFixedRegionError::Overlap(
+                FlowFixedRegionError::RowPositionMismatch {
+                    index: 0, page, fragment_owner: block, source: row.source,
+                },
+            )),
+        );
+        assert_eq!(
+            current_session.fixed_row_footprint_overlaps(
+                &measurement(current),
+                &[placement(current, positioned_overlap)],
+                &[horizontal_position(current)], 1,
+            ).map(|all| all.into_iter().map(trace_footprint).collect::<Vec<_>>()),
+            Ok(vec![(
+                current, flow, page, 0, block, block, row.source,
+                rectangle(x + 19_000, y + 5_000, 2_000, 2_000),
+            )]),
+        );
         assert_eq!(
             current_session.fixed_row_band_overlaps(
                 &measurement(current),

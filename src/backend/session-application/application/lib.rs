@@ -60,12 +60,12 @@ use atrament_media_job_session::{
     WaveformIntermediateIdentity,
 };
 use atrament_semantic_flow_pagination::{
-    FixedPairOverlap, FixedRowBandOverlap, FlowFixedRegionError,
-    RevisionFlowMeasurement,
+    FixedPairOverlap, FixedRowBandOverlap, FixedRowFootprintOverlap,
+    FlowFixedRegionError, RevisionFlowMeasurement, RowHorizontalPosition,
     SemanticPaginationError, SemanticPaginationPlan,
     check_fixed_regions_for_flow, first_fixed_pair_overlap_for_flow,
     fixed_pair_overlaps_for_flow, fixed_row_band_overlaps_for_flow,
-    paginate_revision,
+    fixed_row_footprint_overlaps_for_flow, paginate_revision,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -670,6 +670,33 @@ impl SessionApplication {
             self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
         fixed_row_band_overlaps_for_flow(&plan, &checked, max_overlaps)
             .map_err(SessionFlowFixedRegionError::Overlap)
+    }
+
+    /// Inspect explicit horizontal measured-row footprints on live authority.
+    ///
+    /// The caller supplies one exact revision/page/source-bound row position
+    /// per paginated fragment. Every proposed position and fixed rectangle is
+    /// checked before returning bounded physical intersection diagnostics.
+    /// Unlike the conservative fixed-row band gate, this optional query uses
+    /// caller-positioned measured row widths, **not** visible handwriting ink.
+    /// It cannot authorize collision-free Export or disable band clearance.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed missing-session, invalid measurement/fixed placement,
+    /// row position, physical overflow or result-cap refusal.
+    pub fn fixed_row_footprint_overlaps(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+        positions: &[RowHorizontalPosition],
+        max_overlaps: usize,
+    ) -> Result<Vec<FixedRowFootprintOverlap>, SessionFlowFixedRegionError> {
+        let (plan, checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &checked, positions, max_overlaps,
+        ).map_err(SessionFlowFixedRegionError::Overlap)
     }
 
     /// Inspect in-memory semantic Undo and Redo availability.

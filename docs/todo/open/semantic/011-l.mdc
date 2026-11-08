@@ -3175,3 +3175,25 @@ A separate live page-profile resize regression checks empty reports on the
 original wide profile, exact out-of-bounds refusal on the narrowed revision,
 restored empty reports after Undo and restored overflow after Redo. This is
 profile-geometry provenance, not semantic text measurement or export.
+
+## Explicit measured-row horizontal footprints (partial) — 2026-11-08
+
+A separate, read-only diagnostic now accepts one physical left coordinate per
+measured pagination row, each explicitly bound to the sealed accepted revision,
+page and source `(unit, fragment)`. The application first validates every
+supplied fixed rectangle and each horizontal row position against the actual
+writable page. It can then return complete, bounded two-dimensional physical
+intersections between the caller-positioned row **box** and supplied fixed
+regions, retaining the semantic owners, source and exact intersection geometry.
+Missing, stale, reordered or horizontally overflowing row positions refuse
+with typed errors; an over-limit result refuses without truncation.
+
+An independent 2,048-case u128 rectangle oracle checks exact source/geometry,
+zero-width measured rows, touch clearance and refusal caps. Current-session
+coverage verifies revision mismatch and fresh results after text edit, Undo and
+Redo. The existing conservative full-width row-band gate remains unchanged and
+can still flag a far-right fixed box that does not intersect an explicitly
+left-positioned measured row. This optional report is **not** proof of glyph
+ink contact or an approved layout policy: row positions remain caller-supplied,
+not derived from saved Markdown or handwriting. No native semantic PDF/PNG
+Export path is established by this change; ATR-P2-011 remains open.
