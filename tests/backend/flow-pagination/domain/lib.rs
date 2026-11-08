@@ -209,6 +209,26 @@ fn reference_mixed_units(
     Ok(placements)
 }
 
+// An independent reference derives sheet coverage from *reference*
+// placements and caller-supplied physical order, never from the plan under
+// test. It includes skipped pages but not unused trailing regions.
+fn reference_covered_pages(
+    pages: &[PageRegion<u64>],
+    placements: &[PlacedFragment<u64, u64>],
+) -> Vec<PageRegion<u64>> {
+    let Some(last) = placements.last() else {
+        return Vec::new();
+    };
+    let mut covered = Vec::new();
+    for page in pages {
+        covered.push(*page);
+        if page.page == last.page {
+            return covered;
+        }
+    }
+    panic!("reference placement outside supplied page authority");
+}
+
 #[test]
 fn mixed_policy_pagination_matches_reference_oracle() {
     const CASES: usize = 10_000;
@@ -260,14 +280,18 @@ fn mixed_policy_pagination_matches_reference_oracle() {
             units.push(unit(policy, fragments));
         }
 
-        let actual = paginate(&pages, &units).map(|plan| plan.placements);
+        let actual = paginate(&pages, &units);
         let expected = reference_mixed_units(&pages, &units);
-        if expected.is_ok() {
+        if let (Ok(plan), Ok(placements)) = (&actual, &expected) {
             saw_success = true;
+            assert_eq!(plan.covered_pages,
+                reference_covered_pages(&pages, placements),
+                "generated coverage case {case}");
         } else {
             saw_failure = true;
         }
-        assert_eq!(actual, expected, "generated case {case}");
+        assert_eq!(actual.map(|plan| plan.placements), expected,
+            "generated case {case}");
     }
     assert!(seen_page_counts.into_iter().all(|seen| seen));
     assert!(seen_unit_counts.into_iter().all(|seen| seen));
@@ -349,14 +373,20 @@ fn independent_pagination_matches_reference_oracle() {
                                         FlowUnitPolicy::Independent,
                                         fragments.clone(),
                                     )];
-                                    let actual = paginate(&pages, &units)
-                                        .map(|plan| plan.placements);
+                                    let actual = paginate(&pages, &units);
                                     let expected = reference_independent(
                                         &pages,
                                         &fragments,
                                     );
                                     outcomes.observe(&expected);
-                                    assert_eq!(actual, expected);
+                                    if let (Ok(plan), Ok(placements)) =
+                                        (&actual, &expected) {
+                                        assert_eq!(plan.covered_pages,
+                                            reference_covered_pages(
+                                                &pages, placements));
+                                    }
+                                    assert_eq!(actual.map(|p| p.placements),
+                                        expected);
                                     cases += 1;
                                 }
                             }
@@ -510,15 +540,23 @@ fn keep_together_pagination_matches_fresh_page_reference_oracle() {
                                             let actual = paginate(
                                                 &pages,
                                                 &units,
-                                            )
-                                            .map(|plan| plan.placements);
+                                            );
                                             let expected =
                                                 reference_keep_together_fresh(
                                                     &pages,
                                                     &fragments,
                                                 );
                                             outcomes.observe(&expected);
-                                            assert_eq!(actual, expected);
+                                            if let (Ok(plan), Ok(placements)) =
+                                                (&actual, &expected) {
+                                                assert_eq!(plan.covered_pages,
+                                                    reference_covered_pages(
+                                                        &pages, placements));
+                                            }
+                                            assert_eq!(
+                                                actual.map(|p| p.placements),
+                                                expected,
+                                            );
                                             cases += 1;
                                         }
                                     }
@@ -950,11 +988,12 @@ fn keep_group_skips_narrow_page_for_earliest_whole_fit() {
 
 #[test]
 fn covered_pages_stop_at_last_ink_not_unused_trailing_paper() {
+    // Page identities need not sort like the physical sheet order.
     let mut pages = [
-        page(1, 0, 100, 100),
-        page(2, 1_000, 30, 100),
-        page(3, 2_000, 100, 100),
-        page(4, 3_000, 100, 100),
+        page(91, 0, 100, 100),
+        page(8, 1_000, 30, 100),
+        page(45, 2_000, 100, 100),
+        page(3, 3_000, 100, 100),
     ];
     pages[1].writable.x = Length::from_micrometres(55);
     pages[2].writable.x = Length::from_micrometres(75);
@@ -968,7 +1007,7 @@ fn covered_pages_stop_at_last_ink_not_unused_trailing_paper() {
     let plan = paginate(&pages, &units).expect("covered physical pages");
     assert_eq!(plan.covered_pages, pages[..3]);
     assert_eq!(plan.placements.iter().map(|p| p.page)
-        .collect::<Vec<_>>(), [1, 3, 3]);
+        .collect::<Vec<_>>(), [91, 45, 45]);
 }
 
 #[test]

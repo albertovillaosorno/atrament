@@ -2729,3 +2729,17 @@ still refuse without substituting an unrelated accepted revision.
 This verifies session authority for page-region metadata, not a persistent
 semantic text compiler or notebook PDF/PNG export pathway. The P1 milestone
 remains open.
+
+## Exhaustive reference checks for covered-page order (partial) — 2026-11-07
+
+Independent reference oracles now verify the new `covered_pages` projection
+alongside fragment placement in 10,000 deterministic mixed-policy fixtures,
+1,296 independent fixtures, and 5,184 keep-together fixtures. Expected page
+coverage comes from the separate reference placements and original ordered
+page regions, not from the paginator's own reported coverage. A regression
+also verifies that stable page identities need not sort like physical sheet
+order, and that unused trailing sheets stay excluded.
+
+These checks strengthen sheet-order evidence only. Persisted semantic content
+still is not measured and rendered to native PDF/PNG by this flow capability;
+the P1 end-to-end acceptance criterion remains open.
