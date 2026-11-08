@@ -2144,6 +2144,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     };
     let positions = |revision| plan.placements().iter().map(|row| {
         RowHorizontalPosition {
+            flow,
             left: Length::from_micrometres(80_000),
             page: row.page,
             revision,
@@ -7526,6 +7527,7 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         revision: accepted_revision,
     };
     let horizontal_position = |accepted_revision| RowHorizontalPosition {
+        flow,
         revision: accepted_revision,
         page,
         source: row.source,

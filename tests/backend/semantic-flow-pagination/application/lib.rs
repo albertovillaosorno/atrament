@@ -3708,6 +3708,7 @@ fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
     // row on the covered-but-unplaced page. Source identity remains intact
     // when a later row jumps from the first to the third physical page.
     let positions = plan.placements().iter().map(|row| RowHorizontalPosition {
+        flow: selected,
         left: row.writable.x,
         page: row.page,
         revision,
@@ -4332,6 +4333,7 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
     let width = region.width.micrometres();
     let positions = plan.placements().iter().zip([5_000, 12_000, 25_000])
         .map(|(row, offset)| RowHorizontalPosition {
+            flow,
             revision,
             page: row.page,
             source: row.source,
@@ -4462,7 +4464,14 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
     };
 
     let ids = IdentityAllocator::new();
-    let fixture = candidate_fixture(&ids);
+    let mut fixture = candidate_fixture(&ids);
+    let other_flow_candidate = ids.allocate_candidate()
+        .map_err(|error| format!("other flow identity: {error:?}"))?;
+    fixture.notebook.pages.get_mut(1).ok_or("second page missing")?
+        .flows.push(Flow {
+            blocks: vec![],
+            id: other_flow_candidate,
+        });
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(fixture.notebook)
@@ -4471,6 +4480,7 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
     };
     let accepted = session.current().ok_or("missing accepted revision")?;
     let flow = accepted_for(&mapping, fixture.flow);
+    let other_flow = accepted_for(&mapping, other_flow_candidate);
     let owner = accepted_for(&mapping, fixture.block);
     let page = accepted_for(&mapping, fixture.page_one);
     let plan = paginate_revision(
@@ -4495,7 +4505,7 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
     let overlaps = check(area(15_000, 5_000, 10_000, 2_000))?;
     let invalid = check(area(w - 500, 0, 1_000, 1_000))?;
     let position = RowHorizontalPosition {
-        revision, page, source: row.source,
+        flow, revision, page, source: row.source,
         left: Length::from_micrometres(x),
     };
     assert!(check_fixed_regions_for_flow(&plan, &[near_far_edge.clone()])
@@ -4522,6 +4532,14 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
         fixed_row_footprint_overlaps_for_flow(&plan, &[], &[], 0),
         Err(FlowFixedRegionError::RowPositionCountMismatch {
             expected: 1, supplied: 0,
+        }),
+    );
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(&plan, &[], &[
+            RowHorizontalPosition { flow: other_flow, ..position }
+        ], 0),
+        Err(FlowFixedRegionError::RowPositionMismatch {
+            index: 0, page, fragment_owner: owner, source: row.source,
         }),
     );
     let wrong = RowHorizontalPosition {

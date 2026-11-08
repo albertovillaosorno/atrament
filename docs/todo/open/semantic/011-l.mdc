@@ -3219,3 +3219,12 @@ claiming that middle page is refused with the expected third-page owner and
 source, and a conflicting checked writable rectangle on the middle page still
 refuses before bounded report collection. This does not change the rule that
 unmeasured occupied page ink must never be overwritten by another flow.
+
+## Explicit measured-flow identity for positioned rows — 2026-11-08
+
+Each caller-positioned row now also carries the accepted selected-flow identity
+in addition to its revision, page and `(unit, fragment)` source. Full proposal
+validation refuses a different accepted flow even if its revision, page and
+fragment source happen to match. This avoids treating a row index from a
+separate flow as horizontal evidence for the selected measured plan; the query
+remains diagnostic-only and cannot establish real handwriting-ink bounds.

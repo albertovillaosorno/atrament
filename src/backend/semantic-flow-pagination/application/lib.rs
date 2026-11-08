@@ -361,11 +361,13 @@ impl FixedRowBandOverlap {
 
 /// Caller-selected physical X position for one exact measured flow row.
 ///
-/// The plan owns the row's accepted revision, page, source and physical size.
+/// The plan owns the row's accepted revision, flow, page, source and size.
 /// This proposal supplies only horizontal placement, **not** measured ink
 /// geometry or proof that visible glyphs occupy the resulting rectangle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RowHorizontalPosition {
+    /// Accepted selected flow whose measured source row is positioned.
+    pub flow: AcceptedIdentity,
     /// Absolute physical X origin for this row in micrometres.
     pub left: Length,
     /// Accepted page receiving this measured row.
@@ -671,7 +673,7 @@ pub fn fixed_row_band_overlaps_for_flow(
 /// Inspect caller-positioned measured row boxes against checked fixed regions.
 ///
 /// Unlike conservative full-width row bands, each horizontal row position
-/// explicitly identifies the sealed plan's revision, physical page and source
+/// explicitly identifies the sealed plan's revision, flow, page and source
 /// in physical placement order. Only the measured row `width` and `height`
 /// form its provisional footprint. Zero-width rows and boundary touches have
 /// no positive-area intersection. Every fixed rectangle and every row proposal
@@ -805,6 +807,7 @@ fn validate_row_horizontal_positions(
         .iter().zip(positions).enumerate()
     {
         if position.revision != plan.revision()
+            || position.flow != plan.flow()
             || position.page != row.page
             || position.source != row.source
         {
