@@ -109,6 +109,8 @@ fn reference_independent(
                     page: current.page,
                     writable_left: current.writable.x,
                     writable_width: current.writable.width,
+                    writable_top: current.writable.y,
+                    writable_height: current.writable.height,
                     top: Length::from_micrometres(top),
                     width: fragment.width,
                 });
@@ -412,6 +414,8 @@ fn reference_place_fragment(
                 page: page.page,
                 writable_left: page.writable.x,
                 writable_width: page.writable.width,
+                writable_top: page.writable.y,
+                writable_height: page.writable.height,
                 top: Length::from_micrometres(
                     page.writable.y.micrometres() + cursor.used_height,
                 ),
@@ -466,6 +470,8 @@ fn reference_keep_together_fresh(
             page: page.page,
             writable_left: page.writable.x,
             writable_width: page.writable.width,
+            writable_top: page.writable.y,
+            writable_height: page.writable.height,
             top: Length::from_micrometres(top),
             width: fragment.width,
         });
@@ -592,6 +598,8 @@ fn reference_prefix_then_keep(
                 page: page.page,
                 writable_left: page.writable.x,
                 writable_width: page.writable.width,
+                writable_top: page.writable.y,
+                writable_height: page.writable.height,
                 top: Length::from_micrometres(
                     page.writable.y.micrometres() + cursor.used_height,
                 ),
@@ -719,6 +727,8 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             page: 11,
             writable_left: Length::from_micrometres(10),
             writable_width: Length::from_micrometres(100),
+            writable_top: Length::from_micrometres(1_000),
+            writable_height: Length::from_micrometres(100),
             top: Length::from_micrometres(1_000),
             width: Length::from_micrometres(50),
         },
@@ -728,6 +738,8 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             page: 11,
             writable_left: Length::from_micrometres(10),
             writable_width: Length::from_micrometres(100),
+            writable_top: Length::from_micrometres(1_000),
+            writable_height: Length::from_micrometres(100),
             top: Length::from_micrometres(1_060),
             width: Length::from_micrometres(80),
         },
@@ -737,6 +749,8 @@ fn independent_fragments_fill_then_advance_in_semantic_order() {
             page: 12,
             writable_left: Length::from_micrometres(10),
             writable_width: Length::from_micrometres(100),
+            writable_top: Length::from_micrometres(2_000),
+            writable_height: Length::from_micrometres(100),
             top: Length::from_micrometres(2_000),
             width: Length::from_micrometres(70),
         },
@@ -801,6 +815,45 @@ fn placed_fragments_retain_each_selected_pages_writable_horizontal_bounds() {
             );
             assert_eq!(plan.placements[position + 1].page, page);
         }
+    }
+}
+
+#[test]
+fn placed_fragments_retain_page_vertical_bounds_across_layout_policies() {
+    let pages = [page(1, 310, 100, 50), page(2, 640, 80, 80)];
+    for policy in [
+        FlowUnitPolicy::Independent,
+        FlowUnitPolicy::KeepTogetherWhenPossible,
+    ] {
+        let units = [
+            unit(FlowUnitPolicy::Independent, vec![fragment(1, 20, 30)]),
+            unit(policy, vec![fragment(2, 20, 15), fragment(3, 20, 15)]),
+        ];
+        let plan = paginate(&pages, &units).expect("valid measured placements");
+        assert_eq!(plan.placements.len(), 3);
+        let expected_pages = if policy == FlowUnitPolicy::Independent {
+            [1, 1, 2]
+        } else {
+            [1, 2, 2]
+        };
+        for (placement, expected_page) in
+            plan.placements.iter().zip(expected_pages)
+        {
+            let source = pages
+                .iter()
+                .find(|page| page.page == expected_page)
+                .expect("expected page exists");
+            assert_eq!(placement.page, expected_page);
+            assert_eq!(placement.writable_top, source.writable.y);
+            assert_eq!(placement.writable_height, source.writable.height);
+            assert!(placement.top >= placement.writable_top);
+            assert!(
+                placement.top.micrometres() + placement.height.micrometres()
+                    <= placement.writable_top.micrometres()
+                        + placement.writable_height.micrometres()
+            );
+        }
+        assert_eq!(plan.placements[0].top, Length::from_micrometres(310));
     }
 }
 
@@ -1048,6 +1101,8 @@ fn zero_width_positive_height_fragment_reserves_vertical_space() {
                 page: 1,
                 writable_left: Length::from_micrometres(10),
                 writable_width: Length::from_micrometres(100),
+                writable_top: Length::from_micrometres(500),
+                writable_height: Length::from_micrometres(100),
                 top: Length::from_micrometres(500),
                 width: Length::ZERO,
             },
@@ -1057,6 +1112,8 @@ fn zero_width_positive_height_fragment_reserves_vertical_space() {
                 page: 1,
                 writable_left: Length::from_micrometres(10),
                 writable_width: Length::from_micrometres(100),
+                writable_top: Length::from_micrometres(500),
+                writable_height: Length::from_micrometres(100),
                 top: Length::from_micrometres(520),
                 width: Length::from_micrometres(10),
             },

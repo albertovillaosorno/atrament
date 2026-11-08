@@ -2649,3 +2649,22 @@ reference oracles also compare the new field for all placements.
 
 This supplies geometry metadata only: it does not choose horizontal alignment,
 measure Markdown, persist semantic content or complete native PDF/PNG export.
+
+## Measured placement vertical writable bounds (partial) — 2026-11-07
+
+Each measured placement now carries the selected physical page's exact
+writable-top origin and writable height. The source page rectangle remains
+explicit even after other fragments have advanced the placement top: downstream
+consumers can distinguish accumulated vertical flow offset from available
+page capacity without re-reading a possibly different profile.
+
+A failing-before-fix pure Rust test covers independent and keep-together page
+turns with differing writable origins and heights. Revision-bound semantic
+acceptance tests project two distinct valid top clearances (20/40-mm writable
+tops and 267/247-mm writable heights) while retaining their independently
+measured fragment placements. Existing independent and mixed-policy reference
+oracles compare both new bounds for every emitted placement.
+
+This is bounded physical layout metadata. It neither measures glyph ink nor
+persists a semantic body or connects that body to native PDF/PNG output; the
+P1 two-page saved-notebook acceptance criterion remains open.

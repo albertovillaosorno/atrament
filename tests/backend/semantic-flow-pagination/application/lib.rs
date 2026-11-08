@@ -681,6 +681,8 @@ fn measured_flow_spills_to_next_accepted_page_in_notebook_order() {
     let ids = IdentityAllocator::new();
     let mut fixture = candidate_fixture(&ids);
     fixture.notebook.page_profiles[1].geometry = geometry(40_000);
+    fixture.notebook.page_profiles[1].geometry.top_clearance =
+        Length::from_micrometres(30_000);
     let mut session = SemanticNotebookSessionService::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept(fixture.notebook)
@@ -719,7 +721,23 @@ fn measured_flow_spills_to_next_accepted_page_in_notebook_order() {
         plan.placements.get(1).map(|placed| placed.writable_width),
         Some(Length::from_micrometres(145_000))
     );
-    assert_eq!(plan.placements[1].top, Length::from_micrometres(20_000));
+    assert_eq!(plan.placements[1].top, Length::from_micrometres(40_000));
+    assert_eq!(
+        plan.placements[0].writable_top,
+        Length::from_micrometres(20_000)
+    );
+    assert_eq!(
+        plan.placements[1].writable_top,
+        Length::from_micrometres(40_000)
+    );
+    assert_eq!(
+        plan.placements[0].writable_height,
+        Length::from_micrometres(267_000)
+    );
+    assert_eq!(
+        plan.placements[1].writable_height,
+        Length::from_micrometres(247_000)
+    );
 }
 
 #[test]
