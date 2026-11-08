@@ -96,6 +96,10 @@ pub struct PlacedFragment<Identity, PageIdentity> {
 /// Complete vertical flow pagination result in semantic reading order.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PaginationPlan<Identity, PageIdentity> {
+    /// Ordered page prefix through the last placed fragment, including
+    /// skipped pages with no ink from this flow. Does not include trailing
+    /// unused pages or pages preceding the supplied region sequence.
+    pub covered_pages: Vec<PageRegion<PageIdentity>>,
     /// Ordered placements; one output exists for every measured fragment.
     pub placements: Vec<PlacedFragment<Identity, PageIdentity>>,
 }
@@ -176,6 +180,7 @@ where
 {
     if units.iter().all(|unit| unit.fragments.is_empty()) {
         return Ok(PaginationPlan {
+            covered_pages: Vec::new(),
             placements: Vec::new(),
         });
     }
@@ -217,7 +222,13 @@ where
             },
         }
     }
-    Ok(PaginationPlan { placements })
+    Ok(PaginationPlan {
+        covered_pages: pages.iter()
+            .take(cursor.page_index.saturating_add(1))
+            .copied()
+            .collect(),
+        placements,
+    })
 }
 
 const fn advance_cursor(cursor: &mut Cursor) -> bool {

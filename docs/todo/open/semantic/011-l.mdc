@@ -2695,3 +2695,24 @@ reduces width to 85 mm, and Undo restores the original rectangle. This
 validates the read-only session adapter does not discard page-profile bounds
 or reuse stale geometry after an accepted revision change. The measured
 fragment and semantic persistence-to-native-export gap are unchanged.
+
+## Ordered page coverage in measured plans (partial) — 2026-11-07
+
+The independent Rust paginator now returns an ordered `covered_pages` prefix
+of the supplied physical page regions through the final ink placement. It
+retains the exact `Rect` for intermediate sheets skipped by keep-together or
+width constraints, rather than inferring a consecutive page count from the
+placement owners alone. Trailing unused sheets are omitted. Empty measured
+flows cover no pages and still need no valid page-region authority.
+
+Pure regressions verify skipped pages with different physical left edges and
+an unused trailing sheet. Revision-bound regressions verify that covered
+pages start at the selected flow's owning sheet and preserve all accepted
+profile rectangles, even for a skipped sheet occupied by another flow.
+`covered_pages` indicates this selected flow's page span, **not** that a
+skipped sheet is globally empty: other accepted flow owners retain their
+content.
+
+The contract enables future sheet-order-aware output composition; it does not
+measure semantic text, implement multi-flow composition, or connect accepted
+notebook state to native PDF/PNG export. P1 remains open.

@@ -679,6 +679,7 @@ fn keep_together_remainder_matches_reference_oracle() {
 fn empty_flow_needs_no_page_authority() {
     let plan = paginate::<u64, u64>(&[], &[]).expect("empty flow");
     assert!(plan.placements.is_empty());
+    assert!(plan.covered_pages.is_empty());
 
     let invalid_pages = [PageRegion {
         page: 7_u64,
@@ -696,6 +697,7 @@ fn empty_flow_needs_no_page_authority() {
     let plan = paginate(&invalid_pages, &empty_units)
         .expect("empty measured flow must not inspect unused page authority");
     assert!(plan.placements.is_empty());
+    assert!(plan.covered_pages.is_empty());
 }
 
 #[test]
@@ -942,6 +944,31 @@ fn keep_group_skips_narrow_page_for_earliest_whole_fit() {
     let plan = paginate(&pages, &units).expect("heterogeneous pages");
     assert_eq!(plan.placements[1].page, 3);
     assert_eq!(plan.placements[2].page, 3);
+    // The sheet skipped by ink remains an ordered part of the physical plan.
+    assert_eq!(plan.covered_pages, pages);
+}
+
+#[test]
+fn covered_pages_stop_at_last_ink_not_unused_trailing_paper() {
+    let mut pages = [
+        page(1, 0, 100, 100),
+        page(2, 1_000, 30, 100),
+        page(3, 2_000, 100, 100),
+        page(4, 3_000, 100, 100),
+    ];
+    pages[1].writable.x = Length::from_micrometres(55);
+    pages[2].writable.x = Length::from_micrometres(75);
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 80)]),
+        unit(FlowUnitPolicy::KeepTogetherWhenPossible, vec![
+            fragment(2, 60, 20),
+            fragment(3, 80, 20),
+        ]),
+    ];
+    let plan = paginate(&pages, &units).expect("covered physical pages");
+    assert_eq!(plan.covered_pages, pages[..3]);
+    assert_eq!(plan.placements.iter().map(|p| p.page)
+        .collect::<Vec<_>>(), [1, 3, 3]);
 }
 
 #[test]

@@ -2725,6 +2725,9 @@ fn flow_owned_by_second_page_never_backfills_first_page() {
     .expect("second-page flow");
     assert_eq!(plan.placements.len(), 1);
     assert_eq!(plan.placements[0].page, second_page);
+    // The selected flow starts here, not on the preceding notebook page.
+    assert_eq!(plan.covered_pages.iter().map(|p| p.page)
+        .collect::<Vec<_>>(), [second_page]);
 }
 
 fn add_unmeasured_flow(
@@ -2904,6 +2907,28 @@ fn occupied_narrow_page_skipped_by_flow_remains_untouched()
         };
         let plan = paginate_revision(&accepted, &measurement)
             .map_err(|error| format!("skipped page refused: {error:?}"))?;
+        if plan.covered_pages.iter().map(|p| p.page)
+            .collect::<Vec<_>>() != [first, skipped, third_page] {
+            return Err(format!("covered page sequence mismatch: {policy:?}"));
+        }
+        for covered in &plan.covered_pages {
+            let page = accepted.notebook.pages.iter()
+                .find(|page| page.id == covered.page)
+                .ok_or("covered page not accepted")?;
+            let profile = accepted.notebook.page_profiles.iter()
+                .find(|profile| profile.id == page.paper_profile)
+                .ok_or("covered page profile not accepted")?;
+            let expected = profile.geometry.validated()
+                .map_err(|reason| format!(
+                    "invalid covered profile: {reason:?}"
+                ))?
+                .writable_region();
+            if covered.writable != expected {
+                return Err(format!(
+                    "covered page geometry mismatch: {policy:?}"
+                ));
+            }
+        }
         if plan.placements.len() != 2
             || plan.placements.first().map(|placed| placed.page)
                 != Some(first)
