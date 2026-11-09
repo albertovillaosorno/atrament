@@ -9010,3 +9010,88 @@ fn live_footprints_refuse_source_reuse_across_same_revision_block_regrouping() {
     assert_eq!(session.accepted_revision().map(|current| current.id),
         Some(revision));
 }
+
+#[test]
+fn live_empty_width_row_still_requires_its_semantic_owner() {
+    let fixture_result = live_owner_regroup_fixture();
+    assert!(fixture_result.is_ok(),
+        "regrouping fixture: {:?}", fixture_result.as_ref().err());
+    let Ok(fixture) = fixture_result else { return };
+    let mut measurement = fixture.regrouped;
+    assert_eq!(measurement.units.first().map(|unit| unit.fragments.len()),
+        Some(2));
+    let Some(empty_row) = measurement.units.first_mut()
+        .and_then(|unit| unit.fragments.get_mut(1))
+    else {
+        return;
+    };
+    empty_row.width = Length::ZERO;
+    let mut wrong_positions = fixture.fresh_positions.clone();
+    assert_eq!(wrong_positions.len(), 3);
+    let Some(wrong_position) = wrong_positions.get_mut(1) else {
+        return;
+    };
+    wrong_position.fragment_owner = fixture.first_owner;
+    let mut wrong_selections = fixture.fresh_selections.clone();
+    assert_eq!(wrong_selections.len(), 3);
+    let Some(wrong_selection) = wrong_selections.get_mut(1) else {
+        return;
+    };
+    wrong_selection.fragment_owner = fixture.first_owner;
+    let position_mismatch = application::SessionFlowFixedRegionError::Overlap(
+        FlowFixedRegionError::RowPositionMismatch {
+            index: 1, page: fixture.page,
+            fragment_owner: fixture.changed_owner,
+            source: fixture.changed_source,
+        },
+    );
+    assert_eq!(
+        fixture.session.first_fixed_row_footprint_overlap(
+            &measurement, &fixture.fixed, &wrong_positions,
+        ),
+        Err(position_mismatch),
+    );
+    assert_eq!(
+        fixture.session.fixed_row_footprint_overlaps(
+            &measurement, &fixture.fixed, &wrong_positions, 0,
+        ),
+        Err(position_mismatch),
+    );
+    let alignment_mismatch =
+        application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowAlignmentMismatch {
+                index: 1, page: fixture.page,
+                fragment_owner: fixture.changed_owner,
+                source: fixture.changed_source,
+            },
+        );
+    assert_eq!(
+        fixture.session.first_selected_aligned_fixed_row_footprint_overlap(
+            &measurement, &fixture.fixed, &wrong_selections,
+        ),
+        Err(alignment_mismatch),
+    );
+    assert_eq!(
+        fixture.session.selected_aligned_fixed_row_footprint_overlaps(
+            &measurement, &fixture.fixed, &wrong_selections, 0,
+        ),
+        Err(alignment_mismatch),
+    );
+    let valid_result = fixture.session.first_fixed_row_footprint_overlap(
+        &measurement, &fixture.fixed, &fixture.fresh_positions,
+    );
+    assert!(valid_result.as_ref().is_ok_and(Option::is_some),
+        "valid earlier row must still intersect: {valid_result:?}");
+    let Ok(Some(valid_first)) = valid_result else { return };
+    assert_eq!(valid_first.intersection(), fixture.rectangle);
+    assert_eq!(valid_first.fragment_owner(), fixture.first_owner);
+    assert_eq!(valid_first.source(), fixture.first_source);
+    assert_eq!(
+        fixture.session.fixed_row_footprint_overlaps(
+            &measurement, &fixture.fixed, &fixture.fresh_positions, 1,
+        ).map(|hits| hits.first().copied()),
+        Ok(Some(valid_first)),
+    );
+    assert_eq!(fixture.session.accepted_revision()
+        .map(|current| current.id), Some(fixture.revision));
+}

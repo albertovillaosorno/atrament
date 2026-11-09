@@ -3481,3 +3481,13 @@ intersection and accepted provenance.
 This proves one read-only cross-owner admission boundary through the live
 application facade. It does not authenticate measured glyph ink, prevent
 same-owner remeasurement, persist alignment, or authorize semantic Export.
+
+## Live zero-width source-row ownership — 2026-11-09
+
+A session-level regression now changes only the second provisional measured
+row width to zero while keeping its accepted block owner, page and source.
+After an earlier first-row physical intersection, both first-hit and zero-cap
+reports still refuse a later position or alignment choice naming another
+block. With valid owner-bound positions, the first-row intersection is
+unchanged and the empty row adds no false positive. This strengthens read-only
+admission evidence without treating empty boxes as rendered glyph ink.
