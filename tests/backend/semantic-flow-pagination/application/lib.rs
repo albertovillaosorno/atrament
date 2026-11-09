@@ -5605,3 +5605,97 @@ fn mixed_alignment_refuses_reused_source_assigned_to_another_semantic_owner()
     assert_eq!(session.current(), Some(accepted));
     Ok(())
 }
+
+#[test]
+fn same_revision_remeasurement_requires_fresh_geometry_without_fixed_boxes() {
+    use atrament_semantic_flow_pagination::{
+        first_fixed_row_footprint_overlap_for_flow,
+        fixed_row_footprint_overlaps_for_flow,
+    };
+
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let acceptance = session.accept(fixture.notebook);
+    assert!(matches!(acceptance, AcceptanceOutcome::Accepted { .. }));
+    let AcceptanceOutcome::Accepted { mapping, revision } = acceptance else {
+        return;
+    };
+    let Some(accepted) = session.current() else { return };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let original_result = paginate_revision(
+        accepted, &measurement(revision, flow, owner, &[(20_000, 10_000)]),
+    );
+    let remeasured_result = paginate_revision(
+        accepted, &measurement(revision, flow, owner, &[(21_000, 10_000)]),
+    );
+    assert!(original_result.is_ok() && remeasured_result.is_ok());
+    let (Ok(original), Ok(remeasured)) = (original_result, remeasured_result) else {
+        return;
+    };
+    let (Some(old_row), Some(new_row)) = (
+        original.placements().first(),
+        remeasured.placements().first(),
+    ) else { return };
+    assert_eq!((old_row.owner, old_row.page, old_row.source),
+        (new_row.owner, new_row.page, new_row.source));
+    assert_ne!(old_row.width, new_row.width);
+    let old_positions_result = aligned_row_horizontal_positions_for_flow(
+        &original, RowHorizontalAlignment::Left,
+    );
+    assert!(old_positions_result.is_ok());
+    let Ok(old_positions) = old_positions_result else { return };
+    let rejected = FlowFixedRegionError::RowPositionMismatch {
+        index: 0, page: new_row.page,
+        fragment_owner: owner, source: new_row.source,
+    };
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &remeasured, &[], &old_positions,
+        ),
+        Err(rejected),
+    );
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &remeasured, &[], &old_positions, 0,
+        ),
+        Err(rejected),
+    );
+    let old_selection = [RowAlignmentSelection {
+        alignment: RowHorizontalAlignment::Left,
+        flow,
+        fragment_owner: owner,
+        geometry: MeasuredRowGeometry::from_placement(old_row),
+        page: old_row.page,
+        revision,
+        source: old_row.source,
+    }];
+    assert_eq!(
+        aligned_row_horizontal_positions_by_selection_for_flow(
+            &remeasured, &old_selection,
+        ),
+        Err(FlowFixedRegionError::RowAlignmentMismatch {
+            index: 0, page: new_row.page,
+            fragment_owner: owner, source: new_row.source,
+        }),
+    );
+    let fresh_positions_result = aligned_row_horizontal_positions_for_flow(
+        &remeasured, RowHorizontalAlignment::Left,
+    );
+    assert!(fresh_positions_result.is_ok());
+    let Ok(fresh_positions) = fresh_positions_result else { return };
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &remeasured, &[], &fresh_positions, 0,
+        ),
+        Ok(vec![]),
+    );
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &remeasured, &[], &fresh_positions,
+        ),
+        Ok(None),
+    );
+    assert_eq!(session.current(), Some(accepted));
+}

@@ -3515,3 +3515,10 @@ regression now explicitly rebinds changed geometry while retaining an
 out-of-bounds X coordinate, preserving that separate refusal. This remains a
 read-only measured-box admission rule, not verified handwriting ink, trusted
 measurement generation, persistent alignment or notebook Export support.
+
+The pure pagination boundary independently verifies that same-revision,
+same-owner, same-source width remeasurement refuses stale explicit X positions
+and alignment selections even with no fixed regions supplied. Fresh placements
+correctly produce an empty complete/first-hit report. Admission therefore does
+not depend on finding a collision, on the live session facade, or on a nonzero
+report cap.
