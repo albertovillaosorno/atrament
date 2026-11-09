@@ -3263,3 +3263,17 @@ placed beyond the right page edge. Each invalid batch must refuse with its
 exact row source, even at a zero diagnostic cap; invalid fixed geometry
 still takes precedence over all horizontal proposals. No source text or
 handwriting ink is inferred from these caller-provided X positions.
+
+## Many-row indexed footprints across physical pages — 2026-11-09
+
+A separate independent 2,048-case linear u128 rectangle oracle now checks
+positioned row-footprint inspection for 420 measured rows across two accepted
+physical pages, including zero-width rows and distinct horizontal origins.
+Fixed rectangles belong to their legitimate originating page; the oracle
+scans both pages to detect phantom overlap against spilled rows. It compares
+full intersection geometry, flow, revision, page, owner and source evidence
+without calling indexed row search.
+
+Random rectangles exercise empty, crossing, out-of-bounds and capped-result
+cases. This is a diagnostic-only geometry regression, not a persisted
+notebook or calibrated handwriting.

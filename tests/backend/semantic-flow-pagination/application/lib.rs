@@ -4533,6 +4533,189 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
 }
 
 #[test]
+fn indexed_positioned_footprints_match_linear_oracle_across_pages()
+-> Result<(), String> {
+    use atrament_semantic_flow_pagination::{
+        FixedRowFootprintOverlap, RowHorizontalPosition,
+        fixed_row_footprint_overlaps_for_flow,
+    };
+
+    const CASES: usize = 2_048;
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("multi-page footprint fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing accepted revision")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let mut sizes = vec![(15_000, 1_000); 420];
+    for index in [71, 300] {
+        sizes.get_mut(index).ok_or("zero-width row index missing")?.0 = 0;
+    }
+    let plan = paginate_revision(
+        accepted, &measurement(revision, flow, owner, &sizes),
+    ).map_err(|error| format!("many positioned rows: {error:?}"))?;
+    let [origin_region, spill_region] = plan.covered_pages() else {
+        return Err("expected exactly two covered pages".into());
+    };
+    if plan.placements().len() != sizes.len()
+        || !plan.placements().iter()
+            .any(|row| row.page == spill_region.page)
+    {
+        return Err("expected measured rows to span both pages".into());
+    }
+    let positions = plan.placements().iter().enumerate()
+        .map(|(index, row)| {
+            let writable_width = row.writable.width.micrometres();
+            let free = writable_width - row.width.micrometres();
+            let offset = if row.width == Length::ZERO {
+                free
+            } else {
+                u64::try_from(index).map_err(|error| error.to_string())?
+                    * 7_919 % (free + 1)
+            };
+            Ok(RowHorizontalPosition {
+                flow, revision, page: row.page, source: row.source,
+                left: Length::from_micrometres(
+                    row.writable.x.micrometres() + offset,
+                ),
+            })
+        }).collect::<Result<Vec<_>, String>>()?;
+    let trace = |overlap: FixedRowFootprintOverlap| {
+        (
+            overlap.revision(), overlap.flow(), overlap.page(),
+            overlap.fixed_index(), overlap.object(), overlap.fragment_owner(),
+            overlap.source(), overlap.intersection(),
+        )
+    };
+    let mut seed = 0x431a_203e_f576_7701;
+    let mut classes = [0usize; 3]; // clear, intersects, fixed overflow
+    for case in 0..CASES {
+        // Only the origin page owns this checked block. The independent
+        // spill page has measured rows but no fixed owner to forge.
+        let region = *origin_region;
+        let writable = region.writable;
+        let physical_left = writable.x.micrometres();
+        let physical_top = writable.y.micrometres();
+        let page_width = writable.width.micrometres();
+        let page_height = writable.height.micrometres();
+        let random_x = next_owner_oracle_value(&mut seed);
+        let random_y = next_owner_oracle_value(&mut seed);
+        let random_width = next_owner_oracle_value(&mut seed);
+        let random_height = next_owner_oracle_value(&mut seed);
+        let offset_x = if case % 17 == 0 {
+            page_width - 100
+        } else {
+            random_x % page_width
+        };
+        let offset_y = if case % 19 == 0 {
+            page_height - 100
+        } else {
+            random_y % page_height
+        };
+        let box_width = if case % 11 == 0 {
+            0
+        } else {
+            random_width % 14_000
+        };
+        let box_height = if case % 13 == 0 {
+            0
+        } else {
+            random_height % 24_000
+        };
+        let fixed = validate_fixed_placement(accepted, AcceptedFixedPlacement {
+            object: owner,
+            page: region.page,
+            revision,
+            rectangle: Rect {
+                x: Length::from_micrometres(physical_left + offset_x),
+                y: Length::from_micrometres(physical_top + offset_y),
+                width: Length::from_micrometres(box_width),
+                height: Length::from_micrometres(box_height),
+            },
+        }).map_err(|error| format!("case {case}: {error:?}"))?;
+        let actual = fixed_row_footprint_overlaps_for_flow(
+            &plan, std::slice::from_ref(&fixed), &positions, sizes.len(),
+        ).map(|all| all.into_iter().map(trace).collect::<Vec<_>>());
+        if offset_x + box_width > page_width
+            || offset_y + box_height > page_height
+        {
+            classes[2] += 1;
+            assert_eq!(
+                actual,
+                Err(FlowFixedRegionError::FixedRegionOverflow {
+                    page: region.page, object: owner,
+                }),
+            );
+            continue;
+        }
+        // Linear physical oracle deliberately traverses every placed row,
+        // including the other page; it never uses the indexed row visitor.
+        let mut expected = Vec::new();
+        for (row, position) in plan.placements().iter().zip(&positions) {
+            let left = u128::from(physical_left + offset_x)
+                .max(u128::from(position.left.micrometres()));
+            let right = u128::from(physical_left + offset_x + box_width).min(
+                u128::from(position.left.micrometres())
+                    + u128::from(row.width.micrometres()),
+            );
+            let top = u128::from(physical_top + offset_y)
+                .max(u128::from(row.top.micrometres()));
+            let bottom = u128::from(physical_top + offset_y + box_height).min(
+                u128::from(row.top.micrometres())
+                    + u128::from(row.height.micrometres()),
+            );
+            if row.page != region.page || left >= right || top >= bottom {
+                continue;
+            }
+            expected.push((
+                revision, flow, region.page, 0, owner, row.owner, row.source,
+                Rect {
+                    x: Length::from_micrometres(
+                        u64::try_from(left).map_err(|e| e.to_string())?,
+                    ),
+                    y: Length::from_micrometres(
+                        u64::try_from(top).map_err(|e| e.to_string())?,
+                    ),
+                    width: Length::from_micrometres(
+                        u64::try_from(right - left).map_err(|e| e.to_string())?,
+                    ),
+                    height: Length::from_micrometres(
+                        u64::try_from(bottom - top).map_err(|e| e.to_string())?,
+                    ),
+                },
+            ));
+        }
+        classes[usize::from(!expected.is_empty())] += 1;
+        if actual != Ok(expected.clone()) {
+            return Err(format!(
+                "case {case} indexed footprints: {actual:?} != {expected:?}"
+            ));
+        }
+        if !expected.is_empty() {
+            let limit = expected.len() - 1;
+            assert_eq!(
+                fixed_row_footprint_overlaps_for_flow(
+                    &plan, &[fixed], &positions, limit,
+                ),
+                Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
+                    limit,
+                }),
+            );
+        }
+    }
+    if classes.iter().any(|count| *count < 100) {
+        return Err(format!("incomplete multi-page footprints: {classes:?}"));
+    }
+    assert_eq!(session.current(), Some(accepted));
+    Ok(())
+}
+
+#[test]
 fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
 -> Result<(), String> {
     use atrament_semantic_flow_pagination::{
