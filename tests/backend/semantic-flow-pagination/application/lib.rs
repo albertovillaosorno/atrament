@@ -51,6 +51,7 @@ use atrament_semantic_flow_pagination::{
     RevisionFlowMeasurement,
     SemanticPaginationError, check_fixed_regions_for_flow,
     first_fixed_pair_overlap_for_flow, fixed_pair_overlaps_for_flow,
+    first_fixed_row_band_overlap_for_flow,
     fixed_row_band_overlaps_for_flow, paginate_revision,
 };
 use atrament_semantic_notebook::{
@@ -3508,6 +3509,23 @@ fn indexed_fixed_clearance_matches_linear_scan_across_many_measured_rows()
         let actual_bands = fixed_row_band_overlaps_for_flow(
             &plan, &[region.clone()], sizes.len(),
         ).map(|bands| bands.into_iter().map(trace).collect::<Vec<_>>());
+        // First-hit inspection uses the same accepted geometry but no cap.
+        // Independently compare it to the entire linear u128 oracle.
+        let first_band = first_fixed_row_band_overlap_for_flow(
+            &plan, &[region.clone()],
+        ).map(|first| first.map(trace));
+        if overflow {
+            assert_eq!(
+                first_band,
+                Err(FlowFixedRegionError::FixedRegionOverflow {
+                    page, object: owner,
+                }),
+            );
+        } else if first_band != Ok(expected_bands.first().copied()) {
+            return Err(format!(
+                "first row-band oracle case {case}: {first_band:?}"
+            ));
+        }
         if overflow {
             assert_eq!(
                 actual_bands,
@@ -3559,7 +3577,46 @@ fn indexed_fixed_clearance_matches_linear_scan_across_many_measured_rows()
             },
         })
         .map_err(|error| format!("final collision: {error:?}"))?;
-    empty_regions.push(collision);
+    empty_regions.push(collision.clone());
+    assert_eq!(
+        first_fixed_row_band_overlap_for_flow(&plan, &empty_regions)
+            .map(|hit| hit.map(|band| (
+                band.fixed_index(), band.revision(), band.flow(),
+                band.page(), band.source(), band.overlap_top(),
+            ))),
+        Ok(Some((
+            empty_regions.len() - 1, revision, flow, page,
+            first.source, first.top,
+        ))),
+    );
+    // Complete proposal admission must precede a first hit even if an
+    // earlier valid rectangle would otherwise terminate the search.
+    let invalid_later = validate_fixed_placement(
+        accepted,
+        AcceptedFixedPlacement {
+            object: owner,
+            page,
+            revision,
+            rectangle: Rect {
+                x: Length::from_micrometres(x),
+                y: first.top,
+                width: Length::from_micrometres(width + 1),
+                height: Length::from_micrometres(1_000),
+            },
+        },
+    ).map_err(|error| format!("later invalid fixed: {error:?}"))?;
+    assert_eq!(
+        first_fixed_row_band_overlap_for_flow(
+            &plan, &[collision.clone(), invalid_later.clone()],
+        ),
+        Err(FlowFixedRegionError::FixedRegionOverflow { page, object: owner }),
+    );
+    assert_eq!(
+        fixed_row_band_overlaps_for_flow(
+            &plan, &[collision, invalid_later], 0,
+        ),
+        Err(FlowFixedRegionError::FixedRegionOverflow { page, object: owner }),
+    );
     assert_eq!(
         check_fixed_regions_for_flow(&plan, &empty_regions),
         Err(FlowFixedRegionError::VerticalBandOverlap {

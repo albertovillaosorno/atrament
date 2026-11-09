@@ -3305,3 +3305,21 @@ Redo. On narrow revisions, even a fresh measured row source refuses an
 out-of-bounds horizontal origin, while a position from the earlier revision
 refuses with the exact mismatched source index. Undo restores the same
 physical intersection with freshly bound authority. No real ink is inferred.
+
+## First conservative row-band intersection on live authority — 2026-11-09
+
+A read-only first-hit query now returns the earliest conservative vertical
+intersection between a supplied checked fixed rectangle and a measured flow
+row, retaining the exact accepted revision, flow, page, fixed input index,
+semantic owners, source fragment and physical shared interval. It shares
+full fixed-batch validation and indexed row geometry with complete bounded
+row-band enumeration. Later invalid fixed proposals refuse before an earlier
+hit can escape, but later valid collisions do not require a report cap.
+
+The independent 4,096-case linear u128 interval oracle checks first-hit
+geometry and provenance alongside complete enumeration. Live-session checks
+cover empty state, untouched rows, duplicate fixed proposals, invalid late
+regions, text edit, fresh results after Undo and Redo, and stale revisions.
+The existing blocking first-failure gate retains its caller-order semantics.
+Full writable row bands remain possible conflicts, not measured glyph ink;
+no persistent semantic compiler or native Export path is established.

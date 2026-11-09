@@ -610,6 +610,32 @@ pub fn check_fixed_regions_for_flow(
     Ok(())
 }
 
+/// Find the first conservative fixed-versus-measured-row vertical overlap.
+///
+/// Every submitted checked fixed rectangle is admitted before inspecting rows,
+/// so a later stale, overflowing or inconsistent rectangle cannot hide behind
+/// an earlier intersection. The first result follows fixed input order and
+/// then physical measured-row order, and retains its original fixed index.
+/// Unlike complete bounded enumeration, later valid overlaps do not refuse.
+///
+/// The full writable row band is a *possible* conflict, not measured ink
+/// contact or a policy decision. This read-only result cannot authorize Export.
+///
+/// # Errors
+///
+/// Returns typed revision, bounds, writable-envelope or coordinate failures.
+pub fn first_fixed_row_band_overlap_for_flow(
+    plan: &SemanticPaginationPlan,
+    fixed_regions: &[FixedRegionLayoutResult],
+) -> Result<Option<FixedRowBandOverlap>, FlowFixedRegionError> {
+    let mut first = None;
+    visit_fixed_row_band_overlaps_for_flow(plan, fixed_regions, |overlap| {
+        first = Some(overlap);
+        false
+    })?;
+    Ok(first)
+}
+
 /// Inspect every physical fixed-versus-measured-row vertical interval.
 ///
 /// Unlike the blocking first-failure checker, this validates **all** supplied
@@ -633,21 +659,41 @@ pub fn fixed_row_band_overlaps_for_flow(
     fixed_regions: &[FixedRegionLayoutResult],
     max_overlaps: usize,
 ) -> Result<Vec<FixedRowBandOverlap>, FlowFixedRegionError> {
+    let mut overlaps = Vec::new();
+    let mut exceeded = false;
+    visit_fixed_row_band_overlaps_for_flow(plan, fixed_regions, |overlap| {
+        if overlaps.len() == max_overlaps {
+            exceeded = true;
+            return false;
+        }
+        overlaps.push(overlap);
+        true
+    })?;
+    if exceeded {
+        return Err(FlowFixedRegionError::FixedRowLimitExceeded {
+            limit: max_overlaps,
+        });
+    }
+    Ok(overlaps)
+}
+
+// First-only and complete capped reports share full-batch admission and the
+// same indexed row geometry. Early stop is permitted only after validation.
+fn visit_fixed_row_band_overlaps_for_flow(
+    plan: &SemanticPaginationPlan,
+    fixed_regions: &[FixedRegionLayoutResult],
+    mut visit: impl FnMut(FixedRowBandOverlap) -> bool,
+) -> Result<(), FlowFixedRegionError> {
     let writable_by_page = writable_index(plan);
     for fixed in fixed_regions {
         validate_fixed_region_for_flow(plan, fixed, &writable_by_page)?;
     }
     let rows_by_page = measured_row_index(plan);
-    let mut overlaps = Vec::new();
-    let mut exceeded = false;
     for (fixed_index, fixed) in fixed_regions.iter().enumerate() {
         if let Some(rows) = rows_by_page.get(&fixed.page()) {
+            let mut stopped = false;
             visit_fixed_measured_rows(fixed, rows, |row, top, height| {
-                if overlaps.len() == max_overlaps {
-                    exceeded = true;
-                    return false;
-                }
-                overlaps.push(FixedRowBandOverlap {
+                if !visit(FixedRowBandOverlap {
                     fixed_index,
                     flow: plan.flow(),
                     fragment_owner: row.owner,
@@ -657,17 +703,18 @@ pub fn fixed_row_band_overlaps_for_flow(
                     page: fixed.page(),
                     revision: plan.revision(),
                     source: row.source,
-                });
+                }) {
+                    stopped = true;
+                    return false;
+                }
                 true
             })?;
-        }
-        if exceeded {
-            return Err(FlowFixedRegionError::FixedRowLimitExceeded {
-                limit: max_overlaps,
-            });
+            if stopped {
+                return Ok(());
+            }
         }
     }
-    Ok(overlaps)
+    Ok(())
 }
 
 /// Inspect the first positive-area overlap of positioned rows and fixed boxes.

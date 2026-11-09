@@ -7543,6 +7543,12 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
     );
     assert_eq!(
+        empty_session.first_fixed_row_band_overlap(
+            &measurement(revision), &[],
+        ),
+        Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
+    );
+    assert_eq!(
         empty_session.fixed_row_footprint_overlaps(
             &measurement(revision), &[], &[], 0,
         ),
@@ -7691,6 +7697,31 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             &measurement(revision), &[next_to_row], 0,
         ),
         Ok(vec![]),
+    );
+    assert_eq!(
+        session.first_fixed_row_band_overlap(
+            &measurement(revision), &[next_to_row],
+        ),
+        Ok(None),
+    );
+    assert_eq!(
+        session.first_fixed_row_band_overlap(
+            &measurement(revision), &[near_far_edge, near_far_edge],
+        ).map(|first| first.map(trace_band)),
+        Ok(Some((
+            revision, flow, page, 0, block, block, row.source,
+            Length::from_micrometres(y + 1),
+            Length::from_micrometres(1_000),
+        ))),
+    );
+    // Later invalid fixed geometry must not be hidden by the first hit.
+    assert_eq!(
+        session.first_fixed_row_band_overlap(
+            &measurement(revision), &[near_far_edge, outside],
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow { page, object: block },
+        )),
     );
     assert_eq!(
         session.fixed_row_band_overlaps(
@@ -7883,6 +7914,17 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             )),
         );
         assert_eq!(
+            current_session.first_fixed_row_band_overlap(
+                &measurement(revision), &[near_far_edge],
+            ),
+            Err(application::SessionFlowFixedRegionError::Pagination(
+                SemanticPaginationError::MeasurementRevisionMismatch {
+                    accepted: current,
+                    measured: revision,
+                },
+            )),
+        );
+        assert_eq!(
             current_session.fixed_pair_overlaps(
                 &measurement(revision), &[next_to_row, layered], 1
             ),
@@ -7986,6 +8028,21 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
                 Length::from_micrometres(y + 1),
                 Length::from_micrometres(1_000),
             )]),
+        );
+        assert_eq!(
+            current_session.first_fixed_row_band_overlap(
+                &measurement(current),
+                &[
+                    placement(current, next_to_row.rectangle),
+                    placement(current, near_far_edge.rectangle),
+                    placement(current, near_far_edge.rectangle),
+                ],
+            ).map(|first| first.map(trace_band)),
+            Ok(Some((
+                current, flow, page, 1, block, block, row.source,
+                Length::from_micrometres(y + 1),
+                Length::from_micrometres(1_000),
+            ))),
         );
         let result = current_session.first_fixed_pair_overlap(
             &measurement(current),

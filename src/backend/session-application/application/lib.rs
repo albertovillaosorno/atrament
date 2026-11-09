@@ -64,6 +64,7 @@ use atrament_semantic_flow_pagination::{
     FlowFixedRegionError, RevisionFlowMeasurement, RowHorizontalPosition,
     SemanticPaginationError, SemanticPaginationPlan,
     check_fixed_regions_for_flow, first_fixed_pair_overlap_for_flow,
+    first_fixed_row_band_overlap_for_flow,
     first_fixed_row_footprint_overlap_for_flow,
     fixed_pair_overlaps_for_flow, fixed_row_band_overlaps_for_flow,
     fixed_row_footprint_overlaps_for_flow, paginate_revision,
@@ -622,6 +623,30 @@ impl SessionApplication {
         let (plan, checked) =
             self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
         first_fixed_pair_overlap_for_flow(&plan, &checked)
+            .map_err(SessionFlowFixedRegionError::Overlap)
+    }
+
+    /// Inspect the first conservative fixed-versus-measured-row overlap.
+    ///
+    /// All fixed proposals are checked against live accepted geometry before
+    /// the first indexed row-band observation is returned. Unlike the blocking
+    /// clearance checker, this yields a sealed fixed index, flow and revision;
+    /// unlike complete enumeration, additional valid overlaps are not errors.
+    /// The full writable row band is **not** evidence of actual ink contact.
+    /// This read-only query cannot authorize Export.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed missing-session, measurement, checked-placement or
+    /// physical geometry refusal before any observation is returned.
+    pub fn first_fixed_row_band_overlap(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+    ) -> Result<Option<FixedRowBandOverlap>, SessionFlowFixedRegionError> {
+        let (plan, checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
+        first_fixed_row_band_overlap_for_flow(&plan, &checked)
             .map_err(SessionFlowFixedRegionError::Overlap)
     }
 
