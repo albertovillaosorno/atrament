@@ -67,8 +67,8 @@ use atrament_physical_page_profile::{
 };
 use atrament_semantic_flow_pagination::{
     FixedPairOverlap, FixedRowBandOverlap, FixedRowFootprintOverlap,
-    FlowFixedRegionError, RevisionFlowMeasurement, RowHorizontalAlignment,
-    RowHorizontalPosition,
+    FlowFixedRegionError, RevisionFlowMeasurement, RowAlignmentSelection,
+    RowHorizontalAlignment, RowHorizontalPosition,
     SemanticPaginationError, SemanticPaginationPlan,
 };
 use atrament_semantic_fixed_region_layout::{
@@ -8393,5 +8393,168 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
             .revision(),
         redone,
     );
+    Ok(())
+}
+
+#[test]
+fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
+-> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let (candidate, span_candidate) =
+        editable_text_candidate(&ids, "mixed alignment");
+    let source_page = candidate.pages.first().ok_or("no page")?;
+    let page_candidate = source_page.id;
+    let flow_candidate = source_page.flows[0].id;
+    let block_candidate = source_page.flows[0].blocks[0].id;
+    let mut session = application::SessionApplication::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept_candidate(candidate)
+    else {
+        return Err("mixed session candidate refused".into());
+    };
+    let accepted = |source| {
+        mapping.iter().find(|entry| entry.candidate == source)
+            .map(|entry| entry.accepted).ok_or("mapping missing")
+    };
+    let page = accepted(page_candidate)?;
+    let flow = accepted(flow_candidate)?;
+    let owner = accepted(block_candidate)?;
+    let span = accepted(span_candidate)?;
+    let measurement = |current| RevisionFlowMeasurement {
+        flow,
+        revision: current,
+        units: vec![MeasuredFlowUnit {
+            fragments: vec![
+                MeasuredFragment {
+                    height: Length::from_micrometres(30_000),
+                    owner,
+                    width: Length::from_micrometres(20_000),
+                },
+                MeasuredFragment {
+                    height: Length::from_micrometres(30_000),
+                    owner,
+                    width: Length::from_micrometres(30_000),
+                },
+            ],
+            policy: FlowUnitPolicy::Independent,
+        }],
+    };
+    let initial_plan = session.paginate_measured_flow(&measurement(revision))
+        .map_err(|error| format!("initial mixed plan: {error:?}"))?;
+    let rows = initial_plan.placements();
+    assert_eq!(rows.len(), 2);
+    let selections = |current| rows.iter()
+        .zip([RowHorizontalAlignment::Left, RowHorizontalAlignment::Center])
+        .map(|(row, alignment)| RowAlignmentSelection {
+            alignment,
+            flow,
+            page: row.page,
+            revision: current,
+            source: row.source,
+        })
+        .collect::<Vec<_>>();
+    let centered = rows[1].writable.x.micrometres()
+        + (rows[1].writable.width.micrometres()
+            - rows[1].width.micrometres()) / 2;
+    let bounds = Rect {
+        x: Length::from_micrometres(centered + 1_000),
+        y: Length::from_micrometres(rows[1].top.micrometres() + 2_000),
+        width: Length::from_micrometres(2_000),
+        height: Length::from_micrometres(3_000),
+    };
+    let fixed = |current| AcceptedFixedPlacement {
+        object: owner,
+        page,
+        rectangle: bounds,
+        revision: current,
+    };
+    let assert_hit = |current_session: &application::SessionApplication,
+                      current| {
+        let choice = selections(current);
+        let hit = current_session
+            .first_selected_aligned_fixed_row_footprint_overlap(
+                &measurement(current), &[fixed(current)], &choice,
+            )
+            .expect("current mixed choices admitted")
+            .expect("centered second row hit");
+        assert_eq!(hit.intersection(), bounds);
+        assert_eq!(hit.source(), rows[1].source);
+        assert_eq!(hit.revision(), current);
+        assert_eq!(
+            current_session.selected_aligned_fixed_row_footprint_overlaps(
+                &measurement(current), &[fixed(current)], &choice, 1,
+            ).map(|all| all.into_iter().map(|overlap| overlap.source())
+                .collect::<Vec<_>>()),
+            Ok(vec![rows[1].source]),
+        );
+        assert_eq!(
+            current_session.selected_aligned_fixed_row_footprint_overlaps(
+                &measurement(current), &[fixed(current)], &choice, 0,
+            ),
+            Err(application::SessionFlowFixedRegionError::Overlap(
+                FlowFixedRegionError::FixedRowFootprintLimitExceeded {
+                    limit: 0,
+                },
+            )),
+        );
+        assert_eq!(
+            current_session.first_selected_aligned_fixed_row_footprint_overlap(
+                &measurement(current), &[fixed(current)], &selections(revision),
+            ),
+            if current == revision {
+                Ok(Some(hit))
+            } else {
+                Err(application::SessionFlowFixedRegionError::Overlap(
+                    FlowFixedRegionError::RowAlignmentMismatch {
+                        index: 0, page, fragment_owner: owner,
+                        source: rows[0].source,
+                    },
+                ))
+            },
+        );
+    };
+    assert_hit(&session, revision);
+    let mut swapped = selections(revision);
+    swapped.swap(0, 1);
+    assert_eq!(
+        session.first_selected_aligned_fixed_row_footprint_overlap(
+            &measurement(revision), &[fixed(revision)], &swapped,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowAlignmentMismatch {
+                index: 0, page, fragment_owner: owner,
+                source: rows[0].source,
+            },
+        )),
+    );
+    let TextEditOutcome::Applied { revision: edited, .. } =
+        session.replace_text(revision, span, "changed".into())
+    else {
+        return Err("text revision change refused".into());
+    };
+    assert_hit(&session, edited);
+    assert_eq!(
+        session.first_selected_aligned_fixed_row_footprint_overlap(
+            &measurement(revision), &[fixed(edited)], &selections(revision),
+        ),
+        Err(application::SessionFlowFixedRegionError::Pagination(
+            SemanticPaginationError::MeasurementRevisionMismatch {
+                accepted: edited,
+                measured: revision,
+            },
+        )),
+    );
+    let HistoryTraversalOutcome::Traversed { revision: undone, .. } =
+        session.traverse_history(edited, HistoryDirection::Undo)
+    else {
+        return Err("mixed alignment Undo refused".into());
+    };
+    assert_hit(&session, undone);
+    let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
+        session.traverse_history(undone, HistoryDirection::Redo)
+    else {
+        return Err("mixed alignment Redo refused".into());
+    };
+    assert_hit(&session, redone);
     Ok(())
 }

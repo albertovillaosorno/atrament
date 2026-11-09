@@ -3390,3 +3390,23 @@ revision and page-profile authority. Old measurement evidence still refuses.
 
 This is a diagnostic result for supplied row widths, not glyph ink bounds,
 automatic horizontal layout, fixed-object layering or native Export support.
+
+## Source-bound mixed row alignment (partial) — 2026-11-09
+
+The sealed measured pagination plan now accepts one explicit horizontal
+alignment selection per placed row, independently choosing left, center or
+right. Every selection is matched to its exact accepted revision, selected
+flow, physical page and original measured source (unit, fragment). Missing,
+extra, reordered, cross-page or stale selections refuse before any physical X
+position is derived; uniform alignment remains available unchanged.
+
+The live session exposes first-hit and capped complete fixed/row footprint
+inspection using these mixed selections. Native regressions cover two page
+placements with differently aligned successive fragments of the same semantic
+owner, exact center and boundary coordinates, identity/refusal precedence,
+and refreshed selections after text edits, Undo and Redo.
+
+These are caller-measured provisional row rectangles. A caller's per-row
+alignment intent is not automatically inferred from heading styles, persisted
+content or handwriting. Actual ink intersections, fixed layering permission,
+native semantic Markdown measurement and notebook Export remain unfinished.

@@ -150,6 +150,24 @@ pub enum FlowFixedRegionError {
         /// Stable fixed semantic owner.
         object: AcceptedIdentity,
     },
+    /// Number of per-row alignment choices differs from the sealed plan.
+    RowAlignmentCountMismatch {
+        /// Number of physical rows in the accepted measured flow.
+        expected: usize,
+        /// Number of caller-supplied row alignment choices.
+        supplied: usize,
+    },
+    /// One per-row alignment choice names a different accepted row.
+    RowAlignmentMismatch {
+        /// Placement index in the sealed physical row sequence.
+        index: usize,
+        /// Expected physical page for the selected row.
+        page: AcceptedIdentity,
+        /// Expected semantic owner of the selected row.
+        fragment_owner: AcceptedIdentity,
+        /// Original measured unit and fragment index.
+        source: FragmentSource,
+    },
     /// One positioned measured-row footprint escapes its writable page.
     RowFootprintOverflow {
         /// Accepted page of the measured row.
@@ -373,6 +391,27 @@ pub enum RowHorizontalAlignment {
     Right,
 }
 
+/// One explicitly selected alignment for an exact accepted measured row.
+///
+/// Unlike a position, the choice contains no arbitrary physical coordinate.
+/// Its accepted revision, flow, page and source are checked against a sealed
+/// pagination plan before alignment can produce any physical row footprint.
+/// Callers may select a different alignment for each row, including successive
+/// fragments of the same semantic owner.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct RowAlignmentSelection {
+    /// Left, center or right layout intent for this provisional measured row.
+    pub alignment: RowHorizontalAlignment,
+    /// Accepted measured flow to which the selected row belongs.
+    pub flow: AcceptedIdentity,
+    /// Physical page receiving the selected row.
+    pub page: AcceptedIdentity,
+    /// Revision whose measured row source was selected.
+    pub revision: RevisionIdentity,
+    /// Exact unit and fragment identified by the row selection.
+    pub source: FragmentSource,
+}
+
 /// Caller-selected physical X position for one exact measured flow row.
 ///
 /// The plan owns the row's accepted revision, flow, page, source and size.
@@ -594,52 +633,102 @@ pub fn aligned_row_horizontal_positions_for_flow(
 ) -> Result<Vec<RowHorizontalPosition>, FlowFixedRegionError> {
     plan.placements()
         .iter()
-        .map(|row| {
-            let invalid = || FlowFixedRegionError::RowFootprintOverflow {
-                page: row.page,
-                fragment_owner: row.owner,
-                source: row.source,
-            };
-            let remaining = row
-                .writable
-                .width
-                .micrometres()
-                .checked_sub(row.width.micrometres())
-                .ok_or_else(invalid)?;
-            let offset = match alignment {
-                RowHorizontalAlignment::Left => 0,
-                RowHorizontalAlignment::Center => {
-                    remaining.checked_div(2).ok_or_else(invalid)?
-                },
-                RowHorizontalAlignment::Right => remaining,
-            };
-            let left = row
-                .writable
-                .x
-                .micrometres()
-                .checked_add(offset)
-                .ok_or_else(invalid)?;
-            let right = left
-                .checked_add(row.width.micrometres())
-                .ok_or_else(invalid)?;
-            let writable_right = row
-                .writable
-                .x
-                .micrometres()
-                .checked_add(row.writable.width.micrometres())
-                .ok_or_else(invalid)?;
-            if right > writable_right {
-                return Err(invalid());
+        .map(|row| aligned_position_for_row(plan, row, alignment))
+        .collect()
+}
+
+/// Align each measured row using its own explicit, source-bound selection.
+///
+/// Each selection must identify exactly the row at the same sealed placement
+/// index. No stale, reordered, omitted, extra, or cross-flow choice may be
+/// silently applied to a different row after semantic edits or page changes.
+/// Origins come only from the accepted writable page rectangle and measured
+/// row width. Different fragments of one block may have distinct choices.
+///
+/// # Errors
+///
+/// Refuses the complete selection batch on a count/identity mismatch or
+/// when a selected row cannot fit inside its accepted writable rectangle.
+pub fn aligned_row_horizontal_positions_by_selection_for_flow(
+    plan: &SemanticPaginationPlan,
+    selections: &[RowAlignmentSelection],
+) -> Result<Vec<RowHorizontalPosition>, FlowFixedRegionError> {
+    if selections.len() != plan.placements().len() {
+        return Err(FlowFixedRegionError::RowAlignmentCountMismatch {
+            expected: plan.placements().len(),
+            supplied: selections.len(),
+        });
+    }
+    plan.placements()
+        .iter()
+        .zip(selections)
+        .enumerate()
+        .map(|(index, (row, selection))| {
+            if selection.revision != plan.revision()
+                || selection.flow != plan.flow()
+                || selection.page != row.page
+                || selection.source != row.source
+            {
+                return Err(FlowFixedRegionError::RowAlignmentMismatch {
+                    index,
+                    page: row.page,
+                    fragment_owner: row.owner,
+                    source: row.source,
+                });
             }
-            Ok(RowHorizontalPosition {
-                flow: plan.flow(),
-                left: Length::from_micrometres(left),
-                page: row.page,
-                revision: plan.revision(),
-                source: row.source,
-            })
+            aligned_position_for_row(plan, row, selection.alignment)
         })
         .collect()
+}
+
+fn aligned_position_for_row(
+    plan: &SemanticPaginationPlan,
+    row: &PlacedFragment<AcceptedIdentity, AcceptedIdentity>,
+    alignment: RowHorizontalAlignment,
+) -> Result<RowHorizontalPosition, FlowFixedRegionError> {
+    let invalid = || FlowFixedRegionError::RowFootprintOverflow {
+        page: row.page,
+        fragment_owner: row.owner,
+        source: row.source,
+    };
+    let remaining = row
+        .writable
+        .width
+        .micrometres()
+        .checked_sub(row.width.micrometres())
+        .ok_or_else(invalid)?;
+    let offset = match alignment {
+        RowHorizontalAlignment::Left => 0,
+        RowHorizontalAlignment::Center => {
+            remaining.checked_div(2).ok_or_else(invalid)?
+        },
+        RowHorizontalAlignment::Right => remaining,
+    };
+    let left = row
+        .writable
+        .x
+        .micrometres()
+        .checked_add(offset)
+        .ok_or_else(invalid)?;
+    let right = left
+        .checked_add(row.width.micrometres())
+        .ok_or_else(invalid)?;
+    let writable_right = row
+        .writable
+        .x
+        .micrometres()
+        .checked_add(row.writable.width.micrometres())
+        .ok_or_else(invalid)?;
+    if right > writable_right {
+        return Err(invalid());
+    }
+    Ok(RowHorizontalPosition {
+        flow: plan.flow(),
+        left: Length::from_micrometres(left),
+        page: row.page,
+        revision: plan.revision(),
+        source: row.source,
+    })
 }
 
 /// Inspect checked fixed placements for possible overlap with measured flow.

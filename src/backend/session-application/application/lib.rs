@@ -61,9 +61,10 @@ use atrament_media_job_session::{
 };
 use atrament_semantic_flow_pagination::{
     FixedPairOverlap, FixedRowBandOverlap, FixedRowFootprintOverlap,
-    FlowFixedRegionError, RevisionFlowMeasurement, RowHorizontalAlignment,
-    RowHorizontalPosition,
+    FlowFixedRegionError, RevisionFlowMeasurement, RowAlignmentSelection,
+    RowHorizontalAlignment, RowHorizontalPosition,
     SemanticPaginationError, SemanticPaginationPlan,
+    aligned_row_horizontal_positions_by_selection_for_flow,
     aligned_row_horizontal_positions_for_flow,
     check_fixed_regions_for_flow, first_fixed_pair_overlap_for_flow,
     first_fixed_row_band_overlap_for_flow,
@@ -735,6 +736,33 @@ impl SessionApplication {
             .map_err(SessionFlowFixedRegionError::Overlap)
     }
 
+    /// Inspect the first fixed intersection for per-row selected alignment.
+    ///
+    /// The entire revision/source-bound selection sequence must match the
+    /// current measured plan before its provisional row positions are used.
+    /// This does not approve layering or replace conservative row-band gates.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed missing-session, measurement, placement, selection or
+    /// geometry refusal before disclosing any first-hit observation.
+    pub fn first_selected_aligned_fixed_row_footprint_overlap(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+        selections: &[RowAlignmentSelection],
+    ) -> Result<Option<FixedRowFootprintOverlap>, SessionFlowFixedRegionError>
+    {
+        let (plan, checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
+        let positions = aligned_row_horizontal_positions_by_selection_for_flow(
+            &plan, selections,
+        )
+        .map_err(SessionFlowFixedRegionError::Overlap)?;
+        first_fixed_row_footprint_overlap_for_flow(&plan, &checked, &positions)
+            .map_err(SessionFlowFixedRegionError::Overlap)
+    }
+
     /// Inspect all supplied fixed-pair intersections on current authority.
     ///
     /// Validation runs for the complete caller-supplied batch before any
@@ -1212,6 +1240,37 @@ impl SessionApplication {
     #[must_use]
     pub fn retained_asset_byte_count_for_test(&self) -> usize {
         self.asset_bytes.len()
+    }
+
+    /// Inspect bounded fixed intersections for per-row selected alignments.
+    ///
+    /// The complete selection sequence is bound to the live revision, flow,
+    /// page and measured source. A heading and its following paragraph may
+    /// therefore choose different provisional X positions without injecting
+    /// arbitrary coordinates or claiming visible ink collision clearance.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed missing-session, stale measurement, checked-placement,
+    /// row-selection, geometry or result-cap refusal without a partial report.
+    pub fn selected_aligned_fixed_row_footprint_overlaps(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+        selections: &[RowAlignmentSelection],
+        max_overlaps: usize,
+    ) -> Result<Vec<FixedRowFootprintOverlap>, SessionFlowFixedRegionError>
+    {
+        let (plan, checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
+        let positions = aligned_row_horizontal_positions_by_selection_for_flow(
+            &plan, selections,
+        )
+        .map_err(SessionFlowFixedRegionError::Overlap)?;
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &checked, &positions, max_overlaps,
+        )
+        .map_err(SessionFlowFixedRegionError::Overlap)
     }
 
     /// Simulate one established direct semantic edit without mutation.

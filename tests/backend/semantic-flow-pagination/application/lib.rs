@@ -48,7 +48,9 @@ use atrament_semantic_fixed_region_layout::{
 };
 use atrament_semantic_flow_pagination::{
     FixedPairOverlap, FixedRowBandOverlap, FlowFixedRegionError,
-    RevisionFlowMeasurement, RowHorizontalAlignment,
+    RevisionFlowMeasurement, RowAlignmentSelection,
+    RowHorizontalAlignment,
+    aligned_row_horizontal_positions_by_selection_for_flow,
     aligned_row_horizontal_positions_for_flow,
     SemanticPaginationError, check_fixed_regions_for_flow,
     first_fixed_pair_overlap_for_flow, fixed_pair_overlaps_for_flow,
@@ -5160,6 +5162,160 @@ fn aligned_measured_row_boxes_keep_page_source_and_exact_micrometres()
     assert_eq!(
         right[1].left.micrometres(),
         second.writable.x.micrometres() + second.writable.width.micrometres(),
+    );
+    assert_eq!(session.current(), Some(accepted));
+    Ok(())
+}
+
+#[test]
+fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
+-> Result<(), String> {
+    use atrament_semantic_flow_pagination::{
+        first_fixed_row_footprint_overlap_for_flow,
+        fixed_row_footprint_overlaps_for_flow,
+    };
+
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("mixed-alignment candidate refused".into());
+    };
+    let accepted = session.current().ok_or("accepted revision missing")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let first_page = accepted_for(&mapping, fixture.page_one);
+    let second_page = accepted_for(&mapping, fixture.page_two);
+    let plan = paginate_revision(
+        accepted,
+        &measurement(
+            revision, flow, owner,
+            &[(15_001, 100_000), (15_000, 100_000), (15_000, 100_000)],
+        ),
+    )
+    .map_err(|error| format!("mixed-alignment pagination: {error:?}"))?;
+    let rows = plan.placements();
+    assert_eq!(rows.len(), 3);
+    assert_eq!(
+        rows.iter().map(|row| row.page).collect::<Vec<_>>(),
+        vec![first_page, first_page, second_page],
+    );
+    let choices = [RowHorizontalAlignment::Left,
+        RowHorizontalAlignment::Center, RowHorizontalAlignment::Right];
+    let selections = rows.iter().zip(choices)
+        .map(|(row, alignment)| RowAlignmentSelection {
+            alignment,
+            flow,
+            page: row.page,
+            revision,
+            source: row.source,
+        })
+        .collect::<Vec<_>>();
+    let positions = aligned_row_horizontal_positions_by_selection_for_flow(
+        &plan, &selections,
+    )
+    .map_err(|error| format!("mixed alignment: {error:?}"))?;
+    assert_eq!(positions.len(), 3);
+    for (index, row) in rows.iter().enumerate() {
+        let available =
+            row.writable.width.micrometres() - row.width.micrometres();
+        let offset = match choices[index] {
+            RowHorizontalAlignment::Left => 0,
+            RowHorizontalAlignment::Center => available / 2,
+            RowHorizontalAlignment::Right => available,
+        };
+        assert_eq!(positions[index].source, row.source);
+        assert_eq!(positions[index].page, row.page);
+        assert_eq!(positions[index].revision, revision);
+        assert_eq!(positions[index].flow, flow);
+        assert_eq!(
+            positions[index].left.micrometres(),
+            row.writable.x.micrometres() + offset,
+        );
+    }
+    let box_on_center_row = Rect {
+        x: Length::from_micrometres(
+            positions[1].left.micrometres() + 1_000,
+        ),
+        y: Length::from_micrometres(
+            rows[1].top.micrometres() + 2_000,
+        ),
+        width: Length::from_micrometres(3_000),
+        height: Length::from_micrometres(4_000),
+    };
+    let fixed = validate_fixed_placement(accepted, AcceptedFixedPlacement {
+        object: owner,
+        page: first_page,
+        rectangle: box_on_center_row,
+        revision,
+    })
+    .map_err(|error| format!("centered fixed placement: {error:?}"))?;
+    let hit = first_fixed_row_footprint_overlap_for_flow(
+        &plan, std::slice::from_ref(&fixed), &positions,
+    )
+    .map_err(|error| format!("mixed first hit: {error:?}"))?
+    .ok_or("centered row not hit")?;
+    assert_eq!(hit.intersection(), box_on_center_row);
+    assert_eq!(hit.page(), first_page);
+    assert_eq!(hit.source(), rows[1].source);
+    assert_eq!(hit.flow(), flow);
+    assert_eq!(hit.revision(), revision);
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &[fixed.clone()], &positions, 1,
+        ).map(|hits| hits.into_iter().map(|hit| hit.source())
+            .collect::<Vec<_>>()),
+        Ok(vec![rows[1].source]),
+    );
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &[fixed.clone()], &positions, 0,
+        ),
+        Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded { limit: 0 }),
+    );
+    let uniform_left = aligned_row_horizontal_positions_for_flow(
+        &plan, RowHorizontalAlignment::Left,
+    )
+    .map_err(|error| format!("uniform left: {error:?}"))?;
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &plan, std::slice::from_ref(&fixed), &uniform_left,
+        ),
+        Ok(None),
+    );
+
+    assert_eq!(
+        aligned_row_horizontal_positions_by_selection_for_flow(
+            &plan, &selections[..2],
+        ),
+        Err(FlowFixedRegionError::RowAlignmentCountMismatch {
+            expected: 3,
+            supplied: 2,
+        }),
+    );
+    let mut swapped = selections.clone();
+    swapped.swap(0, 1);
+    assert_eq!(
+        aligned_row_horizontal_positions_by_selection_for_flow(&plan, &swapped),
+        Err(FlowFixedRegionError::RowAlignmentMismatch {
+            index: 0,
+            page: first_page,
+            fragment_owner: owner,
+            source: rows[0].source,
+        }),
+    );
+    let mut stale = selections.clone();
+    stale[2].page = first_page;
+    assert_eq!(
+        aligned_row_horizontal_positions_by_selection_for_flow(&plan, &stale),
+        Err(FlowFixedRegionError::RowAlignmentMismatch {
+            index: 2,
+            page: second_page,
+            fragment_owner: owner,
+            source: rows[2].source,
+        }),
     );
     assert_eq!(session.current(), Some(accepted));
     Ok(())
