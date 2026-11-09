@@ -3466,3 +3466,18 @@ and zero-cap complete diagnostics refuse a later empty row with a mismatched
 owner. Fresh valid positions preserve that first physical intersection, while
 the empty row contributes none. This is batch identity validation, not
 ink-coverage inference or semantic text measurement.
+
+## Same-revision live-session row-owner handoff — 2026-11-09
+
+A new live-session regression now submits two separately valid measured-flow
+plans against one unchanged semantic revision, flow and physical page. Both
+plans reuse all three original row source indices, but the second row moves
+from the first block to the second block. The session's first-hit and capped
+footprint APIs reject reused alignment choices and X positions with the exact
+changed owner and row source, even after a valid earlier hit and with a zero
+report cap. Fresh choices and positions preserve the first exact physical
+intersection and accepted provenance.
+
+This proves one read-only cross-owner admission boundary through the live
+application facade. It does not authenticate measured glyph ink, prevent
+same-owner remeasurement, persist alignment, or authorize semantic Export.
