@@ -3533,3 +3533,25 @@ fixed proposals, including empty physical shapes, exact source provenance and
 zero-cap refusals. A first-page collision cannot conceal a stale geometry
 choice on the last row of the later page. This remains read-only box geometry,
 not glyph ink, a persistent layout style or native Export authorization.
+
+## Checked positioned-row boxes on current authority — 2026-11-09
+
+The measured-flow application can now project a complete caller-positioned
+row batch into immutable physical page rectangles, retaining the accepted
+revision, flow, semantic block owner, page and original source fragment.
+The entire batch is admitted by the existing exact row geometry and horizontal
+bounds validator before any rectangle is returned, including rows with zero
+width. A targeted two-page regression covers per-row left, centre and right
+alignment, empty boxes, source provenance and late stale/overflow rejection.
+An existing 420-row, two-page mixed-alignment oracle additionally checks
+complete box geometry and provenance for every source row.
+
+The live session exposes the same read-only boxes from its current accepted
+revision without requiring a fixed-region proposal. A separate two-block
+regrouping regression verifies that old same-revision source indices cannot
+be reused across owners; later width remeasurement also refuses old positions
+until fresh physical geometry is bound. An edit/Undo/Redo regression also
+requires newly revision-bound positions for otherwise identical row boxes.
+These are measured-box coordinates, not verified handwriting ink, an accepted
+fixed-overlap policy, saved semantic Markdown layout or native notebook Export
+readiness; ATR-P2-011 stays open.

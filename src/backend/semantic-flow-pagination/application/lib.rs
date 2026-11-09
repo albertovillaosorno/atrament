@@ -471,6 +471,68 @@ pub struct RowHorizontalPosition {
     pub source: FragmentSource,
 }
 
+/// Physical box of one explicitly positioned measured flow row.
+///
+/// The complete horizontal position batch is checked against a sealed plan
+/// before any boxes are returned. These constructor-controlled rectangles
+/// preserve source and accepted authority, including zero-width rows.
+/// They represent provisional *measured boxes*, not verified glyph ink or a
+/// fixed-region collision policy. Callers cannot replace admitted geometry.
+///
+/// ```compile_fail
+/// use atrament_semantic_flow_pagination::PositionedRowFootprint;
+/// fn replace_box(mut row: PositionedRowFootprint) {
+///     row.rectangle = row.rectangle();
+/// }
+/// ```
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct PositionedRowFootprint {
+    flow: AcceptedIdentity,
+    fragment_owner: AcceptedIdentity,
+    page: AcceptedIdentity,
+    rectangle: Rect,
+    revision: RevisionIdentity,
+    source: FragmentSource,
+}
+
+impl PositionedRowFootprint {
+    /// Selected accepted semantic flow.
+    #[must_use]
+    pub const fn flow(&self) -> AcceptedIdentity {
+        self.flow
+    }
+
+    /// Accepted semantic block owning this provisional row.
+    #[must_use]
+    pub const fn fragment_owner(&self) -> AcceptedIdentity {
+        self.fragment_owner
+    }
+
+    /// Accepted physical page receiving the row.
+    #[must_use]
+    pub const fn page(&self) -> AcceptedIdentity {
+        self.page
+    }
+
+    /// Complete measured row box in physical page coordinates.
+    #[must_use]
+    pub const fn rectangle(&self) -> Rect {
+        self.rectangle
+    }
+
+    /// Accepted revision that admitted the supplied position batch.
+    #[must_use]
+    pub const fn revision(&self) -> RevisionIdentity {
+        self.revision
+    }
+
+    /// Original measured unit and fragment index.
+    #[must_use]
+    pub const fn source(&self) -> FragmentSource {
+        self.source
+    }
+}
+
 /// Checked intersection of a fixed rectangle and positioned row footprint.
 ///
 /// This is a **provisional** measured-box intersection: actual glyph stroke
@@ -774,6 +836,43 @@ fn aligned_position_for_row(
         revision: plan.revision(),
         source: row.source,
     })
+}
+
+/// Project admitted horizontal positions into complete physical row boxes.
+///
+/// Every position must name the exact revision, flow, block owner, page,
+/// source and measured row geometry in physical placement order. The entire
+/// batch is validated, including empty-width rows, before any box is returned.
+/// The result exposes physical rectangles and their sealed source identities
+/// without inventing glyph ink or choosing a horizontal alignment for callers.
+///
+/// # Errors
+///
+/// Refuses missing, extra, reordered, stale or horizontally overflowing
+/// positions with the same typed admission errors as fixed-row inspection.
+pub fn positioned_row_footprints_for_flow(
+    plan: &SemanticPaginationPlan,
+    positions: &[RowHorizontalPosition],
+) -> Result<Vec<PositionedRowFootprint>, FlowFixedRegionError> {
+    let _left_by_source = validate_row_horizontal_positions(plan, positions)?;
+    Ok(plan
+        .placements()
+        .iter()
+        .zip(positions)
+        .map(|(row, position)| PositionedRowFootprint {
+            flow: plan.flow(),
+            fragment_owner: row.owner,
+            page: row.page,
+            rectangle: Rect {
+                x: position.left,
+                y: row.top,
+                width: row.width,
+                height: row.height,
+            },
+            revision: plan.revision(),
+            source: row.source,
+        })
+        .collect())
 }
 
 /// Inspect checked fixed placements for possible overlap with measured flow.

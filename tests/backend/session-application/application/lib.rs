@@ -8674,6 +8674,12 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
         rectangle: bounds,
         revision: current,
     };
+    let original_positions =
+        atrament_semantic_flow_pagination::
+            aligned_row_horizontal_positions_by_selection_for_flow(
+                &initial_plan, &selections(revision),
+            )
+            .map_err(|error| format!("original positions: {error:?}"))?;
     let assert_hit = |current_session: &application::SessionApplication,
                       current| -> Result<(), String> {
         let choice = selections(current);
@@ -8683,6 +8689,47 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
             )
             .map_err(|error| format!("current mixed choices: {error:?}"))?
             .ok_or("centered second row not hit")?;
+        let current_plan = current_session
+            .paginate_measured_flow(&measurement(current))
+            .map_err(|error| format!("current row plan: {error:?}"))?;
+        let positions = atrament_semantic_flow_pagination::
+            aligned_row_horizontal_positions_by_selection_for_flow(
+                &current_plan, &choice,
+            )
+            .map_err(|error| format!("current row positions: {error:?}"))?;
+        let boxes = current_session
+            .positioned_measured_row_footprints(
+                &measurement(current),
+                &positions,
+            )
+            .map_err(|error| format!("current measured boxes: {error:?}"))?;
+        assert_eq!(boxes.len(), 2);
+        assert_eq!(boxes[1].revision(), current);
+        assert_eq!(boxes[1].source(), centered_row.source);
+        assert_eq!(boxes[1].rectangle(), Rect {
+            x: Length::from_micrometres(centered),
+            y: centered_row.top,
+            width: centered_row.width,
+            height: centered_row.height,
+        });
+        assert_eq!(
+            current_session.positioned_measured_row_footprints(
+                &measurement(current),
+                &original_positions,
+            ),
+            if current == revision {
+                Ok(boxes)
+            } else {
+                Err(application::SessionFlowFixedRegionError::Overlap(
+                    FlowFixedRegionError::RowPositionMismatch {
+                        index: 0,
+                        page,
+                        fragment_owner: owner,
+                        source: first_row.source,
+                    },
+                ))
+            },
+        );
         assert_eq!(hit.intersection(), bounds);
         assert_eq!(hit.source(), centered_row.source);
         assert_eq!(hit.revision(), current);
@@ -9032,6 +9079,127 @@ fn live_footprints_refuse_source_reuse_across_same_revision_block_regrouping() {
     );
     assert_eq!(session.accepted_revision().map(|current| current.id),
         Some(revision));
+}
+
+#[test]
+fn live_positioned_row_boxes_are_sealed_to_current_measured_sources() {
+    let fixture_result = live_owner_regroup_fixture();
+    assert!(fixture_result.is_ok(), "valid live positioned-row fixture");
+    let Ok(fixture) = fixture_result else {
+        return;
+    };
+    let absent = application::SessionApplication::default();
+    assert_eq!(
+        absent.positioned_measured_row_footprints(
+            &fixture.regrouped,
+            &fixture.fresh_positions,
+        ),
+        Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
+    );
+    assert_eq!(
+        fixture.session.positioned_measured_row_footprints(
+            &fixture.regrouped,
+            &fixture.old_positions,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowPositionMismatch {
+                index: 1,
+                page: fixture.page,
+                fragment_owner: fixture.changed_owner,
+                source: fixture.changed_source,
+            },
+        )),
+    );
+    let plan_result =
+        fixture.session.paginate_measured_flow(&fixture.regrouped);
+    assert!(plan_result.is_ok());
+    let Ok(plan) = plan_result else {
+        return;
+    };
+    let boxes_result = fixture.session.positioned_measured_row_footprints(
+        &fixture.regrouped,
+        &fixture.fresh_positions,
+    );
+    assert!(boxes_result.is_ok(), "current measured row boxes admitted");
+    let Ok(boxes) = boxes_result else {
+        return;
+    };
+    assert_eq!(boxes.len(), plan.placements().len());
+    for ((row, position), checked) in plan
+        .placements()
+        .iter()
+        .zip(&fixture.fresh_positions)
+        .zip(&boxes)
+    {
+        assert_eq!(checked.revision(), fixture.revision);
+        assert_eq!(checked.flow(), plan.flow());
+        assert_eq!(checked.fragment_owner(), row.owner);
+        assert_eq!(checked.page(), row.page);
+        assert_eq!(checked.source(), row.source);
+        assert_eq!(checked.rectangle(), Rect {
+            x: position.left,
+            y: row.top,
+            width: row.width,
+            height: row.height,
+        });
+    }
+    let mut remeasured = fixture.regrouped;
+    let Some(last) = remeasured
+        .units
+        .last_mut()
+        .and_then(|unit| unit.fragments.last_mut())
+    else {
+        return;
+    };
+    last.width = Length::from_micrometres(
+        last.width.micrometres().saturating_add(1_000),
+    );
+    let fresh_result = fixture.session.paginate_measured_flow(&remeasured);
+    assert!(fresh_result.is_ok());
+    let Ok(fresh_plan) = fresh_result else {
+        return;
+    };
+    let Some(last_row) = fresh_plan.placements().last() else {
+        return;
+    };
+    assert_eq!(
+        fixture.session.positioned_measured_row_footprints(
+            &remeasured,
+            &fixture.fresh_positions,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowPositionMismatch {
+                index: 2,
+                page: last_row.page,
+                fragment_owner: last_row.owner,
+                source: last_row.source,
+            },
+        )),
+    );
+    let new_positions_result = aligned_row_horizontal_positions_for_flow(
+        &fresh_plan,
+        RowHorizontalAlignment::Left,
+    );
+    assert!(new_positions_result.is_ok());
+    let Ok(new_positions) = new_positions_result else {
+        return;
+    };
+    let updated = fixture
+        .session
+        .positioned_measured_row_footprints(&remeasured, &new_positions);
+    assert!(updated.is_ok());
+    let Ok(updated) = updated else {
+        return;
+    };
+    assert_eq!(updated.len(), boxes.len());
+    assert_ne!(updated[2].rectangle(), boxes[2].rectangle());
+    assert_eq!(
+        fixture
+            .session
+            .accepted_revision()
+            .map(|current| current.id),
+        Some(fixture.revision)
+    );
 }
 
 #[test]

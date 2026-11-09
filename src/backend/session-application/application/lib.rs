@@ -61,7 +61,8 @@ use atrament_media_job_session::{
 };
 use atrament_semantic_flow_pagination::{
     FixedPairOverlap, FixedRowBandOverlap, FixedRowFootprintOverlap,
-    FlowFixedRegionError, RevisionFlowMeasurement, RowAlignmentSelection,
+    FlowFixedRegionError, PositionedRowFootprint, RevisionFlowMeasurement,
+    RowAlignmentSelection,
     RowHorizontalAlignment, RowHorizontalPosition,
     SemanticPaginationError, SemanticPaginationPlan,
     aligned_row_horizontal_positions_by_selection_for_flow,
@@ -71,6 +72,7 @@ use atrament_semantic_flow_pagination::{
     first_fixed_row_footprint_overlap_for_flow,
     fixed_pair_overlaps_for_flow, fixed_row_band_overlaps_for_flow,
     fixed_row_footprint_overlaps_for_flow, paginate_revision,
+    positioned_row_footprints_for_flow,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -954,6 +956,29 @@ impl SessionApplication {
         check_fixed_regions_for_flow(&plan, &checked)
             .map_err(SessionFlowFixedRegionError::Overlap)?;
         Ok(plan)
+    }
+
+    /// Project complete provisional row boxes against the current revision.
+    ///
+    /// All explicit horizontal positions must belong to the live accepted
+    /// measured plan, including exact row geometry and empty-width fragments.
+    /// Results retain sealed physical rectangles, owners and source identities
+    /// without checking fixed objects or claiming they represent visible ink.
+    /// This read-only query cannot authorize native Export.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed missing-session, stale or invalid measurements, or
+    /// stale, missing, reordered or overflowing horizontal row positions.
+    pub fn positioned_measured_row_footprints(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        positions: &[RowHorizontalPosition],
+    ) -> Result<Vec<PositionedRowFootprint>, SessionFlowFixedRegionError> {
+        let (plan, _checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, &[])?;
+        positioned_row_footprints_for_flow(&plan, positions)
+            .map_err(SessionFlowFixedRegionError::Overlap)
     }
 
     /// Inspect explicit Export source, path and layout prerequisites.

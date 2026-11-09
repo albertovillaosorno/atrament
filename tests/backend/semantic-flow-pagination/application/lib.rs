@@ -5233,6 +5233,123 @@ fn aligned_measured_row_boxes_keep_page_source_and_exact_micrometres()
 }
 
 #[test]
+fn positioned_row_boxes_seal_complete_source_bound_geometry_across_pages()
+-> Result<(), String> {
+    use atrament_semantic_flow_pagination::positioned_row_footprints_for_flow;
+
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("positioned row candidate refused".into());
+    };
+    let accepted = session.current().ok_or("accepted revision missing")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let first_page = accepted_for(&mapping, fixture.page_one);
+    let second_page = accepted_for(&mapping, fixture.page_two);
+    let plan = paginate_revision(
+        accepted,
+        &measurement(revision, flow, owner, &[
+            (15_001, 100_000),
+            (0, 100_000),
+            (15_000, 100_000),
+        ]),
+    )
+    .map_err(|error| format!("positioned row pagination: {error:?}"))?;
+    let rows = plan.placements();
+    let [first, empty, last] = rows else {
+        return Err("expected three measured source rows".into());
+    };
+    assert_eq!([first.page, empty.page, last.page], [
+        first_page,
+        first_page,
+        second_page
+    ],);
+    let selections = rows
+        .iter()
+        .zip([
+            RowHorizontalAlignment::Center,
+            RowHorizontalAlignment::Right,
+            RowHorizontalAlignment::Left,
+        ])
+        .map(|(row, alignment)| RowAlignmentSelection {
+            alignment,
+            flow,
+            fragment_owner: row.owner,
+            geometry: MeasuredRowGeometry::from_placement(row),
+            page: row.page,
+            revision,
+            source: row.source,
+        })
+        .collect::<Vec<_>>();
+    let positions = aligned_row_horizontal_positions_by_selection_for_flow(
+        &plan,
+        &selections,
+    )
+    .map_err(|error| format!("mixed row alignment: {error:?}"))?;
+    let footprints = positioned_row_footprints_for_flow(&plan, &positions)
+        .map_err(|error| format!("positioned row boxes: {error:?}"))?;
+    assert_eq!(footprints.len(), rows.len());
+    for ((row, position), footprint) in
+        rows.iter().zip(&positions).zip(&footprints)
+    {
+        assert_eq!(footprint.revision(), revision);
+        assert_eq!(footprint.flow(), flow);
+        assert_eq!(footprint.fragment_owner(), owner);
+        assert_eq!(footprint.page(), row.page);
+        assert_eq!(footprint.source(), row.source);
+        assert_eq!(footprint.rectangle(), Rect {
+            x: position.left,
+            y: row.top,
+            width: row.width,
+            height: row.height,
+        });
+    }
+    assert_eq!(
+        positions[1].left.micrometres(),
+        empty.writable.x.micrometres() + empty.writable.width.micrometres(),
+    );
+    assert_eq!(footprints[1].rectangle().width, Length::ZERO);
+    assert_eq!(
+        positioned_row_footprints_for_flow(&plan, &positions[..2]),
+        Err(FlowFixedRegionError::RowPositionCountMismatch {
+            expected: 3,
+            supplied: 2,
+        }),
+    );
+    // Even a later stale or overflowing row refuses the *whole* batch,
+    // not just its rectangle after earlier valid first-page boxes.
+    let mut stale = positions.clone();
+    stale[2].geometry = MeasuredRowGeometry::from_placement(first);
+    assert_eq!(
+        positioned_row_footprints_for_flow(&plan, &stale),
+        Err(FlowFixedRegionError::RowPositionMismatch {
+            index: 2,
+            page: second_page,
+            fragment_owner: owner,
+            source: last.source,
+        }),
+    );
+    let mut outside = positions;
+    outside[2].left = Length::from_micrometres(
+        last.writable.x.micrometres() + last.writable.width.micrometres(),
+    );
+    assert_eq!(
+        positioned_row_footprints_for_flow(&plan, &outside),
+        Err(FlowFixedRegionError::RowFootprintOverflow {
+            page: second_page,
+            fragment_owner: owner,
+            source: last.source,
+        }),
+    );
+    assert_eq!(session.current(), Some(accepted));
+    Ok(())
+}
+
+#[test]
 fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
 -> Result<(), String> {
     use std::slice::from_ref;
@@ -5776,6 +5893,35 @@ fn check_many_mixed_row_alignments() -> Result<(), String> {
     )
     .map_err(|error| format!("mixed alignment: {error:?}"))?;
     check_many_mixed_alignment_coordinates(&plan, &positions, &selections)?;
+    // Every one of the 420 source rows is available to a downstream layout
+    // consumer, including zero-width boxes and rows on the later page.
+    let boxes =
+        atrament_semantic_flow_pagination::positioned_row_footprints_for_flow(
+            &plan, &positions,
+        )
+        .map_err(|error| format!("many-row checked boxes: {error:?}"))?;
+    if boxes.len() != rows.len() {
+        return Err("many-row box projection omitted a measured row".into());
+    }
+    for ((row, position), checked) in rows.iter().zip(&positions).zip(&boxes) {
+        if checked.revision() != revision
+            || checked.flow() != flow
+            || checked.fragment_owner() != owner
+            || checked.page() != row.page
+            || checked.source() != row.source
+            || checked.rectangle()
+                != (Rect {
+                    x: position.left,
+                    y: row.top,
+                    width: row.width,
+                    height: row.height,
+                })
+        {
+            return Err(
+                "many-row box projection changed physical source".into()
+            );
+        }
+    }
     check_many_mixed_alignment_oracle(
         accepted, &plan, &positions, owner, page_one,
     )?;
