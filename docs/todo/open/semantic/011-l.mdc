@@ -3378,3 +3378,15 @@ each bound to its new accepted revision and original measured source.
 
 The test does not introduce automatic alignment policy, real visible glyph
 metrics, an authenticated fixed-layering decision or native notebook Export.
+
+## Explicit row alignment after page-profile reference retarget (partial)
+
+A separate live semantic command regression now changes the accepted page's
+profile reference from a wide sheet to a narrower existing sheet. Centered
+caller-measured boxes change from clear to an exact 2.5-by-5-mm fixed-region
+intersection; left alignment remains intersecting. The same query restores
+clearance on Undo and reproduces the intersection on Redo, always using fresh
+revision and page-profile authority. Old measurement evidence still refuses.
+
+This is a diagnostic result for supplied row widths, not glyph ink bounds,
+automatic horizontal layout, fixed-object layering or native Export support.

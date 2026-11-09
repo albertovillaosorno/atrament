@@ -2697,6 +2697,54 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     };
     assert_pair(&session, base);
 
+    // An accepted page-profile reference, not only an in-place profile edit,
+    // must determine the caller-selected horizontal footprint. On the wide
+    // profile centered ink boxes clear this fixed near-left candidate; on the
+    // narrow profile the same physical box intersects the measured row.
+    let edge_box = Rect {
+        x: Length::from_micrometres(25_000),
+        y: Length::from_micrometres(25_000),
+        width: Length::from_micrometres(5_000),
+        height: Length::from_micrometres(5_000),
+    };
+    let edge_fixed = |revision| AcceptedFixedPlacement {
+        rectangle: edge_box,
+        ..placement(revision)
+    };
+    let assert_aligned = |current: &application::SessionApplication,
+                          current_revision,
+                          width,
+                          expected_center: Option<Rect>| {
+        let first_hit = current.first_aligned_fixed_row_footprint_overlap(
+            &measurement(current_revision, width),
+            &[edge_fixed(current_revision)], RowHorizontalAlignment::Center,
+        ).expect("accepted profile-reference aligned box query");
+        let expected_source = atrament_flow_pagination::FragmentSource {
+            unit: 0, fragment: 0,
+        };
+        assert_eq!(
+            first_hit.map(|hit| (
+                hit.revision(), hit.flow(), hit.page(), hit.fixed_index(),
+                hit.object(), hit.fragment_owner(), hit.source(),
+                hit.intersection(),
+            )),
+            expected_center.map(|rect| (
+                current_revision, flow, page, 0, block, block,
+                expected_source, rect,
+            )),
+        );
+        assert_eq!(
+            current.aligned_fixed_row_footprint_overlaps(
+                &measurement(current_revision, width),
+                &[edge_fixed(current_revision)], RowHorizontalAlignment::Left,
+                1,
+            ).map(|hits| hits.into_iter().map(|hit| hit.intersection())
+                .collect::<Vec<_>>()),
+            Ok(vec![edge_box]),
+        );
+    };
+    assert_aligned(&session, base, 100_000, None);
+
     assert!(session
         .paginate_measured_flow(&measurement(base, 100_000))
         .is_ok());
@@ -2759,6 +2807,23 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             ),
         )),
     );
+    assert_aligned(&session, edited, 80_000, Some(Rect {
+        x: Length::from_micrometres(27_500),
+        y: Length::from_micrometres(25_000),
+        width: Length::from_micrometres(2_500),
+        height: Length::from_micrometres(5_000),
+    }));
+    assert_eq!(
+        session.first_aligned_fixed_row_footprint_overlap(
+            &measurement(base, 100_000), &[edge_fixed(base)],
+            RowHorizontalAlignment::Center,
+        ),
+        Err(application::SessionFlowFixedRegionError::Pagination(
+            SemanticPaginationError::MeasurementRevisionMismatch {
+                accepted: edited, measured: base,
+            },
+        )),
+    );
     let checked = session
         .validate_fixed_placement(placement(edited))
         .expect("retargeted placement must use second profile");
@@ -2805,6 +2870,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         .paginate_measured_flow(&measurement(undone, 100_000))
         .is_ok());
     assert_pair(&session, undone);
+    assert_aligned(&session, undone, 100_000, None);
     assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(undone)),
         placement(undone),
@@ -2842,6 +2908,12 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             },
         )),
     );
+    assert_aligned(&session, redone, 80_000, Some(Rect {
+        x: Length::from_micrometres(27_500),
+        y: Length::from_micrometres(25_000),
+        width: Length::from_micrometres(2_500),
+        height: Length::from_micrometres(5_000),
+    }));
     let checked = session
         .validate_fixed_placement(placement(redone))
         .expect("Redo placement must use second profile");
