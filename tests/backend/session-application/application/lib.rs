@@ -70,6 +70,7 @@ use atrament_semantic_flow_pagination::{
     FlowFixedRegionError, RevisionFlowMeasurement, RowAlignmentSelection,
     RowHorizontalAlignment, RowHorizontalPosition,
     SemanticPaginationError, SemanticPaginationPlan,
+    aligned_row_horizontal_positions_for_flow,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -8780,34 +8781,69 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
     Ok(())
 }
 
-#[test]
-fn live_footprints_refuse_source_reuse_across_same_revision_block_regrouping()
--> Result<(), String> {
-    use atrament_semantic_flow_pagination::
-        aligned_row_horizontal_positions_for_flow;
+// Keep fixture admission separate from assertions so a failed measurement
+// returns its exact cause instead of panicking midway through verification.
+type LiveOwnerRow = atrament_flow_pagination::PlacedFragment<
+    atrament_semantic_notebook::AcceptedIdentity,
+    atrament_semantic_notebook::AcceptedIdentity,
+>;
 
+struct LiveOwnerRegroupFixture {
+    changed_owner: atrament_semantic_notebook::AcceptedIdentity,
+    changed_source: atrament_flow_pagination::FragmentSource,
+    first_owner: atrament_semantic_notebook::AcceptedIdentity,
+    first_source: atrament_flow_pagination::FragmentSource,
+    fixed: [AcceptedFixedPlacement; 1],
+    fresh_positions: Vec<RowHorizontalPosition>,
+    fresh_selections: Vec<RowAlignmentSelection>,
+    old_positions: Vec<RowHorizontalPosition>,
+    old_selections: Vec<RowAlignmentSelection>,
+    page: atrament_semantic_notebook::AcceptedIdentity,
+    rectangle: Rect,
+    regrouped: RevisionFlowMeasurement,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    session: application::SessionApplication,
+}
+
+fn live_owner_regroup_selections(
+    rows: &[LiveOwnerRow],
+    flow: atrament_semantic_notebook::AcceptedIdentity,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) -> Vec<RowAlignmentSelection> {
+    rows.iter().zip([
+        RowHorizontalAlignment::Left,
+        RowHorizontalAlignment::Center,
+        RowHorizontalAlignment::Right,
+    ]).map(|(row, alignment)| RowAlignmentSelection {
+        alignment,
+        flow,
+        fragment_owner: row.owner,
+        page: row.page,
+        revision,
+        source: row.source,
+    }).collect()
+}
+
+
+fn live_owner_regroup_fixture() -> Result<LiveOwnerRegroupFixture, String> {
     let ids = IdentityAllocator::new();
     let (mut candidate, _) = editable_text_candidate(&ids, "first block");
-    let page_candidate = candidate.pages.first()
-        .ok_or("page absent")?.id;
-    let flow_candidate = candidate.pages.first()
-        .and_then(|page| page.flows.first())
-        .ok_or("flow absent")?.id;
-    let first_block_candidate = candidate.pages.first()
-        .and_then(|page| page.flows.first())
-        .and_then(|flow| flow.blocks.first())
-        .ok_or("block absent")?.id;
+    let first_page = candidate.pages.first().ok_or("page absent")?;
+    let first_flow = first_page.flows.first().ok_or("flow absent")?;
+    let page_candidate = first_page.id;
+    let flow_candidate = first_flow.id;
+    let first_block_candidate = first_flow.blocks.first().ok_or("block")?.id;
     let second_block_candidate = ids.allocate_candidate()
         .map_err(|error| format!("second block identity: {error:?}"))?;
     candidate.pages.first_mut().ok_or("page missing")?
         .flows.first_mut().ok_or("flow missing")?
         .blocks.push(Block {
-        content: BlockContent::Rule,
-        extensions: vec![],
-        id: second_block_candidate,
-        provenance: None,
-        style: None,
-    });
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: second_block_candidate,
+            provenance: None,
+            style: None,
+        });
     let mut session = application::SessionApplication::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept_candidate(candidate)
@@ -8821,100 +8857,96 @@ fn live_footprints_refuse_source_reuse_across_same_revision_block_regrouping()
     let flow = accepted_id(flow_candidate)?;
     let page = accepted_id(page_candidate)?;
     let first_owner = accepted_id(first_block_candidate)?;
-    let second_owner = accepted_id(second_block_candidate)?;
-    // Both complete measurements are legal for one unchanged accepted flow.
-    // The second source index is reused, but its block owner has changed.
-    let measured = |owners: [atrament_semantic_notebook::AcceptedIdentity; 3]| {
-        RevisionFlowMeasurement {
-            flow,
-            revision,
-            units: vec![
-                MeasuredFlowUnit {
-                    fragments: owners[..2].iter().copied().map(|owner| {
-                        MeasuredFragment {
-                            height: Length::from_micrometres(12_000),
-                            owner,
-                            width: Length::from_micrometres(20_000),
-                        }
-                    }).collect(),
-                    policy: FlowUnitPolicy::Independent,
-                },
-                MeasuredFlowUnit {
-                    fragments: vec![MeasuredFragment {
-                        height: Length::from_micrometres(12_000),
-                        owner: owners[2],
-                        width: Length::from_micrometres(20_000),
-                    }],
-                    policy: FlowUnitPolicy::Independent,
-                },
-            ],
-        }
+    let changed_owner = accepted_id(second_block_candidate)?;
+    let fragment = |owner| MeasuredFragment {
+        height: Length::from_micrometres(12_000),
+        owner,
+        width: Length::from_micrometres(20_000),
     };
-    let original = measured([first_owner, first_owner, second_owner]);
-    let regrouped = measured([first_owner, second_owner, second_owner]);
-    let original_plan = session.paginate_measured_flow(&original)
+    let measured = |owners: [_; 3]| RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![
+            MeasuredFlowUnit {
+                fragments: vec![fragment(owners[0]), fragment(owners[1])],
+                policy: FlowUnitPolicy::Independent,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![fragment(owners[2])],
+                policy: FlowUnitPolicy::Independent,
+            },
+        ],
+    };
+    let original = measured([first_owner, first_owner, changed_owner]);
+    let regrouped = measured([first_owner, changed_owner, changed_owner]);
+    let old_plan = session.paginate_measured_flow(&original)
         .map_err(|error| format!("original pagination: {error:?}"))?;
     let new_plan = session.paginate_measured_flow(&regrouped)
         .map_err(|error| format!("regrouped pagination: {error:?}"))?;
-    let old_rows = original_plan.placements();
-    let new_rows = new_plan.placements();
-    assert_eq!(old_rows.len(), 3);
-    assert_eq!(new_rows.len(), 3);
-    assert_eq!(
-        old_rows.iter().map(|row| (row.page, row.source))
-            .collect::<Vec<_>>(),
-        new_rows.iter().map(|row| (row.page, row.source))
-            .collect::<Vec<_>>(),
-    );
-    let changed = new_rows.get(1).ok_or("changed row absent")?;
-    assert_eq!(changed.owner, second_owner);
-    let selections = |rows: &[atrament_flow_pagination::PlacedFragment<
-        atrament_semantic_notebook::AcceptedIdentity,
-        atrament_semantic_notebook::AcceptedIdentity,
-    >]| rows.iter().zip([
-        RowHorizontalAlignment::Left,
-        RowHorizontalAlignment::Center,
-        RowHorizontalAlignment::Right,
-    ]).map(|(row, alignment)| RowAlignmentSelection {
-        alignment,
-        flow,
-        fragment_owner: row.owner,
-        page: row.page,
-        revision,
-        source: row.source,
-    }).collect::<Vec<_>>();
-    let old_selections = selections(old_rows);
-    let fresh_selections = selections(new_rows);
+    let [first_row, changed_row, _] = new_plan.placements() else {
+        return Err("regrouped flow does not have three rows".into());
+    };
+    if old_plan.placements().iter().map(|row| (row.page, row.source))
+        .ne(new_plan.placements().iter().map(|row| (row.page, row.source)))
+        || changed_row.owner != changed_owner
+    {
+        return Err("source indices or changed owner diverged".into());
+    }
     let old_positions = aligned_row_horizontal_positions_for_flow(
-        &original_plan, RowHorizontalAlignment::Left,
+        &old_plan, RowHorizontalAlignment::Left,
     ).map_err(|error| format!("old positions: {error:?}"))?;
     let fresh_positions = aligned_row_horizontal_positions_for_flow(
         &new_plan, RowHorizontalAlignment::Left,
     ).map_err(|error| format!("fresh positions: {error:?}"))?;
-    let first_row = new_rows.first().ok_or("first row absent")?;
-    let first_box = Rect {
+    let rectangle = Rect {
         x: first_row.writable.x,
         y: first_row.top,
         width: Length::from_micrometres(1_000),
         height: Length::from_micrometres(1_000),
     };
-    let fixed = [AcceptedFixedPlacement {
-        object: second_owner,
+    Ok(LiveOwnerRegroupFixture {
+        old_selections: live_owner_regroup_selections(
+            old_plan.placements(), flow, revision,
+        ),
+        fresh_selections: live_owner_regroup_selections(
+            new_plan.placements(), flow, revision,
+        ),
+        old_positions,
+        fresh_positions,
+        fixed: [AcceptedFixedPlacement {
+            object: changed_owner, page, rectangle, revision,
+        }],
+        session,
+        regrouped,
         page,
-        rectangle: first_box,
+        changed_owner,
+        first_owner,
+        changed_source: changed_row.source,
+        first_source: first_row.source,
+        rectangle,
         revision,
-    }];
-    // Both APIs must inspect every selection, even when the first physical
-    // row already intersects a valid fixed rectangle and the cap is zero.
-    let alignment_failure =
-        application::SessionFlowFixedRegionError::Overlap(
-            FlowFixedRegionError::RowAlignmentMismatch {
-                index: 1,
-                page,
-                fragment_owner: second_owner,
-                source: changed.source,
-            },
-        );
+    })
+}
+
+#[test]
+fn live_footprints_refuse_source_reuse_across_same_revision_block_regrouping() {
+    let fixture_result = live_owner_regroup_fixture();
+    assert!(fixture_result.is_ok(),
+        "regrouping fixture: {:?}", fixture_result.as_ref().err());
+    let Ok(fixture) = fixture_result else { return };
+    let LiveOwnerRegroupFixture {
+        session, regrouped, old_selections, fresh_selections, old_positions,
+        fresh_positions, fixed, page, changed_owner, first_owner,
+        changed_source, first_source, rectangle, revision,
+    } = fixture;
+    // After an early valid hit, later changed ownership still wins over both
+    // first-hit inspection and the zero diagnostic cap.
+    let alignment_failure = application::SessionFlowFixedRegionError::Overlap(
+        FlowFixedRegionError::RowAlignmentMismatch {
+            index: 1, page, fragment_owner: changed_owner,
+            source: changed_source,
+        },
+    );
     assert_eq!(
         session.first_selected_aligned_fixed_row_footprint_overlap(
             &regrouped, &fixed, &old_selections,
@@ -8927,15 +8959,12 @@ fn live_footprints_refuse_source_reuse_across_same_revision_block_regrouping()
         ),
         Err(alignment_failure),
     );
-    let position_failure =
-        application::SessionFlowFixedRegionError::Overlap(
-            FlowFixedRegionError::RowPositionMismatch {
-                index: 1,
-                page,
-                fragment_owner: second_owner,
-                source: changed.source,
-            },
-        );
+    let position_failure = application::SessionFlowFixedRegionError::Overlap(
+        FlowFixedRegionError::RowPositionMismatch {
+            index: 1, page, fragment_owner: changed_owner,
+            source: changed_source,
+        },
+    );
     assert_eq!(
         session.first_fixed_row_footprint_overlap(
             &regrouped, &fixed, &old_positions,
@@ -8948,15 +8977,17 @@ fn live_footprints_refuse_source_reuse_across_same_revision_block_regrouping()
         ),
         Err(position_failure),
     );
-    // Fresh owner-bound selections and positions retain the exact first
-    // physical hit, and the selected report independently respects its cap.
-    let first = session.first_selected_aligned_fixed_row_footprint_overlap(
-        &regrouped, &fixed, &fresh_selections,
-    ).map_err(|error| format!("fresh selection hit: {error:?}"))?
-        .ok_or("fresh selection missed first row")?;
-    assert_eq!(first.intersection(), first_box);
+    // The same accepted revision admits fresh per-row choices and positions.
+    let first_result =
+        session.first_selected_aligned_fixed_row_footprint_overlap(
+            &regrouped, &fixed, &fresh_selections,
+        );
+    assert!(first_result.as_ref().is_ok_and(Option::is_some),
+        "fresh selection must intersect the first row: {first_result:?}");
+    let Ok(Some(first)) = first_result else { return };
+    assert_eq!(first.intersection(), rectangle);
     assert_eq!(first.fragment_owner(), first_owner);
-    assert_eq!(first.source(), first_row.source);
+    assert_eq!(first.source(), first_source);
     assert_eq!(first.revision(), revision);
     assert_eq!(
         session.selected_aligned_fixed_row_footprint_overlaps(
@@ -8978,5 +9009,4 @@ fn live_footprints_refuse_source_reuse_across_same_revision_block_regrouping()
     );
     assert_eq!(session.accepted_revision().map(|current| current.id),
         Some(revision));
-    Ok(())
 }
