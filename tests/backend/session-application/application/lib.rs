@@ -2169,6 +2169,14 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         assert_eq!(collision.source(), first_source);
         assert_eq!(collision.fixed_index(), 0);
         assert_eq!(collision.intersection(), footprint_box);
+        assert_eq!(
+            current.first_fixed_row_footprint_overlap(
+                &measurement(current_revision, 100_000),
+                &[footprint_fixed(current_revision)],
+                &positions(current_revision),
+            ),
+            Ok(Some(collision)),
+        );
     };
     assert_wide_footprint(&session, revision);
 
@@ -2290,9 +2298,31 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         )),
     );
     assert_eq!(
+        session.first_fixed_row_footprint_overlap(
+            &measurement(edited, 80_000),
+            &[footprint_fixed(edited)], &positions(edited),
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowFootprintOverflow {
+                page, fragment_owner: block, source: first_source,
+            },
+        )),
+    );
+    assert_eq!(
         session.fixed_row_footprint_overlaps(
             &measurement(edited, 80_000),
             &[footprint_fixed(edited)], &positions(revision), 1,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowPositionMismatch {
+                index: 0, page, fragment_owner: block, source: first_source,
+            },
+        )),
+    );
+    assert_eq!(
+        session.first_fixed_row_footprint_overlap(
+            &measurement(edited, 80_000),
+            &[footprint_fixed(edited)], &positions(revision),
         ),
         Err(application::SessionFlowFixedRegionError::Overlap(
             FlowFixedRegionError::RowPositionMismatch {
@@ -2411,6 +2441,17 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         session.fixed_row_footprint_overlaps(
             &measurement(redone, 80_000),
             &[footprint_fixed(redone)], &positions(redone), 1,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowFootprintOverflow {
+                page, fragment_owner: block, source: first_source,
+            },
+        )),
+    );
+    assert_eq!(
+        session.first_fixed_row_footprint_overlap(
+            &measurement(redone, 80_000),
+            &[footprint_fixed(redone)], &positions(redone),
         ),
         Err(application::SessionFlowFixedRegionError::Overlap(
             FlowFixedRegionError::RowFootprintOverflow {

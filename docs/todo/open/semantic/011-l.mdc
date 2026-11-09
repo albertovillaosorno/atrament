@@ -3295,3 +3295,13 @@ first-hit parity alongside complete enumeration across physical pages,
 including empty rows, variable X positions, overflow and invalid proposals.
 These are provisional measured rectangles, not handwriting-ink bounds or
 permission to export a complete semantic notebook; ATR-P2-011 remains open.
+
+## First-hit footprint under changing page geometry — 2026-11-09
+
+An additional live session regression compares first-hit physical-row
+intersection evidence against complete report geometry on a wide accepted
+page, then checks narrowed page-profile revisions through edit, Undo and
+Redo. On narrow revisions, even a fresh measured row source refuses an
+out-of-bounds horizontal origin, while a position from the earlier revision
+refuses with the exact mismatched source index. Undo restores the same
+physical intersection with freshly bound authority. No real ink is inferred.
