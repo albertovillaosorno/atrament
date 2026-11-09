@@ -9576,6 +9576,49 @@ fn live_selected_row_report_inspects_checked_fixed_pairs_with_row_hits() {
 }
 
 #[test]
+fn live_selected_row_snapshot_preserves_conservative_band_conflicts() {
+    let result = (|| -> Result<(), String> {
+        let fixture = live_owner_regroup_fixture()?;
+        let mut selections = fixture.fresh_selections.clone();
+        selections.first_mut().ok_or("first choice absent")?.alignment =
+            RowHorizontalAlignment::Right;
+        let report = fixture.session.inspect_selected_aligned_measured_rows(
+            &fixture.regrouped, &fixture.fixed, &selections, 0,
+        ).map_err(|error| format!("live positioned-clear report: {error:?}"))?;
+        assert!(report.overlaps().is_empty());
+        assert_eq!(report.revision(), fixture.revision);
+        let independent = fixture.session.fixed_row_band_overlaps(
+            &fixture.regrouped, &fixture.fixed, 1,
+        ).map_err(|error| format!("live band oracle: {error:?}"))?;
+        assert_eq!(independent.len(), 1);
+        assert_eq!(report.fixed_row_band_overlaps(1), Ok(independent.clone()));
+        assert_eq!(report.first_fixed_row_band_overlap(),
+            Ok(independent.first().copied()));
+        let first_band = independent.first().ok_or("first band absent")?;
+        assert_eq!(first_band.source(), fixture.first_source);
+        assert_eq!(first_band.page(), fixture.page);
+        assert_eq!(first_band.revision(), fixture.revision);
+        assert_eq!(first_band.overlap_top(), fixture.rectangle.y);
+        assert_eq!(first_band.overlap_height(), fixture.rectangle.height);
+        assert_eq!(report.fixed_row_band_overlaps(0),
+            Err(FlowFixedRegionError::FixedRowLimitExceeded { limit: 0 }));
+        // A stale cross-owner choice must still be refused before the
+        // immutable report exists, even for a zero physical-hit cap.
+        assert!(matches!(
+            fixture.session.inspect_selected_aligned_measured_rows(
+                &fixture.regrouped, &fixture.fixed,
+                &fixture.old_selections, 0,
+            ),
+            Err(application::SessionFlowFixedRegionError::Overlap(
+                FlowFixedRegionError::RowAlignmentMismatch { index: 1, .. },
+            )),
+        ));
+        Ok(())
+    })();
+    assert!(result.is_ok(), "live conservative report: {result:?}");
+}
+
+#[test]
 fn live_selected_row_inspection_refuses_late_remeasurement() {
     let result = (|| -> Result<(), String> {
         let fixture = live_owner_regroup_fixture()?;

@@ -583,6 +583,34 @@ impl SelectedAlignedRowInspection {
         Ok(first)
     }
 
+    /// First conservative fixed-versus-row vertical-band intersection.
+    ///
+    /// The caller-selected row X positions do not narrow this query: a
+    /// zero-width row still reserves a possible full writable-width band.
+    /// Unlike actual positioned-box hits in `overlaps()`, this reports
+    /// *potential* clearance conflicts. Both observations come from the same
+    /// already admitted immutable fixed and measured-row snapshot.
+    ///
+    /// # Errors
+    ///
+    /// Refuses unrepresentable physical coordinates, without a partial hit.
+    pub fn first_fixed_row_band_overlap(
+        &self,
+    ) -> Result<Option<FixedRowBandOverlap>, FlowFixedRegionError> {
+        let mut first = None;
+        visit_admitted_fixed_row_band_overlaps(
+            self.revision,
+            self.flow,
+            &self.fixed_regions,
+            &self.rows,
+            |overlap| {
+                first = Some(overlap);
+                false
+            },
+        )?;
+        Ok(first)
+    }
+
     /// Enumerate fixed-pair intersections within this sealed inspection.
     ///
     /// Only the snapshot's checked fixed proposals are compared; original
@@ -614,6 +642,45 @@ impl SelectedAlignedRowInspection {
     #[must_use]
     pub fn fixed_regions(&self) -> &[FixedRegionLayoutResult] {
         &self.fixed_regions
+    }
+
+    /// Enumerate potential full-width row-band conflicts from this snapshot.
+    ///
+    /// Matches independent conservative band inspection in fixed-input,
+    /// physical-row order, even when a selected X position clears the fixed
+    /// rectangle. Zero-area fixed boxes contribute none; a zero cap admits
+    /// only a band-clear result. This is not actual glyph-ink collision policy.
+    ///
+    /// # Errors
+    ///
+    /// Refuses coordinate overflow or a result exceeding `max_overlaps`;
+    /// does not expose a partial collection.
+    pub fn fixed_row_band_overlaps(
+        &self,
+        max_overlaps: usize,
+    ) -> Result<Vec<FixedRowBandOverlap>, FlowFixedRegionError> {
+        let mut overlaps = Vec::new();
+        let mut exceeded = false;
+        visit_admitted_fixed_row_band_overlaps(
+            self.revision,
+            self.flow,
+            &self.fixed_regions,
+            &self.rows,
+            |overlap| {
+                if overlaps.len() == max_overlaps {
+                    exceeded = true;
+                    return false;
+                }
+                overlaps.push(overlap);
+                true
+            },
+        )?;
+        if exceeded {
+            return Err(FlowFixedRegionError::FixedRowLimitExceeded {
+                limit: max_overlaps,
+            });
+        }
+        Ok(overlaps)
     }
 
     /// Accepted flow for all read-only collections.
@@ -1550,6 +1617,65 @@ fn visit_fixed_measured_rows(
                 Length::from_micrometres(shared_height),
             ) {
                 break;
+            }
+        }
+    }
+    Ok(())
+}
+
+// The selected report already owns all validated rectangles, so inspecting
+// their vertical bands requires no original plan or reconstructed positions.
+// Preserve the independent conservative oracle's fixed-first, row-second
+// ordering even when a selected X position eliminates physical contact.
+fn visit_admitted_fixed_row_band_overlaps(
+    revision: RevisionIdentity,
+    flow: AcceptedIdentity,
+    fixed_regions: &[FixedRegionLayoutResult],
+    rows: &[PositionedRowFootprint],
+    mut visit: impl FnMut(FixedRowBandOverlap) -> bool,
+) -> Result<(), FlowFixedRegionError> {
+    for (fixed_index, fixed) in fixed_regions.iter().enumerate() {
+        let rectangle = fixed.rectangle();
+        if rectangle.width == Length::ZERO || rectangle.height == Length::ZERO {
+            continue;
+        }
+        let top = rectangle.y.micrometres();
+        let bottom = top
+            .checked_add(rectangle.height.micrometres())
+            .ok_or_else(|| FlowFixedRegionError::CoordinateOverflow {
+                page: fixed.page(),
+                object: fixed.object(),
+            })?;
+        for row in rows.iter().filter(|row| row.page() == fixed.page()) {
+            let row_rectangle = row.rectangle();
+            let row_top = row_rectangle.y.micrometres();
+            let row_bottom = row_top
+                .checked_add(row_rectangle.height.micrometres())
+                .ok_or_else(|| FlowFixedRegionError::CoordinateOverflow {
+                    page: fixed.page(),
+                    object: fixed.object(),
+                })?;
+            let shared_top = top.max(row_top);
+            let shared_bottom = bottom.min(row_bottom);
+            if shared_top < shared_bottom {
+                let shared_height = shared_bottom.checked_sub(shared_top)
+                    .ok_or_else(|| FlowFixedRegionError::CoordinateOverflow {
+                        page: fixed.page(),
+                        object: fixed.object(),
+                    })?;
+                if !visit(FixedRowBandOverlap {
+                    fixed_index,
+                    flow,
+                    fragment_owner: row.fragment_owner(),
+                    object: fixed.object(),
+                    overlap_height: Length::from_micrometres(shared_height),
+                    overlap_top: Length::from_micrometres(shared_top),
+                    page: fixed.page(),
+                    revision,
+                    source: row.source(),
+                }) {
+                    return Ok(());
+                }
             }
         }
     }

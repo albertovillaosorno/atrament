@@ -5378,6 +5378,8 @@ fn positioned_row_boxes_seal_complete_source_bound_geometry_across_pages()
 }
 
 struct SelectedRowInspectionFixture {
+    empty_row_fixed:
+        atrament_semantic_fixed_region_layout::FixedRegionLayoutResult,
     empty_fixed: atrament_semantic_fixed_region_layout::FixedRegionLayoutResult,
     fixed: [atrament_semantic_fixed_region_layout::FixedRegionLayoutResult; 2],
     flow: AcceptedIdentity,
@@ -5493,7 +5495,7 @@ fn selected_row_inspection_fixture()
     )
     .map_err(|error| format!("row inspection pagination: {error:?}"))?;
     let rows = plan.placements();
-    let [first, _, _] = rows else {
+    let [first, empty, _] = rows else {
         return Err("expected two physical pages and three rows".into());
     };
     let selections = rows
@@ -5542,7 +5544,25 @@ fn selected_row_inspection_fixture()
         },
     )
     .map_err(|error| format!("zero-width fixed proposal: {error:?}"))?;
+    let empty_row_fixed = validate_fixed_placement(
+        accepted,
+        AcceptedFixedPlacement {
+            object: owner,
+            page: empty.page,
+            rectangle: Rect {
+                x: empty.writable.x,
+                y: Length::from_micrometres(
+                    empty.top.micrometres() + 1_000,
+                ),
+                width: Length::from_micrometres(2_000),
+                height: Length::from_micrometres(2_000),
+            },
+            revision,
+        },
+    )
+    .map_err(|error| format!("zero-width-row fixed check: {error:?}"))?;
     Ok(SelectedRowInspectionFixture {
+        empty_row_fixed,
         empty_fixed,
         fixed,
         flow,
@@ -5893,6 +5913,101 @@ fn selected_row_inspection_checks_fixed_pairs_without_row_band_gate() {
         Ok(())
     })();
     assert!(result.is_ok(), "checked fixed pairs: {result:?}");
+}
+
+#[test]
+fn selected_row_snapshot_compares_conservative_bands_with_positioned_hits() {
+    let result = (|| -> Result<(), String> {
+        use std::slice::from_ref;
+
+        use atrament_semantic_flow_pagination as layout;
+        let SelectedRowInspectionFixture {
+            empty_fixed,
+            empty_row_fixed,
+            fixed,
+            plan,
+            mut selections,
+            ..
+        } = selected_row_inspection_fixture()?;
+        // Source-bound horizontal intent can clear a rectangle without
+        // changing its potential full-writable-width row-band conflict.
+        selections.first_mut().ok_or("first choice absent")?.alignment =
+            RowHorizontalAlignment::Right;
+        let report = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &fixed, &selections, 0,
+        )
+        .map_err(|error| format!("positioned clear: {error:?}"))?;
+        assert!(report.overlaps().is_empty());
+        let independent = fixed_row_band_overlaps_for_flow(
+            &plan, &fixed, 2,
+        )
+        .map_err(|error| format!("independent bands: {error:?}"))?;
+        assert_eq!(report.fixed_row_band_overlaps(2), Ok(independent.clone()));
+        assert_eq!(report.first_fixed_row_band_overlap(),
+            Ok(independent.first().copied()));
+        let [first_band, second_band] = independent.as_slice() else {
+            return Err("expected two conservative bands".into());
+        };
+        let [first_fixed, second_fixed] = &fixed;
+        assert_eq!(first_band.fixed_index(), 0);
+        assert_eq!(second_band.fixed_index(), 1);
+        let first_row = plan.placements().first()
+            .ok_or("first measured row absent")?;
+        assert_eq!(first_band.source(), first_row.source);
+        assert_eq!(first_band.object(), first_fixed.object());
+        assert_eq!(first_band.flow(), plan.flow());
+        assert_eq!(first_band.revision(), plan.revision());
+        assert_eq!(first_band.overlap_top(), first_fixed.rectangle().y);
+        assert_eq!(first_band.overlap_height(),
+            first_fixed.rectangle().height);
+        assert_eq!(report.fixed_row_band_overlaps(1),
+            Err(FlowFixedRegionError::FixedRowLimitExceeded { limit: 1 }));
+        assert_eq!(report.fixed_row_band_overlaps(0),
+            Err(FlowFixedRegionError::FixedRowLimitExceeded { limit: 0 }));
+        // A checked rectangle overlapping only the second, zero-width row
+        // is a conservative conflict without a positioned-box intersection.
+        let zero_row = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, from_ref(&empty_row_fixed), &selections, 0,
+        ).map_err(|error| format!("empty row band: {error:?}"))?;
+        assert!(zero_row.overlaps().is_empty());
+        let zero_row_band = zero_row.first_fixed_row_band_overlap()
+            .map_err(|error| format!("empty row first band: {error:?}"))?
+            .ok_or("missing zero-width row band")?;
+        assert_eq!(zero_row_band.source(),
+            plan.placements().get(1).ok_or("zero row absent")?.source);
+        assert_eq!(zero_row_band.overlap_top(), empty_row_fixed.rectangle().y);
+        assert_eq!(zero_row_band.overlap_height(),
+            empty_row_fixed.rectangle().height);
+        assert_eq!(zero_row.fixed_row_band_overlaps(1),
+            Ok(vec![zero_row_band]));
+        // Already admitted snapshots retain original indices after the
+        // caller reorders fixed objects; empty boxes produce no false band.
+        let reversed = [
+            second_fixed.clone(), empty_fixed.clone(), first_fixed.clone(),
+        ];
+        let reordered = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &reversed, &selections, 0,
+        ).map_err(|error| format!("reordered bands: {error:?}"))?;
+        let reverse_bands = fixed_row_band_overlaps_for_flow(
+            &plan, &reversed, 2,
+        ).map_err(|error| format!("reversed independent: {error:?}"))?;
+        assert_eq!(reordered.fixed_row_band_overlaps(2), Ok(reverse_bands));
+        assert_eq!(reordered.fixed_row_band_overlaps(2)
+            .map_err(|error| format!("reordered indexed bands: {error:?}"))?
+            .iter().map(FixedRowBandOverlap::fixed_index).collect::<Vec<_>>(),
+            vec![0, 2]);
+        let empty = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &[empty_fixed], &selections, 0,
+        ).map_err(|error| format!("zero-area fixed band: {error:?}"))?;
+        assert_eq!(empty.first_fixed_row_band_overlap(), Ok(None));
+        assert_eq!(empty.fixed_row_band_overlaps(0), Ok(vec![]));
+        let no_fixed = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &[], &selections, 0,
+        ).map_err(|error| format!("empty fixed batch: {error:?}"))?;
+        assert_eq!(no_fixed.fixed_row_band_overlaps(0), Ok(vec![]));
+        Ok(())
+    })();
+    assert!(result.is_ok(), "sealed row-band inspection: {result:?}");
 }
 
 #[test]

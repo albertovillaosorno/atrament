@@ -3674,3 +3674,22 @@ This is not a fixed-layering policy, independently trusted ink geometry,
 persisted notebook alignment or PDF/transparent PNG Export authorization.
 ATR-P2-011 remains open until saved semantic content and measured handwriting
 reach the native output pipeline.
+
+## Conservative band comparison inside selected-row snapshots — 2026-11-09
+
+The admitted mixed-alignment report now independently exposes first and
+capped **conservative vertical row-band** conflicts from its sealed row and
+fixed rectangles. It preserves original fixed-input and physical-row order,
+accepted revision/flow, exact source identity and positive-height shared
+intervals, even when the caller-selected X position clears the fixed object.
+The existing positioned row/fixed intersections remain separate observations.
+
+Pure regression evidence compares snapshot bands against the independent
+full-width row-band oracle, including an intentionally right-aligned row with
+no physical hit, a zero-width measured row that still reserves a conservative
+band, zero-area fixed boxes, source identities, proposal reordering and exact
+zero/insufficient result-cap refusal. A live-session regression proves the
+same distinction under current accepted authority and rejects stale cross-owner
+alignment choices before constructing a report. Nothing authorizes actual
+glyph-ink overlap, fixed-layering, saved alignment or native Export. The finite
+saved-notebook acceptance criterion remains open.
