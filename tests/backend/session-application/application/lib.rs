@@ -9456,6 +9456,7 @@ fn live_selected_row_inspection_admits_one_revision_for_boxes_and_hits() {
             .map_err(|error| format!("live combined inspection: {error:?}"))?;
         assert_eq!(report.revision(), fixture.revision);
         assert_eq!(report.flow(), fixture.regrouped.flow);
+        assert_eq!(report.selections(), fixture.fresh_selections.as_slice());
         assert_eq!(report.fixed_regions().len(), fixture.fixed.len());
         let checked = report.fixed_regions().first()
             .ok_or("checked fixed rectangle missing")?;
@@ -9470,6 +9471,10 @@ fn live_selected_row_inspection_admits_one_revision_for_boxes_and_hits() {
         let first_hit = report.overlaps().first().ok_or("first hit missing")?;
         assert_eq!(first_row.source(), fixture.first_source);
         assert_eq!(second_row.fragment_owner(), fixture.changed_owner);
+        let second_choice = report.selections().get(1)
+            .ok_or("second validated alignment missing")?;
+        assert_eq!(second_choice.fragment_owner, second_row.fragment_owner());
+        assert_eq!(second_choice.source, second_row.source());
         assert_eq!(report.overlaps().len(), 1);
         assert_eq!(first_hit.source(), fixture.first_source);
         assert_eq!(first_hit.intersection(), fixture.rectangle);

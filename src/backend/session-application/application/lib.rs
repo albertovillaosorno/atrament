@@ -886,8 +886,8 @@ impl SessionApplication {
 
     /// Inspect selected row boxes and fixed intersections in one snapshot.
     ///
-    /// Checked fixed rectangles, provisional rows, and indexed intersections
-    /// share the same current accepted revision, flow and selected alignment.
+    /// Checked fixed rectangles, caller-selected alignment choices, provisional
+    /// rows and indexed hits share current revision and flow authority.
     /// The cap bounds intersections but never truncates either box collection.
     /// These collections do not verify visible ink or admit native Export.
     ///

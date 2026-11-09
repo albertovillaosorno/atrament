@@ -3634,3 +3634,19 @@ continue to refuse the entire report. These remain provisional checked boxes,
 not visible ink, a fixed-layering decision, saved alignment intent, or semantic
 notebook Export eligibility; the finite two-page saved-notebook criterion is
 still open.
+
+## Validated alignment intent in the combined inspection — 2026-11-09
+
+The combined selected-row inspection now retains the complete per-row
+left/center/right **choice batch** in source order, with all revision, owner,
+page, measured geometry and original fragment bindings validated before the
+caller can access it. The `selections()` and `rows()` slices share physical
+placement order, including zero-width rows, while the fixed array and exact
+indexed intersections remain from the same accepted measurement.
+
+Pure regression checks three distinct choices across two pages, correspondence
+between every selection and positioned source row, and independent snapshot
+ownership when a caller changes its subsequent alignment. The live-session
+query verifies returned choices still belong to the accepted same-revision
+regrouped block owner. Choices are inspectable but **not persisted** as
+semantic constraints, trusted handwriting ink, or notebook Export readiness.

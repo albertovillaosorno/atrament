@@ -5625,6 +5625,7 @@ fn selected_row_inspection_keeps_boxes_and_fixed_hits_on_one_plan() {
             inspect_selected_aligned_rows_for_flow(&plan, &[], &selections, 0)
                 .map_err(|error| format!("no fixed: {error:?}"))?;
         assert_eq!(clear.rows(), report.rows());
+        assert_eq!(clear.selections(), selections.as_slice());
         assert_eq!(clear.fixed_regions().len(), 0);
         assert_eq!(clear.overlaps().len(), 0);
         let mut stale = selections;
@@ -5702,6 +5703,58 @@ fn selected_row_inspection_seals_fixed_index_geometry_on_reorder() {
         Ok(())
     })();
     assert!(result.is_ok(), "fixed index snapshot: {result:?}");
+}
+
+#[test]
+fn selected_row_inspection_retains_validated_alignment_intent() {
+    let result = (|| -> Result<(), String> {
+        use atrament_semantic_flow_pagination as layout;
+        let SelectedRowInspectionFixture {
+            fixed,
+            flow,
+            plan,
+            revision,
+            selections,
+            ..
+        } = selected_row_inspection_fixture()?;
+        let report = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &fixed, &selections, 2,
+        ).map_err(|error| format!("aligned snapshot: {error:?}"))?;
+        assert_eq!(report.selections(), selections.as_slice());
+        let [left, empty, center] = report.selections() else {
+            return Err("three aligned choices required".into());
+        };
+        assert_eq!(left.alignment, RowHorizontalAlignment::Left);
+        assert_eq!(empty.alignment, RowHorizontalAlignment::Right);
+        assert_eq!(center.alignment, RowHorizontalAlignment::Center);
+        for (row, choice) in report.rows().iter().zip(report.selections()) {
+            assert_eq!(choice.flow, flow);
+            assert_eq!(choice.revision, revision);
+            assert_eq!(choice.source, row.source());
+            assert_eq!(choice.fragment_owner, row.fragment_owner());
+            assert_eq!(choice.page, row.page());
+        }
+        let empty_row = report.rows().get(1).ok_or("empty row missing")?;
+        assert_eq!(empty_row.rectangle().width, Length::ZERO);
+        assert_eq!(empty.source, empty_row.source());
+        // Caller edits after inspection cannot change the sealed report.
+        let mut edited = selections.clone();
+        let first = edited.first_mut().ok_or("first choice missing")?;
+        first.alignment = RowHorizontalAlignment::Center;
+        let reselected = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &[], &edited, 0,
+        ).map_err(|error| format!("new alignment: {error:?}"))?;
+        assert_eq!(reselected.selections(), edited.as_slice());
+        assert_eq!(report.selections(), selections.as_slice());
+        let former_origin = report.rows().first()
+            .ok_or("former first row missing")?.rectangle().x;
+        let new_origin = reselected.rows().first()
+            .ok_or("new first row missing")?.rectangle().x;
+        assert_ne!(former_origin, new_origin);
+        assert_eq!(reselected.overlaps().len(), 0);
+        Ok(())
+    })();
+    assert!(result.is_ok(), "aligned intent snapshot: {result:?}");
 }
 
 #[test]

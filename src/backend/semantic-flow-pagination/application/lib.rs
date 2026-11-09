@@ -535,12 +535,13 @@ impl PositionedRowFootprint {
 
 /// One admitted selection's complete provisional row and fixed boxes.
 ///
-/// The report contains all checked fixed proposals in their original order,
-/// every selected row (including empty widths), and only positive-area
-/// row/fixed intersections. Each hit's `fixed_index()` identifies an entry
-/// in `fixed_regions()`. All three collections belong to one sealed plan
-/// and selection; invalid proposals or intersection-cap overflow refuse the
-/// entire report.
+/// The report retains exact validated alignment choices in source order,
+/// all checked fixed proposals in input order, every provisional positioned
+/// row (including empty widths), and positive-area row/fixed intersections.
+/// Each hit's `fixed_index()` identifies an entry in `fixed_regions()`.
+/// Each row and alignment choice share one placement index. All collections
+/// belong to one sealed plan; invalid proposals or intersection-cap overflow
+/// refuse the entire report.
 /// This is not authenticated glyph ink, overlap policy, or Export authority.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SelectedAlignedRowInspection {
@@ -549,6 +550,7 @@ pub struct SelectedAlignedRowInspection {
     overlaps: Vec<FixedRowFootprintOverlap>,
     revision: RevisionIdentity,
     rows: Vec<PositionedRowFootprint>,
+    selections: Vec<RowAlignmentSelection>,
 }
 
 impl SelectedAlignedRowInspection {
@@ -584,6 +586,15 @@ impl SelectedAlignedRowInspection {
     #[must_use]
     pub fn rows(&self) -> &[PositionedRowFootprint] {
         &self.rows
+    }
+
+    /// Source-bound alignment intent for each corresponding reported row.
+    ///
+    /// These caller-selected choices have passed exact measurement admission,
+    /// but remain read-only evidence, not persisted layout constraints.
+    #[must_use]
+    pub fn selections(&self) -> &[RowAlignmentSelection] {
+        &self.selections
     }
 }
 
@@ -985,6 +996,7 @@ pub fn inspect_selected_aligned_rows_for_flow(
         overlaps,
         revision: plan.revision(),
         rows,
+        selections: selections.to_vec(),
     })
 }
 
