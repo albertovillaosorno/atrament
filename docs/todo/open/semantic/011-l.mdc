@@ -3614,3 +3614,23 @@ accepted semantic owner on that page.
 The result is **diagnostic-only** caller-measured geometry, not confirmed glyph
 ink, persisted alignment, fixed-layer authorization, notebook PDF/PNG Export or
 completion of the saved-notebook acceptance criterion.
+
+## Complete checked fixed geometry in the selected-row report — 2026-11-09
+
+The combined read-only mixed-alignment report now retains its original indexed
+**checked fixed rectangles** alongside all provisional positioned row boxes
+and capped physical intersections. Each hit's fixed index identifies a sealed
+bounds result in the same snapshot, including the accepted object, page,
+revision, exact rectangle and writable area. A caller can reorder or overwrite
+its submitted fixed array after inspection without changing the report.
+
+Pure regressions verify original fixed order (including two proposals with one
+owner), reordered index-to-intersection correspondence, independent snapshot
+ownership, and zero-width checked fixed boxes that remain observable while
+producing no physical hit or consuming a zero hit cap. The live-session test
+checks the fixed geometry and hit index against its accepted current revision.
+Later invalid fixed boxes, stale row selections and intersection-cap failures
+continue to refuse the entire report. These remain provisional checked boxes,
+not visible ink, a fixed-layering decision, saved alignment intent, or semantic
+notebook Export eligibility; the finite two-page saved-notebook criterion is
+still open.

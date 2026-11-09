@@ -9456,6 +9456,14 @@ fn live_selected_row_inspection_admits_one_revision_for_boxes_and_hits() {
             .map_err(|error| format!("live combined inspection: {error:?}"))?;
         assert_eq!(report.revision(), fixture.revision);
         assert_eq!(report.flow(), fixture.regrouped.flow);
+        assert_eq!(report.fixed_regions().len(), fixture.fixed.len());
+        let checked = report.fixed_regions().first()
+            .ok_or("checked fixed rectangle missing")?;
+        assert!(checked.is_within_bounds());
+        assert_eq!(checked.revision(), fixture.revision);
+        assert_eq!(checked.object(), fixture.fixed[0].object);
+        assert_eq!(checked.page(), fixture.fixed[0].page);
+        assert_eq!(checked.rectangle(), fixture.fixed[0].rectangle);
         assert_eq!(report.rows().len(), 3);
         let first_row = report.rows().first().ok_or("first row missing")?;
         let second_row = report.rows().get(1).ok_or("second row missing")?;
@@ -9465,6 +9473,9 @@ fn live_selected_row_inspection_admits_one_revision_for_boxes_and_hits() {
         assert_eq!(report.overlaps().len(), 1);
         assert_eq!(first_hit.source(), fixture.first_source);
         assert_eq!(first_hit.intersection(), fixture.rectangle);
+        assert_eq!(first_hit.fixed_index(), 0);
+        assert_eq!(first_hit.object(), checked.object());
+        assert_eq!(first_hit.page(), checked.page());
         assert_eq!(
             report.rows(),
             fixture

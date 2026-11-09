@@ -886,10 +886,10 @@ impl SessionApplication {
 
     /// Inspect selected row boxes and fixed intersections in one snapshot.
     ///
-    /// Both read-only collections share the same current accepted revision,
-    /// measured flow, checked fixed proposals and exact per-row alignment
-    /// choices. The result cap bounds intersections but never truncates rows.
-    /// Neither collection verifies visible ink or admits native Export.
+    /// Checked fixed rectangles, provisional rows, and indexed intersections
+    /// share the same current accepted revision, flow and selected alignment.
+    /// The cap bounds intersections but never truncates either box collection.
+    /// These collections do not verify visible ink or admit native Export.
     ///
     /// # Errors
     ///

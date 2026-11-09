@@ -533,15 +533,18 @@ impl PositionedRowFootprint {
     }
 }
 
-/// One admitted selection's complete provisional row boxes and fixed hits.
+/// One admitted selection's complete provisional row and fixed boxes.
 ///
-/// Both collections come from one sealed measured plan, one exact sequence of
-/// caller-selected alignments, and the same checked fixed proposals. Empty
-/// measured rows are retained in `rows`, but cannot produce positive-area
-/// `overlaps`. The bounded report refuses instead of truncating intersections.
+/// The report contains all checked fixed proposals in their original order,
+/// every selected row (including empty widths), and only positive-area
+/// row/fixed intersections. Each hit's `fixed_index()` identifies an entry
+/// in `fixed_regions()`. All three collections belong to one sealed plan
+/// and selection; invalid proposals or intersection-cap overflow refuse the
+/// entire report.
 /// This is not authenticated glyph ink, overlap policy, or Export authority.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SelectedAlignedRowInspection {
+    fixed_regions: Vec<FixedRegionLayoutResult>,
     flow: AcceptedIdentity,
     overlaps: Vec<FixedRowFootprintOverlap>,
     revision: RevisionIdentity,
@@ -549,7 +552,17 @@ pub struct SelectedAlignedRowInspection {
 }
 
 impl SelectedAlignedRowInspection {
-    /// Accepted flow for both read-only collections.
+    /// Original checked fixed rectangles in their submitted index order.
+    ///
+    /// Only rectangles admitted against the selected physical page bounds
+    /// enter a successful report. The enclosed diagnostics remain their
+    /// original constructor-sealed checks, not collision-policy decisions.
+    #[must_use]
+    pub fn fixed_regions(&self) -> &[FixedRegionLayoutResult] {
+        &self.fixed_regions
+    }
+
+    /// Accepted flow for all read-only collections.
     #[must_use]
     pub const fn flow(&self) -> AcceptedIdentity {
         self.flow
@@ -561,7 +574,7 @@ impl SelectedAlignedRowInspection {
         &self.overlaps
     }
 
-    /// Accepted revision from which both collections were projected.
+    /// Accepted revision from which all checked collections were projected.
     #[must_use]
     pub const fn revision(&self) -> RevisionIdentity {
         self.revision
@@ -937,13 +950,14 @@ pub fn selected_aligned_row_footprints_for_flow(
     positioned_row_footprints_for_flow(plan, &positions)
 }
 
-/// Return selected row boxes and bounded fixed hits from one measured plan.
+/// Return checked fixed boxes, selected rows and bounded physical hits.
 ///
-/// This combines the existing checked row-box and physical intersection
-/// projections so callers cannot accidentally pair a box list with hits from
-/// another measurement or page authority. Every selected row is admitted
-/// before any boxes or intersections escape; later invalid fixed regions and
-/// result caps refuse the whole report without partial observations.
+/// This binds the original ordered fixed proposals to their hit indices,
+/// and combines them with admitted row boxes from one measured plan. Callers
+/// cannot accidentally pair an intersection with fixed geometry from another
+/// measurement or page authority. Every selected row and checked fixed box
+/// is admitted before any collection escapes. Invalid later proposals or an
+/// exceeded hit cap refuse the entire report without partial observations.
 ///
 /// # Errors
 ///
@@ -966,6 +980,7 @@ pub fn inspect_selected_aligned_rows_for_flow(
         max_overlaps,
     )?;
     Ok(SelectedAlignedRowInspection {
+        fixed_regions: fixed_regions.to_vec(),
         flow: plan.flow(),
         overlaps,
         revision: plan.revision(),

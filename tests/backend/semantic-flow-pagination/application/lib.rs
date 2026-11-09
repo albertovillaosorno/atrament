@@ -5378,6 +5378,7 @@ fn positioned_row_boxes_seal_complete_source_bound_geometry_across_pages()
 }
 
 struct SelectedRowInspectionFixture {
+    empty_fixed: atrament_semantic_fixed_region_layout::FixedRegionLayoutResult,
     fixed: [atrament_semantic_fixed_region_layout::FixedRegionLayoutResult; 2],
     flow: AcceptedIdentity,
     invalid_later:
@@ -5526,7 +5527,23 @@ fn selected_row_inspection_fixture()
         owner,
         revision,
     )?;
+    let empty_fixed = validate_fixed_placement(
+        accepted,
+        AcceptedFixedPlacement {
+            object: owner,
+            page: first.page,
+            rectangle: Rect {
+                x: first_position.left,
+                y: first.top,
+                width: Length::ZERO,
+                height: Length::from_micrometres(2_000),
+            },
+            revision,
+        },
+    )
+    .map_err(|error| format!("zero-width fixed proposal: {error:?}"))?;
     Ok(SelectedRowInspectionFixture {
+        empty_fixed,
         fixed,
         flow,
         invalid_later,
@@ -5569,6 +5586,7 @@ fn selected_row_inspection_keeps_boxes_and_fixed_hits_on_one_plan() {
         .map_err(|error| format!("combined row inspection: {error:?}"))?;
         assert_eq!(report.revision(), revision);
         assert_eq!(report.flow(), flow);
+        assert_eq!(report.fixed_regions(), fixed.as_slice());
         assert_eq!(
             report.rows(),
             selected_aligned_row_footprints_for_flow(&plan, &selections)
@@ -5607,7 +5625,8 @@ fn selected_row_inspection_keeps_boxes_and_fixed_hits_on_one_plan() {
             inspect_selected_aligned_rows_for_flow(&plan, &[], &selections, 0)
                 .map_err(|error| format!("no fixed: {error:?}"))?;
         assert_eq!(clear.rows(), report.rows());
-        assert!(clear.overlaps().is_empty());
+        assert_eq!(clear.fixed_regions().len(), 0);
+        assert_eq!(clear.overlaps().len(), 0);
         let mut stale = selections;
         stale.get_mut(2).ok_or("last selection absent")?.source = first.source;
         assert_eq!(
@@ -5622,6 +5641,106 @@ fn selected_row_inspection_keeps_boxes_and_fixed_hits_on_one_plan() {
         Ok(())
     })();
     assert!(result.is_ok(), "combined pure layout: {result:?}");
+}
+
+#[test]
+fn selected_row_inspection_seals_fixed_index_geometry_on_reorder() {
+    let result = (|| -> Result<(), String> {
+        use atrament_semantic_flow_pagination as layout;
+        let SelectedRowInspectionFixture {
+            fixed,
+            owner,
+            plan,
+            revision,
+            selections,
+            ..
+        } = selected_row_inspection_fixture()?;
+        let first = plan.placements().first().ok_or("first row missing")?;
+        let report = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &fixed, &selections, 2,
+        ).map_err(|error| format!("fixed snapshot: {error:?}"))?;
+        assert_eq!(report.fixed_regions(), fixed.as_slice());
+        for (expected, checked) in fixed.iter().zip(report.fixed_regions()) {
+            assert_eq!(expected, checked);
+            assert!(checked.is_within_bounds());
+            assert_eq!(checked.revision(), revision);
+            assert_eq!(checked.page(), first.page);
+            assert_eq!(checked.object(), owner);
+            assert_eq!(checked.writable(), first.writable);
+        }
+        for hit in report.overlaps() {
+            let checked = report.fixed_regions().get(hit.fixed_index())
+                .ok_or("hit fixed index missing from snapshot")?;
+            assert_eq!(checked.object(), hit.object());
+            assert_eq!(checked.page(), hit.page());
+            assert_eq!(checked.revision(), hit.revision());
+        }
+        // Reordering same-owner proposals changes indices but not physical
+        // rectangles; snapshots own their geometry after caller mutation.
+        let mut reordered = fixed.clone();
+        reordered.reverse();
+        let reversed = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &reordered, &selections, 2,
+        ).map_err(|error| format!("reordered fixed: {error:?}"))?;
+        assert_eq!(reversed.fixed_regions(), reordered.as_slice());
+        assert_eq!(reversed.rows(), report.rows());
+        let [first_hit, second_hit] = report.overlaps() else {
+            return Err("two initial intersections required".into());
+        };
+        let [reversed_first, reversed_second] = reversed.overlaps() else {
+            return Err("two reordered intersections required".into());
+        };
+        assert_eq!(reversed_first.fixed_index(), 0);
+        assert_eq!(reversed_second.fixed_index(), 1);
+        assert_eq!(reversed_first.intersection(), second_hit.intersection());
+        assert_eq!(reversed_second.intersection(), first_hit.intersection());
+        let [_, original_second] = &fixed;
+        let [reordered_first, reordered_second] = &mut reordered;
+        *reordered_first = reordered_second.clone();
+        assert_eq!(reversed.fixed_regions().first(), Some(original_second));
+        assert_eq!(report.fixed_regions(), fixed.as_slice());
+        Ok(())
+    })();
+    assert!(result.is_ok(), "fixed index snapshot: {result:?}");
+}
+
+#[test]
+fn selected_row_inspection_includes_checked_empty_fixed_without_false_hit() {
+    let result = (|| -> Result<(), String> {
+        use atrament_semantic_flow_pagination as layout;
+        let SelectedRowInspectionFixture {
+            empty_fixed,
+            fixed,
+            plan,
+            selections,
+            ..
+        } = selected_row_inspection_fixture()?;
+        let [first_fixed, last_fixed] = fixed;
+        let proposals = [first_fixed, empty_fixed.clone(), last_fixed];
+        let report = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &proposals, &selections, 2,
+        ).map_err(|error| format!("empty fixed inspection: {error:?}"))?;
+        assert_eq!(report.fixed_regions(), proposals.as_slice());
+        let empty_checked = report.fixed_regions().get(1)
+            .ok_or("empty fixed evidence missing")?;
+        assert_eq!(empty_checked.rectangle().width, Length::ZERO);
+        assert!(empty_checked.is_within_bounds());
+        assert_eq!(report.rows().len(), 3);
+        let [first_hit, last_hit] = report.overlaps() else {
+            return Err("two nonempty hits required".into());
+        };
+        assert_eq!(first_hit.fixed_index(), 0);
+        assert_eq!(last_hit.fixed_index(), 2);
+        // Empty physical boxes remain observable without consuming the
+        // positive-area intersection cap.
+        let no_hit = layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &[empty_fixed], &selections, 0,
+        ).map_err(|error| format!("only empty fixed: {error:?}"))?;
+        assert_eq!(no_hit.fixed_regions().len(), 1);
+        assert_eq!(no_hit.overlaps().len(), 0);
+        Ok(())
+    })();
+    assert!(result.is_ok(), "empty fixed snapshot: {result:?}");
 }
 
 #[test]
