@@ -2146,6 +2146,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     let positions = |revision| plan.placements().iter().map(|row| {
         RowHorizontalPosition {
             flow,
+            fragment_owner: row.owner,
             left: Length::from_micrometres(80_000),
             page: row.page,
             revision,
@@ -7917,6 +7918,7 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
     };
     let horizontal_position = |accepted_revision| RowHorizontalPosition {
         flow,
+        fragment_owner: row.owner,
         revision: accepted_revision,
         page,
         source: row.source,
@@ -8179,6 +8181,37 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         Err(application::SessionFlowFixedRegionError::Overlap(
             FlowFixedRegionError::FixedRowFootprintLimitExceeded { limit: 0 },
         )),
+    );
+    // A same-revision row position naming an unrelated semantic owner must
+    // refuse before reporting an otherwise valid physical collision.
+    let wrong_owner = RowHorizontalPosition {
+        fragment_owner: page,
+        ..horizontal_position(revision)
+    };
+    let expected_wrong_owner =
+        application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowPositionMismatch {
+                index: 0,
+                page,
+                fragment_owner: block,
+                source: row.source,
+            },
+        );
+    assert_eq!(
+        session.first_fixed_row_footprint_overlap(
+            &measurement(revision),
+            &[placement(revision, positioned_overlap)],
+            &[wrong_owner],
+        ),
+        Err(expected_wrong_owner),
+    );
+    assert_eq!(
+        session.fixed_row_footprint_overlaps(
+            &measurement(revision),
+            &[placement(revision, positioned_overlap)],
+            &[wrong_owner], 0,
+        ),
+        Err(expected_wrong_owner),
     );
     // This complete report validates later fixed bounds before returning any
     // earlier row conflict; the existing blocking query keeps caller order.

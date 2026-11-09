@@ -3769,6 +3769,7 @@ fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
     // when a later row jumps from the first to the third physical page.
     let positions = plan.placements().iter().map(|row| RowHorizontalPosition {
         flow: selected,
+        fragment_owner: row.owner,
         left: row.writable.x,
         page: row.page,
         revision,
@@ -4435,6 +4436,7 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
         plan.placements().iter().zip(offsets)
             .map(|(row, offset)| RowHorizontalPosition {
                 flow,
+                fragment_owner: row.owner,
                 revision,
                 page: row.page,
                 source: row.source,
@@ -4713,7 +4715,8 @@ fn indexed_positioned_footprints_match_linear_oracle_across_pages()
                     * 7_919 % (free + 1)
             };
             Ok(RowHorizontalPosition {
-                flow, revision, page: row.page, source: row.source,
+                flow, fragment_owner: row.owner, revision,
+                page: row.page, source: row.source,
                 left: Length::from_micrometres(
                     row.writable.x.micrometres() + offset,
                 ),
@@ -4912,7 +4915,8 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
     let overlaps = check(area(15_000, 5_000, 10_000, 2_000))?;
     let invalid = check(area(w - 500, 0, 1_000, 1_000))?;
     let position = RowHorizontalPosition {
-        flow, revision, page, source: row.source,
+        flow, fragment_owner: row.owner, revision, page,
+        source: row.source,
         left: Length::from_micrometres(x),
     };
     assert!(check_fixed_regions_for_flow(&plan, &[near_far_edge.clone()])
@@ -4963,6 +4967,18 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
     assert_eq!(
         fixed_row_footprint_overlaps_for_flow(&plan, &[], &[
             RowHorizontalPosition { flow: other_flow, ..position }
+        ], 0),
+        Err(FlowFixedRegionError::RowPositionMismatch {
+            index: 0, page, fragment_owner: owner, source: row.source,
+        }),
+    );
+    // A valid revision and source index cannot launder a position that
+    // names another semantic owner. This is checked before row bounds.
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(&plan, &[], &[
+            RowHorizontalPosition {
+                fragment_owner: other_flow, ..position
+            },
         ], 0),
         Err(FlowFixedRegionError::RowPositionMismatch {
             index: 0, page, fragment_owner: owner, source: row.source,
@@ -5335,6 +5351,11 @@ fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
 #[test]
 fn mixed_alignment_refuses_reused_source_assigned_to_another_semantic_owner()
 -> Result<(), String> {
+    use atrament_semantic_flow_pagination::{
+        first_fixed_row_footprint_overlap_for_flow,
+        fixed_row_footprint_overlaps_for_flow,
+    };
+
     let ids = IdentityAllocator::new();
     let mut fixture = candidate_fixture(&ids);
     let second_candidate =
@@ -5461,6 +5482,73 @@ fn mixed_alignment_refuses_reused_source_assigned_to_another_semantic_owner()
             &regrouped, &fresh,
         ).is_ok(),
         "regrouped rows may choose fresh alignments",
+    );
+    // Horizontal positions derived from the first valid grouping are
+    // revision/source-identical but must not be reused by the other owner.
+    // The first row would collide with a checked fixed object: full-batch
+    // identity admission takes precedence even for a first-hit query.
+    let old_positions = aligned_row_horizontal_positions_for_flow(
+        &first_plan, RowHorizontalAlignment::Left,
+    ).map_err(|error| format!("original row positions: {error:?}"))?;
+    let fresh_positions = aligned_row_horizontal_positions_for_flow(
+        &regrouped, RowHorizontalAlignment::Left,
+    ).map_err(|error| format!("regrouped row positions: {error:?}"))?;
+    assert_eq!(old_positions[1].fragment_owner, first_owner);
+    assert_eq!(fresh_positions[1].fragment_owner, second_owner);
+    let expected_mismatch = FlowFixedRegionError::RowPositionMismatch {
+        index: 1,
+        page,
+        fragment_owner: second_owner,
+        source: changed_row.source,
+    };
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &regrouped, &[], &old_positions, 0,
+        ),
+        Err(expected_mismatch),
+    );
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &regrouped, &[], &old_positions,
+        ),
+        Err(expected_mismatch),
+    );
+    let first_row = new_rows.first().ok_or("first regrouped row missing")?;
+    let fixed = validate_fixed_placement(accepted, AcceptedFixedPlacement {
+        object: second_owner,
+        page,
+        revision,
+        rectangle: Rect {
+            x: first_row.writable.x,
+            y: first_row.top,
+            width: Length::from_micrometres(1_000),
+            height: Length::from_micrometres(1_000),
+        },
+    }).map_err(|error| format!("checked first row: {error:?}"))?;
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &regrouped, std::slice::from_ref(&fixed), &old_positions,
+        ),
+        Err(expected_mismatch),
+    );
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &regrouped, std::slice::from_ref(&fixed), &old_positions, 0,
+        ),
+        Err(expected_mismatch),
+    );
+    let fresh_first = first_fixed_row_footprint_overlap_for_flow(
+        &regrouped, std::slice::from_ref(&fixed), &fresh_positions,
+    ).map_err(|error| format!("fresh footprint: {error:?}"))?
+        .ok_or("fresh first row collision missing")?;
+    assert_eq!(fresh_first.fragment_owner(), first_owner);
+    assert_eq!(fresh_first.source(), first_row.source);
+    assert_eq!(fresh_first.intersection(), fixed.rectangle());
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &regrouped, &[fixed], &fresh_positions, 1,
+        ),
+        Ok(vec![fresh_first]),
     );
     assert_eq!(session.current(), Some(accepted));
     Ok(())

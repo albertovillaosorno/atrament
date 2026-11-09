@@ -416,13 +416,16 @@ pub struct RowAlignmentSelection {
 
 /// Caller-selected physical X position for one exact measured flow row.
 ///
-/// The plan owns the row's accepted revision, flow, page, source and size.
-/// This proposal supplies only horizontal placement, **not** measured ink
+/// The plan owns the row's accepted revision, flow, block owner, page,
+/// source and size. This proposal supplies only horizontal placement,
+/// **not** measured ink
 /// geometry or proof that visible glyphs occupy the resulting rectangle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RowHorizontalPosition {
     /// Accepted selected flow whose measured source row is positioned.
     pub flow: AcceptedIdentity,
+    /// Stable accepted block owning the positioned source row.
+    pub fragment_owner: AcceptedIdentity,
     /// Absolute physical X origin for this row in micrometres.
     pub left: Length,
     /// Accepted page receiving this measured row.
@@ -727,6 +730,7 @@ fn aligned_position_for_row(
     }
     Ok(RowHorizontalPosition {
         flow: plan.flow(),
+        fragment_owner: row.owner,
         left: Length::from_micrometres(left),
         page: row.page,
         revision: plan.revision(),
@@ -1089,6 +1093,7 @@ fn validate_row_horizontal_positions(
     {
         if position.revision != plan.revision()
             || position.flow != plan.flow()
+            || position.fragment_owner != row.owner
             || position.page != row.page
             || position.source != row.source
         {

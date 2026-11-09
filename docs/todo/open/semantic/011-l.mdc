@@ -3438,3 +3438,21 @@ refuses with the exact new row owner and source; fresh choices succeed.
 The selection does not seal measured ink size, semantic layout policy or
 persistent user alignment. It prevents one particular cross-owner source-index
 reuse even before any accepted revision change.
+
+## Owner-bound explicit row positions (partial) — 2026-11-09
+
+Caller-supplied horizontal row positions now bind each exact measured semantic
+block owner, in addition to the accepted revision, flow, page and original
+(unit, fragment) source. The same validation applies to first-hit and bounded
+complete physical footprint reports; uniform and per-row alignment derivation
+retains the owner automatically. A position from a different block refuses
+before even an earlier intersection or zero-result cap can be reported.
+
+A two-block regression confirms that two valid groupings on one unchanged
+revision produce identical row source indices but different owners for one
+row. The old position batch is rejected, while newly derived positions
+produce an exact checked first-hit intersection and complete one-hit report.
+The live session also rejects an incorrect owner through both inspection APIs,
+even with an otherwise intersecting fixed box and a zero diagnostic cap.
+This is still provisional box inspection, not saved Markdown measurement,
+handwriting ink bounds, a fixed-overlap policy, or native notebook Export.
