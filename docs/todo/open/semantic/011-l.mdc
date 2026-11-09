@@ -3522,3 +3522,14 @@ and alignment selections even with no fixed regions supplied. Fresh placements
 correctly produce an empty complete/first-hit report. Admission therefore does
 not depend on finding a collision, on the live session facade, or on a nonzero
 report cap.
+
+## Many-row mixed alignment oracle — 2026-11-09
+
+A further native mixed-alignment regression covers 420 individually measured
+rows across two physical pages, including zero-width sources and all three
+per-row alignment choices. An independent two-dimensional interval oracle
+compares first/complete positioned-footprint reports against 160 checked
+fixed proposals, including empty physical shapes, exact source provenance and
+zero-cap refusals. A first-page collision cannot conceal a stale geometry
+choice on the last row of the later page. This remains read-only box geometry,
+not glyph ink, a persistent layout style or native Export authorization.

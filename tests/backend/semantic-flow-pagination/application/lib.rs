@@ -5631,7 +5631,9 @@ fn same_revision_remeasurement_requires_fresh_geometry_without_fixed_boxes() {
         accepted, &measurement(revision, flow, owner, &[(21_000, 10_000)]),
     );
     assert!(original_result.is_ok() && remeasured_result.is_ok());
-    let (Ok(original), Ok(remeasured)) = (original_result, remeasured_result) else {
+    let (Ok(original), Ok(remeasured)) =
+        (original_result, remeasured_result)
+    else {
         return;
     };
     let (Some(old_row), Some(new_row)) = (
@@ -5698,4 +5700,408 @@ fn same_revision_remeasurement_requires_fresh_geometry_without_fixed_boxes() {
         Ok(None),
     );
     assert_eq!(session.current(), Some(accepted));
+}
+
+#[test]
+fn many_mixed_row_alignments_match_physical_intersections_across_page_breaks() {
+    let outcome = check_many_mixed_row_alignments();
+    assert!(outcome.is_ok(), "many-row aligned oracle: {outcome:?}");
+}
+
+fn check_many_mixed_row_alignments() -> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("many-row alignment fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing accepted revision")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page_one = accepted_for(&mapping, fixture.page_one);
+    let page_two = accepted_for(&mapping, fixture.page_two);
+    let sizes = (0..420usize)
+        .map(|index| {
+            let width = if index.checked_rem(19) == Some(0) {
+                0
+            } else {
+                5_000u64.saturating_add(
+                    u64::try_from(index)
+                        .unwrap_or_default()
+                        .saturating_mul(5_713)
+                        .checked_rem(21_000)
+                        .unwrap_or_default(),
+                )
+            };
+            (width, 1_000)
+        })
+        .collect::<Vec<_>>();
+    let plan = paginate_revision(
+        accepted,
+        &measurement(revision, flow, owner, &sizes),
+    )
+    .map_err(|error| format!("many-row pagination: {error:?}"))?;
+    let rows = plan.placements();
+    if rows.len() != sizes.len()
+        || !rows.iter().any(|row| row.page == page_one)
+        || !rows.iter().any(|row| row.page == page_two)
+    {
+        return Err("incorrect many-row physical page placement".into());
+    }
+    let selections = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let alignment = match index.checked_rem(3).unwrap_or_default() {
+                0 => RowHorizontalAlignment::Left,
+                1 => RowHorizontalAlignment::Center,
+                _ => RowHorizontalAlignment::Right,
+            };
+            RowAlignmentSelection {
+                alignment,
+                flow,
+                fragment_owner: row.owner,
+                geometry: MeasuredRowGeometry::from_placement(row),
+                page: row.page,
+                revision,
+                source: row.source,
+            }
+        })
+        .collect::<Vec<_>>();
+    let positions = aligned_row_horizontal_positions_by_selection_for_flow(
+        &plan,
+        &selections,
+    )
+    .map_err(|error| format!("mixed alignment: {error:?}"))?;
+    check_many_mixed_alignment_coordinates(&plan, &positions, &selections)?;
+    check_many_mixed_alignment_oracle(
+        accepted, &plan, &positions, owner, page_one,
+    )?;
+    check_many_mixed_alignment_stale_choice(
+        accepted,
+        &plan,
+        &positions,
+        &selections,
+        owner,
+        page_one,
+    )?;
+    if session.current() != Some(accepted) {
+        return Err("inspection changed accepted session".into());
+    }
+    Ok(())
+}
+
+fn check_many_mixed_alignment_coordinates(
+    plan: &atrament_semantic_flow_pagination::SemanticPaginationPlan,
+    positions: &[atrament_semantic_flow_pagination::RowHorizontalPosition],
+    selections: &[RowAlignmentSelection],
+) -> Result<(), String> {
+    let rows = plan.placements();
+    for ((row, position), selection) in
+        rows.iter().zip(positions).zip(selections)
+    {
+        let free = row
+            .writable
+            .width
+            .micrometres()
+            .checked_sub(row.width.micrometres())
+            .ok_or("unfitted row")?;
+        let offset = match selection.alignment {
+            RowHorizontalAlignment::Left => 0,
+            RowHorizontalAlignment::Center => {
+                free.checked_div(2).ok_or("invalid center divisor")?
+            },
+            RowHorizontalAlignment::Right => free,
+        };
+        let expected = row
+            .writable
+            .x
+            .micrometres()
+            .checked_add(offset)
+            .ok_or("X origin overflow")?;
+        if position.left.micrometres() != expected
+            || position.source != row.source
+            || position.geometry != MeasuredRowGeometry::from_placement(row)
+        {
+            return Err(format!(
+                "incorrect mixed row alignment: {:?}",
+                row.source
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn check_many_mixed_alignment_oracle(
+    accepted: &atrament_semantic_notebook::AcceptedRevision,
+    plan: &atrament_semantic_flow_pagination::SemanticPaginationPlan,
+    positions: &[atrament_semantic_flow_pagination::RowHorizontalPosition],
+    owner: AcceptedIdentity,
+    page_one: AcceptedIdentity,
+) -> Result<(), String> {
+    let region = plan
+        .covered_pages()
+        .first()
+        .ok_or("first page region")?
+        .writable;
+    let x = region.x.micrometres();
+    let y = region.y.micrometres();
+    let available_width = region.width.micrometres();
+    let available_height = region.height.micrometres();
+    let mut observed_positive = 0usize;
+    let mut observed_clear = 0usize;
+    for index in 0..160usize {
+        let width = if index.checked_rem(17) == Some(0) {
+            0
+        } else {
+            18_000
+        };
+        let height = if index.checked_rem(23) == Some(0) {
+            0
+        } else {
+            14_000
+        };
+        let i = u64::try_from(index).map_err(|error| error.to_string())?;
+        let dx = i
+            .saturating_mul(7_919)
+            .checked_rem(
+                available_width.saturating_sub(width).saturating_add(1),
+            )
+            .ok_or("invalid width range")?;
+        let dy = i
+            .saturating_mul(1_297)
+            .checked_rem(
+                available_height.saturating_sub(height).saturating_add(1),
+            )
+            .ok_or("invalid height range")?;
+        let left = x.checked_add(dx).ok_or("X overflow")?;
+        let top = y.checked_add(dy).ok_or("Y overflow")?;
+        let fixed =
+            validate_fixed_placement(accepted, AcceptedFixedPlacement {
+                object: owner,
+                page: page_one,
+                rectangle: Rect {
+                    x: Length::from_micrometres(left),
+                    y: Length::from_micrometres(top),
+                    width: Length::from_micrometres(width),
+                    height: Length::from_micrometres(height),
+                },
+                revision: plan.revision(),
+            })
+            .map_err(|error| format!("fixed case {index}: {error:?}"))?;
+        if !fixed.is_within_bounds() {
+            return Err(format!("unexpected overflow in fixed case {index}"));
+        }
+        if check_one_mixed_alignment_intersection(
+            plan, positions, &fixed, owner, page_one, index,
+        )? {
+            observed_positive = observed_positive.saturating_add(1);
+        } else {
+            observed_clear = observed_clear.saturating_add(1);
+        }
+    }
+    if observed_positive == 0 || observed_clear == 0 {
+        return Err(
+            "oracle did not observe clear and positive intersections".into()
+        );
+    }
+    Ok(())
+}
+
+fn check_one_mixed_alignment_intersection(
+    plan: &atrament_semantic_flow_pagination::SemanticPaginationPlan,
+    positions: &[atrament_semantic_flow_pagination::RowHorizontalPosition],
+    fixed: &atrament_semantic_fixed_region_layout::FixedRegionLayoutResult,
+    owner: AcceptedIdentity,
+    page_one: AcceptedIdentity,
+    index: usize,
+) -> Result<bool, String> {
+    use std::slice::from_ref;
+
+    use atrament_semantic_flow_pagination::{
+        first_fixed_row_footprint_overlap_for_flow,
+        fixed_row_footprint_overlaps_for_flow,
+    };
+
+    let rectangle = fixed.rectangle();
+    let left = rectangle.x.micrometres();
+    let top = rectangle.y.micrometres();
+    let width = rectangle.width.micrometres();
+    let height = rectangle.height.micrometres();
+    // Independent physical 2D interval oracle in placement order.
+    let expected = plan
+        .placements()
+        .iter()
+        .zip(positions)
+        .filter(|(row, _)| row.page == page_one)
+        .filter_map(|(row, position)| {
+            let shared_left = left.max(position.left.micrometres());
+            let shared_right = left.saturating_add(width).min(
+                position
+                    .left
+                    .micrometres()
+                    .saturating_add(row.width.micrometres()),
+            );
+            let shared_top = top.max(row.top.micrometres());
+            let shared_bottom = top.saturating_add(height).min(
+                row.top
+                    .micrometres()
+                    .saturating_add(row.height.micrometres()),
+            );
+            if shared_right <= shared_left || shared_bottom <= shared_top {
+                return None;
+            }
+            Some((row.source, Rect {
+                x: Length::from_micrometres(shared_left),
+                y: Length::from_micrometres(shared_top),
+                width: Length::from_micrometres(
+                    shared_right.saturating_sub(shared_left),
+                ),
+                height: Length::from_micrometres(
+                    shared_bottom.saturating_sub(shared_top),
+                ),
+            }))
+        })
+        .collect::<Vec<_>>();
+    let actual = fixed_row_footprint_overlaps_for_flow(
+        plan,
+        from_ref(fixed),
+        positions,
+        expected.len(),
+    )
+    .map_err(|error| format!("complete case {index}: {error:?}"))?;
+    let observed = actual
+        .iter()
+        .map(|hit| {
+            (
+                hit.source(),
+                hit.intersection(),
+                hit.page(),
+                hit.flow(),
+                hit.fragment_owner(),
+            )
+        })
+        .collect::<Vec<_>>();
+    let expected_provenance = expected
+        .iter()
+        .map(|(source, expected_rect)| {
+            (*source, *expected_rect, page_one, plan.flow(), owner)
+        })
+        .collect::<Vec<_>>();
+    let first = first_fixed_row_footprint_overlap_for_flow(
+        plan,
+        from_ref(fixed),
+        positions,
+    )
+    .map_err(|error| format!("first case {index}: {error:?}"))?;
+    if observed != expected_provenance
+        || first.map(|hit| (hit.source(), hit.intersection()))
+            != expected.first().copied()
+    {
+        return Err(format!("mixed alignment oracle mismatch: case {index}"));
+    }
+    if !expected.is_empty()
+        && fixed_row_footprint_overlaps_for_flow(
+            plan,
+            from_ref(fixed),
+            positions,
+            0,
+        ) != Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
+            limit: 0,
+        })
+    {
+        return Err(format!("zero-cap admitted hit: case {index}"));
+    }
+    Ok(!expected.is_empty())
+}
+
+fn check_many_mixed_alignment_stale_choice(
+    accepted: &atrament_semantic_notebook::AcceptedRevision,
+    plan: &atrament_semantic_flow_pagination::SemanticPaginationPlan,
+    positions: &[atrament_semantic_flow_pagination::RowHorizontalPosition],
+    selections: &[RowAlignmentSelection],
+    owner: AcceptedIdentity,
+    page_one: AcceptedIdentity,
+) -> Result<(), String> {
+    use std::slice::from_ref;
+
+    use atrament_semantic_flow_pagination::{
+        first_fixed_row_footprint_overlap_for_flow,
+        fixed_row_footprint_overlaps_for_flow,
+    };
+
+    // A first-page hit must not hide a stale choice on the final page.
+    let rows = plan.placements();
+    let early_row = rows.get(1).ok_or("early nonempty row")?;
+    let early_position = positions.get(1).ok_or("early X position")?;
+    let fixed = validate_fixed_placement(accepted, AcceptedFixedPlacement {
+        object: owner,
+        page: page_one,
+        rectangle: Rect {
+            x: early_position.left,
+            y: early_row.top,
+            width: Length::from_micrometres(1_000),
+            height: Length::from_micrometres(500),
+        },
+        revision: plan.revision(),
+    })
+    .map_err(|error| format!("checked first-page box: {error:?}"))?;
+    if first_fixed_row_footprint_overlap_for_flow(
+        plan,
+        from_ref(&fixed),
+        positions,
+    )
+    .map_err(|error| format!("first hit: {error:?}"))?
+    .is_none()
+    {
+        return Err("expected earlier fixed intersection".into());
+    }
+    let last_index = rows.len().checked_sub(1).ok_or("no final row")?;
+    let last = rows.get(last_index).ok_or("last measured row")?;
+    let expected_alignment = FlowFixedRegionError::RowAlignmentMismatch {
+        index: last_index,
+        page: last.page,
+        fragment_owner: last.owner,
+        source: last.source,
+    };
+    let mut stale_selections = selections.to_vec();
+    stale_selections
+        .get_mut(last_index)
+        .ok_or("last alignment")?
+        .geometry = MeasuredRowGeometry::from_placement(early_row);
+    if aligned_row_horizontal_positions_by_selection_for_flow(
+        plan,
+        &stale_selections,
+    ) != Err(expected_alignment)
+    {
+        return Err("stale final alignment was not refused".into());
+    }
+    let expected_position = FlowFixedRegionError::RowPositionMismatch {
+        index: last_index,
+        page: last.page,
+        fragment_owner: last.owner,
+        source: last.source,
+    };
+    let mut stale_positions = positions.to_vec();
+    stale_positions
+        .get_mut(last_index)
+        .ok_or("last X position")?
+        .geometry = MeasuredRowGeometry::from_placement(early_row);
+    if first_fixed_row_footprint_overlap_for_flow(
+        plan,
+        from_ref(&fixed),
+        &stale_positions,
+    ) != Err(expected_position)
+        || fixed_row_footprint_overlaps_for_flow(
+            plan,
+            &[fixed],
+            &stale_positions,
+            0,
+        ) != Err(expected_position)
+    {
+        return Err("stale final footprint was not refused".into());
+    }
+    Ok(())
 }
