@@ -2181,6 +2181,59 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     };
     assert_wide_footprint(&session, revision);
 
+    // A fixed box against the left writing edge reveals the alignment shift:
+    // wide center starts well to its right; narrow center crosses 2,500 um.
+    // All proposals remain within both accepted physical writable regions.
+    let edge_box = Rect {
+        x: Length::from_micrometres(25_000),
+        y: Length::from_micrometres(25_000),
+        width: Length::from_micrometres(5_000),
+        height: Length::from_micrometres(5_000),
+    };
+    let edge_fixed = |revision| AcceptedFixedPlacement {
+        rectangle: edge_box,
+        ..footprint_fixed(revision)
+    };
+    let assert_aligned = |current: &application::SessionApplication,
+                          current_revision,
+                          width,
+                          expected_center: Option<Rect>| {
+        let centered_hit = current.first_aligned_fixed_row_footprint_overlap(
+            &measurement(current_revision, width),
+            &[edge_fixed(current_revision)],
+            RowHorizontalAlignment::Center,
+        ).expect("accepted centered footprint should be inspectable");
+        assert_eq!(
+            centered_hit.map(|hit| (
+                hit.revision(), hit.flow(), hit.page(), hit.fixed_index(),
+                hit.object(), hit.fragment_owner(), hit.source(),
+                hit.intersection(),
+            )),
+            expected_center.map(|rectangle| (
+                current_revision, flow, page, 0, block, block, first_source,
+                rectangle,
+            )),
+        );
+        assert_eq!(
+            current.aligned_fixed_row_footprint_overlaps(
+                &measurement(current_revision, width),
+                &[edge_fixed(current_revision)], RowHorizontalAlignment::Left,
+                1,
+            ).map(|hits| hits.into_iter().map(|hit| hit.intersection())
+                .collect::<Vec<_>>()),
+            Ok(vec![edge_box]),
+        );
+        assert_eq!(
+            current.aligned_fixed_row_footprint_overlaps(
+                &measurement(current_revision, width),
+                &[edge_fixed(current_revision)], RowHorizontalAlignment::Right,
+                0,
+            ),
+            Ok(vec![]),
+        );
+    };
+    assert_aligned(&session, revision, 100_000, None);
+
     // This explicitly supplied checked rectangle fits the original page but
     // lies to the right of a subsequently narrowed printable rectangle.
     // Its y band never overlaps the admitted two source rows.
@@ -2275,6 +2328,12 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
             ),
         )),
     );
+    assert_aligned(&session, edited, 80_000, Some(Rect {
+        x: Length::from_micrometres(27_500),
+        y: Length::from_micrometres(25_000),
+        width: Length::from_micrometres(2_500),
+        height: Length::from_micrometres(5_000),
+    }));
     let narrowed_fit = session
         .paginate_measured_flow(&measurement(edited, 80_000))
         .expect("fresh narrow measurement must fit edited profile");
@@ -2428,6 +2487,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     }]);
     assert_pair(&session, undone, 100_000);
     assert_wide_footprint(&session, undone);
+    assert_aligned(&session, undone, 100_000, None);
     assert_eq!(
         session.first_fixed_row_band_overlap(
             &measurement(undone, 100_000),
@@ -2463,6 +2523,12 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
             ),
         )),
     );
+    assert_aligned(&session, redone, 80_000, Some(Rect {
+        x: Length::from_micrometres(27_500),
+        y: Length::from_micrometres(25_000),
+        width: Length::from_micrometres(2_500),
+        height: Length::from_micrometres(5_000),
+    }));
     let redone_fit = session
         .paginate_measured_flow(&measurement(redone, 80_000))
         .expect("fresh Redo measurement must use narrowed profile");

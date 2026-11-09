@@ -3365,3 +3365,16 @@ precedence over earlier possible hits. These are **provisional caller-measured
 boxes**, not derived text metrics, glyph-stroke ink contact, accepted layout
 constraints or native semantic PDF/PNG export. The prior conservative row-band
 gate is unchanged.
+
+## Explicit alignment across paper-profile history (partial) — 2026-11-09
+
+A live paper-width regression now compares caller-selected left, center and
+right aligned provisional row footprints on an original 175-mm writable width
+and a narrowed 85-mm writable width. With fresh caller-measured row widths,
+center alignment changes from clear to a precisely checked 2.5-by-5-mm
+fixed-box intersection; left still intersects and right still clears. Undo
+restores the original geometry and Redo reproduces the narrow intersection,
+each bound to its new accepted revision and original measured source.
+
+The test does not introduce automatic alignment policy, real visible glyph
+metrics, an authenticated fixed-layering decision or native notebook Export.
