@@ -2264,6 +2264,12 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
             "current profile must project both aligned rows");
         let Ok(current_boxes) = boxes_result else { return };
         assert_eq!(current_boxes.len(), 2);
+        assert_eq!(
+            current.selected_aligned_measured_row_footprints(
+                &measurement(current_revision, width), &row_choices,
+            ),
+            Ok(current_boxes.clone()),
+        );
         for ((row, position), checked) in current_plan.placements().iter()
             .zip(&aligned_positions).zip(&current_boxes)
         {
@@ -2960,6 +2966,34 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
                         expected: &[(usize, Rect)]| {
         let choices = mixed_choices(current, revision, width);
         assert_eq!(choices.len(), 2);
+        let box_result = current.selected_aligned_measured_row_footprints(
+            &mixed_measurement(revision, width), &choices,
+        );
+        assert!(box_result.is_ok(),
+            "profile-reference mixed row projection: {box_result:?}");
+        let Ok(sealed_boxes) = box_result else { return };
+        assert!(width == 100_000 || width == 80_000,
+            "unexpected reference measured width: {width}");
+        let expected_x = if width == 100_000 {
+            [62_500, 180_000]
+        } else {
+            [27_500, 90_000]
+        };
+        assert_eq!(sealed_boxes.len(), 2);
+        for (index, (box_, x)) in
+            sealed_boxes.iter().zip(expected_x).enumerate()
+        {
+            assert_eq!(box_.revision(), revision);
+            assert_eq!(box_.flow(), flow);
+            assert_eq!(box_.page(), page);
+            assert_eq!(box_.fragment_owner(), block);
+            assert_eq!(box_.source().fragment, index);
+            assert_eq!(box_.source().unit, 0);
+            assert_eq!(box_.rectangle().x.micrometres(), x);
+            assert_eq!(box_.rectangle().width.micrometres(),
+                if index == 0 { width } else { 20_000 });
+            assert_eq!(box_.rectangle().height.micrometres(), 20_000);
+        }
         let fixed = [edge_fixed(revision), far_fixed(revision)];
         let overlaps = current.selected_aligned_fixed_row_footprint_overlaps(
             &mixed_measurement(revision, width), &fixed, &choices, 2,
@@ -3059,6 +3093,19 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     assert_mixed(&session, edited, 80_000, &[
         (0, expected_center_hit), (1, far_box),
     ]);
+    assert_eq!(
+        session.selected_aligned_measured_row_footprints(
+            &mixed_measurement(edited, 80_000), &original_choices,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowAlignmentMismatch {
+                index: 0, page, fragment_owner: block,
+                source: atrament_flow_pagination::FragmentSource {
+                    unit: 0, fragment: 0,
+                },
+            },
+        )),
+    );
     assert_eq!(
         session.first_selected_aligned_fixed_row_footprint_overlap(
             &mixed_measurement(edited, 80_000),

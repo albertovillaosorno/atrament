@@ -3583,3 +3583,13 @@ coverage rejects missing accepted authority, same-revision cross-owner source
 reuse and later same-revision width remeasurement; refreshed choices preserve
 exact row geometry and source identity. These are still caller-measured boxes,
 not ink, stored layout intent, a fixed-layering decision or native Export.
+
+## Selected row-box projection through paper authority — 2026-11-09
+
+The single-call mixed-alignment box handoff now has live paper-profile width
+and reference-retarget regressions. Both follow accepted edit/Undo/Redo page
+authority while retaining centered first-row and right-aligned second-row
+source provenance. The reference test compares exact 62.5/180-mm origins on
+the wide sheet to 27.5/90-mm origins on the narrow sheet; reused choices from
+the old page reference refuse the full batch. Physical rectangles remain
+caller-measured diagnostic boxes, not glyph ink or accepted notebook Export.
