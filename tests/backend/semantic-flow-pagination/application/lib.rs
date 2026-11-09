@@ -52,6 +52,7 @@ use atrament_semantic_flow_pagination::{
     RowHorizontalAlignment,
     aligned_row_horizontal_positions_by_selection_for_flow,
     aligned_row_horizontal_positions_for_flow,
+    selected_aligned_row_footprints_for_flow,
     SemanticPaginationError, check_fixed_regions_for_flow,
     first_fixed_pair_overlap_for_flow, fixed_pair_overlaps_for_flow,
     first_fixed_row_band_overlap_for_flow,
@@ -5313,6 +5314,33 @@ fn positioned_row_boxes_seal_complete_source_bound_geometry_across_pages()
         empty.writable.x.micrometres() + empty.writable.width.micrometres(),
     );
     assert_eq!(footprints[1].rectangle().width, Length::ZERO);
+    // A one-call selected-alignment projection must admit the same sealed
+    // boxes, without exposing a partially positioned intermediary batch.
+    assert_eq!(
+        selected_aligned_row_footprints_for_flow(&plan, &selections),
+        Ok(footprints),
+    );
+    assert_eq!(
+        selected_aligned_row_footprints_for_flow(
+            &plan, selections.get(..2).ok_or("short selection prefix")?,
+        ),
+        Err(FlowFixedRegionError::RowAlignmentCountMismatch {
+            expected: 3,
+            supplied: 2,
+        }),
+    );
+    let mut stale_selection = selections;
+    stale_selection.get_mut(2).ok_or("missing final choice")?.geometry =
+        MeasuredRowGeometry::from_placement(first);
+    assert_eq!(
+        selected_aligned_row_footprints_for_flow(&plan, &stale_selection),
+        Err(FlowFixedRegionError::RowAlignmentMismatch {
+            index: 2,
+            page: second_page,
+            fragment_owner: owner,
+            source: last.source,
+        }),
+    );
     assert_eq!(
         positioned_row_footprints_for_flow(&plan, &positions[..2]),
         Err(FlowFixedRegionError::RowPositionCountMismatch {

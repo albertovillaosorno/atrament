@@ -875,6 +875,27 @@ pub fn positioned_row_footprints_for_flow(
         .collect())
 }
 
+/// Project complete row boxes using one source-bound alignment per row.
+///
+/// Choices are checked against the sealed plan before deriving physical X
+/// positions. The entire position batch must then fit the writable regions
+/// before any boxes escape. This is a single read-only admission path for
+/// caller-selected alignment, not a glyph-ink or fixed-layering decision.
+///
+/// # Errors
+///
+/// Refuses missing, reordered, stale or cross-owner alignment selections, or
+/// any row that cannot fit its accepted physical writable rectangle.
+pub fn selected_aligned_row_footprints_for_flow(
+    plan: &SemanticPaginationPlan,
+    selections: &[RowAlignmentSelection],
+) -> Result<Vec<PositionedRowFootprint>, FlowFixedRegionError> {
+    let positions = aligned_row_horizontal_positions_by_selection_for_flow(
+        plan, selections,
+    )?;
+    positioned_row_footprints_for_flow(plan, &positions)
+}
+
 /// Inspect checked fixed placements for possible overlap with measured flow.
 ///
 /// Flow placement reserves each row's full writable horizontal band because

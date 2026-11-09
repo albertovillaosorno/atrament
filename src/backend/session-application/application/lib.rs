@@ -73,6 +73,7 @@ use atrament_semantic_flow_pagination::{
     fixed_pair_overlaps_for_flow, fixed_row_band_overlaps_for_flow,
     fixed_row_footprint_overlaps_for_flow, paginate_revision,
     positioned_row_footprints_for_flow,
+    selected_aligned_row_footprints_for_flow,
 };
 use atrament_semantic_fixed_region_layout::{
     AcceptedFixedPlacement, FixedRegionLayoutError, FixedRegionLayoutResult,
@@ -1296,6 +1297,28 @@ impl SessionApplication {
             &plan, &checked, &positions, max_overlaps,
         )
         .map_err(SessionFlowFixedRegionError::Overlap)
+    }
+
+    /// Project complete physical row boxes for caller-selected alignments.
+    ///
+    /// The current semantic revision is consulted once for both measured
+    /// pagination and every source-bound alignment choice. This removes the
+    /// need for callers to hand off their own intermediate X-position batch.
+    /// The read-only boxes are not authenticated glyph ink or Export authority.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed missing-session, measurement, alignment or horizontal
+    /// bounds refusal without exposing a partially projected row sequence.
+    pub fn selected_aligned_measured_row_footprints(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        selections: &[RowAlignmentSelection],
+    ) -> Result<Vec<PositionedRowFootprint>, SessionFlowFixedRegionError> {
+        let (plan, _checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, &[])?;
+        selected_aligned_row_footprints_for_flow(&plan, selections)
+            .map_err(SessionFlowFixedRegionError::Overlap)
     }
 
     /// Simulate one established direct semantic edit without mutation.

@@ -3566,3 +3566,20 @@ and freshly rebound but horizontally overflowing positions still refuse.
 Undo restores the original page geometry with fresh revision-bound boxes,
 while Redo restores the narrowed geometry and overflow refusal. This remains
 read-only measurement evidence, not actual rendered ink or notebook Export.
+
+## Atomic selected-alignment row-box handoff — 2026-11-09
+
+The measured-flow application and live semantic session now expose a single
+read-only handoff from explicit source-bound per-row alignment choices to
+complete physical row boxes. The session checks one current accepted revision,
+derives left/center/right X positions and admits the entire sealed row batch
+before returning any rectangle. Callers no longer need to carry a separate
+provisional X-position array between their current-session alignment decision
+and their physical box inspection.
+
+The two-page native test proves parity with separately checked positions,
+including a zero-width row, absent choices and a stale final row. Live-session
+coverage rejects missing accepted authority, same-revision cross-owner source
+reuse and later same-revision width remeasurement; refreshed choices preserve
+exact row geometry and source identity. These are still caller-measured boxes,
+not ink, stored layout intent, a fixed-layering decision or native Export.

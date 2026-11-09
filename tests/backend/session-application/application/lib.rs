@@ -8807,6 +8807,12 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
             )
             .map_err(|error| format!("current measured boxes: {error:?}"))?;
         assert_eq!(boxes.len(), 2);
+        assert_eq!(
+            current_session.selected_aligned_measured_row_footprints(
+                &measurement(current), &choice,
+            ),
+            Ok(boxes.clone()),
+        );
         assert_eq!(boxes[1].revision(), current);
         assert_eq!(boxes[1].source(), centered_row.source);
         assert_eq!(boxes[1].rectangle(), Rect {
@@ -8821,13 +8827,28 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
                 &original_positions,
             ),
             if current == revision {
-                Ok(boxes)
+                Ok(boxes.clone())
             } else {
                 Err(application::SessionFlowFixedRegionError::Overlap(
                     FlowFixedRegionError::RowPositionMismatch {
                         index: 0,
                         page,
                         fragment_owner: owner,
+                        source: first_row.source,
+                    },
+                ))
+            },
+        );
+        assert_eq!(
+            current_session.selected_aligned_measured_row_footprints(
+                &measurement(current), &selections(revision),
+            ),
+            if current == revision {
+                Ok(boxes.clone())
+            } else {
+                Err(application::SessionFlowFixedRegionError::Overlap(
+                    FlowFixedRegionError::RowAlignmentMismatch {
+                        index: 0, page, fragment_owner: owner,
                         source: first_row.source,
                     },
                 ))
@@ -9303,6 +9324,155 @@ fn live_positioned_row_boxes_are_sealed_to_current_measured_sources() {
             .map(|current| current.id),
         Some(fixture.revision)
     );
+}
+
+#[test]
+fn live_selected_alignment_boxes_match_checked_positions() {
+    let result = (|| -> Result<(), String> {
+        use atrament_semantic_flow_pagination as row_layout;
+
+        let fixture = live_owner_regroup_fixture()?;
+        let absent = application::SessionApplication::default();
+        assert_eq!(
+            absent.selected_aligned_measured_row_footprints(
+                &fixture.regrouped,
+                &fixture.fresh_selections,
+            ),
+            Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
+        );
+        let plan = fixture
+            .session
+            .paginate_measured_flow(&fixture.regrouped)
+            .map_err(|error| format!("selected row plan: {error:?}"))?;
+        let positions =
+            row_layout::aligned_row_horizontal_positions_by_selection_for_flow(
+                &plan,
+                &fixture.fresh_selections,
+            )
+            .map_err(|error| format!("aligned positions: {error:?}"))?;
+        let projected = fixture
+            .session
+            .selected_aligned_measured_row_footprints(
+                &fixture.regrouped,
+                &fixture.fresh_selections,
+            )
+            .map_err(|error| format!("selected row boxes: {error:?}"))?;
+        assert_eq!(
+            fixture.session.positioned_measured_row_footprints(
+                &fixture.regrouped,
+                &positions,
+            ),
+            Ok(projected.clone()),
+        );
+        for ((row, position), box_) in
+            plan.placements().iter().zip(&positions).zip(&projected)
+        {
+            assert_eq!(box_.revision(), fixture.revision);
+            assert_eq!(box_.flow(), plan.flow());
+            assert_eq!(box_.fragment_owner(), row.owner);
+            assert_eq!(box_.page(), row.page);
+            assert_eq!(box_.source(), row.source);
+            assert_eq!(box_.rectangle(), Rect {
+                x: position.left,
+                y: row.top,
+                width: row.width,
+                height: row.height,
+            });
+        }
+        Ok(())
+    })();
+    assert!(result.is_ok(), "selected-alignment regression: {result:?}");
+}
+
+#[test]
+fn live_selected_alignment_refuses_late_same_revision_owner_reuse() {
+    let result = (|| -> Result<(), String> {
+        let fixture = live_owner_regroup_fixture()?;
+        // A later same-revision cross-owner selection cannot leak an earlier
+        // box.
+        assert_eq!(
+            fixture.session.selected_aligned_measured_row_footprints(
+                &fixture.regrouped,
+                &fixture.old_selections,
+            ),
+            Err(application::SessionFlowFixedRegionError::Overlap(
+                FlowFixedRegionError::RowAlignmentMismatch {
+                    index: 1,
+                    page: fixture.page,
+                    fragment_owner: fixture.changed_owner,
+                    source: fixture.changed_source,
+                },
+            )),
+        );
+        Ok(())
+    })();
+    assert!(result.is_ok(), "selected-alignment regression: {result:?}");
+}
+
+#[test]
+fn live_selected_alignment_requires_rebinding_after_row_remeasurement() {
+    let result = (|| -> Result<(), String> {
+        let fixture = live_owner_regroup_fixture()?;
+        let projected = fixture
+            .session
+            .selected_aligned_measured_row_footprints(
+                &fixture.regrouped,
+                &fixture.fresh_selections,
+            )
+            .map_err(|error| format!("original selected boxes: {error:?}"))?;
+        // Remeasurement preserves accepted revision, flow, owner, page and
+        // source.
+        let mut changed = fixture.regrouped;
+        let last_fragment = changed
+            .units
+            .last_mut()
+            .and_then(|unit| unit.fragments.last_mut())
+            .ok_or("missing last measured fragment")?;
+        last_fragment.width =
+            Length::from_micrometres(last_fragment.width.micrometres() + 1_000);
+        let changed_plan = fixture
+            .session
+            .paginate_measured_flow(&changed)
+            .map_err(|error| format!("remeasured plan: {error:?}"))?;
+        let changed_row = changed_plan
+            .placements()
+            .last()
+            .ok_or("missing remeasured row")?;
+        assert_eq!(
+            fixture.session.selected_aligned_measured_row_footprints(
+                &changed,
+                &fixture.fresh_selections,
+            ),
+            Err(application::SessionFlowFixedRegionError::Overlap(
+                FlowFixedRegionError::RowAlignmentMismatch {
+                    index: 2,
+                    page: changed_row.page,
+                    fragment_owner: changed_row.owner,
+                    source: changed_row.source,
+                },
+            )),
+        );
+        let fresh = live_owner_regroup_selections(
+            changed_plan.placements(),
+            changed_plan.flow(),
+            changed_plan.revision(),
+        );
+        let updated = fixture
+            .session
+            .selected_aligned_measured_row_footprints(&changed, &fresh)
+            .map_err(|error| format!("fresh remeasured boxes: {error:?}"))?;
+        assert_eq!(updated.len(), projected.len());
+        let last_updated = updated.get(2).ok_or("missing final updated box")?;
+        let last_original = projected.get(2).ok_or("missing original box")?;
+        assert_ne!(last_updated.rectangle(), last_original.rectangle());
+        assert_eq!(last_updated.rectangle().width, changed_row.width);
+        assert_eq!(
+            fixture.session.accepted_revision().map(|accepted| accepted.id),
+            Some(fixture.revision)
+        );
+        Ok(())
+    })();
+    assert!(result.is_ok(), "selected-alignment regression: {result:?}");
 }
 
 #[test]
