@@ -9095,3 +9095,60 @@ fn live_empty_width_row_still_requires_its_semantic_owner() {
     assert_eq!(fixture.session.accepted_revision()
         .map(|current| current.id), Some(fixture.revision));
 }
+
+#[test]
+fn live_empty_row_footprint_clears_while_conservative_band_can_hit() {
+    let fixture_result = live_owner_regroup_fixture();
+    assert!(fixture_result.is_ok(),
+        "regrouping fixture: {:?}", fixture_result.as_ref().err());
+    let Ok(fixture) = fixture_result else { return };
+    let mut measurement = fixture.regrouped;
+    assert_eq!(measurement.units.first().map(|unit| unit.fragments.len()),
+        Some(2));
+    let Some(empty_row) = measurement.units.first_mut()
+        .and_then(|unit| unit.fragments.get_mut(1))
+    else {
+        return;
+    };
+    empty_row.width = Length::ZERO;
+    let plan_result = fixture.session.paginate_measured_flow(&measurement);
+    assert!(plan_result.is_ok(), "zero-width row must paginate");
+    let Ok(plan) = plan_result else { return };
+    let second_result = plan.placements().get(1);
+    assert!(second_result.is_some(), "second physical row must be placed");
+    let Some(second) = second_result else { return };
+    assert_eq!(second.owner, fixture.changed_owner);
+    assert_eq!(second.source, fixture.changed_source);
+    let on_empty_row = [AcceptedFixedPlacement {
+        object: fixture.changed_owner,
+        page: fixture.page,
+        rectangle: Rect {
+            x: second.writable.x,
+            y: second.top,
+            width: Length::from_micrometres(1_000),
+            height: Length::from_micrometres(1_000),
+        },
+        revision: fixture.revision,
+    }];
+    assert_eq!(
+        fixture.session.first_fixed_row_footprint_overlap(
+            &measurement, &on_empty_row, &fixture.fresh_positions,
+        ),
+        Ok(None),
+    );
+    assert_eq!(
+        fixture.session.fixed_row_footprint_overlaps(
+            &measurement, &on_empty_row, &fixture.fresh_positions, 0,
+        ),
+        Ok(vec![]),
+    );
+    let first_band = fixture.session.first_fixed_row_band_overlap(
+        &measurement, &on_empty_row,
+    );
+    assert_eq!(
+        first_band.map(|hit| hit.map(|overlap| overlap.source())),
+        Ok(Some(second.source)),
+    );
+    assert_eq!(fixture.session.accepted_revision()
+        .map(|current| current.id), Some(fixture.revision));
+}

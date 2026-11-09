@@ -3491,3 +3491,9 @@ reports still refuse a later position or alignment choice naming another
 block. With valid owner-bound positions, the first-row intersection is
 unchanged and the empty row adds no false positive. This strengthens read-only
 admission evidence without treating empty boxes as rendered glyph ink.
+
+A further live checked-region regression places a fixed box entirely in the
+vertical span of the same zero-width row. First-hit and zero-cap *physical*
+footprint reports return no intersection, while the conservative full-width
+row-band query retains that row's exact source as a possible conflict. The
+queries intentionally use different geometry; neither establishes glyph ink.
