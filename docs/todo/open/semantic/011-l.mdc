@@ -3650,3 +3650,27 @@ ownership when a caller changes its subsequent alignment. The live-session
 query verifies returned choices still belong to the accepted same-revision
 regrouped block owner. Choices are inspectable but **not persisted** as
 semantic constraints, trusted handwriting ink, or notebook Export readiness.
+
+## Snapshot-bound fixed-pair geometry despite row-band conflicts — 2026-11-09
+
+The complete selected-alignment inspection now offers first and capped
+fixed-versus-fixed intersections from its own constructor-sealed, original-order
+checked fixed rectangles. Both use the same exact physical pair oracle and
+first/complete ordering as independent fixed-pair inspection, but do **not**
+reapply the conservative full-writable-width measured-row band rejection after
+the selected rows and fixed proposals have already been admitted. This permits
+examining intentional fixed layering alongside separate physical row/fixed
+hits in one revision-bound, read-only snapshot.
+
+Pure and live-session regressions supply duplicate-owner, overlapping fixed
+proposals whose bands cross caller-positioned measured rows; the earlier
+conservative fixed-pair API still refuses while the admitted snapshot reports
+an exact indexed pair. Zero-area proposals and disjoint boxes do not produce
+false positives; three overlapping proposals preserve later/earlier input
+ordering, and an insufficient pair cap refuses without partial results. Caller
+mutation after the report cannot change its sealed indexed geometry.
+
+This is not a fixed-layering policy, independently trusted ink geometry,
+persisted notebook alignment or PDF/transparent PNG Export authorization.
+ATR-P2-011 remains open until saved semantic content and measured handwriting
+reach the native output pipeline.

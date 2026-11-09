@@ -888,8 +888,10 @@ impl SessionApplication {
     ///
     /// Checked fixed rectangles, caller-selected alignment choices, provisional
     /// rows and indexed hits share current revision and flow authority.
-    /// The cap bounds intersections but never truncates either box collection.
-    /// These collections do not verify visible ink or admit native Export.
+    /// The cap bounds row/fixed intersections but never truncates the boxes.
+    /// The returned snapshot independently supports bounded fixed-pair
+    /// inspection without conservative row-band clearance. These observations
+    /// do not verify visible ink, decide layering or admit native Export.
     ///
     /// # Errors
     ///
@@ -902,12 +904,14 @@ impl SessionApplication {
         fixed: &[AcceptedFixedPlacement],
         selections: &[RowAlignmentSelection],
         max_overlaps: usize,
-    ) -> Result<SelectedAlignedRowInspection, SessionFlowFixedRegionError>
-    {
+    ) -> Result<SelectedAlignedRowInspection, SessionFlowFixedRegionError> {
         let (plan, checked) =
             self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
         inspect_selected_aligned_rows_for_flow(
-            &plan, &checked, selections, max_overlaps,
+            &plan,
+            &checked,
+            selections,
+            max_overlaps,
         )
         .map_err(SessionFlowFixedRegionError::Overlap)
     }
@@ -1661,7 +1665,6 @@ impl SessionApplication {
         validate_fixed_placement(revision, placement)
             .map_err(SessionFixedRegionLayoutError::Layout)
     }
-
 }
 
 impl SessionDraft for SessionApplication {

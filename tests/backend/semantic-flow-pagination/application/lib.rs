@@ -5797,6 +5797,105 @@ fn selected_row_inspection_includes_checked_empty_fixed_without_false_hit() {
 }
 
 #[test]
+fn selected_row_inspection_checks_fixed_pairs_without_row_band_gate() {
+    let result = (|| -> Result<(), String> {
+        use atrament_semantic_flow_pagination as layout;
+
+        let SelectedRowInspectionFixture {
+            empty_fixed,
+            fixed,
+            flow,
+            plan,
+            revision,
+            selections,
+            ..
+        } = selected_row_inspection_fixture()?;
+        // The first two fixed proposals overlap one another and the first
+        // measured row. Conservative row-band pair inspection must reject
+        // them, but this admitted positioned-row snapshot may inspect both.
+        let mut proposals = vec![
+            fixed[0].clone(),
+            fixed[0].clone(),
+            empty_fixed,
+            fixed[1].clone(),
+        ];
+        assert!(matches!(
+            check_fixed_regions_for_flow(&plan, &proposals),
+            Err(FlowFixedRegionError::VerticalBandOverlap { .. }),
+        ));
+        let report = layout::inspect_selected_aligned_rows_for_flow(
+            &plan,
+            &proposals,
+            &selections,
+            3,
+        )
+        .map_err(|error| format!("paired snapshot: {error:?}"))?;
+        assert_eq!(report.revision(), revision);
+        assert_eq!(report.flow(), flow);
+        assert_eq!(report.overlaps().len(), 3);
+        let first = report
+            .first_fixed_pair_overlap()
+            .map_err(|error| format!("first pair: {error:?}"))?
+            .ok_or("missing identical fixed-pair overlap")?;
+        assert_eq!(first.earlier_index(), 0);
+        assert_eq!(first.later_index(), 1);
+        assert_eq!(first.intersection(), fixed[0].rectangle());
+        assert_eq!(first.page(), fixed[0].page());
+        assert_eq!(first.revision(), revision);
+        assert_eq!(first.flow(), flow);
+        assert_eq!(first.earlier_object(), fixed[0].object());
+        assert_eq!(first.later_object(), fixed[0].object());
+        assert_eq!(
+            report.fixed_pair_overlaps(0),
+            Err(FlowFixedRegionError::FixedPairLimitExceeded { limit: 0 }),
+        );
+        assert_eq!(report.fixed_pair_overlaps(1), Ok(vec![first]),);
+        // The caller cannot change the already checked geometry by
+        // reordering or overwriting its later proposal array.
+        proposals.reverse();
+        *proposals
+            .first_mut()
+            .ok_or("reordered fixed region missing")? = fixed[0].clone();
+        assert_eq!(report.fixed_regions().first(), Some(&fixed[0]));
+        assert_eq!(report.first_fixed_pair_overlap(), Ok(Some(first)));
+        let triple = [fixed[0].clone(), fixed[0].clone(), fixed[0].clone()];
+        let many = layout::inspect_selected_aligned_rows_for_flow(
+            &plan,
+            &triple,
+            &selections,
+            3,
+        )
+        .map_err(|error| format!("three fixed hits: {error:?}"))?;
+        assert_eq!(
+            many.fixed_pair_overlaps(2),
+            Err(FlowFixedRegionError::FixedPairLimitExceeded { limit: 2 }),
+        );
+        let pairs = many
+            .fixed_pair_overlaps(3)
+            .map_err(|error| format!("three fixed pairs: {error:?}"))?;
+        assert_eq!(
+            pairs
+                .iter()
+                .map(|pair| (pair.earlier_index(), pair.later_index()))
+                .collect::<Vec<_>>(),
+            vec![(0, 1), (0, 2), (1, 2)],
+        );
+        assert_eq!(many.first_fixed_pair_overlap(), Ok(pairs.first().copied()));
+        let clear = layout::inspect_selected_aligned_rows_for_flow(
+            &plan,
+            &fixed,
+            &selections,
+            2,
+        )
+        .map_err(|error| format!("disjoint boxes: {error:?}"))?;
+        assert_eq!(clear.first_fixed_pair_overlap(), Ok(None));
+        assert_eq!(clear.fixed_pair_overlaps(0), Ok(vec![]));
+        Ok(())
+    })();
+    assert!(result.is_ok(), "checked fixed pairs: {result:?}");
+}
+
+#[test]
 fn selected_row_inspection_rejects_later_invalid_fixed_region() {
     let result = (|| -> Result<(), String> {
         use atrament_semantic_flow_pagination as row_layout;

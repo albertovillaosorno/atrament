@@ -539,7 +539,9 @@ impl PositionedRowFootprint {
 /// all checked fixed proposals in input order, every provisional positioned
 /// row (including empty widths), and positive-area row/fixed intersections.
 /// Each hit's `fixed_index()` identifies an entry in `fixed_regions()`.
-/// Each row and alignment choice share one placement index. All collections
+/// Each row and alignment choice share one placement index. Fixed-pair
+/// intersections can also be inspected from this admitted snapshot without
+/// requiring conservative full-width row-band clearance. All collections
 /// belong to one sealed plan; invalid proposals or intersection-cap overflow
 /// refuse the entire report.
 /// This is not authenticated glyph ink, overlap policy, or Export authority.
@@ -554,6 +556,56 @@ pub struct SelectedAlignedRowInspection {
 }
 
 impl SelectedAlignedRowInspection {
+    /// First checked fixed-pair intersection in original input order.
+    ///
+    /// Unlike independent fixed-pair inspection, this uses the report's
+    /// already admitted fixed boxes and selected positioned rows. It does not
+    /// require conservative full-width row-band clearance, which may reject
+    /// horizontally separate caller-positioned rows. A pair is an observation,
+    /// not permission to layer actual ink or authorize native Export.
+    ///
+    /// # Errors
+    ///
+    /// Refuses unrepresentable physical coordinates without returning a pair.
+    pub fn first_fixed_pair_overlap(
+        &self,
+    ) -> Result<Option<FixedPairOverlap>, FlowFixedRegionError> {
+        let mut first = None;
+        visit_admitted_fixed_pair_overlaps(
+            self.revision,
+            self.flow,
+            &self.fixed_regions,
+            |pair| {
+                first = Some(pair);
+                false
+            },
+        )?;
+        Ok(first)
+    }
+
+    /// Enumerate fixed-pair intersections within this sealed inspection.
+    ///
+    /// Only the snapshot's checked fixed proposals are compared; original
+    /// proposal indices, revision, flow and exact rectangles stay unchanged.
+    /// Row/fixed hits and fixed/fixed pairs remain separate observations.
+    /// A zero cap admits a pair-free snapshot, but never hides a true pair.
+    ///
+    /// # Errors
+    ///
+    /// Refuses coordinate overflow or more than `max_pairs` intersections,
+    /// without exposing an incomplete pair collection.
+    pub fn fixed_pair_overlaps(
+        &self,
+        max_pairs: usize,
+    ) -> Result<Vec<FixedPairOverlap>, FlowFixedRegionError> {
+        collect_admitted_fixed_pair_overlaps(
+            self.revision,
+            self.flow,
+            &self.fixed_regions,
+            max_pairs,
+        )
+    }
+
     /// Original checked fixed rectangles in their submitted index order.
     ///
     /// Only rectangles admitted against the selected physical page bounds
@@ -1552,16 +1604,36 @@ pub fn fixed_pair_overlaps_for_flow(
     fixed_regions: &[FixedRegionLayoutResult],
     max_pairs: usize,
 ) -> Result<Vec<FixedPairOverlap>, FlowFixedRegionError> {
+    check_fixed_regions_for_flow(plan, fixed_regions)?;
+    collect_admitted_fixed_pair_overlaps(
+        plan.revision(),
+        plan.flow(),
+        fixed_regions,
+        max_pairs,
+    )
+}
+
+fn collect_admitted_fixed_pair_overlaps(
+    revision: RevisionIdentity,
+    flow: AcceptedIdentity,
+    fixed_regions: &[FixedRegionLayoutResult],
+    max_pairs: usize,
+) -> Result<Vec<FixedPairOverlap>, FlowFixedRegionError> {
     let mut pairs = Vec::new();
     let mut exceeded = false;
-    visit_fixed_pair_overlaps_for_flow(plan, fixed_regions, |pair| {
-        if pairs.len() == max_pairs {
-            exceeded = true;
-            return false;
-        }
-        pairs.push(pair);
-        true
-    })?;
+    visit_admitted_fixed_pair_overlaps(
+        revision,
+        flow,
+        fixed_regions,
+        |pair| {
+            if pairs.len() == max_pairs {
+                exceeded = true;
+                return false;
+            }
+            pairs.push(pair);
+            true
+        },
+    )?;
     if exceeded {
         return Err(FlowFixedRegionError::FixedPairLimitExceeded {
             limit: max_pairs,
@@ -1576,9 +1648,27 @@ pub fn fixed_pair_overlaps_for_flow(
 fn visit_fixed_pair_overlaps_for_flow(
     plan: &SemanticPaginationPlan,
     fixed_regions: &[FixedRegionLayoutResult],
-    mut visit: impl FnMut(FixedPairOverlap) -> bool,
+    visit: impl FnMut(FixedPairOverlap) -> bool,
 ) -> Result<(), FlowFixedRegionError> {
     check_fixed_regions_for_flow(plan, fixed_regions)?;
+    visit_admitted_fixed_pair_overlaps(
+        plan.revision(),
+        plan.flow(),
+        fixed_regions,
+        visit,
+    )
+}
+
+// Used either after conservative row-band admission (legacy query) or from
+// the already admitted selected-row snapshot (exact positioned row geometry).
+// Both paths keep the same candidate ordering, checked coordinate arithmetic
+// and caller-bounded complete result semantics.
+fn visit_admitted_fixed_pair_overlaps(
+    revision: RevisionIdentity,
+    flow: AcceptedIdentity,
+    fixed_regions: &[FixedRegionLayoutResult],
+    mut visit: impl FnMut(FixedPairOverlap) -> bool,
+) -> Result<(), FlowFixedRegionError> {
     // The checked bounds guarantee non-overflowing physical rectangles. Keep
     // explicit arithmetic refusal rather than ever comparing saturated ends.
     let mut prior_by_page =
@@ -1628,7 +1718,7 @@ fn visit_fixed_pair_overlaps_for_flow(
                 if !visit(FixedPairOverlap {
                     earlier_index: earlier.index,
                     earlier_object: earlier.object,
-                    flow: plan.flow(),
+                    flow,
                     intersection: Rect {
                         x: Length::from_micrometres(shared_left),
                         y: Length::from_micrometres(shared_top),
@@ -1638,7 +1728,7 @@ fn visit_fixed_pair_overlaps_for_flow(
                     later_index,
                     later_object: fixed.object(),
                     page: fixed.page(),
-                    revision: plan.revision(),
+                    revision,
                 }) {
                     return Ok(());
                 }

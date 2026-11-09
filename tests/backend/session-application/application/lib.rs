@@ -9540,6 +9540,42 @@ fn live_selected_row_inspection_admits_one_revision_for_boxes_and_hits() {
 }
 
 #[test]
+fn live_selected_row_report_inspects_checked_fixed_pairs_with_row_hits() {
+    let result = (|| -> Result<(), String> {
+        let fixture = live_owner_regroup_fixture()?;
+        let repeated = [fixture.fixed[0], fixture.fixed[0]];
+        let report = fixture
+            .session
+            .inspect_selected_aligned_measured_rows(
+                &fixture.regrouped,
+                &repeated,
+                &fixture.fresh_selections,
+                2,
+            )
+            .map_err(|error| format!("paired live report: {error:?}"))?;
+        assert_eq!(report.revision(), fixture.revision);
+        assert_eq!(report.fixed_regions().len(), 2);
+        assert_eq!(report.overlaps().len(), 2);
+        let first = report
+            .first_fixed_pair_overlap()
+            .map_err(|error| format!("first live pair: {error:?}"))?
+            .ok_or("missing checked live pair")?;
+        assert_eq!(first.revision(), fixture.revision);
+        assert_eq!(first.page(), fixture.page);
+        assert_eq!(first.earlier_index(), 0);
+        assert_eq!(first.later_index(), 1);
+        assert_eq!(first.intersection(), fixture.rectangle);
+        assert_eq!(report.fixed_pair_overlaps(1), Ok(vec![first]));
+        assert_eq!(
+            report.fixed_pair_overlaps(0),
+            Err(FlowFixedRegionError::FixedPairLimitExceeded { limit: 0 }),
+        );
+        Ok(())
+    })();
+    assert!(result.is_ok(), "live checked fixed pairs: {result:?}");
+}
+
+#[test]
 fn live_selected_row_inspection_refuses_late_remeasurement() {
     let result = (|| -> Result<(), String> {
         let fixture = live_owner_regroup_fixture()?;
