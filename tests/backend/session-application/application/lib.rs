@@ -67,7 +67,8 @@ use atrament_physical_page_profile::{
 };
 use atrament_semantic_flow_pagination::{
     FixedPairOverlap, FixedRowBandOverlap, FixedRowFootprintOverlap,
-    FlowFixedRegionError, RevisionFlowMeasurement, RowAlignmentSelection,
+    FlowFixedRegionError, MeasuredRowGeometry, RevisionFlowMeasurement,
+    RowAlignmentSelection,
     RowHorizontalAlignment, RowHorizontalPosition,
     SemanticPaginationError, SemanticPaginationPlan,
     aligned_row_horizontal_positions_for_flow,
@@ -2152,6 +2153,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
             page: row.page,
             revision,
             source: row.source,
+            geometry: MeasuredRowGeometry::from_placement(row),
         }
     }).collect::<Vec<_>>();
     let first_source = plan.placements()[0].source;
@@ -2222,6 +2224,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
                 page: row.page,
                 revision: current_revision,
                 source: row.source,
+                geometry: MeasuredRowGeometry::from_placement(row),
             }
         }).collect::<Vec<_>>();
         assert_eq!(
@@ -2388,10 +2391,23 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         page,
         writable: narrowed_writable,
     }]);
+    // A changed writable rectangle invalidates the old measured proposal.
+    // Rebind geometry below while retaining the old absolute X to verify
+    // that the physical overflow gate is independent of stale admission.
+    let rebound_positions = |plan: &SemanticPaginationPlan,
+                             current| {
+        let mut old = positions(current);
+        for (proposal, row) in old.iter_mut().zip(plan.placements()) {
+            proposal.geometry =
+                MeasuredRowGeometry::from_placement(row);
+        }
+        old
+    };
     assert_eq!(
         session.fixed_row_footprint_overlaps(
             &measurement(edited, 80_000),
-            &[footprint_fixed(edited)], &positions(edited), 1,
+            &[footprint_fixed(edited)],
+            &rebound_positions(&narrowed_fit, edited), 1,
         ),
         Err(application::SessionFlowFixedRegionError::Overlap(
             FlowFixedRegionError::RowFootprintOverflow {
@@ -2402,7 +2418,8 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     assert_eq!(
         session.first_fixed_row_footprint_overlap(
             &measurement(edited, 80_000),
-            &[footprint_fixed(edited)], &positions(edited),
+            &[footprint_fixed(edited)],
+            &rebound_positions(&narrowed_fit, edited),
         ),
         Err(application::SessionFlowFixedRegionError::Overlap(
             FlowFixedRegionError::RowFootprintOverflow {
@@ -2577,7 +2594,8 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     assert_eq!(
         session.fixed_row_footprint_overlaps(
             &measurement(redone, 80_000),
-            &[footprint_fixed(redone)], &positions(redone), 1,
+            &[footprint_fixed(redone)],
+            &rebound_positions(&redone_fit, redone), 1,
         ),
         Err(application::SessionFlowFixedRegionError::Overlap(
             FlowFixedRegionError::RowFootprintOverflow {
@@ -2588,7 +2606,8 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     assert_eq!(
         session.first_fixed_row_footprint_overlap(
             &measurement(redone, 80_000),
-            &[footprint_fixed(redone)], &positions(redone),
+            &[footprint_fixed(redone)],
+            &rebound_positions(&redone_fit, redone),
         ),
         Err(application::SessionFlowFixedRegionError::Overlap(
             FlowFixedRegionError::RowFootprintOverflow {
@@ -2828,6 +2847,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             page: row.page,
             revision,
             source: row.source,
+            geometry: MeasuredRowGeometry::from_placement(row),
         }).collect::<Vec<_>>()
     };
     let original_choices = mixed_choices(&session, base, 100_000);
@@ -7923,6 +7943,7 @@ fn combined_flow_and_fixed_regions_follow_live_session_history()
         revision: accepted_revision,
         page,
         source: row.source,
+        geometry: MeasuredRowGeometry::from_placement(&row),
         left: Length::from_micrometres(x + 1_000),
     };
     let trace_footprint = |overlap: FixedRowFootprintOverlap| (
@@ -8630,6 +8651,7 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
             page: row.page,
             revision: current,
             source: row.source,
+            geometry: MeasuredRowGeometry::from_placement(row),
         })
         .collect::<Vec<_>>();
     let horizontal_spare = centered_row.writable.width.micrometres()
@@ -8821,6 +8843,7 @@ fn live_owner_regroup_selections(
         page: row.page,
         revision,
         source: row.source,
+        geometry: MeasuredRowGeometry::from_placement(row),
     }).collect()
 }
 
@@ -9026,13 +9049,23 @@ fn live_empty_width_row_still_requires_its_semantic_owner() {
         return;
     };
     empty_row.width = Length::ZERO;
-    let mut wrong_positions = fixture.fresh_positions.clone();
+    let plan_result = fixture.session.paginate_measured_flow(&measurement);
+    assert!(plan_result.is_ok(), "zero-width measured plan must paginate");
+    let Ok(plan) = plan_result else { return };
+    let Some(changed_row) = plan.placements().get(1) else { return };
+    let mut fresh_positions = fixture.fresh_positions.clone();
+    let Some(position) = fresh_positions.get_mut(1) else { return };
+    position.geometry = MeasuredRowGeometry::from_placement(changed_row);
+    let mut fresh_selections = fixture.fresh_selections.clone();
+    let Some(selection) = fresh_selections.get_mut(1) else { return };
+    selection.geometry = MeasuredRowGeometry::from_placement(changed_row);
+    let mut wrong_positions = fresh_positions.clone();
     assert_eq!(wrong_positions.len(), 3);
     let Some(wrong_position) = wrong_positions.get_mut(1) else {
         return;
     };
     wrong_position.fragment_owner = fixture.first_owner;
-    let mut wrong_selections = fixture.fresh_selections.clone();
+    let mut wrong_selections = fresh_selections.clone();
     assert_eq!(wrong_selections.len(), 3);
     let Some(wrong_selection) = wrong_selections.get_mut(1) else {
         return;
@@ -9077,8 +9110,14 @@ fn live_empty_width_row_still_requires_its_semantic_owner() {
         ),
         Err(alignment_mismatch),
     );
+    assert_eq!(
+        fixture.session.first_fixed_row_footprint_overlap(
+            &measurement, &fixture.fixed, &fixture.fresh_positions,
+        ),
+        Err(position_mismatch),
+    );
     let valid_result = fixture.session.first_fixed_row_footprint_overlap(
-        &measurement, &fixture.fixed, &fixture.fresh_positions,
+        &measurement, &fixture.fixed, &fresh_positions,
     );
     assert!(valid_result.as_ref().is_ok_and(Option::is_some),
         "valid earlier row must still intersect: {valid_result:?}");
@@ -9088,7 +9127,7 @@ fn live_empty_width_row_still_requires_its_semantic_owner() {
     assert_eq!(valid_first.source(), fixture.first_source);
     assert_eq!(
         fixture.session.fixed_row_footprint_overlaps(
-            &measurement, &fixture.fixed, &fixture.fresh_positions, 1,
+            &measurement, &fixture.fixed, &fresh_positions, 1,
         ).map(|hits| hits.first().copied()),
         Ok(Some(valid_first)),
     );
@@ -9130,15 +9169,30 @@ fn live_empty_row_footprint_clears_while_conservative_band_can_hit() {
         },
         revision: fixture.revision,
     }];
+    let mut fresh_positions = fixture.fresh_positions.clone();
+    let Some(position) = fresh_positions.get_mut(1) else { return };
+    position.geometry = MeasuredRowGeometry::from_placement(second);
     assert_eq!(
         fixture.session.first_fixed_row_footprint_overlap(
             &measurement, &on_empty_row, &fixture.fresh_positions,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowPositionMismatch {
+                index: 1, page: fixture.page,
+                fragment_owner: fixture.changed_owner,
+                source: fixture.changed_source,
+            },
+        )),
+    );
+    assert_eq!(
+        fixture.session.first_fixed_row_footprint_overlap(
+            &measurement, &on_empty_row, &fresh_positions,
         ),
         Ok(None),
     );
     assert_eq!(
         fixture.session.fixed_row_footprint_overlaps(
-            &measurement, &on_empty_row, &fixture.fresh_positions, 0,
+            &measurement, &on_empty_row, &fresh_positions, 0,
         ),
         Ok(vec![]),
     );
@@ -9151,4 +9205,123 @@ fn live_empty_row_footprint_clears_while_conservative_band_can_hit() {
     );
     assert_eq!(fixture.session.accepted_revision()
         .map(|current| current.id), Some(fixture.revision));
+}
+
+#[test]
+fn live_same_revision_width_remeasurement_refuses_old_geometry() {
+    let fixture_result = live_owner_regroup_fixture();
+    assert!(fixture_result.is_ok(), "valid live remeasurement fixture");
+    let Ok(fixture) = fixture_result else { return };
+    let mut widened = fixture.regrouped.clone();
+    let Some(first) = widened.units.first_mut()
+        .and_then(|unit| unit.fragments.first_mut())
+    else { return };
+    first.width = Length::from_micrometres(21_000);
+    let mismatch = application::SessionFlowFixedRegionError::Overlap(
+        FlowFixedRegionError::RowPositionMismatch {
+            index: 0, page: fixture.page,
+            fragment_owner: fixture.first_owner,
+            source: fixture.first_source,
+        },
+    );
+    assert_eq!(
+        fixture.session.first_fixed_row_footprint_overlap(
+            &widened, &fixture.fixed, &fixture.fresh_positions,
+        ),
+        Err(mismatch),
+    );
+    assert_eq!(
+        fixture.session.fixed_row_footprint_overlaps(
+            &widened, &fixture.fixed, &fixture.fresh_positions, 0,
+        ),
+        Err(mismatch),
+    );
+    assert_eq!(
+        fixture.session.first_selected_aligned_fixed_row_footprint_overlap(
+            &widened, &fixture.fixed, &fixture.fresh_selections,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowAlignmentMismatch {
+                index: 0, page: fixture.page,
+                fragment_owner: fixture.first_owner,
+                source: fixture.first_source,
+            },
+        )),
+    );
+}
+
+#[test]
+fn live_same_revision_height_change_refuses_shifted_row_top() {
+    let fixture_result = live_owner_regroup_fixture();
+    assert!(fixture_result.is_ok(), "valid live remeasurement fixture");
+    let Ok(fixture) = fixture_result else { return };
+    let mut shifted = fixture.regrouped.clone();
+    let Some(first_fragment) = shifted.units.first_mut()
+        .and_then(|unit| unit.fragments.first_mut())
+    else { return };
+    first_fragment.height = Length::from_micrometres(13_000);
+    let new_result = fixture.session.paginate_measured_flow(&shifted);
+    let old_result = fixture.session
+        .paginate_measured_flow(&fixture.regrouped);
+    assert!(new_result.is_ok() && old_result.is_ok());
+    let (Ok(plan), Ok(original)) = (new_result, old_result) else {
+        return;
+    };
+    let (Some(first_row), Some(second), Some(old_second)) = (
+        plan.placements().first(),
+        plan.placements().get(1),
+        original.placements().get(1),
+    ) else { return };
+    assert_eq!((second.source, second.owner, second.height, second.width),
+        (fixture.changed_source, fixture.changed_owner,
+            old_second.height, old_second.width));
+    assert_eq!(second.top.micrometres(),
+        old_second.top.micrometres() + 1_000);
+
+    // Rebinding row zero cannot hide the stale second-row physical top.
+    let geometry = MeasuredRowGeometry::from_placement(first_row);
+    let mut positions = fixture.fresh_positions.clone();
+    let Some(position) = positions.first_mut() else { return };
+    position.geometry = geometry;
+    assert_eq!(
+        fixture.session.first_fixed_row_footprint_overlap(
+            &shifted, &fixture.fixed, &positions,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowPositionMismatch {
+                index: 1, page: fixture.page,
+                fragment_owner: fixture.changed_owner,
+                source: fixture.changed_source,
+            },
+        )),
+    );
+    let mut selections = fixture.fresh_selections.clone();
+    let Some(selection) = selections.first_mut() else { return };
+    selection.geometry = geometry;
+    assert_eq!(
+        fixture.session.selected_aligned_fixed_row_footprint_overlaps(
+            &shifted, &fixture.fixed, &selections, 0,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowAlignmentMismatch {
+                index: 1, page: fixture.page,
+                fragment_owner: fixture.changed_owner,
+                source: fixture.changed_source,
+            },
+        )),
+    );
+    let fresh_result = aligned_row_horizontal_positions_for_flow(
+        &plan, RowHorizontalAlignment::Left,
+    );
+    assert!(fresh_result.is_ok());
+    let Ok(fresh) = fresh_result else { return };
+    let first_result = fixture.session.first_fixed_row_footprint_overlap(
+        &shifted, &fixture.fixed, &fresh,
+    );
+    assert!(first_result.is_ok());
+    let Ok(Some(first_hit)) = first_result else { return };
+    assert_eq!(first_hit.intersection(), fixture.rectangle);
+    assert_eq!(first_hit.fragment_owner(), fixture.first_owner);
+    assert_eq!(fixture.session.accepted_revision().map(|rev| rev.id),
+        Some(fixture.revision));
 }

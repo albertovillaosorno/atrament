@@ -3497,3 +3497,21 @@ vertical span of the same zero-width row. First-hit and zero-cap *physical*
 footprint reports return no intersection, while the conservative full-width
 row-band query retains that row's exact source as a possible conflict. The
 queries intentionally use different geometry; neither establishes glyph ink.
+
+## Exact measured-row geometry binding (partial) — 2026-11-09
+
+Explicit horizontal positions and mixed per-row alignments now bind the
+provisional row's exact measured width, height, physical top and writable
+rectangle as well as its accepted revision, flow, owner, page and source.
+Same-revision remeasurement can preserve all those identities while changing
+row geometry, so stale choices refuse before first-hit or zero-cap footprint
+inspection can report an earlier collision. Uniformly derived positions carry
+the same geometry automatically; a caller must take fresh row evidence after
+remeasurement or page-profile reflow.
+
+Session regressions distinguish stale width/height and downstream row-top
+changes from valid owner-bound choices. The existing page-profile overflow
+regression now explicitly rebinds changed geometry while retaining an
+out-of-bounds X coordinate, preserving that separate refusal. This remains a
+read-only measured-box admission rule, not verified handwriting ink, trusted
+measurement generation, persistent alignment or notebook Export support.

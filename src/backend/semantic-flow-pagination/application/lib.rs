@@ -157,7 +157,7 @@ pub enum FlowFixedRegionError {
         /// Number of caller-supplied row alignment choices.
         supplied: usize,
     },
-    /// One per-row alignment choice names a different accepted row.
+    /// One per-row alignment choice names a different accepted row or geometry.
     RowAlignmentMismatch {
         /// Placement index in the sealed physical row sequence.
         index: usize,
@@ -184,7 +184,8 @@ pub enum FlowFixedRegionError {
         /// Number of submitted horizontal row positions.
         supplied: usize,
     },
-    /// One horizontal position does not belong to this measured plan row.
+    /// One horizontal position does not belong to this measured row or
+    /// geometry.
     RowPositionMismatch {
         /// Physical output row index in source placement order.
         index: usize,
@@ -391,11 +392,41 @@ pub enum RowHorizontalAlignment {
     Right,
 }
 
+/// Exact measured geometry of one row in a sealed pagination plan.
+///
+/// Source indices and semantic owners can remain identical after a caller
+/// remeasures the same accepted revision. Bind the horizontal proposal to its
+/// entire physical row and writable rectangle so old measurements cannot be
+/// silently interpreted as newly measured row footprints.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct MeasuredRowGeometry {
+    height: Length,
+    top: Length,
+    width: Length,
+    writable: Rect,
+}
+
+impl MeasuredRowGeometry {
+    /// Capture one provisional row's exact measured physical geometry.
+    #[must_use]
+    pub const fn from_placement(
+        row: &PlacedFragment<AcceptedIdentity, AcceptedIdentity>,
+    ) -> Self {
+        Self {
+            height: row.height,
+            top: row.top,
+            width: row.width,
+            writable: row.writable,
+        }
+    }
+}
+
 /// One explicitly selected alignment for an exact accepted measured row.
 ///
 /// Unlike a position, the choice contains no arbitrary physical coordinate.
 /// Its accepted revision, flow, block owner, page and source are checked
 /// against a sealed pagination plan before physical X may be derived.
+/// Recomputed widths, heights, tops or writable bounds require fresh choices.
 /// Callers may select a different alignment for each row, including successive
 /// fragments of the same semantic owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -406,6 +437,8 @@ pub struct RowAlignmentSelection {
     pub flow: AcceptedIdentity,
     /// Stable accepted semantic block owning this measured row.
     pub fragment_owner: AcceptedIdentity,
+    /// Exact measured dimensions, vertical placement and writable rectangle.
+    pub geometry: MeasuredRowGeometry,
     /// Physical page receiving the selected row.
     pub page: AcceptedIdentity,
     /// Revision whose measured row source was selected.
@@ -417,8 +450,8 @@ pub struct RowAlignmentSelection {
 /// Caller-selected physical X position for one exact measured flow row.
 ///
 /// The plan owns the row's accepted revision, flow, block owner, page,
-/// source and size. This proposal supplies only horizontal placement,
-/// **not** measured ink
+/// source and size. Its geometry binding rejects stale remeasurements.
+/// This proposal supplies only horizontal placement, **not** measured ink
 /// geometry or proof that visible glyphs occupy the resulting rectangle.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct RowHorizontalPosition {
@@ -426,6 +459,8 @@ pub struct RowHorizontalPosition {
     pub flow: AcceptedIdentity,
     /// Stable accepted block owning the positioned source row.
     pub fragment_owner: AcceptedIdentity,
+    /// Exact measured dimensions, vertical placement and writable rectangle.
+    pub geometry: MeasuredRowGeometry,
     /// Absolute physical X origin for this row in micrometres.
     pub left: Length,
     /// Accepted page receiving this measured row.
@@ -672,6 +707,8 @@ pub fn aligned_row_horizontal_positions_by_selection_for_flow(
             if selection.revision != plan.revision()
                 || selection.flow != plan.flow()
                 || selection.fragment_owner != row.owner
+                || selection.geometry
+                    != MeasuredRowGeometry::from_placement(row)
                 || selection.page != row.page
                 || selection.source != row.source
             {
@@ -731,6 +768,7 @@ fn aligned_position_for_row(
     Ok(RowHorizontalPosition {
         flow: plan.flow(),
         fragment_owner: row.owner,
+        geometry: MeasuredRowGeometry::from_placement(row),
         left: Length::from_micrometres(left),
         page: row.page,
         revision: plan.revision(),
@@ -1094,6 +1132,8 @@ fn validate_row_horizontal_positions(
         if position.revision != plan.revision()
             || position.flow != plan.flow()
             || position.fragment_owner != row.owner
+            || position.geometry
+                != MeasuredRowGeometry::from_placement(row)
             || position.page != row.page
             || position.source != row.source
         {

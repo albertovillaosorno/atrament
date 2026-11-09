@@ -48,7 +48,7 @@ use atrament_semantic_fixed_region_layout::{
 };
 use atrament_semantic_flow_pagination::{
     FixedPairOverlap, FixedRowBandOverlap, FlowFixedRegionError,
-    RevisionFlowMeasurement, RowAlignmentSelection,
+    MeasuredRowGeometry, RevisionFlowMeasurement, RowAlignmentSelection,
     RowHorizontalAlignment,
     aligned_row_horizontal_positions_by_selection_for_flow,
     aligned_row_horizontal_positions_for_flow,
@@ -3774,6 +3774,7 @@ fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
         page: row.page,
         revision,
         source: row.source,
+        geometry: MeasuredRowGeometry::from_placement(row),
     }).collect::<Vec<_>>();
     assert_eq!(
         fixed_row_footprint_overlaps_for_flow(
@@ -4440,6 +4441,7 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
                 revision,
                 page: row.page,
                 source: row.source,
+                geometry: MeasuredRowGeometry::from_placement(row),
                 left: Length::from_micrometres(x + offset),
             }).collect::<Vec<_>>()
     };
@@ -4762,6 +4764,7 @@ fn indexed_positioned_footprints_match_linear_oracle_across_pages()
             Ok(RowHorizontalPosition {
                 flow, fragment_owner: row.owner, revision,
                 page: row.page, source: row.source,
+            geometry: MeasuredRowGeometry::from_placement(row),
                 left: Length::from_micrometres(
                     row.writable.x.micrometres() + offset,
                 ),
@@ -4962,6 +4965,7 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
     let position = RowHorizontalPosition {
         flow, fragment_owner: row.owner, revision, page,
         source: row.source,
+        geometry: MeasuredRowGeometry::from_placement(&row),
         left: Length::from_micrometres(x),
     };
     assert!(check_fixed_regions_for_flow(&plan, &[near_far_edge.clone()])
@@ -5277,6 +5281,7 @@ fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
             page: row.page,
             revision,
             source: row.source,
+            geometry: MeasuredRowGeometry::from_placement(row),
         })
         .collect::<Vec<_>>();
     let positions = aligned_row_horizontal_positions_by_selection_for_flow(
@@ -5475,6 +5480,7 @@ fn mixed_alignment_refuses_reused_source_assigned_to_another_semantic_owner()
             page: row.page,
             revision,
             source: row.source,
+            geometry: MeasuredRowGeometry::from_placement(row),
         })
         .collect::<Vec<_>>();
     let old_rows = first_plan.placements();
@@ -5520,6 +5526,7 @@ fn mixed_alignment_refuses_reused_source_assigned_to_another_semantic_owner()
             page: row.page,
             revision,
             source: row.source,
+            geometry: MeasuredRowGeometry::from_placement(row),
         })
         .collect::<Vec<_>>();
     assert!(
