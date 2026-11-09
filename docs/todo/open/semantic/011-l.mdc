@@ -3253,3 +3253,13 @@ remain tested; this still measures provisional row boxes, not actual ink.
 Same-page row-source reorderings also refuse explicitly. A separate late
 row-footprint overflow now confirms the complete horizontal proposal batch
 preempts even an earlier possible intersection with a zero-result cap.
+
+## Randomized horizontal overflow admission — 2026-11-09
+
+The independent 2,048-case row/fixed oracle also perturbs one proposed X
+origin in every case to sit precisely one micrometre beyond its permitted
+maximum. It rotates among both positive-width rows and a zero-width row
+placed beyond the right page edge. Each invalid batch must refuse with its
+exact row source, even at a zero diagnostic cap; invalid fixed geometry
+still takes precedence over all horizontal proposals. No source text or
+handwriting ink is inferred from these caller-provided X positions.

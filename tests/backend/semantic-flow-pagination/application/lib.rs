@@ -4391,6 +4391,37 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
         let actual = fixed_row_footprint_overlaps_for_flow(
             &plan, std::slice::from_ref(&fixed), &case_positions, 3,
         ).map(|all| all.into_iter().map(trace).collect::<Vec<_>>());
+        // Every row type, including the zero-width middle row, refuses an
+        // origin one micrometre beyond its admitted rightmost position.
+        // Invalid fixed geometry must refuse first, even with a zero cap.
+        let bad_index = case % 3;
+        let bad_offset = match bad_index {
+            0 => width - 14_999,
+            1 => width + 1,
+            _ => width - 19_999,
+        };
+        let mut bad_positions = case_positions.clone();
+        bad_positions.get_mut(bad_index)
+            .ok_or("oracle missing measured row")?
+            .left = Length::from_micrometres(x + bad_offset);
+        let bad_result = fixed_row_footprint_overlaps_for_flow(
+            &plan, std::slice::from_ref(&fixed), &bad_positions, 0,
+        );
+        let expected_bad = if dx + w > width {
+            FlowFixedRegionError::FixedRegionOverflow {
+                page, object: owner,
+            }
+        } else {
+            FlowFixedRegionError::RowFootprintOverflow {
+                page, fragment_owner: owner,
+                source: plan.placements()[bad_index].source,
+            }
+        };
+        if bad_result != Err(expected_bad) {
+            return Err(format!(
+                "case {case} invalid X: {bad_result:?} != {expected_bad:?}"
+            ));
+        }
         if dx + w > width {
             overflows += 1;
             if actual != Err(FlowFixedRegionError::FixedRegionOverflow {
