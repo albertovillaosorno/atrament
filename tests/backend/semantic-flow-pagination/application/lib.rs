@@ -204,6 +204,8 @@ fn measurement(
 
 #[test]
 fn empty_accepted_flow_needs_no_page_profile_authority() {
+    use atrament_semantic_flow_pagination as row_layout;
+
     let ids = IdentityAllocator::new();
     let mut fixture = candidate_fixture(&ids);
     fixture.notebook.pages[0].flows[0].blocks.clear();
@@ -230,6 +232,22 @@ fn empty_accepted_flow_needs_no_page_profile_authority() {
     assert_eq!(plan.revision(), revision);
     assert_eq!(plan.flow(), flow);
     assert!(plan.placements().is_empty());
+    // No selected semantic rows also means no page-profile authority to
+    // borrow from another flow, even for an immutable report with no hits.
+    let report = row_layout::inspect_selected_aligned_rows_for_flow(
+        &plan, &[], &[], 0,
+    ).expect("empty snapshot must not request absent page profiles");
+    assert_eq!(report.revision(), revision);
+    assert_eq!(report.flow(), flow);
+    assert!(report.covered_pages().is_empty());
+    assert!(report.rows().is_empty());
+    assert!(report.selections().is_empty());
+    assert!(report.fixed_regions().is_empty());
+    assert!(report.overlaps().is_empty());
+    assert_eq!(report.first_fixed_pair_overlap(), Ok(None));
+    assert_eq!(report.first_fixed_row_band_overlap(), Ok(None));
+    assert_eq!(report.fixed_pair_overlaps(0), Ok(vec![]));
+    assert_eq!(report.fixed_row_band_overlaps(0), Ok(vec![]));
 }
 
 #[test]
@@ -3150,6 +3168,8 @@ fn fixed_regions_inspect_measured_vertical_bands_without_guessing_alignment()
 #[test]
 fn fixed_regions_on_uncovered_pages_do_not_collide_with_flow_rows()
 -> Result<(), String> {
+    use atrament_semantic_flow_pagination as row_layout;
+
     let ids = IdentityAllocator::new();
     let mut fixture = candidate_fixture(&ids);
     let fixed_flow = ids
@@ -3195,8 +3215,30 @@ fn fixed_regions_on_uncovered_pages_do_not_collide_with_flow_rows()
         },
     })
     .map_err(|error| format!("fixed bounds: {error:?}"))?;
-    assert_eq!(check_fixed_regions_for_flow(&plan, &[region]), Ok(()));
+    let checked = std::slice::from_ref(&region);
+    assert_eq!(check_fixed_regions_for_flow(&plan, checked), Ok(()));
     assert!(check_fixed_regions_for_flow(&plan, &[]).is_ok());
+    let selections = plan.placements().iter().map(|row| {
+        RowAlignmentSelection {
+            alignment: RowHorizontalAlignment::Left,
+            flow,
+            fragment_owner: row.owner,
+            geometry: MeasuredRowGeometry::from_placement(row),
+            page: row.page,
+            revision,
+            source: row.source,
+        }
+    }).collect::<Vec<_>>();
+    let report = row_layout::inspect_selected_aligned_rows_for_flow(
+        &plan, checked, &selections, 0,
+    ).map_err(|error| format!("uncovered fixed snapshot: {error:?}"))?;
+    assert_eq!(report.covered_pages(), plan.covered_pages());
+    assert!(report.covered_pages().iter().all(|covered| covered.page != page));
+    assert_eq!(report.fixed_regions(), checked);
+    assert!(report.rows().iter().all(|row| row.page() != page));
+    assert!(report.overlaps().is_empty());
+    assert_eq!(report.first_fixed_row_band_overlap(), Ok(None));
+    assert_eq!(report.fixed_row_band_overlaps(0), Ok(vec![]));
     Ok(())
 }
 

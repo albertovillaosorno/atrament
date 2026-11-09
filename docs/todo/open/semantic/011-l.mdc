@@ -3721,3 +3721,12 @@ page-profile-reference edits, Undo and Redo. An earlier captured report
 retains its original page geometry after a newer revision changes paper.
 This remains constructor-sealed, read-only page evidence, not ownership of
 ink on skipped pages, persistent semantic measurement or Export readiness.
+
+## Empty and fixed-only pages in selected-row inspection — 2026-11-09
+
+Further native regressions verify that an accepted empty measured flow
+produces an empty selected-row report without requiring page-profile
+authority. A checked fixed object on a separate, uncovered physical page
+remains visible in the fixed proposal collection but does not invent a
+covered page, positioned row, conservative band or physical intersection.
+Neither case grants ownership of another flow's page or rendered ink.
