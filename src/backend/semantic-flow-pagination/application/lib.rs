@@ -670,6 +670,39 @@ pub fn fixed_row_band_overlaps_for_flow(
     Ok(overlaps)
 }
 
+/// Inspect the first positive-area overlap of positioned rows and fixed boxes.
+///
+/// The **entire** fixed batch and every revision/flow/source-bound horizontal
+/// position are checked before the first observation is returned, including
+/// later invalid proposals. The first result follows supplied fixed order,
+/// then physical measured-row order. Unlike bounded enumeration, this does
+/// not refuse merely because other intersections exist.
+///
+/// This is provisional measured-box geometry, not actual glyph ink or a
+/// policy permitting fixed layering, and cannot authorize native Export.
+///
+/// # Errors
+///
+/// Returns typed fixed-geometry or row-position admission failures, never a
+/// partial result from a mixed valid/invalid proposal batch.
+pub fn first_fixed_row_footprint_overlap_for_flow(
+    plan: &SemanticPaginationPlan,
+    fixed_regions: &[FixedRegionLayoutResult],
+    positions: &[RowHorizontalPosition],
+) -> Result<Option<FixedRowFootprintOverlap>, FlowFixedRegionError> {
+    let mut first = None;
+    visit_fixed_row_footprint_overlaps_for_flow(
+        plan,
+        fixed_regions,
+        positions,
+        |overlap| {
+            first = Some(overlap);
+            false
+        },
+    )?;
+    Ok(first)
+}
+
 /// Inspect caller-positioned measured row boxes against checked fixed regions.
 ///
 /// Unlike conservative full-width row bands, each horizontal row position
@@ -693,14 +726,44 @@ pub fn fixed_row_footprint_overlaps_for_flow(
     positions: &[RowHorizontalPosition],
     max_overlaps: usize,
 ) -> Result<Vec<FixedRowFootprintOverlap>, FlowFixedRegionError> {
+    let mut overlaps = Vec::new();
+    let mut exceeded = false;
+    visit_fixed_row_footprint_overlaps_for_flow(
+        plan,
+        fixed_regions,
+        positions,
+        |overlap| {
+            if overlaps.len() == max_overlaps {
+                exceeded = true;
+                return false;
+            }
+            overlaps.push(overlap);
+            true
+        },
+    )?;
+    if exceeded {
+        return Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
+            limit: max_overlaps,
+        });
+    }
+    Ok(overlaps)
+}
+
+// Admit the entire proposal batch before any first-hit or complete bounded
+// collection. A visitor can stop early only *after* those validations, so a
+// later invalid fixed rectangle or row proposal never hides behind a hit.
+fn visit_fixed_row_footprint_overlaps_for_flow(
+    plan: &SemanticPaginationPlan,
+    fixed_regions: &[FixedRegionLayoutResult],
+    positions: &[RowHorizontalPosition],
+    mut visit: impl FnMut(FixedRowFootprintOverlap) -> bool,
+) -> Result<(), FlowFixedRegionError> {
     let writable_by_page = writable_index(plan);
     for fixed in fixed_regions {
         validate_fixed_region_for_flow(plan, fixed, &writable_by_page)?;
     }
     let left_by_source = validate_row_horizontal_positions(plan, positions)?;
     let rows_by_page = measured_row_index(plan);
-    let mut overlaps = Vec::new();
-    let mut exceeded = false;
     for (fixed_index, fixed) in fixed_regions.iter().enumerate() {
         let rectangle = fixed.rectangle();
         let fixed_left = rectangle.x.micrometres();
@@ -712,6 +775,7 @@ pub fn fixed_row_footprint_overlaps_for_flow(
             })?;
         if let Some(rows) = rows_by_page.get(&fixed.page()) {
             let mut invalid_row = None;
+            let mut stopped = false;
             visit_fixed_measured_rows(fixed, rows, |row, top, height| {
                 if row.width == Length::ZERO {
                     return true;
@@ -746,10 +810,6 @@ pub fn fixed_row_footprint_overlaps_for_flow(
                 if shared_left >= shared_right {
                     return true;
                 }
-                if overlaps.len() == max_overlaps {
-                    exceeded = true;
-                    return false;
-                }
                 let Some(shared_width) = shared_right.checked_sub(shared_left)
                 else {
                     invalid_row = Some(
@@ -760,7 +820,7 @@ pub fn fixed_row_footprint_overlaps_for_flow(
                     );
                     return false;
                 };
-                overlaps.push(FixedRowFootprintOverlap {
+                if !visit(FixedRowFootprintOverlap {
                     fixed_index,
                     flow: plan.flow(),
                     fragment_owner: row.owner,
@@ -774,20 +834,21 @@ pub fn fixed_row_footprint_overlaps_for_flow(
                     page: fixed.page(),
                     revision: plan.revision(),
                     source: row.source,
-                });
+                }) {
+                    stopped = true;
+                    return false;
+                }
                 true
             })?;
             if let Some(error) = invalid_row {
                 return Err(error);
             }
-        }
-        if exceeded {
-            return Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
-                limit: max_overlaps,
-            });
+            if stopped {
+                return Ok(());
+            }
         }
     }
-    Ok(overlaps)
+    Ok(())
 }
 
 // Validate the entire proposed X-placement sequence before any intersections

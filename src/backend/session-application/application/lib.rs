@@ -64,6 +64,7 @@ use atrament_semantic_flow_pagination::{
     FlowFixedRegionError, RevisionFlowMeasurement, RowHorizontalPosition,
     SemanticPaginationError, SemanticPaginationPlan,
     check_fixed_regions_for_flow, first_fixed_pair_overlap_for_flow,
+    first_fixed_row_footprint_overlap_for_flow,
     fixed_pair_overlaps_for_flow, fixed_row_band_overlaps_for_flow,
     fixed_row_footprint_overlaps_for_flow, paginate_revision,
 };
@@ -621,6 +622,31 @@ impl SessionApplication {
         let (plan, checked) =
             self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
         first_fixed_pair_overlap_for_flow(&plan, &checked)
+            .map_err(SessionFlowFixedRegionError::Overlap)
+    }
+
+    /// Find the first checked positioned-row/fixed-box physical intersection.
+    ///
+    /// All fixed proposals and all horizontal positions are validated against
+    /// the current accepted revision before returning the first observation.
+    /// Unlike complete capped enumeration, additional overlaps do not refuse
+    /// this query. Provisional boxes do not establish actual handwriting ink
+    /// contact, a fixed-layering policy or native Export readiness.
+    ///
+    /// # Errors
+    ///
+    /// Returns typed missing-session, invalid measurement/placement, or
+    /// horizontal source/geometry admission failures.
+    pub fn first_fixed_row_footprint_overlap(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+        positions: &[RowHorizontalPosition],
+    ) -> Result<Option<FixedRowFootprintOverlap>, SessionFlowFixedRegionError>
+    {
+        let (plan, checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
+        first_fixed_row_footprint_overlap_for_flow(&plan, &checked, positions)
             .map_err(SessionFlowFixedRegionError::Overlap)
     }
 

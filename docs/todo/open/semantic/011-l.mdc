@@ -3277,3 +3277,21 @@ without calling indexed row search.
 Random rectangles exercise empty, crossing, out-of-bounds and capped-result
 cases. This is a diagnostic-only geometry regression, not a persisted
 notebook or calibrated handwriting.
+
+## First positioned-row intersection on live authority — 2026-11-09
+
+A new native read-only first-hit query returns the first physical intersection
+between caller-positioned measured row boxes and checked fixed rectangles,
+without requiring a bounded all-overlap report. It shares complete fixed and
+horizontal proposal validation with the existing indexed collector: invalid
+later geometry still refuses before an earlier hit can escape. Results retain
+accepted flow, revision, page, original fixed index, semantic owners, exact
+source row and positive-area physical intersection; later valid hits do not
+trigger a result-cap failure.
+
+The live session exposes the same first-hit observation across text edit and
+Undo/Redo authority changes. Two 2,048-case independent u128 oracles check
+first-hit parity alongside complete enumeration across physical pages,
+including empty rows, variable X positions, overflow and invalid proposals.
+These are provisional measured rectangles, not handwriting-ink bounds or
+permission to export a complete semantic notebook; ATR-P2-011 remains open.

@@ -4307,6 +4307,7 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
     use atrament_flow_pagination::FragmentSource;
     use atrament_semantic_flow_pagination::{
         FixedRowFootprintOverlap, RowHorizontalPosition,
+        first_fixed_row_footprint_overlap_for_flow,
         fixed_row_footprint_overlaps_for_flow,
     };
 
@@ -4391,6 +4392,9 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
         let actual = fixed_row_footprint_overlaps_for_flow(
             &plan, std::slice::from_ref(&fixed), &case_positions, 3,
         ).map(|all| all.into_iter().map(trace).collect::<Vec<_>>());
+        let first = first_fixed_row_footprint_overlap_for_flow(
+            &plan, std::slice::from_ref(&fixed), &case_positions,
+        ).map(|item| item.map(trace));
         // Every row type, including the zero-width middle row, refuses an
         // origin one micrometre beyond its admitted rightmost position.
         // Invalid fixed geometry must refuse first, even with a zero cap.
@@ -4422,6 +4426,13 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
                 "case {case} invalid X: {bad_result:?} != {expected_bad:?}"
             ));
         }
+        assert_eq!(
+            first_fixed_row_footprint_overlap_for_flow(
+                &plan, std::slice::from_ref(&fixed), &bad_positions,
+            ),
+            Err(expected_bad),
+            "first-hit case {case} must reject an invalid complete batch",
+        );
         if dx + w > width {
             overflows += 1;
             if actual != Err(FlowFixedRegionError::FixedRegionOverflow {
@@ -4429,6 +4440,12 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
             }) {
                 return Err(format!("case {case} overflow: {actual:?}"));
             }
+            assert_eq!(
+                first,
+                Err(FlowFixedRegionError::FixedRegionOverflow {
+                    page, object: owner,
+                }),
+            );
             continue;
         }
         // This reference uses independent u128 rectangle arithmetic and
@@ -4470,6 +4487,10 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
                 "case {case} footprint: {actual:?} != {expected:?}"
             ));
         }
+        assert_eq!(
+            first, Ok(expected.first().copied()),
+            "case {case}: first intersecting row must match linear oracle",
+        );
         let cap = expected.len().saturating_sub(1);
         if !expected.is_empty()
             && fixed_row_footprint_overlaps_for_flow(
@@ -4520,9 +4541,24 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
             source: plan.placements()[2].source,
         }),
     );
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &plan, std::slice::from_ref(&positioned), &late_overflow,
+        ),
+        Err(FlowFixedRegionError::RowFootprintOverflow {
+            page, fragment_owner: owner,
+            source: plan.placements()[2].source,
+        }),
+    );
     let report = fixed_row_footprint_overlaps_for_flow(
-        &plan, &[positioned.clone(), positioned], &positions, 4,
+        &plan, &[positioned.clone(), positioned.clone()], &positions, 4,
     ).map_err(|error| format!("ordered footprint report: {error:?}"))?;
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &plan, &[positioned.clone(), positioned], &positions,
+        ),
+        Ok(report.first().copied()),
+    );
     assert_eq!(
         report.iter().map(|overlap| (
             overlap.fixed_index(), overlap.source().fragment,
@@ -4537,6 +4573,7 @@ fn indexed_positioned_footprints_match_linear_oracle_across_pages()
 -> Result<(), String> {
     use atrament_semantic_flow_pagination::{
         FixedRowFootprintOverlap, RowHorizontalPosition,
+        first_fixed_row_footprint_overlap_for_flow,
         fixed_row_footprint_overlaps_for_flow,
     };
 
@@ -4641,12 +4678,21 @@ fn indexed_positioned_footprints_match_linear_oracle_across_pages()
         let actual = fixed_row_footprint_overlaps_for_flow(
             &plan, std::slice::from_ref(&fixed), &positions, sizes.len(),
         ).map(|all| all.into_iter().map(trace).collect::<Vec<_>>());
+        let first = first_fixed_row_footprint_overlap_for_flow(
+            &plan, std::slice::from_ref(&fixed), &positions,
+        ).map(|result| result.map(trace));
         if offset_x + box_width > page_width
             || offset_y + box_height > page_height
         {
             classes[2] += 1;
             assert_eq!(
                 actual,
+                Err(FlowFixedRegionError::FixedRegionOverflow {
+                    page: region.page, object: owner,
+                }),
+            );
+            assert_eq!(
+                first,
                 Err(FlowFixedRegionError::FixedRegionOverflow {
                     page: region.page, object: owner,
                 }),
@@ -4696,6 +4742,10 @@ fn indexed_positioned_footprints_match_linear_oracle_across_pages()
                 "case {case} indexed footprints: {actual:?} != {expected:?}"
             ));
         }
+        assert_eq!(
+            first, Ok(expected.first().copied()),
+            "case {case}: first intersection must ignore other pages",
+        );
         if !expected.is_empty() {
             let limit = expected.len() - 1;
             assert_eq!(
@@ -4719,7 +4769,8 @@ fn indexed_positioned_footprints_match_linear_oracle_across_pages()
 fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
 -> Result<(), String> {
     use atrament_semantic_flow_pagination::{
-        RowHorizontalPosition, fixed_row_footprint_overlaps_for_flow,
+        RowHorizontalPosition, first_fixed_row_footprint_overlap_for_flow,
+        fixed_row_footprint_overlaps_for_flow,
     };
 
     let ids = IdentityAllocator::new();
@@ -4860,6 +4911,16 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
         fixed_row_footprint_overlaps_for_flow(&plan, &[], &[outside], 0),
         Err(FlowFixedRegionError::RowFootprintOverflow {
             page, fragment_owner: owner, source: row.source,
+        }),
+    );
+    // Even after a valid first hit, a later invalid checked fixed proposal
+    // must refuse the entire result instead of returning the earlier hit.
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &plan, &[overlaps.clone(), invalid.clone()], &[position],
+        ),
+        Err(FlowFixedRegionError::FixedRegionOverflow {
+            page, object: owner,
         }),
     );
     // All fixed geometry wins even when the cap is zero or row X is invalid.
