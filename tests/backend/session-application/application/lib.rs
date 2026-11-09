@@ -2228,6 +2228,13 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     };
     assert_pair(&session, revision, 100_000);
     assert_eq!(
+        session.first_fixed_row_band_overlap(
+            &measurement(revision, 100_000),
+            &[fixed(revision), layered(revision)],
+        ),
+        Ok(None),
+    );
+    assert_eq!(
         session.fixed_row_band_overlaps(
             &measurement(revision, 100_000),
             &[fixed(revision), layered(revision)],
@@ -2353,6 +2360,27 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
             },
         )),
     );
+    assert_eq!(
+        session.first_fixed_row_band_overlap(
+            &measurement(edited, 80_000),
+            &[fixed(edited), layered(edited)],
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow {
+                page, object: block,
+            },
+        )),
+    );
+    assert_eq!(
+        session.first_fixed_row_band_overlap(
+            &measurement(revision, 100_000), &[fixed(revision)],
+        ),
+        Err(application::SessionFlowFixedRegionError::Pagination(
+            SemanticPaginationError::MeasurementRevisionMismatch {
+                accepted: edited, measured: revision,
+            },
+        )),
+    );
 
     assert_eq!(
         session.paginate_measured_flow_with_fixed_regions(
@@ -2399,6 +2427,13 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
     }]);
     assert_pair(&session, undone, 100_000);
     assert_wide_footprint(&session, undone);
+    assert_eq!(
+        session.first_fixed_row_band_overlap(
+            &measurement(undone, 100_000),
+            &[fixed(undone), layered(undone)],
+        ),
+        Ok(None),
+    );
     assert_eq!(
         session.fixed_row_band_overlaps(
             &measurement(undone, 100_000),
@@ -2475,6 +2510,17 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
             &measurement(redone, 80_000),
             &[fixed(redone), layered(redone)],
             0,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::FixedRegionOverflow {
+                page, object: block,
+            },
+        )),
+    );
+    assert_eq!(
+        session.first_fixed_row_band_overlap(
+            &measurement(redone, 80_000),
+            &[fixed(redone), layered(redone)],
         ),
         Err(application::SessionFlowFixedRegionError::Overlap(
             FlowFixedRegionError::FixedRegionOverflow {

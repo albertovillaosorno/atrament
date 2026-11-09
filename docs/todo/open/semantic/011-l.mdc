@@ -3323,3 +3323,18 @@ regions, text edit, fresh results after Undo and Redo, and stale revisions.
 The existing blocking first-failure gate retains its caller-order semantics.
 Full writable row bands remain possible conflicts, not measured glyph ink;
 no persistent semantic compiler or native Export path is established.
+
+## First conservative band across skipped pages and profile edits — 2026-11-09
+
+First-hit band inspection now has targeted regression evidence for a selected
+flow that skips an occupied physical page and resumes on a later page. The
+intermediate page produces no phantom row hit; later checked rectangles keep
+their original fixed input indices and exact owner/source provenance. An
+inconsistent writable rectangle on the skipped page still refuses the entire
+query even after an earlier valid hit.
+
+A separate live page-profile history regression checks empty first-hit results
+on the wide page, typed bounds overflow after narrowing, restored empty
+results after Undo, and restored overflow after Redo. Old measurements refuse
+with their exact revision mismatch. These remain conservative read-only bands
+without authenticated handwriting-ink geometry or semantic Export readiness.

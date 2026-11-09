@@ -3825,6 +3825,34 @@ fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
         fixed_row_band_overlaps_for_flow(&plan, &[on_skipped.clone()], 0),
         Ok(vec![]),
     );
+    assert_eq!(
+        first_fixed_row_band_overlap_for_flow(&plan, &[on_skipped.clone()]),
+        Ok(None),
+    );
+    let first_hit = first_fixed_row_band_overlap_for_flow(
+        &plan,
+        &[
+            on_skipped.clone(), second_collision.clone(),
+            first_collision.clone(),
+        ],
+    ).map_err(|error| format!("cross-page first band: {error:?}"))?
+        .ok_or("expected first physical band")?;
+    assert_eq!(
+        (
+            first_hit.revision(), first_hit.flow(), first_hit.fixed_index(),
+            first_hit.page(), first_hit.object(), first_hit.fragment_owner(),
+            first_hit.source(), first_hit.overlap_top(),
+            first_hit.overlap_height(),
+        ),
+        (
+            revision, selected, 1, first, owner, owner,
+            plan.placements()[0].source,
+            Length::from_micrometres(
+                first_writable.y.micrometres() + 1_000,
+            ),
+            Length::from_micrometres(1_000),
+        ),
+    );
     let all = fixed_row_band_overlaps_for_flow(
         &plan,
         &[
@@ -3868,6 +3896,15 @@ fn indexed_fixed_clearance_respects_covered_but_unplaced_pages()
     assert_eq!(
         fixed_row_band_overlaps_for_flow(
             &plan, &[first_collision.clone(), altered.clone()], 0,
+        ),
+        Err(FlowFixedRegionError::WritableMismatch {
+            page: skipped,
+            object: fixed_owner,
+        }),
+    );
+    assert_eq!(
+        first_fixed_row_band_overlap_for_flow(
+            &plan, &[first_collision.clone(), altered.clone()],
         ),
         Err(FlowFixedRegionError::WritableMismatch {
             page: skipped,
