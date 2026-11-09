@@ -3555,3 +3555,14 @@ requires newly revision-bound positions for otherwise identical row boxes.
 These are measured-box coordinates, not verified handwriting ink, an accepted
 fixed-overlap policy, saved semantic Markdown layout or native notebook Export
 readiness; ATR-P2-011 stays open.
+
+## Positioned row-box projection across page-profile history — 2026-11-09
+
+The live width-edit/Undo/Redo regression now checks that complete sealed row
+boxes follow the current accepted writable rectangle under mixed center/right
+alignment. On wide paper, exact first/second source coordinates and physical
+extent match the supplied positions; on narrow paper, old authority refuses
+and freshly rebound but horizontally overflowing positions still refuse.
+Undo restores the original page geometry with fresh revision-bound boxes,
+while Redo restores the narrowed geometry and overflow refusal. This remains
+read-only measurement evidence, not actual rendered ink or notebook Export.

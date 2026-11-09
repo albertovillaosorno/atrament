@@ -2174,6 +2174,29 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         assert_eq!(collision.source(), first_source);
         assert_eq!(collision.fixed_index(), 0);
         assert_eq!(collision.intersection(), footprint_box);
+        let row_boxes_result = current.positioned_measured_row_footprints(
+            &measurement(current_revision, 100_000),
+            &positions(current_revision),
+        );
+        assert!(row_boxes_result.is_ok(),
+            "wide profile must admit complete positioned row boxes");
+        let Ok(row_boxes) = row_boxes_result else { return };
+        assert_eq!(row_boxes.len(), 2);
+        for ((row, position), footprint) in plan.placements().iter()
+            .zip(positions(current_revision)).zip(row_boxes)
+        {
+            assert_eq!(footprint.flow(), flow);
+            assert_eq!(footprint.revision(), current_revision);
+            assert_eq!(footprint.fragment_owner(), block);
+            assert_eq!(footprint.page(), page);
+            assert_eq!(footprint.source(), row.source);
+            assert_eq!(footprint.rectangle(), Rect {
+                x: position.left,
+                y: row.top,
+                width: row.width,
+                height: row.height,
+            });
+        }
         assert_eq!(
             current.first_fixed_row_footprint_overlap(
                 &measurement(current_revision, 100_000),
@@ -2227,6 +2250,54 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
                 geometry: MeasuredRowGeometry::from_placement(row),
             }
         }).collect::<Vec<_>>();
+        let aligned_result = atrament_semantic_flow_pagination::
+            aligned_row_horizontal_positions_by_selection_for_flow(
+                &current_plan, &row_choices,
+            );
+        assert!(aligned_result.is_ok(),
+            "current profile must align both source rows");
+        let Ok(aligned_positions) = aligned_result else { return };
+        let boxes_result = current.positioned_measured_row_footprints(
+            &measurement(current_revision, width), &aligned_positions,
+        );
+        assert!(boxes_result.is_ok(),
+            "current profile must project both aligned rows");
+        let Ok(current_boxes) = boxes_result else { return };
+        assert_eq!(current_boxes.len(), 2);
+        for ((row, position), checked) in current_plan.placements().iter()
+            .zip(&aligned_positions).zip(&current_boxes)
+        {
+            assert_eq!(checked.revision(), current_revision);
+            assert_eq!(checked.flow(), flow);
+            assert_eq!(checked.fragment_owner(), block);
+            assert_eq!(checked.source(), row.source);
+            assert_eq!(checked.page(), page);
+            assert_eq!(checked.rectangle(), Rect {
+                x: position.left,
+                y: row.top,
+                width: row.width,
+                height: row.height,
+            });
+        }
+        assert_eq!(current_plan.placements().len(), 2);
+        let expected_center_x = current_plan.placements().first()
+            .and_then(|row| row.writable.width.micrometres()
+                .checked_sub(row.width.micrometres())
+                .and_then(|remaining| remaining.checked_div(2))
+                .and_then(|offset| row.writable.x.micrometres()
+                    .checked_add(offset)));
+        assert_eq!(
+            current_boxes.first()
+                .map(|box_| box_.rectangle().x.micrometres()),
+            expected_center_x,
+        );
+        let expected_right = current_plan.placements().get(1)
+            .and_then(|row| row.writable.x.micrometres()
+                .checked_add(row.writable.width.micrometres()));
+        let actual_right = current_boxes.get(1)
+            .and_then(|box_| box_.rectangle().x.micrometres()
+                .checked_add(box_.rectangle().width.micrometres()));
+        assert_eq!(actual_right, expected_right);
         assert_eq!(
             current.first_selected_aligned_fixed_row_footprint_overlap(
                 &measurement(current_revision, width),
@@ -2403,6 +2474,27 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         }
         old
     };
+    assert_eq!(
+        session.positioned_measured_row_footprints(
+            &measurement(edited, 80_000), &positions(revision),
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowPositionMismatch {
+                index: 0, page, fragment_owner: block, source: first_source,
+            },
+        )),
+    );
+    assert_eq!(
+        session.positioned_measured_row_footprints(
+            &measurement(edited, 80_000),
+            &rebound_positions(&narrowed_fit, edited),
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowFootprintOverflow {
+                page, fragment_owner: block, source: first_source,
+            },
+        )),
+    );
     assert_eq!(
         session.fixed_row_footprint_overlaps(
             &measurement(edited, 80_000),
@@ -2591,6 +2683,17 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
         page,
         writable: narrowed_writable,
     }]);
+    assert_eq!(
+        session.positioned_measured_row_footprints(
+            &measurement(redone, 80_000),
+            &rebound_positions(&redone_fit, redone),
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowFootprintOverflow {
+                page, fragment_owner: block, source: first_source,
+            },
+        )),
+    );
     assert_eq!(
         session.fixed_row_footprint_overlaps(
             &measurement(redone, 80_000),
