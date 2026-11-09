@@ -5170,6 +5170,8 @@ fn aligned_measured_row_boxes_keep_page_source_and_exact_micrometres()
 #[test]
 fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
 -> Result<(), String> {
+    use std::slice::from_ref;
+
     use atrament_semantic_flow_pagination::{
         first_fixed_row_footprint_overlap_for_flow,
         fixed_row_footprint_overlaps_for_flow,
@@ -5197,10 +5199,12 @@ fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
     )
     .map_err(|error| format!("mixed-alignment pagination: {error:?}"))?;
     let rows = plan.placements();
-    assert_eq!(rows.len(), 3);
+    let [first_row, center_row, last_row] = rows else {
+        return Err("expected exactly three measured rows".into());
+    };
     assert_eq!(
-        rows.iter().map(|row| row.page).collect::<Vec<_>>(),
-        vec![first_page, first_page, second_page],
+        [first_row.page, center_row.page, last_row.page],
+        [first_page, first_page, second_page],
     );
     let choices = [RowHorizontalAlignment::Left,
         RowHorizontalAlignment::Center, RowHorizontalAlignment::Right];
@@ -5218,29 +5222,35 @@ fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
     )
     .map_err(|error| format!("mixed alignment: {error:?}"))?;
     assert_eq!(positions.len(), 3);
-    for (index, row) in rows.iter().enumerate() {
-        let available =
-            row.writable.width.micrometres() - row.width.micrometres();
-        let offset = match choices[index] {
+    for ((row, position), alignment) in
+        rows.iter().zip(&positions).zip(choices)
+    {
+        let available = row.writable.width.micrometres()
+            .checked_sub(row.width.micrometres())
+            .ok_or("measured row exceeds writable width")?;
+        let offset = match alignment {
             RowHorizontalAlignment::Left => 0,
-            RowHorizontalAlignment::Center => available / 2,
+            RowHorizontalAlignment::Center => available
+                .checked_div(2).ok_or("center divisor invalid")?,
             RowHorizontalAlignment::Right => available,
         };
-        assert_eq!(positions[index].source, row.source);
-        assert_eq!(positions[index].page, row.page);
-        assert_eq!(positions[index].revision, revision);
-        assert_eq!(positions[index].flow, flow);
+        assert_eq!(position.source, row.source);
+        assert_eq!(position.page, row.page);
+        assert_eq!(position.revision, revision);
+        assert_eq!(position.flow, flow);
         assert_eq!(
-            positions[index].left.micrometres(),
-            row.writable.x.micrometres() + offset,
+            position.left.micrometres(),
+            row.writable.x.micrometres()
+                .checked_add(offset).ok_or("X offset overflow")?,
         );
     }
+    let center_position = positions.get(1).ok_or("center row unpositioned")?;
     let box_on_center_row = Rect {
         x: Length::from_micrometres(
-            positions[1].left.micrometres() + 1_000,
+            center_position.left.micrometres() + 1_000,
         ),
         y: Length::from_micrometres(
-            rows[1].top.micrometres() + 2_000,
+            center_row.top.micrometres() + 2_000,
         ),
         width: Length::from_micrometres(3_000),
         height: Length::from_micrometres(4_000),
@@ -5253,25 +5263,25 @@ fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
     })
     .map_err(|error| format!("centered fixed placement: {error:?}"))?;
     let hit = first_fixed_row_footprint_overlap_for_flow(
-        &plan, std::slice::from_ref(&fixed), &positions,
+        &plan, from_ref(&fixed), &positions,
     )
     .map_err(|error| format!("mixed first hit: {error:?}"))?
     .ok_or("centered row not hit")?;
     assert_eq!(hit.intersection(), box_on_center_row);
     assert_eq!(hit.page(), first_page);
-    assert_eq!(hit.source(), rows[1].source);
+    assert_eq!(hit.source(), center_row.source);
     assert_eq!(hit.flow(), flow);
     assert_eq!(hit.revision(), revision);
     assert_eq!(
         fixed_row_footprint_overlaps_for_flow(
-            &plan, &[fixed.clone()], &positions, 1,
-        ).map(|hits| hits.into_iter().map(|hit| hit.source())
+            &plan, from_ref(&fixed), &positions, 1,
+        ).map(|hits| hits.into_iter().map(|overlap| overlap.source())
             .collect::<Vec<_>>()),
-        Ok(vec![rows[1].source]),
+        Ok(vec![center_row.source]),
     );
     assert_eq!(
         fixed_row_footprint_overlaps_for_flow(
-            &plan, &[fixed.clone()], &positions, 0,
+            &plan, from_ref(&fixed), &positions, 0,
         ),
         Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded { limit: 0 }),
     );
@@ -5281,14 +5291,14 @@ fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
     .map_err(|error| format!("uniform left: {error:?}"))?;
     assert_eq!(
         first_fixed_row_footprint_overlap_for_flow(
-            &plan, std::slice::from_ref(&fixed), &uniform_left,
+            &plan, from_ref(&fixed), &uniform_left,
         ),
         Ok(None),
     );
 
     assert_eq!(
         aligned_row_horizontal_positions_by_selection_for_flow(
-            &plan, &selections[..2],
+            &plan, selections.get(..2).ok_or("two selections missing")?,
         ),
         Err(FlowFixedRegionError::RowAlignmentCountMismatch {
             expected: 3,
@@ -5303,18 +5313,18 @@ fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
             index: 0,
             page: first_page,
             fragment_owner: owner,
-            source: rows[0].source,
+            source: first_row.source,
         }),
     );
-    let mut stale = selections.clone();
-    stale[2].page = first_page;
+    let mut stale = selections;
+    stale.get_mut(2).ok_or("third selection missing")?.page = first_page;
     assert_eq!(
         aligned_row_horizontal_positions_by_selection_for_flow(&plan, &stale),
         Err(FlowFixedRegionError::RowAlignmentMismatch {
             index: 2,
             page: second_page,
             fragment_owner: owner,
-            source: rows[2].source,
+            source: last_row.source,
         }),
     );
     assert_eq!(session.current(), Some(accepted));

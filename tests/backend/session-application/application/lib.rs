@@ -2203,6 +2203,38 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
             &[edge_fixed(current_revision)],
             RowHorizontalAlignment::Center,
         ).expect("accepted centered footprint should be inspectable");
+        // Mixed intent follows the same accepted geometry after profile
+        // edits: the first source row is centered, the second right-aligned.
+        let current_plan = current.paginate_measured_flow(
+            &measurement(current_revision, width),
+        ).expect("current mixed-row geometry");
+        let row_choices = current_plan.placements().iter().map(|row| {
+            RowAlignmentSelection {
+                alignment: if row.source.unit == 1 {
+                    RowHorizontalAlignment::Center
+                } else {
+                    RowHorizontalAlignment::Right
+                },
+                flow,
+                page: row.page,
+                revision: current_revision,
+                source: row.source,
+            }
+        }).collect::<Vec<_>>();
+        assert_eq!(
+            current.first_selected_aligned_fixed_row_footprint_overlap(
+                &measurement(current_revision, width),
+                &[edge_fixed(current_revision)], &row_choices,
+            ),
+            Ok(centered_hit),
+        );
+        assert_eq!(
+            current.selected_aligned_fixed_row_footprint_overlaps(
+                &measurement(current_revision, width),
+                &[edge_fixed(current_revision)], &row_choices, 1,
+            ),
+            Ok(centered_hit.into_iter().collect()),
+        );
         assert_eq!(
             centered_hit.map(|hit| (
                 hit.revision(), hit.flow(), hit.page(), hit.fixed_index(),
@@ -8403,9 +8435,11 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
     let (candidate, span_candidate) =
         editable_text_candidate(&ids, "mixed alignment");
     let source_page = candidate.pages.first().ok_or("no page")?;
+    let source_flow = source_page.flows.first().ok_or("no flow")?;
+    let source_block = source_flow.blocks.first().ok_or("no block")?;
     let page_candidate = source_page.id;
-    let flow_candidate = source_page.flows[0].id;
-    let block_candidate = source_page.flows[0].blocks[0].id;
+    let flow_candidate = source_flow.id;
+    let block_candidate = source_block.id;
     let mut session = application::SessionApplication::default();
     let AcceptanceOutcome::Accepted { mapping, revision } =
         session.accept_candidate(candidate)
@@ -8442,7 +8476,9 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
     let initial_plan = session.paginate_measured_flow(&measurement(revision))
         .map_err(|error| format!("initial mixed plan: {error:?}"))?;
     let rows = initial_plan.placements();
-    assert_eq!(rows.len(), 2);
+    let [first_row, centered_row] = rows else {
+        return Err("expected exactly two measured rows".into());
+    };
     let selections = |current| rows.iter()
         .zip([RowHorizontalAlignment::Left, RowHorizontalAlignment::Center])
         .map(|(row, alignment)| RowAlignmentSelection {
@@ -8453,12 +8489,17 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
             source: row.source,
         })
         .collect::<Vec<_>>();
-    let centered = rows[1].writable.x.micrometres()
-        + (rows[1].writable.width.micrometres()
-            - rows[1].width.micrometres()) / 2;
+    let horizontal_spare = centered_row.writable.width.micrometres()
+        .checked_sub(centered_row.width.micrometres())
+        .ok_or("center row wider than writable region")?;
+    let centered = centered_row.writable.x.micrometres()
+        .checked_add(
+            horizontal_spare.checked_div(2).ok_or("center divisor invalid")?,
+        )
+        .ok_or("center origin overflows")?;
     let bounds = Rect {
         x: Length::from_micrometres(centered + 1_000),
-        y: Length::from_micrometres(rows[1].top.micrometres() + 2_000),
+        y: Length::from_micrometres(centered_row.top.micrometres() + 2_000),
         width: Length::from_micrometres(2_000),
         height: Length::from_micrometres(3_000),
     };
@@ -8469,23 +8510,23 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
         revision: current,
     };
     let assert_hit = |current_session: &application::SessionApplication,
-                      current| {
+                      current| -> Result<(), String> {
         let choice = selections(current);
         let hit = current_session
             .first_selected_aligned_fixed_row_footprint_overlap(
                 &measurement(current), &[fixed(current)], &choice,
             )
-            .expect("current mixed choices admitted")
-            .expect("centered second row hit");
+            .map_err(|error| format!("current mixed choices: {error:?}"))?
+            .ok_or("centered second row not hit")?;
         assert_eq!(hit.intersection(), bounds);
-        assert_eq!(hit.source(), rows[1].source);
+        assert_eq!(hit.source(), centered_row.source);
         assert_eq!(hit.revision(), current);
         assert_eq!(
             current_session.selected_aligned_fixed_row_footprint_overlaps(
                 &measurement(current), &[fixed(current)], &choice, 1,
             ).map(|all| all.into_iter().map(|overlap| overlap.source())
                 .collect::<Vec<_>>()),
-            Ok(vec![rows[1].source]),
+            Ok(vec![centered_row.source]),
         );
         assert_eq!(
             current_session.selected_aligned_fixed_row_footprint_overlaps(
@@ -8507,13 +8548,51 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
                 Err(application::SessionFlowFixedRegionError::Overlap(
                     FlowFixedRegionError::RowAlignmentMismatch {
                         index: 0, page, fragment_owner: owner,
-                        source: rows[0].source,
+                        source: first_row.source,
                     },
                 ))
             },
         );
+        Ok(())
     };
-    assert_hit(&session, revision);
+    assert_hit(&session, revision)?;
+    // Even with an early positive intersection, a later invalid selection
+    // must preempt both first-hit inspection and a zero-cap complete report.
+    let first_bounds = Rect {
+        x: Length::from_micrometres(
+            first_row.writable.x.micrometres() + 1_000,
+        ),
+        y: Length::from_micrometres(first_row.top.micrometres() + 1_000),
+        width: Length::from_micrometres(2_000),
+        height: Length::from_micrometres(3_000),
+    };
+    let earlier_hit = AcceptedFixedPlacement {
+        object: owner,
+        page,
+        rectangle: first_bounds,
+        revision,
+    };
+    let mut late_wrong = selections(revision);
+    late_wrong.get_mut(1).ok_or("second selection missing")?.flow = owner;
+    let proposals = [earlier_hit, fixed(revision)];
+    let mismatch = application::SessionFlowFixedRegionError::Overlap(
+        FlowFixedRegionError::RowAlignmentMismatch {
+            index: 1, page, fragment_owner: owner,
+            source: centered_row.source,
+        },
+    );
+    assert_eq!(
+        session.first_selected_aligned_fixed_row_footprint_overlap(
+            &measurement(revision), &proposals, &late_wrong,
+        ),
+        Err(mismatch),
+    );
+    assert_eq!(
+        session.selected_aligned_fixed_row_footprint_overlaps(
+            &measurement(revision), &proposals, &late_wrong, 0,
+        ),
+        Err(mismatch),
+    );
     let mut swapped = selections(revision);
     swapped.swap(0, 1);
     assert_eq!(
@@ -8523,7 +8602,7 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
         Err(application::SessionFlowFixedRegionError::Overlap(
             FlowFixedRegionError::RowAlignmentMismatch {
                 index: 0, page, fragment_owner: owner,
-                source: rows[0].source,
+                source: first_row.source,
             },
         )),
     );
@@ -8532,7 +8611,7 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
     else {
         return Err("text revision change refused".into());
     };
-    assert_hit(&session, edited);
+    assert_hit(&session, edited)?;
     assert_eq!(
         session.first_selected_aligned_fixed_row_footprint_overlap(
             &measurement(revision), &[fixed(edited)], &selections(revision),
@@ -8549,12 +8628,12 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
     else {
         return Err("mixed alignment Undo refused".into());
     };
-    assert_hit(&session, undone);
+    assert_hit(&session, undone)?;
     let HistoryTraversalOutcome::Traversed { revision: redone, .. } =
         session.traverse_history(undone, HistoryDirection::Redo)
     else {
         return Err("mixed alignment Redo refused".into());
     };
-    assert_hit(&session, redone);
+    assert_hit(&session, redone)?;
     Ok(())
 }
