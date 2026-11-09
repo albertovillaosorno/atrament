@@ -4458,6 +4458,51 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
             object: owner, page, revision, rectangle,
         }).map_err(|error| format!("checked fixed box: {error:?}"))
     };
+    // The empty middle row has no visible horizontal footprint, yet its
+    // owner still belongs to the complete submitted proposal batch. A
+    // first-row hit must not hide a later zero-width source mismatch.
+    let first_hit_box = checked(Rect {
+        x: Length::from_micrometres(x + 5_000),
+        y: Length::from_micrometres(y),
+        width: Length::from_micrometres(1_000),
+        height: Length::from_micrometres(1_000),
+    })?;
+    let mut wrong_empty_owner = positions.clone();
+    wrong_empty_owner[1].fragment_owner = page;
+    let expected_owner = FlowFixedRegionError::RowPositionMismatch {
+        index: 1,
+        page,
+        fragment_owner: owner,
+        source: plan.placements()[1].source,
+    };
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &plan, std::slice::from_ref(&first_hit_box),
+            &wrong_empty_owner,
+        ),
+        Err(expected_owner),
+    );
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, std::slice::from_ref(&first_hit_box),
+            &wrong_empty_owner, 0,
+        ),
+        Err(expected_owner),
+    );
+    // All rows remain usable with freshly correct semantic owners. The
+    // empty row never claims ink in either query.
+    let actual_first = first_fixed_row_footprint_overlap_for_flow(
+        &plan, std::slice::from_ref(&first_hit_box), &positions,
+    ).map_err(|error| format!("valid empty row: {error:?}"))?
+        .ok_or("expected the first nonempty row hit")?;
+    assert_eq!(actual_first.source(), plan.placements()[0].source);
+    assert_eq!(actual_first.intersection(), first_hit_box.rectangle());
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &[first_hit_box], &positions, 1,
+        ),
+        Ok(vec![actual_first]),
+    );
     let mut seed = 0x28bc_5a13_191d_d73f;
     let mut clear = 0;
     let mut intersects = 0;

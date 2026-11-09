@@ -3456,3 +3456,13 @@ The live session also rejects an incorrect owner through both inspection APIs,
 even with an otherwise intersecting fixed box and a zero diagnostic cap.
 This is still provisional box inspection, not saved Markdown measurement,
 handwriting ink bounds, a fixed-overlap policy, or native notebook Export.
+
+## Zero-width row owner admission (partial) — 2026-11-09
+
+A further native regression confirms that a zero-width measured row must still
+carry the correct semantic block owner in an explicitly positioned row batch.
+Even when an earlier nonempty row intersects a checked rectangle, first-hit
+and zero-cap complete diagnostics refuse a later empty row with a mismatched
+owner. Fresh valid positions preserve that first physical intersection, while
+the empty row contributes none. This is batch identity validation, not
+ink-coverage inference or semantic text measurement.
