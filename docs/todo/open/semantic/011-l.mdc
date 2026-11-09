@@ -3693,3 +3693,13 @@ same distinction under current accepted authority and rejects stale cross-owner
 alignment choices before constructing a report. Nothing authorizes actual
 glyph-ink overlap, fixed-layering, saved alignment or native Export. The finite
 saved-notebook acceptance criterion remains open.
+
+## Many-row sealed band and physical-hit parity — 2026-11-09
+
+The existing two-page, 420-row mixed-alignment/160-fixed-proposal oracle now
+also validates one complete immutable selected-row snapshot against both
+independent conservative-band and positioned-footprint queries. It checks
+original fixed index order, source ownership, exact box and choice batches,
+first-hit parity, page isolation, zero-width rows that retain possible band
+conflicts but have no physical hits, and atomic insufficient-band-cap refusal.
+The read-only snapshot still does not establish actual ink or Export readiness.

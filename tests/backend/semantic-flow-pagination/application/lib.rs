@@ -6615,7 +6615,7 @@ fn check_many_mixed_row_alignments() -> Result<(), String> {
         }
     }
     check_many_mixed_alignment_oracle(
-        accepted, &plan, &positions, owner, page_one,
+        accepted, &plan, &positions, &selections, owner, page_one,
     )?;
     check_many_mixed_alignment_stale_choice(
         accepted,
@@ -6676,6 +6676,7 @@ fn check_many_mixed_alignment_oracle(
     accepted: &atrament_semantic_notebook::AcceptedRevision,
     plan: &atrament_semantic_flow_pagination::SemanticPaginationPlan,
     positions: &[atrament_semantic_flow_pagination::RowHorizontalPosition],
+    selections: &[RowAlignmentSelection],
     owner: AcceptedIdentity,
     page_one: AcceptedIdentity,
 ) -> Result<(), String> {
@@ -6690,6 +6691,7 @@ fn check_many_mixed_alignment_oracle(
     let available_height = region.height.micrometres();
     let mut observed_positive = 0usize;
     let mut observed_clear = 0usize;
+    let mut checked_fixed = Vec::new();
     for index in 0..160usize {
         let width = if index.checked_rem(17) == Some(0) {
             0
@@ -6739,11 +6741,79 @@ fn check_many_mixed_alignment_oracle(
         } else {
             observed_clear = observed_clear.saturating_add(1);
         }
+        checked_fixed.push(fixed);
     }
+    check_many_selected_snapshot_parity(
+        plan, positions, selections, &checked_fixed, page_one,
+    )?;
     if observed_positive == 0 || observed_clear == 0 {
         return Err(
             "oracle did not observe clear and positive intersections".into()
         );
+    }
+    Ok(())
+}
+
+// A single sealed report must retain the same full-batch ordering and
+// conservative-versus-physical distinction as independent 420-row oracles.
+fn check_many_selected_snapshot_parity(
+    plan: &atrament_semantic_flow_pagination::SemanticPaginationPlan,
+    positions: &[atrament_semantic_flow_pagination::RowHorizontalPosition],
+    selections: &[RowAlignmentSelection],
+    fixed: &[atrament_semantic_fixed_region_layout::FixedRegionLayoutResult],
+    page_one: AcceptedIdentity,
+) -> Result<(), String> {
+    use atrament_semantic_flow_pagination::{
+        fixed_row_footprint_overlaps_for_flow,
+        inspect_selected_aligned_rows_for_flow,
+    };
+
+    let max = plan.placements().len().checked_mul(fixed.len())
+        .ok_or("many-row diagnostic cap overflow")?;
+    let bands = fixed_row_band_overlaps_for_flow(plan, fixed, max)
+        .map_err(|error| format!("independent many-row bands: {error:?}"))?;
+    let physical = fixed_row_footprint_overlaps_for_flow(
+        plan, fixed, positions, max,
+    )
+    .map_err(|error| format!("independent many-row hits: {error:?}"))?;
+    let report = inspect_selected_aligned_rows_for_flow(
+        plan, fixed, selections, physical.len(),
+    )
+    .map_err(|error| format!("many-row report: {error:?}"))?;
+    if report.rows().len() != plan.placements().len()
+        || report.selections() != selections
+        || report.fixed_regions() != fixed
+        || report.overlaps() != physical
+        || report.fixed_row_band_overlaps(bands.len()) != Ok(bands.clone())
+        || report.first_fixed_row_band_overlap()
+            != Ok(bands.first().copied())
+    {
+        return Err("many-row snapshot and independent oracles disagree".into());
+    }
+    let empty_row_sources = plan.placements().iter()
+        .filter(|row| row.width == Length::ZERO)
+        .map(|row| row.source)
+        .collect::<Vec<_>>();
+    if bands.len() <= physical.len()
+        || !bands.iter().any(|band| empty_row_sources.contains(&band.source()))
+        || physical.iter().any(|hit| empty_row_sources.contains(&hit.source()))
+        || bands.iter().any(|band| band.page() != page_one)
+        || report.overlaps().iter().any(|hit| hit.page() != page_one)
+        || bands.iter().any(|band| {
+            fixed.get(band.fixed_index())
+                .is_none_or(|checked| checked.object() != band.object())
+        })
+    {
+        return Err("many-row report omitted or misattributed a hit".into());
+    }
+    let limited = bands.len().checked_sub(1)
+        .ok_or("no conservative bands to cap")?;
+    if report.fixed_row_band_overlaps(limited)
+        != Err(FlowFixedRegionError::FixedRowLimitExceeded { limit: limited })
+        || report.fixed_row_band_overlaps(0)
+            != Err(FlowFixedRegionError::FixedRowLimitExceeded { limit: 0 })
+    {
+        return Err("many-row snapshot returned a partial capped result".into());
     }
     Ok(())
 }
