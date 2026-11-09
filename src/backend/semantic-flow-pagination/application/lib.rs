@@ -536,6 +536,7 @@ impl PositionedRowFootprint {
 /// One admitted selection's complete provisional row and fixed boxes.
 ///
 /// The report retains exact validated alignment choices in source order,
+/// all accepted covered page rectangles (including pages without placed rows),
 /// all checked fixed proposals in input order, every provisional positioned
 /// row (including empty widths), and positive-area row/fixed intersections.
 /// Each hit's `fixed_index()` identifies an entry in `fixed_regions()`.
@@ -547,6 +548,7 @@ impl PositionedRowFootprint {
 /// This is not authenticated glyph ink, overlap policy, or Export authority.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct SelectedAlignedRowInspection {
+    covered_pages: Vec<PageRegion<AcceptedIdentity>>,
     fixed_regions: Vec<FixedRegionLayoutResult>,
     flow: AcceptedIdentity,
     overlaps: Vec<FixedRowFootprintOverlap>,
@@ -556,6 +558,16 @@ pub struct SelectedAlignedRowInspection {
 }
 
 impl SelectedAlignedRowInspection {
+    /// Ordered accepted physical pages, including covered but unplaced pages.
+    ///
+    /// Each writable rectangle comes from the selected accepted page profile
+    /// during pagination, not from the caller's row or fixed proposals.
+    /// This is page-geometry evidence, not a claim that a page contains ink.
+    #[must_use]
+    pub fn covered_pages(&self) -> &[PageRegion<AcceptedIdentity>] {
+        &self.covered_pages
+    }
+
     /// First checked fixed-pair intersection in original input order.
     ///
     /// Unlike independent fixed-pair inspection, this uses the report's
@@ -1110,6 +1122,7 @@ pub fn inspect_selected_aligned_rows_for_flow(
         max_overlaps,
     )?;
     Ok(SelectedAlignedRowInspection {
+        covered_pages: plan.covered_pages().to_vec(),
         fixed_regions: fixed_regions.to_vec(),
         flow: plan.flow(),
         overlaps,

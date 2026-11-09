@@ -2960,6 +2960,12 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         }).collect::<Vec<_>>()
     };
     let original_choices = mixed_choices(&session, base, 100_000);
+    let original_report = session.inspect_selected_aligned_measured_rows(
+        &mixed_measurement(base, 100_000), &[], &original_choices, 0,
+    ).expect("initial profile-reference row snapshot");
+    assert_eq!(original_report.covered_pages(), [PageRegion {
+        page, writable: first_writable,
+    }]);
     let assert_mixed = |current: &application::SessionApplication,
                         revision,
                         width,
@@ -2995,9 +3001,23 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             assert_eq!(box_.rectangle().height.micrometres(), 20_000);
         }
         let fixed = [edge_fixed(revision), far_fixed(revision)];
+        let report = current.inspect_selected_aligned_measured_rows(
+            &mixed_measurement(revision, width), &fixed, &choices, 2,
+        ).expect("profile-reference selected snapshot");
+        let expected_writable = if width == 100_000 {
+            first_writable
+        } else {
+            second_writable
+        };
+        assert_eq!(report.revision(), revision);
+        assert_eq!(report.covered_pages(), [PageRegion {
+            page, writable: expected_writable,
+        }]);
+        assert_eq!(report.rows(), sealed_boxes.as_slice());
         let overlaps = current.selected_aligned_fixed_row_footprint_overlaps(
             &mixed_measurement(revision, width), &fixed, &choices, 2,
         ).expect("profile-reference mixed footprints");
+        assert_eq!(report.overlaps(), overlaps.as_slice());
         let observed = overlaps.iter().map(|hit| {
             assert_eq!(hit.revision(), revision);
             assert_eq!(hit.flow(), flow);
@@ -3078,6 +3098,11 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             ),
         )),
     );
+    // A prior sealed snapshot is immutable despite accepted page retargeting.
+    assert_eq!(original_report.revision(), base);
+    assert_eq!(original_report.covered_pages(), [PageRegion {
+        page, writable: first_writable,
+    }]);
     assert_aligned(&session, edited, 80_000, Some(Rect {
         x: Length::from_micrometres(27_500),
         y: Length::from_micrometres(25_000),
@@ -9456,6 +9481,10 @@ fn live_selected_row_inspection_admits_one_revision_for_boxes_and_hits() {
             .map_err(|error| format!("live combined inspection: {error:?}"))?;
         assert_eq!(report.revision(), fixture.revision);
         assert_eq!(report.flow(), fixture.regrouped.flow);
+        let live_plan = fixture.session
+            .paginate_measured_flow(&fixture.regrouped)
+            .map_err(|error| format!("live page authority: {error:?}"))?;
+        assert_eq!(report.covered_pages(), live_plan.covered_pages());
         assert_eq!(report.selections(), fixture.fresh_selections.as_slice());
         assert_eq!(report.fixed_regions().len(), fixture.fixed.len());
         let checked = report.fixed_regions().first()

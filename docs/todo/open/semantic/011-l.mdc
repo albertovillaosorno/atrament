@@ -3703,3 +3703,21 @@ original fixed index order, source ownership, exact box and choice batches,
 first-hit parity, page isolation, zero-width rows that retain possible band
 conflicts but have no physical hits, and atomic insufficient-band-cap refusal.
 The read-only snapshot still does not establish actual ink or Export readiness.
+
+## Complete covered-page geometry in selected-row snapshots — 2026-11-09
+
+The immutable selected-alignment row report now also retains the selected
+flow's **complete accepted covered-page sequence and writable rectangles**,
+including an occupied intervening page that receives neither measured rows
+nor submitted fixed rectangles. This ensures an inspection can distinguish a
+covered-but-unplaced sheet from a page omitted from the accepted flow without
+reconstructing a second page-profile authority from the calling session.
+
+Pure two-page and 420-row parity checks compare snapshot geometry to the
+sealed measured pagination plan. A separate three-page fixture tests two
+measurement policies across an occupied narrow middle sheet, while the live
+session checks the returned page bounds against fresh accepted pagination,
+page-profile-reference edits, Undo and Redo. An earlier captured report
+retains its original page geometry after a newer revision changes paper.
+This remains constructor-sealed, read-only page evidence, not ownership of
+ink on skipped pages, persistent semantic measurement or Export readiness.

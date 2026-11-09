@@ -2883,6 +2883,8 @@ fn sibling_flow_content_cannot_share_an_unmeasured_writable_region()
 #[test]
 fn occupied_narrow_page_skipped_by_flow_remains_untouched()
 -> Result<(), String> {
+    use atrament_semantic_flow_pagination as row_layout;
+
     let ids = IdentityAllocator::new();
     let mut fixture = candidate_fixture(&ids);
     let other_flow = ids.allocate_candidate()
@@ -2963,6 +2965,36 @@ fn occupied_narrow_page_skipped_by_flow_remains_untouched()
                     "covered page geometry mismatch: {policy:?}"
                 ));
             }
+        }
+        // An inspection snapshot must retain the skipped page's accepted
+        // writable geometry even though no measured row or fixed box uses it.
+        let selections = plan.placements().iter().map(|row| {
+            RowAlignmentSelection {
+                alignment: RowHorizontalAlignment::Left,
+                flow,
+                fragment_owner: row.owner,
+                geometry: MeasuredRowGeometry::from_placement(row),
+                page: row.page,
+                revision,
+                source: row.source,
+            }
+        }).collect::<Vec<_>>();
+        let report = row_layout::inspect_selected_aligned_rows_for_flow(
+            &plan, &[], &selections, 0,
+        )
+        .map_err(|error| format!(
+            "skipped-page snapshot refused: {error:?}"
+        ))?;
+        if report.covered_pages() != plan.covered_pages()
+            || report.covered_pages().len() != 3
+            || report.covered_pages()[1].page != skipped
+            || report.rows().iter().any(|row| row.page() == skipped)
+            || !report.fixed_regions().is_empty()
+            || !report.overlaps().is_empty()
+        {
+            return Err(format!(
+                "skipped-page snapshot lost accepted authority: {policy:?}"
+            ));
         }
         if plan.placements().len() != 2
             || plan.placements().first().map(|placed| placed.page)
@@ -5606,6 +5638,7 @@ fn selected_row_inspection_keeps_boxes_and_fixed_hits_on_one_plan() {
         .map_err(|error| format!("combined row inspection: {error:?}"))?;
         assert_eq!(report.revision(), revision);
         assert_eq!(report.flow(), flow);
+        assert_eq!(report.covered_pages(), plan.covered_pages());
         assert_eq!(report.fixed_regions(), fixed.as_slice());
         assert_eq!(
             report.rows(),
@@ -5645,6 +5678,7 @@ fn selected_row_inspection_keeps_boxes_and_fixed_hits_on_one_plan() {
             inspect_selected_aligned_rows_for_flow(&plan, &[], &selections, 0)
                 .map_err(|error| format!("no fixed: {error:?}"))?;
         assert_eq!(clear.rows(), report.rows());
+        assert_eq!(clear.covered_pages(), report.covered_pages());
         assert_eq!(clear.selections(), selections.as_slice());
         assert_eq!(clear.fixed_regions().len(), 0);
         assert_eq!(clear.overlaps().len(), 0);
@@ -6781,6 +6815,7 @@ fn check_many_selected_snapshot_parity(
     )
     .map_err(|error| format!("many-row report: {error:?}"))?;
     if report.rows().len() != plan.placements().len()
+        || report.covered_pages() != plan.covered_pages()
         || report.selections() != selections
         || report.fixed_regions() != fixed
         || report.overlaps() != physical
