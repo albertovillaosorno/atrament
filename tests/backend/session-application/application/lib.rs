@@ -2216,6 +2216,7 @@ fn page_profile_edits_recompute_live_pagination_geometry() {
                     RowHorizontalAlignment::Right
                 },
                 flow,
+                fragment_owner: row.owner,
                 page: row.page,
                 revision: current_revision,
                 source: row.source,
@@ -2775,7 +2776,86 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             Ok(vec![edge_box]),
         );
     };
+    // Two provisional source rows may choose different alignments while a
+    // semantic command replaces the page's existing profile reference. The
+    // first centered row and second right-aligned row must each follow that
+    // newly admitted page geometry; the second fixed box stays on the same
+    // physical sheet and only intersects after the reference retarget.
+    let mixed_measurement = |revision, width| RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![MeasuredFlowUnit {
+            fragments: vec![
+                MeasuredFragment {
+                    height: Length::from_micrometres(20_000),
+                    owner: block,
+                    width: Length::from_micrometres(width),
+                },
+                MeasuredFragment {
+                    height: Length::from_micrometres(20_000),
+                    owner: block,
+                    width: Length::from_micrometres(20_000),
+                },
+            ],
+            policy: FlowUnitPolicy::Independent,
+        }],
+    };
+    let far_box = Rect {
+        x: Length::from_micrometres(105_000),
+        y: Length::from_micrometres(45_000),
+        width: Length::from_micrometres(5_000),
+        height: Length::from_micrometres(5_000),
+    };
+    let far_fixed = |revision| AcceptedFixedPlacement {
+        rectangle: far_box,
+        ..edge_fixed(revision)
+    };
+    let mixed_choices = |current: &application::SessionApplication,
+                         revision, width| {
+        let plan = current.paginate_measured_flow(
+            &mixed_measurement(revision, width),
+        ).expect("current profile-reference mixed-row plan");
+        plan.placements().iter().map(|row| RowAlignmentSelection {
+            alignment: if row.source.fragment == 0 {
+                RowHorizontalAlignment::Center
+            } else {
+                RowHorizontalAlignment::Right
+            },
+            flow,
+            fragment_owner: row.owner,
+            page: row.page,
+            revision,
+            source: row.source,
+        }).collect::<Vec<_>>()
+    };
+    let original_choices = mixed_choices(&session, base, 100_000);
+    let assert_mixed = |current: &application::SessionApplication,
+                        revision,
+                        width,
+                        expected: &[(usize, Rect)]| {
+        let choices = mixed_choices(current, revision, width);
+        assert_eq!(choices.len(), 2);
+        let fixed = [edge_fixed(revision), far_fixed(revision)];
+        let overlaps = current.selected_aligned_fixed_row_footprint_overlaps(
+            &mixed_measurement(revision, width), &fixed, &choices, 2,
+        ).expect("profile-reference mixed footprints");
+        let observed = overlaps.iter().map(|hit| {
+            assert_eq!(hit.revision(), revision);
+            assert_eq!(hit.flow(), flow);
+            assert_eq!(hit.page(), page);
+            assert_eq!(hit.object(), block);
+            assert_eq!(hit.fragment_owner(), block);
+            assert_eq!(hit.source().unit, 0);
+            (hit.source().fragment, hit.intersection())
+        }).collect::<Vec<_>>();
+        assert_eq!(observed, expected);
+        let first = current.first_selected_aligned_fixed_row_footprint_overlap(
+            &mixed_measurement(revision, width), &fixed, &choices,
+        ).expect("profile-reference first mixed footprint");
+        assert_eq!(first, overlaps.first().copied());
+    };
     assert_aligned(&session, base, 100_000, None);
+    assert_mixed(&session, base, 100_000, &[]);
 
     assert!(session
         .paginate_measured_flow(&measurement(base, 100_000))
@@ -2845,6 +2925,29 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         width: Length::from_micrometres(2_500),
         height: Length::from_micrometres(5_000),
     }));
+    let expected_center_hit = Rect {
+        x: Length::from_micrometres(27_500),
+        y: Length::from_micrometres(25_000),
+        width: Length::from_micrometres(2_500),
+        height: Length::from_micrometres(5_000),
+    };
+    assert_mixed(&session, edited, 80_000, &[
+        (0, expected_center_hit), (1, far_box),
+    ]);
+    assert_eq!(
+        session.first_selected_aligned_fixed_row_footprint_overlap(
+            &mixed_measurement(edited, 80_000),
+            &[edge_fixed(edited), far_fixed(edited)], &original_choices,
+        ),
+        Err(application::SessionFlowFixedRegionError::Overlap(
+            FlowFixedRegionError::RowAlignmentMismatch {
+                index: 0, page, fragment_owner: block,
+                source: atrament_flow_pagination::FragmentSource {
+                    unit: 0, fragment: 0,
+                },
+            },
+        )),
+    );
     assert_eq!(
         session.first_aligned_fixed_row_footprint_overlap(
             &measurement(base, 100_000), &[edge_fixed(base)],
@@ -2903,6 +3006,7 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         .is_ok());
     assert_pair(&session, undone);
     assert_aligned(&session, undone, 100_000, None);
+    assert_mixed(&session, undone, 100_000, &[]);
     assert!(checked_fixed_within(
         session.validate_fixed_placement(placement(undone)),
         placement(undone),
@@ -2946,6 +3050,9 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
         width: Length::from_micrometres(2_500),
         height: Length::from_micrometres(5_000),
     }));
+    assert_mixed(&session, redone, 80_000, &[
+        (0, expected_center_hit), (1, far_box),
+    ]);
     let checked = session
         .validate_fixed_placement(placement(redone))
         .expect("Redo placement must use second profile");
@@ -8484,6 +8591,7 @@ fn mixed_alignment_session_handoff_rejects_old_row_selections_after_edits()
         .map(|(row, alignment)| RowAlignmentSelection {
             alignment,
             flow,
+            fragment_owner: row.owner,
             page: row.page,
             revision: current,
             source: row.source,

@@ -3410,3 +3410,31 @@ These are caller-measured provisional row rectangles. A caller's per-row
 alignment intent is not automatically inferred from heading styles, persisted
 content or handwriting. Actual ink intersections, fixed layering permission,
 native semantic Markdown measurement and notebook Export remain unfinished.
+
+## Mixed row alignment through semantic profile-reference history — 2026-11-09
+
+A separate live regression now retargets the selected physical page to an
+existing alternate paper profile through a semantic command. Two provisional
+source rows explicitly choose different alignments: centered then right.
+On the original wide writable sheet both fixed boxes clear, while on the
+narrow reference both rows produce exact distinct physical intersections.
+Fresh selections on Undo and Redo restore the respective reports; stale
+pre-retarget row selections refuse on the new accepted revision even when
+their original source indices still match.
+
+This tests source-bound geometry across profile references, not just physical
+page-size edits. It remains diagnostic-only without actual glyph bounds or
+authorization for overlapping layers or semantic notebook Export.
+
+## Same-revision measured-source owner separation — 2026-11-09
+
+Explicit mixed-row alignment choices now also bind the stable semantic block
+owner. A native two-block regression paginates two valid measurement groupings
+against the same accepted revision, flow and page. Both produce identical
+(unit, fragment) source indices, but the second fragment belongs to a
+different block in the second grouping. Reusing the first alignment choices
+refuses with the exact new row owner and source; fresh choices succeed.
+
+The selection does not seal measured ink size, semantic layout policy or
+persistent user alignment. It prevents one particular cross-owner source-index
+reuse even before any accepted revision change.

@@ -394,8 +394,8 @@ pub enum RowHorizontalAlignment {
 /// One explicitly selected alignment for an exact accepted measured row.
 ///
 /// Unlike a position, the choice contains no arbitrary physical coordinate.
-/// Its accepted revision, flow, page and source are checked against a sealed
-/// pagination plan before alignment can produce any physical row footprint.
+/// Its accepted revision, flow, block owner, page and source are checked
+/// against a sealed pagination plan before physical X may be derived.
 /// Callers may select a different alignment for each row, including successive
 /// fragments of the same semantic owner.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -404,6 +404,8 @@ pub struct RowAlignmentSelection {
     pub alignment: RowHorizontalAlignment,
     /// Accepted measured flow to which the selected row belongs.
     pub flow: AcceptedIdentity,
+    /// Stable accepted semantic block owning this measured row.
+    pub fragment_owner: AcceptedIdentity,
     /// Physical page receiving the selected row.
     pub page: AcceptedIdentity,
     /// Revision whose measured row source was selected.
@@ -640,8 +642,8 @@ pub fn aligned_row_horizontal_positions_for_flow(
 /// Align each measured row using its own explicit, source-bound selection.
 ///
 /// Each selection must identify exactly the row at the same sealed placement
-/// index. No stale, reordered, omitted, extra, or cross-flow choice may be
-/// silently applied to a different row after semantic edits or page changes.
+/// index. No stale, reordered, omitted, extra, or cross-flow or cross-owner
+/// choice may silently apply to another row after semantic or page changes.
 /// Origins come only from the accepted writable page rectangle and measured
 /// row width. Different fragments of one block may have distinct choices.
 ///
@@ -666,6 +668,7 @@ pub fn aligned_row_horizontal_positions_by_selection_for_flow(
         .map(|(index, (row, selection))| {
             if selection.revision != plan.revision()
                 || selection.flow != plan.flow()
+                || selection.fragment_owner != row.owner
                 || selection.page != row.page
                 || selection.source != row.source
             {

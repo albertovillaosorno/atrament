@@ -5212,6 +5212,7 @@ fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
         .map(|(row, alignment)| RowAlignmentSelection {
             alignment,
             flow,
+            fragment_owner: row.owner,
             page: row.page,
             revision,
             source: row.source,
@@ -5326,6 +5327,140 @@ fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
             fragment_owner: owner,
             source: last_row.source,
         }),
+    );
+    assert_eq!(session.current(), Some(accepted));
+    Ok(())
+}
+
+#[test]
+fn mixed_alignment_refuses_reused_source_assigned_to_another_semantic_owner()
+-> Result<(), String> {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let second_candidate =
+        ids.allocate_candidate().map_err(|error| format!("{error:?}"))?;
+    let source_page = fixture.notebook.pages.first_mut()
+        .ok_or("two-owner fixture missing page")?;
+    let source_flow = source_page.flows.first_mut()
+        .ok_or("two-owner fixture missing flow")?;
+    source_flow.blocks.push(Block {
+        content: BlockContent::Rule,
+        extensions: vec![],
+        id: second_candidate,
+        provenance: None,
+        style: None,
+    });
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("two-owner alignment fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing accepted notebook")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let first_owner = accepted_for(&mapping, fixture.block);
+    let second_owner = accepted_for(&mapping, second_candidate);
+    let page = accepted_for(&mapping, fixture.page_one);
+    let measurement = |owners: [AcceptedIdentity; 3]| {
+        let [first, second, third] = owners;
+        RevisionFlowMeasurement {
+            flow,
+            revision,
+            units: vec![
+                MeasuredFlowUnit {
+                    fragments: [first, second].into_iter().map(|owner| {
+                        MeasuredFragment {
+                            height: Length::from_micrometres(10_000),
+                            owner,
+                            width: Length::from_micrometres(10_000),
+                        }
+                    }).collect(),
+                    policy: FlowUnitPolicy::Independent,
+                },
+                MeasuredFlowUnit {
+                    fragments: vec![MeasuredFragment {
+                        height: Length::from_micrometres(10_000),
+                        owner: third,
+                        width: Length::from_micrometres(10_000),
+                    }],
+                    policy: FlowUnitPolicy::Independent,
+                },
+            ],
+        }
+    };
+    let first_plan = paginate_revision(
+        accepted, &measurement([first_owner, first_owner, second_owner]),
+    )
+    .map_err(|error| format!("first grouping invalid: {error:?}"))?;
+    let regrouped = paginate_revision(
+        accepted, &measurement([first_owner, second_owner, second_owner]),
+    )
+    .map_err(|error| format!("second grouping invalid: {error:?}"))?;
+    let choices = first_plan.placements().iter()
+        .zip([
+            RowHorizontalAlignment::Left,
+            RowHorizontalAlignment::Center,
+            RowHorizontalAlignment::Right,
+        ])
+        .map(|(row, alignment)| RowAlignmentSelection {
+            alignment,
+            flow,
+            fragment_owner: row.owner,
+            page: row.page,
+            revision,
+            source: row.source,
+        })
+        .collect::<Vec<_>>();
+    let old_rows = first_plan.placements();
+    let new_rows = regrouped.placements();
+    assert_eq!(old_rows.len(), 3);
+    assert_eq!(new_rows.len(), 3);
+    assert_eq!(
+        old_rows.iter().map(|row| (row.page, row.source))
+            .collect::<Vec<_>>(),
+        new_rows.iter().map(|row| (row.page, row.source))
+            .collect::<Vec<_>>(),
+    );
+    let changed_row = new_rows.get(1).ok_or("regrouped row missing")?;
+    assert_eq!(changed_row.page, page);
+    assert_eq!(changed_row.owner, second_owner);
+    assert_eq!(
+        aligned_row_horizontal_positions_by_selection_for_flow(
+            &regrouped, &choices,
+        ),
+        Err(FlowFixedRegionError::RowAlignmentMismatch {
+            index: 1,
+            page,
+            fragment_owner: second_owner,
+            source: changed_row.source,
+        }),
+    );
+    assert!(
+        aligned_row_horizontal_positions_by_selection_for_flow(
+            &first_plan, &choices,
+        ).is_ok(),
+        "selection remains valid only for its original source owners",
+    );
+    let fresh = regrouped.placements().iter()
+        .zip([
+            RowHorizontalAlignment::Left,
+            RowHorizontalAlignment::Center,
+            RowHorizontalAlignment::Right,
+        ])
+        .map(|(row, alignment)| RowAlignmentSelection {
+            alignment,
+            flow,
+            fragment_owner: row.owner,
+            page: row.page,
+            revision,
+            source: row.source,
+        })
+        .collect::<Vec<_>>();
+    assert!(
+        aligned_row_horizontal_positions_by_selection_for_flow(
+            &regrouped, &fresh,
+        ).is_ok(),
+        "regrouped rows may choose fresh alignments",
     );
     assert_eq!(session.current(), Some(accepted));
     Ok(())
