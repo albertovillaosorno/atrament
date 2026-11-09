@@ -4152,7 +4152,9 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
     // Invalid evidence takes priority over a pair found earlier in the batch.
     let invalid = checked(page_two, objects[1], 0, 0, 10_000, 10_000)?;
     assert_eq!(
-        first_fixed_pair_overlap_for_flow(&plan, &[a.clone(), a.clone(), invalid.clone()]),
+        first_fixed_pair_overlap_for_flow(
+            &plan, &[a.clone(), a.clone(), invalid.clone()],
+        ),
         Err(FlowFixedRegionError::FixedRegionOverflow {
             page: page_two,
             object: objects[1],
@@ -4331,14 +4333,19 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
     let x = region.x.micrometres();
     let y = region.y.micrometres();
     let width = region.width.micrometres();
-    let positions = plan.placements().iter().zip([5_000, 12_000, 25_000])
-        .map(|(row, offset)| RowHorizontalPosition {
-            flow,
-            revision,
-            page: row.page,
-            source: row.source,
-            left: Length::from_micrometres(x + offset),
-        }).collect::<Vec<_>>();
+    let positions_at = |offsets: [u64; 3]| {
+        plan.placements().iter().zip(offsets)
+            .map(|(row, offset)| RowHorizontalPosition {
+                flow,
+                revision,
+                page: row.page,
+                source: row.source,
+                left: Length::from_micrometres(x + offset),
+            }).collect::<Vec<_>>()
+    };
+    // An empty physical row may sit on the last writable micrometre.
+    // Its zero-width footprint must never claim horizontal ink.
+    let positions = positions_at([5_000, width, 25_000]);
     let trace = |overlap: FixedRowFootprintOverlap| {
         (
             overlap.revision(), overlap.flow(), overlap.page(),
@@ -4370,8 +4377,19 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
             width: Length::from_micrometres(w),
             height: Length::from_micrometres(h),
         })?;
+        let row_zero_x = match case % 31 {
+            0 => 0,
+            1 => width - 15_000,
+            _ => next_owner_oracle_value(&mut seed) % (width - 15_000 + 1),
+        };
+        let row_two_x = match case % 29 {
+            0 => 0,
+            1 => width - 20_000,
+            _ => next_owner_oracle_value(&mut seed) % (width - 20_000 + 1),
+        };
+        let case_positions = positions_at([row_zero_x, width, row_two_x]);
         let actual = fixed_row_footprint_overlaps_for_flow(
-            &plan, std::slice::from_ref(&fixed), &positions, 3,
+            &plan, std::slice::from_ref(&fixed), &case_positions, 3,
         ).map(|all| all.into_iter().map(trace).collect::<Vec<_>>());
         if dx + w > width {
             overflows += 1;
@@ -4386,9 +4404,9 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
         // literal measured widths/top offsets, not the row-index visitor.
         let mut expected = Vec::new();
         for (row_index, (rx, ry, rw)) in [
-            (5_000u64, 0u64, 15_000u64),
-            (12_000, 10_000, 0),
-            (25_000, 20_000, 20_000),
+            (row_zero_x, 0u64, 15_000u64),
+            (width, 10_000, 0),
+            (row_two_x, 20_000, 20_000),
         ].into_iter().enumerate() {
             let left = u128::from(dx).max(u128::from(rx));
             let right = u128::from(dx + w).min(u128::from(rx + rw));
@@ -4424,7 +4442,7 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
         let cap = expected.len().saturating_sub(1);
         if !expected.is_empty()
             && fixed_row_footprint_overlaps_for_flow(
-                &plan, &[fixed], &positions, cap,
+                &plan, &[fixed], &case_positions, cap,
             ) != Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
                 limit: cap,
             })
@@ -4444,6 +4462,33 @@ fn explicitly_positioned_row_footprints_match_independent_physical_oracle()
         width: Length::from_micrometres(20_000),
         height: Length::from_micrometres(30_000),
     })?;
+    // Reordering two same-page proposals does not change their identities.
+    // The exact source sequence still has to match the sealed plan.
+    let mut reordered = positions.clone();
+    reordered.swap(0, 2);
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &[], &reordered, 0,
+        ),
+        Err(FlowFixedRegionError::RowPositionMismatch {
+            index: 0, page, fragment_owner: owner,
+            source: plan.placements()[0].source,
+        }),
+    );
+    // A late invalid row refuses the entire batch before even a zero-cap
+    // report can return its earlier, already detected intersection.
+    let mut late_overflow = positions.clone();
+    late_overflow.get_mut(2).ok_or("last row position missing")?
+        .left = Length::from_micrometres(x + width - 19_999);
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, std::slice::from_ref(&positioned), &late_overflow, 0,
+        ),
+        Err(FlowFixedRegionError::RowFootprintOverflow {
+            page, fragment_owner: owner,
+            source: plan.placements()[2].source,
+        }),
+    );
     let report = fixed_row_footprint_overlaps_for_flow(
         &plan, &[positioned.clone(), positioned], &positions, 4,
     ).map_err(|error| format!("ordered footprint report: {error:?}"))?;
@@ -4512,9 +4557,28 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
         .is_err());
     assert_eq!(
         fixed_row_footprint_overlaps_for_flow(
-            &plan, &[near_far_edge], &[position], 0,
+            &plan, std::slice::from_ref(&near_far_edge), &[position], 0,
         ),
         Ok(vec![]),
+    );
+    // Touching the row's horizontal edge is not an intersection; placing
+    // the row's entire width flush with the writable right edge is valid.
+    let touching = check(area(20_000, 0, 1_000, 1_000))?;
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &[touching], &[position], 0,
+        ),
+        Ok(vec![]),
+    );
+    let flush_right = RowHorizontalPosition {
+        left: Length::from_micrometres(x + w - 20_000),
+        ..position
+    };
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &[near_far_edge.clone()], &[flush_right], 1,
+        ).map(|all| all.first().map(|overlap| overlap.intersection())),
+        Ok(Some(near_far_edge.rectangle())),
     );
     assert_eq!(
         fixed_row_footprint_overlaps_for_flow(
@@ -4562,6 +4626,17 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
         ], 0),
         Err(FlowFixedRegionError::RowPositionMismatch {
             index: 0, page, fragment_owner: owner, source: row.source,
+        }),
+    );
+    let before_writable = RowHorizontalPosition {
+        left: Length::ZERO, ..position
+    };
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(
+            &plan, &[], &[before_writable], 0,
+        ),
+        Err(FlowFixedRegionError::RowFootprintOverflow {
+            page, fragment_owner: owner, source: row.source,
         }),
     );
     let outside = RowHorizontalPosition {

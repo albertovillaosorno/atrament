@@ -3193,10 +3193,12 @@ zero-width measured rows, touch clearance and refusal caps. Current-session
 coverage verifies revision mismatch and fresh results after text edit, Undo and
 Redo. The existing conservative full-width row-band gate remains unchanged and
 can still flag a far-right fixed box that does not intersect an explicitly
-left-positioned measured row. This optional report is **not** proof of glyph
-ink contact or an approved layout policy: row positions remain caller-supplied,
-not derived from saved Markdown or handwriting. No native semantic PDF/PNG
-Export path is established by this change; ATR-P2-011 remains open.
+left-positioned measured row.
+
+This optional report is **not** proof of glyph ink contact or an approved
+layout policy: row positions remain caller-supplied, not derived from saved
+Markdown or handwriting. No native semantic PDF/PNG Export path is established
+by this change; ATR-P2-011 remains open.
 
 ## Positioned row footprints across page-profile history — 2026-11-08
 
@@ -3228,3 +3230,26 @@ validation refuses a different accepted flow even if its revision, page and
 fragment source happen to match. This avoids treating a row index from a
 separate flow as horizontal evidence for the selected measured plan; the query
 remains diagnostic-only and cannot establish real handwriting-ink bounds.
+
+## Horizontal footprint edge boundaries — 2026-11-08
+
+The positional-regression fixtures additionally distinguish a box touching
+measured row X without overlap from one crossing its physical right edge.
+A measured row may be flush with the last writable micrometre, but an origin
+before the left inset or a positive-width row crossing the right edge refuses.
+An explicitly measured zero-width row can sit exactly at the right boundary
+without falsely claiming ink, although full-width conservative bands still
+reserve its positive vertical advance.
+
+## Variable horizontal row placement oracle — 2026-11-09
+
+The 2,048-case rectangle oracle now also varies both nonempty row origins,
+including exact left and flush-right positions, independently of the supplied
+fixed bounds. Each case compares the full physical intersection and its
+source/revision/flow provenance against independent u128 geometry, with an
+empty row at the writable right boundary. Overflow and result-cap refusals
+remain tested; this still measures provisional row boxes, not actual ink.
+
+Same-page row-source reorderings also refuse explicitly. A separate late
+row-footprint overflow now confirms the complete horizontal proposal batch
+preempts even an earlier possible intersection with a zero-result cap.
