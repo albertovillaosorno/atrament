@@ -3338,3 +3338,30 @@ on the wide page, typed bounds overflow after narrowing, restored empty
 results after Undo, and restored overflow after Redo. Old measurements refuse
 with their exact revision mismatch. These remain conservative read-only bands
 without authenticated handwriting-ink geometry or semantic Export readiness.
+
+## Explicit provisional row alignment (partial) — 2026-11-09
+
+The accepted measured-flow application now derives left-, center- or
+right-aligned horizontal positions from each sealed placed row and the exact
+accepted writable rectangle, only when the caller explicitly selects an
+alignment. Each derived position retains accepted revision, selected flow,
+physical page and original source `(unit, fragment)`. Center alignment splits
+odd-micrometre spare width deterministically, assigning the remainder to the
+right.
+
+Zero-width rows can align to the writable right boundary without claiming ink.
+Unrepresentable or oversized row boxes refuse with typed bounds evidence
+rather than saturating or clipping positions.
+
+The live session now exposes first and complete bounded fixed/row footprint
+intersection inspection using those caller-selected alignments, without
+requiring untrusted arbitrary X coordinates. A two-page native test checks
+exact origins, source ownership, near-edge collision geometry, no phantom
+second-page hit and result-cap refusal.
+
+Current-session checks preserve missing authority, stale revisions after edits
+and fresh results through Undo/Redo; late invalid fixed rectangles still take
+precedence over earlier possible hits. These are **provisional caller-measured
+boxes**, not derived text metrics, glyph-stroke ink contact, accepted layout
+constraints or native semantic PDF/PNG export. The prior conservative row-band
+gate is unchanged.

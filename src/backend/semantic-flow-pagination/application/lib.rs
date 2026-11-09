@@ -359,6 +359,20 @@ impl FixedRowBandOverlap {
     }
 }
 
+/// Caller-selected alignment for provisional measured row boxes.
+///
+/// Alignment operates on **caller-measured widths**, not actual glyph ink.
+/// Odd-micrometre centre remainders are assigned to the right-hand side.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RowHorizontalAlignment {
+    /// Centre each measured row within its writable width.
+    Center,
+    /// Begin each row at the writable area's left edge.
+    Left,
+    /// End each measured row at the writable area's right edge.
+    Right,
+}
+
 /// Caller-selected physical X position for one exact measured flow row.
 ///
 /// The plan owns the row's accepted revision, flow, page, source and size.
@@ -560,6 +574,73 @@ struct FlowScope<'revision> {
 
 type PageRegionsResult =
     Result<Vec<PageRegion<AcceptedIdentity>>, SemanticPaginationError>;
+
+/// Derive explicit, revision-bound horizontal positions from a sealed plan.
+///
+/// A caller must select the alignment; no position is inferred from text or
+/// handwriting. Each result retains the accepted revision, flow, page and
+/// fragment source, including empty-width rows and fragments on later pages.
+/// This is a provisional box alignment, not a fixed-object collision policy
+/// or evidence of actual visible ink. The same positions may be passed into
+/// the read-only footprint inspection APIs.
+///
+/// # Errors
+///
+/// Refuses if a row cannot be represented inside its writable rectangle,
+/// rather than saturating physical coordinates or silently clipping it.
+pub fn aligned_row_horizontal_positions_for_flow(
+    plan: &SemanticPaginationPlan,
+    alignment: RowHorizontalAlignment,
+) -> Result<Vec<RowHorizontalPosition>, FlowFixedRegionError> {
+    plan.placements()
+        .iter()
+        .map(|row| {
+            let invalid = || FlowFixedRegionError::RowFootprintOverflow {
+                page: row.page,
+                fragment_owner: row.owner,
+                source: row.source,
+            };
+            let remaining = row
+                .writable
+                .width
+                .micrometres()
+                .checked_sub(row.width.micrometres())
+                .ok_or_else(invalid)?;
+            let offset = match alignment {
+                RowHorizontalAlignment::Left => 0,
+                RowHorizontalAlignment::Center => {
+                    remaining.checked_div(2).ok_or_else(invalid)?
+                },
+                RowHorizontalAlignment::Right => remaining,
+            };
+            let left = row
+                .writable
+                .x
+                .micrometres()
+                .checked_add(offset)
+                .ok_or_else(invalid)?;
+            let right = left
+                .checked_add(row.width.micrometres())
+                .ok_or_else(invalid)?;
+            let writable_right = row
+                .writable
+                .x
+                .micrometres()
+                .checked_add(row.writable.width.micrometres())
+                .ok_or_else(invalid)?;
+            if right > writable_right {
+                return Err(invalid());
+            }
+            Ok(RowHorizontalPosition {
+                flow: plan.flow(),
+                left: Length::from_micrometres(left),
+                page: row.page,
+                revision: plan.revision(),
+                source: row.source,
+            })
+        })
+        .collect()
+}
 
 /// Inspect checked fixed placements for possible overlap with measured flow.
 ///

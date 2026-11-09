@@ -48,7 +48,8 @@ use atrament_semantic_fixed_region_layout::{
 };
 use atrament_semantic_flow_pagination::{
     FixedPairOverlap, FixedRowBandOverlap, FlowFixedRegionError,
-    RevisionFlowMeasurement,
+    RevisionFlowMeasurement, RowHorizontalAlignment,
+    aligned_row_horizontal_positions_for_flow,
     SemanticPaginationError, check_fixed_regions_for_flow,
     first_fixed_pair_overlap_for_flow, fixed_pair_overlaps_for_flow,
     first_fixed_row_band_overlap_for_flow,
@@ -5025,6 +5026,140 @@ fn positioned_row_footprints_refuse_stale_missing_and_unbounded_proposals()
         Err(FlowFixedRegionError::FixedRegionOverflow {
             page, object: owner,
         }),
+    );
+    assert_eq!(session.current(), Some(accepted));
+    Ok(())
+}
+
+#[test]
+fn aligned_measured_row_boxes_keep_page_source_and_exact_micrometres()
+-> Result<(), String> {
+    use atrament_semantic_flow_pagination::{
+        first_fixed_row_footprint_overlap_for_flow,
+        fixed_row_footprint_overlaps_for_flow,
+    };
+
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("aligned row fixture refused".into());
+    };
+    let accepted = session.current().ok_or("missing accepted revision")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let page_one = accepted_for(&mapping, fixture.page_one);
+    let page_two = accepted_for(&mapping, fixture.page_two);
+    // The second zero-width row cannot fit vertically on the first page.
+    let plan = paginate_revision(
+        accepted,
+        &measurement(revision, flow, owner, &[(15_001, 200_000), (0, 200_000)]),
+    )
+    .map_err(|error| format!("aligned pagination: {error:?}"))?;
+    let rows = plan.placements();
+    if rows.len() != 2 || rows[0].page != page_one || rows[1].page != page_two {
+        return Err(format!("incorrect page split: {rows:?}"));
+    }
+    let left = aligned_row_horizontal_positions_for_flow(
+        &plan,
+        RowHorizontalAlignment::Left,
+    )
+    .map_err(|error| format!("left alignment: {error:?}"))?;
+    let center = aligned_row_horizontal_positions_for_flow(
+        &plan,
+        RowHorizontalAlignment::Center,
+    )
+    .map_err(|error| format!("center alignment: {error:?}"))?;
+    let right = aligned_row_horizontal_positions_for_flow(
+        &plan,
+        RowHorizontalAlignment::Right,
+    )
+    .map_err(|error| format!("right alignment: {error:?}"))?;
+    for (index, row) in rows.iter().enumerate() {
+        let x = row.writable.x.micrometres();
+        let remaining =
+            row.writable.width.micrometres() - row.width.micrometres();
+        for (position, expected) in [
+            (left[index], x),
+            (
+                center[index],
+                x + remaining.checked_div(2).expect("nonzero divisor"),
+            ),
+            (right[index], x + remaining),
+        ] {
+            assert_eq!(position.flow, flow);
+            assert_eq!(position.revision, revision);
+            assert_eq!(position.page, row.page);
+            assert_eq!(position.source, row.source);
+            assert_eq!(position.left.micrometres(), expected);
+        }
+    }
+    // The odd 15,001-um text width keeps the one-micrometre bias on the
+    // right side; an empty row at the right edge remains non-intersecting.
+    assert_eq!(
+        (rows[0].writable.width.micrometres() - 15_001)
+            .checked_rem(2)
+            .expect("nonzero divisor"),
+        1,
+    );
+    let first = rows[0];
+    let far =
+        first.writable.x.micrometres() + first.writable.width.micrometres();
+    let box_at = |page, rectangle| {
+        validate_fixed_placement(accepted, AcceptedFixedPlacement {
+            object: owner,
+            page,
+            revision,
+            rectangle,
+        })
+        .map_err(|error| format!("checked aligned box: {error:?}"))
+    };
+    let far_box = box_at(page_one, Rect {
+        x: Length::from_micrometres(far - 1_000),
+        y: Length::from_micrometres(first.top.micrometres() + 1_000),
+        width: Length::from_micrometres(1_000),
+        height: Length::from_micrometres(2_000),
+    })?;
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &plan,
+            std::slice::from_ref(&far_box),
+            &left,
+        ),
+        Ok(None),
+    );
+    assert_eq!(
+        first_fixed_row_footprint_overlap_for_flow(
+            &plan,
+            std::slice::from_ref(&far_box),
+            &center,
+        ),
+        Ok(None),
+    );
+    let right_hit = first_fixed_row_footprint_overlap_for_flow(
+        &plan,
+        std::slice::from_ref(&far_box),
+        &right,
+    )
+    .map_err(|error| format!("right hit: {error:?}"))?
+    .ok_or("missing right-aligned hit")?;
+    assert_eq!(right_hit.revision(), revision);
+    assert_eq!(right_hit.flow(), flow);
+    assert_eq!(right_hit.page(), page_one);
+    assert_eq!(right_hit.source(), first.source);
+    assert_eq!(right_hit.intersection(), far_box.rectangle());
+    assert_eq!(
+        fixed_row_footprint_overlaps_for_flow(&plan, &[far_box], &right, 0,),
+        Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded { limit: 0 }),
+    );
+    // No second-page object is fabricated solely to hit an empty row.
+    // Its right-aligned origin is the exact writable right boundary.
+    let second = rows[1];
+    assert_eq!(
+        right[1].left.micrometres(),
+        second.writable.x.micrometres() + second.writable.width.micrometres(),
     );
     assert_eq!(session.current(), Some(accepted));
     Ok(())
