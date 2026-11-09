@@ -5377,6 +5377,284 @@ fn positioned_row_boxes_seal_complete_source_bound_geometry_across_pages()
     Ok(())
 }
 
+struct SelectedRowInspectionFixture {
+    fixed: [atrament_semantic_fixed_region_layout::FixedRegionLayoutResult; 2],
+    flow: AcceptedIdentity,
+    invalid_later:
+        atrament_semantic_fixed_region_layout::FixedRegionLayoutResult,
+    owner: AcceptedIdentity,
+    plan: atrament_semantic_flow_pagination::SemanticPaginationPlan,
+    positions: Vec<atrament_semantic_flow_pagination::RowHorizontalPosition>,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+    selections: Vec<RowAlignmentSelection>,
+}
+
+fn checked_fixed_for_selected_row(
+    accepted: &atrament_semantic_notebook::AcceptedRevision,
+    first: &atrament_flow_pagination::PlacedFragment<
+        AcceptedIdentity,
+        AcceptedIdentity,
+    >,
+    first_position: &atrament_semantic_flow_pagination::RowHorizontalPosition,
+    owner: AcceptedIdentity,
+    revision: atrament_semantic_notebook::RevisionIdentity,
+) -> Result<
+    (
+        [atrament_semantic_fixed_region_layout::FixedRegionLayoutResult; 2],
+        atrament_semantic_fixed_region_layout::FixedRegionLayoutResult,
+    ),
+    String,
+> {
+    let check = |rectangle| {
+        validate_fixed_placement(accepted, AcceptedFixedPlacement {
+            object: owner,
+            page: first.page,
+            rectangle,
+            revision,
+        })
+        .map_err(|error| format!("fixed proposal: {error:?}"))
+    };
+    let fixed = [
+        check(Rect {
+            x: Length::from_micrometres(
+                first_position
+                    .left
+                    .micrometres()
+                    .checked_add(1_000)
+                    .ok_or("first X overflow")?,
+            ),
+            y: Length::from_micrometres(
+                first
+                    .top
+                    .micrometres()
+                    .checked_add(1_000)
+                    .ok_or("first Y overflow")?,
+            ),
+            width: Length::from_micrometres(2_000),
+            height: Length::from_micrometres(3_000),
+        })?,
+        check(Rect {
+            x: Length::from_micrometres(
+                first_position
+                    .left
+                    .micrometres()
+                    .checked_add(4_000)
+                    .ok_or("second X overflow")?,
+            ),
+            y: Length::from_micrometres(
+                first
+                    .top
+                    .micrometres()
+                    .checked_add(2_000)
+                    .ok_or("second Y overflow")?,
+            ),
+            width: Length::from_micrometres(4_000),
+            height: Length::from_micrometres(5_000),
+        })?,
+    ];
+    let invalid_later = check(Rect {
+        x: Length::from_micrometres(
+            first
+                .writable
+                .x
+                .micrometres()
+                .checked_add(first.writable.width.micrometres())
+                .and_then(|right| right.checked_sub(500))
+                .ok_or("fixed right boundary overflow")?,
+        ),
+        y: first.top,
+        width: Length::from_micrometres(1_000),
+        height: Length::from_micrometres(1_000),
+    })?;
+    Ok((fixed, invalid_later))
+}
+
+fn selected_row_inspection_fixture()
+-> Result<SelectedRowInspectionFixture, String> {
+    let ids = IdentityAllocator::new();
+    let fixture = candidate_fixture(&ids);
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else {
+        return Err("combined row-inspection candidate refused".into());
+    };
+    let accepted = session.current().ok_or("accepted revision missing")?;
+    let flow = accepted_for(&mapping, fixture.flow);
+    let owner = accepted_for(&mapping, fixture.block);
+    let plan = paginate_revision(
+        accepted,
+        &measurement(revision, flow, owner, &[
+            (15_000, 100_000),
+            (0, 100_000),
+            (15_000, 100_000),
+        ]),
+    )
+    .map_err(|error| format!("row inspection pagination: {error:?}"))?;
+    let rows = plan.placements();
+    let [first, _, _] = rows else {
+        return Err("expected two physical pages and three rows".into());
+    };
+    let selections = rows
+        .iter()
+        .zip([
+            RowHorizontalAlignment::Left,
+            RowHorizontalAlignment::Right,
+            RowHorizontalAlignment::Center,
+        ])
+        .map(|(row, alignment)| RowAlignmentSelection {
+            alignment,
+            flow,
+            fragment_owner: row.owner,
+            geometry: MeasuredRowGeometry::from_placement(row),
+            page: row.page,
+            revision,
+            source: row.source,
+        })
+        .collect::<Vec<_>>();
+    let positions = aligned_row_horizontal_positions_by_selection_for_flow(
+        &plan,
+        &selections,
+    )
+    .map_err(|error| format!("row positions: {error:?}"))?;
+    let first_position =
+        positions.first().ok_or("first row position missing")?;
+    let (fixed, invalid_later) = checked_fixed_for_selected_row(
+        accepted,
+        first,
+        first_position,
+        owner,
+        revision,
+    )?;
+    Ok(SelectedRowInspectionFixture {
+        fixed,
+        flow,
+        invalid_later,
+        owner,
+        plan,
+        positions,
+        revision,
+        selections,
+    })
+}
+
+#[test]
+fn selected_row_inspection_keeps_boxes_and_fixed_hits_on_one_plan() {
+    let result = (|| -> Result<(), String> {
+        use atrament_semantic_flow_pagination::{
+            fixed_row_footprint_overlaps_for_flow,
+            inspect_selected_aligned_rows_for_flow,
+        };
+        let SelectedRowInspectionFixture {
+            fixed,
+            flow,
+            owner,
+            plan,
+            positions,
+            revision,
+            selections,
+            ..
+        } = selected_row_inspection_fixture()?;
+        let [first, empty, last] = plan.placements() else {
+            return Err("expected three rows".into());
+        };
+        assert_ne!(first.page, last.page);
+        assert_eq!(first.page, empty.page);
+        let report = inspect_selected_aligned_rows_for_flow(
+            &plan,
+            &fixed,
+            &selections,
+            2,
+        )
+        .map_err(|error| format!("combined row inspection: {error:?}"))?;
+        assert_eq!(report.revision(), revision);
+        assert_eq!(report.flow(), flow);
+        assert_eq!(
+            report.rows(),
+            selected_aligned_row_footprints_for_flow(&plan, &selections)
+                .map_err(|error| format!("separate boxes: {error:?}"))?
+                .as_slice(),
+        );
+        let empty_box = report.rows().get(1).ok_or("empty row absent")?;
+        assert_eq!(empty_box.source(), empty.source);
+        assert_eq!(empty_box.rectangle().width, Length::ZERO);
+        assert_eq!(
+            report.overlaps(),
+            fixed_row_footprint_overlaps_for_flow(&plan, &fixed, &positions, 2)
+                .map_err(|error| format!("separate hits: {error:?}"))?
+                .as_slice(),
+        );
+        assert_eq!(
+            report
+                .overlaps()
+                .iter()
+                .map(|hit| (hit.fixed_index(), hit.source()))
+                .collect::<Vec<_>>(),
+            vec![(0, first.source), (1, first.source)],
+        );
+        assert_eq!(
+            inspect_selected_aligned_rows_for_flow(
+                &plan,
+                &fixed,
+                &selections,
+                1
+            ),
+            Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
+                limit: 1,
+            }),
+        );
+        let clear =
+            inspect_selected_aligned_rows_for_flow(&plan, &[], &selections, 0)
+                .map_err(|error| format!("no fixed: {error:?}"))?;
+        assert_eq!(clear.rows(), report.rows());
+        assert!(clear.overlaps().is_empty());
+        let mut stale = selections;
+        stale.get_mut(2).ok_or("last selection absent")?.source = first.source;
+        assert_eq!(
+            inspect_selected_aligned_rows_for_flow(&plan, &fixed, &stale, 0),
+            Err(FlowFixedRegionError::RowAlignmentMismatch {
+                index: 2,
+                page: last.page,
+                fragment_owner: owner,
+                source: last.source,
+            }),
+        );
+        Ok(())
+    })();
+    assert!(result.is_ok(), "combined pure layout: {result:?}");
+}
+
+#[test]
+fn selected_row_inspection_rejects_later_invalid_fixed_region() {
+    let result = (|| -> Result<(), String> {
+        use atrament_semantic_flow_pagination as row_layout;
+        let SelectedRowInspectionFixture {
+            fixed,
+            invalid_later,
+            owner,
+            plan,
+            selections,
+            ..
+        } = selected_row_inspection_fixture()?;
+        let first = plan.placements().first().ok_or("no placed row")?;
+        let valid = fixed.first().ok_or("first fixed region absent")?;
+        assert_eq!(
+            row_layout::inspect_selected_aligned_rows_for_flow(
+                &plan,
+                &[valid.clone(), invalid_later],
+                &selections,
+                0,
+            ),
+            Err(FlowFixedRegionError::FixedRegionOverflow {
+                page: first.page,
+                object: owner,
+            }),
+        );
+        Ok(())
+    })();
+    assert!(result.is_ok(), "invalid fixed batch: {result:?}");
+}
+
 #[test]
 fn mixed_source_bound_row_alignments_preserve_identity_across_pages()
 -> Result<(), String> {

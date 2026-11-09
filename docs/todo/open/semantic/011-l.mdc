@@ -3593,3 +3593,24 @@ source provenance. The reference test compares exact 62.5/180-mm origins on
 the wide sheet to 27.5/90-mm origins on the narrow sheet; reused choices from
 the old page reference refuse the full batch. Physical rectangles remain
 caller-measured diagnostic boxes, not glyph ink or accepted notebook Export.
+
+## One-call selected row boxes and fixed intersections (partial) — 2026-11-09
+
+A read-only pure layout and live-session query now return a constructor-sealed
+report containing **every** provisional measured row rectangle and a bounded
+list of its exact intersections with checked fixed proposals. Both collections
+share the same accepted revision, selected flow, measured pagination plan and
+per-row caller-selected alignment evidence. The report admits the complete
+alignment batch and fixed proposal set before returning either collection;
+an exceeded intersection cap refuses rather than returning truncated hits.
+
+Native regressions compare the combined results against the separate checked
+row-box and fixed-footprint APIs across two physical pages, including an empty
+width row, two physical hits, late invalid fixed bounds, stale last-row source,
+same-revision block-owner regrouping and remeasurement. No additional fixed
+object is fabricated on a later page: fixed placement still requires its
+accepted semantic owner on that page.
+
+The result is **diagnostic-only** caller-measured geometry, not confirmed glyph
+ink, persisted alignment, fixed-layer authorization, notebook PDF/PNG Export or
+completion of the saved-notebook acceptance criterion.

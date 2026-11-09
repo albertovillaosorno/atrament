@@ -64,6 +64,7 @@ use atrament_semantic_flow_pagination::{
     FlowFixedRegionError, PositionedRowFootprint, RevisionFlowMeasurement,
     RowAlignmentSelection,
     RowHorizontalAlignment, RowHorizontalPosition,
+    SelectedAlignedRowInspection,
     SemanticPaginationError, SemanticPaginationPlan,
     aligned_row_horizontal_positions_by_selection_for_flow,
     aligned_row_horizontal_positions_for_flow,
@@ -71,7 +72,8 @@ use atrament_semantic_flow_pagination::{
     first_fixed_row_band_overlap_for_flow,
     first_fixed_row_footprint_overlap_for_flow,
     fixed_pair_overlaps_for_flow, fixed_row_band_overlaps_for_flow,
-    fixed_row_footprint_overlaps_for_flow, paginate_revision,
+    fixed_row_footprint_overlaps_for_flow,
+    inspect_selected_aligned_rows_for_flow, paginate_revision,
     positioned_row_footprints_for_flow,
     selected_aligned_row_footprints_for_flow,
 };
@@ -880,6 +882,34 @@ impl SessionApplication {
         target: AcceptedIdentity,
     ) -> IdentityKindInspectOutcome {
         self.semantic.inspect_identity_kind(revision, target)
+    }
+
+    /// Inspect selected row boxes and fixed intersections in one snapshot.
+    ///
+    /// Both read-only collections share the same current accepted revision,
+    /// measured flow, checked fixed proposals and exact per-row alignment
+    /// choices. The result cap bounds intersections but never truncates rows.
+    /// Neither collection verifies visible ink or admits native Export.
+    ///
+    /// # Errors
+    ///
+    /// Refuses absent or stale authority, invalid measurements/placements,
+    /// mismatched selections, physical overflow or excess intersections
+    /// without exposing a partial report.
+    pub fn inspect_selected_aligned_measured_rows(
+        &self,
+        measurement: &RevisionFlowMeasurement,
+        fixed: &[AcceptedFixedPlacement],
+        selections: &[RowAlignmentSelection],
+        max_overlaps: usize,
+    ) -> Result<SelectedAlignedRowInspection, SessionFlowFixedRegionError>
+    {
+        let (plan, checked) =
+            self.checked_measured_flow_and_fixed_regions(measurement, fixed)?;
+        inspect_selected_aligned_rows_for_flow(
+            &plan, &checked, selections, max_overlaps,
+        )
+        .map_err(SessionFlowFixedRegionError::Overlap)
     }
 
     /// Inspect terminal cleanup status for one process-local media job.

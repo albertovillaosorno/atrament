@@ -533,6 +533,47 @@ impl PositionedRowFootprint {
     }
 }
 
+/// One admitted selection's complete provisional row boxes and fixed hits.
+///
+/// Both collections come from one sealed measured plan, one exact sequence of
+/// caller-selected alignments, and the same checked fixed proposals. Empty
+/// measured rows are retained in `rows`, but cannot produce positive-area
+/// `overlaps`. The bounded report refuses instead of truncating intersections.
+/// This is not authenticated glyph ink, overlap policy, or Export authority.
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct SelectedAlignedRowInspection {
+    flow: AcceptedIdentity,
+    overlaps: Vec<FixedRowFootprintOverlap>,
+    revision: RevisionIdentity,
+    rows: Vec<PositionedRowFootprint>,
+}
+
+impl SelectedAlignedRowInspection {
+    /// Accepted flow for both read-only collections.
+    #[must_use]
+    pub const fn flow(&self) -> AcceptedIdentity {
+        self.flow
+    }
+
+    /// Complete physical intersections with caller-supplied fixed regions.
+    #[must_use]
+    pub fn overlaps(&self) -> &[FixedRowFootprintOverlap] {
+        &self.overlaps
+    }
+
+    /// Accepted revision from which both collections were projected.
+    #[must_use]
+    pub const fn revision(&self) -> RevisionIdentity {
+        self.revision
+    }
+
+    /// Every positioned measured row, including zero-width rows.
+    #[must_use]
+    pub fn rows(&self) -> &[PositionedRowFootprint] {
+        &self.rows
+    }
+}
+
 /// Checked intersection of a fixed rectangle and positioned row footprint.
 ///
 /// This is a **provisional** measured-box intersection: actual glyph stroke
@@ -894,6 +935,42 @@ pub fn selected_aligned_row_footprints_for_flow(
         plan, selections,
     )?;
     positioned_row_footprints_for_flow(plan, &positions)
+}
+
+/// Return selected row boxes and bounded fixed hits from one measured plan.
+///
+/// This combines the existing checked row-box and physical intersection
+/// projections so callers cannot accidentally pair a box list with hits from
+/// another measurement or page authority. Every selected row is admitted
+/// before any boxes or intersections escape; later invalid fixed regions and
+/// result caps refuse the whole report without partial observations.
+///
+/// # Errors
+///
+/// Returns typed selection, position, fixed-geometry or intersection-cap
+/// refusal; an empty fixed batch still requires valid row selections.
+pub fn inspect_selected_aligned_rows_for_flow(
+    plan: &SemanticPaginationPlan,
+    fixed_regions: &[FixedRegionLayoutResult],
+    selections: &[RowAlignmentSelection],
+    max_overlaps: usize,
+) -> Result<SelectedAlignedRowInspection, FlowFixedRegionError> {
+    let positions = aligned_row_horizontal_positions_by_selection_for_flow(
+        plan, selections,
+    )?;
+    let rows = positioned_row_footprints_for_flow(plan, &positions)?;
+    let overlaps = fixed_row_footprint_overlaps_for_flow(
+        plan,
+        fixed_regions,
+        &positions,
+        max_overlaps,
+    )?;
+    Ok(SelectedAlignedRowInspection {
+        flow: plan.flow(),
+        overlaps,
+        revision: plan.revision(),
+        rows,
+    })
 }
 
 /// Inspect checked fixed placements for possible overlap with measured flow.

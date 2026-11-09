@@ -9432,6 +9432,138 @@ fn live_selected_alignment_boxes_match_checked_positions() {
 }
 
 #[test]
+fn live_selected_row_inspection_admits_one_revision_for_boxes_and_hits() {
+    let result = (|| -> Result<(), String> {
+        let fixture = live_owner_regroup_fixture()?;
+        let absent = application::SessionApplication::default();
+        assert_eq!(
+            absent.inspect_selected_aligned_measured_rows(
+                &fixture.regrouped,
+                &fixture.fixed,
+                &fixture.fresh_selections,
+                1,
+            ),
+            Err(application::SessionFlowFixedRegionError::NoAcceptedRevision),
+        );
+        let report = fixture
+            .session
+            .inspect_selected_aligned_measured_rows(
+                &fixture.regrouped,
+                &fixture.fixed,
+                &fixture.fresh_selections,
+                1,
+            )
+            .map_err(|error| format!("live combined inspection: {error:?}"))?;
+        assert_eq!(report.revision(), fixture.revision);
+        assert_eq!(report.flow(), fixture.regrouped.flow);
+        assert_eq!(report.rows().len(), 3);
+        let first_row = report.rows().first().ok_or("first row missing")?;
+        let second_row = report.rows().get(1).ok_or("second row missing")?;
+        let first_hit = report.overlaps().first().ok_or("first hit missing")?;
+        assert_eq!(first_row.source(), fixture.first_source);
+        assert_eq!(second_row.fragment_owner(), fixture.changed_owner);
+        assert_eq!(report.overlaps().len(), 1);
+        assert_eq!(first_hit.source(), fixture.first_source);
+        assert_eq!(first_hit.intersection(), fixture.rectangle);
+        assert_eq!(
+            report.rows(),
+            fixture
+                .session
+                .selected_aligned_measured_row_footprints(
+                    &fixture.regrouped,
+                    &fixture.fresh_selections,
+                )
+                .map_err(|error| format!("separate boxes: {error:?}"))?
+                .as_slice(),
+        );
+        assert_eq!(
+            report.overlaps(),
+            fixture
+                .session
+                .selected_aligned_fixed_row_footprint_overlaps(
+                    &fixture.regrouped,
+                    &fixture.fixed,
+                    &fixture.fresh_selections,
+                    1,
+                )
+                .map_err(|error| format!("separate hits: {error:?}"))?
+                .as_slice(),
+        );
+        assert_eq!(
+            fixture.session.inspect_selected_aligned_measured_rows(
+                &fixture.regrouped,
+                &fixture.fixed,
+                &fixture.fresh_selections,
+                0,
+            ),
+            Err(application::SessionFlowFixedRegionError::Overlap(
+                FlowFixedRegionError::FixedRowFootprintLimitExceeded {
+                    limit: 0,
+                },
+            )),
+        );
+        assert_eq!(
+            fixture.session.inspect_selected_aligned_measured_rows(
+                &fixture.regrouped,
+                &fixture.fixed,
+                &fixture.old_selections,
+                0,
+            ),
+            Err(application::SessionFlowFixedRegionError::Overlap(
+                FlowFixedRegionError::RowAlignmentMismatch {
+                    index: 1,
+                    page: fixture.page,
+                    fragment_owner: fixture.changed_owner,
+                    source: fixture.changed_source,
+                },
+            )),
+        );
+        Ok(())
+    })();
+    assert!(result.is_ok(), "combined live layout: {result:?}");
+}
+
+#[test]
+fn live_selected_row_inspection_refuses_late_remeasurement() {
+    let result = (|| -> Result<(), String> {
+        let fixture = live_owner_regroup_fixture()?;
+        let mut remeasured = fixture.regrouped;
+        remeasured
+            .units
+            .get_mut(1)
+            .and_then(|unit| unit.fragments.get_mut(0))
+            .ok_or("remeasured fragment missing")?
+            .width = Length::from_micrometres(21_000);
+        let new_plan = fixture
+            .session
+            .paginate_measured_flow(&remeasured)
+            .map_err(|error| format!("remeasured flow: {error:?}"))?;
+        let last_row = new_plan
+            .placements()
+            .last()
+            .ok_or("last remeasured row missing")?;
+        assert_eq!(
+            fixture.session.inspect_selected_aligned_measured_rows(
+                &remeasured,
+                &fixture.fixed,
+                &fixture.fresh_selections,
+                0,
+            ),
+            Err(application::SessionFlowFixedRegionError::Overlap(
+                FlowFixedRegionError::RowAlignmentMismatch {
+                    index: 2,
+                    page: last_row.page,
+                    fragment_owner: last_row.owner,
+                    source: last_row.source,
+                },
+            )),
+        );
+        Ok(())
+    })();
+    assert!(result.is_ok(), "remeasured combined rows: {result:?}");
+}
+
+#[test]
 fn live_selected_alignment_refuses_late_same_revision_owner_reuse() {
     let result = (|| -> Result<(), String> {
         let fixture = live_owner_regroup_fixture()?;
