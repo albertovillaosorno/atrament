@@ -3235,6 +3235,224 @@ fn compressed_words_cannot_place_second_word_inside_previous_ink()
     Ok(())
 }
 
+// Compute per-word nominal pen contours from emitted rows, independently
+// of the flow compiler's word-wrap preflight. Intra-word letter overlap is
+// deliberately permitted; a later distinct word cannot reuse earlier ink.
+fn verify_emitted_word_clearance(
+    run: &super::TextRun,
+    stats: &atrament_handwriting_statistics::HandwritingStatisticsProfile,
+) -> Result<(), String> {
+    let mut cursor = run.origin_um.0;
+    let mut furthest = cursor;
+    let mut preceding_word = false;
+    for (index, word) in run.text.split(' ').enumerate() {
+        if index > 0 {
+            cursor = cursor
+                .checked_add(4_000)
+                .ok_or("word-clearance space overflow")?;
+        }
+        if word.is_empty() {
+            continue;
+        }
+        if preceding_word && cursor < furthest {
+            return Err(format!(
+                "emitted word reuses preceding ink at {cursor} < {furthest}: \
+                 {run:?}"
+            ));
+        }
+        let mut remaining = word;
+        while !remaining.is_empty() {
+            let (glyph, rest) = super::first_grapheme(remaining)?;
+            remaining = rest;
+            let (advance, outline) =
+                super::GlyphOverlay::flow_advance_um(glyph, Some(stats))?;
+            let slot = advance.max(
+                outline
+                    .checked_add(800)
+                    .ok_or("word-clearance contour overflow")?,
+            );
+            furthest = furthest.max(
+                cursor
+                    .checked_add(slot)
+                    .ok_or("word-clearance endpoint overflow")?,
+            );
+            cursor = cursor
+                .checked_add(advance)
+                .ok_or("word-clearance advance overflow")?;
+        }
+        preceding_word = true;
+    }
+    Ok(())
+}
+
+#[test]
+fn compressed_multiword_markdown_blocks_keep_independent_ink_clearance()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(113);
+    for (glyph, width, spacing) in [
+        ("a", 12_000, -10_000),
+        ("ó", 10_000, -7_000),
+        ("o\u{301}", 11_000, -8_500),
+        ("b", 5_000, -3_000),
+        ("1", 8_000, -6_000),
+        ("2", 8_000, -6_000),
+        (".", 8_000, -6_000),
+    ] {
+        for (dimension, mean) in [
+            (Dimension::Width, width),
+            (Dimension::LetterSpacing, spacing),
+        ] {
+            stats = stats
+                .with_glyph(
+                    glyph,
+                    DimensionStatistics {
+                        dimension,
+                        statistics: ScalarStatistics {
+                            minimum: mean,
+                            maximum: mean,
+                            mean,
+                            median: mean,
+                            standard_deviation: 0,
+                        },
+                    },
+                    &UnicodeGraphemeSegmentation,
+                )
+                .map_err(|error| format!("{error:?}"))?;
+        }
+    }
+    let samples = [
+        "a a",
+        "a ó",
+        "ó a",
+        "a o\u{301}",
+        "a ó a",
+        "ó a ó",
+        "aa a",
+        "a óó",
+        "a b a",
+        "a a a a a a",
+    ];
+    let prefixes = [
+        ("", FlowFormat::Plain),
+        ("", FlowFormat::Markdown),
+        ("- ", FlowFormat::Markdown),
+        ("> ", FlowFormat::Markdown),
+        ("12. ", FlowFormat::Markdown),
+        ("- [x] ", FlowFormat::Markdown),
+    ];
+    let mut accepted = 0usize;
+    let mut wrapped = 0usize;
+    let mut paged = 0usize;
+    let mut indented = 0usize;
+    let mut continuations = 0usize;
+    let mut refused = 0usize;
+    let expected_refusals = [
+        "flow indentation exceeds line region",
+        "glyph exceeds horizontal printable region",
+        "ordered list marker ink overlaps first item glyph",
+        "ordered list label and first glyph exceed horizontal region",
+    ];
+    for &(prefix, format) in &prefixes {
+        for sample in samples {
+            for spaces in 1..=6 {
+                let content = sample.replace(' ', &" ".repeat(spaces));
+                for continued in [false, true] {
+                    let raw = if continued {
+                        // Source-line transitions must use the same physical
+                        // boundary as two words on one authored line.
+                        let join = if prefix == "> " {
+                            "> "
+                        } else if prefix.is_empty() {
+                            ""
+                        } else {
+                            "  "
+                        };
+                        format!("{prefix}a\n{join}{content}")
+                    } else {
+                        format!("{prefix}{content}")
+                    };
+                    let source = FlowSource::new(format, &raw)?;
+                    for width in [24_000, 32_000, 44_000, 58_000, 78_000] {
+                        let region = super::FlowRegion {
+                            left: 30_000,
+                            top: 40_000,
+                            width,
+                            height: 29_000,
+                        };
+                        let (runs, _, pages) =
+                            match super::layout_flow_with_region(
+                                &source,
+                                &NotebookProfile::default(),
+                                Some(&stats),
+                                super::HeadingDecoration::default(),
+                                Some(region),
+                            ) {
+                                Ok(result) => result,
+                                Err(error)
+                                    if expected_refusals
+                                        .contains(&error.as_str()) =>
+                                {
+                                    refused += 1;
+                                    continue;
+                                },
+                                Err(error) => {
+                                    let case = format!("{raw:?}, w={width}");
+                                    return Err(format!(
+                                        "unexpected {case}: {error}"
+                                    ));
+                                },
+                            };
+                        let right =
+                            region.left + region.width - super::EXTRA_RIGHT_UM;
+                        for run in &runs {
+                            verify_emitted_word_clearance(run, &stats)
+                                .map_err(|error| {
+                                    format!(
+                                        "source {raw:?}, width {width}: {error}"
+                                    )
+                                })?;
+                            nominal_row_right_clearance(run, &stats, right)?;
+                            if run.origin_um.0 > region.left + super::INSET_UM {
+                                indented += 1;
+                            }
+                        }
+                        accepted += 1;
+                        if continued {
+                            continuations += 1;
+                        }
+                        if runs.len() > 1 {
+                            wrapped += 1;
+                        }
+                        if pages > 1 {
+                            paged += 1;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    assert_eq!(accepted + refused, 3_600);
+    assert!(
+        accepted > 1_000
+            && refused > 100
+            && wrapped > 400
+            && paged > 100
+            && indented > 200
+            && continuations > 500,
+        "insufficient compressed coverage: {accepted} accepted, \
+         {refused} refused, {wrapped} wrapped, {paged} paged, \
+         {indented} indented, {continuations} continuations"
+    );
+    Ok(())
+}
+
 #[test]
 fn measured_pitch_matches_emitted_ink_for_mixed_sources()
 -> Result<(), String> {

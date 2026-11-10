@@ -4096,3 +4096,23 @@ separately placed authored glyph strokes, and proves that later missing ink
 cannot replace a previously accepted export. This is still bounded,
 transient CLI composition—not persisted notebook semantics or localhost text
 export.
+
+## Compressed cross-block nominal word-clearance matrix — 2026-11-10
+
+A further root Rust regression independently traverses every emitted row's
+nominal glyph advances and contour edges, checking that a new authored word
+never begins inside earlier word ink. It exercises 3,600 deterministic
+same-line and adjacent-source-line candidates across plain text, Markdown
+paragraphs, unordered and numbered lists, task items and quotes. Six exact
+ASCII separator widths, five narrow physical regions, NFC/NFD accented
+shapes and negative letter spacing stress wrapping and page turns.
+
+Both accepted and explicitly refused cases must meet minimum coverage; unknown
+refusals fail rather than silently counting as skips. Each accepted glyph
+contour must also fit the selected horizontal region.
+
+Native PDF/PNG flow shards 40 through 49 were independently replayed in
+bounded runs after the prior session's incomplete receipt: all 30 selected
+integration cases passed with complete TAP counts. This is verification of
+the existing transient Rust CLI export contract, not a persistent Markdown
+notebook model or browser-to-PDF rendering implementation.
