@@ -1346,27 +1346,11 @@ pub fn fixed_row_footprint_overlaps_for_flow(
     positions: &[RowHorizontalPosition],
     max_overlaps: usize,
 ) -> Result<Vec<FixedRowFootprintOverlap>, FlowFixedRegionError> {
-    let mut overlaps = Vec::new();
-    let mut exceeded = false;
-    visit_fixed_row_footprint_overlaps_for_flow(
-        plan,
-        fixed_regions,
-        positions,
-        |overlap| {
-            if overlaps.len() == max_overlaps {
-                exceeded = true;
-                return false;
-            }
-            overlaps.push(overlap);
-            true
-        },
-    )?;
-    if exceeded {
-        return Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
-            limit: max_overlaps,
-        });
-    }
-    Ok(overlaps)
+    validate_fixed_region_batch_for_flow(plan, fixed_regions)?;
+    let rows = positioned_row_footprints_for_flow(plan, positions)?;
+    collect_admitted_fixed_row_footprint_overlaps(
+        plan.revision(), plan.flow(), fixed_regions, &rows, max_overlaps,
+    )
 }
 
 // Full fixed-region admission and exact source/geometry-bound positions precede

@@ -3754,6 +3754,10 @@ then compares only candidate boxes, preserving fixed-input/source-row order,
 positive-area intersection rules, and typed limit refusals. Position
 validation no longer builds an unused source-to-left-coordinate map.
 
+Both capped physical-hit entrypoints now reuse the same admitted collector
+and refuse on the same first over-cap hit. The standalone first-hit visitor
+still permits early stop only after validating every input proposal.
+
 The 420-row/165-fixed-proposal regression now checks the complete selected
 intersection sequence against an independent direct 2D rectangle oracle,
 including variable row heights, rows continuing onto a later page, empty
