@@ -3075,3 +3075,17 @@ Visible bases with selectors, joined emoji, Arabic prefix plus a digit and
 blank Braille with a visible acute remain independently authorable. This
 is a bounded integrity check, not Unicode-wide visibility classification,
 complete glyph geometry or automatic notebook writing.
+
+## Native TSV loads no longer retain valid prefixes on refusal — 2026-11-10
+
+The native glyph-library reader previously appended admitted strokes directly
+to its reusable draft while parsing. A later invalid line could fail the load
+without clearing its earlier valid ink. The parser now stages the entire
+bounded TSV and publishes its exact strokes only after full-file admission.
+
+Focused Rust tests reject header-only files (already refused by the browser),
+malformed structure, a hidden Unicode key, an invalid pen width and the 4097th
+stroke after valid prefixes. Each refusal leaves no strokes or loaded-file flag
+and permits a subsequent exact NFC/TSV retry. This closes a typed in-memory
+integrity gap; the CLI already exited on failed imports, and it does not add
+new outline coverage.

@@ -834,8 +834,11 @@ impl GlyphOverlay {
         if lines.next() != Some(GLYPH_LIBRARY_HEADER) {
             return Err("unsupported glyph library header".into());
         }
+        // Parse into a detached draft: a bad later TSV line must not leave
+        // valid prefix ink behind in a reusable typed caller's overlay.
+        let mut staged = Self::default();
         for (index, line) in lines.enumerate() {
-            if self.strokes.len() == MAX_STROKES {
+            if staged.strokes.len() == MAX_STROKES {
                 return Err("glyph library exceeds 4096 strokes".into());
             }
             let fields: Vec<String> = line.split('\t')
@@ -846,12 +849,18 @@ impl GlyphOverlay {
                     index.saturating_add(2),
                 ));
             }
-            self.parse("--glyph-stroke", &mut fields.iter())
+            staged.parse("--glyph-stroke", &mut fields.iter())
                 .map_err(|error| format!(
                     "glyph library line {}: {error}",
                     index.saturating_add(2),
                 ))?;
         }
+        if staged.strokes.is_empty() {
+            return Err(
+                "glyph library needs at least one authored stroke".into()
+            );
+        }
+        self.strokes = staged.strokes;
         self.loaded_file = true;
         Ok(())
     }

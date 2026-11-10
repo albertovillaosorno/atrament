@@ -2203,6 +2203,7 @@ fn malformed_or_unbounded_glyph_library_refuses_without_pdf_replacement() {
     fs::write(&target, b"previous approved PDF").expect("sentinel");
     for invalid in [
         b"unsupported.version\n".to_vec(),
+        b"atrament.glyph-strokes.v1\n".to_vec(),
         b"atrament.glyph-strokes.v1\r\n".to_vec(),
         b"atrament.glyph-strokes.v1\n\xff".to_vec(),
         [b"atrament.glyph-strokes.v1\n".as_slice(),
@@ -3589,6 +3590,61 @@ fn path_inspection_can_report_the_full_bounded_library() {
     assert!(report.contains("Strokes: 4096\nPaths: 4096"));
     assert!(report.contains("Pen lifts: 4095"));
     assert!(report.contains("Path 4096: strokes 4096..4096"));
+}
+
+#[test]
+fn failed_glyph_tsv_load_does_not_retain_valid_prefix_ink()
+-> Result<(), String> {
+    let header = "atrament.glyph-strokes.v1\n";
+    let valid = "ñ\t100\t200\t600\t900\t250\t#112233\n";
+    let accepted = format!("{header}{valid}");
+    let mut empty = GlyphOverlay::default();
+    let error = empty.load_file_bytes(header.as_bytes())
+        .expect_err("header-only TSV has no authored shapes");
+    if !error.contains("at least one authored stroke")
+        || empty.has_any() || empty.loaded_file {
+        return Err(format!("header-only TSV changed draft: {error}"));
+    }
+    empty.load_file_bytes(accepted.as_bytes())?;
+    if empty.encode_file()? != accepted.as_bytes() {
+        return Err("header-only TSV refusal changed later exact ink".into());
+    }
+    let malformed = [
+        format!("{accepted}no tab separators\n"),
+        format!("{accepted}\u{200d}\t100\t200\t600\t900\t250\t#112233\n"),
+        format!("{accepted}a\t100\t200\t600\t900\t0\t#112233\n"),
+    ];
+    for source in &malformed {
+        let mut overlay = GlyphOverlay::default();
+        let error = overlay.load_file_bytes(source.as_bytes())
+            .expect_err("late invalid TSV row must refuse the entire file");
+        if !error.contains("glyph library line 3") {
+            return Err(format!("wrong late-line diagnostic: {error}"));
+        }
+        if overlay.has_any() || overlay.loaded_file {
+            return Err("failed TSV retained prefix ink or file flag".into());
+        }
+        overlay.load_file_bytes(accepted.as_bytes())?;
+        if overlay.encode_file()? != accepted.as_bytes()
+            || !overlay.loaded_file || overlay.strokes.len() != 1 {
+            return Err("retry after refusal changed exact ink".into());
+        }
+    }
+
+    // Also refuse the 4097th row without retaining the 4096 valid prefix.
+    let overflowing = format!("{header}{}", valid.repeat(4097));
+    let mut overlay = GlyphOverlay::default();
+    let error = overlay.load_file_bytes(overflowing.as_bytes())
+        .expect_err("oversized stroke count must refuse atomically");
+    if !error.contains("4096 strokes")
+        || overlay.has_any() || overlay.loaded_file {
+        return Err(format!("overfull TSV retained partial glyph ink: {error}"));
+    }
+    overlay.load_file_bytes(accepted.as_bytes())?;
+    if overlay.encode_file()? != accepted.as_bytes() {
+        return Err("overfull TSV refusal changed later exact ink".into());
+    }
+    Ok(())
 }
 
 #[test]
