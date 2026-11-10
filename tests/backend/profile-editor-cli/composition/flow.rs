@@ -2758,6 +2758,167 @@ fn compressed_multidigit_labels_admit_only_clear_first_item_ink()
 }
 
 #[test]
+fn mixed_digit_label_contours_follow_independent_physical_clearance()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    // Unlike repeated '1' labels, mixed digits have different physical
+    // contours and advances. The oracle below uses only these independently
+    // authored measurements, not the compiler's ordered-label helper.
+    const GLYPHS: &[(char, i32, i32)] = &[
+        ('0', 9_000, -7_000),
+        ('1', 4_000, 1_000),
+        ('2', 12_000, -9_000),
+        ('3', 6_000, 0),
+        ('4', 10_000, -5_000),
+        ('5', 7_000, -2_000),
+        ('6', 13_000, -10_000),
+        ('7', 3_000, 2_000),
+        ('8', 11_000, -7_000),
+        ('9', 8_000, -3_000),
+        ('.', 9_000, -7_000),
+        (')', 12_000, -10_000),
+        ('a', 4_000, 0),
+    ];
+    let mut stats = HandwritingStatisticsProfile::baseline(64);
+    for &(glyph, width, spacing) in GLYPHS {
+        for (dimension, mean) in [
+            (Dimension::Width, width),
+            (Dimension::LetterSpacing, spacing),
+        ] {
+            stats = stats
+                .with_glyph(
+                    &glyph.to_string(),
+                    DimensionStatistics {
+                        dimension,
+                        statistics: ScalarStatistics {
+                            minimum: mean,
+                            maximum: mean,
+                            mean,
+                            median: mean,
+                            standard_deviation: 0,
+                        },
+                    },
+                    &UnicodeGraphemeSegmentation,
+                )
+                .map_err(|error| format!("{error:?}"))?;
+        }
+    }
+    let paper = NotebookProfile::default();
+    let mut seed = 0x53f6_2491_u64;
+    let mut admitted = 0usize;
+    let mut collision = 0usize;
+    let mut narrow = 0usize;
+    for sample in 0..1_800 {
+        seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        let digits = 1 + (seed as usize % 9);
+        let mut marker = String::new();
+        for _ in 0..digits {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            marker.push(char::from(b'0' + ((seed >> 32) % 10) as u8));
+        }
+        let delimiter = if sample % 2 == 0 {
+            '.'
+        } else {
+            ')'
+        };
+        marker.push(delimiter);
+        let spaces = 1 + (sample % 6);
+        let text = format!("{marker}{}a", " ".repeat(spaces));
+        let width = [24_000, 30_000, 36_000, 45_000, 60_000, 75_000, 90_000]
+            [sample % 7];
+        let cap = width - 10_000;
+        let mut cursor = 0u32;
+        let mut extent = 0u32;
+        let mut marker_too_wide = false;
+        for glyph in marker.chars() {
+            let (_, width, spacing) = GLYPHS
+                .iter()
+                .find(|(name, _, _)| *name == glyph)
+                .ok_or("oracle digit measurement missing")?;
+            let advance = u32::try_from(width + spacing)
+                .map_err(|_error| "oracle digit advance negative")?;
+            let contour = u32::try_from(width + 800)
+                .map_err(|_error| "oracle digit contour overflow")?;
+            let end = cursor
+                .checked_add(contour.max(advance))
+                .ok_or("oracle marker extent overflow")?;
+            marker_too_wide |= end > cap;
+            extent = extent.max(end);
+            cursor = cursor
+                .checked_add(advance)
+                .ok_or("oracle marker cursor overflow")?;
+        }
+        let indent = cursor + (spaces as u32) * 4_000;
+        let expected = if marker_too_wide {
+            Some("ordered list label and first glyph exceed")
+        } else if indent < extent {
+            Some("ordered list marker ink overlaps")
+        } else if indent + 4_800 > cap {
+            Some("ordered list label and first glyph exceed")
+        } else {
+            None
+        };
+        let source = FlowSource::new(FlowFormat::Markdown, &text)?;
+        let region = super::FlowRegion {
+            left: 30_000,
+            top: 40_000,
+            width,
+            height: 20_000,
+        };
+        match (
+            expected,
+            super::layout_flow_with_region(
+                &source,
+                &paper,
+                Some(&stats),
+                super::HeadingDecoration::default(),
+                Some(region),
+            ),
+        ) {
+            (None, Ok((rows, marks, pages)))
+                if rows.len() == 1
+                    && rows[0].text == text
+                    && rows[0].origin_um == (38_500, 42_500)
+                    && marks.is_empty()
+                    && pages == 1 =>
+            {
+                admitted += 1;
+            },
+            (Some(message), Err(error)) if error.contains(message) => {
+                if message.contains("overlaps") {
+                    collision += 1;
+                } else {
+                    narrow += 1;
+                }
+            },
+            (expected, actual) => {
+                return Err(format!(
+                    "mixed-digit label {sample} {text:?}, width {width}: \
+                 expected {expected:?}, received {actual:?}"
+                ));
+            },
+        }
+    }
+    if admitted < 100 || collision < 100 || narrow < 100 {
+        return Err(format!(
+            "insufficient mixed-digit clearance cases: \
+            admitted {admitted}, overlapping {collision}, narrow {narrow}"
+        ));
+    }
+    Ok(())
+}
+
+#[test]
 fn compressed_heading_decoration_covers_actual_authored_contour()
     -> Result<(), String> {
     use atrament_handwriting_statistics::{

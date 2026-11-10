@@ -4051,3 +4051,16 @@ and page-local row origin; rejected ones produce no physical layout.
 
 This expands regression coverage for the recent CLI overlap correction; it
 does not claim persisted semantic list identities or browser body export.
+
+## Mixed-width ordered-label physical oracle (partial) — 2026-11-10
+
+A native Rust CLI regression now checks 1,800 deterministic numbered-item
+labels composed of independently sized and spaced digits, both delimiters,
+one through six literal separator spaces and seven narrow physical regions.
+Its separate contour/advance oracle expects exact single-row glyph identity
+or the appropriate collision/horizontal-clearance refusal; all cases pass.
+A native PDF/PNG regression additionally compares a mixed-width `21.` label
+and its exact three source spaces against manually placed authored glyph ink.
+A one-space collision refuses without replacing either accepted export.
+
+This remains CLI-only, without persisted semantic body or browser export.
