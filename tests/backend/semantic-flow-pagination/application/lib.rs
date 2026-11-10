@@ -6859,6 +6859,32 @@ fn check_many_mixed_alignment_oracle(
             .map_err(|error| format!("boundary fixed: {error:?}"))?;
         checked_fixed.push(fixed);
     }
+    // Fixed #1 has positive area. A one-micrometre probe starting at its
+    // right edge only touches it; moving the probe one micrometre left
+    // creates an exact 1-um physical intersection with the same owner.
+    let source = checked_fixed.get(1).ok_or("fixed pair probe absent")?
+        .rectangle();
+    let right = source.x.micrometres()
+        .checked_add(source.width.micrometres())
+        .ok_or("fixed pair right overflow")?;
+    let before_right = right.checked_sub(1)
+        .ok_or("fixed pair right is zero")?;
+    for left in [right, before_right] {
+        let fixed = validate_fixed_placement(
+            accepted, AcceptedFixedPlacement {
+                object: owner,
+                page: page_one,
+                rectangle: Rect {
+                    x: Length::from_micrometres(left),
+                    y: source.y,
+                    width: Length::from_micrometres(1),
+                    height: source.height,
+                },
+                revision: plan.revision(),
+            },
+        ).map_err(|error| format!("fixed pair edge: {error:?}"))?;
+        checked_fixed.push(fixed);
+    }
     check_many_selected_snapshot_parity(
         plan,
         positions,
@@ -6968,13 +6994,14 @@ fn check_many_selected_snapshot_parity(
     {
         return Err("capped physical hits returned partial data".into());
     }
+    check_many_selected_snapshot_fixed_pairs(&report, fixed)?;
     let [_, prior, following, ..] = plan.placements() else {
         return Err("missing edge rows for partition oracle".into());
     };
     let boundary = following.top.micrometres();
     let edge_bands = bands
         .iter()
-        .filter(|band| band.fixed_index() >= 160)
+        .filter(|band| (160..163).contains(&band.fixed_index()))
         .map(|band| {
             (
                 band.fixed_index(),
@@ -7018,6 +7045,90 @@ fn check_many_selected_snapshot_parity(
             != Err(FlowFixedRegionError::FixedRowLimitExceeded { limit: 0 })
     {
         return Err("many-row snapshot returned a partial capped result".into());
+    }
+    Ok(())
+}
+
+// Fixed-pair diagnostics are intentionally independent of the conservative
+// row-band and positioned-row hits. Compare all proposals in their original
+// later-index/earlier-index order against a direct O(n²) rectangle oracle.
+fn check_many_selected_snapshot_fixed_pairs(
+    report: &atrament_semantic_flow_pagination::SelectedAlignedRowInspection,
+    fixed: &[atrament_semantic_fixed_region_layout::FixedRegionLayoutResult],
+) -> Result<(), String> {
+    let expected = fixed.iter().enumerate().flat_map(|(later, later_fixed)| {
+        fixed.iter().take(later).enumerate().filter_map(
+            move |(earlier, earlier_fixed)| {
+                if earlier_fixed.page() != later_fixed.page() {
+                    return None;
+                }
+                let earlier_rect = earlier_fixed.rectangle();
+                let later_rect = later_fixed.rectangle();
+                let left = earlier_rect.x.micrometres()
+                    .max(later_rect.x.micrometres());
+                let top = earlier_rect.y.micrometres()
+                    .max(later_rect.y.micrometres());
+                let right = earlier_rect.x.micrometres()
+                    .saturating_add(earlier_rect.width.micrometres())
+                    .min(later_rect.x.micrometres()
+                        .saturating_add(later_rect.width.micrometres()));
+                let bottom = earlier_rect.y.micrometres()
+                    .saturating_add(earlier_rect.height.micrometres())
+                    .min(later_rect.y.micrometres()
+                        .saturating_add(later_rect.height.micrometres()));
+                if right <= left || bottom <= top {
+                    return None;
+                }
+                Some((earlier, later, earlier_fixed.object(),
+                    later_fixed.object(), later_fixed.page(), Rect {
+                        x: Length::from_micrometres(left),
+                        y: Length::from_micrometres(top),
+                        width: Length::from_micrometres(
+                            right.saturating_sub(left),
+                        ),
+                        height: Length::from_micrometres(
+                            bottom.saturating_sub(top),
+                        ),
+                    }))
+            },
+        )
+    }).collect::<Vec<_>>();
+    let pairs = report.fixed_pair_overlaps(expected.len())
+        .map_err(|error| format!("indexed fixed pairs: {error:?}"))?;
+    let actual = pairs.iter().map(|pair| {
+        if pair.flow() != report.flow()
+            || pair.revision() != report.revision()
+        {
+            return Err("fixed pair changed accepted authority".to_owned());
+        }
+        Ok((pair.earlier_index(), pair.later_index(),
+            pair.earlier_object(), pair.later_object(), pair.page(),
+            pair.intersection()))
+    }).collect::<Result<Vec<_>, _>>()?;
+    // Original pair #1 and the two appended edge probes must distinguish
+    // touching from a genuine one-micrometre positive-area intersection.
+    if expected.iter().any(|pair| pair.0 == 1 && pair.1 == 163)
+        || !expected.iter().any(|pair| {
+            pair.0 == 1 && pair.1 == 164
+                && pair.5.width == Length::from_micrometres(1)
+        })
+    {
+        return Err("fixed-pair edge probes missed exact contact".into());
+    }
+    let limited = expected.len().checked_sub(1)
+        .ok_or("missing fixed/fixed overlap fixture")?;
+    if actual != expected
+        || report.first_fixed_pair_overlap()
+            .map_err(|error| format!("first indexed fixed pair: {error:?}"))?
+            != pairs.first().copied()
+        || report.fixed_pair_overlaps(limited)
+            != Err(FlowFixedRegionError::FixedPairLimitExceeded {
+                limit: limited,
+            })
+        || report.fixed_pair_overlaps(0)
+            != Err(FlowFixedRegionError::FixedPairLimitExceeded { limit: 0 })
+    {
+        return Err("fixed/fixed intersections differ from 2D oracle".into());
     }
     Ok(())
 }

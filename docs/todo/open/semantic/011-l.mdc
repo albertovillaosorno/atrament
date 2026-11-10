@@ -3754,10 +3754,22 @@ then compares only candidate boxes, preserving fixed-input/source-row order,
 positive-area intersection rules, and typed limit refusals. Position
 validation no longer builds an unused source-to-left-coordinate map.
 
-The 420-row/163-fixed-proposal regression now checks the complete selected
+The 420-row/165-fixed-proposal regression now checks the complete selected
 intersection sequence against an independent direct 2D rectangle oracle,
 including variable row heights, rows continuing onto a later page, empty
 widths, exact vertical boundary probes, first-hit identity, and capped-result
-refusal. This is
-read-only provisional box geometry, not actual ink, overlap permission,
-complete mixed-flow page ownership or native Export authority.
+refusal. This is read-only provisional box geometry, not actual ink,
+overlap permission, complete mixed-flow page ownership or native Export
+authority.
+
+## Checked fixed-pair stress oracle inside the selected report — 2026-11-09
+
+The same read-only selected-row report now has independent regression
+coverage for all checked fixed/fixed intersections across 165 proposals.
+The direct rectangle oracle checks later-index/earlier-index ordering,
+source object/page/flow/revision authority, exact intersection dimensions,
+zero-area omissions, and both first-only and capped diagnostics. Two added
+one-micrometre probes distinguish merely touching a fixed rectangle's right
+edge from a positive-area crossing. The conservative row-band refusal still
+does not decide whether intentional fixed-layering or actual glyph ink is
+allowed; the overall semantic notebook compiler remains incomplete.
