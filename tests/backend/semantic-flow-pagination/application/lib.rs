@@ -4518,6 +4518,78 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
         fixed_pair_overlaps_for_flow(&plan, &sparse, 2),
         Err(FlowFixedRegionError::FixedPairLimitExceeded { limit: 2 })
     );
+    // Page-wide bounds must also reject batches disjoint solely by X,
+    // even when every rectangle occupies the *same* vertical band. Reverse
+    // input order and descending Y check that the index never assumes sorted
+    // proposals or treats exact shared edges as positive intersections.
+    for order in 0..3 {
+        let position = |index: usize| -> (u64, u64) {
+            let index = u64::try_from(index).expect("bounded fixture index");
+            match order {
+                0 => (40_000 + index * 45, 70_000),
+                1 => (40_000 + (2_047 - index) * 45, 70_000),
+                _ => (40_000, 70_000 + (2_047 - index) * 45),
+            }
+        };
+        let mut separate = (0..2_048)
+            .map(|index| {
+                let (x, y) = position(index);
+                checked(
+                    page_two, objects[index % objects.len()], x, y, 5, 2,
+                )
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(
+            fixed_pair_overlaps_for_flow(&plan, &separate, 0),
+            Ok(vec![]), "disjoint order {order}",
+        );
+        let (x, y) = position(200);
+        separate[200] = checked(page_two, objects[0], x, y, 5, 4)?;
+        separate[900] = checked(page_two, objects[1], x, y + 1, 5, 2)?;
+        separate[901] = checked(page_two, objects[2], x, y + 4, 5, 2)?;
+        separate.push(checked(page_two, objects[2], x, y + 1, 5, 2)?);
+        let hits = fixed_pair_overlaps_for_flow(&plan, &separate, 3)
+            .map_err(|error| format!("sparse order {order}: {error:?}"))?;
+        assert_eq!(
+            hits.iter().map(|pair| (
+                pair.earlier_index(), pair.later_index(),
+                pair.intersection(),
+            )).collect::<Vec<_>>(),
+            vec![
+                (200, 900, Rect {
+                    x: Length::from_micrometres(x),
+                    y: Length::from_micrometres(y + 1),
+                    width: Length::from_micrometres(5),
+                    height: Length::from_micrometres(2),
+                }),
+                (200, 2_048, Rect {
+                    x: Length::from_micrometres(x),
+                    y: Length::from_micrometres(y + 1),
+                    width: Length::from_micrometres(5),
+                    height: Length::from_micrometres(2),
+                }),
+                (900, 2_048, Rect {
+                    x: Length::from_micrometres(x),
+                    y: Length::from_micrometres(y + 1),
+                    width: Length::from_micrometres(5),
+                    height: Length::from_micrometres(2),
+                }),
+            ], "sparse order {order}",
+        );
+        assert!(hits.iter().all(|hit| {
+            hit.page() == page_two && hit.revision() == revision
+                && hit.flow() == flow
+        }));
+        assert_eq!(
+            first_fixed_pair_overlap_for_flow(&plan, &separate),
+            Ok(hits.first().copied()), "first order {order}",
+        );
+        assert_eq!(
+            fixed_pair_overlaps_for_flow(&plan, &separate, 2),
+            Err(FlowFixedRegionError::FixedPairLimitExceeded { limit: 2 }),
+            "bounded order {order}",
+        );
+    }
     if overlap_cases < 100 || clear_cases < 100 {
         return Err(format!(
             "pair coverage: yes={overlap_cases}, no={clear_cases}"

@@ -3813,3 +3813,20 @@ first/complete pair ordering, revision/page/flow provenance and an atomic
 insufficient-cap refusal. This reduces unnecessary prior-box comparisons for
 sparse layouts; it does not decide fixed-layering policy or compile saved
 semantic handwriting into native notebook PDF/PNG. ATR-P2-011 stays open.
+
+## Page-envelope broad-phase fixed-pair pruning (partial) — 2026-11-09
+
+The prior fixed-pair vertical index now also tracks each page's exact
+nonempty-rectangle envelope. A new proposal wholly outside that envelope
+skips all prior candidate inspection, including physically horizontal-only
+sparse sheets and reverse-ordered vertical proposals that could not be
+pruned by exclusive-bottom indexing alone. Every nonempty proposal still
+updates the page envelope before subsequent comparisons; original fixed
+input indices and typed capped-result order are unchanged.
+
+Three 2,049-proposal sparse cases cover increasing/decreasing X and
+reverse-ordered Y, with a late positive pair, exact boundary touch,
+original pair ordering and atomic cap refusal. The existing independent
+1,024-case multi-page physical intersection oracle continues to validate
+exact results. This is an inspection-only broad-phase optimization, not a
+fixed-layering policy or the missing saved-semantic handwriting export.

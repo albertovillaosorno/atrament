@@ -904,6 +904,15 @@ struct IndexedFixedRectangle {
     top_um: u64,
 }
 
+// The page-wide envelope cheaply refuses proposals outside *every* prior
+// rectangle, including horizontally or reverse-vertically sparse batches.
+// Bounds are (minimum left, minimum top, maximum right, maximum bottom).
+#[derive(Default)]
+struct IndexedFixedPage {
+    by_bottom: BTreeMap<u64, Vec<IndexedFixedRectangle>>,
+    envelope: Option<(u64, u64, u64, u64)>,
+}
+
 #[derive(Clone, Copy, Debug)]
 struct FlowScope<'revision> {
     blocks: &'revision [Block<AcceptedIdentity>],
@@ -1865,10 +1874,8 @@ fn visit_admitted_fixed_pair_overlaps(
     // Prior boxes are indexed by their exclusive bottom. A later rectangle
     // cannot intersect anything ending at or before its top. Only candidates
     // with overlapping vertical extent need horizontal intersection tests.
-    let mut prior_by_page = BTreeMap::<
-        AcceptedIdentity,
-        BTreeMap<u64, Vec<IndexedFixedRectangle>>,
-    >::new();
+    let mut prior_by_page =
+        BTreeMap::<AcceptedIdentity, IndexedFixedPage>::new();
     for (later_index, fixed) in fixed_regions.iter().enumerate() {
         let rect = fixed.rectangle();
         let width = rect.width.micrometres();
@@ -1891,52 +1898,63 @@ fn visit_admitted_fixed_pair_overlaps(
             }
         })?;
         let prior = prior_by_page.entry(fixed.page()).or_default();
-        let mut candidates = prior
-            .range((Excluded(top), Unbounded))
-            .flat_map(|(_, boxes)| boxes)
-            .filter(|earlier| {
-                earlier.top_um < bottom
-                    && earlier.left_um < right
-                    && left < earlier.right_um
-            })
-            .collect::<Vec<_>>();
-        // Bottom-key traversal is not proposal order. Restore original
-        // earlier-index priority for both first-only and capped reports.
-        candidates.sort_unstable_by_key(|earlier| earlier.index);
-        for earlier in candidates {
-            let shared_left = left.max(earlier.left_um);
-            let shared_top = top.max(earlier.top_um);
-            let overflow = || FlowFixedRegionError::CoordinateOverflow {
-                page: fixed.page(),
-                object: fixed.object(),
-            };
-            let shared_width = right
-                .min(earlier.right_um)
-                .checked_sub(shared_left)
-                .ok_or_else(overflow)?;
-            let shared_height = bottom
-                .min(earlier.bottom_um)
-                .checked_sub(shared_top)
-                .ok_or_else(overflow)?;
-            if !visit(FixedPairOverlap {
-                earlier_index: earlier.index,
-                earlier_object: earlier.object,
-                flow,
-                intersection: Rect {
-                    x: Length::from_micrometres(shared_left),
-                    y: Length::from_micrometres(shared_top),
-                    width: Length::from_micrometres(shared_width),
-                    height: Length::from_micrometres(shared_height),
-                },
-                later_index,
-                later_object: fixed.object(),
-                page: fixed.page(),
-                revision,
-            }) {
-                return Ok(());
+        // A disjoint page-wide envelope is sufficient to skip every prior
+        // candidate, even when the bottom-key index cannot prune them (e.g.
+        // many boxes in the same band, separated only horizontally).
+        let may_intersect = prior.envelope.is_some_and(
+            |(min_left, min_top, max_right, max_bottom)| {
+                left < max_right && min_left < right
+                    && top < max_bottom && min_top < bottom
+            },
+        );
+        if may_intersect {
+            let mut candidates = prior.by_bottom
+                .range((Excluded(top), Unbounded))
+                .flat_map(|(_, boxes)| boxes)
+                .filter(|earlier| {
+                    earlier.top_um < bottom
+                        && earlier.left_um < right
+                        && left < earlier.right_um
+                })
+                .collect::<Vec<_>>();
+            // Bottom-key traversal is not proposal order. Restore original
+            // earlier-index priority for both first-only and capped reports.
+            candidates.sort_unstable_by_key(|earlier| earlier.index);
+            for earlier in candidates {
+                let shared_left = left.max(earlier.left_um);
+                let shared_top = top.max(earlier.top_um);
+                let overflow = || FlowFixedRegionError::CoordinateOverflow {
+                    page: fixed.page(),
+                    object: fixed.object(),
+                };
+                let shared_width = right
+                    .min(earlier.right_um)
+                    .checked_sub(shared_left)
+                    .ok_or_else(overflow)?;
+                let shared_height = bottom
+                    .min(earlier.bottom_um)
+                    .checked_sub(shared_top)
+                    .ok_or_else(overflow)?;
+                if !visit(FixedPairOverlap {
+                    earlier_index: earlier.index,
+                    earlier_object: earlier.object,
+                    flow,
+                    intersection: Rect {
+                        x: Length::from_micrometres(shared_left),
+                        y: Length::from_micrometres(shared_top),
+                        width: Length::from_micrometres(shared_width),
+                        height: Length::from_micrometres(shared_height),
+                    },
+                    later_index,
+                    later_object: fixed.object(),
+                    page: fixed.page(),
+                    revision,
+                }) {
+                    return Ok(());
+                }
             }
         }
-        prior
+        prior.by_bottom
             .entry(bottom)
             .or_default()
             .push(IndexedFixedRectangle {
@@ -1947,6 +1965,13 @@ fn visit_admitted_fixed_pair_overlaps(
                 right_um: right,
                 top_um: top,
             });
+        prior.envelope = Some(match prior.envelope {
+            Some((min_left, min_top, max_right, max_bottom)) => (
+                min_left.min(left), min_top.min(top),
+                max_right.max(right), max_bottom.max(bottom),
+            ),
+            None => (left, top, right, bottom),
+        });
     }
     Ok(())
 }
