@@ -148,14 +148,17 @@ fn refuses_singular_or_periodic_shears_even_on_the_lower_baseline() {
         }),
         ..placement()
     };
-    for angle in [-90_000, 90_000, -180_000, 180_000, i32::MIN, i32::MAX] {
+    for angle in [
+        -90_000i32, 90_000i32, -180_000i32, 180_000i32,
+        i32::MIN, i32::MAX,
+    ] {
         assert_eq!(
             project_ink_segment(baseline, placement_for(angle)),
             Err("glyph slant must be between -90 and 90 degrees"),
             "singular/periodic slant {angle} must refuse",
         );
     }
-    for angle in [-85_000, 0, 85_000] {
+    for angle in [-85_000i32, 0i32, 85_000i32] {
         let projected = project_ink_segment(baseline, placement_for(angle))
             .expect("normal slants retain exact lower baseline geometry");
         assert_eq!(projected.start_um, (10_200, 24_500));
