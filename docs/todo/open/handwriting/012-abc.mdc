@@ -3003,3 +3003,15 @@ Focused native and browser tests cover command input, TSV import/export
 and preservation of a previously selected PDF on refusal. This is a
 bounded identity-validation correction, not automatic multilingual glyph
 synthesis or evidence that the full P1 task is complete.
+
+## Standalone interlinear annotation control refusal — 2026-11-10
+
+The authored glyph key validator now rejects U+FFF9, U+FFFA and U+FFFB
+(interlinear annotation anchor, separator and terminator). These zero-width
+text-layout controls previously accepted standalone pen strokes in both the
+browser and native Rust command/TSV paths. Existing visible combining and
+emoji sequences retain their exact authored Unicode identities.
+
+Focused browser and native regressions exercise direct authoring, TSV
+import/export and refusal without replacing an existing PDF or edited glyph.
+This remains bounded glyph-integrity work, not automatic multilingual shaping.

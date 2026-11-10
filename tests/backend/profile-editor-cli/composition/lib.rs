@@ -2459,6 +2459,7 @@ fn standalone_format_and_variation_scalars_cannot_name_physical_ink() {
         "\u{e0100}", "\u{e01ef}", "\u{115f}", "\u{1160}",
         "\u{17b4}", "\u{17b5}", "\u{180b}", "\u{180f}",
         "\u{3164}", "\u{ffa0}", "\u{fff0}", "\u{fff8}",
+        "\u{fff9}", "\u{fffa}", "\u{fffb}",
         "\u{1bca0}", "\u{1bca3}", "\u{1d173}", "\u{1d17a}",
         "\u{e0001}", "\u{e0067}", "\u{e007f}",
     ] {

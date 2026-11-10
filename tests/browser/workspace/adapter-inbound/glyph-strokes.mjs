@@ -84,7 +84,8 @@ test("standalone format and variation controls cannot become ink", () => {
         "\uFE00", "\uFE0E", "\uFE0F", "\uFEFF",
         "\u{E0100}", "\u{E01EF}", "\u115F", "\u1160",
         "\u17B4", "\u17B5", "\u180B", "\u180F", "\u3164",
-        "\uFFA0", "\uFFF0", "\uFFF8", "\u{1BCA0}",
+        "\uFFA0", "\uFFF0", "\uFFF8", "\uFFF9",
+        "\uFFFA", "\uFFFB", "\u{1BCA0}",
         "\u{1BCA3}", "\u{1D173}", "\u{1D17A}",
         "\u{E0001}", "\u{E0067}", "\u{E007F}"];
     for (const glyph of invisible) {
@@ -767,7 +768,8 @@ test("zero-width glyph refusal preserves browser-authored draft", async () => {
         get("save").dispatch("click");
         const accepted = await downloads[0].text();
         for (const hidden of ["\u200B", "\u200C", "\u200D",
-            "\u2060", "\uFE0E", "\uFE0F", "\uFEFF"]) {
+            "\u2060", "\uFE0E", "\uFE0F", "\uFEFF",
+            "\uFFF9", "\uFFFA", "\uFFFB"]) {
             get("character").value = hidden;
             get("character").dispatch("input");
             get("add").dispatch("click");

@@ -1810,7 +1810,7 @@ fn is_standalone_invisible_scalar(grapheme: &str) -> bool {
                 | '\u{180b}'..='\u{180f}' | '\u{200b}'..='\u{200f}'
                 | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{206f}'
                 | '\u{3164}' | '\u{fe00}'..='\u{fe0f}' | '\u{feff}'
-                | '\u{ffa0}' | '\u{fff0}'..='\u{fff8}'
+                | '\u{ffa0}' | '\u{fff0}'..='\u{fffb}'
                 | '\u{110bd}' | '\u{110cd}'
                 | '\u{13430}'..='\u{1343f}'
                 | '\u{1bca0}'..='\u{1bca3}'
