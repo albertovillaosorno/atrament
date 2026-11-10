@@ -3559,6 +3559,11 @@ export function geometricStarter(
             x2: part.to.x, y2: part.to.y, width: pen, color,
         }));
     }
+    // Every remaining key must explicitly select the loop primitive. A
+    // future inventory addition cannot silently acquire the o-shaped ink.
+    if (!["o", "ó", "a", "á", "b", "d", "p", "q", "g"].includes(g)) {
+        throw new Error(`No geometric loop starter for ${g}`);
+    }
     const point = (step: number): Point => {
         const radians = 2 * Math.PI * step / CIRCLE_SEGMENTS;
         return {

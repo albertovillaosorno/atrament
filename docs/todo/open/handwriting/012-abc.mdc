@@ -2891,3 +2891,25 @@ The 250-case browser glyph-editor suite and TypeScript build pass. The full
 frontend suite was interrupted during supervised execution and cannot be
 claimed as validated for this increment. This is a fail-closed shape-admission
 improvement, not complete handwritten Unicode coverage or a saved notebook.
+
+## Explicit final-loop admission and complete starter alias audit — 2026-11-10
+
+The browser geometric starter now permits the shared circle primitive only
+for the nine explicitly authored loop-family keys: `o`, `ó`, `a`, `á`, `b`,
+`d`, `p`, `q`, and `g`. A future selectable glyph without its own handler
+refuses rather than silently displaying circular `o` ink. The unchanged
+existing glyphs still export directed integer-micrometre TSV segments.
+
+A 296-key native-compatible browser regression covers lowercase, capitals,
+digits, the present math and notation inventory, punctuation, currency and
+composed bilingual accents. Every selected key produces ink. Only four
+intentional pairs share sampled geometry: `c/C`, `o/O`, `s/S`, and `-/−`;
+the exact grapheme labels still differ in TSV. The 251 focused browser
+glyph-editor tests, frontend TypeScript build/check, offline all-feature Rust
+workspace and pinned production Rust Clippy pass. Jig doctor passes; Jig
+check retains 181 existing repository findings, with no added long lines
+in owned paths. The full-browser run was stopped after overlapping jobs;
+a separately rerun Firefox session-storage test still timed out at
+`script.evaluate`, so broad frontend validation remains red/unconfirmed.
+This does not add automatic cursive joining, font-wide glyph synthesis,
+or persisted semantic notebook state.

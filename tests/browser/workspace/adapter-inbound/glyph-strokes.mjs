@@ -3375,6 +3375,37 @@ test("selected marks never borrow unrelated fallback geometry", () => {
     }
 });
 
+test("all selected geometric starters avoid unintended glyph aliases", () => {
+    const glyphs = [...new Set([
+        ..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+        ..."áéíóúñüÁÉÍÓÚÑÜ",
+        ".", ",", "!", "¡", "?", "¿", "«", "»", "‘", "’", "“", "”",
+        "°", "%", "$", "€", ";", ":", "\"", "'", "…", "–", "—",
+        "(", ")", "[", "]", "/", "\\", "{", "}",
+        ...SELECTABLE_MATH_GLYPHS,
+    ])];
+    const geometries = new Map();
+    const geometry = (glyph) => geometricStarter(glyph, 1750, 2250,
+        900, 100, "#243647").map(({ x1, y1, x2, y2 }) =>
+        [x1, y1, x2, y2]);
+    assert.equal(glyphs.length, 296, "inventory changes require audit");
+    for (const glyph of glyphs) {
+        const shape = geometry(glyph);
+        assert.ok(shape.length > 0, `missing authored ${glyph} ink`);
+        const signature = JSON.stringify(shape);
+        geometries.set(signature, [...(geometries.get(signature) ?? []),
+            glyph]);
+    }
+    const shared = [...geometries.values()].filter((keys) =>
+        keys.length > 1).map((keys) => keys.sort()).sort((a, b) =>
+        a[0].localeCompare(b[0]));
+    assert.deepEqual(shared, [
+        ["-", "−"], ["C", "c"], ["O", "o"], ["S", "s"],
+    ].map((keys) => keys.sort()).sort((a, b) =>
+        a[0].localeCompare(b[0])),
+    "only deliberate case/ASCII-minus pairs share physical pen geometry");
+});
+
 test("eight basic math operators have exact bounded pen geometry", () => {
     const expected = {
         "+": [[780, 2450, 2320, 2450], [1550, 1680, 1550, 3220]],
