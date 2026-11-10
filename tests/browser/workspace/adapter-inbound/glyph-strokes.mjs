@@ -76,7 +76,8 @@ test("Unicode row separators cannot become authored browser TSV ink", () => {
 
 test("standalone format, Braille and Egyptian blanks cannot be ink", () => {
     const invisible = ["\u00AD", "\u034F", "\u061C", "\u180E",
-        "\u0600", "\u0605", "\u070F", "\u08E2",
+        "\u0600", "\u0605", "\u06DD", "\u070F",
+        "\u0890", "\u0891", "\u08E2",
         "\u{110BD}", "\u{110CD}", "\u{13430}", "\u{1343F}",
         "\u{13440}", "\u{13441}", "\u{13442}",
         "\u{13447}", "\u{13455}",
@@ -101,7 +102,8 @@ test("standalone format, Braille and Egyptian blanks cannot be ink", () => {
             "native must refuse the same unrenderable exact key");
     }
     for (const visible of ["👩\u200D💻", "❤\uFE0F", "a\u034F",
-        "\u0600\u0661",
+        "\u0600\u0661", "\u06DD\u0661",
+        "\u0890\u0661", "\u0891\u0661",
         "a\u{E0100}", "⠁", "\u2800\u0301",
         "\u{13000}\u{13440}", "\u{13000}\u{13447}",
         "\u{13443}", "🏴\u{E0067}\u{E0062}\u{E0065}"

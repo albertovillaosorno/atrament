@@ -3035,3 +3035,15 @@ Focused native and browser tests cover direct authoring, TSV import/export,
 visible keys, and preservation of an already selected PDF after refusal.
 This narrows a glyph-key admission gap, not generalized handwriting,
 Braille transcription or full P1 glyph coverage.
+
+## Standalone Arabic prefix controls cannot become ink — 2026-11-10
+
+An exact glyph-key TSV previously allowed three standalone Unicode format
+scalars: U+06DD ARABIC END OF AYAH and U+0890/U+0891 Arabic currency
+marks above. They modify following text rather than independently naming
+physical pen strokes. Browser and Rust now refuse these standalone keys
+on authoring, TSV import and PDF export, preserving the prior PDF on
+refusal.
+
+Complete prefix-plus-digit graphemes retain exact authoring. This is bounded
+invisible-key validation, not Arabic script shaping.

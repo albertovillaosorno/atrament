@@ -2449,7 +2449,8 @@ fn standalone_format_braille_and_egyptian_blanks_cannot_name_ink() {
         .expect("write test-owned PDF sentinel");
     for invisible in [
         "\u{00ad}", "\u{034f}", "\u{061c}", "\u{180e}",
-        "\u{0600}", "\u{0605}", "\u{070f}", "\u{08e2}",
+        "\u{0600}", "\u{0605}", "\u{06dd}",
+        "\u{070f}", "\u{0890}", "\u{0891}", "\u{08e2}",
         "\u{110bd}", "\u{110cd}", "\u{13430}", "\u{1343f}",
         "\u{13440}", "\u{13441}", "\u{13442}",
         "\u{13447}", "\u{13455}",
@@ -2498,7 +2499,8 @@ fn standalone_format_braille_and_egyptian_blanks_cannot_name_ink() {
             bytes.as_bytes());
     }
     for visible in ["👩\u{200d}💻", "❤\u{fe0f}",
-        "\u{0600}\u{0661}",
+        "\u{0600}\u{0661}", "\u{06dd}\u{0661}",
+        "\u{0890}\u{0661}", "\u{0891}\u{0661}",
         "a\u{034f}", "a\u{e0100}", "⠁", "\u{2800}\u{301}",
         "\u{13000}\u{13440}", "\u{13000}\u{13447}",
         "\u{13443}",
