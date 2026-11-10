@@ -2587,16 +2587,71 @@ fn ordered_marker_contours_are_preflighted_before_hanging_indent()
         assert!(error.contains("ordered list label and first glyph exceed"),
             "refuse the whole label before partial {glyph:?} rows: {error}");
 
-        let wider = super::FlowRegion { width: 27_000, ..region };
+        // An explicit wider rectangle and extra authored spaces both
+        // admit the pen contour and keep the item clear of its label.
+        let wider = super::FlowRegion { width: 35_000, ..region };
+        let spaced = FlowSource::new(FlowFormat::Markdown, "1.   a")?;
         let (rows, ornaments, pages) = super::layout_flow_with_region(
-            &source, &NotebookProfile::default(), Some(&stats),
+            &spaced, &NotebookProfile::default(), Some(&stats),
             super::HeadingDecoration::default(), Some(wider),
         )?;
         assert_eq!(pages, 1);
         assert!(ornaments.is_empty());
         assert_eq!(rows.len(), 1);
-        assert_eq!(rows[0].text, "1. a");
+        assert_eq!(rows[0].text, "1.   a");
     }
+    Ok(())
+}
+
+#[test]
+fn compressed_ordered_marker_requires_clearance_before_first_item()
+    -> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(62);
+    for glyph in ["1", "."] {
+        for (dimension, mean) in [
+            (Dimension::Width, 12_000),
+            (Dimension::LetterSpacing, -10_000),
+        ] {
+            stats = stats.with_glyph(glyph, DimensionStatistics {
+                dimension,
+                statistics: ScalarStatistics {
+                    minimum: mean, maximum: mean, mean, median: mean,
+                    standard_deviation: 0,
+                },
+            }, &UnicodeGraphemeSegmentation)
+                .map_err(|error| format!("{error:?}"))?;
+        }
+    }
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 35_000, height: 20_000,
+    };
+    let paper = NotebookProfile::default();
+    let too_close = FlowSource::new(FlowFormat::Markdown, "1. a")?;
+    let error = super::layout_flow_with_region(
+        &too_close, &paper, Some(&stats),
+        super::HeadingDecoration::default(), Some(region),
+    ).expect_err("compressed marker contours overlap the first item");
+    assert!(error.contains("ordered list marker ink overlaps"),
+        "unexpected refusal: {error}");
+
+    // Four deliberately authored spaces move the first glyph beyond
+    // the widest compressed marker contour without altering its text.
+    let separated = FlowSource::new(FlowFormat::Markdown, "1.    a")?;
+    let (rows, ornaments, pages) = super::layout_flow_with_region(
+        &separated, &paper, Some(&stats),
+        super::HeadingDecoration::default(), Some(region),
+    )?;
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].text, "1.    a");
+    assert!(ornaments.is_empty());
+    assert_eq!(pages, 1);
     Ok(())
 }
 

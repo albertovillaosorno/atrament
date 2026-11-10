@@ -1722,13 +1722,17 @@ fn measured_ordered_label<'text>(
     // Reserve the whole numeral and delimiter before laying out any row;
     // they must never wrap away from the first item glyph.
     let mut marker_offset = 0u32;
+    let mut marker_extent = 0u32;
     for (_, advance, slot) in marker_glyphs {
-        if marker_offset.checked_add(slot).is_none_or(|end| end > cap) {
+        let end = marker_offset.checked_add(slot)
+            .ok_or("ordered label contour overflow")?;
+        if end > cap {
             return Err(
                 "ordered list label and first glyph exceed horizontal region"
                     .into()
             );
         }
+        marker_extent = marker_extent.max(end);
         marker_offset = marker_offset.checked_add(advance)
             .ok_or("ordered label advance overflow")?;
     }
@@ -1737,6 +1741,12 @@ fn measured_ordered_label<'text>(
         .checked_mul(4_000)
         .and_then(|space_width| marker_width.checked_add(space_width))
         .ok_or("ordered label advance overflow")?;
+    // A negative letter-spacing mean can compress nominal advances far
+    // below the pen contour. Respect the authored label's exact spaces,
+    // but refuse when the first item glyph would overlap the numeral ink.
+    if indent < marker_extent {
+        return Err("ordered list marker ink overlaps first item glyph".into());
+    }
     let first_word = after.trim_start_matches(' ')
         .split(' ').next().unwrap_or("");
     let (glyphs, _, _) = measured_word(first_word, statistics)?;

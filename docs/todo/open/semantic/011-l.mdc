@@ -4022,3 +4022,19 @@ page turns and independent minimum accepted/paged coverage assertions.
 Deliberately empty blocks and unclosed fences may still refuse. This
 strengthens the ephemeral CLI compiler's layout regression coverage; it
 does not implement persistent semantic bodies or localhost Markdown export.
+
+## Compressed ordered-label ink clearance (partial) — 2026-11-10
+
+The CLI's measured Markdown numbered-list layout now checks the farthest
+nominal pen contour of the authored digit/delimiter label against the first
+item glyph's measured origin. Extremely negative letter spacing previously
+let a physically wide numeral or dot extend into that item even when every
+shape individually fit its page. Such collisions now refuse before output,
+without rewriting the caller's text or synthesizing extra spacing.
+
+A focused Rust unit regression first reproduced the admitted collision, then
+verified a clear refusal and successful text-preserving output after adding
+explicit source spaces. Native PDF and transparent PNG subprocess acceptance
+checks that the refusal leaves both previously accepted output files intact.
+This is a limited CLI boundary guard, not glyph calibration, saved notebook
+body flow or a localhost Markdown rendering gateway.

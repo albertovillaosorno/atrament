@@ -52,6 +52,48 @@ function coloredHeadingWidths(bytes) {
     )].map((match) => match[1]);
 }
 
+test('compressed numbered label refuses overlap without clobbering PDF/PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-number-clearance-'));
+        try {
+            const profile = join(dir, 'compressed-marker.json');
+            const options = ['handwriting'];
+            for (const glyph of ['1', '.']) {
+                options.push('--set-glyph', glyph, 'width',
+                    ...Array(4).fill('12000'), '0');
+                options.push('--set-glyph', glyph, 'letter_spacing',
+                    ...Array(4).fill('-10000'), '0');
+            }
+            const configured = spawnSync(cargo, [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
+                ...options,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(profile, configured.stdout);
+            const extra = [
+                '--handwriting-profile', profile,
+                '--flow-region', '30000', '40000', '35000', '20000',
+                '--glyph-stroke', '1', '500', '500', '3200', '3000',
+                '250', '#123456',
+                '--glyph-stroke', '.', '500', '500', '3200', '3000',
+                '250', '#123456',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const safe = render(dir, '1.    a', format, extra);
+                assert.equal(safe.result.status, 0, safe.result.stderr);
+                const accepted = readFileSync(safe.output);
+                const collision = render(dir, '1. a', format, extra);
+                assert.notEqual(collision.result.status, 0);
+                assert.match(collision.result.stderr,
+                    /ordered list marker ink overlaps first item glyph/);
+                assert.deepEqual(readFileSync(collision.output), accepted,
+                    `refused ${format} must preserve previously rendered ink`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('compressed word contours keep whole word on the next PDF/PNG page',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-word-contour-'));
@@ -270,15 +312,16 @@ test('compressed ordered marker contours refuse before replacing PDF/PNG',
                 writeFileSync(profile, configure.stdout);
                 const extras = ['--handwriting-profile', profile, ...ink];
                 for (const format of ['pdf', 'png']) {
-                    const accepted = render(dir, '1. a', format,
-                        [...extras, ...region(27000)]);
+                    // Extra authored spaces keep marker ink clear of the item.
+                    const accepted = render(dir, '1.   a', format,
+                        [...extras, ...region(35000)]);
                     assert.equal(accepted.result.status, 0,
                         accepted.result.stderr);
                     const bytes = readFileSync(accepted.output);
                     const reference = join(dir, `manual-${glyph}.${format}`);
                     const args = [
                         ...base, ...extras,
-                        '--place-text', '1', '38500', '42500', '1. a',
+                        '--place-text', '1', '38500', '42500', '1.   a',
                         '--export-paper', format,
                         ...(format === 'png'
                             ? ['--png-page', '1', '--dpi', '72'] : []),
