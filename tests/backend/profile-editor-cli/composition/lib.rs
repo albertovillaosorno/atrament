@@ -57,6 +57,61 @@ fn test_path() -> PathBuf {
 }
 
 #[test]
+fn invalid_page_ink_tsv_does_not_append_any_valid_prefix() {
+    let file = test_path().with_extension("tsv");
+    let name = file.to_str().expect("owned TSV path");
+    let original = NotebookInkLine {
+        page: 3, start_um: (70_000, 45_000),
+        end_um: (71_000, 46_000), width_um: 250,
+        rgb: [0x12, 0x34, 0x56],
+    };
+    let source = concat!(
+        "atrament.page-ink.v1\n",
+        "1\t80000\t50000\t81000\t51000\t250\t#ABCDEF\n",
+        "2\t90000\t50000\t91000\t51000\t300\t#123456\n",
+    );
+    let invalid = [
+        ("atrament.page-ink.v1\n".to_owned(),
+            "at least one physical segment"),
+        (format!("{source}not a TSV row\n"),
+            "line 4 needs seven tab-separated fields"),
+        (format!("{source}4\t80000\t50000\t81000\t51000\t0\t#ABCDEF\n"),
+            "line 4 refused: ink width"),
+    ];
+    for (contents, diagnostic) in &invalid {
+        fs::write(&file, contents).expect("owned invalid file");
+        let mut ink = vec![original];
+        let error = load_page_ink_file(name, &mut ink)
+            .expect_err("invalid physical ink file must refuse");
+        assert!(error.contains(diagnostic), "unexpected error: {error}");
+        assert_eq!(ink, [original],
+            "failed file import retained its valid prefix");
+    }
+    fs::write(&file, source).expect("owned valid file");
+    let mut almost_full = vec![original; MAX_NOTEBOOK_INK_LINES - 1];
+    let error = load_page_ink_file(name, &mut almost_full)
+        .expect_err("combined manual and file ink must fit budget");
+    assert!(error.contains("4096 explicit line segments"), "{error}");
+    assert_eq!(almost_full, vec![original; MAX_NOTEBOOK_INK_LINES - 1],
+        "over-budget source must not append even its first valid row");
+
+    let mut ink = vec![original];
+    load_page_ink_file(name, &mut ink).expect("complete valid TSV accepted");
+    assert_eq!(ink.len(), 3);
+    assert_eq!(ink[0], original);
+    assert_eq!(ink[1].page, 1);
+    assert_eq!(ink[1].rgb, [0xab, 0xcd, 0xef]);
+    assert_eq!(ink[2].page, 2);
+    let accepted = ink.clone();
+    fs::write(&file, format!("{source}broken\n"))
+        .expect("owned late malformed TSV");
+    assert!(load_page_ink_file(name, &mut ink).is_err());
+    assert_eq!(ink, accepted,
+        "failed second file must preserve previously appended layers");
+    fs::remove_file(file).expect("remove owned test TSV");
+}
+
+#[test]
 fn baseline_round_trip_and_inspection_use_single_codec() {
     let baseline = execute_handwriting(&args(&["--seed", "500"]))
         .expect("default baseline accepted")

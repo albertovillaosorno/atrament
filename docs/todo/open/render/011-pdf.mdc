@@ -292,3 +292,17 @@ identical 32-page physical PDF and selected transparent PNG pages 1, 31 and
 UTF-8, missing ink rows, bad headers, oversized input and competing stdin
 selectors refuse before replacing accepted PDF output. This makes physical
 replay convenient but does not persist editable notebook content or images.
+
+## Atomic reusable page-ink import — 2026-11-10
+
+The native `--ink-file` TSV reader now stages the complete physical-ink layer
+before appending any segments to the existing in-memory draft. Previously a
+valid prefix could remain in that draft after a later malformed row or a
+combined 4096-segment limit refusal. The CLI already refused the export, but
+this closes the same partial-admission gap for reusable typed callers.
+
+A direct Rust regression covers empty TSV, late malformed fields and pen width,
+combined ink-budget overflow, valid retry and refusal after one earlier layer
+was accepted. Existing layers preserve exact page, endpoint, width and color
+values. No new ink synthesis, semantic notebook storage or image overlay is
+implied; the P1 notebook export acceptance remains open.

@@ -1110,7 +1110,10 @@ fn load_page_ink_file(
     if lines.next() != Some(PAGE_INK_FILE_HEADER) {
         return Err("ink file needs atrament.page-ink.v1 header".into());
     }
-    let mut loaded = 0usize;
+    // Keep previously authored manual ink unchanged if any later file row
+    // fails. The CLI exits on refusal, but typed in-memory callers should
+    // not inherit a valid prefix from an invalid imported layer.
+    let mut staged = Vec::new();
     for (index, row) in lines.enumerate() {
         let values = row.split('\t').map(str::to_owned).collect::<Vec<_>>();
         if values.len() != 7 {
@@ -1119,7 +1122,7 @@ fn load_page_ink_file(
                 index.saturating_add(2),
             ));
         }
-        if ink.len() == MAX_NOTEBOOK_INK_LINES {
+        if ink.len().saturating_add(staged.len()) >= MAX_NOTEBOOK_INK_LINES {
             return Err("ink exceeds 4096 explicit line segments".into());
         }
         let segment = parse_ink_line(&mut values.iter()).map_err(|error| {
@@ -1128,12 +1131,12 @@ fn load_page_ink_file(
                 index.saturating_add(2)
             )
         })?;
-        ink.push(segment);
-        loaded = loaded.saturating_add(1);
+        staged.push(segment);
     }
-    if loaded == 0 {
+    if staged.is_empty() {
         return Err("ink file needs at least one physical segment".into());
     }
+    ink.extend(staged);
     Ok(())
 }
 
