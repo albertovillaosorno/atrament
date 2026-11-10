@@ -2440,7 +2440,7 @@ fn saved_glyph_library_rejects_structural_separators_before_pdf_replacement() {
 }
 
 #[test]
-fn standalone_format_braille_and_egyptian_blanks_cannot_name_ink() {
+fn reserved_or_nonmarking_unicode_keys_cannot_name_ink() {
     let source = test_path().with_extension("tsv");
     let target = test_path().with_extension("pdf");
     let filename = source.to_str().expect("selected TSV path");
@@ -2465,13 +2465,16 @@ fn standalone_format_braille_and_egyptian_blanks_cannot_name_ink() {
         "\u{fff9}", "\u{fffa}", "\u{fffb}",
         "\u{1bca0}", "\u{1bca3}", "\u{1d173}", "\u{1d17a}",
         "\u{e0001}", "\u{e0067}", "\u{e007f}",
+        "\u{fdd0}", "\u{fdef}", "\u{fffe}", "\u{ffff}",
+        "\u{1fffe}", "\u{1ffff}", "\u{10fffe}", "\u{10ffff}",
+        "\u{fdd0}\u{301}", "\u{1fffe}\u{e0100}",
     ] {
         let ink = [
             "--glyph-stroke", invisible, "500", "500", "1800",
             "3000", "250", "#123456",
         ];
         let error = execute_glyph_library(&args(&ink))
-            .expect_err("blank or formatting scalar cannot draw ink");
+            .expect_err("reserved or nonmarking key cannot draw ink");
         assert!(error.contains("visible grapheme"), "{error}");
         let bytes = format!(
             concat!(
@@ -2503,7 +2506,8 @@ fn standalone_format_braille_and_egyptian_blanks_cannot_name_ink() {
         "\u{0890}\u{0661}", "\u{0891}\u{0661}",
         "a\u{034f}", "a\u{e0100}", "⠁", "\u{2800}\u{301}",
         "\u{13000}\u{13440}", "\u{13000}\u{13447}",
-        "\u{13443}",
+        "\u{13443}", "\u{e000}", "\u{10fffd}",
+        "\u{fffd}", "\u{fdcf}", "\u{fdf0}",
         "🏴\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}",
         "\u{a0}"] {
         let text = execute_glyph_library(&args(&[
@@ -2514,6 +2518,25 @@ fn standalone_format_braille_and_egyptian_blanks_cannot_name_ink() {
     }
     fs::remove_file(&source).expect("remove own TSV");
     fs::remove_file(&target).expect("remove own PDF");
+}
+
+#[test]
+fn every_unicode_noncharacter_refuses_direct_glyph_authoring() {
+    let mut reserved = (0xfdd0..=0xfdef).collect::<Vec<u32>>();
+    for plane in 0..=16 {
+        reserved.extend([plane * 0x10000 + 0xfffe,
+            plane * 0x10000 + 0xffff]);
+    }
+    assert_eq!(reserved.len(), 66);
+    for scalar in reserved {
+        let key = char::from_u32(scalar)
+            .expect("reserved scalar is in Unicode range").to_string();
+        let error = execute_glyph_library(&args(&[
+            "--glyph-stroke", &key, "500", "500", "1800",
+            "3000", "250", "#123456",
+        ])).expect_err("noncharacters cannot name authored glyph ink");
+        assert!(error.contains("visible grapheme"), "U+{scalar:04X}: {error}");
+    }
 }
 
 #[test]

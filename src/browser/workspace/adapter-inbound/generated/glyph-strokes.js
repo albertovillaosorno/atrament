@@ -39,11 +39,23 @@ const CIRCLE_SEGMENTS = 48;
 const OPEN_ARC_SEGMENTS = 36;
 const ARCH_SEGMENTS = 16;
 const AXES = ["x1", "y1", "x2", "y2", "width"];
+// Noncharacters cannot name transferable glyph shapes. Reject the reserved
+// FDD0..FDEF block and the final two code points of each Unicode plane.
+function containsUnicodeNoncharacter(value) {
+    for (const scalar of value) {
+        const code = scalar.codePointAt(0);
+        if ((code >= 0xFDD0 && code <= 0xFDEF)
+            || (code & 0xFFFE) === 0xFFFE)
+            return true;
+    }
+    return false;
+}
 function exactGrapheme(value) {
     // In Unicode mode an astral scalar is one character; lone UTF-16
     // surrogates still match. TextEncoder would silently replace them with
     // U+FFFD on TSV download, changing the caller's authored glyph identity.
     if (!value || /[\uD800-\uDFFF]/u.test(value)
+        || containsUnicodeNoncharacter(value)
         || new TextEncoder().encode(value).length > 64
         // Native flow and coverage audits reserve these two Unicode row
         // separators as structure; they can never name explicit pen ink.

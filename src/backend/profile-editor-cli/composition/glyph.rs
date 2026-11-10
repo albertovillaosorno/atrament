@@ -1844,11 +1844,19 @@ fn is_standalone_invisible_scalar(grapheme: &str) -> bool {
                 | '\u{e0000}'..='\u{e0fff}')
 }
 
+// Unicode noncharacters have no interchange glyph identity. Reserve the
+// FDD0..FDEF range and the final two scalar values of every plane.
+fn is_unicode_noncharacter(character: char) -> bool {
+    let scalar = u32::from(character);
+    (0xfdd0..=0xfdef).contains(&scalar) || scalar & 0xfffe == 0xfffe
+}
+
 fn is_exact_visible_grapheme(
     grapheme: &str, boundaries: UnicodeGraphemeSegmentation,
 ) -> bool {
     !grapheme.is_empty() && grapheme.len() <= 64
         && !grapheme.chars().any(|ch| ch.is_control()
+            || is_unicode_noncharacter(ch)
             || matches!(ch, '\u{2028}' | '\u{2029}'))
         && grapheme != " "
         // Only standalone invisible format/bidi/variation scalars refuse:

@@ -3047,3 +3047,15 @@ refusal.
 
 Complete prefix-plus-digit graphemes retain exact authoring. This is bounded
 invisible-key validation, not Arabic script shaping.
+
+## Exact Unicode noncharacter keys refuse — 2026-11-10
+
+The native and browser glyph-library paths previously admitted the 66
+reserved Unicode noncharacter scalar values as pen ink. Exact-key
+admission now refuses U+FDD0–U+FDEF and U+FFFE/U+FFFF at each Unicode
+plane boundary, including noncharacters followed by combining marks.
+
+Focused TSV and CLI tests preserve previously selected PDF output on
+refusal and confirm adjacent valid private-use scalars remain authorable.
+This does not restrict caller-authored Unicode private-use glyphs or claim
+a complete font, script shaper or handwritten notebook journey.

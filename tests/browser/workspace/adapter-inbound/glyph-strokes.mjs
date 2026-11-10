@@ -74,7 +74,7 @@ test("Unicode row separators cannot become authored browser TSV ink", () => {
     }
 });
 
-test("standalone format, Braille and Egyptian blanks cannot be ink", () => {
+test("reserved Unicode and standalone nonmarking keys cannot be ink", () => {
     const invisible = ["\u00AD", "\u034F", "\u061C", "\u180E",
         "\u0600", "\u0605", "\u06DD", "\u070F",
         "\u0890", "\u0891", "\u08E2",
@@ -90,7 +90,10 @@ test("standalone format, Braille and Egyptian blanks cannot be ink", () => {
         "\uFFA0", "\u2800", "\uFFF0", "\uFFF8", "\uFFF9",
         "\uFFFA", "\uFFFB", "\u{1BCA0}",
         "\u{1BCA3}", "\u{1D173}", "\u{1D17A}",
-        "\u{E0001}", "\u{E0067}", "\u{E007F}"];
+        "\u{E0001}", "\u{E0067}", "\u{E007F}",
+        "\uFDD0", "\uFDEF", "\uFFFE", "\uFFFF",
+        "\u{1FFFE}", "\u{1FFFF}", "\u{10FFFE}", "\u{10FFFF}",
+        "\uFDD0\u0301", "\u{1FFFE}\u{E0100}"];
     for (const glyph of invisible) {
         assert.throws(() => encodeGlyphLibrary([stroke(glyph)]),
             /visible Unicode grapheme/,
@@ -106,11 +109,30 @@ test("standalone format, Braille and Egyptian blanks cannot be ink", () => {
         "\u0890\u0661", "\u0891\u0661",
         "a\u{E0100}", "⠁", "\u2800\u0301",
         "\u{13000}\u{13440}", "\u{13000}\u{13447}",
-        "\u{13443}", "🏴\u{E0067}\u{E0062}\u{E0065}"
+        "\u{13443}", "\uE000", "\u{10FFFD}",
+        "\uFFFD", "\uFDCF", "\uFDF0", "🏴\u{E0067}\u{E0062}\u{E0065}"
             + "\u{E006E}\u{E0067}\u{E007F}", "\u00A0"]) {
         const original = [stroke(visible)];
         assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(original)),
             original, "joiners and selectors inside real glyphs survive");
+    }
+});
+
+test("every Unicode noncharacter is refused as browser TSV ink", () => {
+    const reserved = Array.from({ length: 32 }, (_, n) =>
+        String.fromCodePoint(0xFDD0 + n));
+    for (let plane = 0; plane <= 16; plane += 1) {
+        reserved.push(String.fromCodePoint(plane * 0x10000 + 0xFFFE));
+        reserved.push(String.fromCodePoint(plane * 0x10000 + 0xFFFF));
+    }
+    assert.equal(reserved.length, 66);
+    for (const key of reserved) {
+        assert.throws(() => encodeGlyphLibrary([stroke(key)]),
+            /visible Unicode grapheme/);
+        const raw = header
+            + `${key}\t100\t200\t3000\t4200\t250\t#A1B2C3\n`;
+        assert.throws(() => parseGlyphLibrary(raw),
+            /visible Unicode grapheme/);
     }
 });
 
