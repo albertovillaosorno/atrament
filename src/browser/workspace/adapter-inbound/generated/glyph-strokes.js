@@ -605,7 +605,7 @@ const MANUAL_MATH_GLYPHS = [
     "⋖", "⋗", "⋘", "⋙",
     "≶", "≷", "⋚", "⋛",
 ];
-const SELECTABLE_MATH_GLYPHS = [
+export const SELECTABLE_MATH_GLYPHS = [
     ...MATH_GLYPHS, ...MANUAL_MATH_GLYPHS,
 ];
 // Extra manual marks do not change the 93-glyph math fill.
@@ -1825,10 +1825,14 @@ function mathParts(cx, cy, radius, glyph) {
             curve([0.8, 0], [0.55, 0.85], [0, 0]),
         ];
     }
-    return [horizontal(0),
-        { from: point(0, -0.7), to: point(0, -0.58) },
-        { from: point(0, 0.58), to: point(0, 0.7) },
-    ];
+    // Division is its own exact Unicode geometry. Never silently assign
+    // division ink to a newly selected math glyph missing an authored shape.
+    if (glyph === "÷")
+        return [horizontal(0),
+            { from: point(0, -0.7), to: point(0, -0.58) },
+            { from: point(0, 0.58), to: point(0, 0.7) },
+        ];
+    throw new Error(`No geometric math starter for ${glyph}`);
 }
 // The dollar reuses the same four smooth S quadratics with a separate
 // vertical pen stroke. The euro reuses the analytic open circle used for c,

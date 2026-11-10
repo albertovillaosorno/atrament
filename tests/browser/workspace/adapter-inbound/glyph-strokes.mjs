@@ -3,7 +3,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
-    geometricStarter, italicizeGlyphStrokes, scaleGlyphHeight, scaleGlyphWidth,
+    geometricStarter, SELECTABLE_MATH_GLYPHS, italicizeGlyphStrokes,
+    scaleGlyphHeight, scaleGlyphWidth,
     scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
     composeAccentedGlyph, fillMissingBilingualBaseline,
     fillMissingConnectedLowercase,
@@ -3333,6 +3334,23 @@ test("five fill gestures author 52 exact glyphs", async () => {
         assert.equal(get("seed-quotes").disabled, true);
     } finally {
         ui.restore();
+    }
+});
+
+test("selectable math glyphs never borrow division ink", () => {
+    const args = [1750, 2250, 900, 100, "#243647"];
+    const geometry = (glyph) => geometricStarter(glyph, ...args)
+        .map(({ x1, y1, x2, y2 }) => [x1, y1, x2, y2]);
+    const division = geometry("÷");
+    assert.ok(SELECTABLE_MATH_GLYPHS.length > 150,
+        "audit both automatic and manual educational math glyphs");
+    assert.equal(new Set(SELECTABLE_MATH_GLYPHS).size,
+        SELECTABLE_MATH_GLYPHS.length, "every selected key is unique");
+    for (const glyph of SELECTABLE_MATH_GLYPHS) {
+        const strokes = geometry(glyph);
+        assert.ok(strokes.length > 0, `no missing authored ink for ${glyph}`);
+        if (glyph !== "÷") assert.notDeepEqual(strokes, division,
+            `math ${glyph} must not silently display division ink`);
     }
 });
 

@@ -2861,3 +2861,18 @@ independently clicks the new button, captures the actual downloaded TSV,
 reopens its bytes through Rust and repeats PDF/PNG and refusal checks.
 This is an explicit geometry authoring shortcut; full cross-letter cursive
 joining, writer calibration and semantic notebook persistence remain open.
+
+## No silent division glyph fallback in geometric math — 2026-11-10
+
+The browser mathematical starter now treats the division sign `÷` as one
+explicitly selected outline. A future mathematical key accidentally added to
+the selectable inventory without its own shape now refuses rather than
+silently borrowing the division strokes. The complete current automatic and
+manual math inventory is regression-checked for an admitted shape, unique
+Unicode keys and absence of accidental division-ink substitution.
+
+All 249 browser glyph-editor tests, frontend compilation/check and the offline
+Rust workspace pass. Jig check retains 181 existing repository findings, with
+no new long lines on changed paths; the pinned production CLI Clippy gate
+passes. This does not synthesize unselected handwriting, persist analytic
+curves in native TSV or complete the bilingual glyph acceptance task.
