@@ -3773,3 +3773,18 @@ one-micrometre probes distinguish merely touching a fixed rectangle's right
 edge from a positive-area crossing. The conservative row-band refusal still
 does not decide whether intentional fixed-layering or actual glyph ink is
 allowed; the overall semantic notebook compiler remains incomplete.
+
+## Live fixed-pair snapshots across paper-reference history — 2026-11-09
+
+The live session's existing page-profile-reference edit/Undo/Redo regression
+now inspects two checked overlapping fixed proposals through the same
+selected-row report used for positioned-row hits. Its fixed-pair indices,
+exact rectangle, accepted flow, page and revision remain correct when the
+narrower paper reference changes positioned row hits from zero to two.
+First-only and bounded pair queries agree, even where no positioned row
+intersects the fixed objects.
+
+A previously captured wide-page report retains
+its original revision, geometry and pair after the page-profile retarget.
+This is immutable read-only provenance evidence, not an Export or layering
+policy.

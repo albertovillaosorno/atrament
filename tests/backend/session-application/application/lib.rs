@@ -2966,6 +2966,15 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     assert_eq!(original_report.covered_pages(), [PageRegion {
         page, writable: first_writable,
     }]);
+    let original_paired = session.inspect_selected_aligned_measured_rows(
+        &mixed_measurement(base, 100_000),
+        &[edge_fixed(base), edge_fixed(base)], &original_choices, 0,
+    ).expect("initial fixed-pair row snapshot");
+    let original_pair = original_paired.first_fixed_pair_overlap()
+        .expect("original fixed-pair coordinates")
+        .expect("original fixed pair missing");
+    assert_eq!(original_pair.intersection(), edge_box);
+    assert!(original_paired.overlaps().is_empty());
     let assert_mixed = |current: &application::SessionApplication,
                         revision,
                         width,
@@ -3032,6 +3041,25 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
             &mixed_measurement(revision, width), &fixed, &choices,
         ).expect("profile-reference first mixed footprint");
         assert_eq!(first, overlaps.first().copied());
+        // Fixed/fixed pairs are independent of horizontally positioned row
+        // contact even when a page-profile change alters the hit count.
+        let paired = current.inspect_selected_aligned_measured_rows(
+            &mixed_measurement(revision, width),
+            &[edge_fixed(revision), edge_fixed(revision)], &choices, 2,
+        ).expect("profile-reference fixed pair snapshot");
+        let pair = paired.first_fixed_pair_overlap()
+            .expect("profile-reference pair coordinates")
+            .expect("checked fixed pair missing");
+        assert_eq!(pair.revision(), revision);
+        assert_eq!(pair.flow(), flow);
+        assert_eq!(pair.page(), page);
+        assert_eq!((pair.earlier_index(), pair.later_index()), (0, 1));
+        assert_eq!(pair.intersection(), edge_box);
+        assert_eq!(paired.fixed_pair_overlaps(1), Ok(vec![pair]));
+        assert_eq!(paired.fixed_pair_overlaps(0),
+            Err(FlowFixedRegionError::FixedPairLimitExceeded { limit: 0 }));
+        assert_eq!(paired.overlaps().len(),
+            if width == 100_000 { 0 } else { 2 });
     };
     assert_aligned(&session, base, 100_000, None);
     assert_mixed(&session, base, 100_000, &[]);
@@ -3103,6 +3131,13 @@ fn page_profile_reference_edits_recompute_live_derived_geometry() {
     assert_eq!(original_report.covered_pages(), [PageRegion {
         page, writable: first_writable,
     }]);
+    assert_eq!(original_paired.revision(), base);
+    assert_eq!(original_paired.covered_pages(), [PageRegion {
+        page, writable: first_writable,
+    }]);
+    assert_eq!(original_paired.fixed_pair_overlaps(1),
+        Ok(vec![original_pair]));
+    assert!(original_paired.overlaps().is_empty());
     assert_aligned(&session, edited, 80_000, Some(Rect {
         x: Length::from_micrometres(27_500),
         y: Length::from_micrometres(25_000),
