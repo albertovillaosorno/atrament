@@ -2656,6 +2656,108 @@ fn compressed_ordered_marker_requires_clearance_before_first_item()
 }
 
 #[test]
+fn compressed_multidigit_labels_admit_only_clear_first_item_ink()
+    -> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(63);
+    for glyph in ["1", ".", ")"] {
+        for (dimension, mean) in [
+            (Dimension::Width, 12_000),
+            (Dimension::LetterSpacing, -10_000),
+        ] {
+            stats = stats.with_glyph(glyph, DimensionStatistics {
+                dimension,
+                statistics: ScalarStatistics {
+                    minimum: mean, maximum: mean, mean, median: mean,
+                    standard_deviation: 0,
+                },
+            }, &UnicodeGraphemeSegmentation)
+                .map_err(|error| format!("{error:?}"))?;
+        }
+    }
+    let paper = NotebookProfile::default();
+    let mut admitted = 0;
+    let mut overlaps = 0;
+    let mut too_narrow = 0;
+    // Independent physical oracle: each label glyph advances 2 mm but
+    // occupies 12.8 mm including the compositor's 0.8-mm pen reserve.
+    // The first body 'a' needs its baseline 3-mm visible slot.
+    for digits in 1..=9u32 {
+        for delimiter in ['.', ')'] {
+            for spaces in 1..=6u32 {
+                for width in [24_000, 30_000, 36_000, 42_000,
+                    48_000, 60_000, 80_000] {
+                    let marker = format!("{}{delimiter}", "1".repeat(
+                        usize::try_from(digits)
+                            .map_err(|_error| "digit count overflow")?
+                    ));
+                    let text = format!(
+                        "{marker}{}a", " ".repeat(usize::try_from(spaces)
+                            .map_err(|_error| "space count overflow")?)
+                    );
+                    let source = FlowSource::new(FlowFormat::Markdown, &text)?;
+                    let region = super::FlowRegion {
+                        left: 30_000, top: 40_000,
+                        width, height: 20_000,
+                    };
+                    let cap = width - 10_000;
+                    let label_width = (digits + 1) * 2_000;
+                    let extent = digits * 2_000 + 12_800;
+                    let indent = label_width + spaces * 4_000;
+                    let expected = if extent > cap {
+                        Some("ordered list label and first glyph exceed")
+                    } else if indent < extent {
+                        Some("ordered list marker ink overlaps")
+                    } else if indent + 3_000 > cap {
+                        Some("ordered list label and first glyph exceed")
+                    } else { None };
+                    let result = super::layout_flow_with_region(
+                        &source, &paper, Some(&stats),
+                        super::HeadingDecoration::default(), Some(region),
+                    );
+                    match (expected, result) {
+                        (None, Ok((rows, marks, pages))) => {
+                            if pages != 1 || rows.len() != 1
+                                || rows[0].text != text
+                                || rows[0].origin_um != (38_500, 42_500)
+                                || !marks.is_empty() {
+                                return Err(format!(
+                                    "label layout altered admitted {text:?}: \
+                                     {rows:?}, {marks:?}, {pages}"
+                                ));
+                            }
+                            admitted += 1;
+                        }
+                        (Some(message), Err(error))
+                            if error.contains(message) => {
+                            if message.contains("overlaps") {
+                                overlaps += 1;
+                            } else {
+                                too_narrow += 1;
+                            }
+                        }
+                        (expected, actual) => return Err(format!(
+                            "wrong multi-digit admission for {text:?}, \
+                             width {width}: {expected:?} vs {actual:?}"
+                        )),
+                    }
+                }
+            }
+        }
+    }
+    assert!(admitted > 100 && overlaps > 100 && too_narrow > 100,
+        "incomplete label geometry coverage: {admitted}, \
+         {overlaps}, {too_narrow}");
+    Ok(())
+}
+
+#[test]
 fn compressed_heading_decoration_covers_actual_authored_contour()
     -> Result<(), String> {
     use atrament_handwriting_statistics::{

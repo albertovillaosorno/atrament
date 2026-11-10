@@ -4038,3 +4038,16 @@ explicit source spaces. Native PDF and transparent PNG subprocess acceptance
 checks that the refusal leaves both previously accepted output files intact.
 This is a limited CLI boundary guard, not glyph calibration, saved notebook
 body flow or a localhost Markdown rendering gateway.
+
+## Compressed multi-digit label matrix (partial) — 2026-11-10
+
+A further native Rust regression checks 756 physical ordered-label cases:
+one through nine digits, both delimiters, one through six authored spaces
+and seven narrow region widths. An independently calculated nominal pen
+contour expects either intact text, a first-body clearance refusal, or a
+whole-label horizontal refusal with negative 10-mm letter spacing and
+12-mm digit/delimiter widths. Admitted cases preserve their literal spaces
+and page-local row origin; rejected ones produce no physical layout.
+
+This expands regression coverage for the recent CLI overlap correction; it
+does not claim persisted semantic list identities or browser body export.
