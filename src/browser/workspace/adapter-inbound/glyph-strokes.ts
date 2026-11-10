@@ -3695,6 +3695,23 @@ export function composeAccentedGlyph(
         if (candidatePenPaths(body, "i").length !== 1) {
             throw new Error("Acute i requires one continuous stem path");
         }
+        // A vertically separated mark on the far side of the cell is not
+        // the i's dot. Anchor it to the highest authored body endpoint,
+        // allowing one pen width for hand-drawn horizontal irregularity.
+        const endpoints = body.flatMap(({ x1, y1, x2, y2 }) => [
+            { x: x1, y: y1 }, { x: x2, y: y2 },
+        ]);
+        const stemTop = Math.min(...endpoints.map(({ y }) => y));
+        const topXs = endpoints.filter(({ y }) => y === stemTop)
+            .map(({ x }) => x);
+        const dot = base[dots[0]!]!;
+        const dotX = (dot.x1 + dot.x2) / 2;
+        const clearance = Math.max(200, dot.width,
+            ...body.map(({ width }) => width));
+        if (dotX < Math.min(...topXs) - clearance
+            || dotX > Math.max(...topXs) + clearance) {
+            throw new Error("Acute i requires an aligned upper dot");
+        }
         base = body;
     }
     // Native TSV admits centerlines at the cell edge. Refuse inherited

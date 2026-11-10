@@ -2952,3 +2952,18 @@ workspace pass, along with frontend build/check, strict production CLI
 Clippy and Jig doctor. Jig check remains at its existing 181 findings,
 without new long lines. The broader Firefox suite was not rerun; strict
 all-target Clippy remains blocked by existing repository test-source lints.
+
+## Upper-dot alignment for acute i composition — 2026-11-10
+
+A vertically separated short mark is not necessarily the upper dot of an
+imported lowercase `i`. Before making `í` or exact decomposed `i` + acute,
+the explicit composer now requires its candidate dot to be horizontally
+aligned with the highest authored stem endpoint, allowing one pen width or
+200 µm of hand-drawn offset. A far-side mark refuses instead of silently
+vanishing from the accented output. Already-authored source and target strokes
+remain unchanged, including through the browser and atomic 114-key fill.
+
+Two regression cases cover NFC/NFD refusal, manual offset acceptance,
+no-clobber browser downloads and single/cursive baseline batch admission.
+All 256 focused glyph-editor tests pass. This narrows the caller-selected
+fallback behavior; it does not make all Unicode glyphs automatically drawable.

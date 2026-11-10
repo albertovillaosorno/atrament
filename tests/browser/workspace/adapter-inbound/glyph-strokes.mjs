@@ -2135,6 +2135,31 @@ test("acute i composition removes only an identifiable upper dot", () => {
     "the unrelated third mark cannot be mistaken for continuous stem ink");
 });
 
+test("acute i refuses an off-axis dot rather than silently erasing ink", () => {
+    const printed = geometricStarter("i", 1550, 2450, 1100,
+        250, "#123456");
+    const shifted = [printed[0], { ...printed[1],
+        x1: 2750, x2: 2750 }];
+    const original = encodeGlyphLibrary(shifted);
+    for (const exact of ["í", "i\u0301"]) {
+        assert.throws(() => composeAccentedGlyph(shifted,
+            "i", exact, "#ABCDEF"), /clear upper dot|aligned upper dot/);
+        assert.equal(encodeGlyphLibrary(shifted), original);
+    }
+    for (const x of [1300, 1650, 1800]) {
+        const near = [printed[0], { ...printed[1], x1: x, x2: x }];
+        assert.equal(composeAccentedGlyph(near, "i", "í",
+            "#ABCDEF").length, 2,
+        "a pen-width offset must still count as an upper dot");
+    }
+    for (const x of [1299, 1801]) {
+        const outside = [printed[0], { ...printed[1], x1: x, x2: x }];
+        assert.throws(() => composeAccentedGlyph(outside, "i", "í",
+            "#ABCDEF"), /aligned upper dot/,
+        "a dot beyond pen-width clearance must be refused");
+    }
+});
+
 test("connected i composes exact NFC and NFD acute without its dot", () => {
     const whole = fillMissingConnectedLowercase([], 1550, 2450,
         1100, 250, "#243647");
@@ -2261,6 +2286,38 @@ test("acute i refuses ambiguous ink without replacing target", async () => {
         ui.restore();
     }
 });
+
+test("off-axis i dot refuses browser accent without replacing either form",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const original = [
+                ...geometricStarter("i", 1550, 2450, 1100, 250,
+                    "#123456").map((line, index) => index === 1
+                    ? { ...line, x1: 2750, x2: 2750 } : line),
+                stroke("í"), stroke("i\u0301"), stroke("∞"),
+            ];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(original));
+            editor.start();
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("copy-from").value = "i";
+            for (const target of ["í", "i\u0301"]) {
+                get("character").value = target;
+                get("character").dispatch("input");
+                get("compose").dispatch("click");
+                assert.match(get("status").textContent, /aligned upper dot/);
+            }
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                original, "neither target nor source can lose off-axis ink");
+        } finally {
+            ui.restore();
+        }
+    });
 
 test("accent composition refuses mismatches and clipped marks", () => {
     const base = { ...stroke("e"), x1: 500, y1: 1500,
@@ -6583,6 +6640,19 @@ test("atomic bilingual fill refuses ambiguous i, clipped marks and caps",
             1550, 2450, 1100, 250, "#243647", { dx: 0, lift: 0 }),
         /Save requires 1..4096/);
         assert.equal(encodeGlyphLibrary(nearlyFull), source);
+        // A separated short mark far from the i's upper stem is not its
+        // dot; never discard it during an atomic NFC/NFD baseline fill.
+        for (const form of ["single", "cursive"]) {
+            const misaligned = geometricStarter("i", 1550, 2450,
+                1100, 250, "#243647").map((line, index) => index === 1
+                ? { ...line, x1: 2750, x2: 2750 } : line);
+            const input = [...misaligned, stroke("∞")];
+            const before = encodeGlyphLibrary(input);
+            assert.throws(() => fillMissingBilingualBaseline(input,
+                1550, 2450, 1100, 250, "#243647",
+                { dx: 0, lift: 0 }, form), /aligned upper dot/);
+            assert.equal(encodeGlyphLibrary(input), before);
+        }
         // A manually imported centerline can be TSV-valid but physically
         // clipped: the bulk fill must not commit any preceding new glyphs.
         for (const form of ["single", "cursive"]) {
