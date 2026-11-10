@@ -2909,8 +2909,9 @@ glyph-editor tests, frontend TypeScript build/check, offline all-feature Rust
 workspace and pinned production Rust Clippy pass.
 
 Jig doctor passes; Jig check retains 181 existing repository findings, with
-no added long lines in owned paths. The full-browser run was stopped after overlapping jobs;
-a separately rerun Firefox session-storage test still timed out at
+no added long lines in owned paths. The full-browser run was stopped after
+overlapping jobs; a separately rerun Firefox session-storage test still timed
+out at
 `script.evaluate`, so broad frontend validation remains red/unconfirmed.
 This does not add automatic cursive joining, font-wide glyph synthesis,
 or persisted semantic notebook state.
