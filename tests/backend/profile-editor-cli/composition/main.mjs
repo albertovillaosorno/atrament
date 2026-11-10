@@ -291,3 +291,80 @@ test('native flow requires an export and cannot be saved as profile JSON',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('syntax-only Setext and fenced markers retain native PDF/PNG row pitch',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-syntax-pitch-'));
+        try {
+            const statistics = join(dir, 'tall-markers.json');
+            const tall = ['25000', '25000', '25000', '25000', '0'];
+            accepted('handwriting',
+                ...['=', '-', '`', '~'].flatMap((glyph) => [
+                    '--set-glyph', glyph, 'height', ...tall,
+                ]), '--output', statistics);
+            const glyph = ['--glyph-stroke', 'a', '600', '500',
+                '1800', '3000', '250', '#123456',
+                '--glyph-stroke', 'b', '900', '500',
+                '2300', '3000', '250', '#654321'];
+            // Fourteen mm leaves room for exactly one ordinary 9-mm row.
+            // A 25-mm syntax-only glyph would make that page unusable.
+            const base = ['notebook', '--printed-sheet', 'false',
+                '--handwriting-profile', statistics, ...glyph,
+                '--heading-style', 'none', '--flow-region',
+                '30000', '40000', '40000', '14000'];
+            const cases = [
+                ['primary Setext', '# a\n\nb', 'a\n===\n\nb'],
+                ['secondary Setext', '## a\n\nb', 'a\n---\n\nb'],
+                ['backtick fence', 'a\n\nb', '```text\na\n```\n\nb'],
+                ['tilde fence', 'a\n\nb', '~~~text\na\n~~~\n\nb'],
+            ];
+            for (const [name, ordinary, syntactic] of cases) {
+                let firstPng = null;
+                for (const format of ['pdf', 'png']) {
+                    const pages = format === 'pdf' ? [1] : [1, 2];
+                    for (const page of pages) {
+                        const options = [...base, '--export-paper', format,
+                            ...(format === 'pdf'
+                                ? ['--pages', '2']
+                                : ['--dpi', '72', '--png-page', `${page}`])];
+                        const output = join(dir,
+                            `${name.replaceAll(' ', '-')}-${format}-${page}`);
+                        accepted(...options, '--flow-markdown', ordinary,
+                            '--output', output);
+                        const original = readFileSync(output);
+                        assert.ok(original.length > 100,
+                            `${name} must render a real ${format}`);
+                        if (format === 'pdf') {
+                            assert.match(original.toString('latin1'),
+                                /\/Count 2/, 'selected two-page PDF');
+                        } else {
+                            assert.deepEqual(original.subarray(0, 8),
+                                Buffer.from('89504e470d0a1a0a', 'hex'));
+                            if (page === 1) {
+                                firstPng = original;
+                            } else {
+                                assert.notDeepEqual(original, firstPng,
+                                    'second page must contain distinct ink');
+                            }
+                        }
+                        accepted(...options, '--flow-markdown', syntactic,
+                            '--output', output, '--replace');
+                        assert.deepEqual(readFileSync(output), original,
+                            `${name} ${format}/${page}: syntax changed ink`);
+                        const failed = profiles(...options,
+                            '--flow-markdown', '\\===', '--output', output,
+                            '--replace');
+                        assert.notEqual(failed.status, 0,
+                            'escaped equals must remain tall authored ink');
+                        assert.match(failed.stderr.toString('utf8'),
+                            /flow line cannot fit printable vertical region/);
+                        assert.equal(failed.stdout.length, 0);
+                        assert.deepEqual(readFileSync(output), original,
+                            'invalid literal ink cannot overwrite export');
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

@@ -3947,3 +3947,17 @@ This verifies that selected-page raster export does not bypass native
 all-page ink admission. These are existing compositing guarantees newly
 covered across the CLI boundary, not persisted semantic notebook content
 or a localhost Markdown rendering gateway.
+
+## Native Setext and code-fence pitch parity (partial) — 2026-11-10
+
+A native CLI acceptance regression checks syntax-only `=`, `-`, backtick
+and tilde markers under individually overridden 25-mm handwriting glyph
+heights. ATX/Setext title pairs and backtick/tilde fenced rows must yield
+byte-identical real PDF and transparent PNG pages inside a one-row 14-mm
+physical region. The chosen two-page PDF and each separate PNG page are
+checked; an escaped literal equals sign must instead refuse without
+partial stdout or replacing an accepted export.
+
+This covers the public native export boundary beyond the existing internal
+row-pitch oracles. It does not establish persisted semantic headings or
+localhost body export.
