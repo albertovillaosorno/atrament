@@ -791,3 +791,87 @@ test('native Markdown space breaks preserve the backslash glyph and output',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('landscape Letter sheet preserves 32-page mixed-ink geometry and marks',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/letter-mixed-ink-'));
+        try {
+            const paperPath = join(dir, 'landscape-paper.json');
+            accepted('paper', '--paper-size', 'letter', '--landscape',
+                '--style', 'blank', '--emit-profile', '--output', paperPath);
+            const paper = readFileSync(paperPath);
+            const base = ['notebook', '--paper-profile', paperPath,
+                '--printed-sheet', 'true', '--page-numbers', 'true',
+                '--date-style', 'line', '--date-placement', 'top-left',
+                '--date-text', '2026-11-10'];
+            const glyph = ['--glyph-stroke', 'a', '500', '500',
+                '1800', '3000', '250', '#234567'];
+            const lateGlyph = ['--place-text', '32', '180000',
+                '50000', 'aa'];
+            const lateLine = ['--ink-line', '31', '140000', '50000',
+                '160000', '51000', '350', '#123456'];
+            const png = (page) => ['--export-paper', 'png', '--dpi', '72',
+                '--png-page', String(page)];
+            const manual31 = accepted(...base, ...lateLine, ...png(31));
+            const manual32 = accepted(...base, ...glyph, ...lateGlyph,
+                ...png(32));
+            assert.notDeepEqual(accepted(...base, ...png(31)),
+                accepted(...base, ...png(32)),
+                'page numbers distinguish otherwise empty physical sheets');
+            assert.notDeepEqual(manual31, manual32,
+                'different numbered pages contain different physical ink');
+            const pdfPath = join(dir, 'approved.pdf');
+            const pngPath = join(dir, 'approved.png');
+            for (const [name, flow] of [
+                ['plain', ['--flow-text', 'a']],
+                ['markdown', ['--flow-markdown', '# a']],
+            ]) {
+                const region = ['--flow-region', '30000', '40000',
+                    '30000', '14000'];
+                const source = [...base, ...glyph, ...flow, ...region];
+                const mixed = [...source, ...lateGlyph, ...lateLine];
+                const pdf = accepted(...mixed, '--export-paper', 'pdf');
+                const content = pdf.toString('latin1');
+                assert.match(content, /\/Count 32\b/,
+                    `${name}: manual final ink extends the physical PDF`);
+                assert.equal((content.match(
+                    /\/MediaBox \[0 0 792\.000 612\.000\]/g) ?? []).length,
+                32, `${name}: every page uses the landscape Letter box`);
+                assert.deepEqual(pdf, accepted(...mixed,
+                    '--export-paper', 'pdf', '--pages', '32'));
+                const firstPage = accepted(...source, ...png(1));
+                assert.deepEqual(accepted(...mixed, ...png(1)), firstPage,
+                    `${name}: late ink cannot alter flow or printed marks`);
+                for (const [page, reference] of [
+                    [31, manual31], [32, manual32],
+                ]) {
+                    const selected = accepted(...mixed, ...png(page));
+                    assert.deepEqual(selected, reference,
+                        `${name}: only page ${page} ink can be selected`);
+                    assert.deepEqual(selected.subarray(0, 8),
+                        Buffer.from('89504e470d0a1a0a', 'hex'));
+                    assert.equal(selected.readUInt32BE(16), 792,
+                        'landscape Letter PNG width at 72 DPI');
+                    assert.equal(selected.readUInt32BE(20), 612,
+                        'landscape Letter PNG height at 72 DPI');
+                    assert.equal(selected[25], 6, 'transparent RGBA output');
+                }
+                writeFileSync(pdfPath, pdf);
+                writeFileSync(pngPath, manual32);
+                refused([...mixed, '--export-paper', 'pdf',
+                    '--pages', '31', '--output', pdfPath, '--replace'],
+                /require 32 physical pages/, pdfPath);
+                refused([...mixed, '--place-text', '32', '270000',
+                    '50000', 'a', ...png(1), '--output', pngPath,
+                    '--replace'], /page 32 ink needs printable endpoints/,
+                pngPath);
+                refused([...mixed, '--place-text', '33', '180000',
+                    '50000', 'a', ...png(1), '--output', pngPath,
+                    '--replace'], /text page/, pngPath);
+                assert.deepEqual(readFileSync(paperPath), paper,
+                    'native exports cannot mutate the selected paper file');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

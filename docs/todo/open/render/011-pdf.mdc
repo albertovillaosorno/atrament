@@ -197,3 +197,30 @@ TypeScript, native flow shard 49 (3/3), print-ready (1/1), joined ink (3/3)
 and Git diff checks passed. Jig check retains 181 known unrelated findings,
 zero on changed paths. Jig doctor exits successfully but reports a degraded
 state because its compiled graph is absent; do not claim a clean Jig gate.
+
+## Landscape Letter mixed-layer physical replay (partial) — 2026-11-10
+
+An additional real native CLI regression reopens a caller-saved landscape
+US Letter paper profile (279.4 × 215.9 mm) and overlays one-page plain or
+Markdown flow with pen ink on page 31 and explicitly placed authored glyphs
+on page 32. Both modes emit exactly 32 vector PDF pages with 792 × 612 point
+MediaBoxes, byte-identical to explicit `--pages 32`; selected 72-DPI
+transparent PNGs are 792 × 612 RGBA. Their late-page bytes equal independent
+manual-only exports with the same printed date and page numbering. The first
+flow page remains byte-identical with or without late annotations, and empty
+numbered sheets 31 and 32 remain distinguishable.
+
+The regression also requires that an insufficient explicit PDF page budget,
+page-32 ink outside landscape margins and nonexistent page 33 refuse before
+replacing accepted PDF/PNG destinations. The selected paper file remains
+byte-identical. This extends the previously A4-only sparse-last-page
+acceptance to a second physical page geometry; it does not persist body text,
+provide image overlays or complete the saved-notebook journey.
+
+Validation: 14/14 native selected-file CLI cases, 2,189 offline all-feature
+Rust workspace tests, workspace check, strict pinned production Clippy,
+frontend TypeScript, native flow shard 49 (3/3), print-ready (1/1) and joined
+ink (3/3) passed. Jig doctor exits successfully in degraded state (compiled
+graph absent); Jig check still reports 181 existing findings, none on these
+two changed paths. The full native-flow
+shard suite was not replayed for this test-only addition.
