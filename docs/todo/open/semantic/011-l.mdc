@@ -4116,3 +4116,18 @@ bounded runs after the prior session's incomplete receipt: all 30 selected
 integration cases passed with complete TAP counts. This is verification of
 the existing transient Rust CLI export contract, not a persistent Markdown
 notebook model or browser-to-PDF rendering implementation.
+
+## Full bounded native-flow replay (verification only) — 2026-11-10
+
+All 49 native PDF/PNG flow acceptance shards were replayed separately on
+clean `main`, producing 147/147 passing cases with exact complete TAP
+receipts; no timed-out or interleaved batch is counted as a pass. The 3/3
+shard-runner checks, 8/8 CLI selected-file tests and 1/1 print-ready dry
+run also passed. Pinned offline all-feature Rust workspace tests passed
+2,189/2,189, as did workspace check, strict CLI Clippy, frontend TypeScript
+and Jig doctor. Jig check still reports 181 existing findings, none in the
+scoped flow source, tests or this evidence note.
+
+This validates existing ephemeral CLI flow and native export boundaries; no
+production implementation changed and the persisted semantic notebook
+body-to-handwriting/PDF/PNG bridge remains unfinished. ATR-P2-011 stays open.
