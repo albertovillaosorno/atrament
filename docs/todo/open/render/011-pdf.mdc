@@ -174,3 +174,26 @@ ink refuse without changing accepted PDF or PNG destinations.
 This change does not persist notebook content, infer handwriting shapes,
 introduce image overlays or expose browser-rendered body text. The
 complete saved-notebook PDF/PNG acceptance remains open.
+
+## Sparse final-sheet native PDF/PNG acceptance (partial) — 2026-11-10
+
+A bounded native CLI regression now exercises the maximum 32 physical pages
+with a manually positioned glyph run on page 32 and an independent pen segment
+on page 31. It repeats this under standalone manual ink, one-page plain-text
+flow and one-page Markdown flow in a fixed region. Automatically sized PDFs
+contain exactly 32 pages and are byte-identical to explicitly sized output;
+transparent PNG pages 31 and 32 match their respective manual-only sources.
+The first flowed page remains unchanged when the late annotations are added.
+
+An explicit 31-page PDF budget, unshaped glyph on an unselected later page,
+invalid page-31 physical ink and out-of-range page 33 all refuse without
+replacing accepted PDF or PNG files. Flowed output also refuses an empty
+page-30 PNG selection. This guards sparse last-sheet behavior, not persisted
+notebook text, object avoidance, visual editing or image overlays.
+
+Validation: 13/13 native selected-file CLI tests, 2,189 all-feature Rust
+workspace tests, offline workspace check, strict production Clippy, frontend
+TypeScript, native flow shard 49 (3/3), print-ready (1/1), joined ink (3/3)
+and Git diff checks passed. Jig check retains 181 known unrelated findings,
+zero on changed paths. Jig doctor exits successfully but reports a degraded
+state because its compiled graph is absent; do not claim a clean Jig gate.

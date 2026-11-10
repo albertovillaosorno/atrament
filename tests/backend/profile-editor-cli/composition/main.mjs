@@ -181,6 +181,77 @@ test('standalone manual ink infers later PDF pages without flow', () => {
     }
 });
 
+test('sparse page-32 annotations preserve native PDF and PNG boundaries',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/sparse-page-32-'));
+        try {
+            const paper = ['notebook', '--printed-sheet', 'true'];
+            const glyph = ['--glyph-stroke', 'a', '500', '500',
+                '1800', '3000', '250', '#234567'];
+            const placed = ['--place-text', '32', '80000', '50000', 'aa'];
+            const line = ['--ink-line', '31', '70000', '40000',
+                '71000', '41000', '250', '#123456'];
+            const png = (page) => ['--export-paper', 'png', '--dpi', '72',
+                '--png-page', String(page)];
+            const reference31 = accepted(...paper, ...line, ...png(31));
+            const reference32 = accepted(...paper, ...glyph, ...placed,
+                ...png(32));
+            assert.notDeepEqual(reference31, reference32,
+                'distinct last-page ink must have distinct PNG geometry');
+
+            for (const [name, flow] of [
+                ['manual', []],
+                ['plain', ['--flow-text', 'a', '--flow-region',
+                    '30000', '40000', '30000', '14000']],
+                ['markdown', ['--flow-markdown', '# a', '--flow-region',
+                    '30000', '40000', '30000', '14000']],
+            ]) {
+                const base = [...paper, ...glyph, ...flow,
+                    ...placed, ...line];
+                const pdf = accepted(...base, '--export-paper', 'pdf');
+                assert.match(pdf.toString('latin1'), /\/Count 32\b/,
+                    `${name}: final annotation must include page 32`);
+                assert.deepEqual(pdf, accepted(...base,
+                    '--export-paper', 'pdf', '--pages', '32'),
+                    `${name}: inferred and explicit 32-page PDFs must match`);
+                assert.deepEqual(accepted(...base, ...png(31)), reference31,
+                    `${name}: page 31 must contain only its manual line`);
+                assert.deepEqual(accepted(...base, ...png(32)), reference32,
+                    `${name}: page 32 must contain only its placed text`);
+                if (flow.length !== 0) {
+                    assert.deepEqual(accepted(...base, ...png(1)),
+                        accepted(...paper, ...glyph, ...flow, ...png(1)),
+                        `${name}: late ink must not alter first-page flow`);
+                }
+
+                const outputPdf = join(dir, `${name}.pdf`);
+                const outputPng = join(dir, `${name}.png`);
+                writeFileSync(outputPdf, pdf);
+                writeFileSync(outputPng, reference32);
+                refused([...base, '--export-paper', 'pdf', '--pages', '31',
+                    '--output', outputPdf, '--replace'],
+                    /require.*32 physical pages/, outputPdf);
+                refused([...base, '--place-text', '31', '80000', '50000',
+                    'b', ...png(32), '--output', outputPng, '--replace'],
+                    /missing authored glyph shapes/, outputPng);
+                refused([...base, '--ink-line', '31', '1000', '1000',
+                    '2000', '2000', '250', '#123456', '--export-paper',
+                    'pdf', '--output', outputPdf, '--replace'],
+                    /page 31 ink needs printable endpoints/, outputPdf);
+                refused([...base, '--place-text', '33', '80000', '50000',
+                    'a', ...png(32), '--output', outputPng, '--replace'],
+                    /text page/, outputPng);
+                if (flow.length !== 0) {
+                    refused([...base, ...png(30), '--output', outputPng,
+                        '--replace'], /selected PNG page is empty/,
+                        outputPng);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('native flow includes explicit manual ink on later PDF/PNG pages',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-manual-page-'));
