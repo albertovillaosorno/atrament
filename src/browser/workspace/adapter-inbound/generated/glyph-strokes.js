@@ -53,7 +53,11 @@ function exactGrapheme(value) {
         // remain distinct, exact multi-scalar graphemes.
         || /^[\u00AD\u034F\u061C\u180E\u200B-\u200F]$/u.test(value)
         || /^[\u202A-\u202E\u2060-\u206F]$/u.test(value)
-        || /^[\uFE00-\uFE0F\uFEFF\u{E0100}-\u{E01EF}]$/u
+        || /^[\uFE00-\uFE0F\uFEFF]$/u.test(value)
+        || /^[\u115F-\u1160\u17B4-\u17B5\u180B-\u180F\u3164\uFFA0]$/u
+            .test(value)
+        || /^[\uFFF0-\uFFF8\u{1BCA0}-\u{1BCA3}]$/u.test(value)
+        || /^[\u{1D173}-\u{1D17A}\u{E0000}-\u{E0FFF}]$/u
             .test(value)) {
         return false;
     }

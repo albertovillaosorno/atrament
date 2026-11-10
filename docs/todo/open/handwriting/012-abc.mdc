@@ -2973,11 +2973,13 @@ fallback behavior; it does not make all Unicode glyphs automatically drawable.
 The browser glyph editor and native Rust glyph admission now reject a
 bounded set of single-scalar invisible format controls, including soft
 hyphen, combining grapheme joiner, directional marks/isolates, invisible
-math operators, and basic or supplemental variation selectors. These
-characters previously could name authored pen strokes despite carrying no
-standalone visible shape. This is an exact-key admission rule, not Unicode
-normalization: joined emoji, visible graphemes with variation selectors,
-and exact non-ASCII spacing glyphs remain independently authorable.
+math operators, basic or supplemental variation selectors, script fillers,
+musical/shorthand controls, and supplementary tag scalars. These characters
+previously could name authored pen strokes despite carrying no standalone
+visible shape. This is an exact-key admission rule, not Unicode
+normalization: joined emoji, subdivision flag tag sequences, visible glyphs
+with variation selectors, and exact non-ASCII spacing glyphs remain
+independently authorable.
 
 Both browser TSV import/export and Rust selected-file loading refuse the
 same standalone controls. The native test also checks command-line authoring

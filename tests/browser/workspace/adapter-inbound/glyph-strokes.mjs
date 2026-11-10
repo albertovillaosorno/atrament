@@ -80,7 +80,11 @@ test("standalone format and variation controls cannot become ink", () => {
         "\u202A", "\u202E", "\u2060", "\u2061", "\u2062",
         "\u2063", "\u2064", "\u2066", "\u2069", "\u206F",
         "\uFE00", "\uFE0E", "\uFE0F", "\uFEFF",
-        "\u{E0100}", "\u{E01EF}"];
+        "\u{E0100}", "\u{E01EF}", "\u115F", "\u1160",
+        "\u17B4", "\u17B5", "\u180B", "\u180F", "\u3164",
+        "\uFFA0", "\uFFF0", "\uFFF8", "\u{1BCA0}",
+        "\u{1BCA3}", "\u{1D173}", "\u{1D17A}",
+        "\u{E0001}", "\u{E0067}", "\u{E007F}"];
     for (const glyph of invisible) {
         assert.throws(() => encodeGlyphLibrary([stroke(glyph)]),
             /visible Unicode grapheme/,
@@ -92,7 +96,8 @@ test("standalone format and variation controls cannot become ink", () => {
             "native must refuse the same unrenderable exact key");
     }
     for (const visible of ["👩\u200D💻", "❤\uFE0F", "a\u034F",
-        "a\u{E0100}", "\u00A0"]) {
+        "a\u{E0100}", "🏴\u{E0067}\u{E0062}\u{E0065}"
+            + "\u{E006E}\u{E0067}\u{E007F}", "\u00A0"]) {
         const original = [stroke(visible)];
         assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(original)),
             original, "joiners and selectors inside real glyphs survive");

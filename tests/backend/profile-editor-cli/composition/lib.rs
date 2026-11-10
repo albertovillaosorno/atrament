@@ -2454,7 +2454,11 @@ fn standalone_format_and_variation_scalars_cannot_name_physical_ink() {
         "\u{2061}", "\u{2062}", "\u{2063}", "\u{2064}",
         "\u{2066}", "\u{2069}", "\u{206f}", "\u{fe00}",
         "\u{fe0e}", "\u{fe0f}", "\u{feff}",
-        "\u{e0100}", "\u{e01ef}",
+        "\u{e0100}", "\u{e01ef}", "\u{115f}", "\u{1160}",
+        "\u{17b4}", "\u{17b5}", "\u{180b}", "\u{180f}",
+        "\u{3164}", "\u{ffa0}", "\u{fff0}", "\u{fff8}",
+        "\u{1bca0}", "\u{1bca3}", "\u{1d173}", "\u{1d17a}",
+        "\u{e0001}", "\u{e0067}", "\u{e007f}",
     ] {
         let ink = [
             "--glyph-stroke", invisible, "500", "500", "1800",
@@ -2489,7 +2493,9 @@ fn standalone_format_and_variation_scalars_cannot_name_physical_ink() {
             bytes.as_bytes());
     }
     for visible in ["👩\u{200d}💻", "❤\u{fe0f}",
-        "a\u{034f}", "a\u{e0100}", "\u{a0}"] {
+        "a\u{034f}", "a\u{e0100}",
+        "🏴\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}",
+        "\u{a0}"] {
         let text = execute_glyph_library(&args(&[
             "--glyph-stroke", visible, "500", "500", "1800",
             "3000", "250", "#123456",
