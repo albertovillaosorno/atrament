@@ -4196,3 +4196,27 @@ dry run pass. Jig doctor passes; Jig check retains 181 unrelated baseline
 findings, none in owned paths. A bounded native flow replay completed shards
 1–30 (90/90 exact TAP cases); later replay wrapper timeouts and overlapping
 runs prevent claiming a fresh complete 49-shard replay in this session.
+
+## Seeded native flow with manual positioned text (partial) — 2026-11-10
+
+A real CLI regression now checks that appending a page-two caller-positioned
+run does not consume or reorder the seeded creative variation of earlier
+flowed glyphs. It compares exact page-one transparent PNG bytes with and
+without the later run for both plain text and a Markdown heading. Repeated
+page-two requests are byte-identical; changing the later authored text
+changes its PNG pixels. Implicit and explicit two-page PDF exports also
+match byte-for-byte.
+
+The same test refuses missing exact glyph ink on a third, unselected page
+and a third-page out-of-margin stroke before replacing either accepted PNG
+or PDF. This guards the ephemeral native CLI output boundary, not persisted
+semantic content, overlap avoidance, or browser notebook Export. P1 remains
+open.
+
+Validation for this addition: 11/11 native selected-file CLI cases,
+2,189/2,189 offline all-features Rust workspace tests, workspace check,
+pinned strict production CLI Clippy and frontend TypeScript pass. Native
+flow shard 49 passes 3/3 with complete TAP counts, as do the 3/3 shard-runner
+checks, 1/1 print-ready dry run and 3/3 joined-ink tests. Jig doctor passes;
+Jig check still reports 181 previously known findings, zero in the two
+changed files. A new full 49-shard replay was not performed here.
