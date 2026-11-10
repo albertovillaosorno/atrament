@@ -7772,3 +7772,101 @@ test('plain piped stdout retains physical breaks in PDF and second PNG',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('32-page native flow ceiling preserves final PNG ink and output',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-page-ceiling-'));
+        try {
+            const oneRow = ['--flow-region', '30000', '40000',
+                '30000', '14000'];
+            const thirtyTwo = [...Array(31).fill('a'), 'ó'].join('\n');
+            const pdf = render(dir, thirtyTwo, 'pdf',
+                [...oneRow, '--pages', '32'], '--flow-text');
+            assert.equal(pdf.result.status, 0, pdf.result.stderr);
+            const acceptedPdf = readFileSync(pdf.output);
+            const pages = [...acceptedPdf.toString('latin1')
+                .matchAll(/\/Type \/Page\b/g)].length;
+            assert.equal(pages, 32, 'one measured row per PDF page');
+            const replay = render(dir, thirtyTwo, 'pdf',
+                [...oneRow, '--pages', '32'], '--flow-text');
+            assert.equal(replay.result.status, 0, replay.result.stderr);
+            assert.deepEqual(readFileSync(pdf.output), acceptedPdf);
+
+            for (const [source, extra, error] of [
+                [thirtyTwo, [...oneRow, '--pages', '31'],
+                    /requires 32 physical pages/],
+                [[...Array(33).fill('a')].join('\n'), oneRow,
+                    /exceeds 32 physical pages/],
+            ]) {
+                const refused = render(dir, source, 'pdf', extra,
+                    '--flow-text');
+                assert.notEqual(refused.result.status, 0);
+                assert.match(refused.result.stderr, error);
+                assert.deepEqual(readFileSync(refused.output), acceptedPdf,
+                    'page-budget refusal cannot replace the accepted PDF');
+            }
+
+            const last = render(dir, thirtyTwo, 'png', oneRow,
+                '--flow-text', 32);
+            assert.equal(last.result.status, 0, last.result.stderr);
+            const acceptedPng = readFileSync(last.output);
+            const reference = join(dir, 'manual-last-page.png');
+            const manual = spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--', ...base,
+                '--place-text', '32', '32500', '42500', 'ó',
+                '--export-paper', 'png', '--png-page', '32',
+                '--dpi', '72', '--output', reference,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(manual.status, 0, manual.stderr);
+            assert.deepEqual(acceptedPng, readFileSync(reference),
+                'last-page PNG is exactly the selected authored glyph ink');
+
+            const lateMissing = render(dir,
+                [...Array(31).fill('a'), 'β'].join('\n'), 'png', oneRow,
+                '--flow-text', 1);
+            assert.notEqual(lateMissing.result.status, 0);
+            assert.match(lateMissing.result.stderr,
+                /missing authored glyph shapes/);
+            assert.deepEqual(readFileSync(lateMissing.output), acceptedPng,
+                'page-one selection cannot conceal invalid page-32 ink');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('128-row physical flow ceiling yields an exact last-page PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-row-ceiling-'));
+        try {
+            const region = ['--flow-region', '30000', '40000',
+                '30000', '41000'];
+            const full = [...Array(127).fill('a'), 'ó'].join('\n');
+            const accepted = render(dir, full, 'png', region,
+                '--flow-text', 32);
+            assert.equal(accepted.result.status, 0, accepted.result.stderr);
+            const expected = readFileSync(accepted.output);
+            const reference = join(dir, 'manual-128th-row.png');
+            const placements = ['a', 'a', 'a', 'ó'].flatMap(
+                (letter, index) => ['--place-text', '32', '32500',
+                    String(42500 + 9000 * index), letter]);
+            const manual = spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--', ...base,
+                ...placements, '--export-paper', 'png',
+                '--png-page', '32', '--dpi', '72', '--output', reference,
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(manual.status, 0, manual.stderr);
+            assert.deepEqual(expected, readFileSync(reference),
+                'rows 125..128 on page 32 match independent manual ink');
+            const excessive = render(dir, `${full}\na`, 'png', region,
+                '--flow-text', 32);
+            assert.notEqual(excessive.result.status, 0);
+            assert.match(excessive.result.stderr,
+                /exceeds 128 measured lines/);
+            assert.deepEqual(readFileSync(excessive.output), expected,
+                'row-budget refusal cannot replace a selected PNG');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

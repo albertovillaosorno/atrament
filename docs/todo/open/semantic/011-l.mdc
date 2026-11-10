@@ -4064,3 +4064,15 @@ and its exact three source spaces against manually placed authored glyph ink.
 A one-space collision refuses without replacing either accepted export.
 
 This remains CLI-only, without persisted semantic body or browser export.
+
+## Exact physical page and measured-row ceilings (partial) — 2026-11-10
+
+Two native CLI acceptance regressions now reach the actual 32-page boundary:
+32 single-row sheets produce a 32-page vector PDF, and the last transparent
+PNG exactly matches separately authored ink placed on sheet 32. A second
+128-row source fills four rows per sheet and compares rows 125–128 against
+independent native placement on that same last PNG page. Deterministic PDF
+replay is byte-identical; an explicit 31-page budget, a 33rd physical page,
+a 129th measured row and missing glyph ink on the unselected 32nd page all
+refuse without replacing accepted PDF/PNG files. This checks the CLI's
+existing finite limits; it does not extend them or persist semantic blocks.
