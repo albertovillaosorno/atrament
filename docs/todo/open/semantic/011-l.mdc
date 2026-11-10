@@ -3976,3 +3976,17 @@ All accepted combinations preserve the exact emitted-glyph pitch, even when
 unused syntactic marker glyphs have 25-mm height overrides. This tests the
 current ephemeral CLI Markdown layout, not persisted semantic identities or
 browser notebook rendering; the executable P1 task remains open.
+
+## Unicode source separators at native export (partial) — 2026-11-10
+
+The native CLI now has an integration regression for U+2028 line and U+2029
+paragraph separators in both Markdown and plain-text source. With a
+single-row repeated physical region, equivalent explicit hard-break and
+blank-line input must render byte-identical PDF and every page's transparent
+72-DPI PNG through inline and read-only selected-file admission. The test
+checks three Markdown pages versus four plain pages, retaining the distinction
+between collapsed paragraph gaps and literal blank writing rows.
+
+A missing authored glyph beyond the first PNG page still refuses before
+replacing a previously accepted page-one export. This is another bounded
+CLI transport and output guarantee, not persisted semantic notebook state.

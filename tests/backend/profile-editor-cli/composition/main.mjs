@@ -368,3 +368,74 @@ test('syntax-only Setext and fenced markers retain native PDF/PNG row pitch',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('Unicode source separators preserve canonical native PDF and PNG pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-unicode-breaks-'));
+        try {
+            const base = ['notebook', '--printed-sheet', 'false',
+                '--glyph-stroke', 'a', '600', '500', '1800', '3000',
+                '250', '#123456', '--glyph-stroke', 'b', '800', '500',
+                '2500', '3000', '250', '#654321', '--flow-region',
+                '30000', '40000', '40000', '14000'];
+            const fixtures = [
+                ['markdown', '# a\u2028a\u2029b', '# a  \na\n\nb', 3],
+                ['text', 'a\u2028a\u2029b', 'a  \na\n\nb', 4],
+            ];
+            for (const [mode, unicode, canonical, pageCount] of fixtures) {
+                const source = join(dir, `${mode}.txt`);
+                writeFileSync(source, unicode);
+                const inline = `--flow-${mode}`;
+                const file = `--flow-${mode}-file`;
+                const exports = [
+                    ['pdf', ['--export-paper', 'pdf']],
+                    ...Array.from({ length: pageCount }, (_, index) => [
+                        `png-page-${index + 1}`, ['--export-paper', 'png',
+                            '--dpi', '72', '--png-page', `${index + 1}`],
+                    ]),
+                ];
+                let priorPng = null;
+                for (const [description, options] of exports) {
+                    const render = (...sourceArgs) => accepted(...base,
+                        ...options, ...sourceArgs);
+                    const expected = render(inline, canonical);
+                    assert.deepEqual(render(inline, unicode), expected,
+                        `${mode}/${description}: Unicode changed page ink`);
+                    assert.deepEqual(render(file, source), expected,
+                        `${mode}/${description}: file changed page ink`);
+                    if (description === 'pdf') {
+                        assert.match(expected.toString('latin1'),
+                            new RegExp(`/Count ${pageCount}\\b`));
+                    } else {
+                        assert.deepEqual(expected.subarray(0, 8),
+                            Buffer.from('89504e470d0a1a0a', 'hex'));
+                        if (description === `png-page-${pageCount}`) {
+                            assert.notDeepEqual(expected, priorPng,
+                                'final source glyph must remain page-local');
+                        }
+                        priorPng = expected;
+                    }
+                }
+                assert.equal(readFileSync(source, 'utf8'), unicode,
+                    'read-only flow admission must not rewrite source');
+                // Even when only page one is requested, later Unicode
+                // boundaries cannot hide an unauthored final-page glyph.
+                const previous = join(dir, `${mode}-previous.png`);
+                const png = ['--export-paper', 'png', '--dpi', '72',
+                    '--png-page', '1', '--output', previous];
+                accepted(...base, inline, canonical, ...png);
+                const before = readFileSync(previous);
+                const failed = profiles(...base, inline,
+                    unicode.replace(/b$/, '\u2603'), ...png, '--replace');
+                assert.notEqual(failed.status, 0);
+                assert.match(failed.stderr.toString('utf8'),
+                    /glyph|U\+2603/i);
+                assert.equal(failed.stdout.length, 0,
+                    'missing later-page glyph must not emit partial PNG');
+                assert.deepEqual(readFileSync(previous), before,
+                    'missing later-page glyph cannot replace page-one PNG');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
