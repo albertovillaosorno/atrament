@@ -193,7 +193,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     every sheet, refusing invalid regions or unfit glyphs/rows. \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
-    It auto-selects PDF page count unless --pages is explicit. \
+    PDF page count includes the last manual ink page, with or without \
+    flow; explicit --pages remains a strict upper bound. \
     Markdown headings default to dark underlines; select a user-colored \
     single/double underline, opaque pastel marker band or no ornament. \
     --heading-marker-scale adjusts the marker underlay pen width (percent) \
@@ -1369,15 +1370,40 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     })
 }
 
+// Source-independent manual annotations contribute to PDF page count.
+fn manual_last_page(request: &NotebookRequest) -> usize {
+    request
+        .ink
+        .iter()
+        .map(|line| line.page)
+        .chain(request.glyphs.runs.iter().map(|run| run.page))
+        .max()
+        .unwrap_or(0)
+}
+
+// Standalone manual ink also selects its last written PDF page by default.
+// An explicit --pages remains a hard caller-selected upper bound.
+fn admit_manual_page_selection(
+    request: &mut NotebookRequest,
+) -> Result<(), String> {
+    let last_page = manual_last_page(request);
+    if request.pages_explicit && request.pages < last_page {
+        return Err(format!(
+            "manual ink requires {last_page} physical pages, \
+             more than the explicit --pages count"
+        ));
+    }
+    request.pages = request.pages.max(last_page);
+    Ok(())
+}
+
 // Flow and explicit manual annotations share physical PDF page accounting.
 // A PNG page past flowed text is selectable only with actual authored ink.
 fn admit_flow_page_selection(
     request: &mut NotebookRequest,
     flow_pages: usize,
 ) -> Result<(), String> {
-    let manual_last_page = request.ink.iter().map(|line| line.page)
-        .chain(request.glyphs.runs.iter().map(|run| run.page))
-        .max().unwrap_or(0);
+    let manual_last_page = manual_last_page(request);
     let required_pages = flow_pages.max(manual_last_page);
     if request.pages_explicit && request.pages < required_pages {
         return Err(if manual_last_page > flow_pages {
@@ -1451,6 +1477,8 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
         request.glyphs.runs.extend(manual_runs);
         request.ink.extend(ornaments);
         request.glyphs.validate_pairing()?;
+    } else {
+        admit_manual_page_selection(&mut request)?;
     }
     let (ink, flow_ink_end) = if let Some(count) = flow_run_count {
         request.glyphs.expand_with_run_boundary(

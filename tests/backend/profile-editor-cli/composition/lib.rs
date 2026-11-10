@@ -1516,6 +1516,8 @@ fn notebook_cli_ink_refusals_leave_preexisting_output_unchanged() {
         args(&[
             "--export-paper",
             "pdf",
+            "--pages",
+            "1",
             "--ink-line",
             "2",
             "25400",

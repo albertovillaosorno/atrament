@@ -561,6 +561,14 @@ cargo run -q -p atrament_profile_editor_cli -- notebook \
   --export-paper png --png-page 2 --dpi 72 --output note-overlay.png
 ```
 
+Standalone manual `--ink-line` and `--place-text` exports also infer the
+last used physical PDF page when `--pages` is omitted. For example, a
+manual stroke on page 3 produces three physical PDF sheets without an
+explicit `--pages 3`. Setting `--pages` still establishes a strict budget:
+requesting only two sheets refuses before replacing any output. Selected
+PNG pages remain caller-chosen with `--png-page` and do not imply content
+on other pages.
+
 Positioned runs are caller-authored overlays, **not** flow obstacles: they
 do not reserve space or automatically avoid overlap with the generated
 body. Unselected pages are still validated before export, including

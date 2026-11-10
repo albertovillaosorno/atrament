@@ -124,6 +124,63 @@ test('native CLI reads selected regular files but never traverses input links',
         }
     });
 
+test('standalone manual ink infers later PDF pages without flow', () => {
+    const dir = mkdtempSync(join(root, '.temp/manual-pdf-pages-'));
+    try {
+        const paper = ['notebook', '--printed-sheet', 'true'];
+        const shape = ['--glyph-stroke', 'a', '500', '500',
+            '1800', '3000', '250', '#234567'];
+        const placed = ['--place-text', '2', '80000', '50000', 'aa'];
+        const line = ['--ink-line', '3', '70000', '40000',
+            '71000', '41000', '250', '#123456'];
+        const png = (page) => ['--export-paper', 'png', '--dpi', '72',
+            '--png-page', String(page)];
+        const selected = [...paper, ...shape, ...placed, ...line];
+
+        for (const [manual, expectedPages] of [
+            [[...paper, ...shape, ...placed], 2],
+            [[...paper, ...line], 3],
+            [selected, 3],
+        ]) {
+            const automatic = accepted(...manual, '--export-paper', 'pdf');
+            assert.match(automatic.toString('latin1'),
+                new RegExp(`/Count ${expectedPages}\\b`),
+                'native PDF counts the last independently authored page');
+            assert.deepEqual(automatic, accepted(...manual,
+                '--export-paper', 'pdf', '--pages', String(expectedPages)),
+            'automatic and explicitly sized PDF bytes must match');
+        }
+
+        assert.deepEqual(accepted(...selected, ...png(2)),
+            accepted(...paper, ...shape, ...placed, ...png(2)),
+            'page two draws only its manually placed glyphs');
+        assert.deepEqual(accepted(...selected, ...png(3)),
+            accepted(...paper, ...line, ...png(3)),
+            'page three draws only its manual pen segment');
+        assert.deepEqual(accepted(...selected, ...png(1)),
+            accepted(...paper, ...png(1)),
+            'unwritten first page stays transparent');
+
+        const outputPdf = join(dir, 'reviewed.pdf');
+        const outputPng = join(dir, 'reviewed.png');
+        writeFileSync(outputPdf,
+            accepted(...selected, '--export-paper', 'pdf'));
+        writeFileSync(outputPng, accepted(...selected, ...png(2)));
+        refused([...selected, '--export-paper', 'pdf', '--pages', '2',
+            '--output', outputPdf, '--replace'],
+        /manual ink requires 3 physical pages/, outputPdf);
+        refused([...selected, '--place-text', '3', '80000', '50000',
+            'b', ...png(2), '--output', outputPng, '--replace'],
+        /missing authored glyph shapes/, outputPng);
+        refused([...selected, '--ink-line', '3', '1000', '1000',
+            '2000', '2000', '250', '#123456', '--export-paper', 'pdf',
+            '--output', outputPdf, '--replace'],
+        /page 3 ink needs printable endpoints/, outputPdf);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('native flow includes explicit manual ink on later PDF/PNG pages',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-manual-page-'));

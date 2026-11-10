@@ -154,3 +154,23 @@ tests passed. Image overlays and the saved complete notebook remain open.
 Open. Provide the actual bounded Rust/backend or browser integration and an
 accepted/refused example before marking the executable capability complete.
 Theoretical design acceptance alone cannot establish that this feature runs.
+
+## Manual-only native PDF page inference (partial) — 2026-11-10
+
+The Rust `atrament-profiles notebook` CLI now infers a manual-only PDF's
+physical page count from the last explicit `--ink-line` or `--place-text`
+page, matching the existing flowed-export behavior. A selected manual mark
+on page 3 produces a three-page vector PDF without separately specifying
+`--pages 3`. An explicit `--pages` remains an upper bound and refuses if
+it would omit any manual page.
+
+A native subprocess regression checks page-two authored glyphs and page-three
+pen ink independently against selected transparent RGBA PNGs, plus exact
+byte parity between automatically inferred and explicitly sized PDFs for
+both manual mark families and their combination. It checks that an
+insufficient page budget, missing later glyph shape and off-margin later
+ink refuse without changing accepted PDF or PNG destinations.
+
+This change does not persist notebook content, infer handwriting shapes,
+introduce image overlays or expose browser-rendered body text. The
+complete saved-notebook PDF/PNG acceptance remains open.
