@@ -1797,6 +1797,19 @@ fn append_path_summary(
     Ok(())
 }
 
+fn is_standalone_invisible_scalar(grapheme: &str) -> bool {
+    let mut characters = grapheme.chars();
+    let Some(first) = characters.next() else {
+        return false;
+    };
+    characters.next().is_none()
+        && matches!(first,
+            '\u{00ad}' | '\u{034f}' | '\u{061c}' | '\u{180e}'
+                | '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}'
+                | '\u{2060}'..='\u{206f}' | '\u{fe00}'..='\u{fe0f}'
+                | '\u{feff}' | '\u{e0100}'..='\u{e01ef}')
+}
+
 fn is_exact_visible_grapheme(
     grapheme: &str, boundaries: UnicodeGraphemeSegmentation,
 ) -> bool {
@@ -1804,12 +1817,9 @@ fn is_exact_visible_grapheme(
         && !grapheme.chars().any(|ch| ch.is_control()
             || matches!(ch, '\u{2028}' | '\u{2029}'))
         && grapheme != " "
-        // These standalone default-ignorable format scalars are not
-        // physical ink. In joined emoji or a presentation sequence,
-        // the same scalar remains part of an otherwise visible grapheme.
-        && !matches!(grapheme,
-            "\u{200b}" | "\u{200c}" | "\u{200d}" | "\u{2060}"
-                | "\u{fe0e}" | "\u{fe0f}" | "\u{feff}")
+        // Only standalone invisible format/bidi/variation scalars refuse:
+        // joined emoji or visible glyphs with such marks keep exact keys.
+        && !is_standalone_invisible_scalar(grapheme)
         && boundaries.grapheme_count(grapheme) == 1
 }
 

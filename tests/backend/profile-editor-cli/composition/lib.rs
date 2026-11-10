@@ -2440,7 +2440,7 @@ fn saved_glyph_library_rejects_structural_separators_before_pdf_replacement() {
 }
 
 #[test]
-fn standalone_zero_width_scalars_cannot_name_physical_glyph_ink() {
+fn standalone_format_and_variation_scalars_cannot_name_physical_ink() {
     let source = test_path().with_extension("tsv");
     let target = test_path().with_extension("pdf");
     let filename = source.to_str().expect("selected TSV path");
@@ -2448,8 +2448,13 @@ fn standalone_zero_width_scalars_cannot_name_physical_glyph_ink() {
     fs::write(&target, b"existing selected PDF")
         .expect("write test-owned PDF sentinel");
     for invisible in [
-        "\u{200b}", "\u{200c}", "\u{200d}", "\u{2060}",
+        "\u{00ad}", "\u{034f}", "\u{061c}", "\u{180e}",
+        "\u{200b}", "\u{200c}", "\u{200d}", "\u{200e}",
+        "\u{200f}", "\u{202a}", "\u{202e}", "\u{2060}",
+        "\u{2061}", "\u{2062}", "\u{2063}", "\u{2064}",
+        "\u{2066}", "\u{2069}", "\u{206f}", "\u{fe00}",
         "\u{fe0e}", "\u{fe0f}", "\u{feff}",
+        "\u{e0100}", "\u{e01ef}",
     ] {
         let ink = [
             "--glyph-stroke", invisible, "500", "500", "1800",
@@ -2483,7 +2488,8 @@ fn standalone_zero_width_scalars_cannot_name_physical_glyph_ink() {
         assert_eq!(fs::read(&source).expect("unchanged TSV"),
             bytes.as_bytes());
     }
-    for visible in ["👩\u{200d}💻", "❤\u{fe0f}", "\u{a0}"] {
+    for visible in ["👩\u{200d}💻", "❤\u{fe0f}",
+        "a\u{034f}", "a\u{e0100}", "\u{a0}"] {
         let text = execute_glyph_library(&args(&[
             "--glyph-stroke", visible, "500", "500", "1800",
             "3000", "250", "#123456",

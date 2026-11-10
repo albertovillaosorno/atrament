@@ -62,9 +62,12 @@ function exactGrapheme(value: string): boolean {
         // Native flow and coverage audits reserve these two Unicode row
         // separators as structure; they can never name explicit pen ink.
         || /[\p{Cc}\u2028\u2029]/u.test(value) || value === " "
-        // Only standalone default-ignorable scalars are refused; a ZWJ
-        // emoji or a visible glyph with variation selector is still exact.
-        || /^[\u200B-\u200D\u2060\uFE0E\uFE0F\uFEFF]$/u
+        // A standalone invisible format, bidi or variation scalar cannot
+        // name physical ink. Joined emoji and visible variation sequences
+        // remain distinct, exact multi-scalar graphemes.
+        || /^[\u00AD\u034F\u061C\u180E\u200B-\u200F]$/u.test(value)
+        || /^[\u202A-\u202E\u2060-\u206F]$/u.test(value)
+        || /^[\uFE00-\uFE0F\uFEFF\u{E0100}-\u{E01EF}]$/u
             .test(value)) {
         return false;
     }

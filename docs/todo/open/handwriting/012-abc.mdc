@@ -2967,3 +2967,22 @@ Two regression cases cover NFC/NFD refusal, manual offset acceptance,
 no-clobber browser downloads and single/cursive baseline batch admission.
 All 256 focused glyph-editor tests pass. This narrows the caller-selected
 fallback behavior; it does not make all Unicode glyphs automatically drawable.
+
+## Standalone invisible Unicode ink refusal — 2026-11-10
+
+The browser glyph editor and native Rust glyph admission now reject a
+bounded set of single-scalar invisible format controls, including soft
+hyphen, combining grapheme joiner, directional marks/isolates, invisible
+math operators, and basic or supplemental variation selectors. These
+characters previously could name authored pen strokes despite carrying no
+standalone visible shape. This is an exact-key admission rule, not Unicode
+normalization: joined emoji, visible graphemes with variation selectors,
+and exact non-ASCII spacing glyphs remain independently authorable.
+
+Both browser TSV import/export and Rust selected-file loading refuse the
+same standalone controls. The native test also checks command-line authoring
+and preserved previously accepted PDF output on refusal. The focused browser
+glyph suite passes 256 cases, the offline workspace passes 2,190 Rust tests,
+and the strict production CLI Clippy and frontend build/check pass. This is
+a bounded ink-integrity fix, not comprehensive Unicode visibility analysis,
+new handwriting outlines, or completed P1 notebook acceptance.

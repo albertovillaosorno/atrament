@@ -74,9 +74,13 @@ test("Unicode row separators cannot become authored browser TSV ink", () => {
     }
 });
 
-test("standalone zero-width controls are not authorable glyph ink", () => {
-    const invisible = ["\u200B", "\u200C", "\u200D", "\u2060",
-        "\uFE0E", "\uFE0F", "\uFEFF"];
+test("standalone format and variation controls cannot become ink", () => {
+    const invisible = ["\u00AD", "\u034F", "\u061C", "\u180E",
+        "\u200B", "\u200C", "\u200D", "\u200E", "\u200F",
+        "\u202A", "\u202E", "\u2060", "\u2061", "\u2062",
+        "\u2063", "\u2064", "\u2066", "\u2069", "\u206F",
+        "\uFE00", "\uFE0E", "\uFE0F", "\uFEFF",
+        "\u{E0100}", "\u{E01EF}"];
     for (const glyph of invisible) {
         assert.throws(() => encodeGlyphLibrary([stroke(glyph)]),
             /visible Unicode grapheme/,
@@ -87,7 +91,8 @@ test("standalone zero-width controls are not authorable glyph ink", () => {
             /visible Unicode grapheme/,
             "native must refuse the same unrenderable exact key");
     }
-    for (const visible of ["👩\u200D💻", "❤\uFE0F", "\u00A0"]) {
+    for (const visible of ["👩\u200D💻", "❤\uFE0F", "a\u034F",
+        "a\u{E0100}", "\u00A0"]) {
         const original = [stroke(visible)];
         assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(original)),
             original, "joiners and selectors inside real glyphs survive");
