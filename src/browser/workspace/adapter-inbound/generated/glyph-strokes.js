@@ -50,21 +50,11 @@ function containsUnicodeNoncharacter(value) {
     }
     return false;
 }
-function exactGrapheme(value) {
-    // In Unicode mode an astral scalar is one character; lone UTF-16
-    // surrogates still match. TextEncoder would silently replace them with
-    // U+FFFD on TSV download, changing the caller's authored glyph identity.
-    if (!value || /[\uD800-\uDFFF]/u.test(value)
-        || containsUnicodeNoncharacter(value)
-        || new TextEncoder().encode(value).length > 64
-        // Native flow and coverage audits reserve these two Unicode row
-        // separators as structure; they can never name explicit pen ink.
-        || /[\p{Cc}\u2028\u2029]/u.test(value) || value === " "
-        // A standalone blank, format, bidi or variation scalar cannot
-        // name physical ink. Joined emoji and visible variation sequences
-        // remain distinct, exact multi-scalar graphemes.
-        || /^[\u00AD\u034F\u0600-\u0605\u061C\u06DD\u070F]$/u
-            .test(value)
+// Do not assign pen ink to clusters made only of format or blank scalars.
+// Visible bases retain exact attached variation/format controls.
+function isNonmarkingScalar(value) {
+    return /^[\u00AD\u034F\u0600-\u0605\u061C\u06DD\u070F]$/u
+        .test(value)
         || /^[\u0890-\u0891\u08E2]$/u.test(value)
         || /^[\u180E\u200B-\u200F]$/u.test(value)
         || /^[\u202A-\u202E\u2060-\u206F]$/u.test(value)
@@ -77,7 +67,21 @@ function exactGrapheme(value) {
         || /^[\u{1BCA0}-\u{1BCA3}]$/u
             .test(value)
         || /^[\u{1D173}-\u{1D17A}\u{E0000}-\u{E0FFF}]$/u
-            .test(value)) {
+            .test(value);
+}
+function exactGrapheme(value) {
+    // In Unicode mode an astral scalar is one character; lone UTF-16
+    // surrogates still match. TextEncoder would silently replace them with
+    // U+FFFD on TSV download, changing the caller's authored glyph identity.
+    if (!value || /[\uD800-\uDFFF]/u.test(value)
+        || containsUnicodeNoncharacter(value)
+        || new TextEncoder().encode(value).length > 64
+        // Native flow and coverage audits reserve these two Unicode row
+        // separators as structure; they can never name explicit pen ink.
+        || /[\p{Cc}\u2028\u2029]/u.test(value) || value === " "
+        // All-nonmarking grapheme clusters, including multi-scalar ones,
+        // have no visible physical pen identity.
+        || [...value].every(isNonmarkingScalar)) {
         return false;
     }
     if (typeof Intl.Segmenter !== "function")

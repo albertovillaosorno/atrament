@@ -1819,14 +1819,10 @@ fn ensure_inserted_bridge_fits_cell(
     Ok(())
 }
 
-// Blank Braille and Egyptian sign modifiers are nonmarking ink keys.
-fn is_standalone_invisible_scalar(grapheme: &str) -> bool {
-    let mut characters = grapheme.chars();
-    let Some(first) = characters.next() else {
-        return false;
-    };
-    characters.next().is_none()
-        && matches!(first,
+// A cluster made entirely of nonmarking scalars has no ink identity.
+// Keep a nonmarking scalar attached to a visible base as an exact key.
+const fn is_nonmarking_scalar(character: char) -> bool {
+    matches!(character,
             '\u{00ad}' | '\u{034f}' | '\u{0600}'..='\u{0605}'
                 | '\u{061c}' | '\u{06dd}' | '\u{070f}'
                 | '\u{0890}'..='\u{0891}' | '\u{08e2}'
@@ -1859,9 +1855,9 @@ fn is_exact_visible_grapheme(
             || is_unicode_noncharacter(ch)
             || matches!(ch, '\u{2028}' | '\u{2029}'))
         && grapheme != " "
-        // Only standalone invisible format/bidi/variation scalars refuse:
-        // joined emoji or visible glyphs with such marks keep exact keys.
-        && !is_standalone_invisible_scalar(grapheme)
+        // Refuse all-nonmarking clusters, not only standalone controls.
+        // Joined emoji or visible glyphs with such marks keep exact keys.
+        && !grapheme.chars().all(is_nonmarking_scalar)
         && boundaries.grapheme_count(grapheme) == 1
 }
 

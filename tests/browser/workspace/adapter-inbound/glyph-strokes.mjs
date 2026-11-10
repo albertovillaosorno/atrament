@@ -93,11 +93,14 @@ test("reserved Unicode and standalone nonmarking keys cannot be ink", () => {
         "\u{E0001}", "\u{E0067}", "\u{E007F}",
         "\uFDD0", "\uFDEF", "\uFFFE", "\uFFFF",
         "\u{1FFFE}", "\u{1FFFF}", "\u{10FFFE}", "\u{10FFFF}",
-        "\uFDD0\u0301", "\u{1FFFE}\u{E0100}"];
+        "\uFDD0\u0301", "\u{1FFFE}\u{E0100}",
+        "\uFE0E\uFE0F", "\u200D\uFE0F", "\u2800\uFE0F",
+        "\u0600\u200D", "\u034F\uFE0E",
+        "\u{E0067}\u{E007F}"];
     for (const glyph of invisible) {
         assert.throws(() => encodeGlyphLibrary([stroke(glyph)]),
             /visible Unicode grapheme/,
-            "standalone nonmarking scalar is not a visible glyph");
+            "nonmarking-only grapheme is not a visible glyph");
         const source = header
             + `${glyph}\t100\t200\t3000\t4200\t250\t#A1B2C3\n`;
         assert.throws(() => parseGlyphLibrary(source),
@@ -797,7 +800,9 @@ test("zero-width glyph refusal preserves browser-authored draft", async () => {
         const accepted = await downloads[0].text();
         for (const hidden of ["\u200B", "\u200C", "\u200D",
             "\u2060", "\uFE0E", "\uFE0F", "\uFEFF",
-            "\uFFF9", "\uFFFA", "\uFFFB"]) {
+            "\uFFF9", "\uFFFA", "\uFFFB",
+            "\u200D\uFE0F", "\u2800\uFE0F",
+            "\u0600\u200D", "\u{E0067}\u{E007F}"]) {
             get("character").value = hidden;
             get("character").dispatch("input");
             get("add").dispatch("click");

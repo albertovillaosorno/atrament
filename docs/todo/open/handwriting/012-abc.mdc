@@ -3059,3 +3059,19 @@ Focused TSV and CLI tests preserve previously selected PDF output on
 refusal and confirm adjacent valid private-use scalars remain authorable.
 This does not restrict caller-authored Unicode private-use glyphs or claim
 a complete font, script shaper or handwritten notebook journey.
+
+## All-nonmarking multi-scalar glyph refusal — 2026-11-10
+
+Exact Unicode graphemes composed solely of nonmarking controls could
+previously name caller-authored pen strokes if they contained more than one
+scalar. Rust and browser admission now reject such clusters, including
+paired variation selectors, a zero-width joiner followed by a selector,
+blank Braille with a selector, Arabic prefix plus joiner, and tag-only
+sequences. The exact Unicode key is never normalized or replaced.
+
+Focused browser TSV and editor tests preserve an already authored draft;
+native CLI source and TSV tests preserve an already selected PDF on refusal.
+Visible bases with selectors, joined emoji, Arabic prefix plus a digit and
+blank Braille with a visible acute remain independently authorable. This
+is a bounded integrity check, not Unicode-wide visibility classification,
+complete glyph geometry or automatic notebook writing.

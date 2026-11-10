@@ -2468,6 +2468,9 @@ fn reserved_or_nonmarking_unicode_keys_cannot_name_ink() {
         "\u{fdd0}", "\u{fdef}", "\u{fffe}", "\u{ffff}",
         "\u{1fffe}", "\u{1ffff}", "\u{10fffe}", "\u{10ffff}",
         "\u{fdd0}\u{301}", "\u{1fffe}\u{e0100}",
+        "\u{fe0e}\u{fe0f}", "\u{200d}\u{fe0f}",
+        "\u{2800}\u{fe0f}", "\u{0600}\u{200d}",
+        "\u{034f}\u{fe0e}", "\u{e0067}\u{e007f}",
     ] {
         let ink = [
             "--glyph-stroke", invisible, "500", "500", "1800",
