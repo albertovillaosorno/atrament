@@ -1513,6 +1513,38 @@ function usesBorrowedStreamReading(source) {
     return false;
 }
 
+// The profile CLI may read an opt-in `-` source, but that is the only
+// inherited input descriptor. Pin its bounded reader byte-for-byte; any
+// additional reader elsewhere in the CLI must return to source review.
+const REVIEWED_CLI_STDIN_READER =
+    String.raw`fn read_bounded_stdin(limit: usize, label: &str) `
+    + String.raw`-> Result<Vec<u8>, String> {
+    let maximum = u64::try_from(
+        limit.checked_add(1).ok_or("stdin input limit overflow")?,
+    )
+    .map_err(|_error| "stdin input limit exceeds u64")?;
+    let mut bytes = Vec::new();
+    let _read = io::stdin()
+        .lock()
+        .take(maximum)
+        .read_to_end(&mut bytes)
+        .map_err(|_error| format!("{label} stdin read failed"))?;
+    if bytes.len() > limit {
+        return Err(format!("{label} stdin exceeds {limit} UTF-8 bytes"));
+    }
+    Ok(bytes)
+}`;
+
+function reviewedProfileCliStdinReader(source) {
+    if (source.split(REVIEWED_CLI_STDIN_READER).length !== 2
+        || source.split("Read as _,").length !== 2) {
+        return false;
+    }
+    const otherSource = source.replace(REVIEWED_CLI_STDIN_READER, "")
+        .replace("Read as _,", "");
+    return !usesBorrowedStreamReading(otherSource);
+}
+
 test("borrowed stream-reading detector reviews std and nix APIs", () => {
     for (const source of [
         'use std::io::Read as _;',
@@ -1580,6 +1612,33 @@ test("borrowed stream-reading detector reviews std and nix APIs", () => {
     }
 });
 
+test("profile CLI source pins only the bounded opt-in stdin reader",
+    async () => {
+    const source = await readFile(PROFILE_EDITOR_CLI, "utf8");
+    assert.equal(reviewedProfileCliStdinReader(source), true);
+    assert.equal(unreviewedStandardStreamAuthority(source,
+        PROFILE_EDITOR_CLI), false);
+    for (const [before, after] of [
+        ["limit.checked_add(1)", "limit.checked_add(2)"],
+        [".take(maximum)", ".take(u64::MAX)"],
+        ["if bytes.len() > limit", "if bytes.is_empty()"],
+    ]) {
+        assert.equal(reviewedProfileCliStdinReader(
+            source.replace(before, after)), false, before);
+    }
+    for (const extra of [
+        "file.read_to_end(&mut contents);",
+        "std::io::Read::bytes(file);",
+        "use std::io::BufRead as _;",
+    ]) {
+        assert.equal(reviewedProfileCliStdinReader(
+            `${source}\n${extra}`), false, extra);
+    }
+    assert.equal(unreviewedStandardStreamAuthority(
+        `${source}\nlet extra = io::stdin();`, PROFILE_EDITOR_CLI),
+    true, "second stdin access cannot borrow ambient input");
+});
+
 test("backend borrowed stream reads stay in reviewed adapters",
     async () => {
     const readers = [];
@@ -1595,6 +1654,7 @@ test("backend borrowed stream reads stay in reviewed adapters",
             "lib.rs"),
         path.join(BACKEND_ROOT, "profile-entry-stream-reader",
             "adapter-inbound", "lib.rs"),
+        PROFILE_EDITOR_CLI,
         LOOPBACK_RUNTIME,
     ].sort(), "new stream reads require privacy review");
 });
@@ -2604,8 +2664,9 @@ function unreviewedStandardStreamAuthority(source, sourcePath) {
             || !source.includes('"CUPS accepted a job for printer {}"');
     }
     if (sourcePath === PROFILE_EDITOR_CLI) {
-        // Eight explicit CLI-only help and serialized-output write sites.
-        return stderr !== 0 || stdin !== 0 || stdout !== 8
+        // Eight explicit outputs and one selected, bounded stdin reader.
+        return stderr !== 0 || stdin !== 1 || stdout !== 8
+            || !reviewedProfileCliStdinReader(source)
             || !source.includes('writeln!(io::stdout().lock(), "{USAGE}")')
             || !source.includes(
                 'writeln!(io::stdout().lock(), "{NOTEBOOK_USAGE}")'
