@@ -42,6 +42,7 @@ use std::fmt::Write as _;
 use std::io::{self, Write as _};
 use std::mem::replace;
 use std::path::Path;
+use std::str::from_utf8;
 use std::slice::Iter;
 
 #[cfg(test)]
@@ -79,6 +80,8 @@ use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
 const MAX_INVENTORY_TEXT_BYTES: usize = 4096;
 const MAX_GLYPH_LIBRARY_BYTES: usize = 524_288;
+const MAX_PAGE_INK_FILE_BYTES: usize = 262_144;
+const PAGE_INK_FILE_HEADER: &str = "atrament.page-ink.v1";
 
 const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     | paper [atrament-paper options] \
@@ -150,6 +153,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
     [--quality preview|final (PNG only, exclusive with --dpi)] \
     [--ink-line PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM '#RRGGBB'] \
+    [--ink-file page-ink.tsv] \
     [--glyph-file strokes.tsv] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--fallback-glyph MISSING AUTHORED] \
@@ -170,7 +174,10 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     Paper-layer export uses nested Rust paper settings and skips ruling \
     on preprinted sheets. The optional date prints in its selected box \
     or line; rounded borders render. Repeated --ink-line (max 4096) draws \
-    explicit, unsaved physical pen segments. --glyph-stroke supplies exact \
+    explicit physical pen segments; --ink-file reads a bounded saved \
+    atrament.page-ink.v1 TSV (page, endpoints, width, color). \
+    These inputs remain export-only, not saved notebook v1 fields. \
+    --glyph-stroke supplies exact \
     author-drawn segments in a 4 x 5 mm cell and --place-text repeats them; \
     missing shapes refuse; --glyph-file loads a reusable library. \
     --join-text-pair opt-in bridges selected adjacent glyph pen endpoints \
@@ -1047,6 +1054,46 @@ fn parse_ink_line(
     })
 }
 
+// A caller-selected page ink library is a strict portable source of the
+// same physical segments as --ink-line. It is never notebook v1 state.
+fn load_page_ink_file(
+    path: &str,
+    ink: &mut Vec<NotebookInkLine>,
+) -> Result<(), String> {
+    let bytes = read_notebook_input(path, MAX_PAGE_INK_FILE_BYTES)?;
+    let source = from_utf8(&bytes)
+        .map_err(|_error| "ink file must be UTF-8")?;
+    let mut lines = source.lines();
+    if lines.next() != Some(PAGE_INK_FILE_HEADER) {
+        return Err("ink file needs atrament.page-ink.v1 header".into());
+    }
+    let mut loaded = 0usize;
+    for (index, row) in lines.enumerate() {
+        let values = row.split('\t').map(str::to_owned).collect::<Vec<_>>();
+        if values.len() != 7 {
+            return Err(format!(
+                "ink file line {} needs seven tab-separated fields",
+                index.saturating_add(2),
+            ));
+        }
+        if ink.len() == MAX_NOTEBOOK_INK_LINES {
+            return Err("ink exceeds 4096 explicit line segments".into());
+        }
+        let segment = parse_ink_line(&mut values.iter()).map_err(|error| {
+            format!(
+                "ink file line {} refused: {error}",
+                index.saturating_add(2)
+            )
+        })?;
+        ink.push(segment);
+        loaded = loaded.saturating_add(1);
+    }
+    if loaded == 0 {
+        return Err("ink file needs at least one physical segment".into());
+    }
+    Ok(())
+}
+
 fn parse_notebook_export_option(
     option: &str,
     iter: &mut Iter<'_, String>,
@@ -1113,6 +1160,10 @@ fn parse_notebook_export_option(
             let selected = iter.next()
                 .ok_or("--glyph-file requires a library path")?;
             glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
+        }
+        "--ink-file" => {
+            let path = iter.next().ok_or("--ink-file requires a file")?;
+            load_page_ink_file(path, ink)?;
         }
         "--ink-line" => {
             if ink.len() == MAX_NOTEBOOK_INK_LINES {
@@ -1322,9 +1373,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             | "--flow-text-file" | "--flow-markdown-file" =>
                 parse_notebook_flow(&mut iter, option, &mut flow)?,
             "--export-paper" | "--pages" | "--dpi" | "--quality"
-            | "--png-page" | "--ink-line" | "--glyph-stroke"
-            | "--glyph-file" | "--place-text" | "--fallback-glyph"
-            | "--glyph-variation" | "--join-text-pair"
+            | "--png-page" | "--ink-line" | "--ink-file"
+            | "--glyph-stroke" | "--glyph-file" | "--place-text"
+            | "--fallback-glyph" | "--glyph-variation" | "--join-text-pair"
             | "--join-text-anchors" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,

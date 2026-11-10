@@ -875,3 +875,132 @@ test('landscape Letter sheet preserves 32-page mixed-ink geometry and marks',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('saved physical ink TSV matches inline native PDF/PNG on late pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/page-ink-file-'));
+        try {
+            const file = join(dir, 'authored-ink.tsv');
+            const rows = [
+                '31\t140000\t50000\t160000\t51000\t350\t#123456',
+                '32\t170000\t51000\t190000\t52000\t400\t#234567',
+            ];
+            const header = 'atrament.page-ink.v1\n';
+            writeFileSync(file, `${header}${rows.join('\n')}\n`);
+            const saved = readFileSync(file);
+            const inline = rows.flatMap((row) => [
+                '--ink-line', ...row.split('\t'),
+            ]);
+            const selected = ['--ink-file', file];
+            const notebook = ['notebook', '--printed-sheet', 'true',
+                '--page-numbers', 'true', '--date-style', 'line',
+                '--date-placement', 'top-left', '--date-text', '2026-11-10'];
+            const shape = ['--glyph-stroke', 'a', '500', '500', '1800',
+                '3000', '250', '#142536'];
+            const scenarios = [
+                ['manual', []],
+                ['plain flow', [...shape, '--flow-text', 'a']],
+                ['Markdown flow', [...shape, '--flow-markdown', '# a']],
+                ['flow with positioned text', [...shape, '--flow-text', 'a',
+                    '--place-text', '32', '100000', '50000', 'aa']],
+            ];
+            for (const [kind, flow] of scenarios) {
+                const base = [...notebook, ...flow];
+                const actual = accepted(...base, ...selected,
+                    '--export-paper', 'pdf');
+                assert.match(actual.toString('latin1'), /\/Count 32\b/,
+                    `${kind}: late saved ink extends native PDF page count`);
+                assert.deepEqual(actual, accepted(...base, ...inline,
+                    '--export-paper', 'pdf'),
+                `${kind}: persisted and inline segments share PDF geometry`);
+                assert.deepEqual(actual, accepted(...base, ...selected,
+                    '--export-paper', 'pdf', '--pages', '32'));
+                for (const page of [1, 31, 32]) {
+                    const png = ['--export-paper', 'png', '--dpi', '72',
+                        '--png-page', String(page)];
+                    assert.deepEqual(accepted(...base, ...selected, ...png),
+                        accepted(...base, ...inline, ...png),
+                        `${kind}: page ${page} matches inline RGBA ink`);
+                }
+            }
+            const first = join(dir, 'first.tsv');
+            const last = join(dir, 'last.tsv');
+            writeFileSync(first, `${header}${rows[0]}\n`);
+            writeFileSync(last, `${header}${rows[1]}\n`);
+            assert.deepEqual(accepted(...notebook, '--ink-file', first,
+                '--ink-file', last, '--export-paper', 'pdf'),
+                accepted(...notebook, ...selected, '--export-paper', 'pdf'),
+                'multiple selected files combine in authored stroke order');
+            assert.deepEqual(readFileSync(file), saved,
+                'input ink is never rewritten by export');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('malformed and untrusted physical ink files cannot replace exports',
+    { skip: process.platform !== 'linux' }, () => {
+        const dir = mkdtempSync(join(root, '.temp/page-ink-refusal-'));
+        try {
+            const selected = join(dir, 'candidate.tsv');
+            const approved = join(dir, 'approved.png');
+            const approvedPdf = join(dir, 'approved.pdf');
+            const line = '31\t140000\t50000\t160000\t51000\t350\t#123456';
+            const source = `atrament.page-ink.v1\n${line}\n`;
+            writeFileSync(selected, source);
+            const args = ['notebook', '--ink-file', selected];
+            const png = ['--export-paper', 'png', '--dpi', '72',
+                '--png-page', '31'];
+            writeFileSync(approved, accepted(...args, ...png));
+            writeFileSync(approvedPdf, accepted(...args,
+                '--export-paper', 'pdf'));
+            const check = (bytes, expected) => {
+                writeFileSync(selected, bytes);
+                for (const [format, output] of [
+                    [png, approved], [['--export-paper', 'pdf'], approvedPdf],
+                ]) {
+                    refused([...args, ...format, '--output', output,
+                        '--replace'], expected, output);
+                }
+            };
+            check('wrong.v1\n' + line + '\n', /ink file needs.*header/);
+            check('atrament.page-ink.v1\n', /at least one physical segment/);
+            check('atrament.page-ink.v1\n' + line + '\n\n' + line,
+                /seven tab-separated fields/);
+            check('atrament.page-ink.v1\n31\t140000\t50000\n',
+                /seven tab-separated fields/);
+            check('atrament.page-ink.v1\n' + line + '\textra\n',
+                /seven tab-separated fields/);
+            check('atrament.page-ink.v1\n' + line.replace('31', '33') + '\n',
+                /ink page requires 1\.\.32/);
+            check('atrament.page-ink.v1\n' + line.replace('#123456',
+                '#broken') + '\n', /ink color must be #RRGGBB/);
+            check('atrament.page-ink.v1\n' + line.replace('140000',
+                '0') + '\n', /page 31 ink needs printable endpoints/);
+            check(Buffer.from([0xff, 0xfe, 0xfd]), /UTF-8/);
+            check(Buffer.alloc(262_145, 0x61), /input refused/);
+            check(`atrament.page-ink.v1\n${Array(4097).fill(line)
+                .join('\n')}\n`, /4096 explicit line segments/);
+            writeFileSync(selected, source);
+            const link = join(dir, 'ink-link.tsv');
+            symlinkSync(selected, link);
+            refused(['notebook', '--ink-file', link, ...png,
+                '--output', approved, '--replace'],
+            /SymlinkForbidden/, approved);
+            refused(['notebook', '--ink-file',
+                `${dir}/real/../candidate.tsv`, ...png,
+                '--output', approved, '--replace'],
+            /ParentTraversal/, approved);
+            refused(['notebook', '--ink-file', selected,
+                '--ink-line', '33', '100000', '50000', '120000',
+                '51000', '300', '#123456', ...png,
+                '--output', approved, '--replace'],
+            /ink page requires 1\.\.32/, approved);
+            refused(['notebook', '--ink-file', selected,
+                '--export-paper', 'pdf', '--pages', '30',
+                '--output', approvedPdf, '--replace'],
+            /requires 31 physical pages/, approvedPdf);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

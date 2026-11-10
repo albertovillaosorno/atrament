@@ -224,3 +224,25 @@ ink (3/3) passed. Jig doctor exits successfully in degraded state (compiled
 graph absent); Jig check still reports 181 existing findings, none on these
 two changed paths. The full native-flow
 shard suite was not replayed for this test-only addition.
+
+## Explicit saved physical ink input (partial) — 2026-11-10
+
+The native Rust notebook CLI can now read a caller-selected, versioned
+`atrament.page-ink.v1` UTF-8 TSV through `--ink-file`. Every tab-separated
+row provides page, physical endpoints, pen width and RGB color; it reuses
+exact `--ink-line` validation and the existing PDF/PNG compositor. A 256-KiB
+file cap and combined 4096-segment bound apply. The same safe regular-file
+reader refuses symlinks, parent traversal, oversize or invalid UTF-8 input.
+
+Two native subprocess tests compare exact PDF and transparent PNG bytes of
+saved ink against identical inline segments on pages 1, 31 and 32, with and
+without plain/Markdown flow. They check automatic PDF page inference, the
+explicit page budget, combining multiple ink files and unchanged input files.
+Invalid schema, blank/malformed rows, bad colors/pages, invalid UTF-8,
+oversized files, excess segments and input symlinks all refuse without
+overwriting previously accepted PDF or PNG output.
+
+This adds reusable manually positioned ink as a separate caller-owned file.
+It does **not** save notebook body text, embed images, synthesize missing
+glyphs or expose the flow source and ink in the localhost editor. The
+complete saved-notebook PDF/PNG acceptance remains open.

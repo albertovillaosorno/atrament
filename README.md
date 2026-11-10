@@ -561,6 +561,34 @@ cargo run -q -p atrament_profile_editor_cli -- notebook \
   --export-paper png --png-page 2 --dpi 72 --output note-overlay.png
 ```
 
+For reusable manually positioned ink, create a UTF-8 TSV file with the exact
+`atrament.page-ink.v1` header and one physical segment per row. Each row has
+seven **tab-separated** fields: one-based page, X1, Y1, X2, Y2, width in
+micrometres, and `#RRGGBB` ink color. For example:
+
+```sh
+{
+  printf 'atrament.page-ink.v1\n'
+  printf '2\t25400\t25400\t50800\t50800\t700\t#DE1144\n'
+} > page-ink.tsv
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --ink-file page-ink.tsv --export-paper pdf --output authored.pdf
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --ink-file page-ink.tsv --export-paper png --png-page 2 --dpi 72 \
+  --output authored-page-2.png
+```
+
+`--ink-file` uses the same native pen geometry and page admission as
+`--ink-line`, including automatic PDF page inference and selected-page PNG.
+It can be repeated and combined with inline lines, authored glyphs, or flow;
+all physical strokes share the existing 4096-segment export ceiling.
+
+Files are limited to 262144 bytes, require at least one row, and must be
+explicitly selected regular files (no symlinks). Malformed rows or later invalid
+ink refuse before replacing an output. This is a reusable **source file**,
+not a new saved notebook body schema, automatic glyph generation, or an image
+layer.
+
 Standalone manual `--ink-line` and `--place-text` exports also infer the
 last used physical PDF page when `--pages` is omitted. For example, a
 manual stroke on page 3 produces three physical PDF sheets without an
@@ -1979,7 +2007,7 @@ standard deviation, min/max envelope, median, and seed, remain validated
 profile data but **do not currently modify output ink**.
 
 The compositor refuses zero-length strokes, nonprintable endpoints, line
-width outside 80–1500 µm, unrequested PDF page numbers, and more than 512
+width outside 80–1500 µm, unrequested PDF page numbers, and more than 4096
 segments. Selected PNG pages render only their page's ink; invalid off-page
 geometry still refuses.
 
@@ -1987,7 +2015,8 @@ The `--ink-line` arguments are **manually specified physical segments**, not
 Unicode glyphs or calibrated handwriting; the separate caller-drawn glyph
 option below associates exact Unicode graphemes with authored segments.
 `atrament.notebook.v1` still saves page metadata alone; `--ink-line` marks
-are not stored in that profile or editable in the localhost web UI yet.
+and caller-selected `--ink-file` sources are not stored in that profile or
+editable in the localhost web UI yet.
 The full notebook-content rendering task therefore remains open.
 
 PDF allows 1–32 physical pages; transparent RGBA PNG renders one page at
