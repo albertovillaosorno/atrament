@@ -584,10 +584,24 @@ It can be repeated and combined with inline lines, authored glyphs, or flow;
 all physical strokes share the existing 4096-segment export ceiling.
 
 Files are limited to 262144 bytes, require at least one row, and must be
-explicitly selected regular files (no symlinks). Malformed rows or later invalid
-ink refuse before replacing an output. This is a reusable **source file**,
-not a new saved notebook body schema, automatic glyph generation, or an image
-layer.
+explicitly selected regular files (no symlinks). Instead of a path,
+`--ink-file -` reads the same bounded TSV from standard input and accepts
+piped `--emit-ink-file` output without an intermediate file. Only one stdin
+source may be selected across `--ink-file -` and `--flow-*-file -`; a second
+selection
+refuses. For example:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --emit-ink-file | \
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --ink-file - --export-paper pdf > replay.pdf
+```
+
+Malformed rows, oversized streams or later invalid ink refuse before replacing
+an output. This is a reusable **physical source**, not a new saved notebook
+body schema, automatic glyph generation, or an image layer.
 
 The complementary `--emit-ink-file` compiles the **actual projected physical
 strokes** of selected inline ink, positioned glyphs and plain/Markdown flow to

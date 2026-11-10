@@ -39,7 +39,7 @@ mod glyph;
 use std::env;
 use std::error::Error;
 use std::fmt::Write as _;
-use std::io::{self, Write as _};
+use std::io::{self, Read as _, Write as _};
 use std::mem::replace;
 use std::path::Path;
 use std::str::from_utf8;
@@ -153,7 +153,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
     [--quality preview|final (PNG only, exclusive with --dpi)] \
     [--ink-line PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM '#RRGGBB'] \
-    [--ink-file page-ink.tsv] [--emit-ink-file] \
+    [--ink-file FILE|-] [--emit-ink-file] \
     [--glyph-file strokes.tsv] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--fallback-glyph MISSING AUTHORED] \
@@ -169,13 +169,14 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-region LEFT_UM TOP_UM WIDTH_UM HEIGHT_UM] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
     [--output FILE [--replace]]\n\
-    A flow source requires --export-paper pdf|png; flow text is not \
+    Flow requires --export-paper pdf|png or --emit-ink-file; text is not \
     stored in notebook profiles. \
     Paper-layer export uses nested Rust paper settings and skips ruling \
     on preprinted sheets. The optional date prints in its selected box \
     or line; rounded borders render. Repeated --ink-line (max 4096) draws \
     explicit physical pen segments; --ink-file reads a bounded saved \
-    atrament.page-ink.v1 TSV (page, endpoints, width, color). \
+    atrament.page-ink.v1 TSV (page, endpoints, width, color); \
+    select - for bounded stdin. \
     --emit-ink-file compiles physical segments (including placed glyphs \
     and flow ornaments) into reusable versioned TSV instead of a PDF/PNG. \
     It retains no paper marks, date or saved semantic content. \
@@ -787,6 +788,25 @@ fn read_notebook_input(path: &str, limit: usize) -> Result<Vec<u8>, String> {
     Ok(bytes.bytes().to_vec())
 }
 
+// The CLI's explicit `-` source is bounded before UTF-8 or format
+// admission. Never read an unbounded pipe or silently persist its contents.
+fn read_bounded_stdin(limit: usize, label: &str) -> Result<Vec<u8>, String> {
+    let maximum = u64::try_from(
+        limit.checked_add(1).ok_or("stdin input limit overflow")?,
+    )
+    .map_err(|_error| "stdin input limit exceeds u64")?;
+    let mut bytes = Vec::new();
+    let _read = io::stdin()
+        .lock()
+        .take(maximum)
+        .read_to_end(&mut bytes)
+        .map_err(|_error| format!("{label} stdin read failed"))?;
+    if bytes.len() > limit {
+        return Err(format!("{label} stdin exceeds {limit} UTF-8 bytes"));
+    }
+    Ok(bytes)
+}
+
 fn read_glyph_input(path: &str) -> Result<Vec<u8>, String> {
     let file = open_selected_profile_file(Path::new(path))
         .map_err(|error| format!("glyph file refused: {error:?}"))?;
@@ -1064,9 +1084,18 @@ fn load_page_ink_file(
     path: &str,
     ink: &mut Vec<NotebookInkLine>,
 ) -> Result<(), String> {
-    let bytes = read_notebook_input(path, MAX_PAGE_INK_FILE_BYTES)?;
-    let source = from_utf8(&bytes)
-        .map_err(|_error| "ink file must be UTF-8")?;
+    let bytes = if path == "-" {
+        read_bounded_stdin(MAX_PAGE_INK_FILE_BYTES, "ink")?
+    } else {
+        read_notebook_input(path, MAX_PAGE_INK_FILE_BYTES)?
+    };
+    let source = from_utf8(&bytes).map_err(|_error| {
+        if path == "-" {
+            "ink stdin must be UTF-8"
+        } else {
+            "ink file must be UTF-8"
+        }
+    })?;
     let mut lines = source.lines();
     if lines.next() != Some(PAGE_INK_FILE_HEADER) {
         return Err("ink file needs atrament.page-ink.v1 header".into());
@@ -1129,6 +1158,7 @@ fn parse_notebook_export_option(
     export: &mut NotebookExportOptions,
     ink: &mut Vec<NotebookInkLine>,
     glyphs: &mut GlyphOverlay,
+    stdin_selected: &mut bool,
 ) -> Result<(), String> {
     match option {
         "--emit-ink-file" => {
@@ -1204,6 +1234,14 @@ fn parse_notebook_export_option(
         }
         "--ink-file" => {
             let path = iter.next().ok_or("--ink-file requires a file")?;
+            if path == "-" {
+                if *stdin_selected {
+                    return Err(
+                        "standard input may be selected only once".into()
+                    );
+                }
+                *stdin_selected = true;
+            }
             load_page_ink_file(path, ink)?;
         }
         "--ink-line" => {
@@ -1287,8 +1325,10 @@ fn parse_notebook_handwriting_profile(
 }
 
 fn parse_notebook_flow(
-    iter: &mut Iter<'_, String>, option: &str,
+    iter: &mut Iter<'_, String>,
+    option: &str,
     flow: &mut Option<FlowSource>,
+    stdin_selected: &mut bool,
 ) -> Result<(), String> {
     if flow.is_some() {
         return Err("only one flow source may be supplied".into());
@@ -1301,6 +1341,12 @@ fn parse_notebook_flow(
     } else {
         FlowFormat::Markdown
     };
+    if option.ends_with("-file") && source == "-" {
+        if *stdin_selected {
+            return Err("standard input may be selected only once".into());
+        }
+        *stdin_selected = true;
+    }
     *flow = Some(if option.ends_with("-file") {
         FlowSource::from_file(format, source)?
     } else {
@@ -1328,6 +1374,16 @@ fn load_notebook_profile_option(
     NotebookProfile::from_json(&read_notebook_input(
         path, MAX_NOTEBOOK_JSON_BYTES,
     )?)
+}
+
+fn load_notebook_paper_option(
+    iter: &mut Iter<'_, String>,
+) -> Result<String, String> {
+    let path = iter.next().ok_or("--paper-profile requires a file")?;
+    let paper = read_notebook_input(
+        path, atrament_notebook_paper_cli::MAX_PROFILE_BYTES,
+    )?;
+    canonical_paper_profile_json(&paper)
 }
 
 fn validate_notebook_flow_selection(
@@ -1372,6 +1428,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut flow = None;
     let mut flow_region = None;
     let mut heading = HeadingDecoration::default();
+    let mut stdin_selected = false;
     let mut loaded = false;
     let mut edited = false;
     let mut iter = args.iter();
@@ -1384,13 +1441,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 loaded = true;
             }
             "--paper-profile" => {
-                let path =
-                    iter.next().ok_or("--paper-profile requires a file")?;
-                let paper = read_notebook_input(
-                    path,
-                    atrament_notebook_paper_cli::MAX_PROFILE_BYTES,
-                )?;
-                profile.paper_json = canonical_paper_profile_json(&paper)?;
+                profile.paper_json = load_notebook_paper_option(&mut iter)?;
                 edited = true;
             }
             "--date-style" | "--date-placement" | "--date-text"
@@ -1413,7 +1464,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 &mut iter, flow_region.is_some())?),
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" =>
-                parse_notebook_flow(&mut iter, option, &mut flow)?,
+                parse_notebook_flow(
+                    &mut iter, option, &mut flow, &mut stdin_selected,
+                )?,
             "--emit-ink-file" | "--export-paper" | "--pages" | "--dpi"
             | "--quality" | "--png-page" | "--ink-line" | "--ink-file"
             | "--glyph-stroke" | "--glyph-file" | "--place-text"
@@ -1421,7 +1474,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             | "--join-text-anchors" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
-                    &mut glyphs,
+                    &mut glyphs, &mut stdin_selected,
                 )?;
             }
             "--output" => output = Some(parse_selected_output(

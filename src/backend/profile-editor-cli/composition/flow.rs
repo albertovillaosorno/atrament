@@ -33,7 +33,6 @@
 //! A bounded text-to-physical-page bridge for the native CLI.
 
 use std::borrow::Cow;
-use std::io::{self, Read as _};
 use std::iter::Peekable;
 use std::mem::take;
 use std::slice::Iter;
@@ -257,16 +256,7 @@ impl FlowSource {
         format: FlowFormat, path: &str,
     ) -> Result<Self, String> {
         let bytes = if path == "-" {
-            let limit = u64::try_from(MAX_FLOW_BYTES + 1)
-                .map_err(|_error| "flow input limit exceeds u64")?;
-            let mut bytes = Vec::new();
-            let _read = io::stdin().lock().take(limit)
-                .read_to_end(&mut bytes)
-                .map_err(|_error| "flow stdin read failed")?;
-            if bytes.len() > MAX_FLOW_BYTES {
-                return Err("flow stdin exceeds 4096 UTF-8 bytes".into());
-            }
-            bytes
+            super::read_bounded_stdin(MAX_FLOW_BYTES, "flow")?
         } else {
             super::read_notebook_input(path, MAX_FLOW_BYTES)?
         };

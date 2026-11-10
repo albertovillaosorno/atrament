@@ -275,3 +275,20 @@ This is an explicit intermediate output useful for testing and replay. It
 does not persist editable notebook semantics, images, paper metadata or a
 complete first-release composition/print journey. The P1 export task remains
 open.
+
+## Bounded physical ink pipe replay (partial) — 2026-11-10
+
+The versioned page-ink reader also accepts explicitly selected `--ink-file -`
+standard input. The same strict TSV admission applies, with a 262144-byte
+cap, checked by reading at most one additional byte. Native CLI re-emission and
+PDF/PNG compositing share the loaded physical segments with selected-file
+mode. The existing Markdown stdin selector and ink stdin selector may not
+both consume a single pipe; repeated `-` selections refuse explicitly.
+
+A native subprocess regression compiles varied, marked Markdown glyph ink
+plus independent page-31/page-32 annotations, then pipes the TSV back into
+identical 32-page physical PDF and selected transparent PNG pages 1, 31 and
+32. Re-emitting stdin reproduces the exact original TSV bytes. Invalid
+UTF-8, missing ink rows, bad headers, oversized input and competing stdin
+selectors refuse before replacing accepted PDF output. This makes physical
+replay convenient but does not persist editable notebook content or images.

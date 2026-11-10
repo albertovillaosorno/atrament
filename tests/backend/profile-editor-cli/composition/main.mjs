@@ -15,10 +15,15 @@ const root = fileURLToPath(new URL(
 const cargo = join(root, '.dependencies/rust/1.99.1/bin/cargo');
 
 function profiles(...args) {
+    return profilesInput(undefined, ...args);
+}
+
+function profilesInput(input, ...args) {
     const result = spawnSync(cargo, [
         'run', '--offline', '--quiet', '-p', 'atrament_profile_editor_cli',
         '--bin', 'atrament-profiles', '--', ...args,
-    ], { cwd: root, timeout: 45_000, maxBuffer: 24 * 1024 * 1024 });
+    ], { cwd: root, input, timeout: 45_000,
+        maxBuffer: 24 * 1024 * 1024 });
     assert.equal(result.error, undefined, result.error?.message);
     return result;
 }
@@ -1033,7 +1038,7 @@ test('compiled page ink TSV replays mixed flow and manual PDF/PNG bytes',
             assert.ok(rows.length > 6, 'flowed glyphs and ornaments compiled');
             for (const row of rows.slice(1)) {
                 assert.match(
-                    row, /^\d+\t\d+\t\d+\t\d+\t\d+\t#[0-9A-F]{6}$/,
+                    row, /^\d+\t\d+\t\d+\t\d+\t\d+\t\d+\t#[0-9A-F]{6}$/,
                 );
             }
             assert.ok(rows.includes(
@@ -1063,6 +1068,93 @@ test('compiled page ink TSV replays mixed flow and manual PDF/PNG bytes',
             refused([...notebook, ...content, '--emit-ink-file',
                 '--output', file], /not saved|Exists/, file);
             assert.deepEqual(readFileSync(file), bytes);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('compiled ink stdin replays sparse pages and rejects unsafe pipes',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/page-ink-pipe-'));
+        try {
+            const saved = join(dir, 'compiled.tsv');
+            const destination = join(dir, 'accepted.pdf');
+            const notebook = ['notebook', '--printed-sheet', 'true',
+                '--page-numbers', 'true', '--date-style', 'line',
+                '--date-placement', 'top-left', '--date-text', '2026-11-10'];
+            const ink = ['--glyph-stroke', 'a', '500', '500', '1800',
+                '3000', '250', '#142536', '--glyph-variation', '19',
+                '8', '7', '9', '4', '60', '65'];
+            const content = [...ink, '--flow-markdown', '# aa\n\n- aa',
+                '--heading-style', 'marker', '--heading-color', '#F8DE91',
+                '--heading-ink-scale', '180', '--place-text', '32',
+                '100000', '50000', 'aa', '--ink-line', '31',
+                '70000', '40000', '71000', '41000', '250', '#abcdef'];
+            const physical = accepted(...notebook, ...content,
+                '--emit-ink-file');
+            assert.ok(physical.length > 100);
+            writeFileSync(saved, physical);
+            const pipe = (input, ...flags) => {
+                const result = profilesInput(input, 'notebook', ...notebook
+                    .slice(1), '--ink-file', '-', ...flags);
+                assert.equal(result.status, 0, result.stderr.toString());
+                return result.stdout;
+            };
+            const emittedAgain = pipe(physical, '--emit-ink-file');
+            assert.deepEqual(emittedAgain, physical,
+                'piped canonical TSV retains exact segment order and bytes');
+            const pdf = accepted(...notebook, ...content,
+                '--export-paper', 'pdf');
+            assert.match(pdf.toString('latin1'), /\/Count 32\b/);
+            assert.deepEqual(pipe(physical, '--export-paper', 'pdf'), pdf);
+            assert.deepEqual(accepted(...notebook, '--ink-file', saved,
+                '--export-paper', 'pdf'), pdf);
+            for (const page of [1, 31, 32]) {
+                const png = ['--export-paper', 'png', '--dpi', '72',
+                    '--png-page', String(page)];
+                assert.deepEqual(pipe(physical, ...png),
+                    accepted(...notebook, ...content, ...png),
+                    `pipe page ${page} is actual original native PNG`);
+            }
+            writeFileSync(destination, pdf);
+            const refusedPipe = (input, flags, expected) => {
+                const before = readFileSync(destination);
+                const result = profilesInput(input, 'notebook',
+                    '--ink-file', '-', ...flags, '--output', destination,
+                    '--replace');
+                assert.notEqual(result.status, 0, flags.join(' '));
+                assert.match(result.stderr.toString('utf8'), expected);
+                assert.equal(result.stdout.length, 0,
+                    'invalid pipe cannot emit partial output');
+                assert.deepEqual(readFileSync(destination), before,
+                    'invalid pipe cannot replace native PDF');
+            };
+            refusedPipe(Buffer.alloc(262_145, 0x61),
+                ['--export-paper', 'pdf'], /ink stdin exceeds 262144/);
+            refusedPipe(Buffer.from([0xff, 0xfe, 0xfd]),
+                ['--export-paper', 'pdf'], /ink stdin must be UTF-8/);
+            refusedPipe(Buffer.from('atrament.page-ink.v1\n'),
+                ['--export-paper', 'pdf'], /at least one physical segment/);
+            refusedPipe(Buffer.from('invalid.v1\n'),
+                ['--export-paper', 'pdf'], /ink file needs.*header/);
+            refusedPipe(physical,
+                ['--ink-file', '-', '--export-paper', 'pdf'],
+                /standard input may be selected only once/);
+            refusedPipe(physical,
+                ['--flow-markdown-file', '-', ...ink,
+                    '--export-paper', 'pdf'],
+                /standard input may be selected only once/);
+            // Reverse argument order: flow claims the same pipe first.
+            const reverse = profilesInput(Buffer.from('a'), 'notebook',
+                ...ink, '--flow-text-file', '-', '--ink-file', '-',
+                '--export-paper', 'pdf', '--output', destination,
+                '--replace');
+            assert.notEqual(reverse.status, 0);
+            assert.match(reverse.stderr.toString(),
+                /standard input may be selected only once/);
+            assert.deepEqual(readFileSync(destination), pdf);
+            assert.deepEqual(readFileSync(saved), physical,
+                'saved physical source remains untouched by pipe replay');
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
