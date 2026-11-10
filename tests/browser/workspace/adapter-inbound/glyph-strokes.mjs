@@ -2113,6 +2113,16 @@ test("acute i composition removes only an identifiable upper dot", () => {
             result);
     }
     assert.deepEqual(source, before, "base i keeps its separate dot");
+    const clippedDot = [source[0], { ...source[1], y1: 0, y2: 80 }];
+    const clippedBefore = encodeGlyphLibrary(clippedDot);
+    for (const target of ["í", "i\u0301"]) {
+        const ink = composeAccentedGlyph(clippedDot,
+            "i", target, "#ABCDEF");
+        assert.deepEqual(ink[0], { ...source[0], grapheme: target },
+            "removed dotted-i ink is not carried into an acute target");
+        assert.equal(ink.length, 2);
+    }
+    assert.equal(encodeGlyphLibrary(clippedDot), clippedBefore);
     const oneStroke = source.slice(0, 1);
     assert.throws(() => composeAccentedGlyph(
         oneStroke, "i", "í", "#ABCDEF"), /clear upper dot/);
@@ -2272,6 +2282,66 @@ test("accent composition refuses mismatches and clipped marks", () => {
         assert.throws(() => composeAccentedGlyph(...args));
     }
 });
+
+test("accent composition refuses source strokes with clipped pen edges", () => {
+    const safe = { ...stroke("e"), x1: 125, y1: 1900,
+        x2: 3375, y2: 4375 };
+    const clipped = [
+        { ...safe, x1: 0 },
+        { ...safe, x2: 3500 },
+        { ...safe, y2: 4500 },
+        { ...safe, x1: 100 },
+    ];
+    const source = [safe, stroke("∞")];
+    const before = encodeGlyphLibrary(source);
+    for (const target of ["é", "e\u0301"]) {
+        const admitted = composeAccentedGlyph(source, "e", target,
+            "#243647");
+        assert.equal(admitted[0].x1, 125,
+            "full-pen contact with the cell boundary remains valid");
+        for (const bad of clipped) {
+            const library = [safe, bad, stroke("∞")];
+            const original = encodeGlyphLibrary(library);
+            assert.throws(() => composeAccentedGlyph(library,
+                "e", target, "#243647"), /Source pen.*glyph cell/);
+            assert.equal(encodeGlyphLibrary(library), original,
+                "refused composed accents must not edit source TSV");
+        }
+    }
+    assert.equal(encodeGlyphLibrary(source), before);
+});
+
+test("browser clipped source pen refuses accent without replacing ink",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const before = [
+                { ...stroke("e"), x1: 0, y1: 1900,
+                    x2: 2300, y2: 3300 },
+                { ...stroke("é"), x1: 700, y1: 800,
+                    x2: 1300, y2: 1000 },
+                stroke("∞"),
+            ];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(before));
+            editor.start();
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("copy-from").value = "e";
+            get("character").value = "é";
+            get("character").dispatch("input");
+            get("compose").dispatch("click");
+            assert.match(get("status").textContent,
+                /Source pen must fit inside glyph cell/);
+            get("save").dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+                before, "refusal cannot replace the already authored accent");
+        } finally {
+            ui.restore();
+        }
+    });
 
 test("accent action replaces target and refuses atomically", async () => {
     const ui = mountEditor();
@@ -6513,6 +6583,17 @@ test("atomic bilingual fill refuses ambiguous i, clipped marks and caps",
             1550, 2450, 1100, 250, "#243647", { dx: 0, lift: 0 }),
         /Save requires 1..4096/);
         assert.equal(encodeGlyphLibrary(nearlyFull), source);
+        // A manually imported centerline can be TSV-valid but physically
+        // clipped: the bulk fill must not commit any preceding new glyphs.
+        for (const form of ["single", "cursive"]) {
+            const edge = [{ ...stroke("e"), x1: 0,
+                y1: 1900, x2: 2300, y2: 3300 }, stroke("∞")];
+            const input = encodeGlyphLibrary(edge);
+            assert.throws(() => fillMissingBilingualBaseline(edge,
+                1550, 2450, 1100, 250, "#243647",
+                { dx: 0, lift: 0 }, form), /Source pen.*glyph cell/);
+            assert.equal(encodeGlyphLibrary(edge), input);
+        }
     });
 
 test("baseline browser button is explicit, idempotent and session-gated",

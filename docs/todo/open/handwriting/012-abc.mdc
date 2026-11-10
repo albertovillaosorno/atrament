@@ -2931,3 +2931,24 @@ keys. The 252-case focused browser suite passes; three isolated Firefox
 privacy/storage scenarios also pass, including the seeded Clear-Site-Data
 positive and negative controls. This is a reproducible first-stage geometry
 safety check, not native analytic-curve persistence or font-wide proof.
+
+## Full-pen clearance in manual accent composition — 2026-11-10
+
+A native-valid glyph TSV may place a centerline on a cell edge, even though
+its physical pen would extend outside the 3500 x 4500 µm template cell.
+The explicit Spanish accent composer now refuses such inherited source ink
+before creating an NFC/NFD target. Acute `i` still diagnoses ambiguous dots
+first, and a removed dot does not need to fit the target. In-memory drafts,
+original exact Unicode glyphs and existing accented targets remain unchanged
+on refusal; a source pen exactly tangent to the boundary remains admissible.
+
+Focused browser regressions exercise both Unicode forms, clipped left/right/
+bottom source strokes, full-pen tangency and UI load/compose/save refusal.
+This closes one bounded clipping path, not automatic glyph synthesis,
+joined writing, or completion of the full P1 handwritten notebook journey.
+
+The final 254-case browser glyph suite and pinned 2,190-test offline Rust
+workspace pass, along with frontend build/check, strict production CLI
+Clippy and Jig doctor. Jig check remains at its existing 181 findings,
+without new long lines. The broader Firefox suite was not rerun; strict
+all-target Clippy remains blocked by existing repository test-source lints.

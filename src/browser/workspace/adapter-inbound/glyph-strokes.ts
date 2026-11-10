@@ -3697,6 +3697,18 @@ export function composeAccentedGlyph(
         }
         base = body;
     }
+    // Native TSV admits centerlines at the cell edge. Refuse inherited
+    // full-pen clipping after any untransferred acute-i dot is removed.
+    const fitsCell = ({ x1, y1, x2, y2, width }: Stroke): boolean => {
+        const fitsX = (x: number) => x - width / 2 >= 0
+            && x + width / 2 <= 3500;
+        const fitsY = (y: number) => y - width / 2 >= 0
+            && y + width / 2 <= 4500;
+        return [x1, x2].every(fitsX) && [y1, y2].every(fitsY);
+    };
+    if (!base.every(fitsCell)) {
+        throw new Error("Source pen must fit inside glyph cell for accent");
+    }
     const xs = base.flatMap((stroke) => [stroke.x1, stroke.x2]);
     const topY = Math.min(...base.flatMap((stroke) => [stroke.y1, stroke.y2]));
     const center = Math.round((Math.min(...xs) + Math.max(...xs)) / 2)
