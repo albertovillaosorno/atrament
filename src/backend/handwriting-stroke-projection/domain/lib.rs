@@ -181,8 +181,8 @@ fn glyph_point(
 /// exporter remains responsible for page-size and stroke-margin admission.
 ///
 /// # Errors
-/// Refuses overflow, negative page coordinates, nonfinite/huge shears and
-/// pen widths outside the supported 80..=1500 micrometre envelope.
+/// Refuses overflow, negative page coordinates, singular or periodic slants,
+/// oversized shears, and pen widths outside the 80..=1500 um envelope.
 pub fn project_ink_segment(
     segment: AuthoredInkSegment,
     placement: InkPlacement,
@@ -194,6 +194,14 @@ pub fn project_ink_segment(
         mean.width_um == 0 || mean.height_um == 0
     }) {
         return Err("glyph mean cell width and height must be positive");
+    }
+    // Tangent repeats every 180 degrees and is singular at +/-90 degrees.
+    // Check the angle independently of contour Y: strokes entirely on the
+    // lower baseline otherwise appear to accept impossible mean slants.
+    if placement.dimensions.is_some_and(|mean| {
+        !(-89_999i32..=89_999i32).contains(&mean.slant_millidegrees)
+    }) {
+        return Err("glyph slant must be between -90 and 90 degrees");
     }
     let mean_width = if let Some(values) = placement.dimensions {
         scale(segment.width_um, values.ink_thickness_um, TEMPLATE_INK_UM)?

@@ -131,6 +131,39 @@ fn slant_shears_upper_contours_but_keeps_exact_lower_baseline() {
 }
 
 #[test]
+fn refuses_singular_or_periodic_shears_even_on_the_lower_baseline() {
+    // The baseline has zero vertical shear. A 90/180 degree tangent could
+    // otherwise appear valid here and silently misrepresent the mean slant.
+    let baseline = AuthoredInkSegment {
+        start_um: (200, 4_500),
+        end_um: (1_200, 4_500),
+        ..ORIGINAL
+    };
+    let placement_for = |angle| InkPlacement {
+        dimensions: Some(MeasuredGlyphDimensions {
+            width_um: 3_500,
+            height_um: 4_500,
+            ink_thickness_um: 300,
+            slant_millidegrees: angle,
+        }),
+        ..placement()
+    };
+    for angle in [-90_000, 90_000, -180_000, 180_000, i32::MIN, i32::MAX] {
+        assert_eq!(
+            project_ink_segment(baseline, placement_for(angle)),
+            Err("glyph slant must be between -90 and 90 degrees"),
+            "singular/periodic slant {angle} must refuse",
+        );
+    }
+    for angle in [-85_000, 0, 85_000] {
+        let projected = project_ink_segment(baseline, placement_for(angle))
+            .expect("normal slants retain exact lower baseline geometry");
+        assert_eq!(projected.start_um, (10_200, 24_500));
+        assert_eq!(projected.end_um, (11_200, 24_500));
+    }
+}
+
+#[test]
 fn refuses_invalid_ink_and_coordinates_without_clipping_or_wrapping() {
     for width in [0, 79, 1501, u32::MAX] {
         let result = project_ink_segment(
