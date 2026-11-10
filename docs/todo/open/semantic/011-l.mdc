@@ -3929,3 +3929,21 @@ zero output bytes and unchanged existing destinations, while preserving the
 separate profile-only JSON command. This confirms the existing transient
 flow contract explicitly; it does not add saved semantic content, a Rust
 localhost flow gateway or complete the P1 end-to-end journey.
+
+## Native flow ink-clearance and unselected PNG-page admission — 2026-11-09
+
+The existing Rust paper compositor already checks every generated pen
+segment against printable margins, including half-stroke-width clearance;
+no second CLI-only geometry rule was added. A native regression now proves
+that a valid handwriting profile with a -20-mm `a` baseline can layout text
+but cannot export ink above the paper's writable top. Plain and Markdown
+flows each refuse both PDF and transparent PNG, emit no partial stdout,
+and preserve the earlier accepted output when `--replace` was selected.
+
+A second regression places nine ordinary `b` rows on page one and a
+baseline-shifted `a` at the top of page two. Requesting only page-one PNG
+still refuses the invalid page-two stroke and retains the existing PNG.
+This verifies that selected-page raster export does not bypass native
+all-page ink admission. These are existing compositing guarantees newly
+covered across the CLI boundary, not persisted semantic notebook content
+or a localhost Markdown rendering gateway.

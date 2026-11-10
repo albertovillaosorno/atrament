@@ -160,6 +160,79 @@ test('native notebook PNG quality presets match exact authored glyph ink',
         }
     });
 
+test('native flow validates final ink against printable margins before commit',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-margin-'));
+        try {
+            const shifted = join(dir, 'shifted.json');
+            accepted('handwriting', '--set-glyph', 'a', 'baseline_offset',
+                '-20000', '-20000', '-20000', '-20000', '0',
+                '--output', shifted);
+            const authored = ['--glyph-stroke', 'a', '600', '500',
+                '1800', '3000', '250', '#123456'];
+            for (const [flag, source] of [
+                ['--flow-text', 'a'],
+                ['--flow-markdown', '# a'],
+            ]) {
+                for (const format of ['pdf', 'png']) {
+                    const output = join(dir,
+                        `accepted-${flag.slice(2)}-${format}.output`);
+                    const options = ['notebook', '--printed-sheet', 'false',
+                        ...authored, flag, source, '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', output];
+                    accepted(...options);
+                    const previous = readFileSync(output);
+                    assert.ok(previous.length > 100, 'real native export');
+                    const rejected = profiles(...options,
+                        '--handwriting-profile', shifted, '--replace');
+                    assert.notEqual(rejected.status, 0,
+                        'baseline-shifted pen crosses the writable top');
+                    assert.match(rejected.stderr.toString('utf8'),
+                        /page 1 ink needs printable endpoints and valid width/);
+                    assert.equal(rejected.stdout.length, 0,
+                        'failed physical export cannot emit partial bytes');
+                    assert.deepEqual(readFileSync(output), previous,
+                        'invalid physical ink cannot replace accepted export');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('selected PNG page rejects invalid ink on a later flow page',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-offpage-'));
+        try {
+            const shifted = join(dir, 'shifted.json');
+            const output = join(dir, 'reviewed.png');
+            accepted('handwriting', '--set-glyph', 'a', 'baseline_offset',
+                '-20000', '-20000', '-20000', '-20000', '0',
+                '--output', shifted);
+            const source = `${'b\n'.repeat(9)}a`;
+            const options = ['notebook', '--printed-sheet', 'false',
+                '--glyph-stroke', 'a', '600', '500', '1800', '3000',
+                '250', '#123456', '--glyph-stroke', 'b', '600', '500',
+                '1800', '3000', '250', '#123456', '--flow-text', source,
+                '--export-paper', 'png', '--png-page', '1', '--dpi', '72',
+                '--output', output];
+            accepted(...options);
+            const prior = readFileSync(output);
+            const failed = profiles(...options, '--handwriting-profile',
+                shifted, '--replace');
+            assert.notEqual(failed.status, 0);
+            assert.match(failed.stderr.toString('utf8'),
+                /page [2-9] ink needs printable endpoints and valid width/,
+                'unselected later pages must be validated before PNG export');
+            assert.equal(failed.stdout.length, 0);
+            assert.deepEqual(readFileSync(output), prior,
+                'invalid later-page ink cannot replace selected PNG');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('native flow requires an export and cannot be saved as profile JSON',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-export-only-'));
