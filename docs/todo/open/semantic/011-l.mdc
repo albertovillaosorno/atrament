@@ -3792,3 +3792,24 @@ A previously captured wide-page report retains
 its original revision, geometry and pair after the page-profile retarget.
 This is immutable read-only provenance evidence, not an Export or layering
 policy.
+
+## Sparse fixed-pair interval indexing (partial) — 2026-11-09
+
+Already admitted fixed/fixed intersection queries now index prior proposals
+by accepted page and exclusive physical bottom. Candidate inspection skips
+all rectangles ending at or before the later proposal's top, then checks
+remaining vertical and horizontal intervals. Candidate hits are restored to
+original earlier-proposal index order before first-only or capped emission;
+thus the existing later-index/earlier-index priority, exact intersection,
+zero-area omission and typed cap refusal remain unchanged.
+
+The independent 1,024-case multi-page oracle and 165-proposal selected-row
+snapshot oracle continue to check exact pairs.
+
+A same-page 2,049-proposal regression places thousands of vertically
+disjoint rectangles, then inserts
+three intersections with deliberately reversed bottom-key order. It verifies
+first/complete pair ordering, revision/page/flow provenance and an atomic
+insufficient-cap refusal. This reduces unnecessary prior-box comparisons for
+sparse layouts; it does not decide fixed-layering policy or compile saved
+semantic handwriting into native notebook PDF/PNG. ATR-P2-011 stays open.

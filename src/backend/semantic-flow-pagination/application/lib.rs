@@ -41,6 +41,7 @@
 //! Accepted-flow binding for deterministic measured-flow pagination.
 
 use std::collections::{BTreeMap, BTreeSet};
+use std::ops::Bound::{Excluded, Unbounded};
 
 use atrament_flow_pagination::{
     FragmentSource, MeasuredFlowUnit, PageRegion, PaginationError,
@@ -1861,8 +1862,13 @@ fn visit_admitted_fixed_pair_overlaps(
 ) -> Result<(), FlowFixedRegionError> {
     // The checked bounds guarantee non-overflowing physical rectangles. Keep
     // explicit arithmetic refusal rather than ever comparing saturated ends.
-    let mut prior_by_page =
-        BTreeMap::<AcceptedIdentity, Vec<IndexedFixedRectangle>>::new();
+    // Prior boxes are indexed by their exclusive bottom. A later rectangle
+    // cannot intersect anything ending at or before its top. Only candidates
+    // with overlapping vertical extent need horizontal intersection tests.
+    let mut prior_by_page = BTreeMap::<
+        AcceptedIdentity,
+        BTreeMap<u64, Vec<IndexedFixedRectangle>>,
+    >::new();
     for (later_index, fixed) in fixed_regions.iter().enumerate() {
         let rect = fixed.rectangle();
         let width = rect.width.micrometres();
@@ -1885,53 +1891,62 @@ fn visit_admitted_fixed_pair_overlaps(
             }
         })?;
         let prior = prior_by_page.entry(fixed.page()).or_default();
-        for earlier in prior.iter() {
-            if earlier.left_um < right
-                && left < earlier.right_um
-                && earlier.top_um < bottom
-                && top < earlier.bottom_um
-            {
-                let shared_left = left.max(earlier.left_um);
-                let shared_top = top.max(earlier.top_um);
-                let overflow = || FlowFixedRegionError::CoordinateOverflow {
-                    page: fixed.page(),
-                    object: fixed.object(),
-                };
-                let shared_width = right
-                    .min(earlier.right_um)
-                    .checked_sub(shared_left)
-                    .ok_or_else(overflow)?;
-                let shared_height = bottom
-                    .min(earlier.bottom_um)
-                    .checked_sub(shared_top)
-                    .ok_or_else(overflow)?;
-                if !visit(FixedPairOverlap {
-                    earlier_index: earlier.index,
-                    earlier_object: earlier.object,
-                    flow,
-                    intersection: Rect {
-                        x: Length::from_micrometres(shared_left),
-                        y: Length::from_micrometres(shared_top),
-                        width: Length::from_micrometres(shared_width),
-                        height: Length::from_micrometres(shared_height),
-                    },
-                    later_index,
-                    later_object: fixed.object(),
-                    page: fixed.page(),
-                    revision,
-                }) {
-                    return Ok(());
-                }
+        let mut candidates = prior
+            .range((Excluded(top), Unbounded))
+            .flat_map(|(_, boxes)| boxes)
+            .filter(|earlier| {
+                earlier.top_um < bottom
+                    && earlier.left_um < right
+                    && left < earlier.right_um
+            })
+            .collect::<Vec<_>>();
+        // Bottom-key traversal is not proposal order. Restore original
+        // earlier-index priority for both first-only and capped reports.
+        candidates.sort_unstable_by_key(|earlier| earlier.index);
+        for earlier in candidates {
+            let shared_left = left.max(earlier.left_um);
+            let shared_top = top.max(earlier.top_um);
+            let overflow = || FlowFixedRegionError::CoordinateOverflow {
+                page: fixed.page(),
+                object: fixed.object(),
+            };
+            let shared_width = right
+                .min(earlier.right_um)
+                .checked_sub(shared_left)
+                .ok_or_else(overflow)?;
+            let shared_height = bottom
+                .min(earlier.bottom_um)
+                .checked_sub(shared_top)
+                .ok_or_else(overflow)?;
+            if !visit(FixedPairOverlap {
+                earlier_index: earlier.index,
+                earlier_object: earlier.object,
+                flow,
+                intersection: Rect {
+                    x: Length::from_micrometres(shared_left),
+                    y: Length::from_micrometres(shared_top),
+                    width: Length::from_micrometres(shared_width),
+                    height: Length::from_micrometres(shared_height),
+                },
+                later_index,
+                later_object: fixed.object(),
+                page: fixed.page(),
+                revision,
+            }) {
+                return Ok(());
             }
         }
-        prior.push(IndexedFixedRectangle {
-            bottom_um: bottom,
-            index: later_index,
-            left_um: left,
-            object: fixed.object(),
-            right_um: right,
-            top_um: top,
-        });
+        prior
+            .entry(bottom)
+            .or_default()
+            .push(IndexedFixedRectangle {
+                bottom_um: bottom,
+                index: later_index,
+                left_um: left,
+                object: fixed.object(),
+                right_um: right,
+                top_um: top,
+            });
     }
     Ok(())
 }

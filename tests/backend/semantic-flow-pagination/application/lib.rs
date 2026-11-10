@@ -4466,6 +4466,58 @@ fn checked_fixed_pair_inspection_preserves_layering_and_source_order()
             clear_cases += 1;
         }
     }
+    // Thousands of vertically disjoint boxes must not hide the late pair.
+    // The two selected earlier boxes have reverse bottom-key ordering, so
+    // first and complete inspections must still emit *input* index order.
+    let mut sparse = (0_usize..2_048)
+        .map(|index| {
+            let offset = u64::try_from(index).map_err(|e| e.to_string())?;
+            checked(
+                page_two,
+                objects[index % objects.len()],
+                40_000,
+                70_000 + offset * 45,
+                5,
+                2,
+            )
+        })
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(fixed_pair_overlaps_for_flow(&plan, &sparse, 0), Ok(vec![]));
+    let y = 70_000 + 200 * 45;
+    sparse[200] = checked(page_two, objects[0], 40_000, y, 5, 4)?;
+    sparse[900] = checked(page_two, objects[1], 40_000, y + 1, 5, 2)?;
+    // An exact shared bottom/top boundary is not positive-area contact.
+    sparse[901] = checked(page_two, objects[2], 40_000, y + 4, 5, 2)?;
+    sparse.push(checked(page_two, objects[2], 40_000, y + 1, 5, 2)?);
+    let pairs = fixed_pair_overlaps_for_flow(&plan, &sparse, 3)
+        .map_err(|error| format!("sparse pairs: {error:?}"))?;
+    assert_eq!(
+        pairs
+            .iter()
+            .map(|pair| (pair.earlier_index(), pair.later_index()))
+            .collect::<Vec<_>>(),
+        vec![(200, 900), (200, 2_048), (900, 2_048)],
+    );
+    let intersection = Rect {
+        x: Length::from_micrometres(40_000),
+        y: Length::from_micrometres(y + 1),
+        width: Length::from_micrometres(5),
+        height: Length::from_micrometres(2),
+    };
+    assert!(pairs.iter().all(|pair| {
+        pair.page() == page_two
+            && pair.flow() == flow
+            && pair.revision() == revision
+            && pair.intersection() == intersection
+    }));
+    assert_eq!(
+        first_fixed_pair_overlap_for_flow(&plan, &sparse),
+        Ok(pairs.first().copied())
+    );
+    assert_eq!(
+        fixed_pair_overlaps_for_flow(&plan, &sparse, 2),
+        Err(FlowFixedRegionError::FixedPairLimitExceeded { limit: 2 })
+    );
     if overlap_cases < 100 || clear_cases < 100 {
         return Err(format!(
             "pair coverage: yes={overlap_cases}, no={clear_cases}"
