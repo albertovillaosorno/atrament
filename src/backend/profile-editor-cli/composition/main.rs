@@ -85,7 +85,7 @@ const PAGE_INK_FILE_HEADER: &str = "atrament.page-ink.v1";
 
 const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     | paper [atrament-paper options] \
-    | glyphs [--profile strokes.tsv] \
+    | glyphs [--profile strokes.tsv|-] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--copy-glyph SOURCE TARGET] \
     [--remove-glyph GRAPHEME] \
@@ -154,7 +154,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--quality preview|final (PNG only, exclusive with --dpi)] \
     [--ink-line PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM '#RRGGBB'] \
     [--ink-file FILE|-] [--emit-ink-file] \
-    [--glyph-file strokes.tsv] \
+    [--glyph-file strokes.tsv|-] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--fallback-glyph MISSING AUTHORED] \
     [--place-text PAGE X_UM Y_UM UTF8_TEXT] \
@@ -183,7 +183,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     These inputs remain export-only, not saved notebook v1 fields. \
     --glyph-stroke supplies exact \
     author-drawn segments in a 4 x 5 mm cell and --place-text repeats them; \
-    missing shapes refuse; --glyph-file loads a reusable library. \
+    missing shapes refuse; --glyph-file loads a reusable library; \
+    select - for bounded glyph TSV stdin (one stdin source per command). \
     --join-text-pair opt-in bridges selected adjacent glyph pen endpoints \
     within one row; matching physical ink and <=1200 um gap required. \
     --join-text-anchors chooses explicit 1-based source exit and target \
@@ -807,7 +808,16 @@ fn read_bounded_stdin(limit: usize, label: &str) -> Result<Vec<u8>, String> {
     Ok(bytes)
 }
 
-fn read_glyph_input(path: &str) -> Result<Vec<u8>, String> {
+fn read_glyph_input(
+    path: &str, stdin_selected: &mut bool,
+) -> Result<Vec<u8>, String> {
+    if path == "-" {
+        if *stdin_selected {
+            return Err("standard input may be selected only once".into());
+        }
+        *stdin_selected = true;
+        return read_bounded_stdin(MAX_GLYPH_LIBRARY_BYTES, "glyph");
+    }
     let file = open_selected_profile_file(Path::new(path))
         .map_err(|error| format!("glyph file refused: {error:?}"))?;
     let bytes = read_bounded_profile_file(file, MAX_GLYPH_LIBRARY_BYTES)
@@ -839,16 +849,16 @@ fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
 fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let mut glyphs = GlyphOverlay::default();
     let (mut output, mut audit_text) = (None, None);
-    let mut audit_baseline = false;
+    let (mut audit_baseline, mut replace, mut piped) = (false, false, false);
     let mut inspection: Option<(String, bool)> = None;
-    let mut replace = false;
     let mut iter = args.iter();
     while let Some(option) = iter.next() {
         match option.as_str() {
             "--profile" => {
                 let selected = iter.next()
                     .ok_or("--profile requires a glyph library path")?;
-                glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
+                glyphs.load_file_bytes(&read_glyph_input(
+                    selected, &mut piped)?)?;
             }
             "--copy-glyph" | "--glyph-stroke" | "--rotate-glyph"
             | "--translate-glyph" | "--shear-glyph"
@@ -1230,7 +1240,9 @@ fn parse_notebook_export_option(
         "--glyph-file" => {
             let selected = iter.next()
                 .ok_or("--glyph-file requires a library path")?;
-            glyphs.load_file_bytes(&read_glyph_input(selected)?)?;
+            glyphs.load_file_bytes(&read_glyph_input(
+                selected, stdin_selected,
+            )?)?;
         }
         "--ink-file" => {
             let path = iter.next().ok_or("--ink-file requires a file")?;

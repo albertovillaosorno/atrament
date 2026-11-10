@@ -1073,6 +1073,97 @@ test('compiled page ink TSV replays mixed flow and manual PDF/PNG bytes',
         }
     });
 
+test('glyph library stdin preserves exact Unicode ink and rejects unsafe pipes',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/glyph-library-pipe-'));
+        try {
+            const saved = join(dir, 'authored.tsv');
+            const destination = join(dir, 'accepted.pdf');
+            const glyph = accepted('glyphs',
+                '--glyph-stroke', 'ñ', '500', '500', '1800', '3000',
+                '250', '#123456',
+                '--glyph-stroke', 'n\u0303', '600', '600', '1800',
+                '3100', '250', '#AABBCC');
+            writeFileSync(saved, glyph);
+            const authored = ['--place-text', '1', '80000', '50000',
+                'ñn\u0303'];
+            const viaFile = (format) => accepted('notebook',
+                '--printed-sheet', 'true', '--glyph-file', saved,
+                ...authored, ...format);
+            const viaPipe = (input, ...args) =>
+                profilesInput(input, ...args);
+            const canonical = viaPipe(glyph, 'glyphs', '--profile', '-');
+            assert.equal(canonical.status, 0, canonical.stderr.toString());
+            assert.deepEqual(canonical.stdout, glyph,
+                'stdin preserves exact NFC/NFD glyph identities and order');
+            const inspected = viaPipe(glyph, 'glyphs', '--profile', '-',
+                '--inspect-glyph', 'n\u0303');
+            assert.equal(inspected.status, 0, inspected.stderr.toString());
+            assert.match(inspected.stdout.toString(), /U\+006E U\+0303/);
+
+            for (const format of [
+                ['--export-paper', 'pdf'],
+                ['--export-paper', 'png', '--dpi', '72'],
+                ['--emit-ink-file'],
+            ]) {
+                const piped = viaPipe(glyph, 'notebook',
+                    '--printed-sheet', 'true', '--glyph-file', '-',
+                    ...authored, ...format);
+                assert.equal(piped.status, 0, piped.stderr.toString());
+                assert.deepEqual(piped.stdout, viaFile(format),
+                    `${format.join(' ')} keeps native ink byte-identical`);
+            }
+            const pdf = viaFile(['--export-paper', 'pdf']);
+            writeFileSync(destination, pdf);
+            const refusedPipe = (input, args, expected) => {
+                const result = viaPipe(input, ...args,
+                    '--output', destination, '--replace');
+                assert.notEqual(result.status, 0, args.join(' '));
+                assert.match(result.stderr.toString(), expected);
+                assert.equal(result.stdout.length, 0,
+                    'invalid glyph stream cannot emit partial output');
+                assert.deepEqual(readFileSync(destination), pdf,
+                    'invalid glyph stream cannot replace accepted PDF');
+            };
+            const notebook = ['notebook', '--glyph-file', '-',
+                ...authored, '--export-paper', 'pdf'];
+            refusedPipe(Buffer.alloc(524_289, 0x61), notebook,
+                /glyph stdin exceeds 524288/);
+            refusedPipe(Buffer.from([0xff, 0xfe, 0xfd]), notebook,
+                /glyph library must be UTF-8/);
+            refusedPipe(Buffer.from('atrament.glyph-strokes.v1\n'),
+                notebook, /glyph library needs at least one authored stroke/);
+            refusedPipe(Buffer.concat([glyph,
+                Buffer.from('broken glyph record\n')]), notebook,
+                /glyph library line 4 needs seven tab-separated fields/);
+            refusedPipe(glyph, ['notebook', '--glyph-file', '-',
+                '--ink-file', '-', ...authored, '--export-paper', 'pdf'],
+            /standard input may be selected only once/);
+            refusedPipe(glyph, ['notebook', '--glyph-file', '-',
+                '--flow-markdown-file', '-', '--export-paper', 'pdf'],
+            /standard input may be selected only once/);
+            refusedPipe(Buffer.from('ñ'), [
+                'notebook', '--flow-text-file', '-', '--glyph-file', '-',
+                '--export-paper', 'pdf'],
+            /standard input may be selected only once/);
+            refusedPipe(Buffer.from(
+                'atrament.page-ink.v1\n1\t70000\t40000\t71000'
+                    + '\t41000\t250\t#123456\n'), [
+                'notebook', '--ink-file', '-', '--glyph-file', '-',
+                '--export-paper', 'pdf'],
+            /standard input may be selected only once/);
+            const double = viaPipe(glyph, 'glyphs', '--profile', '-',
+                '--profile', '-');
+            assert.notEqual(double.status, 0);
+            assert.match(double.stderr.toString(),
+                /standard input may be selected only once/);
+            assert.deepEqual(readFileSync(saved), glyph,
+                'saved source remains untouched by piped replay');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('compiled ink stdin replays sparse pages and rejects unsafe pipes',
     () => {
         const dir = mkdtempSync(join(root, '.temp/page-ink-pipe-'));

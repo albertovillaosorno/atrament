@@ -3089,3 +3089,18 @@ stroke after valid prefixes. Each refusal leaves no strokes or loaded-file flag
 and permits a subsequent exact NFC/TSV retry. This closes a typed in-memory
 integrity gap; the CLI already exited on failed imports, and it does not add
 new outline coverage.
+
+## Single-consumer native glyph TSV pipe — 2026-11-10
+
+The native `glyphs --profile -` editor and notebook `--glyph-file -` exporter
+now accept one explicitly selected standard-input glyph source. The shared
+524,288-byte bounded reader and existing strict LF/UTF-8 glyph TSV admission
+run before any file output; an invalid stream never replaces selected output.
+Exact composed `ñ` and decomposed `n` + tilde retain their distinct authored
+identities through piped inspection, vector PDF, transparent PNG and reusable
+physical ink TSV. File input and stdin produce byte-identical native outputs.
+
+Only one standard-input consumer may be selected per notebook command, shared
+with the existing flow text and physical ink streams. This is a local authoring
+and export convenience, not synthesized glyph coverage or persisted notebook
+content. The P1 geometry and end-to-end writing requirements remain open.
