@@ -152,6 +152,74 @@ test('mixed-width numeral ink and collision refusal match native PDF/PNG',
         }
     });
 
+test('compressed adjacent words paginate without PDF/PNG ink collision',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-word-boundary-'));
+        try {
+            const profile = join(dir, 'compressed-a.json');
+            const config = spawnSync(cargo, [
+                'run', '--quiet', '-p', 'atrament_profile_editor_cli',
+                '--', 'handwriting', '--set-glyph', 'a', 'width',
+                ...Array(4).fill('12000'), '0',
+                '--set-glyph', 'a', 'letter_spacing',
+                ...Array(4).fill('-10000'), '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(config.status, 0, config.stderr);
+            writeFileSync(profile, config.stdout);
+            const selected = [
+                '--handwriting-profile', profile,
+                '--flow-region', '30000', '40000', '50000', '14000',
+            ];
+            for (const flowFlag of ['--flow-text', '--flow-markdown']) {
+                for (const format of ['pdf', 'png']) {
+                    for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                        const rendered = render(dir, 'a a', format,
+                            selected, flowFlag, page);
+                        assert.equal(rendered.result.status, 0,
+                            rendered.result.stderr);
+                        const accepted = readFileSync(rendered.output);
+                        const reference = join(dir,
+                            `manual-${flowFlag}-${format}-${page}`);
+                        const manuallyPlaced = spawnSync(cargo, [
+                            'run', '--quiet', '-p',
+                            'atrament_profile_editor_cli',
+                            '--', ...base, '--handwriting-profile', profile,
+                            '--place-text', '1', '32500', '42500', 'a',
+                            '--place-text', '2', '32500', '42500', 'a',
+                            ...(format === 'pdf'
+                                ? ['--pages', '2']
+                                : ['--png-page', String(page), '--dpi', '72']),
+                            '--export-paper', format, '--output', reference,
+                        ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                        assert.equal(manuallyPlaced.status, 0,
+                            manuallyPlaced.stderr);
+                        assert.deepEqual(accepted, readFileSync(reference),
+                            `${flowFlag} ${format} page ${page} word boundary`);
+
+                        // A later missing glyph must not replace the
+                        // previously accepted page (including page one).
+                        const refused = render(dir, 'a a β', format,
+                            selected, flowFlag, page);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.deepEqual(
+                            readFileSync(refused.output), accepted);
+                    }
+                    // Four authored spaces clear the 12-mm first contour
+                    // and keep both words on the same physical sheet.
+                    const spaced = render(dir, 'a    a', format,
+                        selected, flowFlag);
+                    assert.equal(spaced.result.status, 0,
+                        spaced.result.stderr);
+                    assert.notDeepEqual(readFileSync(spaced.output),
+                        readFileSync(join(dir,
+                            `manual-${flowFlag}-${format}-1`)));
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('compressed word contours keep whole word on the next PDF/PNG page',
     () => {
         const dir = mkdtempSync(join(root, '.temp/flow-word-contour-'));

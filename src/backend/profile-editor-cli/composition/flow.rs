@@ -1177,28 +1177,29 @@ impl Layout<'_> {
         )?;
         let mut row = String::new();
         let mut width = 0u32;
+        // Pen contour can outlive a compressed glyph's nominal advance.
+        // Reserve that occupied ink before admitting the next word.
+        let mut row_ink_extent = 0u32;
         let mut count = 0usize;
         let mut first = true;
         let mut pending_spaces = 0usize;
         for (index, word) in content.split(' ').enumerate() {
             if index > 0 {
-                pending_spaces = pending_spaces
-                    .checked_add(1)
+                pending_spaces = pending_spaces.checked_add(1)
                     .ok_or("flow spaces overflow")?;
             }
             if word.is_empty() {
                 continue;
             }
-            let (glyphs, _advance, word_span) =
-                measured_word(word, self.statistics)?;
+            let (glyphs, _, word_span) = measured_word(word, self.statistics)?;
             let spaces_um = u32::try_from(pending_spaces)
                 .map_err(|_error| "flow spaces overflow")?
                 .checked_mul(4_000).ok_or("flow spaces overflow")?;
+            let outside = word_crosses_row(
+                style, width, row_ink_extent, spaces_um, word_span, cap,
+            )?;
             if !row.is_empty()
-                && (width
-                    .checked_add(spaces_um)
-                    .and_then(|value| value.checked_add(word_span))
-                    .is_none_or(|value| value > cap)
+                && (outside
                     || count
                         .checked_add(pending_spaces)
                         .and_then(|value| value.checked_add(glyphs.len()))
@@ -1217,6 +1218,7 @@ impl Layout<'_> {
                 start_continuation(first, &mut start_x, &mut cap, hang)?;
                 first = false;
                 width = 0;
+                row_ink_extent = 0;
                 count = 0;
                 pending_spaces = 0;
             }
@@ -1244,6 +1246,7 @@ impl Layout<'_> {
                     start_continuation(first, &mut start_x, &mut cap, hang)?;
                     first = false;
                     width = 0;
+                    row_ink_extent = 0;
                     count = 0;
                 }
                 // A numbered item narrows its continuation to the
@@ -1257,6 +1260,8 @@ impl Layout<'_> {
                 if grapheme.len() > 384 {
                     return Err("flow grapheme exceeds line byte limit".into());
                 }
+                row_ink_extent = row_ink_extent.max(width.checked_add(slot)
+                    .ok_or("flow glyph contour overflow")?);
                 row.push_str(grapheme);
                 width = width
                     .checked_add(advance)
@@ -1758,6 +1763,19 @@ fn measured_ordered_label<'text>(
         );
     }
     Ok((indent, marker))
+}
+
+// Flowing prose reserves a preceding compressed glyph's nominal ink contour.
+// Decorative titles are indivisible lines with intentionally adjustable
+// letter overlap; they still obey the physical row width and native ink gates.
+fn word_crosses_row(
+    style: LineStyle, advance: u32, ink_extent: u32, spaces: u32,
+    word_span: u32, cap: u32,
+) -> Result<bool, String> {
+    let start = advance.checked_add(spaces)
+        .ok_or("flow word position overflow")?;
+    Ok((!matches!(style, LineStyle::Heading(_)) && ink_extent > start)
+        || start.checked_add(word_span).is_none_or(|end| end > cap))
 }
 
 fn measured_word<'text>(

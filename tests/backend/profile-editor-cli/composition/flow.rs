@@ -3181,6 +3181,61 @@ fn compressed_following_word_wraps_without_phantom_trailing_space()
 }
 
 #[test]
+fn compressed_words_cannot_place_second_word_inside_previous_ink()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(109);
+    for (dimension, mean) in [
+        (Dimension::Width, 12_000),
+        (Dimension::LetterSpacing, -10_000),
+    ] {
+        stats = stats.with_glyph("a", DimensionStatistics {
+            dimension,
+            statistics: ScalarStatistics {
+                minimum: mean, maximum: mean, mean, median: mean,
+                standard_deviation: 0,
+            },
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 50_000, height: 30_000,
+    };
+    let paper = NotebookProfile::default();
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        let collided = FlowSource::new(format, "a a")?;
+        let (rows, marks, pages) = super::layout_flow_with_region(
+            &collided, &paper, Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        )?;
+        assert_eq!(pages, 1);
+        assert!(marks.is_empty());
+        assert_eq!(rows.iter().map(|row| (row.origin_um.1,
+            row.text.as_str())).collect::<Vec<_>>(), [
+            (42_500, "a"), (51_500, "a"),
+        ], "a 12-mm contour must not overlap another word at 6 mm");
+
+        // The exact caller-authored spaces remain if they provide enough
+        // clearance; only an unsafe word boundary triggers a physical wrap.
+        let clear = FlowSource::new(format, "a    a")?;
+        let (rows, _, pages) = super::layout_flow_with_region(
+            &clear, &paper, Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        )?;
+        assert_eq!(pages, 1);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].text, "a    a");
+    }
+    Ok(())
+}
+
+#[test]
 fn measured_pitch_matches_emitted_ink_for_mixed_sources()
 -> Result<(), String> {
     use atrament_handwriting_statistics::{

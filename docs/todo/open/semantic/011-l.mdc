@@ -4076,3 +4076,23 @@ replay is byte-identical; an explicit 31-page budget, a 33rd physical page,
 a 129th measured row and missing glyph ink on the unselected 32nd page all
 refuse without replacing accepted PDF/PNG files. This checks the CLI's
 existing finite limits; it does not extend them or persist semantic blocks.
+
+## Compressed adjacent-word ink clearance (partial) — 2026-11-10
+
+An ordinary native CLI flow word boundary now compares the preceding row's
+nominal glyph contour with the start of the next authored word. A 12-mm-wide
+`a` compressed to a 2-mm advance used to place `a a` only 6 mm apart on one
+physical row, so the second word could begin inside the first word's ink.
+The flow compiler now wraps that next word onto a new physical row instead
+of admitting the overlap. Four explicit separator spaces keep `a    a` on
+one row; the existing numbered-list label/first-item clearance stays intact.
+
+Decorative single-row headings retain their explicit compressed lettering
+behavior; their physical page and ink bounds are still validated.
+
+A focused Rust regression checks this behavior for plain and Markdown flow.
+Native PDF and transparent PNG acceptance compares both physical pages to
+separately placed authored glyph strokes, and proves that later missing ink
+cannot replace a previously accepted export. This is still bounded,
+transient CLI composition—not persisted notebook semantics or localhost text
+export.
