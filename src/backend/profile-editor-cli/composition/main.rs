@@ -160,7 +160,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--heading-color '#RRGGBB'] [--heading-marker-scale 50..105] \
     [--heading-ink-color '#RRGGBB'] [--heading-ink-scale 100..250] \
     [--flow-text TEXT | --flow-markdown MARKDOWN | \
-     --flow-text-file FILE | --flow-markdown-file FILE] \
+     --flow-text-file FILE|- | --flow-markdown-file FILE|-] \
     [--flow-region LEFT_UM TOP_UM WIDTH_UM HEIGHT_UM] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
     [--output FILE [--replace]]\n\
@@ -182,7 +182,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     -/*/+ bullets, \
     [ ]/[x]/[X] checkbox tasks after bullets, > quotes, 1./1) numbered \
     lists (authored digits/punctuation), and standalone ---/***/___ \
-    horizontal ink rules. -file reads bounded UTF-8. \
+    horizontal ink rules. -file reads bounded UTF-8 from a regular file; \
+    select - to read at most 4096 UTF-8 bytes from standard input. \
     An initial UTF-8 BOM is ignored but counts toward the 4096-byte cap. \
     Both use physical printable regions and exact authored ink; \
     optional --flow-region repeats a fixed rectangle within margins on \

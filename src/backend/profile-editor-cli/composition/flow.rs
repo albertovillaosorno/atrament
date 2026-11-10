@@ -33,6 +33,7 @@
 //! A bounded text-to-physical-page bridge for the native CLI.
 
 use std::borrow::Cow;
+use std::io::{self, Read as _};
 use std::iter::Peekable;
 use std::mem::take;
 use std::slice::Iter;
@@ -249,12 +250,26 @@ impl FlowSource {
         Ok(Self { format, text: expanded })
     }
 
-    /// Read a caller-chosen regular text file using the existing bounded
-    /// profile file reader, without creating any implicit saved notebook.
+    /// Read a chosen regular text file, or explicit `-` standard input,
+    /// without creating any implicit saved notebook. The stream reads at
+    /// most one byte beyond the admitted limit to detect oversize input.
     pub(super) fn from_file(
         format: FlowFormat, path: &str,
     ) -> Result<Self, String> {
-        let bytes = super::read_notebook_input(path, MAX_FLOW_BYTES)?;
+        let bytes = if path == "-" {
+            let limit = u64::try_from(MAX_FLOW_BYTES + 1)
+                .map_err(|_error| "flow input limit exceeds u64")?;
+            let mut bytes = Vec::new();
+            let _read = io::stdin().lock().take(limit)
+                .read_to_end(&mut bytes)
+                .map_err(|_error| "flow stdin read failed")?;
+            if bytes.len() > MAX_FLOW_BYTES {
+                return Err("flow stdin exceeds 4096 UTF-8 bytes".into());
+            }
+            bytes
+        } else {
+            super::read_notebook_input(path, MAX_FLOW_BYTES)?
+        };
         let source = String::from_utf8(bytes)
             .map_err(|_error| "flow file must be UTF-8")?;
         Self::new(format, &source)

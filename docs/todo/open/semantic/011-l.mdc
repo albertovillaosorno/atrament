@@ -3865,3 +3865,17 @@ these conditions. All 135 distinct native CLI flow cases passed again in
 independently selected three-case shards with exact receipts; the final five
 shards passed a second time. This validates the bounded CLI test evidence,
 not persisted semantic notebook bodies or live Rust handwriting export.
+
+## Explicit bounded native Markdown stdin input (partial) — 2026-11-09
+
+The CLI text and Markdown `--flow-*-file -` options now accept explicitly
+piped standard input without a temporary source file. The same 4096-byte
+UTF-8/BOM/CRLF, control-character, grapheme and physical-layout gates apply
+before native PDF/PNG export; a 4097th byte refuses without writing output.
+
+New native acceptance compares piped Markdown to inline and saved source PDF
+and PNG bytes, confirms plain line/page fidelity and checks invalid streams
+preserve the preceding export. Profile/glyph-file selection and the bounded
+regular-file reader remain unchanged. All 138 distinct native flow cases
+passed in 46 bounded TAP-receipted shards. This is CLI-only ephemeral intake,
+not saved notebook body state or localhost Markdown rendering.

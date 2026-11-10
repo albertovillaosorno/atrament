@@ -456,6 +456,22 @@ cargo run -q -p atrament_profile_editor_cli -- \
   --flow-markdown-file notes.md --output notes-page-1.png
 ```
 
+To export pasted or piped Markdown without saving a temporary source file,
+select `-` for `--flow-markdown-file` (or `--flow-text-file` for plain
+text):
+
+```sh
+printf '# a\n\na a\n- a\n' | cargo run -q \
+  -p atrament_profile_editor_cli -- notebook \
+  --printed-sheet false --glyph-file ink.tsv \
+  --flow-markdown-file - --export-paper pdf --output notes.pdf
+```
+
+This explicit stdin mode accepts at most 4096 UTF-8 bytes and the same
+source validation as a regular file, without implicit writes. Empty,
+invalid, or oversized input refuses before replacing an existing output.
+The other profile and glyph flags still require caller-selected files.
+
 Both exports were smoke-tested with the editor's geometric `a` strokes;
 the PDF is a real one-page document and PNG is 72-DPI RGBA. By default, a
 Markdown heading gets a dark pen underline and a list item gets an ink mark.

@@ -29,7 +29,7 @@ const headingOptions = [
 ];
 
 function render(dir, source, format, extra = [],
-    flowFlag = '--flow-markdown', pngPage = 1) {
+    flowFlag = '--flow-markdown', pngPage = 1, input = undefined) {
     const output = join(dir, `flow-${format}.output`);
     const heading = flowFlag.startsWith('--flow-markdown')
         && !extra.includes('--heading-style') ? headingOptions : [];
@@ -41,7 +41,7 @@ function render(dir, source, format, extra = [],
     const result = spawnSync(cargo, [
         'run', '--quiet', '-p', 'atrament_profile_editor_cli', '--',
         ...args,
-    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+    ], { cwd: root, encoding: 'utf8', timeout: 120000, input });
     assert.equal(result.error, undefined, result.error?.message);
     return { result, output };
 }
@@ -7371,6 +7371,92 @@ test('unprinted Markdown markers cannot inflate native PDF/PNG row pitch',
             }
             assert.notDeepEqual(pngPages[0], pngPages[1],
                 'first and second physical sheets contain distinct ink');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('explicit stdin Markdown matches inline and saved native PDF/PNG', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-stdin-markdown-'));
+    try {
+        const source = '# a\n\na a\n- ó\n';
+        const raw = Buffer.from('\uFEFF' + source.replaceAll('\n', '\r\n'));
+        const file = join(dir, 'saved.md');
+        writeFileSync(file, raw);
+        for (const format of ['pdf', 'png']) {
+            const inline = render(dir, source, format);
+            assert.equal(inline.result.status, 0, inline.result.stderr);
+            const expected = readFileSync(inline.output);
+            for (const [selected, input] of [
+                [file, undefined],
+                ['-', raw],
+            ]) {
+                const piped = render(dir, selected, format, [],
+                    '--flow-markdown-file', 1, input);
+                assert.equal(piped.result.status, 0, piped.result.stderr);
+                assert.deepEqual(readFileSync(piped.output), expected,
+                    `${format} identical saved and piped authored ink`);
+            }
+        }
+        assert.deepEqual(readFileSync(file), raw);
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
+test('plain stdin keeps exact native line breaks and selected PNG page',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-stdin-plain-'));
+        try {
+            const source = 'a\nó';
+            const region = [
+                '--flow-region', '30000', '40000', '30000', '14000',
+            ];
+            for (const format of ['pdf', 'png']) {
+                const extra = [...region, ...(format === 'pdf'
+                    ? ['--pages', '2'] : [])];
+                for (const page of format === 'pdf' ? [1] : [1, 2]) {
+                    const inline = render(dir, source, format, extra,
+                        '--flow-text', page);
+                    assert.equal(inline.result.status, 0,
+                        inline.result.stderr);
+                    const expected = readFileSync(inline.output);
+                    const piped = render(dir, '-', format, extra,
+                        '--flow-text-file', page, Buffer.from('a\r\nó'));
+                    assert.equal(piped.result.status, 0,
+                        piped.result.stderr);
+                    assert.deepEqual(readFileSync(piped.output), expected,
+                        `${format} page ${page} unchanged line breaks`);
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('invalid stdin flow refuses before replacing accepted PDF and PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-stdin-refusal-'));
+        try {
+            for (const format of ['pdf', 'png']) {
+                const accepted = render(dir, 'a', format);
+                assert.equal(accepted.result.status, 0,
+                    accepted.result.stderr);
+                const expected = readFileSync(accepted.output);
+                for (const [raw, diagnostic] of [
+                    [Buffer.alloc(4097, 0x61), /flow stdin exceeds 4096/],
+                    [Buffer.from([0xff]), /flow file must be UTF-8/],
+                    [Buffer.from('a\u0000'), /control characters/],
+                    [Buffer.from('  \n\t'), /visible text/],
+                ]) {
+                    const refused = render(dir, '-', format, [],
+                        '--flow-markdown-file', 1, raw);
+                    assert.notEqual(refused.result.status, 0);
+                    assert.match(refused.result.stderr, diagnostic);
+                    assert.deepEqual(readFileSync(refused.output), expected,
+                        'invalid stdin cannot overwrite accepted output');
+                }
+            }
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
