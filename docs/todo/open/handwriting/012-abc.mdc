@@ -2876,3 +2876,18 @@ Rust workspace pass. Jig check retains 181 existing repository findings, with
 no new long lines on changed paths; the pinned production CLI Clippy gate
 passes. This does not synthesize unselected handwriting, persist analytic
 curves in native TSV or complete the bilingual glyph acceptance task.
+
+## No implicit punctuation and notation glyph aliases — 2026-11-10
+
+The geometric starter now requires explicitly authored shapes for question
+and exclamation punctuation, opening curly quotes, euro bars, percent loops,
+and parentheses, rather than treating an unrecognized future member of those
+families as its previous default glyph. The existing exact keys and exported
+line segments remain unchanged. All current punctuation, curly-quote,
+currency, circle-mark and ASCII-notation selectors are checked against
+accidental aliasing in a dedicated regression.
+
+The 250-case browser glyph-editor suite and TypeScript build pass. The full
+frontend suite was interrupted during supervised execution and cannot be
+claimed as validated for this increment. This is a fail-closed shape-admission
+improvement, not complete handwritten Unicode coverage or a saved notebook.

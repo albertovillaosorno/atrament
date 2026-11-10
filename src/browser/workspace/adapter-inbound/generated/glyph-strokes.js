@@ -527,6 +527,9 @@ function punctuationParts(cx, cy, r, glyph) {
         return [{
                 from: point(0.12, 0.72), to: point(-0.17, 0.98),
             }];
+    if (!["!", "¡", "?", "¿"].includes(glyph)) {
+        throw new Error(`No geometric punctuation starter for ${glyph}`);
+    }
     const upsideDown = glyph === "¡" || glyph === "¿";
     const rotate = (p) => upsideDown
         ? { x: 2 * cx - p.x, y: 2 * cy - p.y } : p;
@@ -564,8 +567,11 @@ function quoteParts(cx, cy, r, source) {
         control: point(shift - 0.32, -0.5),
         to: point(shift + 0.04, -0.18),
     });
-    return source === "‘" ? [curl(0)]
-        : [curl(-0.32), curl(0.32)];
+    if (source === "‘")
+        return [curl(0)];
+    if (source === "“")
+        return [curl(-0.32), curl(0.32)];
+    throw new Error(`No geometric quote starter for ${source}`);
 }
 function quotedSource(glyph) {
     return glyph === "»" ? "«"
@@ -1845,6 +1851,9 @@ function currencyParts(cx, cy, radius, glyph) {
                 to: { x: cx, y: cy + radius } },
         ];
     }
+    if (glyph !== "€") {
+        throw new Error(`No geometric currency starter for ${glyph}`);
+    }
     return [-0.28, 0.28].map((height) => ({
         from: { x: cx - Math.round(radius * 0.83),
             y: cy + Math.round(radius * height) },
@@ -1919,6 +1928,9 @@ function circleMarkGeometry(cx, cy, radius, glyph) {
     });
     if (glyph === "°") {
         return { ellipses: [ring(0.4, -0.63)], parts: [] };
+    }
+    if (glyph !== "%") {
+        throw new Error(`No geometric circle-mark starter for ${glyph}`);
     }
     return {
         ellipses: [ring(-0.48, -0.56), ring(0.48, 0.56)],
@@ -2077,6 +2089,9 @@ function textMarkParts(cx, cy, r, glyph) {
     if (glyph === "]")
         return [line(-0.3, -0.9, 0.5, -0.9),
             line(0.5, -0.9, 0.5, 0.9), line(0.5, 0.9, -0.3, 0.9)];
+    if (glyph !== "(" && glyph !== ")") {
+        throw new Error(`No geometric notation starter for ${glyph}`);
+    }
     const flip = glyph === ")" ? -1 : 1;
     return [
         { from: p(flip * -0.2, -0.95),

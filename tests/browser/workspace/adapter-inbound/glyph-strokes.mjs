@@ -3354,6 +3354,27 @@ test("selectable math glyphs never borrow division ink", () => {
     }
 });
 
+test("selected marks never borrow unrelated fallback geometry", () => {
+    const args = [1750, 2250, 900, 100, "#243647"];
+    const geometry = (glyph) => geometricStarter(glyph, ...args)
+        .map(({ x1, y1, x2, y2 }) => [x1, y1, x2, y2]);
+    const families = [
+        ["?", [".", ",", "!", "¡", "¿"]],
+        ["“", ["«", "»", "‘", "’", "”"]],
+        ["€", ["$"]],
+        ["%", ["°"]],
+        ["(", [";", ":", "\"", "'", "…", "–", "—",
+            ")", "[", "]", "/", "\\", "{", "}"]],
+    ];
+    for (const [fallback, marks] of families) {
+        const alternate = geometry(fallback);
+        for (const mark of marks) {
+            assert.notDeepEqual(geometry(mark), alternate,
+                `exact ${mark} cannot silently borrow ${fallback} ink`);
+        }
+    }
+});
+
 test("eight basic math operators have exact bounded pen geometry", () => {
     const expected = {
         "+": [[780, 2450, 2320, 2450], [1550, 1680, 1550, 3220]],
