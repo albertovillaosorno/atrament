@@ -270,8 +270,13 @@ impl FlowSource {
         } else {
             super::read_notebook_input(path, MAX_FLOW_BYTES)?
         };
-        let source = String::from_utf8(bytes)
-            .map_err(|_error| "flow file must be UTF-8")?;
+        let source = String::from_utf8(bytes).map_err(|_error| {
+            if path == "-" {
+                "flow stdin must be UTF-8"
+            } else {
+                "flow file must be UTF-8"
+            }
+        })?;
         Self::new(format, &source)
     }
 

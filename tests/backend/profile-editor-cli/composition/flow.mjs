@@ -7445,7 +7445,7 @@ test('invalid stdin flow refuses before replacing accepted PDF and PNG',
                 const expected = readFileSync(accepted.output);
                 for (const [raw, diagnostic] of [
                     [Buffer.alloc(4097, 0x61), /flow stdin exceeds 4096/],
-                    [Buffer.from([0xff]), /flow file must be UTF-8/],
+                    [Buffer.from([0xff]), /flow stdin must be UTF-8/],
                     [Buffer.from('a\u0000'), /control characters/],
                     [Buffer.from('  \n\t'), /visible text/],
                 ]) {
@@ -7455,6 +7455,67 @@ test('invalid stdin flow refuses before replacing accepted PDF and PNG',
                     assert.match(refused.result.stderr, diagnostic);
                     assert.deepEqual(readFileSync(refused.output), expected,
                         'invalid stdin cannot overwrite accepted output');
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('bounded stdin retains exact UTF-8 byte limit and expansion refusals',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-stdin-byte-cap-'));
+        try {
+            const visible = 'ó';
+            const exact = Buffer.from('\uFEFF' + visible
+                + ' '.repeat(4096 - 3 - Buffer.byteLength(visible)));
+            assert.equal(exact.length, 4096,
+                'UTF-8 signature and accented glyph count as source bytes');
+            const overlong = Buffer.concat([exact, Buffer.from(' ')]);
+            const exactExpansion = Buffer.from('a' + '\t'.repeat(1024));
+            const expanding = Buffer.from('a' + '\t'.repeat(1025));
+            assert.ok(expanding.length < 4096,
+                'expanded tab refusal is distinct from source byte cap');
+            for (const format of ['pdf', 'png']) {
+                for (const [fileFlag, inlineFlag] of [
+                    ['--flow-markdown-file', '--flow-markdown'],
+                    ['--flow-text-file', '--flow-text'],
+                ]) {
+                    const baseline = render(dir, visible, format, [],
+                        inlineFlag);
+                    assert.equal(baseline.result.status, 0,
+                        baseline.result.stderr);
+                    const expected = readFileSync(baseline.output);
+                    const accepted = render(dir, '-', format, [],
+                        fileFlag, 1, exact);
+                    assert.equal(accepted.result.status, 0,
+                        accepted.result.stderr);
+                    assert.deepEqual(readFileSync(accepted.output), expected,
+                        `${format} ${fileFlag} exact source byte cap`);
+                    const tabReference = render(dir, 'a', format, [],
+                        inlineFlag);
+                    assert.equal(tabReference.result.status, 0,
+                        tabReference.result.stderr);
+                    const tabExpected = readFileSync(tabReference.output);
+                    const tabsAccepted = render(dir, '-', format, [],
+                        fileFlag, 1, exactExpansion);
+                    assert.equal(tabsAccepted.result.status, 0,
+                        tabsAccepted.result.stderr);
+                    assert.deepEqual(readFileSync(tabsAccepted.output),
+                        tabExpected,
+                        'exact expanded 4096-byte tab cap is admitted');
+                    for (const [input, diagnostic] of [
+                        [overlong, /flow stdin exceeds 4096 UTF-8 bytes/],
+                        [expanding, /expanded flow text exceeds 4096/],
+                    ]) {
+                        const refused = render(dir, '-', format, [],
+                            fileFlag, 1, input);
+                        assert.notEqual(refused.result.status, 0);
+                        assert.match(refused.result.stderr, diagnostic);
+                        assert.deepEqual(readFileSync(refused.output),
+                            tabExpected,
+                            'source or expansion refusal preserves export');
+                    }
                 }
             }
         } finally {
