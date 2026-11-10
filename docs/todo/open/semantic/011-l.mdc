@@ -3742,3 +3742,22 @@ same. The 420-row comparison against the independent band oracle now also
 includes fixed boxes touching one row boundary exactly and crossing it by
 one micrometre. The indexed query does not change collision policy or grant
 notebook Export authority; ATR-P2-011 remains open.
+
+## Indexed positioned-box inspection from admitted rows — 2026-11-09
+
+The selected-row inspection now reuses its already validated physical row
+boxes when collecting fixed/row intersections. The standalone first/capped
+intersection APIs share the same indexed geometry traversal after their
+existing full-batch fixed-proposal and source-bound row-position admission.
+The traversal partitions by physical page and increasing measured row bottom,
+then compares only candidate boxes, preserving fixed-input/source-row order,
+positive-area intersection rules, and typed limit refusals. Position
+validation no longer builds an unused source-to-left-coordinate map.
+
+The 420-row/163-fixed-proposal regression now checks the complete selected
+intersection sequence against an independent direct 2D rectangle oracle,
+including variable row heights, rows continuing onto a later page, empty
+widths, exact vertical boundary probes, first-hit identity, and capped-result
+refusal. This is
+read-only provisional box geometry, not actual ink, overlap permission,
+complete mixed-flow page ownership or native Export authority.

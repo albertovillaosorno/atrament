@@ -1050,7 +1050,7 @@ pub fn positioned_row_footprints_for_flow(
     plan: &SemanticPaginationPlan,
     positions: &[RowHorizontalPosition],
 ) -> Result<Vec<PositionedRowFootprint>, FlowFixedRegionError> {
-    let _left_by_source = validate_row_horizontal_positions(plan, positions)?;
+    validate_row_horizontal_positions(plan, positions)?;
     Ok(plan
         .placements()
         .iter()
@@ -1115,10 +1115,12 @@ pub fn inspect_selected_aligned_rows_for_flow(
         plan, selections,
     )?;
     let rows = positioned_row_footprints_for_flow(plan, &positions)?;
-    let overlaps = fixed_row_footprint_overlaps_for_flow(
-        plan,
+    validate_fixed_region_batch_for_flow(plan, fixed_regions)?;
+    let overlaps = collect_admitted_fixed_row_footprint_overlaps(
+        plan.revision(),
+        plan.flow(),
         fixed_regions,
-        &positions,
+        &rows,
         max_overlaps,
     )?;
     Ok(SelectedAlignedRowInspection {
@@ -1367,101 +1369,134 @@ pub fn fixed_row_footprint_overlaps_for_flow(
     Ok(overlaps)
 }
 
-// Admit the entire proposal batch before any first-hit or complete bounded
-// collection. A visitor can stop early only *after* those validations, so a
-// later invalid fixed rectangle or row proposal never hides behind a hit.
+// Full fixed-region admission and exact source/geometry-bound positions precede
+// every first-hit or capped result. Already admitted snapshots reuse the same
+// physical-box traversal without revalidating their immutable row positions.
 fn visit_fixed_row_footprint_overlaps_for_flow(
     plan: &SemanticPaginationPlan,
     fixed_regions: &[FixedRegionLayoutResult],
     positions: &[RowHorizontalPosition],
+    visit: impl FnMut(FixedRowFootprintOverlap) -> bool,
+) -> Result<(), FlowFixedRegionError> {
+    validate_fixed_region_batch_for_flow(plan, fixed_regions)?;
+    let rows = positioned_row_footprints_for_flow(plan, positions)?;
+    visit_admitted_fixed_row_footprint_overlaps(
+        plan.revision(), plan.flow(), fixed_regions, &rows, visit,
+    )
+}
+
+fn collect_admitted_fixed_row_footprint_overlaps(
+    revision: RevisionIdentity,
+    flow: AcceptedIdentity,
+    fixed_regions: &[FixedRegionLayoutResult],
+    rows: &[PositionedRowFootprint],
+    max_overlaps: usize,
+) -> Result<Vec<FixedRowFootprintOverlap>, FlowFixedRegionError> {
+    let mut overlaps = Vec::new();
+    let mut exceeded = false;
+    visit_admitted_fixed_row_footprint_overlaps(
+        revision, flow, fixed_regions, rows, |overlap| {
+            if overlaps.len() == max_overlaps {
+                exceeded = true;
+                return false;
+            }
+            overlaps.push(overlap);
+            true
+        },
+    )?;
+    if exceeded {
+        return Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
+            limit: max_overlaps,
+        });
+    }
+    Ok(overlaps)
+}
+
+// A checked plan's rows are in physical vertical order within each page.
+// Indexing their sealed boxes preserves fixed-first and source-row ordering,
+// and skips unrelated pages and rows ending before a fixed rectangle begins.
+fn visit_admitted_fixed_row_footprint_overlaps(
+    revision: RevisionIdentity,
+    flow: AcceptedIdentity,
+    fixed_regions: &[FixedRegionLayoutResult],
+    rows: &[PositionedRowFootprint],
     mut visit: impl FnMut(FixedRowFootprintOverlap) -> bool,
 ) -> Result<(), FlowFixedRegionError> {
-    let writable_by_page = writable_index(plan);
-    for fixed in fixed_regions {
-        validate_fixed_region_for_flow(plan, fixed, &writable_by_page)?;
+    let mut rows_by_page =
+        BTreeMap::<AcceptedIdentity, Vec<&PositionedRowFootprint>>::new();
+    for row in rows {
+        rows_by_page.entry(row.page()).or_default().push(row);
     }
-    let left_by_source = validate_row_horizontal_positions(plan, positions)?;
-    let rows_by_page = measured_row_index(plan);
     for (fixed_index, fixed) in fixed_regions.iter().enumerate() {
         let rectangle = fixed.rectangle();
-        let fixed_left = rectangle.x.micrometres();
-        let fixed_right = fixed_left
-            .checked_add(rectangle.width.micrometres())
-            .ok_or_else(|| FlowFixedRegionError::CoordinateOverflow {
-                page: fixed.page(),
-                object: fixed.object(),
-            })?;
-        if let Some(rows) = rows_by_page.get(&fixed.page()) {
-            let mut invalid_row = None;
-            let mut stopped = false;
-            visit_fixed_measured_rows(fixed, rows, |row, top, height| {
-                if row.width == Length::ZERO {
-                    return true;
-                }
-                let Some(&row_left) = left_by_source
-                    .get(&(row.source.unit, row.source.fragment))
-                else {
-                    // Defensive: the plan rows were all indexed above.
-                    invalid_row = Some(
-                        FlowFixedRegionError::RowFootprintOverflow {
-                            page: row.page,
-                            fragment_owner: row.owner,
-                            source: row.source,
-                        },
-                    );
-                    return false;
-                };
-                let Some(row_right) = row_left
-                    .checked_add(row.width.micrometres())
-                else {
-                    invalid_row = Some(
-                        FlowFixedRegionError::RowFootprintOverflow {
-                            page: row.page,
-                            fragment_owner: row.owner,
-                            source: row.source,
-                        },
-                    );
-                    return false;
-                };
-                let shared_left = fixed_left.max(row_left);
-                let shared_right = fixed_right.min(row_right);
-                if shared_left >= shared_right {
-                    return true;
-                }
-                let Some(shared_width) = shared_right.checked_sub(shared_left)
-                else {
-                    invalid_row = Some(
-                        FlowFixedRegionError::CoordinateOverflow {
-                            page: fixed.page(),
-                            object: fixed.object(),
-                        },
-                    );
-                    return false;
-                };
-                if !visit(FixedRowFootprintOverlap {
-                    fixed_index,
-                    flow: plan.flow(),
-                    fragment_owner: row.owner,
-                    intersection: Rect {
-                        x: Length::from_micrometres(shared_left),
-                        y: top,
-                        width: Length::from_micrometres(shared_width),
-                        height,
-                    },
-                    object: fixed.object(),
-                    page: fixed.page(),
-                    revision: plan.revision(),
-                    source: row.source,
-                }) {
-                    stopped = true;
-                    return false;
-                }
-                true
-            })?;
-            if let Some(error) = invalid_row {
-                return Err(error);
+        if rectangle.width == Length::ZERO || rectangle.height == Length::ZERO {
+            continue;
+        }
+        let left = rectangle.x.micrometres();
+        let top = rectangle.y.micrometres();
+        let overflow = || FlowFixedRegionError::CoordinateOverflow {
+            page: fixed.page(),
+            object: fixed.object(),
+        };
+        let right = left.checked_add(rectangle.width.micrometres())
+            .ok_or_else(overflow)?;
+        let bottom = top.checked_add(rectangle.height.micrometres())
+            .ok_or_else(overflow)?;
+        let Some(page_rows) = rows_by_page.get(&fixed.page()) else {
+            continue;
+        };
+        let first_candidate = page_rows.partition_point(|row| {
+            let box_ = row.rectangle();
+            box_.y.micrometres()
+                .saturating_add(box_.height.micrometres()) <= top
+        });
+        for row in page_rows.get(first_candidate..).unwrap_or(&[]) {
+            let box_ = row.rectangle();
+            let row_top = box_.y.micrometres();
+            if row_top >= bottom {
+                break;
             }
-            if stopped {
+            if box_.width == Length::ZERO {
+                continue;
+            }
+            let row_bottom = row_top.checked_add(box_.height.micrometres())
+                .ok_or_else(overflow)?;
+            let shared_top = top.max(row_top);
+            let shared_bottom = bottom.min(row_bottom);
+            if shared_top >= shared_bottom {
+                continue;
+            }
+            let row_left = box_.x.micrometres();
+            let row_right = row_left.checked_add(box_.width.micrometres())
+                .ok_or_else(|| FlowFixedRegionError::RowFootprintOverflow {
+                    page: row.page(),
+                    fragment_owner: row.fragment_owner(),
+                    source: row.source(),
+                })?;
+            let shared_left = left.max(row_left);
+            let shared_right = right.min(row_right);
+            if shared_left >= shared_right {
+                continue;
+            }
+            let shared_width = shared_right.checked_sub(shared_left)
+                .ok_or_else(overflow)?;
+            let shared_height = shared_bottom.checked_sub(shared_top)
+                .ok_or_else(overflow)?;
+            if !visit(FixedRowFootprintOverlap {
+                fixed_index,
+                flow,
+                fragment_owner: row.fragment_owner(),
+                intersection: Rect {
+                    x: Length::from_micrometres(shared_left),
+                    y: Length::from_micrometres(shared_top),
+                    width: Length::from_micrometres(shared_width),
+                    height: Length::from_micrometres(shared_height),
+                },
+                object: fixed.object(),
+                page: fixed.page(),
+                revision,
+                source: row.source(),
+            }) {
                 return Ok(());
             }
         }
@@ -1470,18 +1505,18 @@ fn visit_fixed_row_footprint_overlaps_for_flow(
 }
 
 // Validate the entire proposed X-placement sequence before any intersections
-// are reported. The source-key index is unique within a sealed pagination plan.
+// are reported. Its placement-order checks also make source-key lookup
+// unnecessary once the accepted row boxes have been projected.
 fn validate_row_horizontal_positions(
     plan: &SemanticPaginationPlan,
     positions: &[RowHorizontalPosition],
-) -> Result<BTreeMap<(usize, usize), u64>, FlowFixedRegionError> {
+) -> Result<(), FlowFixedRegionError> {
     if positions.len() != plan.placements().len() {
         return Err(FlowFixedRegionError::RowPositionCountMismatch {
             expected: plan.placements().len(),
             supplied: positions.len(),
         });
     }
-    let mut left_by_source = BTreeMap::new();
     for (index, (row, position)) in plan.placements()
         .iter().zip(positions).enumerate()
     {
@@ -1518,11 +1553,19 @@ fn validate_row_horizontal_positions(
                 source: row.source,
             });
         }
-        let _previous = left_by_source.insert(
-            (row.source.unit, row.source.fragment), left,
-        );
     }
-    Ok(left_by_source)
+    Ok(())
+}
+
+fn validate_fixed_region_batch_for_flow(
+    plan: &SemanticPaginationPlan,
+    fixed_regions: &[FixedRegionLayoutResult],
+) -> Result<(), FlowFixedRegionError> {
+    let writable_by_page = writable_index(plan);
+    for fixed in fixed_regions {
+        validate_fixed_region_for_flow(plan, fixed, &writable_by_page)?;
+    }
+    Ok(())
 }
 
 fn writable_index(

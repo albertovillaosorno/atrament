@@ -6620,7 +6620,13 @@ fn check_many_mixed_row_alignments() -> Result<(), String> {
                         .unwrap_or_default(),
                 )
             };
-            (width, 1_000)
+            let height = 600u64.saturating_add(
+                u64::try_from(index).unwrap_or_default()
+                    .saturating_mul(223)
+                    .checked_rem(901)
+                    .unwrap_or_default(),
+            );
+            (width, height)
         })
         .collect::<Vec<_>>();
     let plan = paginate_revision(
@@ -6878,6 +6884,7 @@ fn check_many_selected_snapshot_parity(
     page_one: AcceptedIdentity,
 ) -> Result<(), String> {
     use atrament_semantic_flow_pagination::{
+        first_fixed_row_footprint_overlap_for_flow,
         fixed_row_footprint_overlaps_for_flow,
         inspect_selected_aligned_rows_for_flow,
     };
@@ -6904,6 +6911,62 @@ fn check_many_selected_snapshot_parity(
             != Ok(bands.first().copied())
     {
         return Err("many-row snapshot and independent oracles disagree".into());
+    }
+    // Independent 2D rectangle oracle, intentionally using all rows rather
+    // than the production page/vertical index or selected-row helper.
+    let expected = fixed.iter().enumerate().flat_map(|(fixed_index, fixed)| {
+        let box_ = fixed.rectangle();
+        let f_left = box_.x.micrometres();
+        let f_top = box_.y.micrometres();
+        let f_right = f_left.saturating_add(box_.width.micrometres());
+        let f_bottom = f_top.saturating_add(box_.height.micrometres());
+        plan.placements().iter().zip(positions)
+            .filter_map(move |(row, position)| {
+                if row.page != fixed.page() {
+                    return None;
+                }
+                let left = f_left.max(position.left.micrometres());
+                let top = f_top.max(row.top.micrometres());
+                let right = f_right.min(position.left.micrometres()
+                    .saturating_add(row.width.micrometres()));
+                let bottom = f_bottom.min(row.top.micrometres()
+                    .saturating_add(row.height.micrometres()));
+                if left >= right || top >= bottom {
+                    return None;
+                }
+                Some((fixed_index, row.source, row.page, Rect {
+                    x: Length::from_micrometres(left),
+                    y: Length::from_micrometres(top),
+                    width: Length::from_micrometres(right - left),
+                    height: Length::from_micrometres(bottom - top),
+                }))
+            })
+    }).collect::<Vec<_>>();
+    let observed = report.overlaps().iter().map(|hit| {
+        (hit.fixed_index(), hit.source(), hit.page(), hit.intersection())
+    }).collect::<Vec<_>>();
+    if expected != observed
+        || first_fixed_row_footprint_overlap_for_flow(plan, fixed, positions)
+            .map_err(|error| format!("first many-row hit: {error:?}"))?
+            != physical.first().copied()
+    {
+        return Err("indexed hits differ from independent 2D oracle".into());
+    }
+    let limited_hits = expected.len().checked_sub(1)
+        .ok_or("missing many-row physical hits")?;
+    if fixed_row_footprint_overlaps_for_flow(
+        plan, fixed, positions, limited_hits,
+    )
+        != Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
+            limit: limited_hits,
+        })
+        || inspect_selected_aligned_rows_for_flow(
+            plan, fixed, selections, limited_hits,
+        ) != Err(FlowFixedRegionError::FixedRowFootprintLimitExceeded {
+            limit: limited_hits,
+        })
+    {
+        return Err("capped physical hits returned partial data".into());
     }
     let [_, prior, following, ..] = plan.placements() else {
         return Err("missing edge rows for partition oracle".into());
