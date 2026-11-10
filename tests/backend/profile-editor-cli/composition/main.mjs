@@ -124,6 +124,54 @@ test('native CLI reads selected regular files but never traverses input links',
         }
     });
 
+test('native flow includes explicit manual ink on later PDF/PNG pages',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-manual-page-'));
+        try {
+            const ink = ['--ink-line', '2', '70000', '40000',
+                '71000', '41000', '250', '#123456'];
+            const base = ['notebook', '--printed-sheet', 'true',
+                '--glyph-stroke', 'a', '500', '500', '1800', '3000',
+                '250', '#234567', '--flow-text', 'a',
+                '--flow-region', '30000', '40000', '30000', '14000',
+                ...ink];
+            const png = ['--export-paper', 'png', '--dpi', '72',
+                '--png-page', '2'];
+            const reference = accepted('notebook', '--printed-sheet',
+                'true', ...ink, ...png);
+            const later = accepted(...base, ...png);
+            assert.deepEqual(later, reference,
+                'manual-only later page has identical native RGBA ink');
+            assert.deepEqual(later.subarray(0, 8),
+                Buffer.from('89504e470d0a1a0a', 'hex'));
+            assert.equal(later[25], 6, 'page two stays transparent RGBA');
+
+            const pdf = accepted(...base, '--export-paper', 'pdf');
+            assert.match(pdf.toString('latin1'), /\/Count 2\b/,
+                'later manual ink extends the automatic PDF page budget');
+            assert.deepEqual(pdf, accepted(...base,
+                '--export-paper', 'pdf', '--pages', '2'),
+                'automatic and explicit two-page PDF must be identical');
+
+            const outputPng = join(dir, 'approved.png');
+            const outputPdf = join(dir, 'approved.pdf');
+            writeFileSync(outputPng, later);
+            writeFileSync(outputPdf, pdf);
+            refused([...base, ...png.slice(0, -1), '3',
+                '--output', outputPng, '--replace'],
+            /selected PNG page is empty/, outputPng);
+            refused([...base, '--export-paper', 'pdf', '--pages', '1',
+                '--output', outputPdf, '--replace'],
+            /ink.*require 2 physical pages/, outputPdf);
+            refused([...base, '--ink-line', '3', '1000', '1000',
+                '2000', '2000', '250', '#123456', ...png,
+                '--output', outputPng, '--replace'],
+            /page 3 ink needs printable endpoints/, outputPng);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('native notebook PNG quality presets match exact authored glyph ink',
     () => {
         const dir = mkdtempSync(join(root, '.temp/notebook-quality-'));

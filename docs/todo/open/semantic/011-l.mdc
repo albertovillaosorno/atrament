@@ -4131,3 +4131,31 @@ scoped flow source, tests or this evidence note.
 This validates existing ephemeral CLI flow and native export boundaries; no
 production implementation changed and the persisted semantic notebook
 body-to-handwriting/PDF/PNG bridge remains unfinished. ATR-P2-011 stays open.
+
+## Flowed output with later manual ink (partial) — 2026-11-10
+
+The native `atrament-profiles notebook` CLI now counts the last page
+containing an explicit `--ink-line` when automatically sizing a flowed PDF.
+Previously, a one-page text flow plus a valid manually authored line on page
+two failed PDF export because the default page count remained one. Selecting
+page two as transparent PNG likewise refused it as empty even though it held
+manual ink. The physical page count now includes both ink sources; PNG page
+selection accepts a later page only if explicit manual ink occupies it.
+
+A real native PDF/PNG regression checks page-two RGBA bytes against the
+manual-ink-only renderer and compares implicit versus explicit two-page PDF
+bytes. It positions that manual stroke outside an independently bounded
+flow rectangle, showing the existing paper-wide ink validation remains
+separate. Empty PNG selection, an insufficient explicit PDF page budget, and
+invalid ink on an unselected later page all refuse without replacing prior
+accepted outputs.
+
+This fixes transient caller-authored CLI page selection, not semantic block
+persistence, automatic fixed-object placement, or the browser's native
+notebook Export capability. ATR-P2-011 remains open.
+
+Post-change checks: 2,189 offline all-feature Rust workspace tests, strict
+production Clippy, frontend TypeScript, 9/9 native CLI cases, all 49 bounded
+native flow shards (147/147 complete exact receipts), 3/3 shard-runner checks
+and 1/1 print-ready dry run passed. Jig check still reports its 181
+pre-existing unrelated findings, with none in the three changed paths.
