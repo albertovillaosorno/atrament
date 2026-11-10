@@ -3016,15 +3016,20 @@ Focused browser and native regressions exercise direct authoring, TSV
 import/export and refusal without replacing an existing PDF or edited glyph.
 This remains bounded glyph-integrity work, not automatic multilingual shaping.
 
-## Blank Braille glyph-key refusal — 2026-11-10
+## Standalone Braille and Egyptian nonmarking glyph refusal — 2026-11-10
 
 Browser and native Rust authored-stroke admission now refuse standalone
 U+2800 BRAILLE PATTERN BLANK as a drawable glyph. The character has no
 Braille dots; accepting a pen contour for it would silently treat an
 intentionally blank pattern as printed ink. This is an exact, single-scalar
 rule: visible Braille patterns and a U+2800-plus-accent grapheme remain
-independently authorable without normalization. Other non-ASCII spacing
-keys keep their existing exact fallback semantics.
+independently authorable without normalization.
+
+Standalone Egyptian blank signs U+13441/U+13442 and nonmarking
+mirror/damage modifiers U+13440 and U+13447–U+13455 also refuse.
+Complete visible hieroglyph-plus-modifier graphemes remain independently
+authorable; visible lost-sign keys and other non-ASCII spacing retain
+existing exact semantics.
 
 Focused native and browser tests cover direct authoring, TSV import/export,
 visible keys, and preservation of an already selected PDF after refusal.

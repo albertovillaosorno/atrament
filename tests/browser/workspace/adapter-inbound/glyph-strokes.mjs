@@ -74,10 +74,12 @@ test("Unicode row separators cannot become authored browser TSV ink", () => {
     }
 });
 
-test("standalone format, variation and blank Braille cannot become ink", () => {
+test("standalone format, Braille and Egyptian blanks cannot be ink", () => {
     const invisible = ["\u00AD", "\u034F", "\u061C", "\u180E",
         "\u0600", "\u0605", "\u070F", "\u08E2",
         "\u{110BD}", "\u{110CD}", "\u{13430}", "\u{1343F}",
+        "\u{13440}", "\u{13441}", "\u{13442}",
+        "\u{13447}", "\u{13455}",
         "\u200B", "\u200C", "\u200D", "\u200E", "\u200F",
         "\u202A", "\u202E", "\u2060", "\u2061", "\u2062",
         "\u2063", "\u2064", "\u2066", "\u2069", "\u206F",
@@ -100,7 +102,9 @@ test("standalone format, variation and blank Braille cannot become ink", () => {
     }
     for (const visible of ["👩\u200D💻", "❤\uFE0F", "a\u034F",
         "\u0600\u0661",
-        "a\u{E0100}", "⠁", "\u2800\u0301", "🏴\u{E0067}\u{E0062}\u{E0065}"
+        "a\u{E0100}", "⠁", "\u2800\u0301",
+        "\u{13000}\u{13440}", "\u{13000}\u{13447}",
+        "\u{13443}", "🏴\u{E0067}\u{E0062}\u{E0065}"
             + "\u{E006E}\u{E0067}\u{E007F}", "\u00A0"]) {
         const original = [stroke(visible)];
         assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(original)),

@@ -59,7 +59,9 @@ function exactGrapheme(value) {
         || /^[\u115F-\u1160\u17B4-\u17B5\u180B-\u180F\u3164\uFFA0]$/u
             .test(value)
         || /^[\uFFF0-\uFFFB\u{110BD}\u{110CD}]$/u.test(value)
-        || /^[\u{13430}-\u{1343F}\u{1BCA0}-\u{1BCA3}]$/u
+        || /^[\u{13430}-\u{13442}\u{13447}-\u{13455}]$/u
+            .test(value)
+        || /^[\u{1BCA0}-\u{1BCA3}]$/u
             .test(value)
         || /^[\u{1D173}-\u{1D17A}\u{E0000}-\u{E0FFF}]$/u
             .test(value)) {

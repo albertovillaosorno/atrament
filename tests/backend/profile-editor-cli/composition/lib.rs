@@ -2440,7 +2440,7 @@ fn saved_glyph_library_rejects_structural_separators_before_pdf_replacement() {
 }
 
 #[test]
-fn standalone_format_variation_and_blank_braille_cannot_name_ink() {
+fn standalone_format_braille_and_egyptian_blanks_cannot_name_ink() {
     let source = test_path().with_extension("tsv");
     let target = test_path().with_extension("pdf");
     let filename = source.to_str().expect("selected TSV path");
@@ -2451,6 +2451,8 @@ fn standalone_format_variation_and_blank_braille_cannot_name_ink() {
         "\u{00ad}", "\u{034f}", "\u{061c}", "\u{180e}",
         "\u{0600}", "\u{0605}", "\u{070f}", "\u{08e2}",
         "\u{110bd}", "\u{110cd}", "\u{13430}", "\u{1343f}",
+        "\u{13440}", "\u{13441}", "\u{13442}",
+        "\u{13447}", "\u{13455}",
         "\u{200b}", "\u{200c}", "\u{200d}", "\u{200e}",
         "\u{200f}", "\u{202a}", "\u{202e}", "\u{2060}",
         "\u{2061}", "\u{2062}", "\u{2063}", "\u{2064}",
@@ -2498,6 +2500,8 @@ fn standalone_format_variation_and_blank_braille_cannot_name_ink() {
     for visible in ["👩\u{200d}💻", "❤\u{fe0f}",
         "\u{0600}\u{0661}",
         "a\u{034f}", "a\u{e0100}", "⠁", "\u{2800}\u{301}",
+        "\u{13000}\u{13440}", "\u{13000}\u{13447}",
+        "\u{13443}",
         "🏴\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}",
         "\u{a0}"] {
         let text = execute_glyph_library(&args(&[

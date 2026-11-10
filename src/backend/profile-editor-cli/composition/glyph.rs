@@ -1819,7 +1819,7 @@ fn ensure_inserted_bridge_fits_cell(
     Ok(())
 }
 
-// Braille pattern blank (U+2800) is also a single nonmarking ink key.
+// Blank Braille and Egyptian sign modifiers are nonmarking ink keys.
 fn is_standalone_invisible_scalar(grapheme: &str) -> bool {
     let mut characters = grapheme.chars();
     let Some(first) = characters.next() else {
@@ -1836,7 +1836,8 @@ fn is_standalone_invisible_scalar(grapheme: &str) -> bool {
                 | '\u{fe00}'..='\u{fe0f}' | '\u{feff}'
                 | '\u{ffa0}' | '\u{fff0}'..='\u{fffb}'
                 | '\u{110bd}' | '\u{110cd}'
-                | '\u{13430}'..='\u{1343f}'
+                | '\u{13430}'..='\u{13442}'
+                | '\u{13447}'..='\u{13455}'
                 | '\u{1bca0}'..='\u{1bca3}'
                 | '\u{1d173}'..='\u{1d17a}'
                 | '\u{e0000}'..='\u{e0fff}')
