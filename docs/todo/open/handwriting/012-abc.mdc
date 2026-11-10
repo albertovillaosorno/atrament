@@ -2906,10 +2906,27 @@ composed bilingual accents. Every selected key produces ink. Only four
 intentional pairs share sampled geometry: `c/C`, `o/O`, `s/S`, and `-/−`;
 the exact grapheme labels still differ in TSV. The 251 focused browser
 glyph-editor tests, frontend TypeScript build/check, offline all-feature Rust
-workspace and pinned production Rust Clippy pass. Jig doctor passes; Jig
-check retains 181 existing repository findings, with no added long lines
-in owned paths. The full-browser run was stopped after overlapping jobs;
+workspace and pinned production Rust Clippy pass.
+
+Jig doctor passes; Jig check retains 181 existing repository findings, with
+no added long lines in owned paths. The full-browser run was stopped after overlapping jobs;
 a separately rerun Firefox session-storage test still timed out at
 `script.evaluate`, so broad frontend validation remains red/unconfirmed.
 This does not add automatic cursive joining, font-wide glyph synthesis,
 or persisted semantic notebook state.
+
+## Full-pen physical containment regression — 2026-11-10
+
+The fixed 296-key geometric selector inventory now also drives a bounded
+physical-clearance regression. It tests every selected glyph at five cell
+locations for two radii and two pen widths; accepted directed strokes must
+retain the exact Unicode key and fit **the full pen width**, not merely the
+sampled centerline, within the 3500 x 4500 micrometre glyph cell. Boundary
+refusals must name geometry or clearance, never missing shape admission.
+
+The same matrix covers 33 explicitly selected connected forms, four italic
+loops, four two-storey variants, and fourteen independent decomposed-accent
+keys. The 252-case focused browser suite passes; three isolated Firefox
+privacy/storage scenarios also pass, including the seeded Clear-Site-Data
+positive and negative controls. This is a reproducible first-stage geometry
+safety check, not native analytic-curve persistence or font-wide proof.

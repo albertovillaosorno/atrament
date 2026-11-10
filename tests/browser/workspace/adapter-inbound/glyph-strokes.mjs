@@ -3375,15 +3375,19 @@ test("selected marks never borrow unrelated fallback geometry", () => {
     }
 });
 
+// Centralize the exact selected baseline for both shape identity and
+// physical pen-clearance regression, so newly added selectors enter both.
+const SELECTABLE_GEOMETRIC_GLYPHS = [...new Set([
+    ..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+    ..."áéíóúñüÁÉÍÓÚÑÜ",
+    ".", ",", "!", "¡", "?", "¿", "«", "»", "‘", "’", "“", "”",
+    "°", "%", "$", "€", ";", ":", "\"", "'", "…", "–", "—",
+    "(", ")", "[", "]", "/", "\\", "{", "}",
+    ...SELECTABLE_MATH_GLYPHS,
+])];
+
 test("all selected geometric starters avoid unintended glyph aliases", () => {
-    const glyphs = [...new Set([
-        ..."abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
-        ..."áéíóúñüÁÉÍÓÚÑÜ",
-        ".", ",", "!", "¡", "?", "¿", "«", "»", "‘", "’", "“", "”",
-        "°", "%", "$", "€", ";", ":", "\"", "'", "…", "–", "—",
-        "(", ")", "[", "]", "/", "\\", "{", "}",
-        ...SELECTABLE_MATH_GLYPHS,
-    ])];
+    const glyphs = SELECTABLE_GEOMETRIC_GLYPHS;
     const geometries = new Map();
     const geometry = (glyph) => geometricStarter(glyph, 1750, 2250,
         900, 100, "#243647").map(({ x1, y1, x2, y2 }) =>
@@ -3405,6 +3409,83 @@ test("all selected geometric starters avoid unintended glyph aliases", () => {
         a[0].localeCompare(b[0])),
     "only deliberate case/ASCII-minus pairs share physical pen geometry");
 });
+
+test("selected geometric strokes fit their full pen inside the glyph cell",
+    () => {
+        const connected = ["o", "a", "ó", "á", "c", "e", "é", "i", "í",
+            "j", "l", "t", "f", "n", "ñ", "u", "ú", "ü", "m", "h",
+            "r", "v", "w", "z", "s", "y", "k", "x", "g", "b", "p",
+            "d", "q"];
+        const accented = [..."áéíóúñüÁÉÍÓÚÑÜ"].map((glyph) =>
+            [glyph.normalize("NFD"), "single"]);
+        const choices = [
+            ...SELECTABLE_GEOMETRIC_GLYPHS.map((glyph) =>
+                [glyph, "single"]),
+            ...connected.map((glyph) => [glyph, "cursive"]),
+            ...["o", "a", "ó", "á"].map((glyph) => [glyph, "italic"]),
+            ...["a", "á"].flatMap((glyph) =>
+                [[glyph, "two-storey"], [glyph, "two-storey-italic"]]),
+            ...accented,
+        ];
+        assert.equal(SELECTABLE_GEOMETRIC_GLYPHS.length, 296,
+            "physical clearance inventory changes require review");
+        let accepted = 0;
+        let refused = 0;
+        for (const [glyph, variant] of choices) {
+            let acceptedForVariant = 0;
+            for (const radius of [350, 900]) {
+                for (const width of [100, 250]) {
+                    const halfPen = width / 2;
+                    const xMin = radius + halfPen;
+                    const xMax = 3500 - xMin;
+                    const yMin = radius + halfPen;
+                    const yMax = 4500 - yMin;
+                    // Exercise four physical corners and the interior: a
+                    // sampled centerline may fit even when the pen does not.
+                    const centers = [
+                        [xMin, yMin], [xMax, yMin], [1750, 2250],
+                        [xMin, yMax], [xMax, yMax],
+                    ];
+                    for (const [x, y] of centers) {
+                        let strokes;
+                        try {
+                            strokes = geometricStarter(glyph, x, y, radius,
+                                width, "#243647", undefined, variant);
+                        } catch (error) {
+                            assert.match(error.message,
+                                /pen|clip|cell|clearance/,
+                                `${glyph} ${variant} must refuse only `
+                                    + "physical geometry");
+                            refused += 1;
+                            continue;
+                        }
+                        accepted += 1;
+                        acceptedForVariant += 1;
+                        assert.ok(strokes.length > 0,
+                            `${glyph} ${variant} silently lost all ink`);
+                        for (const line of strokes) {
+                            assert.equal(line.grapheme, glyph,
+                                "variant must preserve exact Unicode key");
+                            for (const xEnd of [line.x1, line.x2]) {
+                                assert.ok(xEnd - width / 2 >= 0
+                                    && xEnd + width / 2 <= 3500,
+                                `${glyph} ${variant} clipped horizontal ink`);
+                            }
+                            for (const yEnd of [line.y1, line.y2]) {
+                                assert.ok(yEnd - width / 2 >= 0
+                                    && yEnd + width / 2 <= 4500,
+                                `${glyph} ${variant} clipped vertical ink`);
+                            }
+                        }
+                    }
+                }
+            }
+            assert.ok(acceptedForVariant > 0,
+                `${glyph} ${variant} has no safe geometric construction`);
+        }
+        assert.ok(accepted > 0 && refused > 0,
+            "boundary matrix must exercise both acceptance and refusal");
+    });
 
 test("eight basic math operators have exact bounded pen geometry", () => {
     const expected = {
