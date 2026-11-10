@@ -3961,3 +3961,18 @@ partial stdout or replacing an accepted export.
 This covers the public native export boundary beyond the existing internal
 row-pitch oracles. It does not establish persisted semantic headings or
 localhost body export.
+
+## Exhaustive adjacent Markdown pitch matrix (partial) — 2026-11-10
+
+An additional bounded native Rust regression cross-checks physical row pitch
+against the independent height calculation from actual emitted handwriting
+runs. Every pair of 27 short source-line forms is combined with four terminal
+forms, including body, headings, list/task/quote markers, Setext rules,
+fences, escaped syntax and Unicode line/paragraph separators. Only valid
+admitted layouts contribute to the asserted coverage floor of 1,800 cases;
+invalid empty blocks and unfinished fences remain explicit refusals.
+
+All accepted combinations preserve the exact emitted-glyph pitch, even when
+unused syntactic marker glyphs have 25-mm height overrides. This tests the
+current ephemeral CLI Markdown layout, not persisted semantic identities or
+browser notebook rendering; the executable P1 task remains open.

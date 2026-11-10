@@ -6569,3 +6569,78 @@ fn adjacent_markdown_block_transitions_measure_only_emitted_glyphs()
     }
     Ok(())
 }
+
+// Unlike random independent blocks, this exhaustive short-source matrix
+// exercises every neighboring transition at the raw Markdown line boundary.
+// The expected pitch is obtained from actual emitted glyphs, not the parser.
+#[test]
+fn adjacent_markdown_three_line_pitch_matches_emitted_ink()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    const LINES: &[&str] = &[
+        "a", "a  ", "a\\", "a a", "# a", "## a", "- a", "- [x] a",
+        "1) a", "> a", "  a", "   a", "    # a", "\\# a", "\\= a",
+        "===", "---", "- - -", "~~~", "```", "", ">", "  ===",
+        "  ---", "  - a", "a\u{2028}a", "a\u{2029}a",
+    ];
+    let tall = ScalarStatistics {
+        minimum: 25_000, maximum: 25_000, mean: 25_000,
+        median: 25_000, standard_deviation: 0,
+    };
+    let mut stats = HandwritingStatisticsProfile::baseline(72);
+    for glyph in [
+        "#", ">", "=", "-", "+", "*", "_", "`", "~", "[", "]", "x",
+        "1", ")", ".", "\\",
+    ] {
+        stats = stats.with_glyph(glyph, DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let paper = NotebookProfile::default();
+    let mut accepted = 0usize;
+    let mut baseline = 0usize;
+    let mut high = 0usize;
+    for first in LINES {
+        for second in LINES {
+            for third in ["a", "===", "- [x] a", ""] {
+                let text = format!("{first}\n{second}\n{third}");
+                let Ok(source) = FlowSource::new(FlowFormat::Markdown, &text)
+                else {
+                    // Three blank source lines have no visible block.
+                    continue;
+                };
+                let Ok((runs, _marks, _pages)) = super::layout_flow(
+                    &source, &paper, Some(&stats),
+                    super::HeadingDecoration::default(),
+                ) else {
+                    // Empty items, unclosed fences and headings can refuse.
+                    continue;
+                };
+                let emitted = emitted_glyph_pitch(&runs, &stats)?;
+                let measured = super::measured_pitch(&source, Some(&stats))?;
+                if measured != emitted {
+                    return Err(format!(
+                        "source {text:?}: pitch {measured} != {emitted}"
+                    ));
+                }
+                accepted += 1;
+                baseline += usize::from(measured == 9_000);
+                high += usize::from(measured > 9_000);
+            }
+        }
+    }
+    if accepted < 1_800 || baseline < 100 || high < 100 {
+        return Err(format!(
+            "insufficient short-source coverage: {accepted}, \
+            baseline={baseline}, high={high}"
+        ));
+    }
+    Ok(())
+}
