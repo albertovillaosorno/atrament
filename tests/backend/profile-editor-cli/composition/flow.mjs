@@ -7456,6 +7456,15 @@ test('invalid stdin flow refuses before replacing accepted PDF and PNG',
                     assert.deepEqual(readFileSync(refused.output), expected,
                         'invalid stdin cannot overwrite accepted output');
                 }
+                const invalidFile = join(dir, 'invalid-utf8.md');
+                writeFileSync(invalidFile, Buffer.from([0xff]));
+                const refusedFile = render(dir, invalidFile, format, [],
+                    '--flow-markdown-file');
+                assert.notEqual(refusedFile.result.status, 0);
+                assert.match(refusedFile.result.stderr,
+                    /flow file must be UTF-8/);
+                assert.deepEqual(readFileSync(refusedFile.output), expected,
+                    'invalid selected file cannot overwrite accepted output');
             }
         } finally {
             rmSync(dir, { recursive: true, force: true });

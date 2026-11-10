@@ -3890,6 +3890,7 @@ source expanding tabs to exactly 4,096 bytes is admitted; one more tab
 refuses atomically.
 
 Invalid UTF-8 in explicit stdin is diagnosed as stdin (not a saved file),
-while regular-file decoding retains its existing file diagnostic. All 139
-native cases passed across 47 independently bounded, exact-count TAP shards.
+while a matching invalid selected-file regression retains the existing file
+diagnostic and preserves PDF/PNG output. All 139 native cases passed across
+47 independently bounded, exact-count TAP shards.
 This is CLI-only input evidence, not persisted semantic notebook state.
