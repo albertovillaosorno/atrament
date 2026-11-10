@@ -4006,3 +4006,19 @@ transparent 72-DPI PNG page match the same explicitly placed glyph strokes.
 When the literal backslash has no authored stroke, export refuses with no
 partial stdout and cannot replace a previously accepted PDF/PNG. This is a
 bounded CLI parsing correction, not persisted semantic notebook content.
+
+## Four-line mixed Markdown region oracle (partial) — 2026-11-10
+
+A second deterministic source-transition regression now generates 3,000
+four-line Markdown candidates from headings, Setext rules, fenced code,
+escaped syntax, task/ordered/unordered lists, quotes, hard breaks, Unicode
+line separators, NFC/NFD accents, tabs, and long wrapped paragraphs. It
+compares measured row pitch against the independently recalculated height of
+every *emitted* authored glyph, not the original syntax markers.
+
+Accepted candidates also validate all physical rows and ornaments within
+alternating narrow one- and two-row fixed page regions, with real automatic
+page turns and independent minimum accepted/paged coverage assertions.
+Deliberately empty blocks and unclosed fences may still refuse. This
+strengthens the ephemeral CLI compiler's layout regression coverage; it
+does not implement persistent semantic bodies or localhost Markdown export.

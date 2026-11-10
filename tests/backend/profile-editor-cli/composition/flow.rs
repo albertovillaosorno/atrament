@@ -6698,3 +6698,90 @@ fn markdown_two_space_break_retains_preceding_literal_backslash()
     }
     Ok(())
 }
+
+#[test]
+fn mixed_markdown_four_line_transitions_preserve_emitted_pitch()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    const LINES: &[&str] = &[
+        "a", "a  ", "a\\", "a\\  ", "a\\\\", "a\\\\\\",
+        "a\u{2028}a", "a\u{2029}a", "# a", "## a", "### a",
+        "   # a", "    # a", "\\# a", "a\n==", "==", "  ===",
+        "   ---", "---", "- - -", "- a", "* a", "+ a", "- [x] a",
+        "1. a", "12) a", "12\\. a", "> a", ">", "> a  ",
+        "  > a", "  a", "   a", "    a", "```", "~~~", "~~~txt",
+        "   ~~~", "    ~~~", "`a", "~a", "", " ", "  ",
+        "a\ta", "\t# a", "\t- a", "a\t", "a\r\na", "é", "e\u{301}",
+        "a a a a a a a a a a a a a a a a", "- a a a a a a a a a a a a",
+        "> a a a a a a a a a a a a",
+    ];
+    let tall = ScalarStatistics {
+        minimum: 25_000, maximum: 25_000, mean: 25_000,
+        median: 25_000, standard_deviation: 0,
+    };
+    let mut stats = HandwritingStatisticsProfile::baseline(74);
+    for glyph in ["#", ">", "=", "-", "+", "*", "_", "`", "~",
+        "[", "]", "x", "1", "2", ")", ".", "\\"] {
+        stats = stats.with_glyph(glyph, DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let paper = NotebookProfile::default();
+    let mut seed = 0xc918_5c10u64;
+    let mut accepted = 0usize;
+    let mut high = 0usize;
+    let mut low = 0usize;
+    let mut paged = 0usize;
+    let printable = paper.printable_rect_um()?;
+    for case in 0..3_000usize {
+        let mut text = String::new();
+        for index in 0..4usize {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let choice = usize::try_from(seed >> 32)
+                .map_err(|_error| "source index overflow")?
+                % LINES.len();
+            if index > 0 { text.push('\n'); }
+            text.push_str(LINES[choice]);
+        }
+        let source = FlowSource::new(FlowFormat::Markdown, &text)?;
+        let region = super::FlowRegion {
+            left: printable.0, top: printable.1,
+            width: 110_000,
+            height: if case % 2 == 0 { 47_000 } else { 70_000 },
+        };
+        let Ok((runs, marks, pages)) = super::layout_flow_with_region(
+            &source, &paper, Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        ) else { continue; };
+        let measured = super::measured_pitch(&source, Some(&stats))?;
+        let emitted = emitted_glyph_pitch(&runs, &stats)?;
+        verify_mixed_region_placement(
+            &runs, &marks, region, printable, pages, measured,
+        )?;
+        paged += usize::from(pages > 1);
+        if measured != emitted {
+            return Err(format!(
+                "case {case} source {text:?}: pitch {measured} != {emitted}; \
+                 rows {runs:?}"
+            ));
+        }
+        accepted += 1;
+        high += usize::from(measured > 9_000);
+        low += usize::from(measured == 9_000);
+    }
+    if accepted < 1_000 || high < 300 || low < 30 || paged < 300 {
+        return Err(format!(
+            "insufficient four-line coverage {accepted}, high={high}, \
+             low={low}, paged={paged}"
+        ));
+    }
+    Ok(())
+}
