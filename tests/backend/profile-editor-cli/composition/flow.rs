@@ -6465,3 +6465,107 @@ fn mixed_markdown_source_pitch_matches_every_emitted_glyph()
     }
     Ok(())
 }
+
+#[test]
+fn adjacent_markdown_block_transitions_measure_only_emitted_glyphs()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    const LINES: &[&str] = &[
+        "a", "a  ", "a\\", "a a", "# a", "# a ##", "  ## a", "a\n===", "===",
+        "---", "- a", "- [ ] a", "- [x] a", "12) a", "> a", ">", "  a", "   a",
+        "    # a", "\\# a", "\\> a", "~~~txt", "~~~", "```", "\n", "a\n- a",
+        "> a\n  a", "a\n==", "a\n---", "- a\n  a",
+    ];
+    let tall = ScalarStatistics {
+        minimum: 25_000,
+        maximum: 25_000,
+        mean: 25_000,
+        median: 25_000,
+        standard_deviation: 0,
+    };
+    let mut stats = HandwritingStatisticsProfile::baseline(33);
+    for glyph in [
+        "#", ">", "=", "-", "+", "*", "_", "`", "~", "[", "]", "x", "1", "2",
+        ")", ".", "\\",
+    ] {
+        stats = stats
+            .with_glyph(
+                glyph,
+                DimensionStatistics {
+                    dimension: Dimension::Height,
+                    statistics: tall,
+                },
+                &UnicodeGraphemeSegmentation,
+            )
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let paper = NotebookProfile::default();
+    let printable = paper.printable_rect_um()?;
+    let region = super::FlowRegion {
+        left: printable.0,
+        top: printable.1,
+        width: 110_000,
+        height: 110_000,
+    };
+    let _: (u32, u32, u32, u32) = region.bounds_within(printable)?;
+    let mut seed = 0x4ab8_361eu64;
+    let mut accepted = 0usize;
+    let mut high_pitch = 0usize;
+    let mut baseline_pitch = 0usize;
+    let mut paged = 0usize;
+    for case in 0..1_024usize {
+        let mut text = String::new();
+        for index in 0..6usize {
+            seed = seed
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let offset = usize::try_from(seed >> 32u32)
+                .map_err(|_error| "case index overflow")?
+                .checked_rem(LINES.len())
+                .ok_or("empty line inventory")?;
+            let line = LINES.get(offset).ok_or("sampled line out of bounds")?;
+            if index > 0 {
+                text.push('\n');
+            }
+            text.push_str(line);
+        }
+        let source = FlowSource::new(FlowFormat::Markdown, &text)?;
+        let Ok((runs, marks, pages)) = super::layout_flow_with_region(
+            &source,
+            &paper,
+            Some(&stats),
+            super::HeadingDecoration::default(),
+            Some(region),
+        ) else {
+            // Empty blocks, unclosed fences and oversized headings refuse.
+            continue;
+        };
+        accepted += 1;
+        let measured = super::measured_pitch(&source, Some(&stats))?;
+        verify_mixed_region_placement(
+            &runs, &marks, region, printable, pages, measured,
+        )?;
+        paged += usize::from(pages > 1);
+        let emitted = emitted_glyph_pitch(&runs, &stats)?;
+        if measured != emitted {
+            return Err(format!(
+                "case {case} source {text:?}: pitch {measured} != {emitted}"
+            ));
+        }
+        high_pitch += usize::from(measured > 9_000);
+        baseline_pitch += usize::from(measured == 9_000);
+    }
+    if accepted < 300 || high_pitch < 100 || baseline_pitch < 10 || paged < 50 {
+        return Err(format!(
+            "insufficient accepted transitions: {accepted}, \
+            high={high_pitch}, baseline={baseline_pitch}, paged={paged}"
+        ));
+    }
+    Ok(())
+}
