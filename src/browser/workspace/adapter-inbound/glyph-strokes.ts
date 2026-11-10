@@ -62,14 +62,14 @@ function exactGrapheme(value: string): boolean {
         // Native flow and coverage audits reserve these two Unicode row
         // separators as structure; they can never name explicit pen ink.
         || /[\p{Cc}\u2028\u2029]/u.test(value) || value === " "
-        // A standalone invisible format, bidi or variation scalar cannot
+        // A standalone blank, format, bidi or variation scalar cannot
         // name physical ink. Joined emoji and visible variation sequences
         // remain distinct, exact multi-scalar graphemes.
         || /^[\u00AD\u034F\u0600-\u0605\u061C\u070F\u08E2]$/u
             .test(value)
         || /^[\u180E\u200B-\u200F]$/u.test(value)
         || /^[\u202A-\u202E\u2060-\u206F]$/u.test(value)
-        || /^[\uFE00-\uFE0F\uFEFF]$/u.test(value)
+        || /^[\u2800\uFE00-\uFE0F\uFEFF]$/u.test(value)
         || /^[\u115F-\u1160\u17B4-\u17B5\u180B-\u180F\u3164\uFFA0]$/u
             .test(value)
         || /^[\uFFF0-\uFFFB\u{110BD}\u{110CD}]$/u.test(value)

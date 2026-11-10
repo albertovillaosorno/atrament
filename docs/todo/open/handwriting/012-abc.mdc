@@ -3015,3 +3015,18 @@ emoji sequences retain their exact authored Unicode identities.
 Focused browser and native regressions exercise direct authoring, TSV
 import/export and refusal without replacing an existing PDF or edited glyph.
 This remains bounded glyph-integrity work, not automatic multilingual shaping.
+
+## Blank Braille glyph-key refusal — 2026-11-10
+
+Browser and native Rust authored-stroke admission now refuse standalone
+U+2800 BRAILLE PATTERN BLANK as a drawable glyph. The character has no
+Braille dots; accepting a pen contour for it would silently treat an
+intentionally blank pattern as printed ink. This is an exact, single-scalar
+rule: visible Braille patterns and a U+2800-plus-accent grapheme remain
+independently authorable without normalization. Other non-ASCII spacing
+keys keep their existing exact fallback semantics.
+
+Focused native and browser tests cover direct authoring, TSV import/export,
+visible keys, and preservation of an already selected PDF after refusal.
+This narrows a glyph-key admission gap, not generalized handwriting,
+Braille transcription or full P1 glyph coverage.

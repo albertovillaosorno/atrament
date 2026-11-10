@@ -74,7 +74,7 @@ test("Unicode row separators cannot become authored browser TSV ink", () => {
     }
 });
 
-test("standalone format and variation controls cannot become ink", () => {
+test("standalone format, variation and blank Braille cannot become ink", () => {
     const invisible = ["\u00AD", "\u034F", "\u061C", "\u180E",
         "\u0600", "\u0605", "\u070F", "\u08E2",
         "\u{110BD}", "\u{110CD}", "\u{13430}", "\u{1343F}",
@@ -84,14 +84,14 @@ test("standalone format and variation controls cannot become ink", () => {
         "\uFE00", "\uFE0E", "\uFE0F", "\uFEFF",
         "\u{E0100}", "\u{E01EF}", "\u115F", "\u1160",
         "\u17B4", "\u17B5", "\u180B", "\u180F", "\u3164",
-        "\uFFA0", "\uFFF0", "\uFFF8", "\uFFF9",
+        "\uFFA0", "\u2800", "\uFFF0", "\uFFF8", "\uFFF9",
         "\uFFFA", "\uFFFB", "\u{1BCA0}",
         "\u{1BCA3}", "\u{1D173}", "\u{1D17A}",
         "\u{E0001}", "\u{E0067}", "\u{E007F}"];
     for (const glyph of invisible) {
         assert.throws(() => encodeGlyphLibrary([stroke(glyph)]),
             /visible Unicode grapheme/,
-            "default-ignorable standalone scalar is not a visible glyph");
+            "standalone nonmarking scalar is not a visible glyph");
         const source = header
             + `${glyph}\t100\t200\t3000\t4200\t250\t#A1B2C3\n`;
         assert.throws(() => parseGlyphLibrary(source),
@@ -100,7 +100,7 @@ test("standalone format and variation controls cannot become ink", () => {
     }
     for (const visible of ["👩\u200D💻", "❤\uFE0F", "a\u034F",
         "\u0600\u0661",
-        "a\u{E0100}", "🏴\u{E0067}\u{E0062}\u{E0065}"
+        "a\u{E0100}", "⠁", "\u2800\u0301", "🏴\u{E0067}\u{E0062}\u{E0065}"
             + "\u{E006E}\u{E0067}\u{E007F}", "\u00A0"]) {
         const original = [stroke(visible)];
         assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(original)),

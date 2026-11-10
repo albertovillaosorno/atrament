@@ -2440,7 +2440,7 @@ fn saved_glyph_library_rejects_structural_separators_before_pdf_replacement() {
 }
 
 #[test]
-fn standalone_format_and_variation_scalars_cannot_name_physical_ink() {
+fn standalone_format_variation_and_blank_braille_cannot_name_ink() {
     let source = test_path().with_extension("tsv");
     let target = test_path().with_extension("pdf");
     let filename = source.to_str().expect("selected TSV path");
@@ -2458,7 +2458,7 @@ fn standalone_format_and_variation_scalars_cannot_name_physical_ink() {
         "\u{fe0e}", "\u{fe0f}", "\u{feff}",
         "\u{e0100}", "\u{e01ef}", "\u{115f}", "\u{1160}",
         "\u{17b4}", "\u{17b5}", "\u{180b}", "\u{180f}",
-        "\u{3164}", "\u{ffa0}", "\u{fff0}", "\u{fff8}",
+        "\u{3164}", "\u{ffa0}", "\u{2800}", "\u{fff0}", "\u{fff8}",
         "\u{fff9}", "\u{fffa}", "\u{fffb}",
         "\u{1bca0}", "\u{1bca3}", "\u{1d173}", "\u{1d17a}",
         "\u{e0001}", "\u{e0067}", "\u{e007f}",
@@ -2468,7 +2468,7 @@ fn standalone_format_and_variation_scalars_cannot_name_physical_ink() {
             "3000", "250", "#123456",
         ];
         let error = execute_glyph_library(&args(&ink))
-            .expect_err("a bare zero-width format scalar cannot draw ink");
+            .expect_err("blank or formatting scalar cannot draw ink");
         assert!(error.contains("visible grapheme"), "{error}");
         let bytes = format!(
             concat!(
@@ -2497,7 +2497,7 @@ fn standalone_format_and_variation_scalars_cannot_name_physical_ink() {
     }
     for visible in ["👩\u{200d}💻", "❤\u{fe0f}",
         "\u{0600}\u{0661}",
-        "a\u{034f}", "a\u{e0100}",
+        "a\u{034f}", "a\u{e0100}", "⠁", "\u{2800}\u{301}",
         "🏴\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}",
         "\u{a0}"] {
         let text = execute_glyph_library(&args(&[
