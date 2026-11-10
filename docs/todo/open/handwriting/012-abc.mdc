@@ -2988,3 +2988,18 @@ glyph suite passes 256 cases, the offline workspace passes 2,190 Rust tests,
 and the strict production CLI Clippy and frontend build/check pass. This is
 a bounded ink-integrity fix, not comprehensive Unicode visibility analysis,
 new handwriting outlines, or completed P1 notebook acceptance.
+
+## Standalone script-layout control refusal — 2026-11-10
+
+The exact browser and Rust authored-glyph paths now reject standalone
+Arabic number and Syriac abbreviation formatting controls, U+08E2,
+Kaithi number signs, and Egyptian hieroglyph enclosure controls
+(U+13430–U+1343F). These are formatting instructions, not independently
+drawable pen shapes. The earlier standalone format, variation and tag
+refusals remain intact; visible grapheme clusters with an Arabic number
+sign and digit remain independently authorable without normalization.
+
+Focused native and browser tests cover command input, TSV import/export
+and preservation of a previously selected PDF on refusal. This is a
+bounded identity-validation correction, not automatic multilingual glyph
+synthesis or evidence that the full P1 task is complete.

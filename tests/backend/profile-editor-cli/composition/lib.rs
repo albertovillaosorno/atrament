@@ -2449,6 +2449,8 @@ fn standalone_format_and_variation_scalars_cannot_name_physical_ink() {
         .expect("write test-owned PDF sentinel");
     for invisible in [
         "\u{00ad}", "\u{034f}", "\u{061c}", "\u{180e}",
+        "\u{0600}", "\u{0605}", "\u{070f}", "\u{08e2}",
+        "\u{110bd}", "\u{110cd}", "\u{13430}", "\u{1343f}",
         "\u{200b}", "\u{200c}", "\u{200d}", "\u{200e}",
         "\u{200f}", "\u{202a}", "\u{202e}", "\u{2060}",
         "\u{2061}", "\u{2062}", "\u{2063}", "\u{2064}",
@@ -2493,6 +2495,7 @@ fn standalone_format_and_variation_scalars_cannot_name_physical_ink() {
             bytes.as_bytes());
     }
     for visible in ["👩\u{200d}💻", "❤\u{fe0f}",
+        "\u{0600}\u{0661}",
         "a\u{034f}", "a\u{e0100}",
         "🏴\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}",
         "\u{a0}"] {

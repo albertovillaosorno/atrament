@@ -65,12 +65,16 @@ function exactGrapheme(value: string): boolean {
         // A standalone invisible format, bidi or variation scalar cannot
         // name physical ink. Joined emoji and visible variation sequences
         // remain distinct, exact multi-scalar graphemes.
-        || /^[\u00AD\u034F\u061C\u180E\u200B-\u200F]$/u.test(value)
+        || /^[\u00AD\u034F\u0600-\u0605\u061C\u070F\u08E2]$/u
+            .test(value)
+        || /^[\u180E\u200B-\u200F]$/u.test(value)
         || /^[\u202A-\u202E\u2060-\u206F]$/u.test(value)
         || /^[\uFE00-\uFE0F\uFEFF]$/u.test(value)
         || /^[\u115F-\u1160\u17B4-\u17B5\u180B-\u180F\u3164\uFFA0]$/u
             .test(value)
-        || /^[\uFFF0-\uFFF8\u{1BCA0}-\u{1BCA3}]$/u.test(value)
+        || /^[\uFFF0-\uFFF8\u{110BD}\u{110CD}]$/u.test(value)
+        || /^[\u{13430}-\u{1343F}\u{1BCA0}-\u{1BCA3}]$/u
+            .test(value)
         || /^[\u{1D173}-\u{1D17A}\u{E0000}-\u{E0FFF}]$/u
             .test(value)) {
         return false;
@@ -3713,8 +3717,8 @@ export function composeAccentedGlyph(
             .map(({ x }) => x);
         const dot = base[dots[0]!]!;
         const dotX = (dot.x1 + dot.x2) / 2;
-        const clearance = Math.max(200, dot.width,
-            ...body.map(({ width }) => width));
+        const bodyWidths = body.map(({ width }) => width);
+        const clearance = Math.max(200, dot.width, ...bodyWidths);
         if (dotX < Math.min(...topXs) - clearance
             || dotX > Math.max(...topXs) + clearance) {
             throw new Error("Acute i requires an aligned upper dot");

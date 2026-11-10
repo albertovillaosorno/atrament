@@ -76,6 +76,8 @@ test("Unicode row separators cannot become authored browser TSV ink", () => {
 
 test("standalone format and variation controls cannot become ink", () => {
     const invisible = ["\u00AD", "\u034F", "\u061C", "\u180E",
+        "\u0600", "\u0605", "\u070F", "\u08E2",
+        "\u{110BD}", "\u{110CD}", "\u{13430}", "\u{1343F}",
         "\u200B", "\u200C", "\u200D", "\u200E", "\u200F",
         "\u202A", "\u202E", "\u2060", "\u2061", "\u2062",
         "\u2063", "\u2064", "\u2066", "\u2069", "\u206F",
@@ -96,6 +98,7 @@ test("standalone format and variation controls cannot become ink", () => {
             "native must refuse the same unrenderable exact key");
     }
     for (const visible of ["👩\u200D💻", "❤\uFE0F", "a\u034F",
+        "\u0600\u0661",
         "a\u{E0100}", "🏴\u{E0067}\u{E0062}\u{E0065}"
             + "\u{E006E}\u{E0067}\u{E007F}", "\u00A0"]) {
         const original = [stroke(visible)];
