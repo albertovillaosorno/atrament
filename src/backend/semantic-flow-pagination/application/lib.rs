@@ -1647,6 +1647,14 @@ fn visit_admitted_fixed_row_band_overlaps(
     rows: &[PositionedRowFootprint],
     mut visit: impl FnMut(FixedRowBandOverlap) -> bool,
 ) -> Result<(), FlowFixedRegionError> {
+    // Pagination places positive-height rows in increasing vertical order
+    // within each page. Index once so a later fixed rectangle need not scan
+    // rows on other pages or those ending before its first possible hit.
+    let mut rows_by_page =
+        BTreeMap::<AcceptedIdentity, Vec<&PositionedRowFootprint>>::new();
+    for row in rows {
+        rows_by_page.entry(row.page()).or_default().push(row);
+    }
     for (fixed_index, fixed) in fixed_regions.iter().enumerate() {
         let rectangle = fixed.rectangle();
         if rectangle.width == Length::ZERO || rectangle.height == Length::ZERO {
@@ -1659,9 +1667,23 @@ fn visit_admitted_fixed_row_band_overlaps(
                 page: fixed.page(),
                 object: fixed.object(),
             })?;
-        for row in rows.iter().filter(|row| row.page() == fixed.page()) {
+        let Some(page_rows) = rows_by_page.get(&fixed.page()) else {
+            continue;
+        };
+        let first_candidate = page_rows.partition_point(|row| {
+            let row_rectangle = row.rectangle();
+            row_rectangle
+                .y
+                .micrometres()
+                .saturating_add(row_rectangle.height.micrometres())
+                <= top
+        });
+        for row in page_rows.get(first_candidate..).unwrap_or(&[]) {
             let row_rectangle = row.rectangle();
             let row_top = row_rectangle.y.micrometres();
+            if row_top >= bottom {
+                break;
+            }
             let row_bottom = row_top
                 .checked_add(row_rectangle.height.micrometres())
                 .ok_or_else(|| FlowFixedRegionError::CoordinateOverflow {
@@ -1671,10 +1693,12 @@ fn visit_admitted_fixed_row_band_overlaps(
             let shared_top = top.max(row_top);
             let shared_bottom = bottom.min(row_bottom);
             if shared_top < shared_bottom {
-                let shared_height = shared_bottom.checked_sub(shared_top)
-                    .ok_or_else(|| FlowFixedRegionError::CoordinateOverflow {
-                        page: fixed.page(),
-                        object: fixed.object(),
+                let shared_height =
+                    shared_bottom.checked_sub(shared_top).ok_or_else(|| {
+                        FlowFixedRegionError::CoordinateOverflow {
+                            page: fixed.page(),
+                            object: fixed.object(),
+                        }
                     })?;
                 if !visit(FixedRowBandOverlap {
                     fixed_index,

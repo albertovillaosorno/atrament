@@ -3730,3 +3730,15 @@ authority. A checked fixed object on a separate, uncovered physical page
 remains visible in the fixed proposal collection but does not invent a
 covered page, positioned row, conservative band or physical intersection.
 Neither case grants ownership of another flow's page or rendered ink.
+
+## Indexed conservative bands from sealed row snapshots — 2026-11-09
+
+The read-only selected-alignment report now indexes its admitted measured
+rows by accepted page and ordered physical bottom before checking conservative
+fixed-versus-row vertical bands. Each checked fixed proposal skips unrelated
+pages and rows ending before its first candidate; fixed-input and source-row
+order, full-width zero-ink caution, and all first/capped results remain the
+same. The 420-row comparison against the independent band oracle now also
+includes fixed boxes touching one row boundary exactly and crossing it by
+one micrometre. The indexed query does not change collision policy or grant
+notebook Export authority; ATR-P2-011 remains open.

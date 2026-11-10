@@ -6819,8 +6819,46 @@ fn check_many_mixed_alignment_oracle(
         }
         checked_fixed.push(fixed);
     }
+    // Exercise the vertical page index at an exact row boundary: a box
+    // starting at the prior row's bottom must skip it, a box ending there
+    // must skip the following row, and a two-micrometre box must see both.
+    let [_, prior, following, ..] = plan.placements() else {
+        return Err("many-row edge fixture is incomplete".into());
+    };
+    if prior.page != page_one || following.page != page_one {
+        return Err("boundary test rows belong to another page".into());
+    }
+    let boundary = prior
+        .top
+        .micrometres()
+        .checked_add(prior.height.micrometres())
+        .ok_or("row boundary overflow")?;
+    if boundary != following.top.micrometres() {
+        return Err("boundary rows must be contiguous".into());
+    }
+    let before = boundary.checked_sub(1).ok_or("zero row boundary")?;
+    for (top, height) in [(boundary, 1), (before, 1), (before, 2)] {
+        let fixed =
+            validate_fixed_placement(accepted, AcceptedFixedPlacement {
+                object: owner,
+                page: page_one,
+                rectangle: Rect {
+                    x: region.x,
+                    y: Length::from_micrometres(top),
+                    width: Length::from_micrometres(10_000),
+                    height: Length::from_micrometres(height),
+                },
+                revision: plan.revision(),
+            })
+            .map_err(|error| format!("boundary fixed: {error:?}"))?;
+        checked_fixed.push(fixed);
+    }
     check_many_selected_snapshot_parity(
-        plan, positions, selections, &checked_fixed, page_one,
+        plan,
+        positions,
+        selections,
+        &checked_fixed,
+        page_one,
     )?;
     if observed_positive == 0 || observed_clear == 0 {
         return Err(
@@ -6866,6 +6904,32 @@ fn check_many_selected_snapshot_parity(
             != Ok(bands.first().copied())
     {
         return Err("many-row snapshot and independent oracles disagree".into());
+    }
+    let [_, prior, following, ..] = plan.placements() else {
+        return Err("missing edge rows for partition oracle".into());
+    };
+    let boundary = following.top.micrometres();
+    let edge_bands = bands
+        .iter()
+        .filter(|band| band.fixed_index() >= 160)
+        .map(|band| {
+            (
+                band.fixed_index(),
+                band.source(),
+                band.overlap_top().micrometres(),
+                band.overlap_height().micrometres(),
+            )
+        })
+        .collect::<Vec<_>>();
+    if edge_bands
+        != [
+            (160, following.source, boundary, 1),
+            (161, prior.source, boundary - 1, 1),
+            (162, prior.source, boundary - 1, 1),
+            (162, following.source, boundary, 1),
+        ]
+    {
+        return Err(format!("wrong exact-touching bands: {edge_bands:?}"));
     }
     let empty_row_sources = plan.placements().iter()
         .filter(|row| row.width == Length::ZERO)
