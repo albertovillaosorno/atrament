@@ -6008,7 +6008,7 @@ fn hard_break_only_quote_line_cannot_masquerade_as_empty_separator()
     }
     for invalid in [
         ">a\n>\\\n>b", ">a\n> \\\n>b",
-        ">a\n>\\  \n>b", ">a\n  >\\\n>b",
+        ">a\n  >\\\n>b",
     ] {
         match render(invalid) {
             Err(error) if error.contains("empty Markdown block refused") => {},
@@ -6019,6 +6019,15 @@ fn hard_break_only_quote_line_cannot_masquerade_as_empty_separator()
                 "backslash-only quote unexpectedly admitted: {invalid:?}"
             )),
         }
+    }
+    let (rows, bars, pages) = render(">a\n>\\  \n>b")?;
+    let texts = rows.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>();
+    if pages != 1 || texts != ["a \\", "b"] || bars.len() != 2
+        || rows[1].origin_um.1 - rows[0].origin_um.1 != 9_000 {
+        return Err(format!(
+            "literal backslash before space break lost: {rows:?}"
+        ));
     }
     Ok(())
 }
@@ -6641,6 +6650,51 @@ fn adjacent_markdown_three_line_pitch_matches_emitted_ink()
             "insufficient short-source coverage: {accepted}, \
             baseline={baseline}, high={high}"
         ));
+    }
+    Ok(())
+}
+
+#[test]
+fn markdown_two_space_break_retains_preceding_literal_backslash()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let tall = ScalarStatistics {
+        minimum: 25_000, maximum: 25_000, mean: 25_000,
+        median: 25_000, standard_deviation: 0,
+    };
+    let stats = HandwritingStatisticsProfile::baseline(73)
+        .with_glyph("\\", DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+        .map_err(|error| format!("{error:?}"))?;
+    let paper = NotebookProfile::default();
+    // Exactly the last backslash is hard-break syntax; before the two
+    // syntactic trailing spaces it is actual authored, measurable ink.
+    for (input, text_rows, pitch) in [
+        ("a\\\na", ["a", "a"], 9_000),
+        ("a  \na", ["a", "a"], 9_000),
+        ("a\\  \na", ["a\\", "a"], 29_000),
+        ("a\\\\  \na", ["a\\\\", "a"], 29_000),
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, input)?;
+        let (rows, ornaments, pages) = super::layout_flow(
+            &source, &paper, Some(&stats),
+            super::HeadingDecoration::default(),
+        )?;
+        assert_eq!(pages, 1, "{input:?}");
+        assert!(ornaments.is_empty(), "{input:?}");
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>(), text_rows, "{input:?}");
+        assert_eq!(super::measured_pitch(&source, Some(&stats))?,
+            pitch, "{input:?}");
+        assert_eq!(rows[1].origin_um.1 - rows[0].origin_um.1,
+            pitch, "{input:?}");
     }
     Ok(())
 }

@@ -3505,15 +3505,30 @@ test('Markdown backslash hard break survives Unicode line separators',
                 assert.equal(reference.result.status, 0,
                     reference.result.stderr);
                 const hardBreak = readFileSync(reference.output);
+                const literalSingle = render(dir,
+                    `a${slash}  \na`, format, authoredSlash);
+                assert.equal(literalSingle.result.status, 0,
+                    literalSingle.result.stderr);
+                const singleBytes = readFileSync(literalSingle.output);
+                assert.notDeepEqual(singleBytes, hardBreak,
+                    'a slash before two spaces remains visible ink');
                 for (const alternate of [
                     `a${slash}\u2028a`, `a${slash}  \na`,
                 ]) {
-                    const replay = render(dir, alternate, format);
+                    const replay = render(dir, alternate, format,
+                        authoredSlash);
                     assert.equal(replay.result.status, 0,
                         replay.result.stderr);
-                    assert.deepEqual(readFileSync(replay.output), hardBreak,
-                        'single slash is syntactic before either hard break');
+                    assert.deepEqual(readFileSync(replay.output), singleBytes,
+                        'line separators preserve literal single slash ink');
                 }
+                const missingSingle = render(dir,
+                    `a${slash}\u2028a`, format);
+                assert.notEqual(missingSingle.result.status, 0);
+                assert.match(missingSingle.result.stderr,
+                    /missing authored glyph shapes.*U\+005C/);
+                assert.deepEqual(readFileSync(missingSingle.output),
+                    singleBytes, 'refusal preserves last accepted ink');
                 const paired = `a${slash}${slash}\u2028a`;
                 const literal = render(dir, paired, format, authoredSlash);
                 assert.equal(literal.result.status, 0,
@@ -7084,10 +7099,11 @@ test('hard-break-only quote cannot become a silent separator in PDF/PNG',
                 source.replaceAll('\n', '\r\n'),
             ];
             const invalid = [
-                '> a\n>\\\n> ó',
-                '> a\n> \\\n> ó',
-                '> a\n>\\  \n> ó',
-                '> a\n  >\\\n> ó',
+                ['> a\n>\\\n> ó', /empty Markdown block refused/],
+                ['> a\n> \\\n> ó', /empty Markdown block refused/],
+                ['> a\n>\\  \n> ó',
+                    /missing authored glyph shapes.*U\+005C/],
+                ['> a\n  >\\\n> ó', /empty Markdown block refused/],
             ];
             for (const format of ['pdf', 'png']) {
                 for (const page of format === 'pdf' ? [1] : [1, 2]) {
@@ -7119,12 +7135,11 @@ test('hard-break-only quote cannot become a silent separator in PDF/PNG',
                         assert.deepEqual(readFileSync(replay.output), accepted,
                             'valid empty quote separators retain exact ink');
                     }
-                    for (const sourceText of invalid) {
+                    for (const [sourceText, expectedError] of invalid) {
                         const refused = render(dir, sourceText, format,
                             options, '--flow-markdown', page);
                         assert.notEqual(refused.result.status, 0);
-                        assert.match(refused.result.stderr,
-                            /empty Markdown block refused/);
+                        assert.match(refused.result.stderr, expectedError);
                         assert.deepEqual(readFileSync(refused.output), accepted,
                             'backslash-only quote must never replace output');
                     }

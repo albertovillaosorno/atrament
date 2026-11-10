@@ -3990,3 +3990,19 @@ between collapsed paragraph gaps and literal blank writing rows.
 A missing authored glyph beyond the first PNG page still refuses before
 replacing a previously accepted page-one export. This is another bounded
 CLI transport and output guarantee, not persisted semantic notebook state.
+
+## Literal backslash before Markdown space breaks (partial) — 2026-11-10
+
+A Markdown line ending in one backslash still forces a physical hard break,
+while two trailing spaces force the same break independently. A literal
+backslash **before** those two spaces is now preserved as authored ink
+instead of being discarded with the trailing whitespace. Unicode U+2028
+line separators, which normalize to an equivalent two-space break, retain
+that preceding literal backslash as well.
+
+The native Rust unit regression verifies exact emitted row text and pitch,
+including a 25-mm backslash-height override. A real two-page PDF and each
+transparent 72-DPI PNG page match the same explicitly placed glyph strokes.
+When the literal backslash has no authored stroke, export refuses with no
+partial stdout and cannot replace a previously accepted PDF/PNG. This is a
+bounded CLI parsing correction, not persisted semantic notebook content.

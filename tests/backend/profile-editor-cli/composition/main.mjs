@@ -439,3 +439,67 @@ test('Unicode source separators preserve canonical native PDF and PNG pages',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('native Markdown space breaks preserve the backslash glyph and output',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-space-slash-'));
+        try {
+            const letter = [
+                '--glyph-stroke', 'a', '600', '500', '1800', '3000',
+                '250', '#123456',
+            ];
+            const slash = [
+                '--glyph-stroke', '\\', '600', '500', '1800', '3000',
+                '250', '#654321',
+            ];
+            const common = ['notebook', '--printed-sheet', 'false'];
+            const region = ['--flow-region', '30000', '40000',
+                '40000', '14000'];
+            const literal = 'a\\  \na';
+            const unicode = 'a\\\u2028a';
+            const escaped = 'a\\\na';
+            const spaces = 'a  \na';
+            for (const [name, formatArgs] of [
+                ['pdf', ['--export-paper', 'pdf', '--pages', '2']],
+                ['png-1', ['--export-paper', 'png', '--dpi', '72',
+                    '--png-page', '1']],
+                ['png-2', ['--export-paper', 'png', '--dpi', '72',
+                    '--png-page', '2']],
+            ]) {
+                const flow = (...args) => accepted(...common, ...letter,
+                    ...args, ...region, ...formatArgs);
+                const actual = flow(...slash, '--flow-markdown', literal);
+                assert.deepEqual(flow(...slash, '--flow-markdown', unicode),
+                    actual, `${name}: Unicode line break lost literal ink`);
+                const manual = accepted(...common, ...letter, ...slash,
+                    '--place-text', '1', '32500', '42500', 'a\\',
+                    '--place-text', '2', '32500', '42500', 'a',
+                    ...formatArgs);
+                assert.deepEqual(actual, manual,
+                    `${name}: native PDF/PNG omitted authored backslash`);
+                const syntaxOnly = flow('--flow-markdown', escaped);
+                assert.deepEqual(syntaxOnly,
+                    flow('--flow-markdown', spaces),
+                    `${name}: lone trailing backslash should stay syntactic`);
+                if (name !== 'png-2') {
+                    assert.notDeepEqual(actual, syntaxOnly,
+                        `${name}: literal slash made no visible ink`);
+                }
+                const previous = join(dir, `${name}.output`);
+                writeFileSync(previous, actual);
+                const failure = profiles(...common, ...letter, ...region,
+                    ...formatArgs, '--flow-markdown', literal,
+                    '--output', previous, '--replace');
+                assert.notEqual(failure.status, 0,
+                    'missing literal slash shape must refuse');
+                assert.match(failure.stderr.toString('utf8'),
+                    /missing authored glyph shapes.*U\+005C/);
+                assert.equal(failure.stdout.length, 0,
+                    'refused flow must emit no partial PDF/PNG');
+                assert.deepEqual(readFileSync(previous), actual,
+                    `${name}: refusal replaced accepted export`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
