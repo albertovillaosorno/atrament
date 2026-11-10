@@ -3849,3 +3849,19 @@ rather than omitting unknown cases.
 This improves repeatability of native output validation only. The CLI
 remains export-only, and saved semantic body content, live notebook rendering,
 and full notebook acceptance are not yet implemented.
+
+## Fail-closed native flow acceptance receipts — 2026-11-09
+
+The bounded native CLI PDF/PNG runner now requires the exact TAP test and pass
+counts for each selected three-case shard. A successful Node process with no
+matched tests, missing/duplicate summaries, failures, skips, cancellations or
+TODO results no longer counts as accepted coverage. A malformed or partial
+receipt refuses the shard instead of silently advancing the sequence.
+
+Full `pnpm run test:flow` also checks the runner's own discovery, shard-list
+coverage, invalid-selector refusal and deliberately malformed TAP receipts
+before starting native exports. Three small no-export Node regressions cover
+these conditions. All 135 distinct native CLI flow cases passed again in
+independently selected three-case shards with exact receipts; the final five
+shards passed a second time. This validates the bounded CLI test evidence,
+not persisted semantic notebook bodies or live Rust handwriting export.
