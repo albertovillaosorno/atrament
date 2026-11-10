@@ -748,3 +748,22 @@ or select the first of duplicate source mappings. A red-to-green regression
 checks malformed, duplicate and over-budget typed entries and unchanged
 valid one-stroke replay. This remains explicit fallback selection, not
 automatic character-shape synthesis.
+
+## Explicit inserted pen bridges respect full cell clearance — 2026-11-10
+
+The browser and native Rust glyph editors now check the *whole round pen*
+when explicitly inserting a same-glyph stroke connector or closing an open
+multi-stroke path. Imported v1 TSV is still admitted by its existing
+centerline limits, but a newly inserted bridge must keep both centerline
+endpoints at least half its pen width from the 3500 x 4500 um cell edges.
+A straight connector between these admitted endpoints also fits the cell.
+Exact tangency is permitted; no previous pen stroke is silently clipped or
+rewritten.
+
+Native CLI and browser tests cover a formerly accepted clipped connector,
+valid inclusive tangency, interleaved Unicode rows, and refusal without
+changing caller-owned glyphs or a previously selected output file. The
+browser's explicit join and path-close actions follow the same refusal as
+the CLI `--join-strokes` and `--close-path`. This only constrains newly
+inserted physical pen ink, not all caller-authored source segments, nor
+automatic joining between neighboring letters or correlated line variation.

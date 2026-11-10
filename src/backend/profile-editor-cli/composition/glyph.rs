@@ -402,6 +402,7 @@ impl GlyphOverlay {
         if self.strokes.len() == MAX_STROKES {
             return Err("path closure exceeds 4096 authored strokes".into());
         }
+        ensure_inserted_bridge_fits_cell(start, end, last.width_um)?;
         let closure = GlyphStroke {
             grapheme: grapheme.to_owned(), start_um: start, end_um: end,
             width_um: last.width_um, rgb: last.rgb,
@@ -795,6 +796,7 @@ impl GlyphOverlay {
         if self.strokes.len() == MAX_STROKES {
             return Err("joining exceeds 4096 authored strokes".into());
         }
+        ensure_inserted_bridge_fits_cell(start, end, before.width_um)?;
         let bridge = GlyphStroke {
             grapheme: grapheme.to_owned(),
             start_um: start,
@@ -1794,6 +1796,26 @@ fn append_path_summary(
         first.width_um, first.rgb[0], first.rgb[1], first.rgb[2],
         closure,
     );
+    Ok(())
+}
+
+// Imported source segments may be centerline-valid but physically clipped.
+// A newly authored bridge must fit with its entire round pen, not just its
+// two endpoints. Straight lines between admitted endpoints stay within the
+// convex glyph cell, including an exact half-width tangent.
+fn ensure_inserted_bridge_fits_cell(
+    start: (u32, u32), end: (u32, u32), width: u32,
+) -> Result<(), String> {
+    let inside = |position: u32, limit: u32| {
+        position.saturating_mul(2) >= width
+            && position.saturating_mul(2)
+                <= limit.saturating_mul(2).saturating_sub(width)
+    };
+    if [start, end].into_iter().any(|(x, y)| {
+        !inside(x, 3500) || !inside(y, 4500)
+    }) {
+        return Err("inserted pen bridge clips glyph cell".into());
+    }
     Ok(())
 }
 

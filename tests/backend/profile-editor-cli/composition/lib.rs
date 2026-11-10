@@ -3066,6 +3066,9 @@ fn native_explicit_path_closure_preserves_unicode_and_refuses_atomically() {
         args(&["--close-path", nfd, "4097"]),
         args(&["--close-path", nfd, "2",
             "--close-path", nfd, "2"]),
+        args(&["--set-stroke", nfd, "2", "0", "500",
+            "1400", "500", "250", "#243647",
+            "--close-path", nfd, "2"]),
     ];
     for edit in invalid {
         let mut command = args(&["--profile", source]);
@@ -3107,6 +3110,17 @@ fn native_explicit_path_closure_preserves_unicode_and_refuses_atomically() {
             end_x - 500
         );
     }
+    let tangent = args(&[
+        "--glyph-stroke", "o", "125", "800", "900", "1200",
+        "250", "#243647",
+        "--glyph-stroke", "o", "900", "1200", "500", "800",
+        "250", "#243647", "--close-path", "o", "1",
+    ]);
+    let admitted = execute_glyph_library(&tangent)
+        .expect("inclusive physical pen tangent accepted")
+        .expect("closure ink bytes");
+    assert!(String::from_utf8(admitted).expect("UTF-8").contains(
+        "o\t500\t800\t125\t800\t250\t#243647\n"));
     // The closing bridge cannot bypass the shared v1 4096-row budget.
     let mut full = args(&[
         "--glyph-stroke", "o", "500", "800", "900", "1200",
@@ -4519,6 +4533,26 @@ fn explicit_joins_obey_physical_gap_boundary_and_pen_direction() {
     ]);
     assert!(execute_glyph_library(&outside).is_err(),
         "1201 um gap is outside inclusive 1200 um bound");
+    let clipped = args(&[
+        "--glyph-stroke", "ó", "500", "600", "0", "1000",
+        "250", "#204060",
+        "--glyph-stroke", "ó", "500", "1000", "900", "1400",
+        "250", "#204060", "--join-strokes", "ó", "1",
+    ]);
+    let error = execute_glyph_library(&clipped)
+        .expect_err("an imported edge centerline cannot insert clipped ink");
+    assert!(error.contains("pen bridge clips glyph cell"), "{error}");
+    let tangent = args(&[
+        "--glyph-stroke", "ó", "500", "600", "125", "1000",
+        "250", "#204060",
+        "--glyph-stroke", "ó", "425", "1000", "900", "1400",
+        "250", "#204060", "--join-strokes", "ó", "1",
+    ]);
+    let admitted = execute_glyph_library(&tangent)
+        .expect("round pen tangent to cell edge fits")
+        .expect("three authored rows");
+    assert!(String::from_utf8(admitted).expect("UTF-8").contains(
+        "ó\t125\t1000\t425\t1000\t250\t#204060\n"));
 }
 
 #[test]
@@ -4559,6 +4593,11 @@ fn explicit_joins_refuse_unsafe_gaps_colors_and_indices_atomically() {
             "--join-strokes", "\u{f1}", "1"]),
         args(&["--set-stroke", "\u{f1}", "2", "1500", "1800",
             "2200", "2600", "250", "#AABBCC",
+            "--join-strokes", "\u{f1}", "1"]),
+        args(&["--set-stroke", "\u{f1}", "1", "500", "600",
+            "0", "1400", "250", "#102030",
+            "--set-stroke", "\u{f1}", "2", "500", "1800",
+            "2200", "2600", "250", "#102030",
             "--join-strokes", "\u{f1}", "1"]),
     ];
     for flags in invalid {

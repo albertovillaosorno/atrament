@@ -1336,6 +1336,18 @@ test("explicit path closure preserves Unicode rows and refuses gaps", () => {
     assert.deepEqual(closeCandidatePath(edge, "o", 0).strokes.at(-1),
         ink("o", 1700, 800, 500, 800),
         "inclusive 1200 µm edge matches native behavior");
+    const clipped = [ink("o", 0, 800, 900, 1200),
+        ink("o", 900, 1200, 500, 800)];
+    const clippedBytes = encodeGlyphLibrary(clipped);
+    assert.throws(() => closeCandidatePath(clipped, "o", 0),
+        /pen bridge clips glyph cell/,
+        "centerline-valid imported ink cannot create a clipped bridge");
+    assert.equal(encodeGlyphLibrary(clipped), clippedBytes);
+    const tangent = [ink("o", 125, 800, 900, 1200),
+        ink("o", 900, 1200, 500, 800)];
+    assert.deepEqual(closeCandidatePath(tangent, "o", 0).strokes.at(-1),
+        ink("o", 500, 800, 125, 800),
+        "an inserted round pen may be exactly tangent to the cell edge");
     assert.throws(() => closeCandidatePath([
         edge[0], { ...edge[1], x2: 1701 },
     ], "o", 0), /1200 µm/);
@@ -1665,6 +1677,7 @@ test("browser refuses unsafe joins without mutating authored ink", async () => {
             [{ ...first }, { ...second, width: 350 }],
             [{ ...first }, { ...second, color: "#AABBCC" }],
             [{ ...first }, { ...second, x1: 1000, y1: 1000 }],
+            [{ ...first, x2: 0 }, { ...second, x1: 500 }],
         ];
         for (const source of invalid) {
             const bytes = new TextEncoder().encode(
@@ -1679,7 +1692,7 @@ test("browser refuses unsafe joins without mutating authored ink", async () => {
             get("selected").dispatch("change");
             get("join").dispatch("click");
             assert.match(get("status").textContent,
-                /(?:1200|matching|already continuous)/);
+                /(?:1200|matching|already continuous|pen bridge clips)/);
             get("save").dispatch("click");
             const last = downloads.at(-1);
             assert.deepEqual(parseGlyphLibrary(await last.text()), source,
@@ -1702,6 +1715,25 @@ test("browser refuses unsafe joins without mutating authored ink", async () => {
         assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
             [first, { ...first, x1: 1000, y1: 1000,
                 x2: 2200, y2: 1000 }, second]);
+        const tangent = [{ ...first, x2: 125 },
+            { ...second, x1: 425 }];
+        const tangible = new TextEncoder().encode(
+            encodeGlyphLibrary(tangent));
+        get("load").files = [{
+            size: tangible.length, arrayBuffer: async () => tangible.buffer,
+        }];
+        await get("load").dispatch("change");
+        get("character").value = "á";
+        get("character").dispatch("input");
+        get("selected").value = "0";
+        get("selected").dispatch("change");
+        get("join").dispatch("click");
+        assert.match(get("status").textContent, /Connected selected/);
+        get("save").dispatch("click");
+        assert.deepEqual(parseGlyphLibrary(await downloads.at(-1).text()),
+            [tangent[0], { ...first, x1: 125, y1: 1000,
+                x2: 425, y2: 1000 }, tangent[1]],
+            "inclusive half-width tangent remains a valid new bridge");
     } finally {
         ui.restore();
     }

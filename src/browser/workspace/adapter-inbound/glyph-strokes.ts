@@ -115,6 +115,18 @@ function validateStroke(stroke: Stroke): Stroke {
     return { ...stroke, color: stroke.color.toUpperCase() };
 }
 
+// Native TSV permits a pen centerline at the exact cell edge, but an
+// explicitly inserted bridge must fit its *entire* round pen in the cell.
+function validateInsertedBridge(stroke: Stroke): void {
+    const radius = stroke.width / 2;
+    const fits = (point: number, limit: number): boolean =>
+        point >= radius && point <= limit - radius;
+    if (![stroke.x1, stroke.x2].every((x) => fits(x, 3500))
+        || ![stroke.y1, stroke.y2].every((y) => fits(y, 4500))) {
+        throw new Error("Inserted pen bridge clips glyph cell");
+    }
+}
+
 export function parseGlyphLibrary(text: string): Stroke[] {
     if (new TextEncoder().encode(text).length > MAX_BYTES
         || !text.endsWith("\n") || text.includes("\r")) {
@@ -278,6 +290,7 @@ export function closeCandidatePath(
         x2: path.start.x, y2: path.start.y,
         width: path.width, color: path.color,
     };
+    validateInsertedBridge(closure);
     const next = strokes.slice();
     next.splice(endSlot + 1, 0, closure);
     encodeGlyphLibrary(next);
@@ -6215,6 +6228,7 @@ export function createGlyphStrokeEditor(): {
                 x2: second.x1, y2: second.y1,
                 width: first.width, color: first.color,
             };
+            validateInsertedBridge(bridge);
             const next = strokes.slice();
             next.splice(selectedIndex + 1, 0, bridge);
             encodeGlyphLibrary(next);
