@@ -472,6 +472,12 @@ source validation as a regular file, without implicit writes. Empty,
 invalid, or oversized input refuses before replacing an existing output.
 The other profile and glyph flags still require caller-selected files.
 
+Without `--output`, the same commands write binary PDF or PNG bytes to
+standard output, so shell redirection can select the destination instead.
+Native acceptance compares both Markdown and plain piped stdout against
+PDF and both selected PNG pages; invalid source emits no partial bytes.
+Do not redirect stderr into the binary output.
+
 Both exports were smoke-tested with the editor's geometric `a` strokes;
 the PDF is a real one-page document and PNG is 72-DPI RGBA. By default, a
 Markdown heading gets a dark pen underline and a list item gets an ink mark.

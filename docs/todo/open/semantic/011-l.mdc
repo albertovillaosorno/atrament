@@ -3894,3 +3894,16 @@ while a matching invalid selected-file regression retains the existing file
 diagnostic and preserves PDF/PNG output. All 139 native cases passed across
 47 independently bounded, exact-count TAP shards.
 This is CLI-only input evidence, not persisted semantic notebook state.
+
+## Binary-clean piped export boundary (partial) — 2026-11-09
+
+Native CLI acceptance now verifies that explicitly piped BOM/CRLF Markdown
+produces byte-for-byte identical PDF and page-one/page-two transparent PNG
+on stdout versus both inline and selected-file flow exports. Piped plain
+text also preserves real page breaks in PDF and both PNG pages. The selected
+source file stays unchanged. Invalid UTF-8, oversized input, missing authored
+glyph shapes and empty Markdown blocks each refuse with nonzero exit status
+and **zero** PDF/PNG stdout bytes, rather than a truncated artifact.
+
+These regressions cover stdout transport and fail-closed admission, not saved
+semantic notebook content or browser-side Markdown composition.

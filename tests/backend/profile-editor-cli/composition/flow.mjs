@@ -7531,3 +7531,128 @@ test('bounded stdin retains exact UTF-8 byte limit and expansion refusals',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('piped Markdown stdout matches native PDF and second-page PNG files',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-pipe-stdout-'));
+        try {
+            const markdown = '# a\n\n- a';
+            const transported = Buffer.from('\uFEFF# a\r\n\r\n- a');
+            const source = join(dir, 'source.md');
+            writeFileSync(source, transported);
+            const region = [
+                '--flow-region', '30000', '40000', '30000', '14000',
+            ];
+            for (const [format, page] of [
+                ['pdf', 1], ['png', 1], ['png', 2],
+            ]) {
+                const flags = [...region, ...(format === 'pdf'
+                    ? ['--pages', '2'] : [])];
+                const reference = render(dir, markdown, format, flags,
+                    '--flow-markdown', page);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const expected = readFileSync(reference.output);
+                const stdoutArgs = [
+                    ...base, ...headingOptions, ...flags,
+                    '--flow-markdown-file', '-', '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72'] : []),
+                ];
+                const piped = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--', ...stdoutArgs,
+                ], { cwd: root, input: transported, timeout: 120000,
+                    maxBuffer: 24 * 1024 * 1024 });
+                assert.equal(piped.error, undefined, piped.error?.message);
+                assert.equal(piped.status, 0, piped.stderr.toString());
+                assert.deepEqual(piped.stdout, expected,
+                    `${format} page ${page} is binary-clean on stdout`);
+
+                const savedArgs = [...stdoutArgs];
+                savedArgs[savedArgs.indexOf('--flow-markdown-file') + 1] =
+                    source;
+                const saved = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    ...savedArgs,
+                ], { cwd: root, timeout: 120000,
+                    maxBuffer: 24 * 1024 * 1024 });
+                assert.equal(saved.error, undefined, saved.error?.message);
+                assert.equal(saved.status, 0, saved.stderr.toString());
+                assert.deepEqual(saved.stdout, expected,
+                    `${format} page ${page} saved-source stdout parity`);
+            }
+            assert.deepEqual(readFileSync(source), transported,
+                'selected source is never rewritten');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('invalid piped flow emits no partial native PDF or PNG on stdout',
+    () => {
+        const baseArgs = [...base, '--flow-region', '30000', '40000',
+            '30000', '14000', '--flow-markdown-file', '-'];
+        for (const [format, extra] of [
+            ['pdf', ['--pages', '2']],
+            ['png', ['--png-page', '2', '--dpi', '72']],
+        ]) {
+            for (const [input, diagnostic] of [
+                [Buffer.from([0xff]), /flow stdin must be UTF-8/],
+                [Buffer.alloc(4097, 0x61), /flow stdin exceeds 4096/],
+                [Buffer.from('# a\n\n- b'), /missing authored glyph shapes/],
+                [Buffer.from('# \n\n- a'), /empty Markdown block refused/],
+            ]) {
+                const result = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    ...baseArgs, '--export-paper', format, ...extra,
+                ], { cwd: root, input, timeout: 120000,
+                    maxBuffer: 24 * 1024 * 1024 });
+                assert.equal(result.error, undefined, result.error?.message);
+                assert.notEqual(result.status, 0,
+                    `${format} must reject source without stdout bytes`);
+                assert.match(result.stderr.toString(), diagnostic);
+                assert.equal(result.stdout.length, 0,
+                    `${format} cannot stream output before admission`);
+            }
+        }
+    });
+
+test('plain piped stdout retains physical breaks in PDF and second PNG',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-plain-stdout-'));
+        try {
+            const source = 'a\nó';
+            const region = [
+                '--flow-region', '30000', '40000', '30000', '14000',
+            ];
+            for (const [format, page] of [
+                ['pdf', 1], ['png', 1], ['png', 2],
+            ]) {
+                const args = [...base, ...region,
+                    ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    '--flow-text-file', '-', '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72'] : []),
+                ];
+                const reference = render(dir, source, format,
+                    [...region, ...(format === 'pdf'
+                        ? ['--pages', '2'] : [])], '--flow-text', page);
+                assert.equal(reference.result.status, 0,
+                    reference.result.stderr);
+                const piped = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--', ...args,
+                ], { cwd: root, input: Buffer.from('a\r\nó'),
+                    timeout: 120000, maxBuffer: 24 * 1024 * 1024 });
+                assert.equal(piped.error, undefined, piped.error?.message);
+                assert.equal(piped.status, 0, piped.stderr.toString());
+                assert.deepEqual(piped.stdout, readFileSync(reference.output),
+                    `${format} page ${page}: plain stdin stdout parity`);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
