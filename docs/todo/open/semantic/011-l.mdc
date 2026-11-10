@@ -3907,3 +3907,25 @@ and **zero** PDF/PNG stdout bytes, rather than a truncated artifact.
 
 These regressions cover stdout transport and fail-closed admission, not saved
 semantic notebook content or browser-side Markdown composition.
+
+## Completed native flow acceptance tail replay — 2026-11-09
+
+The five 3-case shards (41–45) not rerun in the preceding session now each
+pass with an exact 3/3 TAP receipt, no failures, skips or cancellations.
+Together with that session's other 127 distinct cases, all 142 registered
+native Markdown/plain PDF and PNG flow cases have been exercised across
+these two sessions. This is cross-session coverage, not a claim that a
+single uninterrupted 48-shard command ran. The offline all-features Rust
+workspace suite also completed successfully in the current session.
+
+## Explicit native flow export-only refusal (partial) — 2026-11-09
+
+The Rust notebook CLI now checks an explicit text/Markdown flow source
+against the required `--export-paper pdf|png` choice before the generic
+glyph-overlay gate. It refuses attempts to inspect or write a JSON notebook
+profile while source flow is selected, even without any glyph templates.
+A native regression checks inline, saved-file and piped source variants,
+zero output bytes and unchanged existing destinations, while preserving the
+separate profile-only JSON command. This confirms the existing transient
+flow contract explicitly; it does not add saved semantic content, a Rust
+localhost flow gateway or complete the P1 end-to-end journey.

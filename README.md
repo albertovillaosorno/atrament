@@ -472,6 +472,11 @@ source validation as a regular file, without implicit writes. Empty,
 invalid, or oversized input refuses before replacing an existing output.
 The other profile and glyph flags still require caller-selected files.
 
+Flow source options are **export-only**, not fields in a saved notebook
+profile. Omitting `--export-paper pdf|png` explicitly refuses instead of
+returning or replacing a profile JSON that omits the selected text.
+The normal `notebook --output notebook.json` profile-only save is unchanged.
+
 Without `--output`, the same commands write binary PDF or PNG bytes to
 standard output, so shell redirection can select the destination instead.
 Native acceptance compares both Markdown and plain piped stdout against

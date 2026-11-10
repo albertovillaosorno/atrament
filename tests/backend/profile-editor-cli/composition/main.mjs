@@ -159,3 +159,62 @@ test('native notebook PNG quality presets match exact authored glyph ink',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('native flow requires an export and cannot be saved as profile JSON',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-export-only-'));
+        try {
+            const source = join(dir, 'source.md');
+            const destination = join(dir, 'previous.json');
+            writeFileSync(source, '# a\n\na\n');
+            writeFileSync(destination, 'previous accepted bytes');
+            const glyph = ['--glyph-stroke', 'a', '500', '500',
+                '1800', '3000', '250', '#123456'];
+            const sources = [
+                ['--flow-text', 'a'],
+                ['--flow-markdown', '# a'],
+                ['--flow-text-file', source],
+                ['--flow-markdown-file', source],
+            ];
+            for (const selected of sources) {
+                const result = profiles('notebook', ...glyph, ...selected,
+                    '--output', destination, '--replace');
+                assert.notEqual(result.status, 0);
+                assert.match(result.stderr.toString('utf8'),
+                    /flow source needs --export-paper pdf or png/);
+                assert.equal(result.stdout.length, 0);
+                assert.equal(readFileSync(destination, 'utf8'),
+                    'previous accepted bytes');
+            }
+            // Even a source without glyphs must not be mistaken for an
+            // editable notebook profile or a successful inspection.
+            for (const flags of [[], ['--inspect']]) {
+                const result = profiles('notebook', '--flow-text', 'a',
+                    ...flags);
+                assert.notEqual(result.status, 0);
+                assert.match(result.stderr.toString('utf8'),
+                    /flow source needs --export-paper pdf or png/);
+                assert.equal(result.stdout.length, 0);
+            }
+            const piped = spawnSync(cargo, [
+                'run', '--offline', '--quiet', '-p',
+                'atrament_profile_editor_cli', '--bin', 'atrament-profiles',
+                '--', 'notebook', ...glyph, '--flow-markdown-file', '-',
+                '--output', destination, '--replace',
+            ], { cwd: root, input: '# a\n', timeout: 45_000 });
+            assert.equal(piped.error, undefined, piped.error?.message);
+            assert.notEqual(piped.status, 0);
+            assert.match(piped.stderr.toString('utf8'),
+                /flow source needs --export-paper pdf or png/);
+            assert.equal(piped.stdout.length, 0);
+            assert.equal(readFileSync(destination, 'utf8'),
+                'previous accepted bytes');
+
+            // The explicit profile-only command still emits canonical JSON.
+            const profile = accepted('notebook', '--printed-sheet', 'true');
+            assert.match(profile.toString('utf8'),
+                /"printed_sheet":\s*true/);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

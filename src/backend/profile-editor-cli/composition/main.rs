@@ -164,6 +164,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-region LEFT_UM TOP_UM WIDTH_UM HEIGHT_UM] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
     [--output FILE [--replace]]\n\
+    A flow source requires --export-paper pdf|png; flow text is not \
+    stored in notebook profiles. \
     Paper-layer export uses nested Rust paper settings and skips ruling \
     on preprinted sheets. The optional date prints in its selected box \
     or line; rounded borders render. Repeated --ink-line (max 4096) draws \
@@ -1235,7 +1237,15 @@ fn load_notebook_profile_option(
 fn validate_notebook_flow_selection(
     flow: Option<&FlowSource>, glyphs: &GlyphOverlay,
     heading: HeadingDecoration, region: Option<FlowRegion>,
+    export: &NotebookExportOptions,
 ) -> Result<(), String> {
+    // Transient text is not a field in the saved notebook v1 profile.
+    if flow.is_some() && export.format.is_none() {
+        return Err(concat!(
+            "flow source needs --export-paper pdf or png; ",
+            "notebook profiles do not save the supplied text",
+        ).into());
+    }
     if region.is_some() && flow.is_none() {
         return Err("--flow-region requires a text or Markdown flow".into());
     }
@@ -1332,12 +1342,12 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             _ => return Err(format!("unknown notebook option: {option}")),
         }
     }
+    validate_notebook_flow_selection(
+        flow.as_ref(), &glyphs, heading, flow_region, &export,
+    )?;
     validate_notebook_export_flags(
         replace, output.as_deref(), inspect, &export, &ink,
         &glyphs, statistics.as_ref(),
-    )?;
-    validate_notebook_flow_selection(
-        flow.as_ref(), &glyphs, heading, flow_region,
     )?;
     profile.validate()?;
     Ok(NotebookRequest {
