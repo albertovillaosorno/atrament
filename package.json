@@ -10,7 +10,7 @@
     "test:frontend":
       "node --test --test-concurrency=1 tests/browser/*/*/*.mjs",
     "test:flow":
-      "node --test tests/backend/profile-editor-cli/composition/flow.mjs",
+      "node tests/backend/profile-editor-cli/composition/flow-shards.mjs",
     "test:cli-files":
       "node --test tests/backend/profile-editor-cli/composition/main.mjs",
     "test:print-ready":

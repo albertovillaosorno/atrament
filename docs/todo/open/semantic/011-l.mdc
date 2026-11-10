@@ -3830,3 +3830,22 @@ original pair ordering and atomic cap refusal. The existing independent
 1,024-case multi-page physical intersection oracle continues to validate
 exact results. This is an inspection-only broad-phase optimization, not a
 fixed-layering policy or the missing saved-semantic handwriting export.
+
+## Bounded native Markdown PDF/PNG acceptance runner — 2026-11-09
+
+The previous session verified 121 of 135 native CLI flow cases; the final
+14 passed in four separately bounded batches. Subsequently, all 135 cases
+passed again across 45 three-case shards in one validation sequence. This
+is complete native case coverage, not one uninterrupted Node test process.
+
+The root `pnpm run test:flow` command now runs an explicit, deterministic
+three-case shard sequence rather than leaving all native PDF/PNG exports
+inside one long Node test-file process. Each shard has a four-minute timeout
+and fails closed. The `flow-shards.mjs` helper accepts `--list` to display
+its current membership, while `--shard N` selects one one-based batch.
+Names must be unique literal top-level `test` calls or the runner refuses
+rather than omitting unknown cases.
+
+This improves repeatability of native output validation only. The CLI
+remains export-only, and saved semantic body content, live notebook rendering,
+and full notebook acceptance are not yet implemented.

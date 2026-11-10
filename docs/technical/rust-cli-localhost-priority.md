@@ -176,7 +176,7 @@ verifies an executable subset, not completion of every M1–M4 requirement.
 
 ```sh
 cargo test --offline -p atrament_profile_editor_cli --bin atrament-profiles
-node --test tests/backend/profile-editor-cli/composition/flow.mjs
+pnpm run test:flow
 node --test tests/backend/profile-editor-cli/composition/main.mjs
 ```
 
