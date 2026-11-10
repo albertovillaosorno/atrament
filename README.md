@@ -587,9 +587,8 @@ Files are limited to 262144 bytes, require at least one row, and must be
 explicitly selected regular files (no symlinks). Instead of a path,
 `--ink-file -` reads the same bounded TSV from standard input and accepts
 piped `--emit-ink-file` output without an intermediate file. Only one stdin
-source may be selected across `--ink-file -` and `--flow-*-file -`; a second
-selection
-refuses. For example:
+source may be selected across `--ink-file -`, `--glyph-file -`, and
+`--flow-*-file -`; a second selection refuses. For example:
 
 ```sh
 cargo run -q -p atrament_profile_editor_cli -- notebook \
@@ -1346,6 +1345,24 @@ cargo run -q -p atrament_profile_editor_cli -- notebook \
 ```
 
 `glyphs --profile my-glyphs.tsv` prints the canonical library to stdout.
+The exact same 512-KiB-bounded LF-terminated UTF-8 TSV can be piped as
+`glyphs --profile -` or `notebook --glyph-file -`, without an intermediate
+file. For example, using the authored shapes saved above:
+
+```sh
+cat my-glyphs.tsv | cargo run -q -p atrament_profile_editor_cli -- \
+  glyphs --profile - --audit-text 'ñ ñ ∞'
+cat my-glyphs.tsv | cargo run -q -p atrament_profile_editor_cli -- \
+  notebook --printed-sheet true --glyph-file - \
+  --place-text 1 25400 30000 'ñ ∞ ñ' --export-paper pdf \
+  --output piped-glyphs.pdf
+```
+
+Each command may consume standard input only once. Source glyph identities
+remain exact (composed `ñ` differs from decomposed `ñ`); missing authored
+outlines are reported or refused, never silently generated. Invalid TSV or
+an excessive stream refuses before replacing an already selected output.
+
 Additional `--glyph-stroke` flags append segments; to redraw one letter,
 use `--remove-glyph 'ñ'` before adding its new strokes. An explicit
 `--output ... --replace` saves the revision. To discover missing shapes for
