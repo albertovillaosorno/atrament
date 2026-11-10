@@ -589,6 +589,32 @@ ink refuse before replacing an output. This is a reusable **source file**,
 not a new saved notebook body schema, automatic glyph generation, or an image
 layer.
 
+The complementary `--emit-ink-file` compiles the **actual projected physical
+strokes** of selected inline ink, positioned glyphs and plain/Markdown flow to
+the same TSV format. It includes authored/seeded glyph positions, joins and
+Markdown heading/list ornaments, rather than just the original templates:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --heading-style marker --heading-color '#F8DE91' \
+  --emit-ink-file --output compiled-ink.tsv
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --ink-file compiled-ink.tsv --export-paper pdf --output replay.pdf
+```
+
+Without `--output`, `--emit-ink-file` writes UTF-8 TSV to stdout. It is
+mutually exclusive with `--export-paper` and PDF/PNG page/DPI selectors;
+invalid or empty physical ink refuses. The emitter validates every page with
+the native printable PDF geometry before committing a bounded file. It uses
+the same explicit `--replace`/no-clobber file transport.
+
+A replay with the same paper and notebook metadata produces identical PDF and
+selected PNG ink.
+The TSV holds **only physical pen segments**, not paper, printed date, page
+numbers, editable glyph definitions, semantic text or handwriting statistics.
+Keep those source/profile inputs separately if future edits are required.
+
 Standalone manual `--ink-line` and `--place-text` exports also infer the
 last used physical PDF page when `--pages` is omitted. For example, a
 manual stroke on page 3 produces three physical PDF sheets without an

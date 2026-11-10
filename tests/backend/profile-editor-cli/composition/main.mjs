@@ -1004,3 +1004,112 @@ test('malformed and untrusted physical ink files cannot replace exports',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('compiled page ink TSV replays mixed flow and manual PDF/PNG bytes',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/page-ink-output-'));
+        try {
+            const file = join(dir, 'compiled.tsv');
+            const notebook = ['notebook', '--printed-sheet', 'true',
+                '--page-numbers', 'true', '--date-style', 'line',
+                '--date-placement', 'top-left', '--date-text', '2026-11-10'];
+            const authored = [
+                '--glyph-stroke', 'a', '500', '500', '1800', '3000',
+                '250', '#142536',
+                '--glyph-stroke', 'a', '1800', '3000', '2500', '3000',
+                '250', '#142536',
+            ];
+            const content = [
+                ...authored, '--flow-markdown', '# a\n\n- aa',
+                '--heading-style', 'marker', '--heading-color', '#F8DE91',
+                '--heading-ink-color', '#BD376A', '--heading-ink-scale', '180',
+                '--place-text', '2', '100000', '50000', 'aa',
+                '--ink-line', '2', '70000', '40000', '71000', '41000',
+                '250', '#abcdef',
+            ];
+            const bytes = accepted(...notebook, ...content, '--emit-ink-file');
+            const rows = bytes.toString('utf8').trimEnd().split('\n');
+            assert.equal(rows[0], 'atrament.page-ink.v1');
+            assert.ok(rows.length > 6, 'flowed glyphs and ornaments compiled');
+            for (const row of rows.slice(1)) {
+                assert.match(
+                    row, /^\d+\t\d+\t\d+\t\d+\t\d+\t#[0-9A-F]{6}$/,
+                );
+            }
+            assert.ok(rows.includes(
+                '2\t70000\t40000\t71000\t41000\t250\t#ABCDEF',
+            ));
+            assert.deepEqual(
+                accepted(...notebook, ...content, '--emit-ink-file'),
+                bytes, 'repeated compilation is byte stable',
+            );
+            assert.deepEqual(accepted(...notebook, ...content,
+                '--emit-ink-file', '--output', file), Buffer.alloc(0));
+            assert.deepEqual(readFileSync(file), bytes,
+                'explicit file output equals stdout without a second codec');
+            const physical = [...notebook, '--ink-file', file];
+            assert.deepEqual(accepted(...physical, '--emit-ink-file'), bytes,
+                'read-only reimport preserves exact physical segment order');
+            assert.deepEqual(accepted(...physical, '--export-paper', 'pdf'),
+                accepted(...notebook, ...content, '--export-paper', 'pdf'),
+                'compiled ink and original mixed source have identical PDF');
+            for (const page of [1, 2]) {
+                const png = ['--export-paper', 'png', '--dpi', '72',
+                    '--png-page', String(page)];
+                assert.deepEqual(accepted(...physical, ...png),
+                    accepted(...notebook, ...content, ...png),
+                    `compiled physical page ${page} matches original PNG`);
+            }
+            refused([...notebook, ...content, '--emit-ink-file',
+                '--output', file], /not saved|Exists/, file);
+            assert.deepEqual(readFileSync(file), bytes);
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+test('page ink output rejects incompatible modes and unprintable segments',
+    { skip: process.platform !== 'linux' }, () => {
+        const dir = mkdtempSync(join(root, '.temp/page-ink-output-refusal-'));
+        try {
+            const target = join(dir, 'accepted.tsv');
+            const ink = ['--ink-line', '1', '70000', '40000',
+                '71000', '41000', '250', '#123456'];
+            accepted('notebook', ...ink, '--emit-ink-file',
+                '--output', target);
+            const check = (arguments_, expected) => refused([
+                'notebook', ...arguments_, '--output', target, '--replace',
+            ], expected, target);
+            check(['--emit-ink-file'], /at least one physical segment/);
+            check([...ink, '--emit-ink-file', '--emit-ink-file'],
+                /may appear only once/);
+            check([...ink, '--emit-ink-file', '--export-paper', 'pdf'],
+                /cannot accompany --emit-ink-file/);
+            check([...ink, '--emit-ink-file', '--pages', '2'],
+                /--pages requires --export-paper pdf/);
+            check([...ink, '--emit-ink-file', '--png-page', '1'],
+                /require --export-paper png/);
+            check([...ink, '--emit-ink-file', '--quality', 'preview'],
+                /require --export-paper png/);
+            check([...ink, '--emit-ink-file', '--inspect'],
+                /--inspect is stdout only/);
+            check(['--ink-line', '1', '0', '40000', '71000', '41000',
+                '250', '#123456', '--emit-ink-file'],
+            /page 1 ink needs printable endpoints/);
+            check(['--glyph-stroke', 'a', '500', '500', '1800',
+                '3000', '250', '#123456', '--flow-text', 'ab',
+                '--emit-ink-file'], /missing authored glyph shapes/);
+            check(['--ink-line', '2', '70000', '40000', '71000',
+                '41000', '250', '#123456', '--emit-ink-file',
+                '--export-paper', 'png'], /cannot accompany --emit-ink-file/);
+            const link = join(dir, 'linked.tsv');
+            symlinkSync(target, link);
+            refused(
+                ['notebook', ...ink, '--emit-ink-file', '--output', link,
+                    '--replace'],
+                /InvalidExistingTarget/, target,
+            );
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

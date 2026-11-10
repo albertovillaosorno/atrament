@@ -246,3 +246,32 @@ This adds reusable manually positioned ink as a separate caller-owned file.
 It does **not** save notebook body text, embed images, synthesize missing
 glyphs or expose the flow source and ink in the localhost editor. The
 complete saved-notebook PDF/PNG acceptance remains open.
+
+## Reusable compiled physical ink output (partial) — 2026-11-10
+
+The native notebook CLI now accepts exclusive `--emit-ink-file` as a physical
+ink export format. It compiles caller-authored page segments, placed glyphs
+and plain/Markdown flow into one canonical `atrament.page-ink.v1` TSV stream,
+including selected variation, joins, heading treatments and flow ornaments.
+This is the **post-projection physical ink**, not the editable source glyph
+library, page stationery, notebook profile or stored Markdown content.
+
+Output goes to stdout or the caller-selected `--output` path with the same
+atomic no-clobber and explicit `--replace` behavior as native PDF/PNG. The
+256-KiB TSV cap and 4096-stroke ceiling apply; every page is checked against
+the native PDF printable-paper compositor before the TSV is returned or
+saved. Empty ink, invalid geometry, unsupported combined output formats,
+PDF/PNG-only flags and malformed glyph/flow sources refuse explicitly.
+
+Two native subprocess regressions verify that an actual mixed manual,
+positioned-glyph and decorated Markdown two-page compilation yields
+byte-stable canonical TSV. Reopening its saved bytes through `--ink-file`
+produces the exact same two-page vector PDF and selected transparent PNG
+pages as the original live composition with identical notebook paper/date
+settings. Refusals preserve the prior destination, and direct reimport then
+re-emission reproduces identical ordered physical segments.
+
+This is an explicit intermediate output useful for testing and replay. It
+does not persist editable notebook semantics, images, paper metadata or a
+complete first-release composition/print journey. The P1 export task remains
+open.

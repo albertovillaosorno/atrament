@@ -153,7 +153,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--dpi 72..300 (PNG only)] [--png-page 1..32 (PNG only)] \
     [--quality preview|final (PNG only, exclusive with --dpi)] \
     [--ink-line PAGE X1_UM Y1_UM X2_UM Y2_UM WIDTH_UM '#RRGGBB'] \
-    [--ink-file page-ink.tsv] \
+    [--ink-file page-ink.tsv] [--emit-ink-file] \
     [--glyph-file strokes.tsv] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--fallback-glyph MISSING AUTHORED] \
@@ -176,6 +176,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     or line; rounded borders render. Repeated --ink-line (max 4096) draws \
     explicit physical pen segments; --ink-file reads a bounded saved \
     atrament.page-ink.v1 TSV (page, endpoints, width, color). \
+    --emit-ink-file compiles physical segments (including placed glyphs \
+    and flow ornaments) into reusable versioned TSV instead of a PDF/PNG. \
+    It retains no paper marks, date or saved semantic content. \
     These inputs remain export-only, not saved notebook v1 fields. \
     --glyph-stroke supplies exact \
     author-drawn segments in a 4 x 5 mm cell and --place-text repeats them; \
@@ -276,7 +279,7 @@ struct HandwritingRequest {
 #[derive(Debug)]
 struct NotebookRequest {
     dpi: u32,
-    export_paper: Option<NotebookPaperFormat>,
+    export_format: Option<NotebookExportFormat>,
     flow: Option<FlowSource>,
     flow_region: Option<FlowRegion>,
     glyphs: GlyphOverlay,
@@ -293,7 +296,8 @@ struct NotebookRequest {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum NotebookPaperFormat {
+enum NotebookExportFormat {
+    InkTsv,
     Pdf,
     Png,
 }
@@ -301,7 +305,7 @@ enum NotebookPaperFormat {
 #[derive(Default)]
 struct NotebookExportOptions {
     dpi: Option<u32>,
-    format: Option<NotebookPaperFormat>,
+    format: Option<NotebookExportFormat>,
     pages: Option<usize>,
     png_page: Option<usize>,
     quality_dpi: Option<u32>,
@@ -1094,6 +1098,31 @@ fn load_page_ink_file(
     Ok(())
 }
 
+// Reusable *physical* layer artifact: no paper/date decorations, semantic
+// source or authored glyph definitions are silently treated as persisted.
+fn encode_page_ink_file(ink: &[NotebookInkLine]) -> Result<Vec<u8>, String> {
+    if ink.is_empty() {
+        return Err(
+            "page ink export needs at least one physical segment".into()
+        );
+    }
+    let mut text = format!("{PAGE_INK_FILE_HEADER}\n");
+    for line in ink {
+        writeln!(
+            text,
+            "{}\t{}\t{}\t{}\t{}\t{}\t#{:02X}{:02X}{:02X}",
+            line.page, line.start_um.0, line.start_um.1,
+            line.end_um.0, line.end_um.1, line.width_um,
+            line.rgb[0], line.rgb[1], line.rgb[2],
+        )
+        .map_err(|error| format!("page ink TSV encoding refused: {error}"))?;
+        if text.len() > MAX_PAGE_INK_FILE_BYTES {
+            return Err("page ink TSV exceeds 262144 bytes".into());
+        }
+    }
+    Ok(text.into_bytes())
+}
+
 fn parse_notebook_export_option(
     option: &str,
     iter: &mut Iter<'_, String>,
@@ -1102,13 +1131,25 @@ fn parse_notebook_export_option(
     glyphs: &mut GlyphOverlay,
 ) -> Result<(), String> {
     match option {
+        "--emit-ink-file" => {
+            if export.format.is_some() {
+                return Err(concat!(
+                    "--emit-ink-file may appear only once and ",
+                    "cannot accompany --export-paper",
+                ).into());
+            }
+            export.format = Some(NotebookExportFormat::InkTsv);
+        }
         "--export-paper" => {
             if export.format.is_some() {
-                return Err("--export-paper may appear only once".into());
+                return Err(concat!(
+                    "--export-paper may appear only once and ",
+                    "cannot accompany --emit-ink-file",
+                ).into());
             }
             export.format = Some(match iter.next().map(String::as_str) {
-                Some("pdf") => NotebookPaperFormat::Pdf,
-                Some("png") => NotebookPaperFormat::Png,
+                Some("pdf") => NotebookExportFormat::Pdf,
+                Some("png") => NotebookExportFormat::Png,
                 _ => return Err("--export-paper requires pdf or png".into()),
             });
         }
@@ -1192,16 +1233,16 @@ fn validate_notebook_export_flags(
         return Err("--inspect is stdout only; omit --output".into());
     }
     if inspect && export.format.is_some() {
-        return Err("--inspect cannot export paper".into());
+        return Err("--inspect cannot export paper or page ink".into());
     }
     if export.pages.is_some()
-        && export.format != Some(NotebookPaperFormat::Pdf)
+        && export.format != Some(NotebookExportFormat::Pdf)
     {
         return Err("--pages requires --export-paper pdf".into());
     }
     if (export.dpi.is_some() || export.png_page.is_some()
         || export.quality_dpi.is_some())
-        && export.format != Some(NotebookPaperFormat::Png)
+        && export.format != Some(NotebookExportFormat::Png)
     {
         return Err(
             "--dpi, --quality and --png-page require --export-paper png".into()
@@ -1213,7 +1254,7 @@ fn validate_notebook_export_flags(
     if (glyphs.has_any() || !ink.is_empty()) && export.format.is_none() {
         return Err(concat!(
             "ink and glyph overlays need ",
-            "--export-paper pdf or png",
+            "--export-paper pdf or png or --emit-ink-file",
         ).into());
     }
     if glyphs.variation.is_some() && glyphs.strokes.is_empty() {
@@ -1297,7 +1338,8 @@ fn validate_notebook_flow_selection(
     // Transient text is not a field in the saved notebook v1 profile.
     if flow.is_some() && export.format.is_none() {
         return Err(concat!(
-            "flow source needs --export-paper pdf or png; ",
+            "flow source needs --export-paper pdf or png ",
+            "or --emit-ink-file; ",
             "notebook profiles do not save the supplied text",
         ).into());
     }
@@ -1372,8 +1414,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" =>
                 parse_notebook_flow(&mut iter, option, &mut flow)?,
-            "--export-paper" | "--pages" | "--dpi" | "--quality"
-            | "--png-page" | "--ink-line" | "--ink-file"
+            "--emit-ink-file" | "--export-paper" | "--pages" | "--dpi"
+            | "--quality" | "--png-page" | "--ink-line" | "--ink-file"
             | "--glyph-stroke" | "--glyph-file" | "--place-text"
             | "--fallback-glyph" | "--glyph-variation" | "--join-text-pair"
             | "--join-text-anchors" => {
@@ -1409,7 +1451,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         glyphs,
         heading,
         dpi: export.dpi.or(export.quality_dpi).unwrap_or(150),
-        export_paper: export.format,
+        export_format: export.format,
         ink,
         inspect,
         output,
@@ -1475,7 +1517,7 @@ fn admit_flow_page_selection(
             )
         });
     }
-    if request.export_paper == Some(NotebookPaperFormat::Png)
+    if request.export_format == Some(NotebookExportFormat::Png)
         && request.png_page > flow_pages
         && !request.ink.iter().any(|line| line.page == request.png_page)
         && !request.glyphs.runs.iter().any(|run| run.page == request.png_page)
@@ -1545,14 +1587,23 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             request.profile.printable_rect_um()?, generated,
         )?;
     }
-    let (bytes, maximum_bytes) = match request.export_paper {
-        Some(NotebookPaperFormat::Pdf) => (
+    let (bytes, maximum_bytes) = match request.export_format {
+        Some(NotebookExportFormat::InkTsv) => {
+            // Reuse physical PDF admission on every page, including ink that
+            // is not visible on the currently selected PNG page. These PDF
+            // bytes are not returned or persisted.
+            drop(request.profile.paper_layer_pdf_with_ink(
+                request.pages, &ink,
+            )?);
+            (encode_page_ink_file(&ink)?, MAX_PAGE_INK_FILE_BYTES)
+        }
+        Some(NotebookExportFormat::Pdf) => (
             request.profile.paper_layer_pdf_with_ink(
                 request.pages, &ink,
             )?,
             MAX_PAPER_OUTPUT_BYTES,
         ),
-        Some(NotebookPaperFormat::Png) => (
+        Some(NotebookExportFormat::Png) => (
             request.profile.paper_layer_png_page_with_ink(
                 request.dpi, request.png_page, &ink,
             )?,
