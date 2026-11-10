@@ -172,6 +172,63 @@ test('native flow includes explicit manual ink on later PDF/PNG pages',
         }
     });
 
+test('native flow keeps manual text overlays outside its fixed rectangle',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-text-overlay-'));
+        try {
+            const shape = ['--glyph-stroke', 'a', '500', '500',
+                '1800', '3000', '250', '#123456'];
+            const overlay = ['--place-text', '2', '80000', '50000', 'aa'];
+            const png = (page) => ['--export-paper', 'png', '--dpi', '72',
+                '--png-page', String(page)];
+            const paper = ['notebook', '--printed-sheet', 'true', ...shape];
+            const manualPage = accepted(...paper, ...overlay, ...png(2));
+            const destinationPng = join(dir, 'accepted.png');
+            const destinationPdf = join(dir, 'accepted.pdf');
+
+            for (const [flag, source] of [
+                ['--flow-text', 'a'],
+                ['--flow-markdown', 'a'],
+            ]) {
+                const flow = [...paper, flag, source, '--flow-region',
+                    '30000', '40000', '30000', '14000'];
+                const both = [...flow, ...overlay];
+                const flowPage = accepted(...flow, ...png(1));
+                assert.deepEqual(accepted(...both, ...png(1)), flowPage,
+                    'later annotation cannot change page-one flowed ink');
+                const later = accepted(...both, ...png(2));
+                assert.deepEqual(later, manualPage,
+                    'page-two manual glyph ink remains independent of flow');
+                const pdf = accepted(...both, '--export-paper', 'pdf');
+                assert.match(pdf.toString('latin1'), /\/Count 2\b/);
+                assert.deepEqual(pdf, accepted(...both,
+                    '--export-paper', 'pdf', '--pages', '2'));
+
+                // Same-page annotations may sit outside flow-region but
+                // still inside printable paper. They must not be clipped.
+                const adjacent = accepted(...flow, '--place-text', '1',
+                    '80000', '50000', 'a', ...png(1));
+                assert.notDeepEqual(adjacent, flowPage);
+                writeFileSync(destinationPng, later);
+                writeFileSync(destinationPdf, pdf);
+                refused([...both, ...png(3), '--output', destinationPng,
+                    '--replace'], /selected PNG page is empty/,
+                destinationPng);
+                refused([...both, '--export-paper', 'pdf', '--pages', '1',
+                    '--output', destinationPdf, '--replace'],
+                /require 2 physical pages/, destinationPdf);
+                refused([...both, '--place-text', '3', '80000', '50000',
+                    'b', ...png(2), '--output', destinationPng, '--replace'],
+                /missing authored glyph shapes/, destinationPng);
+                refused([...both, '--place-text', '3', '1000', '1000',
+                    'a', ...png(2), '--output', destinationPng, '--replace'],
+                /page 3 ink needs printable endpoints/, destinationPng);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('native notebook PNG quality presets match exact authored glyph ink',
     () => {
         const dir = mkdtempSync(join(root, '.temp/notebook-quality-'));

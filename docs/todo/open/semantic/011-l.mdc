@@ -4159,3 +4159,40 @@ production Clippy, frontend TypeScript, 9/9 native CLI cases, all 49 bounded
 native flow shards (147/147 complete exact receipts), 3/3 shard-runner checks
 and 1/1 print-ready dry run passed. Jig check still reports its 181
 pre-existing unrelated findings, with none in the three changed paths.
+
+## Native flowed text with explicit placed-glyph overlays (partial) — 2026-11-10
+
+The native Rust `atrament-profiles notebook` CLI now accepts up to 16
+caller-positioned `--place-text` runs alongside plain or Markdown flow,
+using the same exact authored shapes and physical ink compositor. Previously,
+flow selection rejected all manual placed text even though `--ink-line`
+annotations were already supported. Flow runs are expanded before manual
+runs, so a later annotation does not change existing flowed glyph variation.
+
+Flow-only rectangular ink admission now stops at the exact generated-run
+boundary. This checks decorative ornaments and every flowed glyph against
+the selected fixed region while letting manually positioned glyphs render
+outside it, subject to the paper-wide printable margins. These overlays do
+not reserve space, avoid collisions or become persisted semantic blocks.
+
+Native PDF page counting and transparent PNG selection include later pages
+containing manual placed glyph runs. A new real CLI integration regression
+verifies plain and Markdown flow with a page-two manual text overlay: page-one
+PNG is unchanged, page-two PNG equals separately placed native ink, and
+implicit two-page PDF bytes match explicit `--pages 2`. A same-page overlay
+outside the flow rectangle also renders. Empty later PNG selection,
+insufficient explicit PDF page budget, missing authored glyph ink on a later
+page, and an out-of-margin later-page glyph refuse without replacing accepted
+PDF or PNG bytes.
+
+This remains ephemeral caller-authored composition; the saved notebook body,
+fixed-object automatic avoidance and browser native text export are still
+unimplemented. ATR-P2-011 remains open.
+
+Post-change validation: 2,189 offline all-feature workspace Rust tests,
+260 CLI Rust tests, production strict Clippy, frontend TypeScript, 10/10
+native selected-file CLI cases, 3/3 flow-runner checks and 1/1 print-ready
+dry run pass. Jig doctor passes; Jig check retains 181 unrelated baseline
+findings, none in owned paths. A bounded native flow replay completed shards
+1–30 (90/90 exact TAP cases); later replay wrapper timeouts and overlapping
+runs prevent claiming a fresh complete 49-shard replay in this session.

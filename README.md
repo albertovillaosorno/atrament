@@ -547,8 +547,25 @@ overshooting stroke refuses even if the original line measurements fit.
 
 This applies across all PDF pages and separately selected PNG pages.
 
-Explicit caller-authored `--ink-line` annotations stay independent of the
-flow rectangle (but still must fit the physical printable sheet).
+Explicit caller-authored `--ink-line` annotations and `--place-text`
+glyph runs may coexist with plain/Markdown flow. Their positions are
+independent of the flow rectangle but must fit the physical printable
+sheet. A positioned run on a later sheet extends the automatic PDF page
+count and makes that otherwise empty sheet selectable via `--png-page`:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-region 30000 40000 50000 30000 \
+  --place-text 2 80000 50000 'ñ' \
+  --export-paper png --png-page 2 --dpi 72 --output note-overlay.png
+```
+
+Positioned runs are caller-authored overlays, **not** flow obstacles: they
+do not reserve space or automatically avoid overlap with the generated
+body. Unselected pages are still validated before export, including
+missing exact glyph shapes and out-of-margin ink. Explicit PDF page
+budgets cannot omit these overlays, and empty PNG page selections refuse.
 
 Omitting the flag retains full-printable-area composition. This first
 bounded region is **one repeated page-local text rectangle**, not

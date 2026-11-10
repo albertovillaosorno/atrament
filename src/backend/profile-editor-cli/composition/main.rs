@@ -40,6 +40,7 @@ use std::env;
 use std::error::Error;
 use std::fmt::Write as _;
 use std::io::{self, Write as _};
+use std::mem::replace;
 use std::path::Path;
 use std::slice::Iter;
 
@@ -190,6 +191,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     Both use physical printable regions and exact authored ink; \
     optional --flow-region repeats a fixed rectangle within margins on \
     every sheet, refusing invalid regions or unfit glyphs/rows. \
+    Explicit --place-text overlays may coexist with flow, outside its \
+    rectangle, but do not reserve flow space or prevent collisions. \
     It auto-selects PDF page count unless --pages is explicit. \
     Markdown headings default to dark underlines; select a user-colored \
     single/double underline, opaque pastel marker band or no ornament. \
@@ -1257,11 +1260,8 @@ fn validate_notebook_flow_selection(
     }
     if flow.is_none() {
         glyphs.validate_pairing()?;
-    } else if glyphs.strokes.is_empty() || !glyphs.runs.is_empty() {
-        return Err(concat!(
-            "flow requires authored glyph shapes without manual ",
-            "--place-text runs",
-        ).into());
+    } else if glyphs.strokes.is_empty() {
+        return Err("flow requires authored glyph shapes".into());
     }
     Ok(())
 }
@@ -1375,8 +1375,9 @@ fn admit_flow_page_selection(
     request: &mut NotebookRequest,
     flow_pages: usize,
 ) -> Result<(), String> {
-    let manual_last_page =
-        request.ink.iter().map(|line| line.page).max().unwrap_or(0);
+    let manual_last_page = request.ink.iter().map(|line| line.page)
+        .chain(request.glyphs.runs.iter().map(|run| run.page))
+        .max().unwrap_or(0);
     let required_pages = flow_pages.max(manual_last_page);
     if request.pages_explicit && request.pages < required_pages {
         return Err(if manual_last_page > flow_pages {
@@ -1400,6 +1401,7 @@ fn admit_flow_page_selection(
     if request.export_paper == Some(NotebookPaperFormat::Png)
         && request.png_page > flow_pages
         && !request.ink.iter().any(|line| line.page == request.png_page)
+        && !request.glyphs.runs.iter().any(|run| run.page == request.png_page)
     {
         return Err(format!(
             "flow has {flow_pages} pages; selected PNG page is empty"
@@ -1433,27 +1435,33 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             .into_bytes(),
         ));
     }
-    // Manual annotations can extend a flowed PDF beyond the last text page,
-    // or supply the selected PNG page even when flow ends on an earlier one.
-    // They remain outside the optional flow rectangle but still pass the
-    // native paper-wide printable-ink validation on every physical page.
+    // Manually authored ink and positioned glyph runs can extend the page
+    // budget. They remain outside the optional flow-only rectangle while
+    // the native compositor validates every pen segment on every page.
     let manual_ink_count = request.ink.len();
+    let mut flow_run_count = None;
     if let Some(source) = &request.flow {
         let (runs, ornaments, flow_pages) = layout_flow_with_region(
             source, &request.profile, request.statistics.as_ref(),
             request.heading, request.flow_region,
         )?;
         admit_flow_page_selection(&mut request, flow_pages)?;
-        request.glyphs.runs = runs;
+        flow_run_count = Some(runs.len());
+        let manual_runs = replace(&mut request.glyphs.runs, runs);
+        request.glyphs.runs.extend(manual_runs);
         request.ink.extend(ornaments);
         request.glyphs.validate_pairing()?;
     }
-    let ink = request.glyphs.expand(
-        &request.ink, request.statistics.as_ref(),
-    )?;
+    let (ink, flow_ink_end) = if let Some(count) = flow_run_count {
+        request.glyphs.expand_with_run_boundary(
+            &request.ink, request.statistics.as_ref(), count,
+        )?
+    } else {
+        (request.glyphs.expand(&request.ink, request.statistics.as_ref())?, 0)
+    };
     if let Some(region) = request.flow_region {
-        let generated = ink.get(manual_ink_count..)
-            .ok_or("flow ink offset exceeds expanded stroke count")?;
+        let generated = ink.get(manual_ink_count..flow_ink_end)
+            .ok_or("flow ink boundary exceeds expanded stroke count")?;
         region.validate_ink(
             request.profile.printable_rect_um()?, generated,
         )?;

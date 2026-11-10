@@ -537,16 +537,30 @@ impl GlyphOverlay {
         &self, manual: &[NotebookInkLine],
         statistics: Option<&HandwritingStatisticsProfile>,
     ) -> Result<Vec<NotebookInkLine>, String> {
+        self.expand_with_run_boundary(manual, statistics, self.runs.len())
+            .map(|(ink, _boundary)| ink)
+    }
+
+    // The prefix is generated flow; any later runs are explicit overlays.
+    // Preserve one expansion/variation order and isolate physical ink bounds
+    // without making manually placed text obey a flow-only rectangle.
+    pub(super) fn expand_with_run_boundary(
+        &self, manual: &[NotebookInkLine],
+        statistics: Option<&HandwritingStatisticsProfile>,
+        boundary_run: usize,
+    ) -> Result<(Vec<NotebookInkLine>, usize), String> {
         // A typed sibling can supply a mutated profile without passing
         // through the CLI's saved-JSON decoder. Refuse malformed versions,
         // duplicate dimensions or unbounded means before placing any ink.
         validate_glyph_statistics(statistics)?;
         self.validate_pairing()?;
         let mut expanded = manual.to_vec();
+        let mut boundary_ink_end = (boundary_run == 0)
+            .then_some(expanded.len());
         let mut missing = Vec::new();
         let mut occurrence = 0u32;
         let mut joined_pairs = vec![false; self.text_joins.len()];
-        for run in &self.runs {
+        for (run_index, run) in self.runs.iter().enumerate() {
             let mut offset_um = 0i64;
             // A pen lift is implicit at every run/row or authored space.
             let mut previous: Option<(&str, Vec<NotebookInkLine>)> = None;
@@ -624,22 +638,16 @@ impl GlyphOverlay {
                 occurrence = occurrence.checked_add(1)
                     .ok_or("variation occurrence overflow")?;
             }
+            if run_index.saturating_add(1) == boundary_run {
+                boundary_ink_end = Some(expanded.len());
+            }
         }
         if !missing.is_empty() {
             return Err(missing_shapes_error(&missing));
         }
-        for (join, seen) in self.text_joins.iter().zip(joined_pairs) {
-            if !seen {
-                return Err(format!(
-                    concat!(
-                        "selected text join pair not adjacent in a run: ",
-                        "\"{}\" \"{}\"",
-                    ),
-                    join.left, join.right,
-                ));
-            }
-        }
-        Ok(expanded)
+        self.validate_seen_text_joins(&joined_pairs)?;
+        Ok((expanded, boundary_ink_end
+            .ok_or("flow run boundary exceeds positioned text runs")?))
     }
 
     /// Layout uses the same per-grapheme advances as physical ink placement.
@@ -1686,6 +1694,22 @@ impl GlyphOverlay {
                 return Err(format!(
                     "fallback target has no authored strokes: \"{}\"",
                     fallback.authored.escape_debug(),
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn validate_seen_text_joins(&self, seen_pairs: &[bool])
+    -> Result<(), String> {
+        for (join, seen) in self.text_joins.iter().zip(seen_pairs) {
+            if !seen {
+                return Err(format!(
+                    concat!(
+                        "selected text join pair not adjacent in a run: ",
+                        "\"{}\" \"{}\"",
+                    ),
+                    join.left, join.right,
                 ));
             }
         }
