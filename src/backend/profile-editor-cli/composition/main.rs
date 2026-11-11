@@ -2086,8 +2086,52 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
         }
     }
     // Imported-only ink is checked after its bounded source read.
+    preflight_notebook_export_and_ink(flags, flow_format, region_selected,
+        inline_ink_count, glyph_file_selected, handwriting_selected,
+        &glyph_preflight)
+}
+
+// All source-independent output and physical-ink gates precede selected I/O.
+fn preflight_notebook_export_and_ink(
+    flags: NotebookFlagPreflight, flow_format: Option<FlowFormat>,
+    region_selected: bool, inline_ink_count: usize,
+    glyph_file_selected: bool, handwriting_selected: bool,
+    glyphs: &GlyphOverlay,
+) -> Result<(), String> {
     flags.validate(flow_format, region_selected, inline_ink_count,
-        glyph_preflight.has_any())
+        glyphs.has_any())?;
+    preflight_notebook_ink_requirements(
+        flow_format, glyph_file_selected, handwriting_selected, glyphs,
+    )
+}
+
+// Check impossible physical ink requirements before any selected source is
+// opened. Imported glyph libraries may supply strokes but neither saved page
+// ink nor handwriting statistics can supply missing placed text.
+fn preflight_notebook_ink_requirements(
+    flow_format: Option<FlowFormat>, glyph_file_selected: bool,
+    handwriting_selected: bool, glyphs: &GlyphOverlay,
+) -> Result<(), String> {
+    if flow_format.is_some() && !glyph_file_selected
+        && glyphs.strokes.is_empty()
+    {
+        return Err("flow requires authored glyph shapes".into());
+    }
+    if handwriting_selected && (
+        (!glyph_file_selected && glyphs.strokes.is_empty())
+            || (flow_format.is_none() && glyphs.runs.is_empty())
+    ) {
+        return Err(concat!(
+            "--handwriting-profile requires both --glyph-stroke ",
+            "and --place-text",
+        ).into());
+    }
+    if flow_format.is_none() && glyphs.runs.is_empty()
+        && glyphs.variation.is_some()
+    {
+        return Err("--glyph-variation requires placed text".into());
+    }
+    Ok(())
 }
 
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {

@@ -422,6 +422,7 @@ fn early_output_selection_requires_a_literal_filename() {
     "--output requires a filename");
     preflight_notebook_sources(&args(&[
         "--flow-text", "--output", "--export-paper", "pdf",
+        "--glyph-file", "unopened.tsv",
     ])).expect("flag-like flow text is not an output selection");
 }
 
@@ -459,7 +460,8 @@ fn notebook_preflight_requires_selected_file_operands_before_stdin() {
         "--paper-profile", "--flow-text-file", "--flow-markdown-file"] {
         // A literal option-like filename remains an operand, not an option.
         preflight_notebook_sources(&args(&["--ink-file", "-", option,
-            "--output", "--export-paper", "pdf"]))
+            "--output", "--export-paper", "pdf", "--glyph-stroke",
+            "a", "500", "500", "1800", "3000", "250", "#123456"]))
             .expect("literal source filenames are preserved");
     }
 }
@@ -668,29 +670,61 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
     }
     for flags in [
         ["--flow-text", "--ink-file", "--ink-file", "-",
-            "--export-paper", "pdf"].as_slice(),
+            "--export-paper", "pdf", "--glyph-file", "unopened.tsv"]
+            .as_slice(),
         ["--glyph-file", "-", "--place-text", "1", "30000", "40000",
             "--ink-file", "--export-paper", "pdf"].as_slice(),
         ["--flow-markdown", "--export-paper", "--export-paper",
-            "pdf", "--pages", "1"].as_slice(),
-        ["--flow-markdown", "--heading-style", "--heading-style",
-            "marker", "--export-paper", "pdf"].as_slice(),
-        ["--flow-markdown-file", "-", "--heading-style", "marker",
-            "--heading-marker-scale", "95", "--emit-ink-file"].as_slice(),
-        ["--flow-markdown", "# a", "--date-text", "--ink-file",
-            "--export-paper", "pdf"].as_slice(),
-        ["--flow-text-file", "-", "--flow-region", "20000",
-            "30000", "40000", "50000", "--export-paper", "pdf"]
+            "pdf", "--pages", "1", "--glyph-file", "unopened.tsv"]
             .as_slice(),
+        ["--flow-markdown", "--heading-style", "--heading-style",
+            "marker", "--export-paper", "pdf", "--glyph-file",
+            "unopened.tsv"].as_slice(),
+        ["--flow-markdown-file", "-", "--heading-style", "marker",
+            "--heading-marker-scale", "95", "--emit-ink-file",
+            "--glyph-file", "unopened.tsv"].as_slice(),
+        ["--flow-markdown", "# a", "--date-text", "--ink-file",
+            "--export-paper", "pdf", "--glyph-file", "unopened.tsv"]
+            .as_slice(),
+        ["--flow-text-file", "-", "--flow-region", "20000",
+            "30000", "40000", "50000", "--export-paper", "pdf",
+            "--glyph-file", "unopened.tsv"].as_slice(),
         ["--ink-file", "-", "--export-paper", "png", "--dpi",
             "150", "--png-page", "1", "--output", "out.png",
             "--replace"].as_slice(),
         ["--ink-file", "-", "--handwriting-profile", "valid.json",
-            "--export-paper", "pdf"].as_slice(),
+            "--export-paper", "pdf", "--glyph-stroke", "a", "500",
+            "500", "1800", "3000", "250", "#123456",
+            "--place-text", "1", "30000", "40000", "a"].as_slice(),
     ] {
         preflight_notebook_sources(&args(flags))
             .expect("option-looking values are not source flags");
     }
+}
+
+#[test]
+fn notebook_preflight_refuses_unrenderable_overlays_before_source_io() {
+    for (flags, expected) in [
+        (["--flow-text-file", "-", "--export-paper", "pdf"].as_slice(),
+            "flow requires authored glyph shapes"),
+        (["--flow-markdown-file", "-", "--ink-file", "empty.tsv",
+            "--export-paper", "png"].as_slice(),
+            "flow requires authored glyph shapes"),
+        (["--ink-file", "-", "--handwriting-profile", "unopened.json",
+            "--export-paper", "pdf"].as_slice(),
+            "--handwriting-profile requires both"),
+        (["--ink-file", "-", "--glyph-variation", "1", "1", "1",
+            "1", "1", "1", "1", "--export-paper", "pdf"].as_slice(),
+            "--glyph-variation requires placed text"),
+    ] {
+        let error = preflight_notebook_sources(&args(flags))
+            .expect_err("impossible ink must refuse before source I/O");
+        assert!(error.contains(expected), "{flags:?}: {error}");
+    }
+    preflight_notebook_sources(&args(&[
+        "--glyph-file", "unopened.tsv", "--flow-text-file", "-",
+        "--export-paper", "pdf",
+    ])).expect("imported library may provide the missing shapes");
 }
 
 #[test]
@@ -824,9 +858,10 @@ fn inline_flow_is_admitted_before_earlier_selected_stdin_sources() {
         ["--glyph-file", "-", "--flow-text", "a\tb",
             "--export-paper", "pdf"].as_slice(),
         ["--ink-file", "-", "--flow-markdown", "# ñ\r\n¡a!",
-            "--emit-ink-file"].as_slice(),
-        ["--flow-text", "--output", "--export-paper", "pdf"]
-            .as_slice(),
+            "--emit-ink-file", "--glyph-stroke", "a", "500", "500",
+            "1800", "3000", "250", "#123456"].as_slice(),
+        ["--flow-text", "--output", "--export-paper", "pdf",
+            "--glyph-file", "unopened.tsv"].as_slice(),
     ] {
         preflight_notebook_sources(&args(flags)).unwrap_or_else(|error| {
             panic!("valid inline flow {flags:?} refused: {error}")
