@@ -863,9 +863,25 @@ fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
 fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
     let mut iter = args.iter();
     let mut profile_selected = false;
+    let mut audit_selected = false;
+    let mut inspection_selected = false;
+    let mut output_selected = false;
+    let mut replace_selected = false;
     while let Some(option) = iter.next() {
         let operands: usize = match option.as_str() {
-            "--audit-baseline" | "--replace" => 0,
+            "--audit-baseline" => {
+                preflight_unique_selection(&mut audit_selected,
+                    concat!(
+                        "--audit-text and --audit-baseline ",
+                        "may be selected only once",
+                    ))?;
+                0
+            }
+            "--replace" => {
+                preflight_unique_selection(&mut replace_selected,
+                    "--replace may appear only once")?;
+                0
+            }
             "--glyph-stroke" => 7,
             "--set-stroke" => 8,
             "--rotate-glyph" | "--translate-path" => 4,
@@ -885,13 +901,39 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
                 profile_selected = true;
                 1
             }
-            "--remove-glyph" | "--audit-text" | "--inspect-glyph"
-            | "--inspect-paths" | "--output" => 1,
+            "--audit-text" => {
+                preflight_unique_selection(&mut audit_selected,
+                    "--audit-text may appear only once")?;
+                1
+            }
+            "--inspect-glyph" | "--inspect-paths" => {
+                preflight_unique_selection(&mut inspection_selected,
+                    "glyph inspection may appear only once")?;
+                1
+            }
+            "--output" => {
+                preflight_unique_selection(&mut output_selected,
+                    "--output requires one explicit filename")?;
+                1
+            }
+            "--remove-glyph" => 1,
             _ => return Err(format!("unknown glyph library option: {option}")),
         };
         for _ in 0usize..operands {
             if iter.next().is_none() { break }
         }
+    }
+    if inspection_selected && audit_selected {
+        return Err("glyph inspection cannot accompany a glyph audit".into());
+    }
+    if inspection_selected && (output_selected || replace_selected) {
+        return Err("glyph inspection is stdout-only; omit --output".into());
+    }
+    if audit_selected && (output_selected || replace_selected) {
+        return Err("--audit-text is stdout-only; omit --output".into());
+    }
+    if replace_selected && !output_selected {
+        return Err("--replace requires --output".into());
     }
     Ok(())
 }

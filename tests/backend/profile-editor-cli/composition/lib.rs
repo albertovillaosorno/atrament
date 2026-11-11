@@ -81,6 +81,41 @@ fn glyph_library_preflight_rejects_second_source_without_input_io() {
 }
 
 #[test]
+fn glyph_library_preflight_refuses_deferred_flag_conflicts() {
+    for (flags, diagnostic) in [
+        (["--profile", "-", "--audit-text", "a", "--audit-text", "b"]
+            .as_slice(), "--audit-text may appear only once"),
+        (["--profile", "-", "--audit-baseline", "--audit-text", "a"]
+            .as_slice(), "--audit-text may appear only once"),
+        (["--profile", "-", "--inspect-paths", "a", "--inspect-glyph",
+            "b"].as_slice(), "glyph inspection may appear only once"),
+        (["--profile", "-", "--output", "one.tsv", "--output",
+            "two.tsv"].as_slice(), "--output requires one explicit filename"),
+        (["--profile", "-", "--replace", "--replace"].as_slice(),
+            "--replace may appear only once"),
+        (["--profile", "-", "--audit-baseline", "--inspect-glyph",
+            "a"].as_slice(), "glyph inspection cannot accompany a glyph audit"),
+        (["--profile", "-", "--audit-text", "a", "--output",
+            "one.tsv"].as_slice(), "--audit-text is stdout-only"),
+        (["--profile", "-", "--inspect-glyph", "a", "--output",
+            "one.tsv"].as_slice(), "glyph inspection is stdout-only"),
+        (["--profile", "-", "--replace"].as_slice(),
+            "--replace requires --output"),
+    ] {
+        let error = preflight_glyph_profile_sources(&args(flags))
+            .expect_err("invalid late glyph flags must refuse before stdin");
+        assert!(error.contains(diagnostic), "{error}");
+    }
+    for flags in [
+        ["--audit-text", "--inspect-glyph", "--profile", "-"].as_slice(),
+        ["--profile", "-", "--audit-text", "--output"].as_slice(),
+    ] {
+        preflight_glyph_profile_sources(&args(flags))
+            .expect("literal argument values must not select flags");
+    }
+}
+
+#[test]
 fn notebook_preflight_detects_invalid_sources_without_input_io() {
     for flags in [
         ["--ink-file", "-", "--glyph-file", "-"].as_slice(),

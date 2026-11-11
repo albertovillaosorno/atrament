@@ -3130,3 +3130,11 @@ A native subprocess regression keeps stdin open and unwritten while a late
 duplicate path or pipe is supplied; refusal must not modify previously
 reviewed output. Focused Rust tests cover operand lookalikes. This is only
 selected-source admission, not an automatic glyph-generation capability.
+
+## Deferred glyph audit and output admission — 2026-11-10
+
+Standalone native glyph CLI preflight now detects repeated audit, inspection,
+output and replace selections, and mutually incompatible audit/inspection or
+stdout-only requests, before reading a prior unclosed `--profile -` pipe.
+Focused Rust and unwritten-pipe subprocess tests assert prompt refusal and
+unchanged reviewed output. This is CLI input safety, not shape generation.
