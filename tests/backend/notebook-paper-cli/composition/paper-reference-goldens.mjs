@@ -101,7 +101,7 @@ function pngCrc32(bytes) {
     return (crc ^ 0xffffffff) >>> 0;
 }
 
-function decodeNativePng(bytes, dpi) {
+function decodeNativePng(bytes, dpi, widthUm, heightUm) {
     assert.deepEqual(bytes.subarray(0, 8),
         Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     const tags = [];
@@ -129,8 +129,8 @@ function decodeNativePng(bytes, dpi) {
     assert.deepEqual(tags, ['IHDR', 'pHYs', 'IDAT', 'IEND']);
     assert.equal(chunks.get('IEND').length, 0);
     const header = chunks.get('IHDR');
-    const width = Math.ceil(210000 * dpi / 25400);
-    const height = Math.ceil(297000 * dpi / 25400);
+    const width = Math.ceil(widthUm * dpi / 25400);
+    const height = Math.ceil(heightUm * dpi / 25400);
     assert.equal(header.readUInt32BE(0), width);
     assert.equal(header.readUInt32BE(4), height);
     assert.deepEqual(header.subarray(8), Buffer.from([8, 6, 0, 0, 0]));
@@ -154,16 +154,23 @@ test('native transparent PNG passes independent CRC and zlib validation',
         const directory = mkdtempSync(join(tmpdir(), 'atrament-png-frame-'));
         try {
             const output = join(directory, 'blank.png');
-            for (const dpi of [72, 150, 225]) {
+            // 300-DPI A4 exceeds five million pixels, but A5 remains
+            // admissible and independently decodable at the maximum DPI.
+            for (const { dpi, size, widthUm, heightUm } of [
+                { dpi: 72, size: 'a4', widthUm: 210000, heightUm: 297000 },
+                { dpi: 150, size: 'a4', widthUm: 210000, heightUm: 297000 },
+                { dpi: 225, size: 'a4', widthUm: 210000, heightUm: 297000 },
+                { dpi: 300, size: 'a5', widthUm: 148000, heightUm: 210000 },
+            ]) {
                 const run = nativePaper('--style', 'blank',
-                    '--format', 'png', '--dpi', String(dpi),
-                    '--output', output,
+                    '--paper-size', size, '--format', 'png',
+                    '--dpi', String(dpi), '--output', output,
                     ...(dpi === 72 ? [] : ['--replace']));
                 assert.equal(run.status, 0, run.stderr);
                 const png = readFileSync(output);
                 assert.ok(png.length <= 24_000_000,
                     'bounded native PNG output');
-                decodeNativePng(png, dpi);
+                decodeNativePng(png, dpi, widthUm, heightUm);
             }
             const accepted = readFileSync(output);
             const refused = nativePaper('--style', 'blank',

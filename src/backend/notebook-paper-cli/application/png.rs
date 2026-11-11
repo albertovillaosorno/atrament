@@ -34,6 +34,8 @@
 
 //! Paper-only transparent raster export, without external image subprocesses.
 
+use std::iter;
+
 use atrament_pdf_vector_serializer::{
     PdfPathCommand, PdfPathPaint, PdfPoint, PdfRgb, PdfVectorPath,
 };
@@ -311,19 +313,16 @@ fn crc32_part(mut crc: u32, data: &[u8]) -> u32 {
     crc
 }
 
-fn checksum_adler32(data: &[u8]) -> u32 {
-    let mut first = 1u32;
-    let mut second = 0u32;
+fn update_adler32(first: &mut u32, second: &mut u32, data: &[u8]) {
     // Reduce each accumulated sum modulo 65_521 before a u32 can overflow.
     for chunk in data.chunks(2_000) {
         for byte in chunk {
-            first = first.saturating_add(u32::from(*byte));
-            second = second.saturating_add(first);
+            *first = first.saturating_add(u32::from(*byte));
+            *second = second.saturating_add(*first);
         }
-        first %= 65_521;
-        second %= 65_521;
+        *first %= 65_521;
+        *second %= 65_521;
     }
-    (second << 16) | first
 }
 
 fn png_chunk(
@@ -359,20 +358,19 @@ fn encode_rgba(
         .map_err(|error| format!("PNG width refused: {error}"))?
         .checked_mul(4)
         .ok_or("PNG row size overflow")?;
+    let rows = usize::try_from(height)
+        .map_err(|error| format!("PNG height refused: {error}"))?;
+    let expected_pixels =
+        stride.checked_mul(rows).ok_or("PNG raster size overflow")?;
+    if pixels.len() != expected_pixels {
+        return Err("PNG raster does not match physical dimensions".into());
+    }
     let raw_len = stride
         .checked_add(1)
-        .and_then(|size| size.checked_mul(usize::try_from(height).ok()?))
+        .and_then(|size| size.checked_mul(rows))
         .ok_or("PNG raster size overflow")?;
-    let mut raw = Vec::new();
-    raw.try_reserve_exact(raw_len)
-        .map_err(|error| format!("PNG raster allocation refused: {error}"))?;
-    for scanline in pixels.chunks_exact(stride) {
-        raw.push(0); // PNG filter type None.
-        raw.extend_from_slice(scanline);
-    }
-    let blocks = raw.len().div_ceil(usize::from(u16::MAX));
-    let compression_bytes = raw
-        .len()
+    let blocks = raw_len.div_ceil(usize::from(u16::MAX));
+    let compression_bytes = raw_len
         .checked_add(blocks.saturating_mul(5))
         .and_then(|size| size.checked_add(6))
         .ok_or("PNG compression size overflow")?;
@@ -384,15 +382,34 @@ fn encode_rgba(
         format!("PNG compression allocation refused: {error}")
     })?;
     zlib.extend_from_slice(&[0x78, 0x01]); // zlib stream, stored DEFLATE.
-    for (index, block) in raw.chunks(usize::from(u16::MAX)).enumerate() {
+    // Stream interleaved filter bytes and pixels directly into stored blocks.
+    // No second full-size filtered raster is needed alongside RGBA and zlib.
+    let mut filtered = pixels.chunks_exact(stride).flat_map(|scanline| {
+        iter::once(0u8).chain(scanline.iter().copied())
+    });
+    let mut first = 1u32;
+    let mut second = 0u32;
+    for index in 0..blocks {
+        let length = raw_len
+            .checked_sub(index.saturating_mul(usize::from(u16::MAX)))
+            .ok_or("PNG block offset overflow")?
+            .min(usize::from(u16::MAX));
         zlib.push(u8::from(index.saturating_add(1) == blocks));
-        let len = u16::try_from(block.len())
+        let len = u16::try_from(length)
             .map_err(|error| format!("PNG block refused: {error}"))?;
         zlib.extend_from_slice(&len.to_le_bytes());
         zlib.extend_from_slice(&(!len).to_le_bytes());
-        zlib.extend_from_slice(block);
+        let start = zlib.len();
+        zlib.extend(filtered.by_ref().take(length));
+        let end = start
+            .checked_add(length)
+            .ok_or("PNG block length overflow")?;
+        let content = zlib
+            .get(start..end)
+            .ok_or("PNG filtered raster ended before block boundary")?;
+        update_adler32(&mut first, &mut second, content);
     }
-    zlib.extend_from_slice(&checksum_adler32(&raw).to_be_bytes());
+    zlib.extend_from_slice(&((second << 16) | first).to_be_bytes());
 
     let mut output = Vec::new();
     output

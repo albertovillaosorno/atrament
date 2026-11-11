@@ -1138,7 +1138,8 @@ fn date_placeholder_is_physical_and_uses_shared_pdf_png_mark_geometry() {
 // Independently derive Gregorian month lengths instead of mirroring the
 // date parser's admission expression or inferring a locale for slash labels.
 fn reference_gregorian_date(year: u32, month: u32, day: u32) -> bool {
-    let leap = year % 400 == 0 || (year % 4 == 0 && year % 100 != 0);
+    let leap = year.is_multiple_of(400)
+        || (year.is_multiple_of(4) && !year.is_multiple_of(100));
     let days = match month {
         2 if leap => 29,
         2 => 28,
@@ -1150,10 +1151,6 @@ fn reference_gregorian_date(year: u32, month: u32, day: u32) -> bool {
 }
 
 #[test]
-#[expect(
-    clippy::integer_division_remainder_used,
-    reason = "test-only independent Gregorian leap-year reference",
-)]
 fn printed_date_parser_matches_full_century_and_month_boundary_oracle() {
     let check = |year, month, day| {
         let expected = reference_gregorian_date(year, month, day);
@@ -1189,7 +1186,10 @@ fn printed_date_parser_matches_full_century_and_month_boundary_oracle() {
         }
     }
     assert!(validate_printed_date_text("").is_ok());
-    for invalid in ["2026-2-3", "2026/11/03", "03/11.2026", "٣/١١/٢٠٢٦"] {
+    for invalid in [
+        "2026-2-3", "2026/11/03", "03/11.2026",
+        "\u{663}/\u{661}\u{661}/\u{662}\u{660}\u{662}\u{666}",
+    ] {
         assert!(validate_printed_date_text(invalid).is_err(), "{invalid}");
     }
     assert_eq!(
@@ -1485,7 +1485,8 @@ fn selected_png_renders_only_its_page_but_validates_all_4096_ink_lines() {
     );
 
     let mut invalid = ink;
-    invalid[31].start_um = (0, 25_000);
+    invalid.get_mut(31).expect("bounded 4,096-line fixture").start_um =
+        (0, 25_000);
     assert_eq!(
         output(&invalid).expect_err("invalid page 32 ink cannot be dropped"),
         "page 32 ink needs printable endpoints and valid width",

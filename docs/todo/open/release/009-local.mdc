@@ -571,3 +571,22 @@ export requirement and existing refusal message are not weakened.
 Focused Rust option-scanner cases and deliberately open-pipe native children
 verify both early refusal and preservation of an approved destination.
 This is argument admission, not generated handwriting or saved semantic text.
+
+## Direct stored-PNG scanline streaming at maximum DPI — 2026-11-11
+
+The native Rust PNG encoder now interleaves each zero-filter scanline with its
+RGBA pixels directly into the bounded stored-DEFLATE stream. It no longer
+allocates a second full-size filtered raster in addition to the RGBA canvas,
+compressed stream and encoded PNG. A new exact pixel-length guard refuses
+mismatched internal raster dimensions; physical geometry and encoded output
+budgets remain unchanged.
+
+The checked-in ruled/grid PDF and PNG golden bytes stay identical. An
+independent Node PNG decoder validates chunk CRCs, zlib inflation, unfiltered
+RGBA transparency, dimensions and physical resolution for A4 at 72, 150 and
+225 DPI, and the still-admitted A5 at the maximum 300 DPI. A4 at 300 DPI
+continues to refuse the five-million-pixel ceiling without replacing a
+reviewed PNG.
+
+Focused Rust tests and all-feature workspace tests also pass. This changes
+memory use, not notebook content or physical-print acceptance.
