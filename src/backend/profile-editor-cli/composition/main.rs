@@ -377,21 +377,25 @@ impl NotebookFlagPreflight {
                 self.unique(option, "--output requires one explicit filename")?;
                 1
             }
-            "--pages" => {
-                self.unique(option, "--pages may appear only once")?;
-                1
-            }
-            "--dpi" => {
-                self.unique(option, "--dpi may appear only once")?;
-                1
+            "--pages" | "--dpi" | "--png-page" => {
+                self.unique(option, &format!("{option} may appear only once"))?;
+                let (minimum, maximum) = if option == "--dpi" {
+                    (72, 300)
+                } else {
+                    (1, 32)
+                };
+                let _validated = export_integer(
+                    iter.next().map(String::as_str), option,
+                    minimum, maximum,
+                )?;
+                0
             }
             "--quality" => {
                 self.unique(option, "--quality may appear only once")?;
-                1
-            }
-            "--png-page" => {
-                self.unique(option, "--png-page may appear only once")?;
-                1
+                let _validated = parse_export_quality(
+                    iter.next().map(String::as_str),
+                )?;
+                0
             }
             "--heading-style" | "--heading-color"
             | "--heading-marker-scale" | "--heading-ink-color"
@@ -1278,6 +1282,16 @@ fn export_integer(
     Ok(number)
 }
 
+// Keep source-independent quality selection identical in preflight and
+// final output parsing, before any earlier stdin source can block.
+fn parse_export_quality(selected: Option<&str>) -> Result<u32, String> {
+    match selected {
+        Some("preview") => Ok(72),
+        Some("final") => Ok(150),
+        _ => Err("--quality requires preview or final".into()),
+    }
+}
+
 fn parse_ink_line(
     iter: &mut Iter<'_, String>,
 ) -> Result<NotebookInkLine, String> {
@@ -1454,11 +1468,9 @@ fn parse_notebook_export_option(
             if export.quality_dpi.is_some() {
                 return Err("--quality may appear only once".into());
             }
-            export.quality_dpi = Some(match iter.next().map(String::as_str) {
-                Some("preview") => 72,
-                Some("final") => 150,
-                _ => return Err("--quality requires preview or final".into()),
-            });
+            export.quality_dpi = Some(parse_export_quality(
+                iter.next().map(String::as_str),
+            )?);
         }
         "--png-page" => {
             if export.png_page.is_some() {
@@ -1695,13 +1707,10 @@ fn preflight_unique_selection(
 // that look like flags without selecting another input source.
 fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut iter, mut stdin_selected) = (args.iter(), false);
-    let mut glyph_file_selected = false;
-    let mut glyph_edited = false;
+    let (mut glyph_file_selected, mut glyph_edited) = (false, false);
     let mut flow_format = None;
-    let mut profile_selected = false;
-    let mut paper_selected = false;
-    let mut profile_edited = false;
-    let mut handwriting_selected = false;
+    let (mut profile_selected, mut profile_edited) = (false, false);
+    let (mut paper_selected, mut handwriting_selected) = (false, false);
     let mut region_selected = false;
     let mut flags = NotebookFlagPreflight::default();
     while let Some(option) = iter.next() {

@@ -282,3 +282,16 @@ at that early boundary. Argument-like text operands remain literal input.
 Focused Rust tests and unwritten-stdin subprocess regressions assert prompt
 refusal without changing a previously reviewed PDF. This is input safety,
 not persisted notebook text or a complete local editing journey.
+
+## Numeric export settings before source reads — 2026-11-10
+
+Notebook preflight now checks the actual ranges of `--pages`, `--dpi` and
+`--png-page`, and the two accepted `--quality` presets, before opening any
+prior glyph, ink or Markdown source. It reuses the final typed integer and
+quality parsers, so missing, malformed and out-of-range values retain their
+existing refusal messages instead of blocking on an unclosed input pipe.
+
+Focused Rust red/green tests and eight additional live-pipe regression cases
+verify early refusal and unchanged reviewed output. All 21 native CLI file
+suites pass. This strengthens argument admission; it does not add persisted
+notebook content or complete the local end-to-end journey.
