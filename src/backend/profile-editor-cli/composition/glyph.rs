@@ -1206,6 +1206,7 @@ impl GlyphOverlay {
     /// A missing exact match is a refusal, not a normalization or fallback.
     pub(super) fn remove_glyph(&mut self, grapheme: &str)
         -> Result<(), String> {
+        validate_removal_glyph_key(grapheme)?;
         let before = self.strokes.len();
         self.strokes.retain(|stroke| stroke.grapheme != grapheme);
         if self.strokes.len() == before {
@@ -2014,6 +2015,19 @@ pub(super) fn validate_inspection_glyph_key(
 ) -> Result<(), String> {
     if !is_exact_visible_grapheme(grapheme, UnicodeGraphemeSegmentation) {
         return Err("inspection requires one exact visible grapheme".into());
+    }
+    Ok(())
+}
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "CLI sibling module shares this exact-key validator",
+)]
+pub(super) fn validate_removal_glyph_key(
+    grapheme: &str,
+) -> Result<(), String> {
+    if !is_exact_visible_grapheme(grapheme, UnicodeGraphemeSegmentation) {
+        return Err("glyph removal requires one exact visible grapheme".into());
     }
     Ok(())
 }

@@ -1216,7 +1216,12 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
                 let _selected = parse_selected_output(&mut iter, false)?;
                 0
             }
-            "--remove-glyph" => 1,
+            "--remove-glyph" => {
+                let selected = iter.next()
+                    .ok_or("--remove-glyph requires an exact grapheme")?;
+                glyph::validate_removal_glyph_key(selected)?;
+                0
+            }
             _ => return Err(format!("unknown glyph library option: {option}")),
         };
         preflight_glyph_operands(option, operands, &mut iter)?;

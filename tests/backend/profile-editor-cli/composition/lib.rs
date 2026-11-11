@@ -274,7 +274,7 @@ fn glyph_library_preflights_typed_transformation_values() {
 }
 
 #[test]
-fn glyph_library_preflights_exact_copy_and_inspection_keys() {
+fn glyph_library_preflights_exact_mutation_and_inspection_keys() {
     for (tail, diagnostic) in [
         (["--copy-glyph", "a", "a"].as_slice(),
             "glyph copy needs two distinct exact visible graphemes"),
@@ -288,6 +288,12 @@ fn glyph_library_preflights_exact_copy_and_inspection_keys() {
             "inspection requires one exact visible grapheme"),
         (["--inspect-paths", "\n"].as_slice(),
             "inspection requires one exact visible grapheme"),
+        (["--remove-glyph", "ab"].as_slice(),
+            "glyph removal requires one exact visible grapheme"),
+        (["--remove-glyph", " "].as_slice(),
+            "glyph removal requires one exact visible grapheme"),
+        (["--remove-glyph", ""].as_slice(),
+            "glyph removal requires one exact visible grapheme"),
     ] {
         let mut flags = args(&["--profile", "-"]);
         flags.extend(tail.iter().map(|value| (*value).to_owned()));
@@ -299,6 +305,8 @@ fn glyph_library_preflights_exact_copy_and_inspection_keys() {
         ["--copy-glyph", "n\u{303}", "ñ"].as_slice(),
         ["--inspect-glyph", "ñ"].as_slice(),
         ["--inspect-paths", "n\u{303}"].as_slice(),
+        ["--remove-glyph", "ñ"].as_slice(),
+        ["--remove-glyph", "n\u{303}"].as_slice(),
     ] {
         let mut flags = args(&["--profile", "-"]);
         flags.extend(tail.iter().map(|value| (*value).to_owned()));

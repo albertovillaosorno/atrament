@@ -486,3 +486,16 @@ receive the ordinary exact-key refusal rather than masquerading as flags.
 Focused Rust and native unclosed-pipe regressions assert prompt, empty-stdout
 refusal and unchanged reviewed output. This is syntax admission only, not
 complete authored glyph coverage or persistent notebook content.
+
+## Standalone glyph removal exact-key preflight — 2026-11-10
+
+`atrament-profiles glyphs` now rejects a malformed `--remove-glyph` key
+before reading a previously selected stdin glyph library. The pure exact
+visible-grapheme validator also runs in the final removal operation, while
+missing authored strokes remain a source-dependent refusal. Composed `ñ`
+and decomposed `n` plus tilde remain distinct valid keys.
+
+Focused Rust source-free and native open-pipe subprocess tests cover invalid
+removal keys, empty stdout and preservation of already approved output. This
+is a bounded admission correction, not automatic glyph outlines or saved
+notebook content.
