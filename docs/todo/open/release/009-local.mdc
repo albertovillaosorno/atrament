@@ -308,3 +308,17 @@ the selected notebook profile and the eventual expanded ink.
 Focused Rust and six native unwritten-pipe regressions verify early refusal,
 consistent diagnostics and no replacement of previously reviewed output.
 This is bounded CLI input safety, not persisted notebook flow or layout editing.
+
+## Typed notebook metadata before source reads — 2026-11-10
+
+Notebook preflight now checks the lexical values of printed date style and
+placement, border radius, page-number and preprinted-sheet toggles before
+reading earlier glyph, ink or Markdown sources. It uses the same typed edit
+path as the final parser and preserves source-independent flag-like values as
+literal text. Missing and malformed options refuse without waiting for an
+unclosed stdin pipe; combination and paper geometry checks still use the
+selected profile after input loading.
+
+Focused red/green Rust tests and six additional native live-pipe cases assert
+existing diagnostics, empty stdout and preservation of reviewed output.
+This is CLI argument admission, not persistent semantic notebook editing.

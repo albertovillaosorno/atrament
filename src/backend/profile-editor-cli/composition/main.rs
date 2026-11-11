@@ -1264,6 +1264,16 @@ fn apply_notebook_edit(
     Ok(())
 }
 
+// Reuse the final notebook edit parser for source-independent arguments.
+// Profile-level combinations still validate after loading the source.
+fn preflight_notebook_edit(
+    option: &str, iter: &mut Iter<'_, String>,
+) -> Result<(), String> {
+    let value = iter.next()
+        .ok_or_else(|| format!("{option} requires a value"))?;
+    apply_notebook_edit(&mut NotebookProfile::default(), option, value)
+}
+
 fn export_integer(
     text: Option<&str>,
     option: &str,
@@ -1711,8 +1721,8 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let mut flow_format = None;
     let (mut profile_selected, mut profile_edited) = (false, false);
     let (mut paper_selected, mut handwriting_selected) = (false, false);
-    let mut region_selected = false;
-    let mut flags = NotebookFlagPreflight::default();
+    let (mut region_selected, mut flags) =
+        (false, NotebookFlagPreflight::default());
     while let Some(option) = iter.next() {
         let (operands, stdin_source): (usize, bool) = if let Some(count) =
             flags.select_option(option, &mut iter)?
@@ -1781,8 +1791,9 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 "--date-style" | "--date-placement" | "--date-text"
                 | "--border-radius-um" | "--page-numbers"
                 | "--printed-sheet" => {
+                    preflight_notebook_edit(option, &mut iter)?;
                     profile_edited = true;
-                    (1, false)
+                    (0, false)
                 }
                 "--handwriting-profile" => {
                     preflight_unique_selection(&mut handwriting_selected,
