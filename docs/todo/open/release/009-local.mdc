@@ -270,3 +270,15 @@ values remain operands rather than additional selections.
 Focused Rust scanner tests and native unwritten-pipe subprocesses assert
 prompt refusal and no replacement of reviewed output. This is bounded CLI
 input safety, not automatic notebook decoration or persisted semantic flow.
+
+## Flow and heading combinations before source reads — 2026-11-10
+
+The native notebook CLI now validates flow/export selection, flow rectangle
+requirements and Markdown-only heading customization before reading glyph,
+page-ink or flow sources. Heading options use the existing typed Rust parser
+and enforce their value ranges, color syntax and incompatible combinations
+at that early boundary. Argument-like text operands remain literal input.
+
+Focused Rust tests and unwritten-stdin subprocess regressions assert prompt
+refusal without changing a previously reviewed PDF. This is input safety,
+not persisted notebook text or a complete local editing journey.

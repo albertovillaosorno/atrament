@@ -317,6 +317,7 @@ struct NotebookExportOptions {
 #[derive(Default)]
 struct NotebookFlagPreflight {
     export_format: Option<NotebookExportFormat>,
+    heading: HeadingDecoration,
     selected: BTreeSet<String>,
 }
 
@@ -396,7 +397,8 @@ impl NotebookFlagPreflight {
             | "--heading-marker-scale" | "--heading-ink-color"
             | "--heading-ink-scale" => {
                 self.select_heading(option)?;
-                1
+                self.heading.parse(option, iter)?;
+                0
             }
             _ => return Ok(None),
         };
@@ -412,7 +414,9 @@ impl NotebookFlagPreflight {
         Ok(())
     }
 
-    fn validate(self) -> Result<(), String> {
+    fn validate(
+        self, flow_format: Option<FlowFormat>, region_selected: bool,
+    ) -> Result<(), String> {
         let has = |option: &str| self.selected.contains(option);
         if has("--replace") && !has("--output") {
             return Err("--replace requires --output".into());
@@ -439,7 +443,12 @@ impl NotebookFlagPreflight {
         if has("--dpi") && has("--quality") {
             return Err("--quality and --dpi are mutually exclusive".into());
         }
-        Ok(())
+        // These relationships depend on selected flags, never on the bytes
+        // supplied by a previous flow, glyph library or page-ink source.
+        validate_notebook_flow_flag_compatibility(
+            flow_format, region_selected, self.heading,
+            self.export_format,
+        )
     }
 }
 
@@ -1631,28 +1640,37 @@ fn load_notebook_paper_option(
     Ok(canonical)
 }
 
-fn validate_notebook_flow_selection(
-    flow: Option<&FlowSource>, glyphs: &GlyphOverlay,
-    heading: HeadingDecoration, region: Option<FlowRegion>,
-    export: &NotebookExportOptions,
+fn validate_notebook_flow_flag_compatibility(
+    flow_format: Option<FlowFormat>, region_selected: bool,
+    heading: HeadingDecoration, export_format: Option<NotebookExportFormat>,
 ) -> Result<(), String> {
     // Transient text is not a field in the saved notebook v1 profile.
-    if flow.is_some() && export.format.is_none() {
+    if flow_format.is_some() && export_format.is_none() {
         return Err(concat!(
             "flow source needs --export-paper pdf or png ",
             "or --emit-ink-file; ",
             "notebook profiles do not save the supplied text",
         ).into());
     }
-    if region.is_some() && flow.is_none() {
+    if region_selected && flow_format.is_none() {
         return Err("--flow-region requires a text or Markdown flow".into());
     }
     heading.validate().map_err(str::to_owned)?;
-    if heading.is_selected() && flow.is_none_or(|source| {
-        source.format != FlowFormat::Markdown
-    }) {
+    if heading.is_selected() && flow_format != Some(FlowFormat::Markdown) {
         return Err("heading customization requires --flow-markdown".into());
     }
+    Ok(())
+}
+
+fn validate_notebook_flow_selection(
+    flow: Option<&FlowSource>, glyphs: &GlyphOverlay,
+    heading: HeadingDecoration, region: Option<FlowRegion>,
+    export: &NotebookExportOptions,
+) -> Result<(), String> {
+    validate_notebook_flow_flag_compatibility(
+        flow.map(|source| source.format), region.is_some(), heading,
+        export.format,
+    )?;
     if flow.is_none() {
         glyphs.validate_pairing()?;
     } else if glyphs.strokes.is_empty() {
@@ -1679,7 +1697,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut iter, mut stdin_selected) = (args.iter(), false);
     let mut glyph_file_selected = false;
     let mut glyph_edited = false;
-    let mut flow_selected = false;
+    let mut flow_format = None;
     let mut profile_selected = false;
     let mut paper_selected = false;
     let mut profile_edited = false;
@@ -1723,12 +1741,16 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 }
                 "--flow-text" | "--flow-markdown"
                 | "--flow-text-file" | "--flow-markdown-file" => {
-                    if flow_selected {
+                    if flow_format.is_some() {
                         return Err(
                             "only one flow source may be supplied".into()
                         );
                     }
-                    flow_selected = true;
+                    flow_format = Some(if option.starts_with("--flow-text") {
+                        FlowFormat::Plain
+                    } else {
+                        FlowFormat::Markdown
+                    });
                     (1, option.ends_with("-file"))
                 }
                 "--ink-file" => (1, true),
@@ -1772,7 +1794,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    flags.validate()
+    flags.validate(flow_format, region_selected)
 }
 
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
