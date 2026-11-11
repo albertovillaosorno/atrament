@@ -1095,6 +1095,125 @@ impl GlyphOverlay {
         })
     }
 
+    /// Admit typed edit operands without consulting an imported glyph file.
+    /// The final edit still checks whether selected strokes or paths exist.
+    pub(super) fn preflight_stroke_or_path_edit(
+        flag: &str, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let path = matches!(flag,
+            "--reverse-path" | "--close-path" | "--rotate-path"
+            | "--move-path" | "--translate-path",
+        );
+        let grapheme = iter.next().ok_or(if path {
+            "path edit requires an exact grapheme"
+        } else {
+            "stroke edit requires an exact grapheme"
+        })?;
+        if path {
+            let _from = next_integer(iter, "path index", 1, 4096)?;
+            match flag {
+                "--rotate-path" => {
+                    let _start = next_integer(
+                        iter, "path start stroke", 1, 4096,
+                    )?;
+                }
+                "--move-path" => {
+                    let _to = next_integer(iter, "path index", 1, 4096)?;
+                }
+                "--translate-path" => {
+                    let dx = next_signed_path_offset(iter, "path dx", 3500)?;
+                    let dy = next_signed_path_offset(iter, "path dy", 4500)?;
+                    if dx == 0i32 && dy == 0i32 {
+                        return Err(
+                            "path shift needs nonzero bounded whole um".into()
+                        );
+                    }
+                }
+                "--reverse-path" | "--close-path" => {}
+                _ => return Err("unknown path edit".into()),
+            }
+        } else {
+            let _from = next_stroke_index(iter)?;
+            match flag {
+                "--move-stroke" => {
+                    let _to = next_stroke_index(iter)?;
+                }
+                "--set-stroke" => {
+                    let _stroke = Self::parse_stroke(grapheme, iter)?;
+                }
+                "--reverse-stroke" | "--join-strokes"
+                | "--remove-stroke" => {}
+                _ => return Err("unknown stroke edit".into()),
+            }
+        }
+        if !is_exact_visible_grapheme(grapheme, UnicodeGraphemeSegmentation) {
+            return Err(
+                "stroke edit requires one exact visible grapheme".into()
+            );
+        }
+        Ok(())
+    }
+
+    /// Parse independent transform numbers before reading a selected library.
+    /// Actual transformed contour bounds still need imported glyph strokes.
+    pub(super) fn preflight_transform_option(
+        flag: &str, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let grapheme = iter.next()
+            .ok_or_else(|| format!("{flag} requires an exact grapheme"))?;
+        match flag {
+            "--rotate-glyph" => {
+                let _angle = next_signed_path_offset(
+                    iter, "rotation angle", 20,
+                )?;
+                let _pivot_x = next_integer(
+                    iter, "rotation X pivot", 0, 3500,
+                )?;
+                let _pivot_y = next_integer(
+                    iter, "rotation Y pivot", 0, 4500,
+                )?;
+            }
+            "--translate-glyph" => {
+                let _dx = next_signed_path_offset(iter, "glyph dx", 3500)?;
+                let _dy = next_signed_path_offset(iter, "glyph dy", 4500)?;
+            }
+            "--shear-glyph" => {
+                let _angle = next_integer(iter, "italic angle", 0, 20)?;
+                let _baseline = next_integer(
+                    iter, "italic baseline", 0, 4500,
+                )?;
+            }
+            "--scale-glyph-height" => {
+                let _percent = next_integer(
+                    iter, "glyph height percent", 50, 150,
+                )?;
+                let _baseline = next_integer(
+                    iter, "glyph height baseline", 0, 4500,
+                )?;
+            }
+            "--scale-glyph-width" => {
+                let _percent = next_integer(
+                    iter, "glyph width percent", 50, 150,
+                )?;
+                let _anchor = next_integer(
+                    iter, "glyph width anchor", 0, 3500,
+                )?;
+            }
+            "--scale-glyph-ink" => {
+                let _percent = next_integer(
+                    iter, "glyph ink percent", 50, 150,
+                )?;
+            }
+            _ => return Err("unknown glyph transformation".into()),
+        }
+        if !is_exact_visible_grapheme(grapheme, UnicodeGraphemeSegmentation) {
+            return Err(
+                "stroke edit requires one exact visible grapheme".into()
+            );
+        }
+        Ok(())
+    }
+
     /// Remove every exact template segment for one grapheme in the library.
     /// A missing exact match is a refusal, not a normalization or fallback.
     pub(super) fn remove_glyph(&mut self, grapheme: &str)

@@ -1108,6 +1108,39 @@ fn preflight_glyph_operands(
     Ok(())
 }
 
+// Admit source-independent glyph shape, path and transform operands with
+// the same bounded native readers used by final edits. Library-dependent
+// stroke/path existence and transformed pen clearance remain deferred.
+fn preflight_glyph_typed_option(
+    option: &str, iter: &mut Iter<'_, String>,
+    validated_strokes: &mut GlyphOverlay,
+) -> Result<bool, String> {
+    let count = match option {
+        "--glyph-stroke" => 7,
+        "--set-stroke" => 8,
+        "--translate-path" | "--rotate-glyph" => 4,
+        "--move-stroke" | "--move-path" | "--rotate-path"
+        | "--shear-glyph" | "--scale-glyph-height"
+        | "--scale-glyph-width" | "--translate-glyph" => 3,
+        "--reverse-stroke" | "--join-strokes" | "--remove-stroke"
+        | "--reverse-path" | "--close-path"
+        | "--scale-glyph-ink" => 2,
+        _ => return Ok(false),
+    };
+    let mut complete = iter.clone();
+    preflight_glyph_operands(option, count, &mut complete)?;
+    match option {
+        "--glyph-stroke" => validated_strokes.parse(option, iter)?,
+        "--set-stroke" | "--move-stroke" | "--reverse-stroke"
+        | "--join-strokes" | "--remove-stroke" | "--reverse-path"
+        | "--close-path" | "--rotate-path" | "--move-path"
+        | "--translate-path" =>
+            GlyphOverlay::preflight_stroke_or_path_edit(option, iter)?,
+        _ => GlyphOverlay::preflight_transform_option(option, iter)?,
+    }
+    Ok(true)
+}
+
 // A repeated selected glyph library is invalid even if the first source is
 // an unclosed stdin pipe. Respect command operand counts so authored text
 // such as "--profile" cannot masquerade as another source selection.
@@ -1122,6 +1155,11 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
     // Admit it before an earlier --profile - source can wait for stdin EOF.
     let mut validated_strokes = GlyphOverlay::default();
     while let Some(option) = iter.next() {
+        if preflight_glyph_typed_option(
+            option, &mut iter, &mut validated_strokes,
+        )? {
+            continue;
+        }
         let operands: usize = match option.as_str() {
             "--audit-baseline" => {
                 preflight_unique_selection(&mut audit_selected,
@@ -1136,22 +1174,7 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
                     "--replace may appear only once")?;
                 0
             }
-            "--glyph-stroke" => {
-                // Retain the existing full-arity diagnostic before the
-                // shared typed parser inspects exact grapheme/pen geometry.
-                let mut complete = iter.clone();
-                preflight_glyph_operands(option, 7, &mut complete)?;
-                validated_strokes.parse(option, &mut iter)?;
-                0
-            }
-            "--set-stroke" => 8,
-            "--rotate-glyph" | "--translate-path" => 4,
-            "--shear-glyph" | "--scale-glyph-height"
-            | "--scale-glyph-width" | "--translate-glyph"
-            | "--move-stroke" | "--rotate-path" | "--move-path" => 3,
-            "--copy-glyph" | "--reverse-stroke" | "--join-strokes"
-            | "--remove-stroke" | "--reverse-path" | "--close-path"
-            | "--scale-glyph-ink" => 2,
+            "--copy-glyph" => 2,
             "--profile" => {
                 if profile_selected {
                     return Err(concat!(

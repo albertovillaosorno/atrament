@@ -458,3 +458,17 @@ refusal, and valid authored Unicode strokes remain accepted.
 Focused Rust parsing and native deliberately open-pipe subprocess regressions
 verify prompt refusal with untouched reviewed output. This is CLI argument
 safety, not generated glyph outlines or a saved semantic notebook.
+
+## Standalone glyph edit and transform operand admission — 2026-11-10
+
+The standalone native glyph editor now checks bounded stroke indices,
+replacement-stroke geometry, path ordinals, signed path offsets and scalar
+transform settings before reading an earlier selected library from stdin.
+Known edit options still require their complete operand count first; valid
+selections against an imported library defer stroke/path existence and pen
+clearance checks until the source has been loaded.
+
+Focused Rust red/green tests and native open-stdin no-clobber subprocess cases
+cover malformed values across stroke edits, path edits and rotation, shift,
+shear and scale transforms. This is source admission, not synthesized
+handwriting or a persisted notebook document.

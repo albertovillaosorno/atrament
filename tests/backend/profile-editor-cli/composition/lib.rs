@@ -192,6 +192,87 @@ fn glyph_library_preflights_typed_stroke_geometry_before_source_io() {
 }
 
 #[test]
+fn glyph_library_preflights_typed_stroke_and_path_edits() {
+    for (tail, diagnostic) in [
+        (["--reverse-stroke", "a", "0"].as_slice(),
+            "stroke index requires 1..4096"),
+        (["--join-strokes", "a", "-1"].as_slice(),
+            "stroke index requires 1..4096"),
+        (["--move-stroke", "a", "1", "5000"].as_slice(),
+            "stroke index requires 1..4096"),
+        (["--set-stroke", "a", "1", "500", "500", "500", "500",
+            "250", "#123456"].as_slice(),
+            "glyph stroke must have two distinct points"),
+        (["--set-stroke", "a", "0", "500", "500", "1800", "3000",
+            "250", "#123456"].as_slice(),
+            "stroke index requires 1..4096"),
+        (["--reverse-path", "a", "0"].as_slice(),
+            "path index requires 1..4096"),
+        (["--move-path", "a", "1", "5000"].as_slice(),
+            "path index requires 1..4096"),
+        (["--rotate-path", "a", "1", "0"].as_slice(),
+            "path start stroke requires 1..4096"),
+        (["--translate-path", "a", "1", "5000", "0"].as_slice(),
+            "path dx outside native bounds"),
+        (["--translate-path", "a", "1", "0", "0"].as_slice(),
+            "path shift needs nonzero bounded whole um"),
+    ] {
+        let mut flags = args(&["--profile", "-"]);
+        flags.extend(tail.iter().map(|value| (*value).to_owned()));
+        let error = preflight_glyph_profile_sources(&flags)
+            .expect_err("invalid edit operands must refuse before stdin");
+        assert!(error.contains(diagnostic), "{tail:?}: {error}");
+    }
+    for tail in [
+        ["--reverse-stroke", "ñ", "1"].as_slice(),
+        ["--set-stroke", "ñ", "1", "500", "500", "1800", "3000",
+            "250", "#123456"].as_slice(),
+        ["--translate-path", "ñ", "1", "-2", "2"].as_slice(),
+    ] {
+        let mut flags = args(&["--profile", "-"]);
+        flags.extend(tail.iter().map(|value| (*value).to_owned()));
+        preflight_glyph_profile_sources(&flags)
+            .expect("valid edit syntax must defer imported-library state");
+    }
+}
+
+#[test]
+fn glyph_library_preflights_typed_transformation_values() {
+    for (tail, diagnostic) in [
+        (["--rotate-glyph", "a", "21", "1750", "2250"].as_slice(),
+            "rotation angle outside native bounds"),
+        (["--rotate-glyph", "a", "10", "1750", "4501"].as_slice(),
+            "rotation Y pivot requires 0..4500"),
+        (["--translate-glyph", "a", "-3501", "0"].as_slice(),
+            "glyph dx outside native bounds"),
+        (["--shear-glyph", "a", "21", "2250"].as_slice(),
+            "italic angle requires 0..20"),
+        (["--scale-glyph-height", "a", "151", "2250"].as_slice(),
+            "glyph height percent requires 50..150"),
+        (["--scale-glyph-width", "a", "100", "3501"].as_slice(),
+            "glyph width anchor requires 0..3500"),
+        (["--scale-glyph-ink", "a", "49"].as_slice(),
+            "glyph ink percent requires 50..150"),
+    ] {
+        let mut flags = args(&["--profile", "-"]);
+        flags.extend(tail.iter().map(|value| (*value).to_owned()));
+        let error = preflight_glyph_profile_sources(&flags)
+            .expect_err("invalid transformation must refuse before stdin");
+        assert!(error.contains(diagnostic), "{tail:?}: {error}");
+    }
+    for tail in [
+        ["--rotate-glyph", "ñ", "-10", "1750", "2250"].as_slice(),
+        ["--translate-glyph", "ñ", "0", "0"].as_slice(),
+        ["--scale-glyph-ink", "ñ", "100"].as_slice(),
+    ] {
+        let mut flags = args(&["--profile", "-"]);
+        flags.extend(tail.iter().map(|value| (*value).to_owned()));
+        preflight_glyph_profile_sources(&flags)
+            .expect("valid transformation syntax defers shape checks");
+    }
+}
+
+#[test]
 fn glyph_library_preflights_audit_text_before_stdin_source_io() {
     let over_limit = "ñ".repeat(2049);
     for input in ["", "  \n", "\u{feff}", "a\u{b}", "a\rb",
