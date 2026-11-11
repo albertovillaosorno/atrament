@@ -1484,10 +1484,11 @@ fn apply_notebook_edit(
 // Profile-level combinations still validate after loading the source.
 fn preflight_notebook_edit(
     option: &str, iter: &mut Iter<'_, String>,
+    profile: &mut NotebookProfile,
 ) -> Result<(), String> {
     let value = iter.next()
         .ok_or_else(|| format!("{option} requires a value"))?;
-    apply_notebook_edit(&mut NotebookProfile::default(), option, value)
+    apply_notebook_edit(profile, option, value)
 }
 
 fn export_integer(
@@ -2007,6 +2008,21 @@ fn preflight_notebook_file_operand(
     Ok(())
 }
 
+// Library geometry must precede inline glyph edits even when the selected
+// source would otherwise wait indefinitely on stdin.
+fn preflight_glyph_file_selection(
+    selected: &mut bool, edited: bool,
+) -> Result<(), String> {
+    if *selected || edited {
+        return Err(concat!(
+            "--glyph-file or --profile must precede authored ",
+            "strokes and may appear only once",
+        ).into());
+    }
+    *selected = true;
+    Ok(())
+}
+
 // Reject impossible source selections before the first file or stdin read.
 // Count actual operands: Markdown text and glyph values can contain strings
 // that look like flags without selecting another input source.
@@ -2016,6 +2032,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut flow_format, mut region_selected) = (None, false);
     let (mut profile_selected, mut profile_edited) = (false, false);
     let (mut paper_selected, mut handwriting_selected) = (false, false);
+    let mut preview = NotebookProfile::default();
     let mut flags = NotebookFlagPreflight::default();
     let mut inline_ink_count = 0usize;
     // Reuse the exact, side-effect-free glyph parser before opening any
@@ -2053,13 +2070,9 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                     (0, false)
                 }
                 "--glyph-file" => {
-                    if glyph_file_selected || glyph_edited {
-                        return Err(concat!(
-                            "--glyph-file or --profile must precede authored ",
-                            "strokes and may appear only once",
-                        ).into());
-                    }
-                    glyph_file_selected = true;
+                    preflight_glyph_file_selection(
+                        &mut glyph_file_selected, glyph_edited,
+                    )?;
                     (1, true)
                 }
                 "--flow-text" | "--flow-markdown"
@@ -2092,7 +2105,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 "--date-style" | "--date-placement" | "--date-text"
                 | "--border-radius-um" | "--page-numbers"
                 | "--printed-sheet" => {
-                    preflight_notebook_edit(option, &mut iter)?;
+                    preflight_notebook_edit(option, &mut iter, &mut preview)?;
                     profile_edited = true;
                     (0, false)
                 }
@@ -2114,7 +2127,22 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     // Imported-only ink is checked after its bounded source read.
     preflight_notebook_export_and_ink(flags, flow_format, region_selected,
         inline_ink_count, glyph_file_selected, handwriting_selected,
-        &glyph_preflight)
+        &glyph_preflight)?;
+    preflight_default_notebook_metadata(
+        &preview, profile_edited, profile_selected, paper_selected,
+    )
+}
+
+// Without a selected notebook/paper file, the default paper and all explicit
+// metadata edits are known. Refuse contradictory date settings before stdin.
+fn preflight_default_notebook_metadata(
+    preview: &NotebookProfile, edited: bool, profile_selected: bool,
+    paper_selected: bool,
+) -> Result<(), String> {
+    if edited && !profile_selected && !paper_selected {
+        preview.validate()?;
+    }
+    Ok(())
 }
 
 // All source-independent output and physical-ink gates precede selected I/O.

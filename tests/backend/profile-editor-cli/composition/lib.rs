@@ -667,6 +667,16 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         (["--glyph-file", "-", "--date-text", "2026/11/11",
             "--export-paper", "pdf"].as_slice(),
             "invalid printed Gregorian date"),
+        (["--ink-file", "-", "--date-text", "2026-11-11",
+            "--export-paper", "pdf"].as_slice(),
+            "printed date text requires a date placeholder"),
+        (["--ink-file", "-", "--date-style", "line",
+            "--export-paper", "pdf"].as_slice(),
+            "date style and placement must both be none or set"),
+        (["--flow-text-file", "-", "--glyph-file", "unopened.tsv",
+            "--date-placement", "top-right", "--export-paper", "pdf"]
+            .as_slice(),
+            "date style and placement must both be none or set"),
         (["--flow-markdown-file", "-", "--heading-style", "marker",
             "--heading-style", "underline"].as_slice(),
             "--heading-style may appear only once"),
@@ -708,6 +718,18 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         assert!(error.contains(diagnostic), "{error}");
     }
     for flags in [
+        ["--profile", "unopened-notebook.json", "--ink-file", "-",
+            "--date-text", "2026-11-11", "--export-paper", "pdf"].as_slice(),
+        ["--paper-profile", "unopened-paper.json", "--ink-file", "-",
+            "--date-text", "2026-11-11", "--export-paper", "pdf"].as_slice(),
+        ["--ink-file", "-", "--date-style", "line",
+            "--date-placement", "top-left", "--date-text", "2026-11-11",
+            "--export-paper", "pdf"].as_slice(),
+    ] {
+        preflight_notebook_sources(&args(flags))
+            .expect("valid or deferred date metadata is source-safe");
+    }
+    for flags in [
         ["--flow-text", "--ink-file", "--ink-file", "-",
             "--export-paper", "pdf", "--glyph-file", "unopened.tsv"]
             .as_slice(),
@@ -722,7 +744,8 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         ["--flow-markdown-file", "-", "--heading-style", "marker",
             "--heading-marker-scale", "95", "--emit-ink-file",
             "--glyph-file", "unopened.tsv"].as_slice(),
-        ["--flow-markdown", "# a", "--date-text", "2026-11-11",
+        ["--flow-markdown", "# a", "--date-style", "line",
+            "--date-placement", "top-left", "--date-text", "2026-11-11",
             "--export-paper", "pdf", "--glyph-file", "unopened.tsv"]
             .as_slice(),
         ["--flow-text-file", "-", "--flow-region", "20000",
