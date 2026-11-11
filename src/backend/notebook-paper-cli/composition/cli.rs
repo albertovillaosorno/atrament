@@ -179,22 +179,23 @@ fn parse_options_with_profile(
         )? {
             continue;
         }
-        seen_edit = true;
-        match name.as_str() {
-            "--pages" => {
-                if seen_pages {
-                    return Err("--pages may appear only once".into());
-                }
-                pages = parse_page_count(value)?;
-                seen_pages = true;
+        if name == "--pages" {
+            // Page count controls this export, not the saved profile.
+            // It may be selected before loading the source profile.
+            if seen_pages {
+                return Err("--pages may appear only once".into());
             }
-            _ => apply_paper_edit(
+            pages = parse_page_count(value)?;
+            seen_pages = true;
+        } else {
+            seen_edit = true;
+            apply_paper_edit(
                 &mut opts,
                 name,
                 value,
                 &mut seen_size_override,
                 &mut seen_preset,
-            )?,
+            )?;
         }
     }
     validate_export_flags(format, seen_pages, seen_dpi, emit_profile)?;

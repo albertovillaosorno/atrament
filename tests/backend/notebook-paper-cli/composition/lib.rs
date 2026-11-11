@@ -225,6 +225,52 @@ fn paper_profile_must_be_loaded_before_edit_flags() {
 }
 
 #[test]
+fn export_only_page_count_may_precede_loaded_paper_profile() {
+    use std::fs;
+    use std::process;
+
+    let path = env::temp_dir().join(format!(
+        "atrament-paper-page-count-order-{}.json", process::id(),
+    ));
+    let source = Options {
+        height_um: 279_400,
+        style: Style::Ruled,
+        width_um: 215_900,
+        ..Options::default()
+    };
+    fs::write(&path, encode_profile(source))
+        .expect("test-owned paper source is saved");
+    let name = path.to_str().expect("test-owned path is UTF-8");
+    let before = parse_options(
+        &["--pages", "2", "--profile", name].map(str::to_owned),
+    )
+    .expect("export count before profile is valid")
+    .expect("not help");
+    let after = parse_options(
+        &["--profile", name, "--pages", "2"].map(str::to_owned),
+    )
+    .expect("export count after profile is valid")
+    .expect("not help");
+    assert_eq!(before.pages, 2);
+    assert_eq!(before.options.width_um, 215_900);
+    assert_eq!(before.options.height_um, 279_400);
+    assert_eq!(before.options.style, Style::Ruled);
+    let before_pdf = render_pages(before.options, before.pages)
+        .expect("count-first physical PDF export");
+    let after_pdf = render_pages(after.options, after.pages)
+        .expect("profile-first physical PDF export");
+    assert_eq!(before_pdf, after_pdf);
+    assert!(String::from_utf8_lossy(&before_pdf).contains("/Count 2"));
+    // An actual paper edit still has to follow the loaded profile.
+    let invalid = parse_options(
+        &["--spacing-mm", "4", "--profile", name].map(str::to_owned),
+    )
+    .expect_err("edits before profile refuse");
+    assert!(invalid.contains("before edits"));
+    fs::remove_file(path).expect("test-owned paper source removed");
+}
+
+#[test]
 fn paper_profile_preflights_later_options_before_selected_source_io() {
     // An unavailable or malformed profile must not obscure a later typed
     // argument refusal. All options are parsed in source-free mode first.
