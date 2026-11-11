@@ -57,25 +57,40 @@ fn test_path() -> PathBuf {
 }
 
 #[test]
-fn notebook_preflight_detects_multiple_stdin_sources_without_input_io() {
+fn notebook_preflight_detects_invalid_sources_without_input_io() {
     for flags in [
         ["--ink-file", "-", "--glyph-file", "-"].as_slice(),
         ["--glyph-file", "-", "--flow-text-file", "-"].as_slice(),
         ["--flow-markdown-file", "-", "--ink-file", "-"].as_slice(),
         ["--ink-file", "-", "--ink-file", "-"].as_slice(),
     ] {
-        let error = preflight_notebook_stdin_sources(&args(flags))
+        let error = preflight_notebook_sources(&args(flags))
             .expect_err("multiple stdin consumers must refuse before read");
         assert_eq!(error, "standard input may be selected only once");
     }
+    for (flags, diagnostic) in [
+        (["--glyph-file", "-", "--glyph-file", "missing.tsv"].as_slice(),
+            "must precede authored strokes and may appear only once"),
+        (["--glyph-file", "-", "--place-text", "1", "30000", "40000",
+            "a", "--glyph-file", "missing.tsv"].as_slice(),
+            "must precede authored strokes and may appear only once"),
+        (["--flow-text-file", "-", "--flow-markdown", "hello"].as_slice(),
+            "only one flow source may be supplied"),
+        (["--flow-markdown-file", "-", "--flow-text-file", "text.md"]
+            .as_slice(), "only one flow source may be supplied"),
+    ] {
+        let error = preflight_notebook_sources(&args(flags))
+            .expect_err("late invalid source must refuse before read");
+        assert!(error.contains(diagnostic), "{error}");
+    }
     for flags in [
-        ["--flow-text", "--ink-file", "--glyph-file", "-"].as_slice(),
-        ["--place-text", "1", "30000", "40000", "--ink-file",
-            "--glyph-file", "-"].as_slice(),
+        ["--flow-text", "--ink-file", "--ink-file", "-"].as_slice(),
+        ["--glyph-file", "-", "--place-text", "1", "30000", "40000",
+            "--ink-file"].as_slice(),
         ["--ink-line", "1", "30000", "40000", "40000", "50000",
             "250", "--ink-file", "--flow-text-file", "-"].as_slice(),
     ] {
-        preflight_notebook_stdin_sources(&args(flags))
+        preflight_notebook_sources(&args(flags))
             .expect("option-looking values are not source flags");
     }
 }

@@ -218,3 +218,14 @@ checks duplicate/cross-family conflicts exit, emit no output and preserve a
 previously reviewed PDF. Focused Rust tests cover misleading option-like
 operand values. This is command-level refusal only, not notebook content
 persistence or a general source-stream multiplexer. P8-009 remains open.
+
+## Preflight late native glyph and flow conflicts — 2026-11-10
+
+The same flag-arity preflight also refuses a second or out-of-order glyph
+library and a second text/Markdown flow source **before** reading an initial
+stdin source. A later file path is never opened just to discover the input
+conflict, and a caller's already reviewed PDF remains unchanged.
+
+Rust flag-operand tests and actual unwritten-pipe subprocess regressions
+cover these cases. This hardens transient CLI admission; it does not provide
+a persistent notebook document or editable semantic content.

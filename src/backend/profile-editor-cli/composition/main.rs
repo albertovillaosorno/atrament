@@ -1449,31 +1449,59 @@ fn validate_notebook_flow_selection(
     Ok(())
 }
 
-// An impossible two-stream request must be rejected before opening the
-// first source (which could be an unwritten stdin pipe). Count only actual
-// flag operands: Markdown text and authored glyphs can themselves contain
-// strings that look like options or a standalone "-".
-fn preflight_notebook_stdin_sources(args: &[String]) -> Result<(), String> {
+// Reject impossible source selections before the first file or stdin read.
+// Count actual operands: Markdown text and glyph values can contain strings
+// that look like flags without selecting another input source.
+fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let mut iter = args.iter();
     let mut stdin_selected = false;
+    let mut glyph_file_selected = false;
+    let mut glyph_edited = false;
+    let mut flow_selected = false;
     while let Some(option) = iter.next() {
         let (operands, stdin_source): (usize, bool) = match option.as_str() {
             "--inspect" | "--replace" | "--emit-ink-file" => (0, false),
-            "--ink-line" | "--glyph-stroke" | "--glyph-variation" =>
-                (7, false),
-            "--place-text" | "--flow-region" | "--join-text-anchors" =>
-                (4, false),
-            "--join-text-pair" | "--fallback-glyph" => (2, false),
-            "--ink-file" | "--glyph-file" | "--flow-text-file"
-            | "--flow-markdown-file" => (1, true),
+            "--ink-line" => (7, false),
+            "--glyph-stroke" | "--glyph-variation" => {
+                glyph_edited = true;
+                (7, false)
+            }
+            "--flow-region" => (4, false),
+            "--place-text" | "--join-text-anchors" => {
+                glyph_edited = true;
+                (4, false)
+            }
+            "--join-text-pair" | "--fallback-glyph" => {
+                glyph_edited = true;
+                (2, false)
+            }
+            "--glyph-file" => {
+                if glyph_file_selected || glyph_edited {
+                    return Err(concat!(
+                        "--glyph-file or --profile must precede authored ",
+                        "strokes and may appear only once",
+                    ).into());
+                }
+                glyph_file_selected = true;
+                (1, true)
+            }
+            "--flow-text" | "--flow-markdown"
+            | "--flow-text-file" | "--flow-markdown-file" => {
+                if flow_selected {
+                    return Err("only one flow source may be supplied".into());
+                }
+                flow_selected = true;
+                (1, option.ends_with("-file"))
+            }
+            "--ink-file" => (1, true),
             "--profile" | "--paper-profile" | "--handwriting-profile"
             | "--date-style" | "--date-placement" | "--date-text"
             | "--border-radius-um" | "--page-numbers" | "--printed-sheet"
             | "--heading-style" | "--heading-color"
             | "--heading-marker-scale" | "--heading-ink-color"
-            | "--heading-ink-scale" | "--flow-text" | "--flow-markdown"
-            | "--export-paper" | "--pages" | "--dpi" | "--quality"
-            | "--png-page" | "--output" => (1, false),
+            | "--heading-ink-scale" | "--export-paper" | "--pages"
+            | "--dpi" | "--quality" | "--png-page" | "--output" =>
+                (1, false),
             _ => return Err(format!("unknown notebook option: {option}")),
         };
         for _ in 0usize..operands {
@@ -1492,7 +1520,7 @@ fn preflight_notebook_stdin_sources(args: &[String]) -> Result<(), String> {
 }
 
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
-    preflight_notebook_stdin_sources(args)?;
+    preflight_notebook_sources(args)?;
     let mut profile = NotebookProfile::default();
     let mut inspect = false;
     let mut output = None;
