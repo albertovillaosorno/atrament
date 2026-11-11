@@ -1690,3 +1690,121 @@ fn degenerate_paper_stroke_refuses_png_instead_of_painting_a_square() {
     ).expect_err("zero-length paper stroke must not be a painted dot");
     assert_eq!(error, "invalid zero-length paper stroke");
 }
+
+#[test]
+fn reversed_pen_segment_has_identical_png_pixels_at_supported_dpi() {
+    let paper = encode_profile(Options {
+        style: Style::Blank,
+        width_um: 70_000,
+        height_um: 100_000,
+        ..Options::default()
+    });
+    for dpi in [72, 150, 300] {
+        for (start, end) in [
+            ((25_000, 25_000), (35_000, 25_000)),
+            ((25_000, 25_000), (25_000, 45_000)),
+            ((25_000, 25_000), (35_000, 45_000)),
+            ((25_000, 45_000), (35_000, 25_000)),
+            ((25_000, 25_000), (35_000, 27_500)),
+        ] {
+            let line = NotebookInkLine {
+                page: 1,
+                start_um: start,
+                end_um: end,
+                width_um: 700,
+                rgb: [0x58, 0x21, 0xc4],
+            };
+            let reverse = NotebookInkLine {
+                start_um: end,
+                end_um: start,
+                ..line
+            };
+            let render = |ink: NotebookInkLine| {
+                paper_profile_png_page_with_ink(
+                    paper.as_bytes(), dpi, false, None, false, 1, 0,
+                    None, &[ink],
+                ).expect("bounded line in a selected transparent page")
+            };
+            assert_eq!(render(line), render(reverse),
+                "physical pen bitmap must be direction-neutral: {dpi} DPI, \
+                 {start:?} -> {end:?}");
+        }
+    }
+}
+
+#[test]
+fn edge_crossing_paper_marks_refuse_both_pdf_and_png() {
+    let options = Options {
+        margin_left_um: 0,
+        margin_top_um: 0,
+        ..Options::default()
+    };
+    assert!(render_pages(options, 1).is_err(),
+        "PDF must not silently clip the edge-crossing paper marks");
+    assert!(render_png(options, 72).is_err(),
+        "PNG must share the PDF printable sheet clipping refusal");
+}
+
+#[test]
+fn direct_png_path_bounds_keep_fills_and_half_strokes_on_sheet() {
+    let page_width = 70_000;
+    let page_height = 100_000;
+    let stroke = |first: PdfPoint, last: PdfPoint, width_um| {
+        PdfVectorPath {
+            commands: vec![
+                PdfPathCommand::MoveTo(first),
+                PdfPathCommand::LineTo(last),
+            ],
+            paint: PdfPathPaint::Stroke {
+                color: DEFAULT_COLOR,
+                width_um,
+            },
+        }
+    };
+    let render = |path: PdfVectorPath| {
+        png::render_paper_png(
+            page_width, page_height, 72, &[path], 1, None,
+        )
+    };
+    let center = PdfPoint { x_um: 25_000, y_um: 25_000 };
+    assert!(render(stroke(
+        PdfPoint { x_um: 60, y_um: 60 }, center, 120,
+    )).is_ok(), "inclusive half-stroke page boundary is valid");
+    assert!(render(stroke(
+        PdfPoint { x_um: 59, y_um: 60 }, center, 120,
+    )).is_err(), "a single micrometre beyond the left edge refuses");
+    assert!(render(stroke(
+        PdfPoint { x_um: 60, y_um: 59 }, center, 120,
+    )).is_err(), "a single micrometre above the top edge refuses");
+    assert!(render(stroke(
+        center, PdfPoint { x_um: 69_941, y_um: 99_940 }, 120,
+    )).is_err(), "a one-micrometre overrun at the far edge refuses");
+    assert!(render(stroke(center, center, 0)).is_err(),
+        "zero-width pen path refuses before pixel allocation");
+    assert!(render(stroke(
+        PdfPoint { x_um: -1, y_um: 25_000 }, center, 120,
+    )).is_err(), "negative physical coordinates refuse");
+
+    let fill = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(PdfPoint { x_um: 0, y_um: 0 }),
+            PdfPathCommand::LineTo(PdfPoint { x_um: 100, y_um: 0 }),
+            PdfPathCommand::LineTo(PdfPoint { x_um: 100, y_um: 100 }),
+            PdfPathCommand::LineTo(PdfPoint { x_um: 0, y_um: 100 }),
+            PdfPathCommand::Close,
+        ],
+        paint: PdfPathPaint::Fill {
+            color: DEFAULT_COLOR,
+            rule: PdfFillRule::NonZero,
+        },
+    };
+    assert!(render(fill.clone()).is_ok(),
+        "a filled dot may touch the page edge without stroke clearance");
+    let mut outside = fill;
+    *outside.commands.get_mut(2).expect("test fill corner exists") =
+        PdfPathCommand::LineTo(
+            PdfPoint { x_um: 70_001, y_um: 100 },
+        );
+    assert!(render(outside).is_err(),
+        "a filled polygon cannot paint outside the physical page");
+}

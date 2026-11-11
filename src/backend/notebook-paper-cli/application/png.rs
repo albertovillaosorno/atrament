@@ -267,6 +267,51 @@ fn pixel_coordinate(
         .map_err(|error| format!("PNG coordinate refused: {error}"))
 }
 
+// Refuse paths extending beyond the physical page before allocating a raster.
+// The vector PDF applies the same half-stroke clearance to every path point;
+// PNG must not silently clip invalid paper, printed, or authored ink geometry.
+fn validate_page_path_bounds(
+    path: &PdfVectorPath,
+    width_um: u32,
+    height_um: u32,
+) -> Result<(), String> {
+    let clearance = match path.paint {
+        PdfPathPaint::Stroke { width_um: pen_width_um, .. }
+            if pen_width_um > 0 =>
+        {
+            pen_width_um.div_ceil(2)
+        }
+        PdfPathPaint::Stroke { .. } => {
+            return Err("PNG stroke width must be positive".into());
+        }
+        PdfPathPaint::Fill { .. } => 0,
+    };
+    let right = width_um.checked_sub(clearance);
+    let bottom = height_um.checked_sub(clearance);
+    let inside = |point: PdfPoint| -> bool {
+        u32::try_from(point.x_um).is_ok_and(|x| {
+            right.is_some_and(|edge| x >= clearance && x <= edge)
+        }) && u32::try_from(point.y_um).is_ok_and(|y| {
+            bottom.is_some_and(|edge| y >= clearance && y <= edge)
+        })
+    };
+    for command in &path.commands {
+        let valid = match *command {
+            PdfPathCommand::MoveTo(point) | PdfPathCommand::LineTo(point) => {
+                inside(point)
+            }
+            PdfPathCommand::CubicTo(first, second, third) => {
+                inside(first) && inside(second) && inside(third)
+            }
+            PdfPathCommand::Close => true,
+        };
+        if !valid {
+            return Err("PNG path extends outside the physical sheet".into());
+        }
+    }
+    Ok(())
+}
+
 // Only paper marks are rasterized: axis-aligned strokes and square dots.
 // Keeping unmarked pixels RGBA(0,0,0,0) permits digital overlays.
 fn paint_rectangle(
@@ -552,6 +597,9 @@ pub(super) fn render_paper_png(
         .ok_or("PNG pixel count overflow")?;
     if width == 0 || height == 0 || pixels > MAX_PIXELS {
         return Err("PNG pixel budget exceeded; lower the DPI".into());
+    }
+    for path in paths {
+        validate_page_path_bounds(path, width_um, height_um)?;
     }
     let bytes = pixels.checked_mul(4).ok_or("PNG raster byte overflow")?;
     let mut raster = Vec::new();
