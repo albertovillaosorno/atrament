@@ -621,6 +621,109 @@ fn zero_slant_means_match_independent_u128_rounding_oracle() {
 }
 
 #[test]
+fn negative_shear_uses_the_lower_baseline_and_never_clips_to_page() {
+    let vertical = AuthoredInkSegment {
+        start_um: (100, 0),
+        end_um: (100, 4_500),
+        ..ORIGINAL
+    };
+    let dimensions = MeasuredGlyphDimensions {
+        width_um: 3_500,
+        height_um: 4_500,
+        ink_thickness_um: 300,
+        slant_millidegrees: -45_000,
+    };
+    let placement_at = |x| InkPlacement {
+        origin_um: (x, 300),
+        dimensions: Some(dimensions),
+        ..placement()
+    };
+    assert_eq!(
+        project_ink_segment(vertical, placement_at(4_400)),
+        Ok(PhysicalInkSegment {
+            page: 1,
+            start_um: (0, 300),
+            end_um: (4_500, 4_800),
+            width_um: 200,
+            rgb: ORIGINAL.rgb,
+        }),
+        "a negative local shear may be offset by a positive origin",
+    );
+    assert_eq!(
+        project_ink_segment(vertical, placement_at(4_399)),
+        Err("slanted glyph must stay on page"),
+        "a one-micrometre crossing must refuse, never clamp to zero",
+    );
+    assert_eq!(
+        project_ink_segment(
+            vertical,
+            InkPlacement {
+                origin_um: (i64::from(u32::MAX) - 100, 300),
+                dimensions: Some(MeasuredGlyphDimensions {
+                    slant_millidegrees: 45_000,
+                    ..dimensions
+                }),
+                ..placement()
+            },
+        ),
+        Err("slanted glyph must stay on page"),
+        "an overlarge positive shear must not wrap the u32 coordinate",
+    );
+}
+
+#[test]
+fn forty_five_degree_shears_follow_integer_baseline_displacements() {
+    // At 45 degrees, tangent shear is exactly one unit per micrometre of
+    // vertical baseline distance. Check both signs and source directions
+    // with an independent integer-coordinate oracle, including descenders.
+    for angle in [-45_000i32, 45_000i32] {
+        let direction = i64::from(angle.signum());
+        let dims = MeasuredGlyphDimensions {
+            width_um: 3_500,
+            height_um: 4_500,
+            ink_thickness_um: 300,
+            slant_millidegrees: angle,
+        };
+        for sample in 0..512u32 {
+            let y1 = sample * 11;
+            let y2 = 5_500 - sample * 7;
+            let x1 = 100 + sample * 3;
+            let x2 = 300 + sample * 5;
+            let origin_x = 10_000i64;
+            let point = |x: u32, y: u32| {
+                (
+                    u32::try_from(origin_x + i64::from(x)
+                        + direction * (4_500 - i64::from(y)))
+                        .expect("bounded integer shear oracle"),
+                    2_000 + y,
+                )
+            };
+            let source = AuthoredInkSegment {
+                start_um: (x1, y1),
+                end_um: (x2, y2),
+                ..ORIGINAL
+            };
+            let placed = InkPlacement {
+                origin_um: (origin_x, 2_000),
+                dimensions: Some(dims),
+                ..placement()
+            };
+            assert_eq!(
+                project_ink_segment(source, placed),
+                Ok(PhysicalInkSegment {
+                    page: 1,
+                    start_um: point(x1, y1),
+                    end_um: point(x2, y2),
+                    width_um: ORIGINAL.width_um,
+                    rgb: ORIGINAL.rgb,
+                }),
+                "45-degree integer oracle angle {angle} sample {sample}",
+            );
+        }
+    }
+}
+
+#[test]
 fn repeated_projection_replays_identically_for_both_render_paths() {
     for seed_offset in 0..96u32 {
         let shape = AuthoredInkSegment {
