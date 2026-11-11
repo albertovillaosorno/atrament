@@ -760,6 +760,42 @@ fn rounded_notebook_border_matches_pdf_and_transparent_png() {
     );
 }
 
+// The candidate is independently replayable through `atrament-profiles`
+// with A5 blank paper, a 3000-um border and 300-DPI transparent output.
+// Pin the physical high-resolution contour and its encoded bytes.
+#[test]
+fn a5_high_dpi_rounded_border_keeps_candidate_png_bytes() {
+    use atrament_profile_entry_sha256::sha256_profile_bytes;
+
+    let profile = encode_profile(Options {
+        style: Style::Blank,
+        width_um: 148_000,
+        height_um: 210_000,
+        ..Options::default()
+    });
+    let png = paper_profile_png_page_with_border(
+        profile.as_bytes(), 300, true, None, false, 1, 3_000,
+    ).expect("physical A5 border");
+    assert_eq!(sha256_profile_bytes(&png).bytes(), [
+        0x8a, 0x93, 0x33, 0x07, 0x7f, 0x41, 0xcc, 0x59,
+        0x8c, 0xa8, 0x5e, 0x86, 0x90, 0xc7, 0x1a, 0x27,
+        0x69, 0x2f, 0x33, 0x55, 0x6b, 0x92, 0xa8, 0x6e,
+        0xf9, 0xfe, 0x9a, 0x3d, 0x3b, 0x4f, 0x69, 0x92,
+    ], "high-DPI border encoded PNG candidate changed");
+    let (width, height, raw) = stored_png_pixels(&png);
+    assert_eq!((width, height), (1_749, 2_481));
+    let alpha = |x: usize, y: usize| -> u8 {
+        let offset = y.checked_mul(width * 4 + 1)
+            .and_then(|row| row.checked_add(x * 4 + 4))
+            .expect("valid candidate pixel");
+        *raw.get(offset).expect("pixel in decoded sheet")
+    };
+    assert_eq!(alpha(236, 260), 0, "arc clears top-left corner");
+    assert_eq!(alpha(590, 260), 255, "top border remains visible");
+    assert_eq!(alpha(236, 1180), 255, "left border remains visible");
+    assert_eq!(alpha(590, 1180), 0, "page interior stays transparent");
+}
+
 #[test]
 fn rounded_border_refuses_unprintable_radius_and_missing_edge_clearance() {
     let paper = default_paper_profile_json();
@@ -1826,5 +1862,47 @@ fn zero_margin_blank_and_dotted_paper_remain_exportable_in_both_formats() {
         );
         assert!(pdf.starts_with(b"%PDF-1.4"));
         assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    }
+}
+
+// Check both faces of the PDF half-stroke clearance at the admitted PNG
+// resolution extremes, including all four sheet edges and dot fills.
+#[test]
+fn paper_margin_clearance_matches_pdf_at_both_png_dpi_extremes() {
+    let margins = [0, 59, 60, 61, 90, 121];
+    for style in [Style::Blank, Style::Dot, Style::Grid, Style::Ruled] {
+        let (width_um, height_um) = (40_000, 60_000);
+        for margin in margins {
+            for edge in 0u8..4u8 {
+                let mut options = Options {
+                    style,
+                    width_um,
+                    height_um,
+                    margin_left_um: 0,
+                    margin_right_um: 0,
+                    margin_top_um: 0,
+                    margin_bottom_um: 0,
+                    ..Options::default()
+                };
+                match edge {
+                    0 => options.margin_left_um = margin,
+                    1 => options.margin_right_um = margin,
+                    2 => options.margin_top_um = margin,
+                    _ => options.margin_bottom_um = margin,
+                }
+                let pdf = render_pages(options, 1);
+                for dpi in [72, 300] {
+                    let png = render_png(options, dpi);
+                    assert_eq!(
+                        pdf.is_ok(),
+                        png.is_ok(),
+                        "{style:?} {width_um}x{height_um}, edge {edge}, \
+                         margin {margin}, {dpi} DPI: PDF {:?}, PNG {:?}",
+                        pdf.as_ref().err(),
+                        png.as_ref().err(),
+                    );
+                }
+            }
+        }
     }
 }

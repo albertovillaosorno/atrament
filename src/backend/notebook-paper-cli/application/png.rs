@@ -370,14 +370,29 @@ fn paint_rounded_border(
     let radius = f64::from(border.radius_um);
     let threshold = f64::from(NOTEBOOK_BORDER_STROKE_UM) / 2.0f64
         + pitch / 2.0f64;
+    // Between the top and bottom stroke bands, a rounded rectangle can
+    // paint only its two side/corner bands. Skip its empty horizontal
+    // center before running the comparatively expensive signed distance.
+    let top_band_end = f64::from(border.top_um) + threshold;
+    let bottom_band_start = f64::from(border.bottom_um) - threshold;
+    let left_corner_end = f64::from(border.left_um) + radius + threshold;
+    let right_corner_start = f64::from(border.right_um) - radius - threshold;
     let mut y = pitch / 2.0f64;
     for row in 0..height {
         if (y - center_y).abs() > half_height + threshold {
             y += pitch;
             continue;
         }
+        let between_horizontal_bands =
+            y > top_band_end && y < bottom_band_start;
         let mut x = pitch / 2.0f64;
         for column in 0..width {
+            if between_horizontal_bands
+                && x > left_corner_end && x < right_corner_start
+            {
+                x += pitch;
+                continue;
+            }
             if (x - center_x).abs() <= half_width + threshold {
                 let dx = (x - center_x).abs() - (half_width - radius);
                 let dy = (y - center_y).abs() - (half_height - radius);
