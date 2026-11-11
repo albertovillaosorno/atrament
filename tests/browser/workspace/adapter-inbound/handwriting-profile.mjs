@@ -1,4 +1,4 @@
-// Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: LicenseRef-Proprietary
+// Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: MIT
 // Authenticated Rust handwriting statistics form, without ambient storage.
 import assert from "node:assert/strict";
 import test from "node:test";

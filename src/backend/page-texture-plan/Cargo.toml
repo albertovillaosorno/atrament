@@ -3,7 +3,7 @@ name = "atrament_page_texture_plan"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [dependencies]
 atrament_material_layer_plan = { workspace = true }

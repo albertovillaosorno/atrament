@@ -1,28 +1,21 @@
-PROPRIETARY LICENSE — ALL RIGHTS RESERVED
+MIT License
 
-Copyright (c) 2026 Alberto Villa Osorno. All rights reserved.
+Copyright (c) 2026 Alberto Villa Osorno
 
-The source code, documentation and other original materials in this repository
-for which Alberto Villa Osorno owns the necessary rights are proprietary.
-No license to such materials is granted by the mere availability of this
-repository. Unless expressly authorized by a separate written agreement,
-permission is not granted to copy, modify, distribute, sublicense, sell,
-or commercially use those covered materials, including for the creation of
-training datasets or training and evaluation of artificial intelligence
-models, except to the extent permitted by applicable law.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-This notice does NOT claim ownership of third-party software, dependencies,
-assets or other contributions. Third-party materials remain subject to their
-own applicable licenses, attribution requirements and permissions. Any
-copyright and license notices included with those materials remain valid.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-This notice is prospective. It does not revoke licenses or permissions that
-were validly granted for earlier versions or copies of the material, including
-past open-source distributions. Any such earlier permissions remain governed
-by the terms under which they were originally provided.
-
-Commercial licenses, including for dataset and AI-training use, must be
-negotiated separately with the applicable rights holder.
-
-THE COVERED MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

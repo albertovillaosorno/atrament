@@ -3,7 +3,7 @@ name = "atrament_pen_contact_model"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [lib]
 path = "domain/lib.rs"

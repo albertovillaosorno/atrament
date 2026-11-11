@@ -1,5 +1,5 @@
 // Copyright © 2026 Alberto Villa Osorno.
-// SPDX-License-Identifier: LicenseRef-Proprietary
+// SPDX-License-Identifier: MIT
 // Repeatable Linux CPU measurements, not cross-machine performance budgets.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

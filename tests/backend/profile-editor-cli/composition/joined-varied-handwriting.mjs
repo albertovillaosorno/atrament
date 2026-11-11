@@ -1,5 +1,5 @@
 // Copyright © 2026 Alberto Villa Osorno.
-// SPDX-License-Identifier: LicenseRef-Proprietary
+// SPDX-License-Identifier: MIT
 // Real Rust glyph + notebook subprocess acceptance, without a printer.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

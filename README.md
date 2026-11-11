@@ -2476,7 +2476,7 @@ claim about who physically wrote an exported page.
 
 ## License
 
-Original materials covered by the current [LICENSE](LICENSE) are proprietary.
-That notice preserves valid permissions for earlier licensed versions and
-separate rights for third-party materials. Earlier MIT terms remain in the
-corresponding historical versions; they are not the current source license.
+Original project code and documentation are available under the
+[MIT License](LICENSE), with MIT SPDX notices in the source files. The project
+also uses separately licensed dependencies and tools; their own licenses and
+attribution requirements remain applicable.

@@ -3,7 +3,7 @@ name = "atrament_educational_assignment_fixture"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [dependencies]
 atrament_educational_coverage_evidence = { workspace = true }

@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 default-run = "atrament-paper"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [dependencies]
 atrament_paper_mark_geometry = { workspace = true }

@@ -3,7 +3,7 @@ name = "atrament_mcp_operation_lifecycle_projection"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [dependencies]
 atrament_mcp_capability_effect = { workspace = true }

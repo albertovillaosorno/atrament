@@ -1,5 +1,5 @@
 // Copyright © 2026 Alberto Villa Osorno.
-// SPDX-License-Identifier: LicenseRef-Proprietary
+// SPDX-License-Identifier: MIT
 // Exercises real Rust file admission without contacting localhost or CUPS.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

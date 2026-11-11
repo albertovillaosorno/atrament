@@ -3,7 +3,7 @@ name = "atrament_mcp_semantic_command_result_projection"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [dependencies]
 atrament_application_operation_lifecycle = { workspace = true }

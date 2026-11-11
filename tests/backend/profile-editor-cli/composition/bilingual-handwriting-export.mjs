@@ -1,5 +1,5 @@
 // Copyright © 2026 Alberto Villa Osorno.
-// SPDX-License-Identifier: LicenseRef-Proprietary
+// SPDX-License-Identifier: MIT
 // A real browser-authored geometry -> TSV -> Rust page export regression.
 // Run after the frontend TypeScript build: node --test <this file>.
 import assert from 'node:assert/strict';

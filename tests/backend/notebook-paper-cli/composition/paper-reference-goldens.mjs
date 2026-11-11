@@ -1,5 +1,5 @@
 // Copyright © 2026 Alberto Villa Osorno.
-// SPDX-License-Identifier: LicenseRef-Proprietary
+// SPDX-License-Identifier: MIT
 // Black-box native paper CLI parity with viewable candidate paper files.
 // No real browser or printer is started.
 import assert from 'node:assert/strict';

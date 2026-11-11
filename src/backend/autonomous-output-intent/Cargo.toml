@@ -3,7 +3,7 @@ name = "atrament_autonomous_output_intent"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [dependencies]
 atrament_explicit_file_path_intent = { workspace = true }

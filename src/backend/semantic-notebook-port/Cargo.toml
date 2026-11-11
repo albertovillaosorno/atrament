@@ -3,7 +3,7 @@ name = "atrament_semantic_notebook_port"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [dependencies]
 atrament_semantic_command_graph = { workspace = true }

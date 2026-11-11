@@ -3,7 +3,7 @@ name = "atrament_profile_export_retry_recovery"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [dependencies]
 atrament_profile_export_assembly = { workspace = true }

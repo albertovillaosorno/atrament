@@ -3,7 +3,7 @@ name = "atrament_runtime_bootstrap"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [dependencies]
 atrament_notebook_paper_cli = { workspace = true }

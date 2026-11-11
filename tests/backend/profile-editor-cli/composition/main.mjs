@@ -1,5 +1,5 @@
 // Copyright © 2026 Alberto Villa Osorno.
-// SPDX-License-Identifier: LicenseRef-Proprietary
+// SPDX-License-Identifier: MIT
 // Verify real native CLI selected-source resolution and no-clobber refusal.
 import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';

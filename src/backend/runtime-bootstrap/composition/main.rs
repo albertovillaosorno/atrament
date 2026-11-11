@@ -1,9 +1,9 @@
 // Copyright:
 //   - Copyright © 2026 Alberto Villa Osorno.
 // SPDX-License-Identifier:
-//   - LicenseRef-Proprietary
+//   - MIT
 // Confidential:
-//   - true
+//   - false
 // License-File:
 //   - LICENSE
 //

@@ -1,4 +1,4 @@
-// Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: LicenseRef-Proprietary
+// Copyright © 2026 Alberto Villa Osorno. SPDX-License-Identifier: MIT
 // Paper-only form adapter: exercises authenticated Rust requests and local files.
 import assert from "node:assert/strict";
 import test from "node:test";

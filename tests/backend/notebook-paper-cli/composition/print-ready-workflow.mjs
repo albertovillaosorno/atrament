@@ -1,5 +1,5 @@
 // Copyright © 2026 Alberto Villa Osorno.
-// SPDX-License-Identifier: LicenseRef-Proprietary
+// SPDX-License-Identifier: MIT
 // Runs real Rust CLIs; no printer or localhost server is contacted.
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';

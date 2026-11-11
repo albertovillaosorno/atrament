@@ -3,7 +3,7 @@ name = "atrament_profile_editor_cli"
 version = "0.1.0"
 edition = "2024"
 publish = false
-license-file = "../../../LICENSE"
+license = "MIT"
 
 [dependencies]
 atrament_english_spanish_grapheme_inventory = { workspace = true }
