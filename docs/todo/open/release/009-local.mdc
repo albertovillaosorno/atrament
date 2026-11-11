@@ -641,3 +641,22 @@ checks the last ruled row at 127 mm, the last grid column at 195 mm and a
 transparent cell between those marks, along with full chunk CRC, zlib,
 scanline and physical-resolution validation. This is native orientation
 and mark placement evidence, not a print/scan calibration result.
+
+## Single-pass PNG IDAT checksums — 2026-11-11
+
+The native stored-DEFLATE writer now accumulates its zlib Adler-32 and PNG
+IDAT CRC-32 in the same pass over each bounded filtered scanline block. The
+five-byte stored-block headers, two-byte zlib prefix and four-byte Adler
+trailer also enter the CRC in physical output order. This removes the
+previous separate scan of the completed compressed raster without adding
+another full-page buffer or changing the PNG chunk layout.
+
+The unchanged checked-in 72-DPI PNG goldens, 80 native paper Rust tests and
+six independent native PNG/PDF subprocess tests confirm byte identity and
+CRC/zlib/physical-resolution correctness through 300-DPI A5 and the exact
+five-million-pixel resource ceiling. Local warmed debug A5 300-DPI grid
+runs changed from approximately 1.7 seconds to 1.5–1.6 seconds per native
+process; this is not a controlled release-build performance guarantee.
+
+This encoder improvement does not add saved notebook semantics, asset layers
+or physical print calibration. The full notebook-to-PDF/PNG journey is open.

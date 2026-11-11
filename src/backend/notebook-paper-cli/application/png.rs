@@ -369,16 +369,27 @@ fn crc32_part(mut crc: u32, data: &[u8]) -> Result<u32, String> {
     Ok(crc)
 }
 
-fn update_adler32(first: &mut u32, second: &mut u32, data: &[u8]) {
-    // Reduce each accumulated sum modulo 65_521 before a u32 can overflow.
+fn update_zlib_checksums(
+    first: &mut u32,
+    second: &mut u32,
+    crc: &mut u32,
+    data: &[u8],
+) -> Result<(), String> {
+    // A 2,000-byte chunk keeps even the worst-case Adler sums below u32::MAX.
+    // Compute the IDAT CRC over the same bytes in this single raster pass.
     for chunk in data.chunks(2_000) {
         for byte in chunk {
-            *first = first.saturating_add(u32::from(*byte));
-            *second = second.saturating_add(*first);
+            *first = first.wrapping_add(u32::from(*byte));
+            *second = second.wrapping_add(*first);
+            let index = usize::from(crc.to_le_bytes()[0] ^ *byte);
+            let part = CRC32_TABLE.get(index)
+                .ok_or("PNG CRC lookup outside the byte table")?;
+            *crc = (*crc >> 8u32) ^ part;
         }
         *first %= 65_521;
         *second %= 65_521;
     }
+    Ok(())
 }
 
 fn png_chunk(
@@ -465,7 +476,10 @@ fn encode_rgba(
     output.extend_from_slice(&idat_len.to_be_bytes());
     output.extend_from_slice(b"IDAT");
     let idat_start = output.len();
-    output.extend_from_slice(&[0x78, 0x01]); // zlib, stored DEFLATE.
+    let mut crc = crc32_part(!0u32, b"IDAT")?;
+    let zlib_header = [0x78, 0x01]; // zlib, stored DEFLATE.
+    output.extend_from_slice(&zlib_header);
+    crc = crc32_part(crc, &zlib_header)?;
     let mut filtered = pixels.chunks_exact(stride).flat_map(|scanline| {
         iter::once(0u8).chain(scanline.iter().copied())
     });
@@ -476,11 +490,15 @@ fn encode_rgba(
             .checked_sub(index.saturating_mul(usize::from(u16::MAX)))
             .ok_or("PNG block offset overflow")?
             .min(usize::from(u16::MAX));
-        output.push(u8::from(index.saturating_add(1) == blocks));
         let len = u16::try_from(length)
             .map_err(|error| format!("PNG block refused: {error}"))?;
-        output.extend_from_slice(&len.to_le_bytes());
-        output.extend_from_slice(&(!len).to_le_bytes());
+        let block_header = [
+            u8::from(index.saturating_add(1) == blocks),
+            len.to_le_bytes()[0], len.to_le_bytes()[1],
+            (!len).to_le_bytes()[0], (!len).to_le_bytes()[1],
+        ];
+        output.extend_from_slice(&block_header);
+        crc = crc32_part(crc, &block_header)?;
         let start = output.len();
         output.extend(filtered.by_ref().take(length));
         let end = start
@@ -489,19 +507,20 @@ fn encode_rgba(
         let content = output
             .get(start..end)
             .ok_or("PNG filtered raster ended before block boundary")?;
-        update_adler32(&mut first, &mut second, content);
+        update_zlib_checksums(
+            &mut first, &mut second, &mut crc, content,
+        )?;
     }
-    output.extend_from_slice(&((second << 16) | first).to_be_bytes());
+    let adler = ((second << 16) | first).to_be_bytes();
+    output.extend_from_slice(&adler);
+    crc = crc32_part(crc, &adler)?;
     let idat_end = idat_start
         .checked_add(compression_bytes)
         .ok_or("PNG IDAT boundary overflow")?;
     if output.len() != idat_end {
         return Err("PNG IDAT differs from declared compressed size".into());
     }
-    let idat = output.get(idat_start..idat_end)
-        .ok_or("PNG IDAT boundary exceeds output")?;
-    let crc = !crc32_part(crc32_part(!0u32, b"IDAT")?, idat)?;
-    output.extend_from_slice(&crc.to_be_bytes());
+    output.extend_from_slice(&(!crc).to_be_bytes());
     png_chunk(&mut output, *b"IEND", &[])?;
     Ok(output)
 }
