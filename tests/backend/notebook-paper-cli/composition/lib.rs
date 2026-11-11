@@ -1808,3 +1808,23 @@ fn direct_png_path_bounds_keep_fills_and_half_strokes_on_sheet() {
     assert!(render(outside).is_err(),
         "a filled polygon cannot paint outside the physical page");
 }
+
+#[test]
+fn zero_margin_blank_and_dotted_paper_remain_exportable_in_both_formats() {
+    for style in [Style::Blank, Style::Dot] {
+        let options = Options {
+            style,
+            margin_left_um: 0,
+            margin_top_um: 0,
+            ..Options::default()
+        };
+        let pdf = render_pages(options, 1).expect(
+            "blank pages and edge-touching filled dots have no stroke overrun",
+        );
+        let png = render_png(options, 72).expect(
+            "PNG must preserve admitted zero-margin filled paper",
+        );
+        assert!(pdf.starts_with(b"%PDF-1.4"));
+        assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    }
+}
