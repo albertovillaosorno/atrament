@@ -316,6 +316,7 @@ struct NotebookExportOptions {
 
 #[derive(Default)]
 struct NotebookFlagPreflight {
+    explicit_pages: Option<usize>,
     export_format: Option<NotebookExportFormat>,
     heading: HeadingDecoration,
     imported_ink_count: usize,
@@ -390,10 +391,14 @@ impl NotebookFlagPreflight {
                 } else {
                     (1, 32)
                 };
-                let _validated = export_integer(
+                let value = export_integer(
                     iter.next().map(String::as_str), option,
                     minimum, maximum,
                 )?;
+                if option == "--pages" {
+                    self.explicit_pages = Some(usize::try_from(value)
+                        .map_err(|error| format!("page count refused: {error}"))?);
+                }
                 0
             }
             "--quality" => {
@@ -426,7 +431,8 @@ impl NotebookFlagPreflight {
 
     fn validate(
         self, flow_format: Option<FlowFormat>, region_selected: bool,
-        inline_ink_count: usize, glyph_has_any: bool,
+        inline_ink_count: usize, inline_last_page: usize,
+        glyph_has_any: bool,
     ) -> Result<(), String> {
         let has = |option: &str| self.selected.contains(option);
         if has("--replace") && !has("--output") {
@@ -454,6 +460,9 @@ impl NotebookFlagPreflight {
         if has("--dpi") && has("--quality") {
             return Err("--quality and --dpi are mutually exclusive".into());
         }
+        validate_explicit_manual_page_budget(
+            self.explicit_pages, inline_last_page, flow_format.is_some(),
+        )?;
         // These relationships depend on selected flags, never on the bytes
         // supplied by a previous flow, glyph library or page-ink source.
         validate_notebook_flow_flag_compatibility(
@@ -1576,13 +1585,13 @@ fn parse_ink_line(
 // Reuse final ink parsing while bounding explicit lines before selected IO.
 fn preflight_inline_ink_line(
     iter: &mut Iter<'_, String>, count: &mut usize,
-) -> Result<(), String> {
+) -> Result<usize, String> {
     if *count == MAX_NOTEBOOK_INK_LINES {
         return Err("ink exceeds 4096 explicit line segments".into());
     }
-    let _line = parse_ink_line(iter)?;
+    let line = parse_ink_line(iter)?;
     *count = count.saturating_add(1);
-    Ok(())
+    Ok(line.page)
 }
 
 // A caller-selected page ink library is a strict portable source of the
@@ -2048,6 +2057,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let mut preview = NotebookProfile::default();
     let mut flags = NotebookFlagPreflight::default();
     let mut inline_ink_count = 0usize;
+    let mut inline_last_page = 0usize;
     // Reuse the exact, side-effect-free glyph parser before opening any
     // selected library, profile, or flow source. These temporary shapes are
     // only validation evidence; final composition parses its own library.
@@ -2062,9 +2072,11 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
         } else {
             match option.as_str() {
                 "--ink-line" => {
-                    preflight_inline_ink_line(
-                        &mut iter, &mut inline_ink_count,
-                    )?;
+                    inline_last_page = inline_last_page.max(
+                        preflight_inline_ink_line(
+                            &mut iter, &mut inline_ink_count,
+                        )?,
+                    );
                     (0, false)
                 }
                 "--glyph-stroke" | "--glyph-variation" | "--place-text"
@@ -2139,8 +2151,8 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     }
     // Imported-only ink is checked after its bounded source read.
     preflight_notebook_export_and_ink(flags, flow_format, region_selected,
-        inline_ink_count, glyph_file_selected, handwriting_selected,
-        &glyph_preflight)?;
+        inline_ink_count, inline_last_page, glyph_file_selected,
+        handwriting_selected, &glyph_preflight)?;
     preflight_default_notebook_metadata(
         &preview, profile_edited, profile_selected, paper_selected,
     )
@@ -2162,11 +2174,14 @@ fn preflight_default_notebook_metadata(
 fn preflight_notebook_export_and_ink(
     flags: NotebookFlagPreflight, flow_format: Option<FlowFormat>,
     region_selected: bool, inline_ink_count: usize,
-    glyph_file_selected: bool, handwriting_selected: bool,
-    glyphs: &GlyphOverlay,
+    inline_last_page: usize, glyph_file_selected: bool,
+    handwriting_selected: bool, glyphs: &GlyphOverlay,
 ) -> Result<(), String> {
+    let manual_last_page = inline_last_page.max(
+        glyphs.runs.iter().map(|run| run.page).max().unwrap_or(0),
+    );
     flags.validate(flow_format, region_selected, inline_ink_count,
-        glyphs.has_any())?;
+        manual_last_page, glyphs.has_any())?;
     preflight_notebook_ink_requirements(
         flow_format, glyph_file_selected, handwriting_selected, glyphs,
     )
@@ -2336,18 +2351,34 @@ fn manual_last_page(request: &NotebookRequest) -> usize {
         .unwrap_or(0)
 }
 
+// A known manual page cannot be hidden by a smaller explicit PDF budget,
+// even when an earlier selected source has not yet been read.
+fn validate_explicit_manual_page_budget(
+    selected: Option<usize>, last_page: usize, flow_selected: bool,
+) -> Result<(), String> {
+    if let Some(pages) = selected {
+        if pages < last_page {
+            let source = if flow_selected { "flow and manual ink" }
+                else { "manual ink" };
+            let verb = if flow_selected { "require" } else { "requires" };
+            return Err(format!(
+                "{source} {verb} {last_page} physical pages, \
+                 more than the explicit --pages count"
+            ));
+        }
+    }
+    Ok(())
+}
+
 // Standalone manual ink also selects its last written PDF page by default.
 // An explicit --pages remains a hard caller-selected upper bound.
 fn admit_manual_page_selection(
     request: &mut NotebookRequest,
 ) -> Result<(), String> {
     let last_page = manual_last_page(request);
-    if request.pages_explicit && request.pages < last_page {
-        return Err(format!(
-            "manual ink requires {last_page} physical pages, \
-             more than the explicit --pages count"
-        ));
-    }
+    validate_explicit_manual_page_budget(
+        request.pages_explicit.then_some(request.pages), last_page, false,
+    )?;
     request.pages = request.pages.max(last_page);
     Ok(())
 }

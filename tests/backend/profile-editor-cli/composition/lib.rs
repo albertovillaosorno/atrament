@@ -628,6 +628,18 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         (["--ink-file", "-", "--ink-line", "0", "30000",
             "40000", "32000", "42000", "250", "#123456"].as_slice(),
             "ink page requires 1..32"),
+        (["--ink-file", "-", "--ink-line", "6", "70000",
+            "40000", "71000", "41000", "250", "#123456",
+            "--pages", "5", "--export-paper", "pdf"].as_slice(),
+            "manual ink requires 6 physical pages"),
+        (["--glyph-file", "-", "--place-text", "3", "30000",
+            "40000", "a", "--pages", "2", "--export-paper", "pdf"]
+            .as_slice(), "manual ink requires 3 physical pages"),
+        (["--flow-markdown-file", "-", "--glyph-stroke", "a",
+            "500", "500", "1800", "3000", "250", "#123456",
+            "--place-text", "4", "30000", "40000", "a",
+            "--pages", "3", "--export-paper", "pdf"].as_slice(),
+            "flow and manual ink require 4 physical pages"),
         (["--glyph-file", "-", "--ink-line", "1", "700001",
             "40000", "32000", "42000", "250", "#123456"].as_slice(),
             "ink x1 requires 0..700000"),
@@ -738,6 +750,12 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         ["--ink-file", "-", "--date-style", "line",
             "--date-placement", "top-left", "--date-text", "2026-11-11",
             "--export-paper", "pdf"].as_slice(),
+        ["--ink-file", "-", "--ink-line", "2", "70000",
+            "40000", "71000", "41000", "250", "#123456",
+            "--pages", "2", "--export-paper", "pdf"].as_slice(),
+        ["--glyph-file", "-", "--place-text", "3", "30000",
+            "40000", "a", "--pages", "3", "--export-paper", "pdf"]
+            .as_slice(),
     ] {
         preflight_notebook_sources(&args(flags))
             .expect("valid or deferred date metadata is source-safe");
