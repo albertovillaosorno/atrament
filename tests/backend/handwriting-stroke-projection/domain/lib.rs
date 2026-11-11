@@ -421,6 +421,112 @@ fn unsafe_adjacent_joins_refuse_instead_of_interpolating_ink() {
 }
 
 #[test]
+fn joins_refuse_forged_nonphysical_strokes_before_emitting_ink() {
+    // PhysicalInkSegment is public for exporters, so callers can construct a
+    // value without going through project_ink_segment. A join must not turn
+    // those values into apparently admitted physical ink.
+    let before = PhysicalInkSegment {
+        page: 1,
+        start_um: (100, 100),
+        end_um: (200, 100),
+        width_um: 200,
+        rgb: [1, 2, 3],
+    };
+    let after = PhysicalInkSegment {
+        start_um: (300, 100),
+        end_um: (400, 100),
+        ..before
+    };
+    assert!(matches!(connect_ink_segments(before, after, 100), Ok(Some(_))));
+    assert_eq!(
+        connect_ink_segments(
+            PhysicalInkSegment { page: 0, ..before },
+            PhysicalInkSegment { page: 0, ..after },
+            100,
+        ),
+        Err("text join source page must be positive"),
+    );
+    for width in [0, 79, 1_501, u32::MAX] {
+        assert_eq!(
+            connect_ink_segments(
+                PhysicalInkSegment { width_um: width, ..before },
+                PhysicalInkSegment { width_um: width, ..after },
+                100,
+            ),
+            Err("text join source pen width exceeds 80..1500 um"),
+        );
+    }
+    for (left, right) in [
+        (PhysicalInkSegment { end_um: before.start_um, ..before }, after),
+        (before, PhysicalInkSegment { end_um: after.start_um, ..after }),
+        (
+            PhysicalInkSegment { end_um: before.start_um, ..before },
+            PhysicalInkSegment { start_um: before.start_um, ..after },
+        ),
+    ] {
+        assert_eq!(
+            connect_ink_segments(left, right, 100),
+            Err("text join source segment must have distinct endpoints"),
+        );
+    }
+}
+
+#[test]
+fn two_axis_join_limit_matches_independent_physical_distance_oracle() {
+    let left = PhysicalInkSegment {
+        page: 3,
+        start_um: (10, 10),
+        end_um: (5_000, 5_000),
+        width_um: 300,
+        rgb: [4, 5, 6],
+    };
+    let mut bridges = 0usize;
+    let mut refusals = 0usize;
+    let mut coincidences = 0usize;
+    // Both signed axes exercise all four quadrants, exact equality, and
+    // distances whose individual components fit but Euclidean length does not.
+    for dx in (-1_500i32..=1_500i32).step_by(75) {
+        for dy in (-1_500i32..=1_500i32).step_by(75) {
+            let right = PhysicalInkSegment {
+                start_um: (
+                    u32::try_from(5_000i32 + dx).expect("bounded oracle x"),
+                    u32::try_from(5_000i32 + dy).expect("bounded oracle y"),
+                ),
+                end_um: (10_000, 10_000),
+                ..left
+            };
+            let horizontal_square = i128::from(dx) * i128::from(dx);
+            let vertical_square = i128::from(dy) * i128::from(dy);
+            let inside =
+                horizontal_square + vertical_square <= 1_200i128 * 1_200;
+            let outcome = connect_ink_segments(left, right, 1_200);
+            if !inside {
+                refusals += 1;
+                assert_eq!(outcome, Err("text join gap exceeds 1200 um"));
+            } else if dx == 0i32 && dy == 0i32 {
+                coincidences += 1;
+                assert_eq!(outcome, Ok(None));
+            } else {
+                bridges += 1;
+                assert_eq!(
+                    outcome,
+                    Ok(Some(PhysicalInkSegment {
+                        page: left.page,
+                        start_um: left.end_um,
+                        end_um: right.start_um,
+                        width_um: left.width_um,
+                        rgb: left.rgb,
+                    })),
+                );
+            }
+        }
+    }
+    assert!(bridges > 600, "oracle must admit many real bridges");
+    assert!(refusals > 600, "oracle must reject diagonal over-limit gaps");
+    assert_eq!(coincidences, 1);
+}
+
+#[test]
 fn repeated_projection_replays_identically_for_both_render_paths() {
     for seed_offset in 0..96u32 {
         let shape = AuthoredInkSegment {

@@ -236,7 +236,7 @@ pub fn project_ink_segment(
 /// be silently reconciled. Exact coincidence produces no duplicate segment.
 ///
 /// # Errors
-/// Refuses cross-page/cross-pen joins or gaps above the supplied limit.
+/// Refuses nonphysical inputs, cross-page/cross-pen joins, or excessive gaps.
 pub fn connect_ink_segments(
     before: PhysicalInkSegment,
     after: PhysicalInkSegment,
@@ -245,8 +245,19 @@ pub fn connect_ink_segments(
     if before.page != after.page {
         return Err("text join cannot cross physical pages");
     }
+    // Public physical segment values can be supplied without projection.
+    // Refuse nonphysical inputs instead of laundering them into joined ink.
+    if before.page == 0 {
+        return Err("text join source page must be positive");
+    }
     if before.rgb != after.rgb || before.width_um != after.width_um {
         return Err("text join requires matching physical pen and RGB");
+    }
+    if !(80..=1_500).contains(&before.width_um) {
+        return Err("text join source pen width exceeds 80..1500 um");
+    }
+    if before.start_um == before.end_um || after.start_um == after.end_um {
+        return Err("text join source segment must have distinct endpoints");
     }
     let (start, end) = (before.end_um, after.start_um);
     if start == end {
