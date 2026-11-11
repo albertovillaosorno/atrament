@@ -2052,6 +2052,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut iter, mut stdin_selected) = (args.iter(), false);
     let (mut glyph_file_selected, mut glyph_edited) = (false, false);
     let (mut flow_format, mut region_selected) = (None, false);
+    let mut region_geometry = None;
     let (mut profile_selected, mut profile_edited) = (false, false);
     let (mut paper_selected, mut handwriting_selected) = (false, false);
     let mut preview = NotebookProfile::default();
@@ -2091,7 +2092,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 "--flow-region" => {
                     preflight_unique_selection(&mut region_selected,
                         "--flow-region may appear only once")?;
-                    let _validated = FlowRegion::parse(&mut iter)?;
+                    region_geometry = Some(FlowRegion::parse(&mut iter)?);
                     (0, false)
                 }
                 "--glyph-file" => {
@@ -2155,7 +2156,16 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
         handwriting_selected, &glyph_preflight)?;
     preflight_default_notebook_metadata(
         &preview, profile_edited, profile_selected, paper_selected,
-    )
+    )?;
+    // The default paper's printable rectangle is fully known. Never read an
+    // earlier selected source for a region that cannot fit this rectangle.
+    // A loaded notebook or paper profile may legitimately change margins.
+    if !profile_selected && !paper_selected {
+        if let Some(region) = region_geometry {
+            region.validate_ink(preview.printable_rect_um()?, &[])?;
+        }
+    }
+    Ok(())
 }
 
 // Without a selected notebook/paper file, the default paper and all explicit
