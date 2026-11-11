@@ -436,3 +436,13 @@ option and expected operand count. Option-like literal values remain operands.
 Rust scanner tests and real native CLI children with deliberately unclosed
 stdin confirm early refusal, empty stdout, and unchanged reviewed output.
 No glyph outlines or complete notebook source documents are generated here.
+
+## Standalone glyph audit literal preflight (partial) — 2026-11-10
+
+The exact bounded glyph-audit text validator now runs before an earlier
+selected glyph stdin library is opened. An empty, control-bearing or oversize
+audit refuses without waiting for pipe EOF or overwriting accepted output.
+Valid visible Unicode and flag-shaped literal text remain admissible.
+
+Focused Rust scanner and real open-pipe subprocess cases cover the refusal.
+This is not shape generation, complete bilingual coverage, or document saving.

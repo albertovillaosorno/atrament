@@ -168,6 +168,24 @@ fn glyph_library_preflight_refuses_missing_operands_before_source_io() {
 }
 
 #[test]
+fn glyph_library_preflights_audit_text_before_stdin_source_io() {
+    let over_limit = "ñ".repeat(2049);
+    for input in ["", "  \n", "\u{feff}", "a\u{b}", "a\rb",
+        over_limit.as_str()] {
+        let flags = args(&["--profile", "-", "--audit-text", input]);
+        let error = preflight_glyph_profile_sources(&flags)
+            .expect_err("bad literal audit text must refuse before stdin");
+        assert!(error.contains("glyph audit needs 1..4096 UTF-8 bytes"),
+            "{input:?}: {error}");
+    }
+    for input in ["ñ", "--profile", "a\tb", "n\u{303} ∞"] {
+        preflight_glyph_profile_sources(&args(&[
+            "--profile", "-", "--audit-text", input,
+        ])).expect("visible Unicode and literal options remain accepted");
+    }
+}
+
+#[test]
 fn glyph_library_preflight_refuses_deferred_flag_conflicts() {
     for (flags, diagnostic) in [
         (["--profile", "-", "--audit-text", "a", "--audit-text", "b"]

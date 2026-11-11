@@ -1155,7 +1155,10 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
             "--audit-text" => {
                 preflight_unique_selection(&mut audit_selected,
                     "--audit-text may appear only once")?;
-                1
+                let selected = iter.next()
+                    .ok_or("--audit-text requires UTF-8 text")?;
+                validate_glyph_audit_text(selected)?;
+                0
             }
             "--inspect-glyph" | "--inspect-paths" => {
                 preflight_unique_selection(&mut inspection_selected,
