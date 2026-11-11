@@ -65,7 +65,7 @@ use atrament_handwriting_statistics_json::{
 };
 use atrament_notebook_paper_cli::{
     MAX_NOTEBOOK_INK_LINES, MAX_PAPER_OUTPUT_BYTES, NotebookInkLine,
-    canonical_paper_profile_json,
+    canonical_paper_profile_json, validate_printed_date_text,
 };
 use atrament_notebook_profile::{
     DatePlacement, DateStyle, MAX_NOTEBOOK_JSON_BYTES, NotebookProfile,
@@ -1443,7 +1443,10 @@ fn apply_notebook_edit(
 ) -> Result<(), String> {
     match option {
         "--date-style" => profile.date_style = DateStyle::parse(value)?,
-        "--date-text" => value.clone_into(&mut profile.date_text),
+        "--date-text" => {
+            validate_printed_date_text(value)?;
+            value.clone_into(&mut profile.date_text);
+        }
         "--date-placement" => {
             profile.date_placement = DatePlacement::parse(value)?;
         }
