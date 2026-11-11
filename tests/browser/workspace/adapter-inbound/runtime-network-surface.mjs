@@ -2664,8 +2664,9 @@ function unreviewedStandardStreamAuthority(source, sourcePath) {
             || !source.includes('"CUPS accepted a job for printer {}"');
     }
     if (sourcePath === PROFILE_EDITOR_CLI) {
-        // Eight explicit outputs and one selected, bounded stdin reader.
-        return stderr !== 0 || stdin !== 1 || stdout !== 8
+        // Seven explicit outputs after shared glyph/handwriting help,
+        // and one selected, bounded stdin reader.
+        return stderr !== 0 || stdin !== 1 || stdout !== 7
             || !reviewedProfileCliStdinReader(source)
             || !source.includes('writeln!(io::stdout().lock(), "{USAGE}")')
             || !source.includes(
