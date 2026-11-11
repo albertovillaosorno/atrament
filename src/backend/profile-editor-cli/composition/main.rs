@@ -1489,6 +1489,17 @@ fn validate_notebook_flow_selection(
     Ok(())
 }
 
+// Reject duplicate selections before parsing would read a prior input source.
+fn preflight_unique_selection(
+    selected: &mut bool, message: &'static str,
+) -> Result<(), String> {
+    if *selected {
+        return Err(message.into());
+    }
+    *selected = true;
+    Ok(())
+}
+
 // Reject impossible source selections before the first file or stdin read.
 // Count actual operands: Markdown text and glyph values can contain strings
 // that look like flags without selecting another input source.
@@ -1501,6 +1512,9 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let mut profile_selected = false;
     let mut paper_selected = false;
     let mut profile_edited = false;
+    let mut handwriting_selected = false;
+    let mut region_selected = false;
+    let mut output_selected = false;
     while let Some(option) = iter.next() {
         let (operands, stdin_source): (usize, bool) = match option.as_str() {
             "--inspect" | "--replace" | "--emit-ink-file" => (0, false),
@@ -1509,7 +1523,11 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 glyph_edited = true;
                 (7, false)
             }
-            "--flow-region" => (4, false),
+            "--flow-region" => {
+                preflight_unique_selection(&mut region_selected,
+                    "--flow-region may appear only once")?;
+                (4, false)
+            }
             "--place-text" | "--join-text-anchors" => {
                 glyph_edited = true;
                 (4, false)
@@ -1539,18 +1557,15 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
             "--ink-file" => (1, true),
             "--profile" => {
                 if profile_selected || profile_edited {
-                    return Err(
-                        "--profile must appear once, before edits".into()
-                    );
+                    return Err("--profile must appear once, before edits"
+                        .into());
                 }
                 profile_selected = true;
                 (1, false)
             }
             "--paper-profile" => {
-                if paper_selected {
-                    return Err("--paper-profile may appear only once".into());
-                }
-                paper_selected = true;
+                preflight_unique_selection(&mut paper_selected,
+                    "--paper-profile may appear only once")?;
                 profile_edited = true;
                 (1, false)
             }
@@ -1559,10 +1574,20 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 profile_edited = true;
                 (1, false)
             }
-            "--handwriting-profile" | "--heading-style" | "--heading-color"
+            "--handwriting-profile" => {
+                preflight_unique_selection(&mut handwriting_selected,
+                    "--handwriting-profile may appear only once")?;
+                (1, false)
+            }
+            "--output" => {
+                preflight_unique_selection(&mut output_selected,
+                    "--output requires one explicit filename")?;
+                (1, false)
+            }
+            "--heading-style" | "--heading-color"
             | "--heading-marker-scale" | "--heading-ink-color"
             | "--heading-ink-scale" | "--export-paper" | "--pages"
-            | "--dpi" | "--quality" | "--png-page" | "--output" =>
+            | "--dpi" | "--quality" | "--png-page" =>
                 (1, false),
             _ => return Err(format!("unknown notebook option: {option}")),
         };

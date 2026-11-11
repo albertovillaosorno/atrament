@@ -111,6 +111,16 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         (["--glyph-file", "-", "--date-style", "line",
             "--profile", "notebook.json"].as_slice(),
             "--profile must appear once, before edits"),
+        (["--ink-file", "-", "--handwriting-profile", "one.json",
+            "--handwriting-profile", "two.json"].as_slice(),
+            "--handwriting-profile may appear only once"),
+        (["--flow-text-file", "-", "--flow-region", "20000",
+            "30000", "40000", "50000", "--flow-region", "10000",
+            "20000", "30000", "40000"].as_slice(),
+            "--flow-region may appear only once"),
+        (["--glyph-file", "-", "--output", "one.pdf",
+            "--output", "two.pdf"].as_slice(),
+            "--output requires one explicit filename"),
     ] {
         let error = preflight_notebook_sources(&args(flags))
             .expect_err("late invalid source must refuse before read");
@@ -122,6 +132,9 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
             "--ink-file"].as_slice(),
         ["--ink-line", "1", "30000", "40000", "40000", "50000",
             "250", "--ink-file", "--flow-text-file", "-"].as_slice(),
+        ["--flow-markdown", "--flow-region", "--flow-region",
+            "20000", "30000", "40000", "50000", "--output",
+            "file.pdf"].as_slice(),
     ] {
         preflight_notebook_sources(&args(flags))
             .expect("option-looking values are not source flags");

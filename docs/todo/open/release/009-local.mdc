@@ -237,3 +237,11 @@ repeated/late `--profile` before consuming a preceding glyph, ink, or flow
 stdin pipe. The original single-profile and pre-edit ordering rules remain
 unchanged. Native live-pipe regressions assert prompt refusal and unchanged
 reviewed output. This is input admission, not saved notebook body support.
+
+## Additional deferred CLI selection guards — 2026-11-10
+
+Notebook preflight now rejects duplicate handwriting-profile, flow-region,
+and output selections before a preceding pending glyph, ink, or Markdown
+stdin read. Native parser and unwritten-pipe subprocess regressions confirm
+no accepted output changes. Valid single selections retain their meaning;
+this does not persist notebook content or complete the editor journey.
