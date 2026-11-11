@@ -632,3 +632,12 @@ last dot near the lower-right writing margin must still be present. The A5
 ruled and squared sheets also retain their last horizontal rule at 192 mm;
 only the grid admits the vertical line at 130 mm. These are actual decoded
 pixel assertions, not checks of a PNG header or synthetic test raster.
+
+## Landscape A5 maximum-DPI registration — 2026-11-11
+
+The independent PNG decoder now accepts a 300-DPI landscape A5 squared
+sheet as 210 by 148 mm rather than transposing the portrait raster. It
+checks the last ruled row at 127 mm, the last grid column at 195 mm and a
+transparent cell between those marks, along with full chunk CRC, zlib,
+scanline and physical-resolution validation. This is native orientation
+and mark placement evidence, not a print/scan calibration result.

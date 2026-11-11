@@ -186,6 +186,15 @@ function decodeNativePng(bytes, dpi, widthUm, heightUm,
                 style === 'grid' ? pigment : clear,
                 'last A5 vertical rule is present only on a grid');
         }
+        if (dpi === 300 && widthUm === 210000 && heightUm === 148000) {
+            assert.deepEqual(pixelAtMm(187, 127), pigment,
+                'last landscape A5 horizontal rule reaches the right side');
+            assert.deepEqual(pixelAtMm(195, 124),
+                style === 'grid' ? pigment : clear,
+                'last landscape column is present only on a grid');
+            assert.deepEqual(pixelAtMm(187, 124), clear,
+                'landscape A5 grid cells stay transparent');
+        }
         assert.equal(raster[4], 0, 'unmarked upper-left remains clear');
     }
 }
@@ -198,7 +207,7 @@ test('native transparent PNG passes independent CRC and zlib validation',
             // 300-DPI A4 exceeds five million pixels, but A5 remains
             // admissible and independently decodable at the maximum DPI.
             for (const { dpi, size, widthUm, heightUm, style = 'blank',
-                color } of [
+                color, landscape = false } of [
                 { dpi: 72, size: 'a4', widthUm: 210000, heightUm: 297000 },
                 { dpi: 150, size: 'a4', widthUm: 210000, heightUm: 297000 },
                 { dpi: 225, size: 'a4', widthUm: 210000, heightUm: 297000 },
@@ -209,10 +218,13 @@ test('native transparent PNG passes independent CRC and zlib validation',
                     style: 'ruled' },
                 { dpi: 300, size: 'a5', widthUm: 148000, heightUm: 210000,
                     style: 'dot' },
+                { dpi: 300, size: 'a5', widthUm: 210000, heightUm: 148000,
+                    style: 'grid', landscape: true },
             ]) {
                 const run = nativePaper('--style', style,
                     '--paper-size', size, '--format', 'png',
                     '--dpi', String(dpi), '--output', output,
+                    ...(landscape ? ['--landscape'] : []),
                     ...(color ? ['--line-color', color] : []),
                     ...(dpi === 72 ? [] : ['--replace']));
                 assert.equal(run.status, 0, run.stderr);
