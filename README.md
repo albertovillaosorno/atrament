@@ -536,8 +536,9 @@ micrometres measured from the **top-left of each sheet**. For example,
 `--flow-region 30000 40000 50000 30000` repeats a 50 × 30 mm
 writing area starting 30 mm from the left and 40 mm from the top. It
 must fit entirely inside the selected paper's printable margins and
-have enough space for the measured handwritten glyphs and row pitch. With
-the default paper, an impossible region is refused before reading selected
+have enough space for the measured handwritten glyphs and row pitch.
+
+With the default paper, an impossible region is refused before reading selected
 files or stdin. Imported profiles keep their own authoritative margins.
 
 The CLI continues content on the next physical page when needed;
@@ -635,11 +636,16 @@ Keep those source/profile inputs separately if future edits are required.
 Standalone manual `--ink-line` and `--place-text` exports also infer the
 last used physical PDF page when `--pages` is omitted. For example, a
 manual stroke on page 3 produces three physical PDF sheets without an
-explicit `--pages 3`. Setting `--pages` still establishes a strict budget:
+explicit `--pages 3`.
+
+Setting `--pages` still establishes a strict budget:
 requesting only two sheets refuses before replacing any output. Known manual
 page numbers exceeding that budget refuse before reading selected files or
-waiting for an open stdin source. Selected PNG pages remain caller-chosen
-with `--png-page` and do not imply content on other pages.
+waiting for an open stdin source. Inline ink outside the known default paper
+margins also refuses before source reads; a selected notebook or paper profile
+may change those margins, so its ink clearance is checked after loading it.
+Selected PNG pages remain caller-chosen with `--png-page` and do not imply
+content on other pages.
 
 Positioned runs are caller-authored overlays, **not** flow obstacles: they
 do not reserve space or automatically avoid overlap with the generated

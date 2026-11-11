@@ -468,6 +468,41 @@ fn notebook_preflight_requires_selected_file_operands_before_stdin() {
 }
 
 #[test]
+fn notebook_preflight_checks_default_paper_inline_ink_clearance() {
+    for (x1, y1, x2, y2, width) in [
+        (19_999, 40_000, 70_000, 41_000, 250),
+        (30_000, 21_999, 70_000, 41_000, 250),
+        (195_876, 40_000, 190_000, 41_000, 250),
+        (30_000, 280_876, 70_000, 275_000, 250),
+        (20_124, 40_000, 70_000, 41_000, 250),
+    ] {
+        let flags = args(&[
+            "--ink-file", "-", "--export-paper", "pdf",
+            "--ink-line", "1", &x1.to_string(), &y1.to_string(),
+            &x2.to_string(), &y2.to_string(), &width.to_string(),
+            "#123456",
+        ]);
+        let error = preflight_notebook_sources(&flags)
+            .expect_err("default paper margin refuses before stdin");
+        assert!(error.contains("page 1 ink needs printable endpoints"),
+            "{error}");
+    }
+    preflight_notebook_sources(&args(&[
+        "--ink-file", "-", "--ink-line", "1", "20125", "22125",
+        "195875", "280875", "250", "#123456",
+        "--export-paper", "pdf",
+    ])).expect("ink radius exactly on default printable boundary is valid");
+    for source in ["--paper-profile", "--profile"] {
+        let mut flags = args(&["--ink-file", "-", source, "unopened.json"]);
+        flags.extend(args(&["--ink-line", "1", "10000", "30000",
+            "11000", "31000", "250", "#123456",
+            "--export-paper", "pdf"]));
+        preflight_notebook_sources(&flags)
+            .expect("selected paper may have different valid margins");
+    }
+}
+
+#[test]
 fn notebook_preflight_refuses_unplaceable_ink_before_selected_source() {
     for flags in [
         ["--glyph-file", "-", "--export-paper", "pdf"].as_slice(),

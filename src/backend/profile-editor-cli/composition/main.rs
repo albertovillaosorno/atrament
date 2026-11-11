@@ -44,7 +44,7 @@ use std::io::{self, Read as _, Write as _};
 use std::mem::replace;
 use std::path::Path;
 use std::str::from_utf8;
-use std::slice::Iter;
+use std::slice::{Iter, from_ref};
 
 #[cfg(test)]
 use flow::layout_flow;
@@ -397,7 +397,9 @@ impl NotebookFlagPreflight {
                 )?;
                 if option == "--pages" {
                     self.explicit_pages = Some(usize::try_from(value)
-                        .map_err(|error| format!("page count refused: {error}"))?);
+                        .map_err(|error| {
+                            format!("page count refused: {error}")
+                        })?);
                 }
                 0
             }
@@ -1584,14 +1586,13 @@ fn parse_ink_line(
 
 // Reuse final ink parsing while bounding explicit lines before selected IO.
 fn preflight_inline_ink_line(
-    iter: &mut Iter<'_, String>, count: &mut usize,
-) -> Result<usize, String> {
-    if *count == MAX_NOTEBOOK_INK_LINES {
+    iter: &mut Iter<'_, String>, lines: &mut Vec<NotebookInkLine>,
+) -> Result<(), String> {
+    if lines.len() == MAX_NOTEBOOK_INK_LINES {
         return Err("ink exceeds 4096 explicit line segments".into());
     }
-    let line = parse_ink_line(iter)?;
-    *count = count.saturating_add(1);
-    Ok(line.page)
+    lines.push(parse_ink_line(iter)?);
+    Ok(())
 }
 
 // A caller-selected page ink library is a strict portable source of the
@@ -2004,6 +2005,20 @@ fn preflight_notebook_flow_option(
     Ok((format, 0, false))
 }
 
+// A second source is source-independent, even when the first is stdin.
+fn preflight_notebook_flow_selection(
+    option: &str, iter: &mut Iter<'_, String>,
+    flow_format: &mut Option<FlowFormat>,
+) -> Result<(usize, bool), String> {
+    if flow_format.is_some() {
+        return Err("only one flow source may be supplied".into());
+    }
+    let (format, operands, stdin_source) =
+        preflight_notebook_flow_option(option, iter)?;
+    *flow_format = Some(format);
+    Ok((operands, stdin_source))
+}
+
 // Match final file-option arity before earlier selected stdin or file I/O.
 // Literal flag-shaped filenames are still operands, not new selections.
 fn preflight_notebook_file_operand(
@@ -2057,8 +2072,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut paper_selected, mut handwriting_selected) = (false, false);
     let mut preview = NotebookProfile::default();
     let mut flags = NotebookFlagPreflight::default();
-    let mut inline_ink_count = 0usize;
-    let mut inline_last_page = 0usize;
+    let mut inline_ink = Vec::new();
     // Reuse the exact, side-effect-free glyph parser before opening any
     // selected library, profile, or flow source. These temporary shapes are
     // only validation evidence; final composition parses its own library.
@@ -2073,11 +2087,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
         } else {
             match option.as_str() {
                 "--ink-line" => {
-                    inline_last_page = inline_last_page.max(
-                        preflight_inline_ink_line(
-                            &mut iter, &mut inline_ink_count,
-                        )?,
-                    );
+                    preflight_inline_ink_line(&mut iter, &mut inline_ink)?;
                     (0, false)
                 }
                 "--glyph-stroke" | "--glyph-variation" | "--place-text"
@@ -2103,15 +2113,9 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 }
                 "--flow-text" | "--flow-markdown"
                 | "--flow-text-file" | "--flow-markdown-file" => {
-                    if flow_format.is_some() {
-                        return Err(
-                            "only one flow source may be supplied".into()
-                        );
-                    }
-                    let (format, operands, stdin_source) =
-                        preflight_notebook_flow_option(option, &mut iter)?;
-                    flow_format = Some(format);
-                    (operands, stdin_source)
+                    preflight_notebook_flow_selection(
+                        option, &mut iter, &mut flow_format,
+                    )?
                 }
                 "--ink-file" => (1, true),
                 "--profile" => {
@@ -2152,18 +2156,48 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     }
     // Imported-only ink is checked after its bounded source read.
     preflight_notebook_export_and_ink(flags, flow_format, region_selected,
-        inline_ink_count, inline_last_page, glyph_file_selected,
-        handwriting_selected, &glyph_preflight)?;
+        &inline_ink, glyph_file_selected, handwriting_selected,
+        &glyph_preflight)?;
     preflight_default_notebook_metadata(
         &preview, profile_edited, profile_selected, paper_selected,
     )?;
-    // The default paper's printable rectangle is fully known. Never read an
-    // earlier selected source for a region that cannot fit this rectangle.
-    // A loaded notebook or paper profile may legitimately change margins.
+    // A caller-selected notebook/paper profile may change the margins.
+    // Defer all physical geometry that depends on those source bytes.
     if !profile_selected && !paper_selected {
-        if let Some(region) = region_geometry {
-            region.validate_ink(preview.printable_rect_um()?, &[])?;
-        }
+        preflight_default_paper_geometry(
+            &preview, region_geometry, &inline_ink,
+        )?;
+    }
+    Ok(())
+}
+
+// Validate known default paper geometry using the same pen clearance rule
+// as selected flow rectangles, without rendering or reading earlier sources.
+fn preflight_default_paper_geometry(
+    preview: &NotebookProfile, region_geometry: Option<FlowRegion>,
+    inline_ink: &[NotebookInkLine],
+) -> Result<(), String> {
+    if region_geometry.is_none() && inline_ink.is_empty() {
+        return Ok(());
+    }
+    let printable = preview.printable_rect_um()?;
+    if let Some(region) = region_geometry {
+        region.validate_ink(printable, &[])?;
+    }
+    let paper_region = FlowRegion {
+        left: printable.0,
+        top: printable.1,
+        width: printable.2.checked_sub(printable.0)
+            .ok_or("paper horizontal bounds reversed")?,
+        height: printable.3.checked_sub(printable.1)
+            .ok_or("paper vertical bounds reversed")?,
+    };
+    for line in inline_ink {
+        paper_region.validate_ink(printable, from_ref(line))
+            .map_err(|_error| format!(
+                "page {} ink needs printable endpoints and valid width",
+                line.page,
+            ))?;
     }
     Ok(())
 }
@@ -2183,14 +2217,14 @@ fn preflight_default_notebook_metadata(
 // All source-independent output and physical-ink gates precede selected I/O.
 fn preflight_notebook_export_and_ink(
     flags: NotebookFlagPreflight, flow_format: Option<FlowFormat>,
-    region_selected: bool, inline_ink_count: usize,
-    inline_last_page: usize, glyph_file_selected: bool,
-    handwriting_selected: bool, glyphs: &GlyphOverlay,
+    region_selected: bool, inline_ink: &[NotebookInkLine],
+    glyph_file_selected: bool, handwriting_selected: bool,
+    glyphs: &GlyphOverlay,
 ) -> Result<(), String> {
-    let manual_last_page = inline_last_page.max(
-        glyphs.runs.iter().map(|run| run.page).max().unwrap_or(0),
-    );
-    flags.validate(flow_format, region_selected, inline_ink_count,
+    let manual_last_page = inline_ink.iter().map(|line| line.page)
+        .chain(glyphs.runs.iter().map(|run| run.page))
+        .max().unwrap_or(0);
+    flags.validate(flow_format, region_selected, inline_ink.len(),
         manual_last_page, glyphs.has_any())?;
     preflight_notebook_ink_requirements(
         flow_format, glyph_file_selected, handwriting_selected, glyphs,
@@ -2366,16 +2400,14 @@ fn manual_last_page(request: &NotebookRequest) -> usize {
 fn validate_explicit_manual_page_budget(
     selected: Option<usize>, last_page: usize, flow_selected: bool,
 ) -> Result<(), String> {
-    if let Some(pages) = selected {
-        if pages < last_page {
-            let source = if flow_selected { "flow and manual ink" }
-                else { "manual ink" };
-            let verb = if flow_selected { "require" } else { "requires" };
-            return Err(format!(
-                "{source} {verb} {last_page} physical pages, \
-                 more than the explicit --pages count"
-            ));
-        }
+    if let Some(pages) = selected && pages < last_page {
+        let source = if flow_selected { "flow and manual ink" }
+            else { "manual ink" };
+        let verb = if flow_selected { "require" } else { "requires" };
+        return Err(format!(
+            "{source} {verb} {last_page} physical pages, \
+             more than the explicit --pages count"
+        ));
     }
     Ok(())
 }
