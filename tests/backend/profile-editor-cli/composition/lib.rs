@@ -161,6 +161,52 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
             .expect_err("late invalid source must refuse before read");
         assert!(error.contains(diagnostic), "{error}");
     }
+    for (flags, diagnostic) in [
+        (["--ink-file", "-", "--inspect", "--inspect"].as_slice(),
+            "--inspect may appear only once"),
+        (["--glyph-file", "-", "--replace", "--replace"].as_slice(),
+            "--replace may appear only once"),
+        (["--ink-file", "-", "--export-paper", "pdf",
+            "--export-paper", "png"].as_slice(),
+            "--export-paper may appear only once"),
+        (["--ink-file", "-", "--emit-ink-file",
+            "--export-paper", "pdf"].as_slice(),
+            "--export-paper may appear only once"),
+        (["--ink-file", "-", "--export-paper", "pdf",
+            "--emit-ink-file"].as_slice(),
+            "--emit-ink-file may appear only once"),
+        (["--ink-file", "-", "--pages", "1", "--pages", "2",
+            "--export-paper", "pdf"].as_slice(),
+            "--pages may appear only once"),
+        (["--ink-file", "-", "--dpi", "150", "--dpi", "72",
+            "--export-paper", "png"].as_slice(),
+            "--dpi may appear only once"),
+        (["--ink-file", "-", "--quality", "preview", "--quality",
+            "final", "--export-paper", "png"].as_slice(),
+            "--quality may appear only once"),
+        (["--ink-file", "-", "--png-page", "1", "--png-page", "2",
+            "--export-paper", "png"].as_slice(),
+            "--png-page may appear only once"),
+        (["--ink-file", "-", "--inspect", "--output", "out.pdf"]
+            .as_slice(), "--inspect is stdout only"),
+        (["--ink-file", "-", "--inspect", "--emit-ink-file"].as_slice(),
+            "--inspect cannot export paper or page ink"),
+        (["--ink-file", "-", "--replace"].as_slice(),
+            "--replace requires --output"),
+        (["--ink-file", "-", "--pages", "2", "--emit-ink-file"]
+            .as_slice(), "--pages requires --export-paper pdf"),
+        (["--ink-file", "-", "--dpi", "150", "--export-paper", "pdf"]
+            .as_slice(), "require --export-paper png"),
+        (["--ink-file", "-", "--quality", "preview", "--dpi", "150",
+            "--export-paper", "png"].as_slice(),
+            "--quality and --dpi are mutually exclusive"),
+        (["--ink-file", "-", "--export-paper", "invalid"].as_slice(),
+            "--export-paper requires pdf or png"),
+    ] {
+        let error = preflight_notebook_sources(&args(flags))
+            .expect_err("late export conflict must refuse before read");
+        assert!(error.contains(diagnostic), "{error}");
+    }
     for flags in [
         ["--flow-text", "--ink-file", "--ink-file", "-"].as_slice(),
         ["--glyph-file", "-", "--place-text", "1", "30000", "40000",
@@ -170,6 +216,11 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         ["--flow-markdown", "--flow-region", "--flow-region",
             "20000", "30000", "40000", "50000", "--output",
             "file.pdf"].as_slice(),
+        ["--flow-markdown", "--export-paper", "--export-paper",
+            "pdf", "--pages", "1"].as_slice(),
+        ["--ink-file", "-", "--export-paper", "png", "--dpi",
+            "150", "--png-page", "1", "--output", "out.png",
+            "--replace"].as_slice(),
     ] {
         preflight_notebook_sources(&args(flags))
             .expect("option-looking values are not source flags");

@@ -36,6 +36,7 @@
 mod flow;
 mod glyph;
 
+use std::collections::BTreeSet;
 use std::env;
 use std::error::Error;
 use std::fmt::Write as _;
@@ -311,6 +312,119 @@ struct NotebookExportOptions {
     pages: Option<usize>,
     png_page: Option<usize>,
     quality_dpi: Option<u32>,
+}
+
+#[derive(Default)]
+struct NotebookFlagPreflight {
+    export_format: Option<NotebookExportFormat>,
+    selected: BTreeSet<String>,
+}
+
+// Output-only selections have no dependency on source bytes. Consume their
+// arity before opening an earlier file or waiting for stdin to close.
+impl NotebookFlagPreflight {
+    fn select_option(
+        &mut self, option: &str, iter: &mut Iter<'_, String>,
+    ) -> Result<Option<usize>, String> {
+        let operands = match option {
+            "--inspect" => {
+                self.unique(option, "--inspect may appear only once")?;
+                0
+            }
+            "--replace" => {
+                self.unique(option, "--replace may appear only once")?;
+                0
+            }
+            "--emit-ink-file" => {
+                if self.export_format.is_some() {
+                    return Err(concat!(
+                        "--emit-ink-file may appear only once and ",
+                        "cannot accompany --export-paper",
+                    ).into());
+                }
+                self.export_format = Some(NotebookExportFormat::InkTsv);
+                0
+            }
+            "--export-paper" => {
+                if self.export_format.is_some() {
+                    return Err(concat!(
+                        "--export-paper may appear only once and ",
+                        "cannot accompany --emit-ink-file",
+                    ).into());
+                }
+                let selected = iter.next().map(String::as_str);
+                self.export_format = Some(match selected {
+                    Some("pdf") => NotebookExportFormat::Pdf,
+                    Some("png") => NotebookExportFormat::Png,
+                    _ => {
+                        return Err("--export-paper requires pdf or png".into());
+                    }
+                });
+                0
+            }
+            "--output" => {
+                self.unique(option, "--output requires one explicit filename")?;
+                1
+            }
+            "--pages" => {
+                self.unique(option, "--pages may appear only once")?;
+                1
+            }
+            "--dpi" => {
+                self.unique(option, "--dpi may appear only once")?;
+                1
+            }
+            "--quality" => {
+                self.unique(option, "--quality may appear only once")?;
+                1
+            }
+            "--png-page" => {
+                self.unique(option, "--png-page may appear only once")?;
+                1
+            }
+            _ => return Ok(None),
+        };
+        Ok(Some(operands))
+    }
+
+    fn unique(
+        &mut self, option: &str, message: &'static str,
+    ) -> Result<(), String> {
+        if !self.selected.insert(option.to_owned()) {
+            return Err(message.into());
+        }
+        Ok(())
+    }
+
+    fn validate(self) -> Result<(), String> {
+        let has = |option: &str| self.selected.contains(option);
+        if has("--replace") && !has("--output") {
+            return Err("--replace requires --output".into());
+        }
+        if has("--inspect") && has("--output") {
+            return Err("--inspect is stdout only; omit --output".into());
+        }
+        if has("--inspect") && self.export_format.is_some() {
+            return Err("--inspect cannot export paper or page ink".into());
+        }
+        if has("--pages")
+            && self.export_format != Some(NotebookExportFormat::Pdf)
+        {
+            return Err("--pages requires --export-paper pdf".into());
+        }
+        if (has("--dpi") || has("--png-page") || has("--quality"))
+            && self.export_format != Some(NotebookExportFormat::Png)
+        {
+            return Err(
+                "--dpi, --quality and --png-page require --export-paper png"
+                    .into()
+            );
+        }
+        if has("--dpi") && has("--quality") {
+            return Err("--quality and --dpi are mutually exclusive".into());
+        }
+        Ok(())
+    }
 }
 
 fn read_handwriting_profile(
@@ -1546,8 +1660,7 @@ fn preflight_unique_selection(
 // Count actual operands: Markdown text and glyph values can contain strings
 // that look like flags without selecting another input source.
 fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
-    let mut iter = args.iter();
-    let mut stdin_selected = false;
+    let (mut iter, mut stdin_selected) = (args.iter(), false);
     let mut glyph_file_selected = false;
     let mut glyph_edited = false;
     let mut flow_selected = false;
@@ -1556,82 +1669,83 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let mut profile_edited = false;
     let mut handwriting_selected = false;
     let mut region_selected = false;
-    let mut output_selected = false;
+    let mut flags = NotebookFlagPreflight::default();
     while let Some(option) = iter.next() {
-        let (operands, stdin_source): (usize, bool) = match option.as_str() {
-            "--inspect" | "--replace" | "--emit-ink-file" => (0, false),
-            "--ink-line" => (7, false),
-            "--glyph-stroke" | "--glyph-variation" => {
-                glyph_edited = true;
-                (7, false)
-            }
-            "--flow-region" => {
-                preflight_unique_selection(&mut region_selected,
-                    "--flow-region may appear only once")?;
-                (4, false)
-            }
-            "--place-text" | "--join-text-anchors" => {
-                glyph_edited = true;
-                (4, false)
-            }
-            "--join-text-pair" | "--fallback-glyph" => {
-                glyph_edited = true;
-                (2, false)
-            }
-            "--glyph-file" => {
-                if glyph_file_selected || glyph_edited {
-                    return Err(concat!(
-                        "--glyph-file or --profile must precede authored ",
-                        "strokes and may appear only once",
-                    ).into());
+        let (operands, stdin_source): (usize, bool) = if let Some(count) =
+            flags.select_option(option, &mut iter)?
+        {
+            (count, false)
+        } else {
+            match option.as_str() {
+                "--ink-line" => (7, false),
+                "--glyph-stroke" | "--glyph-variation" => {
+                    glyph_edited = true;
+                    (7, false)
                 }
-                glyph_file_selected = true;
-                (1, true)
-            }
-            "--flow-text" | "--flow-markdown"
-            | "--flow-text-file" | "--flow-markdown-file" => {
-                if flow_selected {
-                    return Err("only one flow source may be supplied".into());
+                "--flow-region" => {
+                    preflight_unique_selection(&mut region_selected,
+                        "--flow-region may appear only once")?;
+                    (4, false)
                 }
-                flow_selected = true;
-                (1, option.ends_with("-file"))
-            }
-            "--ink-file" => (1, true),
-            "--profile" => {
-                if profile_selected || profile_edited {
-                    return Err("--profile must appear once, before edits"
-                        .into());
+                "--place-text" | "--join-text-anchors" => {
+                    glyph_edited = true;
+                    (4, false)
                 }
-                profile_selected = true;
-                (1, false)
+                "--join-text-pair" | "--fallback-glyph" => {
+                    glyph_edited = true;
+                    (2, false)
+                }
+                "--glyph-file" => {
+                    if glyph_file_selected || glyph_edited {
+                        return Err(concat!(
+                            "--glyph-file or --profile must precede authored ",
+                            "strokes and may appear only once",
+                        ).into());
+                    }
+                    glyph_file_selected = true;
+                    (1, true)
+                }
+                "--flow-text" | "--flow-markdown"
+                | "--flow-text-file" | "--flow-markdown-file" => {
+                    if flow_selected {
+                        return Err(
+                            "only one flow source may be supplied".into()
+                        );
+                    }
+                    flow_selected = true;
+                    (1, option.ends_with("-file"))
+                }
+                "--ink-file" => (1, true),
+                "--profile" => {
+                    if profile_selected || profile_edited {
+                        return Err("--profile must appear once, before edits"
+                            .into());
+                    }
+                    profile_selected = true;
+                    (1, false)
+                }
+                "--paper-profile" => {
+                    preflight_unique_selection(&mut paper_selected,
+                        "--paper-profile may appear only once")?;
+                    profile_edited = true;
+                    (1, false)
+                }
+                "--date-style" | "--date-placement" | "--date-text"
+                | "--border-radius-um" | "--page-numbers"
+                | "--printed-sheet" => {
+                    profile_edited = true;
+                    (1, false)
+                }
+                "--handwriting-profile" => {
+                    preflight_unique_selection(&mut handwriting_selected,
+                        "--handwriting-profile may appear only once")?;
+                    (1, false)
+                }
+                "--heading-style" | "--heading-color"
+                | "--heading-marker-scale" | "--heading-ink-color"
+                | "--heading-ink-scale" => (1, false),
+                _ => return Err(format!("unknown notebook option: {option}")),
             }
-            "--paper-profile" => {
-                preflight_unique_selection(&mut paper_selected,
-                    "--paper-profile may appear only once")?;
-                profile_edited = true;
-                (1, false)
-            }
-            "--date-style" | "--date-placement" | "--date-text"
-            | "--border-radius-um" | "--page-numbers" | "--printed-sheet" => {
-                profile_edited = true;
-                (1, false)
-            }
-            "--handwriting-profile" => {
-                preflight_unique_selection(&mut handwriting_selected,
-                    "--handwriting-profile may appear only once")?;
-                (1, false)
-            }
-            "--output" => {
-                preflight_unique_selection(&mut output_selected,
-                    "--output requires one explicit filename")?;
-                (1, false)
-            }
-            "--heading-style" | "--heading-color"
-            | "--heading-marker-scale" | "--heading-ink-color"
-            | "--heading-ink-scale" | "--export-paper" | "--pages"
-            | "--dpi" | "--quality" | "--png-page" =>
-                (1, false),
-            _ => return Err(format!("unknown notebook option: {option}")),
         };
         for _ in 0usize..operands {
             let Some(value) = iter.next() else { break };
@@ -1645,7 +1759,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
             }
         }
     }
-    Ok(())
+    flags.validate()
 }
 
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {

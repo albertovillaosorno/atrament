@@ -245,3 +245,16 @@ and output selections before a preceding pending glyph, ink, or Markdown
 stdin read. Native parser and unwritten-pipe subprocess regressions confirm
 no accepted output changes. Valid single selections retain their meaning;
 this does not persist notebook content or complete the editor journey.
+
+## Deferred notebook export flag preflight — 2026-11-10
+
+The native notebook CLI now checks duplicate inspection, replace, export
+format, page count, DPI, quality and PNG-page flags before reading a selected
+file or an unclosed stdin pipe. Incompatible output modes, page-only options,
+inspection with output, and quality/DPI conflicts refuse at the same early
+boundary. Operand-looking Markdown and glyph text still remain data.
+
+Focused native parser tests and real unwritten-pipe subprocess regressions
+assert prompt refusal, empty stdout and preservation of a previously accepted
+output file. This limits invalid CLI source consumption; it does not persist
+semantic notebook content or complete localhost notebook editing.
