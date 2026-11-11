@@ -36,7 +36,9 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use atrament_profile_file_reader::read_bounded_profile_file;
+use atrament_profile_file_reader::{
+    ProfileFileReadError, read_bounded_profile_file,
+};
 use atrament_profile_selected_file_open::{
     ProfileSelectedFileOpenError, open_selected_profile_file,
 };
@@ -44,9 +46,9 @@ use atrament_profile_selected_file_open::{
 /// Refusal before any selected bytes are returned to the caller.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum LocalProfileFileReadError {
-    /// Source opening, metadata or bounded reading failed.
+    /// Source I/O, metadata retrieval or memory reservation failed.
     FileIo,
-    /// Source is a link, special file or invalid path.
+    /// Source path, file type, size or observed contents were inadmissible.
     InvalidInput,
     /// Source does not exist.
     NotFound,
@@ -71,6 +73,24 @@ pub fn canonical_local_profile_directory(path: &Path) -> io::Result<PathBuf> {
         ));
     }
     fs::canonicalize(path)
+}
+
+/// Preserve the distinction between caller-invalid sources and host failures.
+/// The localhost HTTP transport uses these categories for its error status.
+#[must_use]
+pub(crate) const fn classify_bounded_profile_read_error(
+    error: ProfileFileReadError,
+) -> LocalProfileFileReadError {
+    match error {
+        ProfileFileReadError::AllocationFailed
+        | ProfileFileReadError::FileIo(_) => LocalProfileFileReadError::FileIo,
+        ProfileFileReadError::FileLengthChanged
+        | ProfileFileReadError::FileMetadataChanged
+        | ProfileFileReadError::FileTooLarge
+        | ProfileFileReadError::NotRegularFile => {
+            LocalProfileFileReadError::InvalidInput
+        }
+    }
 }
 
 /// Open a host-validated profile path and read its exact bounded bytes.
@@ -105,6 +125,6 @@ pub fn read_local_profile_bytes(
         }
     })?;
     let bytes = read_bounded_profile_file(file, maximum_bytes)
-        .map_err(|_error| LocalProfileFileReadError::InvalidInput)?;
+        .map_err(classify_bounded_profile_read_error)?;
     Ok(bytes.bytes().to_vec())
 }

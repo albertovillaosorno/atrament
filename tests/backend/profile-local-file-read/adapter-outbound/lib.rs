@@ -38,6 +38,11 @@
     reason = "fail-fast, test-owned filesystem fixtures"
 )]
 
+// Exercise the same private error classifier compiled by the production crate.
+// jig-ignore-next-line: Stable test source path cannot be split in Rust.
+#[path = "../../../../src/backend/profile-local-file-read/adapter-outbound/lib.rs"]
+pub mod read_error_mapping;
+
 #[cfg(target_os = "linux")]
 use std::fs::{self, File};
 #[cfg(target_os = "linux")]
@@ -52,6 +57,7 @@ use std::process;
 #[cfg(target_os = "linux")]
 use std::sync::atomic::{AtomicU64, Ordering};
 
+use atrament_profile_file_reader::ProfileFileReadError;
 use atrament_profile_file_reader as _;
 use atrament_profile_selected_file_open as _;
 
@@ -158,6 +164,35 @@ fn nonregular_linked_and_parent_linked_sources_are_refused() {
         read_local_profile_bytes(&fixture.0.join("../missing.json"), 100),
         Err(LocalProfileFileReadError::InvalidInput),
     );
+}
+
+#[test]
+fn read_error_categories_preserve_host_failures_and_input_refusals() {
+    use std::io::ErrorKind;
+
+    for error in [
+        ProfileFileReadError::AllocationFailed,
+        ProfileFileReadError::FileIo(ErrorKind::PermissionDenied),
+        ProfileFileReadError::FileIo(ErrorKind::UnexpectedEof),
+    ] {
+        assert_eq!(
+            read_error_mapping::classify_bounded_profile_read_error(error),
+            read_error_mapping::LocalProfileFileReadError::FileIo,
+            "host error {error:?} must not be attributed to caller input",
+        );
+    }
+    for error in [
+        ProfileFileReadError::FileLengthChanged,
+        ProfileFileReadError::FileMetadataChanged,
+        ProfileFileReadError::FileTooLarge,
+        ProfileFileReadError::NotRegularFile,
+    ] {
+        assert_eq!(
+            read_error_mapping::classify_bounded_profile_read_error(error),
+            read_error_mapping::LocalProfileFileReadError::InvalidInput,
+            "bad source {error:?} must refuse without file effects",
+        );
+    }
 }
 
 #[test]
