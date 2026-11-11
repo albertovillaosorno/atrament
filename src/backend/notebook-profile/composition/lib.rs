@@ -343,17 +343,7 @@ impl NotebookProfile {
     /// # Errors
     /// Refuses contradictory date fields, impossible radius or invalid paper.
     pub fn validate(&self) -> Result<(), String> {
-        if (self.date_style == DateStyle::None)
-            != (self.date_placement == DatePlacement::None)
-        {
-            return Err(
-                "date style and placement must both be none or set".into()
-            );
-        }
-        validate_printed_date_text(&self.date_text)?;
-        if self.date_placeholder().is_none() && !self.date_text.is_empty() {
-            return Err("printed date text requires a date placeholder".into());
-        }
+        self.validate_date_metadata()?;
         let paper = canonical_paper_profile_json(self.paper_json.as_bytes())?;
         if self.date_placeholder().is_some() {
             validate_paper_date_clearance(paper.as_bytes())?;
@@ -393,6 +383,25 @@ impl NotebookProfile {
         Ok(())
     }
 
+    /// Validate date fields without consulting paper-dependent clearance.
+    /// A selected paper profile cannot change these metadata relationships.
+    ///
+    /// # Errors
+    /// Refuses contradictory date placement or invalid printed date text.
+    pub fn validate_date_metadata(&self) -> Result<(), String> {
+        if (self.date_style == DateStyle::None)
+            != (self.date_placement == DatePlacement::None)
+        {
+            return Err(
+                "date style and placement must both be none or set".into()
+            );
+        }
+        validate_printed_date_text(&self.date_text)?;
+        if self.date_placeholder().is_none() && !self.date_text.is_empty() {
+            return Err("printed date text requires a date placeholder".into());
+        }
+        Ok(())
+    }
 
 }
 

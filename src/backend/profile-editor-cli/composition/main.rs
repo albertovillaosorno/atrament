@@ -2216,14 +2216,19 @@ fn preflight_default_paper_geometry(
     Ok(())
 }
 
-// Without a selected notebook/paper file, the default paper and all explicit
-// metadata edits are known. Refuse contradictory date settings before stdin.
+// A selected notebook may change date fields, but a selected paper only
+// changes geometry. Refuse known contradictory date edits before source IO;
+// defer paper-dependent clearance until its selected profile is loaded.
 fn preflight_default_notebook_metadata(
     preview: &NotebookProfile, edited: bool, profile_selected: bool,
     paper_selected: bool,
 ) -> Result<(), String> {
-    if edited && !profile_selected && !paper_selected {
-        preview.validate()?;
+    if edited && !profile_selected {
+        if paper_selected {
+            preview.validate_date_metadata()?;
+        } else {
+            preview.validate()?;
+        }
     }
     Ok(())
 }

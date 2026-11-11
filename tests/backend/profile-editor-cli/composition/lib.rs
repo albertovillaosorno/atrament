@@ -578,6 +578,31 @@ fn notebook_preflight_refuses_unplaceable_ink_before_selected_source() {
 }
 
 #[test]
+fn selected_paper_cannot_defer_known_invalid_notebook_date_metadata() {
+    for (flags, expected) in [
+        (["--ink-file", "-", "--paper-profile", "unopened-paper.json",
+            "--date-style", "line", "--export-paper", "pdf"].as_slice(),
+            "date style and placement must both be none or set"),
+        (["--ink-file", "-", "--paper-profile", "unopened-paper.json",
+            "--date-text", "2026-11-11", "--export-paper", "pdf"].as_slice(),
+            "printed date text requires a date placeholder"),
+    ] {
+        let error = preflight_notebook_sources(&args(flags))
+            .expect_err("known metadata must refuse before source read");
+        assert_eq!(error, expected);
+    }
+    preflight_notebook_sources(&args(&[
+        "--ink-file", "-", "--paper-profile", "unopened-paper.json",
+        "--date-style", "line", "--date-placement", "top-left",
+        "--date-text", "2026-11-11", "--export-paper", "pdf",
+    ])).expect("valid metadata may await the selected paper geometry");
+    preflight_notebook_sources(&args(&[
+        "--ink-file", "-", "--profile", "unopened-notebook.json",
+        "--date-style", "line", "--export-paper", "pdf",
+    ])).expect("a saved notebook may supply the missing date placement");
+}
+
+#[test]
 fn notebook_preflight_detects_invalid_sources_without_input_io() {
     for flags in [
         ["--ink-file", "-", "--glyph-file", "-"].as_slice(),
@@ -835,6 +860,7 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         ["--profile", "unopened-notebook.json", "--ink-file", "-",
             "--date-text", "2026-11-11", "--export-paper", "pdf"].as_slice(),
         ["--paper-profile", "unopened-paper.json", "--ink-file", "-",
+            "--date-style", "line", "--date-placement", "top-left",
             "--date-text", "2026-11-11", "--export-paper", "pdf"].as_slice(),
         ["--ink-file", "-", "--date-style", "line",
             "--date-placement", "top-left", "--date-text", "2026-11-11",

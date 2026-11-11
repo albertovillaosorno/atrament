@@ -341,6 +341,30 @@ fn printed_date_round_trips_legacy_and_new_notebook_profiles() {
 }
 
 #[test]
+fn date_metadata_validation_does_not_depend_on_selected_paper() {
+    let mut profile = NotebookProfile::default();
+    // A caller can validate known date metadata while source paper bytes
+    // remain unavailable; geometry is only checked after the paper loads.
+    profile.paper_json = "unloaded paper profile".into();
+    assert!(profile.validate_date_metadata().is_ok());
+    assert!(profile.validate().is_err());
+    profile.date_style = DateStyle::Line;
+    assert_eq!(profile.validate_date_metadata().unwrap_err(),
+        "date style and placement must both be none or set");
+    profile.date_placement = DatePlacement::TopLeft;
+    profile.date_text = "2026-11-11".into();
+    assert!(profile.validate_date_metadata().is_ok());
+    profile.date_text = "2026-02-29".into();
+    assert!(profile.validate_date_metadata().unwrap_err()
+        .contains("invalid printed Gregorian date"));
+    profile.date_style = DateStyle::None;
+    profile.date_placement = DatePlacement::None;
+    profile.date_text = "2026-11-11".into();
+    assert_eq!(profile.validate_date_metadata().unwrap_err(),
+        "printed date text requires a date placeholder");
+}
+
+#[test]
 fn printed_date_has_native_visible_ink_in_pdf_and_transparent_png() {
     let mut notebook = NotebookProfile {
         date_style: DateStyle::Box,
