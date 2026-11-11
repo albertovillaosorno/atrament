@@ -34,7 +34,6 @@
 
 #![expect(
     clippy::expect_used,
-    clippy::missing_trait_methods,
     reason = "fail-fast, uniquely owned filesystem test fixtures",
 )]
 
@@ -122,6 +121,30 @@ fn bounded_reader_does_not_change_a_cloned_descriptors_cursor() {
         parallel_reader.stream_position().expect("shared cursor after read"),
         original_offset,
         "profile reads must not disturb a duplicated descriptor's offset",
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn bounded_reader_rejects_opened_directory_and_socket_before_reading() {
+    use std::os::fd::OwnedFd;
+    use std::os::unix::net::UnixStream;
+
+    let directory = File::open(env::temp_dir())
+        .expect("open a directory as a nonregular source");
+    assert_eq!(
+        read_bounded_profile_file(directory, usize::MAX)
+            .expect_err("directory never becomes profile bytes"),
+        ProfileFileReadError::NotRegularFile,
+    );
+
+    let (reader, _writer) = UnixStream::pair()
+        .expect("test-owned nonregular socket pair");
+    let socket = File::from(OwnedFd::from(reader));
+    assert_eq!(
+        read_bounded_profile_file(socket, usize::MAX)
+            .expect_err("socket must refuse before a blocking read"),
+        ProfileFileReadError::NotRegularFile,
     );
 }
 
