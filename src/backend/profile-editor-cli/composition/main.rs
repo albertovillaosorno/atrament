@@ -320,9 +320,19 @@ struct NotebookFlagPreflight {
     selected: BTreeSet<String>,
 }
 
-// Output-only selections have no dependency on source bytes. Consume their
+// Output and heading selections do not depend on source bytes. Consume their
 // arity before opening an earlier file or waiting for stdin to close.
 impl NotebookFlagPreflight {
+    fn select_heading(&mut self, option: &str) -> Result<(), String> {
+        let diagnostic = match option {
+            "--heading-ink-scale" => "--heading-ink-scale repeated".to_owned(),
+            "--heading-marker-scale" =>
+                "--heading-marker-scale repeated".to_owned(),
+            _ => format!("{option} may appear only once"),
+        };
+        self.unique(option, &diagnostic)
+    }
+
     fn select_option(
         &mut self, option: &str, iter: &mut Iter<'_, String>,
     ) -> Result<Option<usize>, String> {
@@ -382,16 +392,22 @@ impl NotebookFlagPreflight {
                 self.unique(option, "--png-page may appear only once")?;
                 1
             }
+            "--heading-style" | "--heading-color"
+            | "--heading-marker-scale" | "--heading-ink-color"
+            | "--heading-ink-scale" => {
+                self.select_heading(option)?;
+                1
+            }
             _ => return Ok(None),
         };
         Ok(Some(operands))
     }
 
     fn unique(
-        &mut self, option: &str, message: &'static str,
+        &mut self, option: &str, message: &str,
     ) -> Result<(), String> {
         if !self.selected.insert(option.to_owned()) {
-            return Err(message.into());
+            return Err(message.to_owned());
         }
         Ok(())
     }
@@ -1741,9 +1757,6 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                         "--handwriting-profile may appear only once")?;
                     (1, false)
                 }
-                "--heading-style" | "--heading-color"
-                | "--heading-marker-scale" | "--heading-ink-color"
-                | "--heading-ink-scale" => (1, false),
                 _ => return Err(format!("unknown notebook option: {option}")),
             }
         };

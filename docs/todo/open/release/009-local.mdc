@@ -258,3 +258,15 @@ Focused native parser tests and real unwritten-pipe subprocess regressions
 assert prompt refusal, empty stdout and preservation of a previously accepted
 output file. This limits invalid CLI source consumption; it does not persist
 semantic notebook content or complete localhost notebook editing.
+
+## Repeated heading flag refusal before source reads — 2026-11-10
+
+The five native heading-decoration selections now use the same early flag
+admission as export options. A second style, marker/ink scale or heading/ink
+color refuses before an earlier glyph, ink or Markdown stdin pipe is read.
+Existing diagnostic wording is retained, and literal option-like heading
+values remain operands rather than additional selections.
+
+Focused Rust scanner tests and native unwritten-pipe subprocesses assert
+prompt refusal and no replacement of reviewed output. This is bounded CLI
+input safety, not automatic notebook decoration or persisted semantic flow.
