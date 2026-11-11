@@ -1550,6 +1550,19 @@ fn parse_ink_line(
         u8::from_str_radix(digits, 16)
             .map_err(|_error| "ink color must be #RRGGBB".into())
     };
+    // A zero-length pen mark or one whose radius crosses the page origin
+    // cannot render on any sheet, regardless of selected paper margins.
+    // Refuse this known-invalid geometry before an earlier stdin read.
+    let clearance = width_um.div_ceil(2);
+    if (x1, y1) == (x2, y2)
+        || [(x1, y1), (x2, y2)].iter().any(|(x, y)| {
+            *x < clearance || *y < clearance
+        })
+    {
+        return Err(format!(
+            "page {page} ink needs printable endpoints and valid width",
+        ));
+    }
     Ok(NotebookInkLine {
         page: usize::try_from(page)
             .map_err(|error| format!("invalid ink page: {error}"))?,

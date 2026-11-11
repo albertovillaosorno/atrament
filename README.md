@@ -599,8 +599,10 @@ cargo run -q -p atrament_profile_editor_cli -- notebook \
 ```
 
 Malformed rows, oversized streams or later invalid ink refuse before replacing
-an output. This is a reusable **physical source**, not a new saved notebook
-body schema, automatic glyph generation, or an image layer.
+an output. Inline zero-length strokes or ink crossing the physical page
+origin refuse before reading selected sources, including an open stdin pipe.
+This is a reusable **physical source**, not a new saved notebook body schema,
+automatic glyph generation, or an image layer.
 
 The complementary `--emit-ink-file` compiles the **actual projected physical
 strokes** of selected inline ink, positioned glyphs and plain/Markdown flow to
