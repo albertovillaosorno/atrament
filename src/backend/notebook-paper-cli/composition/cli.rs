@@ -102,7 +102,10 @@ fn source_profile_options(
     path: &str,
     read_source: bool,
 ) -> Result<Options, String> {
-    if path.is_empty() {
+    // Missing operands must not consume the following option and turn
+    // it into an unintended local source. Prefix an actual dash-named
+    // file with ./ to select it unambiguously.
+    if path.is_empty() || path.starts_with('-') {
         return Err("--profile requires one explicit file path".into());
     }
     if read_source {

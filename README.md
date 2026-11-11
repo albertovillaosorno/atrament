@@ -299,8 +299,11 @@ cargo run -q -p atrament_notebook_paper_cli -- \
   --profile paper-profile.json --margin-top-mm 18 > ruled.pdf
 ```
 
-`--profile` must precede edit flags. The `atrament.paper.v1` profile uses
-integer micrometers, has a 4-KiB input ceiling, rejects duplicate or unknown
+`--profile` must precede edit flags and name an explicit file; an
+option-shaped operand such as `--help` is not a valid profile path.
+For a basename beginning with a dash, use an explicit directory prefix
+such as `./-paper.json`. The `atrament.paper.v1` profile uses integer
+micrometers, has a 4-KiB input ceiling, rejects duplicate or unknown
 fields, and is validated against the actual PDF path before acceptance.
 The shell chooses the output file and handles any overwrite; this
 paper-only CLI is separate from the opt-in localhost notebook/handwriting

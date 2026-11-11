@@ -330,6 +330,27 @@ fn paper_profile_preflights_later_options_before_selected_source_io() {
     assert!(error.contains("--help must be the only argument"));
 }
 
+#[test]
+fn paper_profile_operand_must_not_swallow_an_option() {
+    for operand in ["--help", "--output", "--replace", "--format", "-"] {
+        let error = parse_options(
+            &["--profile", operand].map(str::to_owned),
+        ).expect_err("option-shaped paper path must refuse in preflight");
+        assert!(
+            error.contains("--profile requires one explicit file path"),
+            "{operand}: {error}",
+        );
+    }
+    // Spell a legitimate dash-prefixed basename with an explicit
+    // relative directory prefix. It reaches file admission, not the
+    // option-as-path refusal.
+    let error = parse_options(
+        &["--profile", "./-paper-profile-does-not-exist.json"]
+            .map(str::to_owned),
+    ).expect_err("missing but syntactically valid paper path");
+    assert!(error.contains("paper profile file refused"), "{error}");
+}
+
 #[cfg(target_os = "linux")]
 #[test]
 fn paper_profile_preflight_refuses_bad_flags_before_fifo_and_output_commit() {
