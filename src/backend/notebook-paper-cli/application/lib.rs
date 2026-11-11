@@ -1286,6 +1286,48 @@ pub fn paper_profile_pdf_pages_with_printed_date(
     )
 }
 
+// Validate every page's authored ink without allocating paths for sheets
+// omitted from one selected PNG. PDF and PNG share this geometry admission.
+fn validate_ink_line(
+    options: Options,
+    line: &NotebookInkLine,
+) -> Result<(), String> {
+    let clearance = line.width_um.div_ceil(2);
+    let min_x = options
+        .margin_left_um
+        .checked_add(clearance)
+        .ok_or("ink horizontal clearance overflow")?;
+    let min_y = options
+        .margin_top_um
+        .checked_add(clearance)
+        .ok_or("ink vertical clearance overflow")?;
+    let max_x = options
+        .width_um
+        .checked_sub(options.margin_right_um)
+        .and_then(|value| value.checked_sub(clearance))
+        .ok_or("ink exceeds printable horizontal region")?;
+    let max_y = options
+        .height_um
+        .checked_sub(options.margin_bottom_um)
+        .and_then(|value| value.checked_sub(clearance))
+        .ok_or("ink exceeds printable vertical region")?;
+    if !(80..=1_500).contains(&line.width_um)
+        || line.start_um == line.end_um
+        || [line.start_um, line.end_um]
+            .iter()
+            .any(|(x, y)| {
+                !(min_x..=max_x).contains(x)
+                    || !(min_y..=max_y).contains(y)
+            })
+    {
+        return Err(format!(
+            "page {} ink needs printable endpoints and valid width",
+            line.page,
+        ));
+    }
+    Ok(())
+}
+
 fn append_ink_lines(
     paths: &mut Vec<PdfVectorPath>,
     options: Options,
@@ -1293,38 +1335,7 @@ fn append_ink_lines(
     ink: &[NotebookInkLine],
 ) -> Result<(), String> {
     for line in ink.iter().filter(|line| line.page == page) {
-        let clearance = line.width_um.div_ceil(2);
-        let min_x = options
-            .margin_left_um
-            .checked_add(clearance)
-            .ok_or("ink horizontal clearance overflow")?;
-        let min_y = options
-            .margin_top_um
-            .checked_add(clearance)
-            .ok_or("ink vertical clearance overflow")?;
-        let max_x = options
-            .width_um
-            .checked_sub(options.margin_right_um)
-            .and_then(|value| value.checked_sub(clearance))
-            .ok_or("ink exceeds printable horizontal region")?;
-        let max_y = options
-            .height_um
-            .checked_sub(options.margin_bottom_um)
-            .and_then(|value| value.checked_sub(clearance))
-            .ok_or("ink exceeds printable vertical region")?;
-        if !(80..=1_500).contains(&line.width_um)
-            || line.start_um == line.end_um
-            || [line.start_um, line.end_um]
-                .iter()
-                .any(|(x, y)| {
-                    !(min_x..=max_x).contains(x)
-                        || !(min_y..=max_y).contains(y)
-                })
-        {
-            return Err(format!(
-                "page {page} ink needs printable endpoints and valid width"
-            ));
-        }
+        validate_ink_line(options, line)?;
         paths.push(PdfVectorPath {
             commands: vec![
                 PdfPathCommand::MoveTo(PdfPoint {
@@ -1596,14 +1607,12 @@ pub fn paper_profile_png_page_with_ink(
     // round-capped authored strokes for the transparent PNG projection.
     let ink_start = paths.len();
     // Refuse invalid off-page ink as well: selecting PNG page 1 must not
-    // silently accept impossible marks intended for another page.
-    for requested_page in 1..=MAX_PAGES {
-        if requested_page == page {
-            append_ink_lines(&mut paths, options, requested_page, ink)?;
-        } else {
-            append_ink_lines(&mut Vec::new(), options, requested_page, ink)?;
-        }
+    // silently accept impossible marks intended for another page. Validate
+    // without constructing and discarding full vector paths for 31 sheets.
+    for line in ink {
+        validate_ink_line(options, line)?;
     }
+    append_ink_lines(&mut paths, options, page, ink)?;
     let border = rounded_border(options, border_radius_um)?;
     png::render_paper_png(
         options.width_um, options.height_um, dpi, &paths, ink_start, border,

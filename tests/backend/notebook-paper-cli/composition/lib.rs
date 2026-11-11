@@ -1355,6 +1355,53 @@ fn manual_ink_refuses_overflow_and_missing_printable_clearance() {
 #[expect(
     clippy::integer_division,
     clippy::integer_division_remainder_used,
+    reason = "test-only fixed grid indexing across 32 paper pages",
+)]
+fn selected_png_renders_only_its_page_but_validates_all_4096_ink_lines() {
+    let paper = default_paper_profile_json();
+    let ink = (0..MAX_NOTEBOOK_INK_LINES).map(|index| {
+        let column = u32::try_from(index / 32 % 32)
+            .expect("bounded paper column");
+        let row = u32::try_from(index / 1_024)
+            .expect("bounded paper row");
+        let x = 25_000 + column * 4_000;
+        let y = 25_000 + row * 8_000;
+        NotebookInkLine {
+            page: index % 32 + 1,
+            start_um: (x, y),
+            end_um: (x + 800, y + 1_000),
+            width_um: 250,
+            rgb: [25, 45, 100],
+        }
+    }).collect::<Vec<_>>();
+    let selected = ink.iter().copied()
+        .filter(|line| line.page == 1)
+        .collect::<Vec<_>>();
+    assert_eq!(selected.len(), 128);
+    let output = |lines: &[NotebookInkLine]| {
+        paper_profile_png_page_with_ink(
+            paper.as_bytes(), 72, false, None, false, 1, 0, None,
+            lines,
+        )
+    };
+    assert_eq!(
+        output(&ink).expect("all 32 page groups admitted"),
+        output(&selected).expect("selected 128 paths alone"),
+        "other-page strokes never paint the selected PNG",
+    );
+
+    let mut invalid = ink;
+    invalid[31].start_um = (0, 25_000);
+    assert_eq!(
+        output(&invalid).expect_err("invalid page 32 ink cannot be dropped"),
+        "page 32 ink needs printable endpoints and valid width",
+    );
+}
+
+#[test]
+#[expect(
+    clippy::integer_division,
+    clippy::integer_division_remainder_used,
     reason = "test-only fixed grid indexing across 32 columns and three pages",
 )]
 fn multilingual_sized_ink_batch_renders_pdf_and_selected_png() {
