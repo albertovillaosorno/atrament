@@ -697,6 +697,7 @@ impl GlyphOverlay {
         &self, grapheme: &str,
     ) -> Result<Vec<u8>, String> {
         validate_inspection_glyph_key(grapheme)?;
+        self.validate_stroke_library()?;
         let selected = self.strokes.iter()
             .filter(|stroke| stroke.grapheme == grapheme)
             .collect::<Vec<_>>();
@@ -731,6 +732,7 @@ impl GlyphOverlay {
         &self, grapheme: &str,
     ) -> Result<Vec<u8>, String> {
         validate_inspection_glyph_key(grapheme)?;
+        self.validate_stroke_library()?;
         let selected = self.strokes.iter()
             .filter(|stroke| stroke.grapheme == grapheme)
             .collect::<Vec<_>>();

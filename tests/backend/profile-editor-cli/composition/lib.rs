@@ -7882,6 +7882,53 @@ fn typed_glyph_audit_obeys_native_text_admission()
 }
 
 #[test]
+fn typed_glyph_inspection_refuses_invalid_unselected_inventory()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    for grapheme in ["a", "b"] {
+        glyphs.parse("--glyph-stroke", &mut args(&[
+            grapheme, "600", "500", "1800", "3000", "250", "#123456",
+        ]).iter())?;
+    }
+    let paths = glyphs.inspect_paths("a")?;
+    let order = glyphs.inspect_stroke_order("a")?;
+    let original = glyphs.strokes[1].clone();
+    let mut collapsed = original.clone();
+    collapsed.end_um = collapsed.start_um;
+    let mut invalid_key = original.clone();
+    invalid_key.grapheme = "bc".into();
+    let mut clipped = original.clone();
+    clipped.end_um.1 = 4501;
+    for (name, invalid) in [
+        ("collapsed unused stroke", collapsed),
+        ("invalid unused key", invalid_key),
+        ("clipped unused stroke", clipped),
+    ] {
+        glyphs.strokes[1] = invalid;
+        if glyphs.inspect_paths("a").is_ok()
+            || glyphs.inspect_stroke_order("a").is_ok() {
+            return Err(format!("inspection hid {name}"));
+        }
+        glyphs.strokes[1] = original.clone();
+        if glyphs.inspect_paths("a")? != paths
+            || glyphs.inspect_stroke_order("a")? != order {
+            return Err(format!("rejected {name} changed inspection replay"));
+        }
+    }
+    glyphs.strokes.resize(4097, original);
+    if glyphs.inspect_paths("a").is_ok()
+        || glyphs.inspect_stroke_order("a").is_ok() {
+        return Err("inspection accepted over-budget typed library".into());
+    }
+    glyphs.strokes.truncate(2);
+    if glyphs.inspect_paths("a")? != paths
+        || glyphs.inspect_stroke_order("a")? != order {
+        return Err("over-budget refusal changed valid inspection".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_glyph_audit_rejects_unrenderable_inventory()
 -> Result<(), String> {
     let mut glyphs = GlyphOverlay::default();
