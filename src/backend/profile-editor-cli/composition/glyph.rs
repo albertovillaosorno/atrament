@@ -416,15 +416,7 @@ impl GlyphOverlay {
     pub(super) fn copy_glyph(
         &mut self, source: &str, target: &str,
     ) -> Result<(), String> {
-        let boundaries = UnicodeGraphemeSegmentation;
-        if !is_exact_visible_grapheme(source, boundaries)
-            || !is_exact_visible_grapheme(target, boundaries)
-            || source == target
-        {
-            return Err(
-                "glyph copy needs two distinct exact visible graphemes".into()
-            );
-        }
+        validate_copy_glyph_keys(source, target)?;
         if self.strokes.iter().any(|stroke| stroke.grapheme == target) {
             return Err("glyph copy refuses an already authored target".into());
         }
@@ -699,9 +691,7 @@ impl GlyphOverlay {
     pub(super) fn inspect_paths(
         &self, grapheme: &str,
     ) -> Result<Vec<u8>, String> {
-        if !is_exact_visible_grapheme(grapheme, UnicodeGraphemeSegmentation) {
-            return Err("inspection requires one exact visible grapheme".into());
-        }
+        validate_inspection_glyph_key(grapheme)?;
         let selected = self.strokes.iter()
             .filter(|stroke| stroke.grapheme == grapheme)
             .collect::<Vec<_>>();
@@ -735,9 +725,7 @@ impl GlyphOverlay {
     pub(super) fn inspect_stroke_order(
         &self, grapheme: &str,
     ) -> Result<Vec<u8>, String> {
-        if !is_exact_visible_grapheme(grapheme, UnicodeGraphemeSegmentation) {
-            return Err("inspection requires one exact visible grapheme".into());
-        }
+        validate_inspection_glyph_key(grapheme)?;
         let selected = self.strokes.iter()
             .filter(|stroke| stroke.grapheme == grapheme)
             .collect::<Vec<_>>();
@@ -1994,6 +1982,40 @@ fn is_exact_visible_grapheme(
         // Joined emoji or visible glyphs with such marks keep exact keys.
         && !grapheme.chars().all(is_nonmarking_scalar)
         && boundaries.grapheme_count(grapheme) == 1
+}
+
+// Pure exact-key admission shared by standalone CLI preflight and final
+// library-dependent copy/inspection operations. No Unicode normalization.
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "CLI sibling module shares this exact-key validator",
+)]
+pub(super) fn validate_copy_glyph_keys(
+    source: &str, target: &str,
+) -> Result<(), String> {
+    let boundaries = UnicodeGraphemeSegmentation;
+    if !is_exact_visible_grapheme(source, boundaries)
+        || !is_exact_visible_grapheme(target, boundaries)
+        || source == target
+    {
+        return Err(
+            "glyph copy needs two distinct exact visible graphemes".into()
+        );
+    }
+    Ok(())
+}
+
+#[expect(
+    clippy::redundant_pub_crate,
+    reason = "CLI sibling module shares this exact-key validator",
+)]
+pub(super) fn validate_inspection_glyph_key(
+    grapheme: &str,
+) -> Result<(), String> {
+    if !is_exact_visible_grapheme(grapheme, UnicodeGraphemeSegmentation) {
+        return Err("inspection requires one exact visible grapheme".into());
+    }
+    Ok(())
 }
 
 // The renderer-independent Rust handwriting engine owns every physical

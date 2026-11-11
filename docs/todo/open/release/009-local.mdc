@@ -472,3 +472,17 @@ Focused Rust red/green tests and native open-stdin no-clobber subprocess cases
 cover malformed values across stroke edits, path edits and rotation, shift,
 shear and scale transforms. This is source admission, not synthesized
 handwriting or a persisted notebook document.
+
+## Standalone glyph exact-key admission before stdin — 2026-11-10
+
+The standalone glyph CLI now rejects malformed source/target keys for a
+copy and invalid inspection graphemes before opening a selected glyph TSV
+stdin pipe. Pure exact-grapheme validators are shared by early scanning and
+final Rust copy/inspection, preserving NFC/NFD identity without normalization.
+Duplicate or occupied target shapes and missing selected stroke data remain
+source-dependent checks. Flag-looking operands stay literal values, then
+receive the ordinary exact-key refusal rather than masquerading as flags.
+
+Focused Rust and native unclosed-pipe regressions assert prompt, empty-stdout
+refusal and unchanged reviewed output. This is syntax admission only, not
+complete authored glyph coverage or persistent notebook content.

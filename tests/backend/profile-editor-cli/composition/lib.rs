@@ -162,9 +162,10 @@ fn glyph_library_preflight_refuses_missing_operands_before_source_io() {
             .expect_err("missing glyph operand must refuse before stdin");
         assert_eq!(error, diagnostic, "{flags:?}");
     }
-    preflight_glyph_profile_sources(&args(&[
+    let error = preflight_glyph_profile_sources(&args(&[
         "--profile", "-", "--copy-glyph", "--output", "--replace",
-    ])).expect("flag-shaped values are literal operands, not options");
+    ])).expect_err("flag-shaped copy keys are operands, then invalid keys");
+    assert!(error.contains("glyph copy needs two distinct exact"));
 }
 
 #[test]
@@ -269,6 +270,40 @@ fn glyph_library_preflights_typed_transformation_values() {
         flags.extend(tail.iter().map(|value| (*value).to_owned()));
         preflight_glyph_profile_sources(&flags)
             .expect("valid transformation syntax defers shape checks");
+    }
+}
+
+#[test]
+fn glyph_library_preflights_exact_copy_and_inspection_keys() {
+    for (tail, diagnostic) in [
+        (["--copy-glyph", "a", "a"].as_slice(),
+            "glyph copy needs two distinct exact visible graphemes"),
+        (["--copy-glyph", "a", "ab"].as_slice(),
+            "glyph copy needs two distinct exact visible graphemes"),
+        (["--copy-glyph", " ", "ñ"].as_slice(),
+            "glyph copy needs two distinct exact visible graphemes"),
+        (["--inspect-glyph", "ab"].as_slice(),
+            "inspection requires one exact visible grapheme"),
+        (["--inspect-paths", ""].as_slice(),
+            "inspection requires one exact visible grapheme"),
+        (["--inspect-paths", "\n"].as_slice(),
+            "inspection requires one exact visible grapheme"),
+    ] {
+        let mut flags = args(&["--profile", "-"]);
+        flags.extend(tail.iter().map(|value| (*value).to_owned()));
+        let error = preflight_glyph_profile_sources(&flags)
+            .expect_err("bad glyph keys must refuse before stdin");
+        assert!(error.contains(diagnostic), "{tail:?}: {error}");
+    }
+    for tail in [
+        ["--copy-glyph", "n\u{303}", "ñ"].as_slice(),
+        ["--inspect-glyph", "ñ"].as_slice(),
+        ["--inspect-paths", "n\u{303}"].as_slice(),
+    ] {
+        let mut flags = args(&["--profile", "-"]);
+        flags.extend(tail.iter().map(|value| (*value).to_owned()));
+        preflight_glyph_profile_sources(&flags)
+            .expect("valid exact Unicode keys defer imported-library checks");
     }
 }
 

@@ -1174,7 +1174,16 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
                     "--replace may appear only once")?;
                 0
             }
-            "--copy-glyph" => 2,
+            "--copy-glyph" => {
+                let mut complete = iter.clone();
+                preflight_glyph_operands(option, 2, &mut complete)?;
+                let source = iter.next()
+                    .ok_or("--copy-glyph requires 2 operands")?;
+                let target = iter.next()
+                    .ok_or("--copy-glyph requires 2 operands")?;
+                glyph::validate_copy_glyph_keys(source, target)?;
+                0
+            }
             "--profile" => {
                 if profile_selected {
                     return Err(concat!(
@@ -1196,7 +1205,10 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
             "--inspect-glyph" | "--inspect-paths" => {
                 preflight_unique_selection(&mut inspection_selected,
                     "glyph inspection may appear only once")?;
-                1
+                let selected = iter.next()
+                    .ok_or("inspection requires an exact grapheme")?;
+                glyph::validate_inspection_glyph_key(selected)?;
+                0
             }
             "--output" => {
                 preflight_unique_selection(&mut output_selected,
