@@ -1726,6 +1726,16 @@ test('unavailable glyph and ink inputs refuse without waiting for stdin',
                 [['notebook', '--flow-text-file', '-', '--ink-line', '1',
                     '30000', '40000', '32000', '42000', '250', '--ink-file',
                     '--export-paper', 'pdf'], /ink color must be #RRGGBB/],
+                // Fully inline glyph strokes have a known physical ink
+                // contour. Even page two is checked for a page-one PNG.
+                [['notebook', '--ink-file', '-', ...shape,
+                    '--place-text', '1', '19000', '40000', 'a',
+                    '--export-paper', 'pdf'],
+                    /page 1 ink needs printable endpoints and valid width/],
+                [['notebook', '--ink-file', '-', ...shape,
+                    '--place-text', '2', '30000', '280000', 'a',
+                    '--export-paper', 'png', '--png-page', '1'],
+                    /page 2 ink needs printable endpoints and valid width/],
                 // Typed glyph options must refuse before opening an
                 // earlier selected but unwritten standard-input source.
                 [['notebook', '--glyph-file', '-', '--glyph-stroke', 'a',

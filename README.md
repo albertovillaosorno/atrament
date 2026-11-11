@@ -642,8 +642,14 @@ Setting `--pages` still establishes a strict budget:
 requesting only two sheets refuses before replacing any output. Known manual
 page numbers exceeding that budget refuse before reading selected files or
 waiting for an open stdin source. Inline ink outside the known default paper
-margins also refuses before source reads; a selected notebook or paper profile
-may change those margins, so its ink clearance is checked after loading it.
+margins also refuses before source reads.
+
+Fully inline manual `--place-text` glyphs receive the same early check
+when their strokes,
+statistics, flow and paper depend on no selected input files. Their actual
+expanded pen contours are checked, including pages outside a selected PNG.
+A selected notebook/paper profile or glyph/statistics source may change
+geometry, so its ink clearance is checked after loading it.
 Selected PNG pages remain caller-chosen with `--png-page` and do not imply
 content on other pages.
 

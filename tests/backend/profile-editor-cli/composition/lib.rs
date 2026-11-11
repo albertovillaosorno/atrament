@@ -503,6 +503,52 @@ fn notebook_preflight_checks_default_paper_inline_ink_clearance() {
 }
 
 #[test]
+fn notebook_preflight_checks_default_paper_authored_glyph_clearance() {
+    for (page, x, y) in [
+        (1, 19_000, 40_000),
+        (2, 30_000, 21_000),
+        (3, 195_000, 40_000),
+        (4, 30_000, 280_000),
+    ] {
+        let flags = args(&[
+            "--ink-file", "-", "--glyph-stroke", "a", "500", "500",
+            "1800", "3000", "250", "#123456", "--place-text",
+            &page.to_string(), &x.to_string(), &y.to_string(), "a",
+            "--export-paper", "png", "--png-page", "1",
+        ]);
+        let error = preflight_notebook_sources(&flags)
+            .expect_err("default paper glyph clearance refuses before stdin");
+        assert!(error.contains(&format!(
+            "page {page} ink needs printable endpoints and valid width"
+        )), "{error}");
+    }
+    let _error = preflight_notebook_sources(&args(&[
+        "--ink-file", "-", "--glyph-stroke", "a", "500", "500",
+        "1800", "3000", "250", "#123456", "--place-text",
+        "1", "19625", "21624", "a", "--export-paper", "pdf",
+    ])).expect_err("ink crosses the printable inset by half its width");
+    preflight_notebook_sources(&args(&[
+        "--ink-file", "-", "--glyph-stroke", "a", "500", "500",
+        "1800", "3000", "250", "#123456", "--place-text",
+        "1", "19625", "22125", "a", "--export-paper", "pdf",
+    ])).expect("glyph ink touching default margin is valid");
+    for selected in ["--paper-profile", "--profile"] {
+        preflight_notebook_sources(&args(&[
+            "--ink-file", "-", selected, "unopened.json",
+            "--glyph-stroke", "a", "500", "500", "1800", "3000",
+            "250", "#123456", "--place-text", "1", "10000", "40000",
+            "a", "--export-paper", "pdf",
+        ])).expect("caller-selected paper may admit different margins");
+    }
+    preflight_notebook_sources(&args(&[
+        "--ink-file", "-", "--handwriting-profile", "unopened.json",
+        "--glyph-stroke", "a", "500", "500", "1800", "3000",
+        "250", "#123456", "--place-text", "1", "30000", "40000",
+        "a", "--export-paper", "pdf",
+    ])).expect("mean handwriting metrics require selected source");
+}
+
+#[test]
 fn notebook_preflight_refuses_unplaceable_ink_before_selected_source() {
     for flags in [
         ["--glyph-file", "-", "--export-paper", "pdf"].as_slice(),

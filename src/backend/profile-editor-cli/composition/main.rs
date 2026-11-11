@@ -2164,9 +2164,10 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     // A caller-selected notebook/paper profile may change the margins.
     // Defer all physical geometry that depends on those source bytes.
     if !profile_selected && !paper_selected {
-        preflight_default_paper_geometry(
-            &preview, region_geometry, &inline_ink,
-        )?;
+        // Defer contours that depend on imported shapes, stats or flow.
+        preflight_default_paper_geometry(&preview, region_geometry,
+            &inline_ink, (!glyph_file_selected && !handwriting_selected
+                && flow_format.is_none()).then_some(&glyph_preflight))?;
     }
     Ok(())
 }
@@ -2175,9 +2176,10 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
 // as selected flow rectangles, without rendering or reading earlier sources.
 fn preflight_default_paper_geometry(
     preview: &NotebookProfile, region_geometry: Option<FlowRegion>,
-    inline_ink: &[NotebookInkLine],
+    inline_ink: &[NotebookInkLine], authored_glyphs: Option<&GlyphOverlay>,
 ) -> Result<(), String> {
-    if region_geometry.is_none() && inline_ink.is_empty() {
+    if region_geometry.is_none() && inline_ink.is_empty()
+        && authored_glyphs.is_none_or(|glyphs| glyphs.runs.is_empty()) {
         return Ok(());
     }
     let printable = preview.printable_rect_um()?;
@@ -2198,6 +2200,18 @@ fn preflight_default_paper_geometry(
                 "page {} ink needs printable endpoints and valid width",
                 line.page,
             ))?;
+    }
+    if let Some(glyphs) = authored_glyphs
+        && !glyphs.runs.is_empty() {
+        // Reuse the real authored pen compositor rather than estimating
+        // a run's bounding box from its origin or nominal advance.
+        for line in glyphs.expand(&[], None)? {
+            paper_region.validate_ink(printable, from_ref(&line))
+                .map_err(|_error| format!(
+                    "page {} ink needs printable endpoints and valid width",
+                    line.page,
+                ))?;
+        }
     }
     Ok(())
 }
