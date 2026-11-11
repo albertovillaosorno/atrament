@@ -881,7 +881,8 @@ fn xref_stream_field_widths(bytes: &[u8], at: &mut usize) -> Option<()> {
 
 // /Index is optional, but when present it must enumerate nonempty,
 // increasing disjoint pairs of object start and count within /Size.
-// The xref-stream object itself must be represented in the claimed ranges.
+// A terminal standalone stream must index itself. A hybrid stream may
+// instead have its own object entry in the surrounding traditional table.
 // This checks object coverage without allocating or decoding stream rows.
 fn xref_stream_index_end(
     bytes: &[u8], at: &mut usize, object_number: usize,
@@ -1079,7 +1080,7 @@ fn xref_stream_header_end(
     if depth != 0 || array_depth != 0 || !found_type || !found_widths
         || declared_size.is_none_or(|size| object_number >= size
             || index_end.is_some_and(|(end, contains_self)| {
-                end > size || !contains_self
+                end > size || (previous.is_some() && !contains_self)
             })) {
         return None;
     }

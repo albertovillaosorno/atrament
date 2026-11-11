@@ -226,9 +226,11 @@ ordered and disjoint, with each exclusive endpoint inside `/Size` and the
 same resource ceiling. Invalid, repeated, signed or overflowing entries
 refuse before CUPS; absent `/Index` retains PDF's implicit range policy.
 
-An explicit `/Index` must also include the stream object's own object number;
-being less than `/Size` alone is insufficient. A sparse incremental stream
-may still name only itself and leave earlier objects in previous revisions.
+A terminal standalone stream with an explicit `/Index` must include its
+own object number; being less than `/Size` alone is insufficient. In a
+hybrid-reference PDF, the traditional table may instead index the stream
+object, so the stream's `/Index` need not repeat it. Sparse incremental
+streams may still index only themselves and inherit earlier objects.
 This does not verify encoded rows or incremental cross-reference chains.
 
 A typed cross-reference stream must also

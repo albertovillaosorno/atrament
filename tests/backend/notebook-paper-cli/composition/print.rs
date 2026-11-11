@@ -1810,6 +1810,43 @@ fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
         assert_eq!(fs::read(&spooled).expect("spooled bytes"), candidate);
         fs::remove_file(&spooled).expect("clear test spool");
     }
+    // In a hybrid file the traditional table may carry the xref stream's
+    // own object entry. The stream's /Index then need not repeat it.
+    let mut hybrid_stream = one_page_xref_stream_pdf(
+        "1.5", " /Index [0 4]",
+    );
+    let length_key = b"/Length 35";
+    let length_at = hybrid_stream.windows(length_key.len())
+        .position(|part| part == length_key)
+        .expect("five-row source length");
+    hybrid_stream[length_at..length_at + length_key.len()]
+        .copy_from_slice(b"/Length 28");
+    let row_start = hybrid_stream.windows(b"stream\n".len())
+        .position(|part| part == b"stream\n")
+        .expect("one encoded xref stream") + b"stream\n".len();
+    let _removed_xref_row: Vec<_> =
+        hybrid_stream.drain(row_start + 28..row_start + 35).collect();
+    let locator = hybrid_stream.windows(b"startxref\n".len())
+        .rposition(|part| part == b"startxref\n")
+        .expect("terminal pointer follows stream");
+    hybrid_stream.truncate(locator);
+    let hybrid = [
+        hybrid_stream.as_slice(),
+        format!(
+            "xref\n4 1\n{prior:010} 00000 n \n\
+             trailer\n<< /Size 5 /Root 1 0 R /XRefStm {prior} >>\n\
+             startxref\n{}\n%%EOF\n", hybrid_stream.len(),
+        ).as_bytes(),
+    ].concat();
+    assert!(supported_pdf_cross_reference(&hybrid),
+        "table-owned stream must not require a duplicate /Index entry");
+    fs::write(&pdf, &hybrid).expect("hybrid PDF with table-owned stream");
+    assert_eq!(submit_selected(&request, &fake_spool)
+        .expect("table-owned stream reaches fake spool"),
+        sha256_profile_bytes(&hybrid).bytes());
+    assert_eq!(fs::read(&spooled).expect("hybrid spool bytes"), hybrid);
+    fs::remove_file(&spooled).expect("clear hybrid spool");
+
     for trailer in [
         "/XRefStm 0".into(), "/XRefStm -1".into(),
         "/XRefStm abc".into(),
