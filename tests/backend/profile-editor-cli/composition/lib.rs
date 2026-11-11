@@ -57,6 +57,58 @@ fn test_path() -> PathBuf {
 }
 
 #[test]
+fn handwriting_preflight_rejects_invalid_flags_before_profile_io() {
+    for (flags, diagnostic) in [
+        (["--profile", "unopened.json", "--profile", "other.json"]
+            .as_slice(), "--profile must appear once, before edits"),
+        (["--profile", "unopened.json", "--seed", "-1"]
+            .as_slice(), "invalid seed"),
+        (["--profile", "unopened.json", "--set-global",
+            "not-a-dimension", "1", "2", "1", "1", "0"]
+            .as_slice(), "unknown statistics dimension"),
+        (["--profile", "unopened.json", "--remove-glyph-dimension",
+            "a", "invalid-dimension"].as_slice(), "unknown dimension"),
+        (["--profile", "unopened.json", "--preview-glyph", "a", "-1"]
+            .as_slice(), "preview occurrence requires an unsigned integer"),
+        (["--profile", "unopened.json", "--inspect", "--output", "out.json"]
+            .as_slice(), "--inspect is stdout only"),
+        (["--profile", "unopened.json", "--inventory-text", "a",
+            "--output", "out.json"].as_slice(),
+            "--inventory-text is stdout only"),
+        (["--profile", "unopened.json", "--preview-glyph", "a", "1",
+            "--inspect"].as_slice(), "--preview-glyph is stdout-only"),
+        (["--profile", "unopened.json", "--replace"]
+            .as_slice(), "--replace requires --output"),
+        (["--profile", "unopened.json", "--replace", "--replace"]
+            .as_slice(), "--replace may appear only once"),
+        (["--profile", "unopened.json", "--output", "a.json",
+            "--output", "b.json"].as_slice(),
+            "--output requires one explicit filename"),
+        (["--profile", "unopened.json", "--output", "-"]
+            .as_slice(), "--output requires one explicit filename"),
+        (["--profile", "unopened.json", "--unexpected"]
+            .as_slice(), "unknown handwriting option"),
+    ] {
+        let error = preflight_handwriting_options(&args(flags))
+            .expect_err("invalid deferred flags must refuse before source I/O");
+        assert!(error.contains(diagnostic), "{error}");
+    }
+    for flags in [
+        ["--profile", "unopened.json", "--inventory-text", "--output"]
+            .as_slice(),
+        ["--profile", "unopened.json", "--preview-glyph", "--replace",
+            "42"].as_slice(),
+        ["--set-global", "width", "1", "2", "1", "1", "0"]
+            .as_slice(),
+    ] {
+        // A flag-shaped operand is not a second option selection.
+        // This is a syntax-only pass, not a substitute for domain validation.
+        preflight_handwriting_options(&args(flags))
+            .expect("complete literal operands should survive early scanning");
+    }
+}
+
+#[test]
 fn glyph_library_preflight_rejects_second_source_without_input_io() {
     for flags in [
         ["--profile", "-", "--profile", "missing.tsv"].as_slice(),

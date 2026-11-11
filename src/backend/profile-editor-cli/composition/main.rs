@@ -633,9 +633,95 @@ fn validate_handwriting_flags(
     Ok(())
 }
 
+// A saved statistics profile must not be opened for a command that cannot
+// complete regardless of the source bytes. Consume exact operand counts so
+// literal values resembling option names remain ordinary data. This checks
+// source-independent syntax and flag compatibility; the full profile and
+// merged statistics still validate in the final parser.
+fn preflight_handwriting_options(args: &[String]) -> Result<(), String> {
+    let (mut iter, mut seen_profile, mut seen_edit) =
+        (args.iter(), false, false);
+    let (mut inspect, mut inventory_text) = (false, None);
+    let (mut preview_glyph, mut output) = (false, None);
+    let mut replace = false;
+    while let Some(name) = iter.next() {
+        match name.as_str() {
+            "--profile" => {
+                if seen_profile || seen_edit {
+                    return Err(
+                        "--profile must appear once, before edits".into()
+                    );
+                }
+                let _selected = iter.next()
+                    .ok_or("--profile requires one input file")?;
+                seen_profile = true;
+            }
+            "--seed" => {
+                let value = iter.next()
+                    .ok_or("--seed requires an unsigned integer")?;
+                let _seed = value.parse::<u64>()
+                    .map_err(|error| format!("invalid seed: {error}"))?;
+                seen_edit = true;
+            }
+            "--set-global" | "--set-glyph" => {
+                if name == "--set-glyph" {
+                    let _grapheme = iter.next()
+                        .ok_or("--set-glyph requires a grapheme")?;
+                }
+                let values = iter.by_ref().take(6).cloned()
+                    .collect::<Vec<_>>();
+                let _parameter = parse_parameter(&values)?;
+                seen_edit = true;
+            }
+            "--remove-glyph" | "--remove-glyph-dimension" => {
+                let _grapheme = iter.next()
+                    .ok_or("removal requires a grapheme")?;
+                if name == "--remove-glyph-dimension" {
+                    let key = iter.next()
+                        .ok_or("removal requires a dimension")?;
+                    let _dimension = Dimension::from_key(key)
+                        .ok_or_else(|| format!("unknown dimension: {key}"))?;
+                }
+                seen_edit = true;
+            }
+            "--inspect" if inspect =>
+                return Err("--inspect may appear only once".into()),
+            "--inspect" => inspect = true,
+            "--inventory-text" => {
+                inventory_text = Some(parse_inventory_text(
+                    &mut iter, inventory_text.as_deref(),
+                )?);
+            }
+            "--preview-glyph" => {
+                let _selected = parse_preview_glyph(
+                    &mut iter, preview_glyph,
+                )?;
+                preview_glyph = true;
+            }
+            "--output" => {
+                output = Some(parse_selected_output(
+                    &mut iter, output.is_some(),
+                )?);
+            }
+            "--replace" => {
+                if replace {
+                    return Err("--replace may appear only once".into());
+                }
+                replace = true;
+            }
+            _ => return Err(format!("unknown handwriting option: {name}")),
+        }
+    }
+    validate_handwriting_flags(
+        inspect, inventory_text.as_deref(), preview_glyph,
+        output.as_deref(), replace,
+    )
+}
+
 fn parse_handwriting_options(
     args: &[String],
 ) -> Result<HandwritingRequest, String> {
+    preflight_handwriting_options(args)?;
     let boundaries = UnicodeGraphemeSegmentation;
     let mut profile = HandwritingStatisticsProfile::baseline(0);
     let mut seen_profile = false;

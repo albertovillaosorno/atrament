@@ -139,6 +139,70 @@ test('native CLI reads selected regular files but never traverses input links',
         }
     });
 
+test('handwriting rejects impossible flags before selected profile access',
+    { skip: process.platform !== 'linux' }, () => {
+        const dir = mkdtempSync(join(root, '.temp/handwriting-preflight-'));
+        try {
+            const source = join(dir, 'writer.json');
+            const linked = join(dir, 'selected-link.json');
+            const destination = join(dir, 'reviewed.json');
+            accepted('handwriting', '--seed', '37', '--output', source);
+            symlinkSync(source, linked);
+            writeFileSync(destination, 'previously approved profile');
+            const original = readFileSync(destination);
+            const saved = readFileSync(source);
+            const cases = [
+                [['--profile', linked, '--profile', source,
+                    '--output', destination, '--replace'],
+                /--profile must appear once, before edits/],
+                [['--profile', linked, '--seed', 'not-a-seed',
+                    '--output', destination, '--replace'], /invalid seed/],
+                [['--profile', linked, '--set-global', 'unknown_dimension',
+                    '1', '2', '1', '1', '0', '--output', destination,
+                    '--replace'], /unknown statistics dimension/],
+                [['--profile', linked, '--remove-glyph-dimension', 'a',
+                    'not_a_dimension', '--output', destination, '--replace'],
+                /unknown dimension/],
+                [['--profile', linked, '--preview-glyph', 'a', '-1',
+                    '--output', destination, '--replace'],
+                /preview occurrence requires an unsigned integer/],
+                [['--profile', linked, '--inspect', '--output',
+                    destination, '--replace'], /--inspect is stdout only/],
+                [['--profile', linked, '--inventory-text', 'ñ',
+                    '--output', destination, '--replace'],
+                /--inventory-text is stdout only/],
+                [['--profile', linked, '--replace', '--replace',
+                    '--output', destination],
+                /--replace may appear only once/],
+                [['--profile', linked, '--output', '', '--replace'],
+                /--output requires one explicit filename/],
+                [['--profile', linked, '--unknown-handwriting-option',
+                    '--output', destination, '--replace'],
+                /unknown handwriting option/],
+            ];
+            for (const [flags, diagnostic] of cases) {
+                const result = profiles('handwriting', ...flags);
+                assert.notEqual(result.status, 0,
+                    'impossible option set must be rejected');
+                assert.match(result.stderr.toString('utf8'), diagnostic,
+                    'source must not be opened before flag diagnostics');
+                assert.equal(result.stdout.length, 0,
+                    'invalid commands cannot emit partial JSON');
+                assert.deepEqual(readFileSync(destination), original);
+                assert.deepEqual(readFileSync(source), saved,
+                    'rejected command cannot change source profile');
+            }
+            assert.deepEqual(accepted('handwriting', '--profile', source),
+                saved, 'valid selected profiles remain readable');
+            assert.match(accepted('handwriting', '--profile', source,
+                '--inventory-text', '--output').toString('utf8'),
+            /Exact text-inventory audit/,
+            'literal flag-like inventory text must not be reinterpreted');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 test('standalone manual ink infers later PDF pages without flow', () => {
     const dir = mkdtempSync(join(root, '.temp/manual-pdf-pages-'));
     try {

@@ -184,6 +184,26 @@ ink cannot silently corrupt shell-redirection output. The test uses
 isolated operating-system temporary directories rather than requiring
 an ignored repository `.temp` directory.
 
+## Standalone handwriting option preflight (partial) — 2026-11-10
+
+The standalone native handwriting CLI now checks complete source-independent
+option syntax and compatibility before opening the selected statistics JSON.
+Duplicate or late profile selection, invalid seed/parameter/preview values,
+unknown flags, invalid output names, and incompatible stdout-only inspections
+reject first. Values that merely resemble option names remain literal
+operands. Source-dependent profile and statistical validation still runs after
+opening the approved source; no profile data is inferred.
+
+A real native subprocess regression selects a symlinked source, then supplies
+each invalid command. Every case returns its flag diagnostic instead of the
+source-open refusal, emits no partial JSON and leaves both the saved source
+and existing output bytes untouched. Valid regular-file profiles and literal
+audit values continue to work.
+
+Evidence: 2,198 offline all-feature Rust workspace tests, 23 native CLI
+subprocess cases, and strict production CLI Clippy passed. This closes one
+CLI source-admission gap, not the open browser-editable notebook journey.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an
