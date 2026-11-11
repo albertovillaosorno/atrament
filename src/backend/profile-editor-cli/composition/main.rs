@@ -1969,6 +1969,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut profile_selected, mut profile_edited) = (false, false);
     let (mut paper_selected, mut handwriting_selected) = (false, false);
     let mut flags = NotebookFlagPreflight::default();
+    let mut inline_ink_count = 0usize;
     // Reuse the exact, side-effect-free glyph parser before opening any
     // selected library, profile, or flow source. These temporary shapes are
     // only validation evidence; final composition parses its own library.
@@ -1980,7 +1981,16 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
             (count, false)
         } else {
             match option.as_str() {
-                "--ink-line" => parse_ink_line(&mut iter).map(|_| (0, false))?,
+                "--ink-line" => {
+                    if inline_ink_count == MAX_NOTEBOOK_INK_LINES {
+                        return Err(
+                            "ink exceeds 4096 explicit line segments".into()
+                        );
+                    }
+                    let _line = parse_ink_line(&mut iter)?;
+                    inline_ink_count = inline_ink_count.saturating_add(1);
+                    (0, false)
+                }
                 "--glyph-stroke" | "--glyph-variation" | "--place-text"
                 | "--fallback-glyph" | "--join-text-anchors"
                 | "--join-text-pair" => {

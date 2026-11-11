@@ -1321,6 +1321,62 @@ test('invalid selected output names refuse before stdin is read',
         }
     });
 
+test('over-budget inline ink refuses before an earlier open stdin read',
+    { skip: process.platform !== 'linux' }, async () => {
+        const dir = mkdtempSync(join(root, '.temp/inline-ink-budget-'));
+        try {
+            accepted('notebook');
+            const executable = join(root,
+                '.cache/cargo-target/debug/atrament-profiles');
+            const destination = join(dir, 'approved.pdf');
+            writeFileSync(destination, 'previous approved document');
+            const previous = readFileSync(destination);
+            const line = ['--ink-line', '1', '70000', '40000',
+                '71000', '41000', '250', '#123456'];
+            const inline = Array.from({ length: 4097 }, () => line).flat();
+            for (const source of [
+                ['--ink-file', '-'],
+                ['--flow-markdown-file', '-'],
+            ]) {
+                const flags = ['notebook', ...source, ...inline,
+                    '--export-paper', 'pdf', '--output', destination,
+                    '--replace'];
+                const result = await new Promise((resolve, reject) => {
+                    const child = spawn(executable, flags, {
+                        cwd: root, stdio: ['pipe', 'pipe', 'pipe'],
+                    });
+                    let stdout = '';
+                    let stderr = '';
+                    child.stdout.setEncoding('utf8');
+                    child.stderr.setEncoding('utf8');
+                    child.stdout.on('data', (chunk) => { stdout += chunk; });
+                    child.stderr.on('data', (chunk) => { stderr += chunk; });
+                    const timeout = setTimeout(() => {
+                        child.kill();
+                        reject(new Error('inline ink budget blocked on stdin'));
+                    }, 5_000);
+                    child.on('error', (error) => {
+                        clearTimeout(timeout);
+                        reject(error);
+                    });
+                    child.on('close', (status) => {
+                        clearTimeout(timeout);
+                        resolve({ status, stdout, stderr });
+                    });
+                    // Do not close stdin: no invalid request should read it.
+                });
+                assert.notEqual(result.status, 0);
+                assert.match(result.stderr,
+                    /ink exceeds 4096 explicit line segments/);
+                assert.equal(result.stdout, '');
+                assert.deepEqual(readFileSync(destination), previous,
+                    'the previously approved document cannot be replaced');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 // Keep the pipe open and unwritten: an impossible request must exit before
 // attempting even a bounded stdin read. The native binary was built by the
 // ordinary CLI invocation, so this check does not wait on Cargo's file lock.

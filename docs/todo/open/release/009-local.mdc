@@ -517,3 +517,16 @@ The `handwriting` CLI also validates the exact five-statistic tuple for
 source-independent preflight. Inverted envelopes, out-of-range means and
 impossible deviations now refuse before opening an earlier selected profile.
 Native symlink and Rust tests prove unchanged reviewed output on refusal.
+
+## Notebook inline-ink count admission before stdin — 2026-11-11
+
+The notebook CLI now counts validated `--ink-line` arguments during
+source-independent preflight, refusing the 4,097th physical line before
+opening a previously selected `--ink-file -` or Markdown stdin source. The
+existing 4,096-segment bound and exact native refusal are unchanged; mixed
+file-backed and inline ink still undergo final aggregate admission after
+source reading. The preflight does not infer glyph or notebook content.
+
+A Rust boundary test verifies the exact inclusive limit and early overflow;
+native children with deliberately unclosed stdin verify prompt refusal,
+empty stdout and unchanged approved output for two source types.

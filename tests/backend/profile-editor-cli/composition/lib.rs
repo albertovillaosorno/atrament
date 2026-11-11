@@ -694,6 +694,27 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
 }
 
 #[test]
+fn notebook_preflight_rejects_inline_ink_above_budget_before_stdin() {
+    let line = args(&[
+        "--ink-line", "1", "70000", "40000", "71000", "41000",
+        "250", "#123456",
+    ]);
+    let mut request = args(&["--ink-file", "-"]);
+    for _ in 0..MAX_NOTEBOOK_INK_LINES {
+        request.extend(line.iter().cloned());
+    }
+    preflight_notebook_sources(&request)
+        .expect("exactly 4096 valid inline lines remain admitted");
+    request.extend(line);
+    assert_eq!(
+        preflight_notebook_sources(&request).expect_err(
+            "4097th inline line must refuse before opening stdin",
+        ),
+        "ink exceeds 4096 explicit line segments",
+    );
+}
+
+#[test]
 fn notebook_preflights_exact_typed_glyph_options_without_opening_sources() {
     for (flags, diagnostic) in [
         (["--glyph-file", "-", "--glyph-stroke", "a", "3501", "500",
