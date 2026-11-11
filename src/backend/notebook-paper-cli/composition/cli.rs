@@ -77,6 +77,9 @@ fn select_output_path(
 pub(super) fn parse_options(
     args: &[String],
 ) -> Result<Option<CliRequest>, String> {
+    if args == ["--help"] {
+        return Ok(None);
+    }
     // Check every source-independent flag before opening a selected profile.
     // This uses the same typed parsers as the final pass, so a malformed late
     // option cannot consume a source or obscure the argument refusal.
@@ -132,7 +135,7 @@ fn parse_options_with_profile(
     let mut items = args.iter();
     while let Some(name) = items.next() {
         if name == "--help" {
-            return Ok(None);
+            return Err("--help must be the only argument".into());
         }
         if name == "--emit-profile" {
             select_once(&mut emit_profile,

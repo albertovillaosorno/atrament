@@ -271,6 +271,28 @@ fn export_only_page_count_may_precede_loaded_paper_profile() {
 }
 
 #[test]
+fn paper_help_must_be_the_only_argument_before_loading_selected_profiles() {
+    assert!(parse_options(&["--help".to_owned()])
+        .expect("sole help argument is accepted").is_none());
+
+    // Previously any later --help silently discarded malformed option
+    // combinations, even when a selected profile could not be opened.
+    for values in [
+        vec!["--style", "blank", "--help"],
+        vec!["--help", "--style", "grid"],
+        vec!["--profile", "missing-paper-profile.json", "--help"],
+        vec!["--profile", "missing-paper-profile.json",
+            "--pages", "2", "--help"],
+    ] {
+        let args = values.into_iter().map(str::to_owned).collect::<Vec<_>>();
+        let refusal = parse_options(&args)
+            .expect_err("help mixed with export arguments must refuse");
+        assert!(refusal.contains("--help must be the only argument"),
+            "unexpected refusal for {args:?}: {refusal}");
+    }
+}
+
+#[test]
 fn paper_profile_preflights_later_options_before_selected_source_io() {
     // An unavailable or malformed profile must not obscure a later typed
     // argument refusal. All options are parsed in source-free mode first.
@@ -302,9 +324,10 @@ fn paper_profile_preflights_later_options_before_selected_source_io() {
     let error = parse_options(&["--profile", ""].map(str::to_owned))
         .expect_err("empty selected profile path refuses in preflight");
     assert!(error.contains("--profile requires one explicit file path"));
-    let help = parse_options(&["--profile", nonexistent, "--help"]
-        .map(str::to_owned)).expect("help does not read a selected source");
-    assert!(help.is_none());
+    let error = parse_options(&["--profile", nonexistent, "--help"]
+        .map(str::to_owned))
+        .expect_err("mixed help refuses before a selected source read");
+    assert!(error.contains("--help must be the only argument"));
 }
 
 #[cfg(target_os = "linux")]
