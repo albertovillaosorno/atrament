@@ -375,7 +375,8 @@ impl NotebookFlagPreflight {
             }
             "--output" => {
                 self.unique(option, "--output requires one explicit filename")?;
-                1
+                let _selected = parse_selected_output(iter, false)?;
+                0
             }
             "--pages" | "--dpi" | "--png-page" => {
                 self.unique(option, &format!("{option} may appear only once"))?;
@@ -1057,7 +1058,8 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
             "--output" => {
                 preflight_unique_selection(&mut output_selected,
                     "--output requires one explicit filename")?;
-                1
+                let _selected = parse_selected_output(&mut iter, false)?;
+                0
             }
             "--remove-glyph" => 1,
             _ => return Err(format!("unknown glyph library option: {option}")),

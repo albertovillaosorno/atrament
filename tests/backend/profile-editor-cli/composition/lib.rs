@@ -116,6 +116,39 @@ fn glyph_library_preflight_refuses_deferred_flag_conflicts() {
 }
 
 #[test]
+fn early_output_selection_requires_a_literal_filename() {
+    for flags in [
+        ["--profile", "-", "--output", ""].as_slice(),
+        ["--profile", "-", "--output", "-"].as_slice(),
+        ["--profile", "-", "--output", "--replace"].as_slice(),
+    ] {
+        let error = preflight_glyph_profile_sources(&args(flags))
+            .expect_err("invalid selected glyph output must refuse before IO");
+        assert_eq!(error, "--output requires one explicit filename");
+    }
+    for flags in [
+        ["--ink-file", "-", "--output", ""].as_slice(),
+        ["--glyph-file", "-", "--output", "-"].as_slice(),
+        ["--flow-text-file", "-", "--output", "--replace"].as_slice(),
+    ] {
+        let error = preflight_notebook_sources(&args(flags))
+            .expect_err("invalid notebook output must refuse before IO");
+        assert_eq!(error, "--output requires one explicit filename");
+    }
+    assert_eq!(preflight_notebook_sources(&args(&[
+        "--ink-file", "-", "--output",
+    ])).expect_err("missing file must refuse"),
+    "--output requires a filename");
+    assert_eq!(preflight_glyph_profile_sources(&args(&[
+        "--profile", "-", "--output",
+    ])).expect_err("missing file must refuse"),
+    "--output requires a filename");
+    preflight_notebook_sources(&args(&[
+        "--flow-text", "--output", "--export-paper", "pdf",
+    ])).expect("flag-like flow text is not an output selection");
+}
+
+#[test]
 fn notebook_preflight_detects_invalid_sources_without_input_io() {
     for flags in [
         ["--ink-file", "-", "--glyph-file", "-"].as_slice(),

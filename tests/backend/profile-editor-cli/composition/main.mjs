@@ -1187,6 +1187,63 @@ test('glyph library stdin preserves exact Unicode ink and rejects unsafe pipes',
         }
     });
 
+test('invalid selected output names refuse before stdin is read',
+    { skip: process.platform !== 'linux' }, async () => {
+        const dir = mkdtempSync(join(root, '.temp/output-preflight-'));
+        try {
+            accepted('notebook');
+            const executable = join(root,
+                '.cache/cargo-target/debug/atrament-profiles');
+            const destination = join(dir, 'reviewed.pdf');
+            writeFileSync(destination, 'previous reviewed bytes');
+            const original = readFileSync(destination);
+            for (const [args, expected] of [
+                [['notebook', '--ink-file', '-', '--output', ''],
+                    /--output requires one explicit filename/],
+                [['notebook', '--glyph-file', '-', '--output', '-'],
+                    /--output requires one explicit filename/],
+                [['notebook', '--flow-text-file', '-', '--output',
+                    '--replace'], /--output requires one explicit filename/],
+                [['notebook', '--ink-file', '-', '--output'],
+                    /--output requires a filename/],
+                [['glyphs', '--profile', '-', '--output', ''],
+                    /--output requires one explicit filename/],
+                [['glyphs', '--profile', '-', '--output'],
+                    /--output requires a filename/],
+            ]) {
+                const result = await new Promise((resolve, reject) => {
+                    const child = spawn(executable, args, {
+                        cwd: root, stdio: ['pipe', 'pipe', 'pipe'],
+                    });
+                    let stderr = '';
+                    let stdout = '';
+                    child.stderr.setEncoding('utf8');
+                    child.stdout.setEncoding('utf8');
+                    child.stderr.on('data', (part) => { stderr += part; });
+                    child.stdout.on('data', (part) => { stdout += part; });
+                    const timer = setTimeout(() => {
+                        child.kill();
+                        reject(new Error('invalid output blocked on stdin'));
+                    }, 5_000);
+                    child.on('error', (error) => {
+                        clearTimeout(timer);
+                        reject(error);
+                    });
+                    child.on('close', (status) => {
+                        clearTimeout(timer);
+                        resolve({ status, stderr, stdout });
+                    });
+                });
+                assert.notEqual(result.status, 0);
+                assert.match(result.stderr, expected);
+                assert.equal(result.stdout, '');
+                assert.deepEqual(readFileSync(destination), original);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
 // Keep the pipe open and unwritten: an impossible request must exit before
 // attempting even a bounded stdin read. The native binary was built by the
 // ordinary CLI invocation, so this check does not wait on Cargo's file lock.

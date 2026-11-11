@@ -322,3 +322,15 @@ selected profile after input loading.
 Focused red/green Rust tests and six additional native live-pipe cases assert
 existing diagnostics, empty stdout and preservation of reviewed output.
 This is CLI argument admission, not persistent semantic notebook editing.
+
+## Selected output path before stdin reads — 2026-11-10
+
+The notebook and glyph-library CLI preflights now use their existing filename
+parser for `--output` before consuming an earlier glyph, ink or Markdown
+source. Missing, empty and dash-prefixed destinations refuse immediately,
+without waiting for an unclosed stdin pipe. Ordinary literal text operands
+remain distinct from actual `--output` selection.
+
+Focused Rust tests and a new six-case real-process unwritten-pipe regression
+verify early refusal, empty stdout and preserved accepted output. This does
+not change the atomic file-commit and overwrite authorization boundaries.
