@@ -1809,6 +1809,18 @@ fn preflight_unique_selection(
     Ok(())
 }
 
+// The same typed glyph parser must run during source-independent preflight
+// and final expansion; its inputs never require reading a selected file.
+fn preflight_notebook_glyph_option(
+    option: &str, glyphs: &mut GlyphOverlay, iter: &mut Iter<'_, String>,
+) -> Result<(), String> {
+    match option {
+        "--join-text-anchors" => glyphs.add_text_join_anchors(iter),
+        "--join-text-pair" => glyphs.add_text_join_pair(iter),
+        _ => glyphs.parse(option, iter),
+    }
+}
+
 // Reject impossible source selections before the first file or stdin read.
 // Count actual operands: Markdown text and glyph values can contain strings
 // that look like flags without selecting another input source.
@@ -1819,6 +1831,10 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut profile_selected, mut profile_edited) = (false, false);
     let (mut paper_selected, mut handwriting_selected) = (false, false);
     let mut flags = NotebookFlagPreflight::default();
+    // Reuse the exact, side-effect-free glyph parser before opening any
+    // selected library, profile, or flow source. These temporary shapes are
+    // only validation evidence; final composition parses its own library.
+    let mut glyph_preflight = GlyphOverlay::default();
     while let Some(option) = iter.next() {
         let (operands, stdin_source): (usize, bool) = if let Some(count) =
             flags.select_option(option, &mut iter)?
@@ -1827,23 +1843,20 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
         } else {
             match option.as_str() {
                 "--ink-line" => parse_ink_line(&mut iter).map(|_| (0, false))?,
-                "--glyph-stroke" | "--glyph-variation" => {
+                "--glyph-stroke" | "--glyph-variation" | "--place-text"
+                | "--fallback-glyph" | "--join-text-anchors"
+                | "--join-text-pair" => {
                     glyph_edited = true;
-                    (7, false)
+                    preflight_notebook_glyph_option(
+                        option, &mut glyph_preflight, &mut iter,
+                    )?;
+                    (0, false)
                 }
                 "--flow-region" => {
                     preflight_unique_selection(&mut region_selected,
                         "--flow-region may appear only once")?;
                     let _validated = FlowRegion::parse(&mut iter)?;
                     (0, false)
-                }
-                "--place-text" | "--join-text-anchors" => {
-                    glyph_edited = true;
-                    (4, false)
-                }
-                "--join-text-pair" | "--fallback-glyph" => {
-                    glyph_edited = true;
-                    (2, false)
                 }
                 "--glyph-file" => {
                     if glyph_file_selected || glyph_edited {

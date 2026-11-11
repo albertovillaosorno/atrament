@@ -430,6 +430,51 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
 }
 
 #[test]
+fn notebook_preflights_exact_typed_glyph_options_without_opening_sources() {
+    for (flags, diagnostic) in [
+        (["--glyph-file", "-", "--glyph-stroke", "a", "3501", "500",
+            "1800", "3000", "250", "#123456"].as_slice(),
+            "glyph x1 requires 0..3500"),
+        (["--flow-text-file", "-", "--glyph-stroke", "ñ", "500",
+            "500", "500", "500", "250", "#123456"].as_slice(),
+            "glyph stroke must have two distinct points"),
+        (["--ink-file", "-", "--glyph-variation", "42", "0",
+            "0", "0", "0", "0", "151"].as_slice(),
+            "variation regularity requires 0..150"),
+        (["--glyph-file", "-", "--place-text", "0", "30000",
+            "40000", "a"].as_slice(), "text page requires 1..32"),
+        (["--flow-text-file", "-", "--fallback-glyph", "a", "a"]
+            .as_slice(), "fallback requires two distinct exact"),
+        (["--ink-file", "-", "--join-text-anchors", "a", "b",
+            "0", "1"].as_slice(), "join exit stroke requires 1..4096"),
+        (["--glyph-file", "-", "--join-text-pair", "a", "b",
+            "--join-text-pair", "a", "b"].as_slice(),
+            "duplicate text join pair refused"),
+        (["--glyph-file", "-", "--glyph-variation", "42", "0",
+            "0", "0", "0", "0", "0", "--glyph-variation", "42",
+            "0", "0", "0", "0", "0", "0"].as_slice(),
+            "--glyph-variation may appear only once"),
+    ] {
+        let error = preflight_notebook_sources(&args(flags))
+            .expect_err("bad typed glyph option must refuse before source IO");
+        assert!(error.contains(diagnostic), "{error}");
+    }
+    for flags in [
+        ["--glyph-file", "-", "--place-text", "1", "30000", "40000",
+            "--glyph-stroke"].as_slice(),
+        ["--flow-markdown-file", "-", "--glyph-stroke", "n\u{303}",
+            "500", "500", "1800", "3000", "250", "#123456",
+            "--join-text-pair", "n\u{303}", "n\u{303}",
+            "--export-paper", "pdf"].as_slice(),
+        ["--ink-file", "-", "--fallback-glyph", "ñ", "n\u{303}",
+            "--place-text", "1", "30000", "40000", "ñ"].as_slice(),
+    ] {
+        preflight_notebook_sources(&args(flags))
+            .expect("valid option-like and decomposed Unicode operands");
+    }
+}
+
+#[test]
 fn invalid_page_ink_tsv_does_not_append_any_valid_prefix() {
     let file = test_path().with_extension("tsv");
     let name = file.to_str().expect("owned TSV path");

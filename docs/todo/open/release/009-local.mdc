@@ -380,3 +380,18 @@ remain distinct from actual `--output` selection.
 Focused Rust tests and a new six-case real-process unwritten-pipe regression
 verify early refusal, empty stdout and preserved accepted output. This does
 not change the atomic file-commit and overwrite authorization boundaries.
+
+## Typed glyph options before selected source reads — 2026-11-10
+
+Notebook CLI preflight now calls its existing typed glyph-option parsers
+before opening a selected glyph TSV, physical ink or flow source. Invalid
+stroke coordinates/width/color, placed-text geometry, glyph variation,
+fallback identities and adjacent-text join anchors/pairs therefore refuse
+before an earlier unclosed stdin pipe could block. Duplicate variation or
+join selections are also detected without reading source content.
+
+Focused Rust scanner fixtures and fourteen native real-process unwritten-pipe
+regressions verify prompt refusal, empty stdout and unchanged selected output.
+Source-dependent glyph coverage and physical page checks still run after the
+selected source is admitted. This is CLI argument safety, not persisted
+notebook text or completed handwriting composition.
