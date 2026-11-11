@@ -1660,7 +1660,7 @@ test('unavailable glyph and ink inputs refuse without waiting for stdin',
         }
     });
 
-test('missing notebook file operands refuse before an open stdin source',
+test('missing CLI operands refuse before an open stdin source',
     { skip: process.platform !== 'linux' }, async () => {
         const dir = mkdtempSync(join(root, '.temp/file-arity-preflight-'));
         try {
@@ -1670,53 +1670,80 @@ test('missing notebook file operands refuse before an open stdin source',
             const destination = join(dir, 'reviewed.pdf');
             writeFileSync(destination, 'previous reviewed notebook PDF');
             const original = readFileSync(destination);
-            const base = ['notebook', '--output', destination, '--replace',
-                '--ink-file', '-'];
-            for (const [option, expected] of [
-                ['--glyph-file', /--glyph-file requires a library path/],
-                ['--ink-file', /--ink-file requires a file/],
-                ['--profile', /--profile requires a file/],
-                ['--paper-profile', /--paper-profile requires a file/],
-                ['--flow-text-file', /flow needs a UTF-8 text value/],
-                ['--flow-markdown-file', /flow needs a UTF-8 text value/],
-            ]) {
-                for (const suffix of [[], ['']]) {
-                    const result = await new Promise((resolve, reject) => {
-                        const child = spawn(executable,
-                            [...base, option, ...suffix], {
-                                cwd: root, stdio: ['pipe', 'pipe', 'pipe'],
-                            });
-                        let stderr = '';
-                        let stdout = '';
-                        child.stderr.setEncoding('utf8');
-                        child.stdout.setEncoding('utf8');
-                        child.stderr.on('data', (chunk) => {
-                            stderr += chunk;
-                        });
-                        child.stdout.on('data', (chunk) => {
-                            stdout += chunk;
-                        });
-                        const timeout = setTimeout(() => {
-                            child.kill();
-                            reject(new Error(
-                                'missing source blocked on stdin'));
-                        }, 5_000);
-                        child.on('error', (error) => {
-                            clearTimeout(timeout);
-                            reject(error);
-                        });
-                        child.on('close', (status) => {
-                            clearTimeout(timeout);
-                            resolve({ status, stderr, stdout });
-                        });
-                        // Keep stdin open: an actual source read would hang.
+            const notebook = ['notebook', '--output', destination,
+                '--replace', '--ink-file', '-'];
+            const glyphs = ['glyphs', '--output', destination,
+                '--replace', '--profile', '-'];
+            const cases = [
+                ...[
+                    ['--glyph-file', /--glyph-file requires a library path/],
+                    ['--ink-file', /--ink-file requires a file/],
+                    ['--profile', /--profile requires a file/],
+                    ['--paper-profile', /--paper-profile requires a file/],
+                    ['--flow-text-file', /flow needs a UTF-8 text value/],
+                    ['--flow-markdown-file', /flow needs a UTF-8 text value/],
+                ].flatMap(([option, expected]) => [
+                    [[...notebook, option], expected],
+                    [[...notebook, option, ''], expected],
+                ]),
+                ...[
+                    [['--audit-text'], /--audit-text requires UTF-8 text/],
+                    [['--inspect-glyph'], /inspection requires an exact/],
+                    [['--inspect-paths'], /inspection requires an exact/],
+                    [['--remove-glyph'], /--remove-glyph requires an exact/],
+                    [['--copy-glyph', 'a'],
+                        /--copy-glyph requires 2 operands/],
+                    [['--rotate-glyph', 'a', '10', '200'],
+                        /--rotate-glyph requires 4 operands/],
+                    [['--move-stroke', 'a', '1'],
+                        /--move-stroke requires 3 operands/],
+                    [['--translate-path', 'a', '1', '0'],
+                        /--translate-path requires 4 operands/],
+                    [['--set-stroke', 'a', '1', '500', '500',
+                        '1800', '3000', '250'],
+                        /--set-stroke requires 8 operands/],
+                    [['--glyph-stroke', 'a', '500', '500',
+                        '1800', '3000', '250'],
+                        /--glyph-stroke requires 7 operands/],
+                    [['--scale-glyph-ink', 'a'],
+                        /--scale-glyph-ink requires 2 operands/],
+                ].map(([tail, expected]) => [[...glyphs, ...tail], expected]),
+            ];
+            for (const [args, expected] of cases) {
+                const result = await new Promise((resolve, reject) => {
+                    const child = spawn(executable, args, {
+                        cwd: root, stdio: ['pipe', 'pipe', 'pipe'],
                     });
-                    assert.notEqual(result.status, 0, option);
-                    assert.match(result.stderr, expected, option);
-                    assert.equal(result.stdout, '', option);
-                    assert.deepEqual(readFileSync(destination), original,
-                        'refused source cannot replace the reviewed PDF');
-                }
+                    let stderr = '';
+                    let stdout = '';
+                    child.stderr.setEncoding('utf8');
+                    child.stdout.setEncoding('utf8');
+                    child.stderr.on('data', (chunk) => {
+                        stderr += chunk;
+                    });
+                    child.stdout.on('data', (chunk) => {
+                        stdout += chunk;
+                    });
+                    const timeout = setTimeout(() => {
+                        child.kill();
+                        reject(new Error(
+                            'missing source blocked on stdin'));
+                    }, 5_000);
+                    child.on('error', (error) => {
+                        clearTimeout(timeout);
+                        reject(error);
+                    });
+                    child.on('close', (status) => {
+                        clearTimeout(timeout);
+                        resolve({ status, stderr, stdout });
+                    });
+                    // Keep stdin open: an actual source read would hang.
+                });
+                assert.notEqual(result.status, 0, args.join(' '));
+                assert.match(result.stderr, expected, args.join(' '));
+                assert.equal(result.stdout, '', args.join(' '));
+                assert.deepEqual(readFileSync(destination), original,
+                    'refused source cannot replace the reviewed PDF');
             }
         } finally {
             rmSync(dir, { recursive: true, force: true });

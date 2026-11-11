@@ -1087,6 +1087,27 @@ fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
     Ok(())
 }
 
+// A later incomplete glyph command must refuse before a previously selected
+// library may block on stdin. Preserve literal flag-looking operands.
+fn preflight_glyph_operands(
+    option: &str, count: usize, iter: &mut Iter<'_, String>,
+) -> Result<(), String> {
+    for _ in 0..count {
+        if iter.next().is_none() {
+            return Err(match option {
+                "--profile" => "--profile requires a glyph library path".into(),
+                "--audit-text" => "--audit-text requires UTF-8 text".into(),
+                "--inspect-glyph" | "--inspect-paths" =>
+                    "inspection requires an exact grapheme".into(),
+                "--remove-glyph" =>
+                    "--remove-glyph requires an exact grapheme".into(),
+                _ => format!("{option} requires {count} operands"),
+            });
+        }
+    }
+    Ok(())
+}
+
 // A repeated selected glyph library is invalid even if the first source is
 // an unclosed stdin pipe. Respect command operand counts so authored text
 // such as "--profile" cannot masquerade as another source selection.
@@ -1150,9 +1171,7 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
             "--remove-glyph" => 1,
             _ => return Err(format!("unknown glyph library option: {option}")),
         };
-        for _ in 0usize..operands {
-            if iter.next().is_none() { break }
-        }
+        preflight_glyph_operands(option, operands, &mut iter)?;
     }
     if inspection_selected && audit_selected {
         return Err("glyph inspection cannot accompany a glyph audit".into());

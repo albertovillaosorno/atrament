@@ -421,3 +421,18 @@ that resemble flags remain operands, not silently reinterpreted options.
 Focused Rust argument-scanner tests and a real native CLI open-pipe subprocess
 regression exercise each source selector. This changes command admission,
 not notebook content persistence or the incomplete localhost editor journey.
+
+## Standalone glyph argument arity admission (partial) — 2026-11-10
+
+The glyph-library CLI now refuses incomplete argument lists before reading a
+previously selected `--profile -` pipe. Every known mutation, inspection and
+audit option has its required operand count checked without opening source
+bytes.
+
+Exact existing messages are retained for the standalone profile, audit,
+inspection and glyph-removal selectors. Other incomplete edits report the
+option and expected operand count. Option-like literal values remain operands.
+
+Rust scanner tests and real native CLI children with deliberately unclosed
+stdin confirm early refusal, empty stdout, and unchanged reviewed output.
+No glyph outlines or complete notebook source documents are generated here.

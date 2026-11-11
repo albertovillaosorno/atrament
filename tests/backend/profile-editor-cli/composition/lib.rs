@@ -133,6 +133,41 @@ fn glyph_library_preflight_rejects_second_source_without_input_io() {
 }
 
 #[test]
+fn glyph_library_preflight_refuses_missing_operands_before_source_io() {
+    for (flags, diagnostic) in [
+        (["--profile", "-", "--audit-text"].as_slice(),
+            "--audit-text requires UTF-8 text"),
+        (["--profile", "-", "--inspect-glyph"].as_slice(),
+            "inspection requires an exact grapheme"),
+        (["--profile", "-", "--inspect-paths"].as_slice(),
+            "inspection requires an exact grapheme"),
+        (["--profile", "-", "--remove-glyph"].as_slice(),
+            "--remove-glyph requires an exact grapheme"),
+        (["--profile", "-", "--copy-glyph", "a"].as_slice(),
+            "--copy-glyph requires 2 operands"),
+        (["--profile", "-", "--rotate-glyph", "a", "10", "200"]
+            .as_slice(), "--rotate-glyph requires 4 operands"),
+        (["--profile", "-", "--move-stroke", "a", "1"]
+            .as_slice(), "--move-stroke requires 3 operands"),
+        (["--profile", "-", "--set-stroke", "a", "1", "500",
+            "500", "1800", "3000", "250"].as_slice(),
+            "--set-stroke requires 8 operands"),
+        (["--profile", "-", "--glyph-stroke", "a", "500",
+            "500", "1800", "3000", "250"].as_slice(),
+            "--glyph-stroke requires 7 operands"),
+        (["--profile", "-", "--scale-glyph-ink", "a"].as_slice(),
+            "--scale-glyph-ink requires 2 operands"),
+    ] {
+        let error = preflight_glyph_profile_sources(&args(flags))
+            .expect_err("missing glyph operand must refuse before stdin");
+        assert_eq!(error, diagnostic, "{flags:?}");
+    }
+    preflight_glyph_profile_sources(&args(&[
+        "--profile", "-", "--copy-glyph", "--output", "--replace",
+    ])).expect("flag-shaped values are literal operands, not options");
+}
+
+#[test]
 fn glyph_library_preflight_refuses_deferred_flag_conflicts() {
     for (flags, diagnostic) in [
         (["--profile", "-", "--audit-text", "a", "--audit-text", "b"]
