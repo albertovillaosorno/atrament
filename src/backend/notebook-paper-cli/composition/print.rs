@@ -880,7 +880,8 @@ fn bounded_stream_length(bytes: &[u8], at: &mut usize) -> Option<usize> {
 // A cross-reference stream cannot be decoded without its /W triplet.
 // Require three bounded, direct, unsigned integer field widths. This is a
 // structural preflight only: compressed data and /Index rows are not decoded.
-fn xref_stream_field_widths(bytes: &[u8], at: &mut usize) -> Option<()> {
+fn xref_stream_field_widths(bytes: &[u8], at: &mut usize)
+    -> Option<usize> {
     *at = pdf_trivia_end(bytes, *at);
     if bytes.get(*at) != Some(&b'[') {
         return None;
@@ -909,17 +910,44 @@ fn xref_stream_field_widths(bytes: &[u8], at: &mut usize) -> Option<()> {
         return None;
     }
     *at = at.checked_add(1)?;
-    Some(())
+    Some(widths.iter().sum())
+}
+
+// /Filter on an encoded xref stream names a decoder, or a nonempty array
+// of decoder names. Without it, /Length must describe complete raw rows.
+fn xref_stream_filter(bytes: &[u8], at: &mut usize) -> Option<()> {
+    *at = pdf_trivia_end(bytes, *at);
+    if bytes.get(*at) == Some(&b'/') {
+        *at = pdf_name(bytes, *at)?.1;
+        return Some(());
+    }
+    if bytes.get(*at) != Some(&b'[') {
+        return None;
+    }
+    *at = at.checked_add(1)?;
+    let mut seen = false;
+    loop {
+        *at = pdf_trivia_end(bytes, *at);
+        if bytes.get(*at) == Some(&b']') {
+            if !seen {
+                return None;
+            }
+            *at = at.checked_add(1)?;
+            return Some(());
+        }
+        *at = pdf_name(bytes, *at)?.1;
+        seen = true;
+    }
 }
 
 // /Index is optional, but when present it must enumerate nonempty,
 // increasing disjoint pairs of object start and count within /Size.
 // A terminal standalone stream must index itself. A hybrid stream may
 // instead have its own object entry in the surrounding traditional table.
-// This checks object coverage without allocating or decoding stream rows.
+// This checks coverage and row count without decoding the stream.
 fn xref_stream_index_end(
     bytes: &[u8], at: &mut usize, object_number: usize,
-) -> Option<(usize, bool)> {
+) -> Option<(usize, bool, usize)> {
     *at = pdf_trivia_end(bytes, *at);
     if bytes.get(*at) != Some(&b'[') {
         return None;
@@ -928,6 +956,7 @@ fn xref_stream_index_end(
     let mut previous_end = 0usize;
     let mut seen_range = false;
     let mut contains_self = false;
+    let mut row_count = 0usize;
     loop {
         *at = pdf_trivia_end(bytes, *at);
         if bytes.get(*at) == Some(&b']') {
@@ -935,7 +964,7 @@ fn xref_stream_index_end(
                 return None;
             }
             *at = at.checked_add(1)?;
-            return Some((previous_end, contains_self));
+            return Some((previous_end, contains_self, row_count));
         }
         let first = xref_stream_index_integer(bytes, at)?;
         let count = xref_stream_index_integer(bytes, at)?;
@@ -945,6 +974,7 @@ fn xref_stream_index_end(
             return None;
         }
         contains_self |= (first..end).contains(&object_number);
+        row_count = row_count.checked_add(count)?;
         previous_end = end;
         seen_range = true;
     }
@@ -1030,6 +1060,33 @@ fn xref_stream_data_start(prefix: &[u8], at: usize) -> Option<usize> {
     start.checked_add(6)
 }
 
+// Check the decoded-row shape of a stream without parsing its row values.
+// A filtered stream may have a different encoded /Length and is only
+// subject to exact stream frame validation after this metadata check.
+fn xref_stream_payload_shape(
+    metadata: (Option<usize>, Option<usize>, Option<usize>),
+    index: Option<(usize, bool, usize)>, object_number: usize,
+    require_self_index: bool, filtered: bool,
+) -> Option<(usize, bool)> {
+    let (Some(size), Some(length), Some(width)) = metadata else {
+        return None;
+    };
+    if object_number >= size || index.is_some_and(|(end, contains_self, _)| {
+        end > size || (require_self_index && !contains_self)
+    }) {
+        return None;
+    }
+    // Unfiltered streams contain one /W-sized entry per /Index object,
+    // or per 0..Size object when /Index is absent. No row is decoded.
+    let rows = index.map_or(size, |(_, _, count)| count);
+    if !filtered && rows.checked_mul(width)? != length {
+        return None;
+    }
+    Some((length, index.is_some_and(|(_, self_indexed, _)| {
+        !self_indexed
+    })))
+}
+
 // A terminal stream may carry /Prev just like a traditional trailer.
 // Only its immediate earlier header is checked; older chains are outside
 // this bounded lexical preflight and are never parsed recursively.
@@ -1047,8 +1104,9 @@ fn xref_stream_header_end(
     let mut found_type = false;
     let mut declared_size = None;
     let mut declared_length = None;
-    let mut found_widths = false;
+    let mut field_bytes = None;
     let mut seen_prev = false;
+    let mut seen_filter = false;
     let mut index_end = None;
     while at < prefix.len() {
         match prefix.get(at) {
@@ -1096,9 +1154,9 @@ fn xref_stream_header_end(
                         Some(bounded_xref_size(prefix, &mut at, 1)?);
                 } else if depth == 1 && array_depth == 0
                     && pdf_name_is(name, b"W") {
-                    if found_widths { return None; }
-                    xref_stream_field_widths(prefix, &mut at)?;
-                    found_widths = true;
+                    if field_bytes.is_some() { return None; }
+                    field_bytes = Some(xref_stream_field_widths(
+                        prefix, &mut at)?);
                 } else if depth == 1 && array_depth == 0
                     && pdf_name_is(name, b"Index") {
                     if index_end.is_some() { return None; }
@@ -1110,6 +1168,11 @@ fn xref_stream_header_end(
                     if declared_length.is_some() { return None; }
                     declared_length =
                         Some(bounded_stream_length(prefix, &mut at)?);
+                } else if depth == 1 && array_depth == 0
+                    && pdf_name_is(name, b"Filter") {
+                    if seen_filter { return None; }
+                    xref_stream_filter(prefix, &mut at)?;
+                    seen_filter = true;
                 } else if depth == 1 && array_depth == 0
                     && pdf_name_is(name, b"Prev") {
                     if seen_prev || !bounded_stream_previous(
@@ -1123,15 +1186,13 @@ fn xref_stream_header_end(
             _ => at = at.saturating_add(1),
         }
     }
-    if depth != 0 || array_depth != 0 || !found_type || !found_widths
-        || declared_size.is_none_or(|size| object_number >= size
-            || index_end.is_some_and(|(end, contains_self)| {
-                end > size || (previous.is_some() && !contains_self)
-            })) {
-        return None;
-    }
-    Some((xref_stream_data_start(prefix, at)?, declared_length?,
-        index_end.is_some_and(|(_, self_indexed)| !self_indexed)))
+    if depth != 0 || array_depth != 0 || !found_type { return None; }
+    let (length, needs_table_owner) = xref_stream_payload_shape(
+        (declared_size, declared_length, field_bytes), index_end,
+        object_number, previous.is_some(), seen_filter,
+    )?;
+    Some((xref_stream_data_start(prefix, at)?, length,
+        needs_table_owner))
 }
 
 // Validate exact encoded bytes and both closing delimiters for every xref

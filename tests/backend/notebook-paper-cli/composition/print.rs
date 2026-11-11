@@ -417,7 +417,8 @@ fn fake_pdf_trailers_and_retargeted_xrefs_cannot_reach_a_printer() {
     // an ASCII xref table; its offset form remains eligible for admission.
     let stream_prefix = [
         b"%PDF-1.7\n1 0 obj\n".as_slice(),
-        b"<< /Type /XRef /Size 2 /Length 1 /W [1 0 0] >>\n".as_slice(),
+        b"<< /Type /XRef /Size 2 /Index [1 1] \
+          /Length 1 /W [1 0 0] >>\n".as_slice(),
         b"stream\n\x00\nendstream\nendobj\n".as_slice(),
     ].concat();
     let stream_framing = [
@@ -476,7 +477,8 @@ fn xref_stream_tokens_cannot_hide_in_comments_or_string_literals() {
     let nested_stream = [
         "%PDF-1.7\n1 0 obj\n<< /Note (/Type /Page)\n",
         " /Type % ordinary PDF dictionary comment\n /XRef",
-        " /Size 2 /Length 1 /W [1 0 0] /DecodeParms << /Type /Page >> >>\n",
+        " /Size 2 /Index [1 1] /Length 1 /W [1 0 0] \
+          /DecodeParms << /Type /Page >> >>\n",
         "stream\r\n\u{0000}\nendstream\nendobj\n",
         "startxref\n9\n%%EOF\n",
     ].concat().into_bytes();
@@ -670,7 +672,8 @@ fn xref_stream_advertised_size_must_be_bounded_and_unique() {
     fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
         .expect("make fake spool executable");
     let framed = |dictionary: &str| format!(
-        "%PDF-1.7\n1 0 obj\n<< /Length 1 /W [1 0 0] {dictionary} >>\n\
+        "%PDF-1.7\n1 0 obj\n<< /Length 1 /W [1 0 0] \
+         /Index [1 1] {dictionary} >>\n\
          stream\n\0\nendstream\nendobj\nstartxref\n9\n%%EOF\n",
     ).into_bytes();
     for valid in [
@@ -728,7 +731,8 @@ fn xref_stream_object_identity_must_fit_declared_size() {
     let framed = |object: &str, generation: &str, size: usize| {
         format!(
             "%PDF-1.7\n{object} {generation} obj\n\
-             << /Type /XRef /Size {size} /Length 1 /W [1 0 0] >>\nstream\n\0\n\
+             << /Type /XRef /Size {size} /Index [{object} 1] \
+             /Length 1 /W [1 0 0] >>\nstream\n\0\n\
              endstream\nendobj\nstartxref\n9\n%%EOF\n",
         ).into_bytes()
     };
@@ -782,16 +786,17 @@ fn xref_stream_length_must_match_selected_raw_bytes() {
     let framed = |dictionary: &str, data: &[u8]| [
         format!(
             "%PDF-1.7\n1 0 obj\n\
-             << /Type /XRef /Size 2 /W [1 0 0] {dictionary} >>\nstream\n",
+             << /Type /XRef /Size 2 /Index [1 1] \
+             /W [1 0 0] {dictionary} >>\nstream\n",
         ).into_bytes(),
         data.to_vec(),
         b"\nendstream\nendobj\nstartxref\n9\n%%EOF\n".to_vec(),
     ].concat();
     for valid in [
         framed("/Length 1", b"\0"),
-        framed("/Length 3", b"xyz"),
+        framed("/Length 3 /Filter /FlateDecode", b"xyz"),
         framed("/Meta << /Length 99999999 >> /Length 1", b"\0"),
-        framed("/Length 16", b"\0\nendstream\nxxxx"),
+        framed("/Length 16 /Filter /FlateDecode", b"\0\nendstream\nxxxx"),
     ] {
         assert!(supported_pdf_cross_reference(&valid),
             "exact bounded raw stream data remains eligible");
@@ -826,6 +831,133 @@ fn xref_stream_length_must_match_selected_raw_bytes() {
 
 #[cfg(unix)]
 #[test]
+fn unfiltered_xref_stream_length_must_cover_all_indexed_rows() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("truncated-xref.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\nprintf contacted > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS script");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    let original = one_page_xref_stream_pdf("1.5", " /Index [0 5]");
+    assert!(supported_pdf_cross_reference(&original),
+        "complete five-row xref stream must remain eligible");
+    let mut short = original.clone();
+    let length = short.windows(b"/Length 35".len())
+        .position(|part| part == b"/Length 35")
+        .expect("known xref length");
+    short[length..length + b"/Length 35".len()]
+        .copy_from_slice(b"/Length 34");
+    let data = short.windows(b"stream\n".len())
+        .position(|part| part == b"stream\n")
+        .expect("xref stream start") + b"stream\n".len();
+    let _removed_byte = short.remove(data + 34);
+    assert!(!supported_pdf_cross_reference(&short),
+        "the final unfiltered row cannot lose a byte");
+    assert_fake_spool_rejected(
+        &pdf, &request, &fake_spool, &spooled, &short);
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+// Test-only, fully valid zlib stream with an uncompressed Deflate block.
+// This avoids test dependencies while proving an encoded PDF is readable.
+fn zlib_stored_block(bytes: &[u8]) -> Vec<u8> {
+    let length = u16::try_from(bytes.len()).expect("tiny xref fixture");
+    let mut encoded = vec![0x78, 0x01, 0x01];
+    encoded.extend_from_slice(&length.to_le_bytes());
+    encoded.extend_from_slice(&(!length).to_le_bytes());
+    encoded.extend_from_slice(bytes);
+    let (mut a, mut b) = (1u32, 0u32);
+    for byte in bytes {
+        a = (a + u32::from(*byte)) % 65_521;
+        b = (b + a) % 65_521;
+    }
+    encoded.extend_from_slice(&((b << 16) | a).to_be_bytes());
+    encoded
+}
+
+#[cfg(unix)]
+#[test]
+fn compressed_xref_stream_accepts_encoded_length_and_validates_filter() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let pdf = directory.join("compressed.pdf");
+    let spooled = directory.join("fake-spool.pdf");
+    let fake_spool = directory.join("lp.sh");
+    fs::write(&fake_spool, format!(
+        "#!/bin/sh\ncat > '{}'\n", spooled.display(),
+    )).expect("write fake CUPS script");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake CUPS executable");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    let raw = one_page_xref_stream_pdf("1.5", " /Index [0 5]");
+    let length_key = b"/Length 35";
+    let length_at = raw.windows(length_key.len())
+        .position(|part| part == length_key)
+        .expect("known uncompressed stream length");
+    let data = raw.windows(b"stream\n".len())
+        .position(|part| part == b"stream\n")
+        .expect("xref data start") + b"stream\n".len();
+    let compressed_rows = zlib_stored_block(raw.get(data..data + 35)
+        .expect("five original xref rows"));
+    assert_ne!(compressed_rows.len(), 35,
+        "encoded length differs from uncompressed row length");
+    let mut compressed = raw;
+    drop(compressed.splice(data..data + 35, compressed_rows.iter().copied()));
+    let filter_and_length = format!(
+        "/Filter /FlateDecode /Length {}", compressed_rows.len(),
+    );
+    drop(compressed.splice(length_at..length_at + length_key.len(),
+        filter_and_length.bytes()));
+    assert!(supported_pdf_cross_reference(&compressed),
+        "a framed, genuinely Flate-encoded xref stream remains eligible");
+    fs::write(&pdf, &compressed).expect("write valid compressed PDF");
+    assert_eq!(submit_selected(&request, &fake_spool)
+        .expect("compressed PDF reaches fake CUPS"),
+        sha256_profile_bytes(&compressed).bytes());
+    assert_eq!(fs::read(&spooled).expect("captured PDF"), compressed);
+    fs::remove_file(&spooled).expect("clear capture");
+
+    // A fake or repeated top-level filter must not disguise a short raw
+    // stream. The nested Filter name cannot bypass the row-length check.
+    for filter in [
+        "/Filter 123", "/Filter []", "/Filter [/FlateDecode 2]",
+        "/Filter /FlateDecode /Filter /FlateDecode",
+        "/Filter /FlateDecode /Fil#74er /FlateDecode",
+        "/Filter /", "/Filter [ ]",
+    ] {
+        let candidate = compressed
+            .windows(filter_and_length.len())
+            .position(|part| part == filter_and_length.as_bytes())
+            .map(|at| {
+                let mut changed = compressed.clone();
+                drop(changed.splice(at..at + "/Filter /FlateDecode".len(),
+                    filter.bytes()));
+                changed
+            }).expect("compressed filter dictionary");
+        assert!(!supported_pdf_cross_reference(&candidate),
+            "malformed Filter must refuse: {filter}");
+        assert_fake_spool_rejected(
+            &pdf, &request, &fake_spool, &spooled, &candidate);
+    }
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn xref_stream_requires_one_bounded_top_level_width_array() {
     use std::os::unix::fs::PermissionsExt as _;
 
@@ -838,17 +970,19 @@ fn xref_stream_requires_one_bounded_top_level_width_array() {
     )).expect("write fake CUPS script");
     fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
         .expect("make fake CUPS executable");
-    let framed = |dictionary: &str| format!(
+    let framed = |dictionary: &str, length: usize| format!(
         "%PDF-1.7\n1 0 obj\n\
-         << /Type /XRef /Size 2 /Length 1 {dictionary} >>\n\
-         stream\n\0\nendstream\nendobj\nstartxref\n9\n%%EOF\n",
+         << /Type /XRef /Size 2 /Index [1 1] \
+         /Length {length} {dictionary} >>\n\
+         stream\n{}\nendstream\nendobj\nstartxref\n9\n%%EOF\n",
+        "\0".repeat(length),
     ).into_bytes();
-    for valid in [
-        "/W [1 2 1]",
-        "/W[0 2 0]",
-        "/Meta << /W [9] >> /W [1% comment\n 2 1]",
+    for (valid, length) in [
+        ("/W [1 2 1]", 4),
+        ("/W[0 2 0]", 2),
+        ("/Meta << /W [9] >> /W [1% comment\n 2 1]", 4),
     ] {
-        let source = framed(valid);
+        let source = framed(valid, length);
         assert!(supported_pdf_cross_reference(&source),
             "bounded stream widths remain admitted: {valid:?}");
     }
@@ -859,7 +993,7 @@ fn xref_stream_requires_one_bounded_top_level_width_array() {
         "/W [1 2 1] /W [1 2 1]", "/Meta << /W [1 2 1] >>",
         "/W [1 2 999999]",
     ] {
-        let source = framed(invalid);
+        let source = framed(invalid, 1);
         assert!(!supported_pdf_cross_reference(&source),
             "invalid or hidden xref widths must refuse: {invalid:?}");
         fs::write(&pdf, &source).expect("write invalid selected PDF");
@@ -891,17 +1025,19 @@ fn xref_stream_index_ranges_are_bounded_disjoint_pairs() {
     )).expect("write fake CUPS script");
     fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
         .expect("make fake CUPS executable");
-    let framed = |index: &str| format!(
+    let framed = |index: &str, length: usize| format!(
         "%PDF-1.7\n1 0 obj\n\
-         << /Type /XRef /Size 3 /W [1 0 0] /Length 1 {index} >>\n\
-         stream\n\0\nendstream\nendobj\nstartxref\n9\n%%EOF\n",
+         << /Type /XRef /Size 3 /W [1 0 0] /Length {length} {index} >>\n\
+         stream\n{}\nendstream\nendobj\nstartxref\n9\n%%EOF\n",
+        "\0".repeat(length),
     ).into_bytes();
-    for valid in [
-        "", "/Index [1 1]", "/Index[0 2 2 1]",
-        "/Index [0% row comment\n 2]",
-        "/Meta << /Index [9 9] >> /Index [1 1]",
+    for (valid, length) in [
+        ("", 3), ("/Index [1 1]", 1),
+        ("/Index[0 2 2 1]", 3),
+        ("/Index [0% row comment\n 2]", 2),
+        ("/Meta << /Index [9 9] >> /Index [1 1]", 1),
     ] {
-        let candidate = framed(valid);
+        let candidate = framed(valid, length);
         assert!(supported_pdf_cross_reference(&candidate),
             "disjoint or omitted stream ranges remain admitted: {valid:?}");
     }
@@ -916,7 +1052,7 @@ fn xref_stream_index_ranges_are_bounded_disjoint_pairs() {
         "/Index (0 1)", "/Index [0 1 /Other]",
         "/Index [0 1.0]", "/Index [18446744073709551616 1]",
     ] {
-        let candidate = framed(invalid);
+        let candidate = framed(invalid, 1);
         assert!(!supported_pdf_cross_reference(&candidate),
             "malformed xref-stream index ranges refuse: {invalid:?}");
         fs::write(&pdf, &candidate).expect("write malformed PDF");

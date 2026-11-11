@@ -223,6 +223,24 @@ A cross-reference stream must advertise one top-level direct `/W` array
 of exactly three unsigned decimal byte widths, each from 0 to 8 inclusive.
 At least one field must occupy bytes. Missing, nested-only, duplicated,
 negative, noninteger, oversized and extra array fields refuse before CUPS.
+
+The declared widths also determine the exact raw byte count for
+**unfiltered** cross-reference streams: the sum of all selected `/Index`
+counts (or `/Size` when `/Index` is absent), multiplied by the sum of the
+three `/W` widths, must equal `/Length`. A truncated or surplus raw row
+refuses before CUPS, even when `endstream` still follows the declared
+number of bytes.
+
+A filtered stream instead requires one top-level `/Filter` with a direct PDF
+name or nonempty array of names. Duplicate filter keys and non-name filter
+values refuse; escaped spellings remain recognized. Its `/Length` describes
+**encoded** bytes, so the raw row-count equation does not apply. This gate
+checks the encoded stream's exact framing, but does not decompress it or
+verify any row's decoded content.
+
+An independently readable Flate-compressed one-page PDF is covered by the
+local fake-spool acceptance test.
+
 This local preflight does not decode compressed or uncompressed stream rows.
 
 An optional top-level `/Index` array must comprise nonempty pairs of
