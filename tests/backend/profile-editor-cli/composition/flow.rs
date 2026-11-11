@@ -7441,3 +7441,70 @@ fn short_boundary_sequences_measure_only_emitted_markdown_ink()
         "insufficient admitted Markdown boundary cases: {accepted}");
     Ok(())
 }
+
+#[test]
+fn markdown_fence_and_escaped_marker_samples_match_emitted_pitch()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    const LINES: &[&str] = &[
+        "a", "a  ", "a\\", "a\\  ", "a\\\\", " a",
+        "  a", "   a", "    a", " > a", "  > a", "   >",
+        ">", "> ", ">  ", "> a", "> a  ", "> a\\",
+        "- a", "- ", "- [ ] a", "- [x] a", "  - a",
+        "   - a", "    - a", "1. a", "9) a", "01. a",
+        "1\\. a", "1\\) a", "  3) a", "   3. a",
+        "# a", "  ## a", "### a ###", "# a  ",
+        "\\# a", "\\> a", "\\- a", "\\~a", "\\=a",
+        "===", "==", "==  ", " ---", "   ---", "    ---",
+        "---", "- - -", "***", "___", "  ___",
+        "```", "```rust", "````", "   ```",
+        "~~~", "~~~rust", "~~~~", "   ~~~",
+        "~~~ ", "``` ", "~~~#", "~~~a-b",
+        "", " ", "  ", "   ", "    ",
+    ];
+    let tall = ScalarStatistics {
+        minimum: 25_000, maximum: 25_000, mean: 25_000,
+        median: 25_000, standard_deviation: 0,
+    };
+    let mut stats = HandwritingStatisticsProfile::baseline(205);
+    for glyph in ["#", ">", "=", "-", "+", "*", "_", "`", "~",
+        "[", "]", "x", "1", "3", "9", "0", ")", ".", "\\"] {
+        stats = stats.with_glyph(glyph, DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let paper = NotebookProfile::default();
+    let mut seed = 0xb44d_9a1e_a65c_0071u64;
+    let mut accepted = 0usize;
+    for case in 0..6_000usize {
+        let mut source_text = String::new();
+        for index in 0..4usize {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let choice = usize::try_from(seed >> 32)
+                .map_err(|_| "source index refused")? % LINES.len();
+            if index != 0 { source_text.push('\n'); }
+            source_text.push_str(LINES[choice]);
+        }
+        let source = FlowSource::new(FlowFormat::Markdown, &source_text)?;
+        let Ok((runs, _, _)) = super::layout_flow(
+            &source, &paper, Some(&stats),
+            super::HeadingDecoration::default(),
+        ) else { continue; };
+        let measured = super::measured_pitch(&source, Some(&stats))?;
+        let emitted = emitted_glyph_pitch(&runs, &stats)?;
+        assert_eq!(measured, emitted,
+            "case {case}, source {source_text:?}, runs {runs:?}");
+        accepted += 1;
+    }
+    assert!(accepted > 1_800,
+        "insufficient valid fenced/escaped samples: {accepted}");
+    Ok(())
+}
