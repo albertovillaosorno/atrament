@@ -107,6 +107,11 @@ A separately admitted JSON section may coexist
 with an opaque, non-UTF-8 binary asset, whose bytes remain available without
 parsing.
 
+Stored-ZIP regressions also forge undeclared local bytes between two
+otherwise valid entries or before the central directory, then repair the
+directory offsets. The reader still rejects both layouts before exposing
+a checked member; a matching end record cannot hide an unclaimed region.
+
 Selected-path opener regressions cover link policy, relative and pinned-CWD
 paths, nonregular sources, and name replacement after opening. An unconnected
 FIFO is refused without waiting for a writer, while directories and missing

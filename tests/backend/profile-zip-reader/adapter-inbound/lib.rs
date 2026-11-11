@@ -497,6 +497,41 @@ fn trailing_or_unclaimed_local_bytes_never_hide_a_second_payload() {
 }
 
 #[test]
+fn corrected_directory_offsets_cannot_hide_unclaimed_local_bytes() {
+    let original = make_zip(&ENTRIES);
+    let first_end = 30 + "manifest.json".len() + ENTRIES[0].1.len();
+    let local_end = central_start(&original);
+    let unexpected = b"PK\x03\x04unclaimed";
+    for insertion in [first_end, local_end] {
+        let mut bytes = original.clone();
+        assert_eq!(bytes.splice(insertion..insertion,
+            unexpected.iter().copied()).count(), 0);
+        let changed_central = local_end + unexpected.len();
+        let second_directory = changed_central + 46 + "manifest.json".len();
+        if insertion == first_end {
+            let second_offset = u32::try_from(first_end + unexpected.len())
+                .expect("bounded second member offset");
+            bytes[second_directory + 42..second_directory + 46]
+                .copy_from_slice(&second_offset.to_le_bytes());
+        }
+        let directory_offset = u32::try_from(changed_central)
+            .expect("bounded central directory offset");
+        let end_record_directory = bytes.len() - 6;
+        bytes[end_record_directory..end_record_directory + 4]
+            .copy_from_slice(&directory_offset.to_le_bytes());
+        assert_eq!(
+            read_stored_profile_zip(&bytes, limits()),
+            Err(if insertion == first_end {
+                ProfileZipReadError::NonCanonical
+            } else {
+                ProfileZipReadError::InvalidStructure
+            }),
+            "unclaimed bytes at offset {insertion} must not be borrowed",
+        );
+    }
+}
+
+#[test]
 fn root_manifest_utf8_has_a_separate_byte_limit_before_json_parsing() {
     let bytes = make_zip(&ENTRIES);
     let archive = read_stored_profile_zip(&bytes, limits())
