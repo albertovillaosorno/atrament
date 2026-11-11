@@ -857,7 +857,47 @@ fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
     Ok(())
 }
 
+// A repeated selected glyph library is invalid even if the first source is
+// an unclosed stdin pipe. Respect command operand counts so authored text
+// such as "--profile" cannot masquerade as another source selection.
+fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
+    let mut iter = args.iter();
+    let mut profile_selected = false;
+    while let Some(option) = iter.next() {
+        let operands: usize = match option.as_str() {
+            "--audit-baseline" | "--replace" => 0,
+            "--glyph-stroke" => 7,
+            "--set-stroke" => 8,
+            "--rotate-glyph" | "--translate-path" => 4,
+            "--shear-glyph" | "--scale-glyph-height"
+            | "--scale-glyph-width" | "--translate-glyph"
+            | "--move-stroke" | "--rotate-path" | "--move-path" => 3,
+            "--copy-glyph" | "--reverse-stroke" | "--join-strokes"
+            | "--remove-stroke" | "--reverse-path" | "--close-path"
+            | "--scale-glyph-ink" => 2,
+            "--profile" => {
+                if profile_selected {
+                    return Err(concat!(
+                        "--glyph-file or --profile must precede authored ",
+                        "strokes and may appear only once",
+                    ).into());
+                }
+                profile_selected = true;
+                1
+            }
+            "--remove-glyph" | "--audit-text" | "--inspect-glyph"
+            | "--inspect-paths" | "--output" => 1,
+            _ => return Err(format!("unknown glyph library option: {option}")),
+        };
+        for _ in 0usize..operands {
+            if iter.next().is_none() { break }
+        }
+    }
+    Ok(())
+}
+
 fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
+    preflight_glyph_profile_sources(args)?;
     let mut glyphs = GlyphOverlay::default();
     let (mut output, mut audit_text) = (None, None);
     let (mut audit_baseline, mut replace, mut piped) = (false, false, false);

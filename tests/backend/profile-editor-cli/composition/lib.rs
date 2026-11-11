@@ -57,6 +57,30 @@ fn test_path() -> PathBuf {
 }
 
 #[test]
+fn glyph_library_preflight_rejects_second_source_without_input_io() {
+    for flags in [
+        ["--profile", "-", "--profile", "missing.tsv"].as_slice(),
+        ["--profile", "-", "--profile", "-"].as_slice(),
+        ["--profile", "-", "--glyph-stroke", "a", "500", "500",
+            "1800", "3000", "250", "#123456", "--profile", "missing.tsv"]
+            .as_slice(),
+    ] {
+        let error = preflight_glyph_profile_sources(&args(flags))
+            .expect_err("duplicate library must refuse before source I/O");
+        assert!(error.contains("may appear only once"), "{error}");
+    }
+    for flags in [
+        ["--audit-text", "--profile", "--profile", "-"].as_slice(),
+        ["--profile", "-", "--audit-text", "--profile"].as_slice(),
+        ["--glyph-stroke", "a", "500", "500", "1800", "3000",
+            "250", "#123456", "--audit-text", "--profile"].as_slice(),
+    ] {
+        preflight_glyph_profile_sources(&args(flags))
+            .expect("literal option-like operands do not select sources");
+    }
+}
+
+#[test]
 fn notebook_preflight_detects_invalid_sources_without_input_io() {
     for flags in [
         ["--ink-file", "-", "--glyph-file", "-"].as_slice(),

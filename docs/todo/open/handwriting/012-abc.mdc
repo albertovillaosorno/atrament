@@ -3118,3 +3118,15 @@ proves prompt refusal for both commands, and checks that a preexisting output
 file remains unchanged. Invalid missing paths also refuse for source order
 without attempting file opening. This does not add inferred glyph shapes or
 change the one-consumer stdin policy; P1 handwriting remains incomplete.
+
+## Standalone glyph-library source preflight — 2026-11-10
+
+The native `atrament-profiles glyphs` command now refuses a repeated
+`--profile` before opening a first selected library, including an unwritten
+stdin pipe. The scan counts each flag's operands, so literal `--profile`
+text in an audit or glyph value is not a second file source.
+
+A native subprocess regression keeps stdin open and unwritten while a late
+duplicate path or pipe is supplied; refusal must not modify previously
+reviewed output. Focused Rust tests cover operand lookalikes. This is only
+selected-source admission, not an automatic glyph-generation capability.
