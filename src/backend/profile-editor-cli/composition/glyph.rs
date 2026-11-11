@@ -306,6 +306,8 @@ impl GlyphOverlay {
     /// An English/Spanish statistics baseline alone never implies ink.
     pub(super) fn audit_text(&self, text: &str)
         -> Result<Vec<u8>, String> {
+        super::validate_glyph_audit_text(text)?;
+        self.validate_stroke_library()?;
         let mut seen = Vec::new();
         let mut missing = 0usize;
         let mut details = String::new();
@@ -504,12 +506,9 @@ impl GlyphOverlay {
                 "glyph library needs at least one authored stroke".into()
             );
         }
-        if self.strokes.len() > MAX_STROKES {
-            return Err("glyph library exceeds 4096 strokes".into());
-        }
+        self.validate_stroke_library()?;
         let mut text = format!("{GLYPH_LIBRARY_HEADER}\n");
         for stroke in &self.strokes {
-            validate_serializable_stroke(stroke)?;
             let _written = writeln!(
                 text,
                 "{}\t{}\t{}\t{}\t{}\t{}\t#{:02X}{:02X}{:02X}",
@@ -1765,12 +1764,7 @@ impl GlyphOverlay {
         // A typed sibling may supply unused shapes directly. Reject the
         // complete invalid library before rendering just the selected text,
         // rather than silently overlooking malformed unselected strokes.
-        if self.strokes.len() > MAX_STROKES {
-            return Err("glyph library exceeds 4096 strokes".into());
-        }
-        for stroke in &self.strokes {
-            validate_serializable_stroke(stroke)?;
-        }
+        self.validate_stroke_library()?;
         for run in &self.runs {
             validate_text_run(run)?;
         }
@@ -1854,6 +1848,18 @@ impl GlyphOverlay {
                     join.left, join.right,
                 ));
             }
+        }
+        Ok(())
+    }
+
+    // Audit, serialization and rendering must agree about every authored
+    // stroke, including unused rows injected by typed callers.
+    fn validate_stroke_library(&self) -> Result<(), String> {
+        if self.strokes.len() > MAX_STROKES {
+            return Err("glyph library exceeds 4096 strokes".into());
+        }
+        for stroke in &self.strokes {
+            validate_serializable_stroke(stroke)?;
         }
         Ok(())
     }

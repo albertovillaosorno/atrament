@@ -7851,6 +7851,77 @@ fn typed_placed_text_runs_keep_cli_admission_at_ink_boundary()
 }
 
 #[test]
+fn typed_glyph_audit_obeys_native_text_admission()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "á", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    let baseline = glyphs.audit_text("á")?;
+    let maximum = "á".repeat(2_048);
+    if !String::from_utf8(glyphs.audit_text(&maximum)?)
+        .map_err(|error| error.to_string())?
+        .contains("Missing authored glyphs: 0") {
+        return Err("4096-byte Unicode audit boundary was refused".into());
+    }
+    for (name, invalid) in [
+        ("empty source", String::new()),
+        ("only structural source", "  \r\n ".into()),
+        ("oversized source", "á".repeat(2_049)),
+        ("unpaired carriage return", "á\rx".into()),
+        ("control byte", "á\u{0001}".into()),
+    ] {
+        if glyphs.audit_text(&invalid).is_ok() {
+            return Err(format!("typed {name} escaped glyph audit bounds"));
+        }
+        if glyphs.audit_text("á")? != baseline {
+            return Err(format!("rejected {name} changed accepted audit"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn typed_glyph_audit_rejects_unrenderable_inventory()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "á", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    let original = glyphs.strokes[0].clone();
+    let baseline = glyphs.audit_text("á")?;
+    let mut collapsed = original.clone();
+    collapsed.end_um = collapsed.start_um;
+    let mut invalid_key = original.clone();
+    invalid_key.grapheme = "ab".into();
+    let mut outside = original.clone();
+    outside.start_um.0 = 3501;
+    for (name, invalid) in [
+        ("collapsed shape", collapsed),
+        ("invalid key", invalid_key),
+        ("out-of-cell shape", outside),
+    ] {
+        glyphs.strokes[0] = invalid;
+        if glyphs.audit_text("á").is_ok() {
+            return Err(format!("audit accepted {name} as coverage"));
+        }
+        glyphs.strokes[0] = original.clone();
+        if glyphs.audit_text("á")? != baseline {
+            return Err(format!("rejected {name} changed valid audit"));
+        }
+    }
+    glyphs.strokes.resize(4097, original);
+    if glyphs.audit_text("á").is_ok() {
+        return Err("audit accepted over-budget stroke inventory".into());
+    }
+    glyphs.strokes.truncate(1);
+    if glyphs.audit_text("á")? != baseline {
+        return Err("over-budget audit mutated valid inventory".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_glyph_expansion_limits_positioned_runs()
 -> Result<(), String> {
     let mut glyphs = GlyphOverlay::default();
