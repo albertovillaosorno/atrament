@@ -7788,6 +7788,54 @@ fn seeded_variation_keeps_exact_nfd_fallback_and_applies_selected_means() {
 }
 
 #[test]
+fn typed_glyph_expansion_refuses_unselected_invalid_ink()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    for glyph in ["a", "b"] {
+        glyphs.parse("--glyph-stroke", &mut args(&[
+            glyph, "600", "500", "1800", "3000", "250", "#123456",
+        ]).iter())?;
+    }
+    glyphs.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "a",
+    ]).iter())?;
+    let baseline = glyphs.expand(&[], None)?;
+    let original = glyphs.strokes[1].clone();
+    let mut hidden = original.clone();
+    hidden.grapheme = "\u{00ad}".into();
+    let mut collapsed = original.clone();
+    collapsed.end_um = collapsed.start_um;
+    let mut clipped = original.clone();
+    clipped.end_um.0 = 3501;
+    let mut invalid_width = original.clone();
+    invalid_width.width_um = 1501;
+    for (case, invalid) in [
+        ("non-ink glyph key", hidden),
+        ("collapsed unused segment", collapsed),
+        ("unused segment beyond cell", clipped),
+        ("unused pen outside bounds", invalid_width),
+    ] {
+        glyphs.strokes[1] = invalid;
+        if glyphs.expand(&[], None).is_ok() {
+            return Err(format!("render ignored {case}"));
+        }
+        glyphs.strokes[1] = original.clone();
+        if glyphs.expand(&[], None)? != baseline {
+            return Err(format!("{case} altered accepted replay"));
+        }
+    }
+    glyphs.strokes.resize(4097, original);
+    if glyphs.expand(&[], None).is_ok() {
+        return Err("render accepted an oversized typed glyph library".into());
+    }
+    glyphs.strokes.truncate(2);
+    if glyphs.expand(&[], None)? != baseline {
+        return Err("oversized library altered accepted replay".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_glyph_library_never_serializes_unreloadable_strokes()
 -> Result<(), String> {
     let mut glyphs = GlyphOverlay::default();

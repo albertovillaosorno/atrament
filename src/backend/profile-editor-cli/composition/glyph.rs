@@ -1773,6 +1773,15 @@ impl GlyphOverlay {
     }
 
     pub(super) fn validate_pairing(&self) -> Result<(), String> {
+        // A typed sibling may supply unused shapes directly. Reject the
+        // complete invalid library before rendering just the selected text,
+        // rather than silently overlooking malformed unselected strokes.
+        if self.strokes.len() > MAX_STROKES {
+            return Err("glyph library exceeds 4096 strokes".into());
+        }
+        for stroke in &self.strokes {
+            validate_serializable_stroke(stroke)?;
+        }
         if self.strokes.is_empty() != self.runs.is_empty() {
             return Err(concat!(
                 "--glyph-stroke and --place-text require one another; ",
