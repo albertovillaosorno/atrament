@@ -377,43 +377,11 @@ fn encode_rgba(
     if compression_bytes.saturating_add(100) > MAX_OUTPUT_BYTES {
         return Err("PNG exceeds output byte limit".into());
     }
-    let mut zlib = Vec::new();
-    zlib.try_reserve_exact(compression_bytes).map_err(|error| {
-        format!("PNG compression allocation refused: {error}")
-    })?;
-    zlib.extend_from_slice(&[0x78, 0x01]); // zlib stream, stored DEFLATE.
-    // Stream interleaved filter bytes and pixels directly into stored blocks.
-    // No second full-size filtered raster is needed alongside RGBA and zlib.
-    let mut filtered = pixels.chunks_exact(stride).flat_map(|scanline| {
-        iter::once(0u8).chain(scanline.iter().copied())
-    });
-    let mut first = 1u32;
-    let mut second = 0u32;
-    for index in 0..blocks {
-        let length = raw_len
-            .checked_sub(index.saturating_mul(usize::from(u16::MAX)))
-            .ok_or("PNG block offset overflow")?
-            .min(usize::from(u16::MAX));
-        zlib.push(u8::from(index.saturating_add(1) == blocks));
-        let len = u16::try_from(length)
-            .map_err(|error| format!("PNG block refused: {error}"))?;
-        zlib.extend_from_slice(&len.to_le_bytes());
-        zlib.extend_from_slice(&(!len).to_le_bytes());
-        let start = zlib.len();
-        zlib.extend(filtered.by_ref().take(length));
-        let end = start
-            .checked_add(length)
-            .ok_or("PNG block length overflow")?;
-        let content = zlib
-            .get(start..end)
-            .ok_or("PNG filtered raster ended before block boundary")?;
-        update_adler32(&mut first, &mut second, content);
-    }
-    zlib.extend_from_slice(&((second << 16) | first).to_be_bytes());
-
+    // Build directly into the final PNG. The caller's RGBA canvas is the
+    // only full-size input buffer; IDAT no longer needs a second zlib copy.
     let mut output = Vec::new();
     output
-        .try_reserve_exact(zlib.len().saturating_add(100))
+        .try_reserve_exact(compression_bytes.saturating_add(100))
         .map_err(|error| format!("PNG output allocation refused: {error}"))?;
     output.extend_from_slice(b"\x89PNG\r\n\x1a\n");
     let mut ihdr = Vec::with_capacity(13);
@@ -433,7 +401,51 @@ fn encode_rgba(
     phys.extend_from_slice(&ppm.to_be_bytes());
     phys.push(1); // Pixels per metre.
     png_chunk(&mut output, *b"pHYs", &phys)?;
-    png_chunk(&mut output, *b"IDAT", &zlib)?;
+
+    // IDAT length and type precede the stored-DEFLATE stream. Write its CRC
+    // after the stream so the already-serialized bytes need not be copied.
+    let idat_len = u32::try_from(compression_bytes)
+        .map_err(|error| format!("PNG IDAT length refused: {error}"))?;
+    output.extend_from_slice(&idat_len.to_be_bytes());
+    output.extend_from_slice(b"IDAT");
+    let idat_start = output.len();
+    output.extend_from_slice(&[0x78, 0x01]); // zlib, stored DEFLATE.
+    let mut filtered = pixels.chunks_exact(stride).flat_map(|scanline| {
+        iter::once(0u8).chain(scanline.iter().copied())
+    });
+    let mut first = 1u32;
+    let mut second = 0u32;
+    for index in 0..blocks {
+        let length = raw_len
+            .checked_sub(index.saturating_mul(usize::from(u16::MAX)))
+            .ok_or("PNG block offset overflow")?
+            .min(usize::from(u16::MAX));
+        output.push(u8::from(index.saturating_add(1) == blocks));
+        let len = u16::try_from(length)
+            .map_err(|error| format!("PNG block refused: {error}"))?;
+        output.extend_from_slice(&len.to_le_bytes());
+        output.extend_from_slice(&(!len).to_le_bytes());
+        let start = output.len();
+        output.extend(filtered.by_ref().take(length));
+        let end = start
+            .checked_add(length)
+            .ok_or("PNG block length overflow")?;
+        let content = output
+            .get(start..end)
+            .ok_or("PNG filtered raster ended before block boundary")?;
+        update_adler32(&mut first, &mut second, content);
+    }
+    output.extend_from_slice(&((second << 16) | first).to_be_bytes());
+    let idat_end = idat_start
+        .checked_add(compression_bytes)
+        .ok_or("PNG IDAT boundary overflow")?;
+    if output.len() != idat_end {
+        return Err("PNG IDAT differs from declared compressed size".into());
+    }
+    let idat = output.get(idat_start..idat_end)
+        .ok_or("PNG IDAT boundary exceeds output")?;
+    let crc = !crc32_part(crc32_part(!0u32, b"IDAT"), idat);
+    output.extend_from_slice(&crc.to_be_bytes());
     png_chunk(&mut output, *b"IEND", &[])?;
     Ok(output)
 }
