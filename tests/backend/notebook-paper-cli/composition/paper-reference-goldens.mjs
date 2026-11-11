@@ -365,8 +365,13 @@ test('paper CLI validates late options before loading profile or replacing PDF',
                     'preflight refusal must preserve the reviewed PDF');
             }
             const help = nativePaper('--profile', absent, '--help');
-            assert.equal(help.status, 0, help.stderr);
-            assert.match(help.stdout, /^Usage: atrament-paper/);
+            assert.notEqual(help.status, 0,
+                'mixed help must refuse without opening a selected profile');
+            assert.match(help.stderr, /--help must be the only argument/);
+            assert.equal(help.stdout, '',
+                'mixed help cannot emit a successful usage response');
+            assert.deepEqual(readFileSync(output), approved,
+                'mixed help must preserve an existing reviewed PDF');
         } finally {
             rmSync(directory, { recursive: true, force: true });
         }
