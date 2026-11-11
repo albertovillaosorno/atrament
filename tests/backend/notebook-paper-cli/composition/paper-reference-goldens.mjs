@@ -101,7 +101,7 @@ function pngCrc32(bytes) {
     return (crc ^ 0xffffffff) >>> 0;
 }
 
-function decodeNativePng(bytes, dpi, widthUm, heightUm) {
+function decodeNativePng(bytes, dpi, widthUm, heightUm, marked = false) {
     assert.deepEqual(bytes.subarray(0, 8),
         Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     const tags = [];
@@ -145,24 +145,32 @@ function decodeNativePng(bytes, dpi, widthUm, heightUm) {
     for (let row = 0; row < height; row += 1) {
         assert.equal(raster[row * stride], 0, 'unfiltered RGBA row');
     }
-    // Blank paper stays entirely transparent, even at the output budget.
-    assert.ok(raster.every(value => value === 0));
+    // Blank paper stays fully transparent; selected ruled/grid marks must
+    // contain actual opaque pigment while preserving transparent corners.
+    if (marked) {
+        assert.ok(raster.includes(255), 'marked sheet includes opaque ink');
+        assert.equal(raster[4], 0, 'unmarked upper-left remains clear');
+    } else {
+        assert.ok(raster.every(value => value === 0));
+    }
 }
 
 test('native transparent PNG passes independent CRC and zlib validation',
     () => {
         const directory = mkdtempSync(join(tmpdir(), 'atrament-png-frame-'));
         try {
-            const output = join(directory, 'blank.png');
+            const output = join(directory, 'canvas.png');
             // 300-DPI A4 exceeds five million pixels, but A5 remains
             // admissible and independently decodable at the maximum DPI.
-            for (const { dpi, size, widthUm, heightUm } of [
+            for (const { dpi, size, widthUm, heightUm, style = 'blank' } of [
                 { dpi: 72, size: 'a4', widthUm: 210000, heightUm: 297000 },
                 { dpi: 150, size: 'a4', widthUm: 210000, heightUm: 297000 },
                 { dpi: 225, size: 'a4', widthUm: 210000, heightUm: 297000 },
                 { dpi: 300, size: 'a5', widthUm: 148000, heightUm: 210000 },
+                { dpi: 300, size: 'a5', widthUm: 148000, heightUm: 210000,
+                    style: 'grid' },
             ]) {
-                const run = nativePaper('--style', 'blank',
+                const run = nativePaper('--style', style,
                     '--paper-size', size, '--format', 'png',
                     '--dpi', String(dpi), '--output', output,
                     ...(dpi === 72 ? [] : ['--replace']));
@@ -170,7 +178,8 @@ test('native transparent PNG passes independent CRC and zlib validation',
                 const png = readFileSync(output);
                 assert.ok(png.length <= 24_000_000,
                     'bounded native PNG output');
-                decodeNativePng(png, dpi, widthUm, heightUm);
+                decodeNativePng(png, dpi, widthUm, heightUm,
+                    style !== 'blank');
             }
             const accepted = readFileSync(output);
             const refused = nativePaper('--style', 'blank',

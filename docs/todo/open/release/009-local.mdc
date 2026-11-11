@@ -584,7 +584,7 @@ physical geometry and encoded output budgets remain unchanged.
 The checked-in ruled/grid PDF and PNG golden bytes stay identical. An
 independent Node PNG decoder validates chunk CRCs, zlib inflation, unfiltered
 RGBA transparency, dimensions and physical resolution for A4 at 72, 150 and
-225 DPI, and the still-admitted A5 at the maximum 300 DPI. A4 at 300 DPI
+225 DPI, and both blank and grid A5 at the maximum 300 DPI. A4 at 300 DPI
 continues to refuse the five-million-pixel ceiling without replacing a
 reviewed PNG.
 
