@@ -7788,6 +7788,78 @@ fn seeded_variation_keeps_exact_nfd_fallback_and_applies_selected_means() {
 }
 
 #[test]
+fn typed_stroke_replacement_refuses_invalid_geometry_atomically()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "a", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    let accepted = glyphs.encode_file()?;
+    let original = glyphs.strokes.first().cloned()
+        .ok_or("missing accepted typed shape")?;
+    let mut collapsed = original.clone();
+    collapsed.end_um = collapsed.start_um;
+    let mut outside = original.clone();
+    outside.end_um.0 = 3501;
+    let mut too_thin = original.clone();
+    too_thin.width_um = 79;
+    let mut too_thick = original;
+    too_thick.width_um = 1501;
+    for (description, replacement) in [
+        ("collapsed", collapsed),
+        ("outside cell", outside),
+        ("too thin", too_thin),
+        ("too thick", too_thick),
+    ] {
+        if glyphs.set_stroke("a", 1, replacement).is_ok() {
+            return Err(format!("{description} typed stroke was accepted"));
+        }
+        if glyphs.encode_file()? != accepted {
+            return Err(format!("{description} poisoned the canonical library"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn typed_glyph_expansion_refuses_over_budget_manual_ink()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    let valid = NotebookInkLine {
+        page: 1,
+        start_um: (25_000, 30_000),
+        end_um: (27_000, 32_000),
+        width_um: 250,
+        rgb: [0x12, 0x34, 0x56],
+    };
+    let within_limit = vec![valid; MAX_NOTEBOOK_INK_LINES];
+    if glyphs.expand(&within_limit, None)? != within_limit {
+        return Err("boundary-sized manual ink was changed".into());
+    }
+    let mut over_limit = within_limit.clone();
+    over_limit.push(valid);
+    let Err(error) = glyphs.expand(&over_limit, None) else {
+        return Err("over-budget typed manual ink was admitted".into());
+    };
+    if !error.contains("4096") {
+        return Err(format!("unexpected ink budget refusal: {error}"));
+    }
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "a", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    glyphs.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "a",
+    ]).iter())?;
+    let Err(error) = glyphs.expand(&within_limit, None) else {
+        return Err("authored glyph overflowed typed manual ink budget".into());
+    };
+    if !error.contains("4096") {
+        return Err(format!("unexpected glyph budget refusal: {error}"));
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_glyph_expansion_refuses_unvalidated_statistics()
 -> Result<(), String> {
     use atrament_handwriting_statistics::{

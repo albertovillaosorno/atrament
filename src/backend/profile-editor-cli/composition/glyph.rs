@@ -558,6 +558,9 @@ impl GlyphOverlay {
         // duplicate dimensions or unbounded means before placing any ink.
         validate_glyph_statistics(statistics)?;
         self.validate_pairing()?;
+        if manual.len() > MAX_NOTEBOOK_INK_LINES {
+            return Err("manual ink exceeds 4096 total pen strokes".into());
+        }
         let mut expanded = manual.to_vec();
         let mut boundary_ink_end = (boundary_run == 0)
             .then_some(expanded.len());
@@ -1580,6 +1583,17 @@ impl GlyphOverlay {
             return Err(
                 "replacement glyph identity must match selection".into()
             );
+        }
+        // CLI operands are parsed by parse_stroke, but typed sibling callers
+        // must not be able to install a malformed segment into a saved TSV.
+        if replacement.start_um == replacement.end_um
+            || [replacement.start_um.0, replacement.end_um.0]
+                .iter().any(|x| *x > 3500)
+            || [replacement.start_um.1, replacement.end_um.1]
+                .iter().any(|y| *y > 4500)
+            || !(80..=1500).contains(&replacement.width_um) {
+            return Err("replacement glyph geometry outside native bounds"
+                .into());
         }
         let positions = self.matching_stroke_positions(grapheme)?;
         let index = Self::checked_stroke_position(&positions, ordinal)?;
