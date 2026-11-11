@@ -7788,6 +7788,47 @@ fn seeded_variation_keeps_exact_nfd_fallback_and_applies_selected_means() {
 }
 
 #[test]
+fn typed_glyph_expansion_limits_selected_text_join_pairs()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    let letters = "abcdefghijklmnopqrstuvwxyzABCDEFGH";
+    let keys = letters.chars().map(|ch| ch.to_string())
+        .collect::<Vec<_>>();
+    for key in &keys {
+        glyphs.parse("--glyph-stroke", &mut args(&[
+            key, "125", "2250", "3375", "2250", "250", "#123456",
+        ]).iter())?;
+    }
+    glyphs.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", letters,
+    ]).iter())?;
+    for pair in keys.windows(2).take(32) {
+        glyphs.add_text_join_pair(&mut args(&[
+            &pair[0], &pair[1],
+        ]).iter())?;
+    }
+    let baseline = glyphs.expand(&[], None)?;
+    if baseline.len() != 66 {
+        return Err("expected 34 glyphs and 32 explicit bridges".into());
+    }
+    glyphs.text_joins.push(TextJoin {
+        left: keys[32].clone(), right: keys[33].clone(), anchors: None,
+    });
+    let Err(error) = glyphs.expand(&[], None) else {
+        return Err("typed 33rd text join bypassed CLI limit".into());
+    };
+    if !error.contains("32") {
+        return Err(format!("unexpected join limit refusal: {error}"));
+    }
+    let _removed = glyphs.text_joins.pop()
+        .ok_or("missing rejected join")?;
+    if glyphs.expand(&[], None)? != baseline {
+        return Err("rejected join changed accepted physical ink".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_glyph_expansion_refuses_unselected_invalid_ink()
 -> Result<(), String> {
     let mut glyphs = GlyphOverlay::default();

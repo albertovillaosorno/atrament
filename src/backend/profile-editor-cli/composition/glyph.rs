@@ -1794,6 +1794,11 @@ impl GlyphOverlay {
         if !self.text_joins.is_empty() && self.runs.is_empty() {
             return Err("--join-text-pair requires placed text".into());
         }
+        // The CLI caps pairs on insertion, but a typed sibling can construct
+        // the join list directly. Keep the same bounded export admission.
+        if self.text_joins.len() > MAX_TEXT_JOIN_PAIRS {
+            return Err("text joins limited to 32 selected pairs".into());
+        }
         if !self.fallbacks.is_empty() && self.runs.is_empty() {
             return Err(concat!(
                 "--fallback-glyph requires authored glyphs ",
