@@ -92,6 +92,11 @@ bytes, start with a letter or number, and otherwise contain only letters,
 numbers, `_`, `-` or `.`. Unknown flags, invalid queues and duplicate options
 refuse before any print submission.
 
+A bare dash-prefixed token cannot be
+used as the `--pdf` filename, even if a matching file exists, because an
+omitted pathname could otherwise consume `--dry-run` and submit a job.
+Use `./--filename.pdf` for a deliberately dash-prefixed basename.
+
 The PDF is read through Atrament's symlink-refusing Linux selected-file
 opener and exact bounded reader. Missing, nonregular, symlinked, changing
 or larger-than-24,000,000-byte inputs refuse.

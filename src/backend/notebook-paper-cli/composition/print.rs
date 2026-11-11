@@ -140,7 +140,8 @@ fn parse_args(args: &[String]) -> Result<Option<PrintRequest>, String> {
             .next()
             .ok_or_else(|| format!("{flag} requires a value; use --help"))?;
         match flag.as_str() {
-            "--pdf" if pdf.is_none() && !value.is_empty() => {
+            "--pdf" if pdf.is_none() && !value.is_empty()
+                && !value.starts_with('-') => {
                 pdf = Some(PathBuf::from(value));
             }
             "--expect-sha256" if expected_sha256.is_none() => {

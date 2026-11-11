@@ -194,6 +194,10 @@ fn printing_requires_exact_file_and_named_queue() {
             "q",
         ],
         vec!["--help", "--pdf", "notebook.pdf"],
+        vec!["--pdf", "--dry-run", "--printer", "queue"],
+        vec!["--pdf", "--help", "--printer", "queue"],
+        vec!["--pdf", "--printer", "--printer", "queue"],
+        vec!["--pdf", "-document.pdf", "--printer", "queue"],
         vec!["--pdf", "file.pdf", "--printer", "q", "--expect-sha256", "ff"],
         vec!["--pdf", "file.pdf", "--printer", "q", "--expect-sha256", "Z"],
         vec!["--pdf", "file.pdf", "--printer", "q", "--expect-sha256", ""],
@@ -213,6 +217,12 @@ fn printing_requires_exact_file_and_named_queue() {
         let args = flags.iter().map(ToString::to_string).collect::<Vec<_>>();
         assert!(parse_args(&args).is_err(), "refused {flags:?}");
     }
+    let explicit_dash_basename = [
+        "--pdf", "./--dry-run", "--printer", "queue",
+    ].map(str::to_owned);
+    assert_eq!(parse_args(&explicit_dash_basename)
+        .expect("explicitly prefixed dash basename is a path")
+        .expect("explicit print request").pdf, PathBuf::from("./--dry-run"));
     assert!(!valid_printer(&"a".repeat(81)));
 
 }
