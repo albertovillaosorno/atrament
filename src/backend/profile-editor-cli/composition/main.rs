@@ -1104,6 +1104,11 @@ fn load_page_ink_file(
     path: &str,
     ink: &mut Vec<NotebookInkLine>,
 ) -> Result<(), String> {
+    // Every valid file has at least one row. If no capacity remains,
+    // refuse before opening another file or waiting for stdin EOF.
+    if ink.len() >= MAX_NOTEBOOK_INK_LINES {
+        return Err("ink exceeds 4096 explicit line segments".into());
+    }
     let bytes = if path == "-" {
         read_bounded_stdin(MAX_PAGE_INK_FILE_BYTES, "ink")?
     } else {

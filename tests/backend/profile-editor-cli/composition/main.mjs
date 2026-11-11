@@ -1177,10 +1177,10 @@ test('glyph library stdin preserves exact Unicode ink and rejects unsafe pipes',
         }
     });
 
-// Keep the pipe open and unwritten: an invalid option order must exit before
+// Keep the pipe open and unwritten: an impossible request must exit before
 // attempting even a bounded stdin read. The native binary was built by the
 // ordinary CLI invocation, so this check does not wait on Cargo's file lock.
-test('out-of-order glyph sources refuse without waiting for stdin',
+test('unavailable glyph and ink inputs refuse without waiting for stdin',
     { skip: process.platform !== 'linux' }, async () => {
         const dir = mkdtempSync(join(root, '.temp/glyph-order-pipe-'));
         try {
@@ -1192,10 +1192,18 @@ test('out-of-order glyph sources refuse without waiting for stdin',
             const previous = readFileSync(destination);
             const executable = join(root,
                 '.cache/cargo-target/debug/atrament-profiles');
-            for (const flags of [
-                ['glyphs', ...shape, '--profile', '-'],
-                ['notebook', ...shape, '--glyph-file', '-',
+            const saturated = join(dir, 'full-ink.tsv');
+            const line = '1\t70000\t40000\t71000\t41000\t250\t#123456\n';
+            writeFileSync(saturated,
+                'atrament.page-ink.v1\n' + line.repeat(4096));
+            for (const [flags, expected] of [
+                [['glyphs', ...shape, '--profile', '-'],
+                    /must precede authored strokes and may appear only once/],
+                [['notebook', ...shape, '--glyph-file', '-',
                     '--export-paper', 'pdf'],
+                    /must precede authored strokes and may appear only once/],
+                [['notebook', '--ink-file', saturated, '--ink-file', '-',
+                    '--emit-ink-file'], /ink exceeds 4096 explicit/],
             ]) {
                 const args = [...flags, '--output', destination,
                     '--replace'];
@@ -1224,12 +1232,15 @@ test('out-of-order glyph sources refuse without waiting for stdin',
                     // Do not close or write to child.stdin before it exits.
                 });
                 assert.notEqual(result.status, 0);
-                assert.match(result.stderr,
-                    /must precede authored strokes and may appear only once/);
+                assert.match(result.stderr, expected);
                 assert.equal(result.stdout, '');
                 assert.deepEqual(readFileSync(destination), previous,
-                    'invalid source order preserves accepted file bytes');
+                    'refused source leaves accepted output unchanged');
             }
+            refused(['notebook', '--ink-file', saturated, '--ink-file',
+                join(dir, 'missing.tsv'), '--emit-ink-file',
+                '--output', destination, '--replace'],
+            /ink exceeds 4096 explicit/, destination);
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }

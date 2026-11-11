@@ -306,3 +306,17 @@ combined ink-budget overflow, valid retry and refusal after one earlier layer
 was accepted. Existing layers preserve exact page, endpoint, width and color
 values. No new ink synthesis, semantic notebook storage or image overlay is
 implied; the P1 notebook export acceptance remains open.
+
+## Exhausted physical ink refuses before source I/O — 2026-11-10
+
+When existing manual or imported strokes already fill the native 4096-segment
+budget, another nonempty `--ink-file` cannot be admitted. The page-ink loader
+now refuses this state before opening a later source or waiting for an
+unclosed `--ink-file -` stdin stream. The entire TSV remains staged before
+append if capacity is still available.
+
+A native subprocess regression imports a valid 4096-row layer, leaves a
+second selected pipe open and unwritten, and verifies immediate refusal
+without changing accepted output. A missing second file is also refused for
+the exhausted budget before the file opener runs. This is an admission and
+nonblocking improvement, not persisted notebook content or complete export.
