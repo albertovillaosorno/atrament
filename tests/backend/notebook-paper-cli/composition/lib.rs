@@ -1375,6 +1375,52 @@ fn authored_horizontal_and_vertical_ink_use_round_png_pen_caps() {
 }
 
 #[test]
+fn five_megapixel_png_boundary_keeps_authored_ink_near_last_margin() {
+    // Width and height round up to exactly 2000 x 2500 pixels at 300 DPI.
+    // Adding one micrometre to either dimension adds an entire pixel row or
+    // column and must not bypass the inclusive five-million-pixel ceiling.
+    let page = Options {
+        style: Style::Blank,
+        width_um: 169_333,
+        height_um: 211_666,
+        ..Options::default()
+    };
+    let ink = [NotebookInkLine {
+        page: 1,
+        start_um: (151_000, 194_000),
+        end_um: (154_000, 194_000),
+        width_um: 700,
+        rgb: [0x7a, 0x26, 0xd4],
+    }];
+    let selected = encode_profile(page);
+    let rendered = paper_profile_png_page_with_ink(
+        selected.as_bytes(), 300, false, None, false, 1, 0,
+        None, &ink,
+    ).expect("five million RGBA pixels with near-edge pen ink");
+    let (width, height, raw) = stored_png_pixels(&rendered);
+    assert_eq!((width, height), (2_000, 2_500));
+    let pixel = |x: usize, y: usize| -> &[u8] {
+        let index = y * (width * 4 + 1) + 1 + x * 4;
+        raw.get(index..index + 4).expect("5MP raster sample")
+    };
+    assert_eq!(pixel(1_800, 2_291), &[0x7a, 0x26, 0xd4, 255],
+        "last printable-area pen stroke remains visible");
+    assert_eq!(pixel(1_999, 2_499), &[0, 0, 0, 0],
+        "last physical pixel remains transparent outside the margin");
+    assert_eq!(pixel(0, 0), &[0, 0, 0, 0]);
+    for oversized in [
+        Options { width_um: 169_334, ..page },
+        Options { height_um: 211_667, ..page },
+    ] {
+        let refused = paper_profile_png_page_with_ink(
+            encode_profile(oversized).as_bytes(), 300, false, None,
+            false, 1, 0, None, &ink,
+        ).expect_err("one extra output row or column exceeds 5MP");
+        assert!(refused.contains("PNG pixel budget"), "{refused}");
+    }
+}
+
+#[test]
 fn maximum_dpi_a5_png_preserves_round_ink_caps_and_transparent_diagonals() {
     let paper = encode_profile(Options {
         style: Style::Blank,

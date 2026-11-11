@@ -680,3 +680,17 @@ raster resolution without changing production colors or PNG bytes.
 These are physical pixel and overlay-order regressions only. They do not
 supply handwriting glyph outlines, source persistence, image overlays,
 full notebook export or physical print/scan accuracy.
+
+## Inclusive five-megapixel authored PNG boundary — 2026-11-11
+
+A direct Rust raster regression now renders explicit purple pen ink near the
+last printable margin of a custom 169.333-by-211.666-mm sheet at 300 DPI.
+The result is exactly 2,000 by 2,500 transparent RGBA pixels, and the
+selected horizontal stroke remains visible near the bottom-right writing
+region without making the sheet corner opaque.
+
+Increasing either paper dimension by one micrometre must refuse the same
+ink-bearing request before any PNG bytes exist. This complements the prior
+blank-page native CLI no-clobber tests: genuine handwritten segments now
+exercise the exact inclusive resource ceiling as well as physical geometry.
+It does not infer glyphs or complete the saved notebook/print workflow.
