@@ -904,6 +904,38 @@ fn transparent_png_grid_has_real_ink_and_physical_resolution() {
     assert_eq!(bytes, render_png(options, 150).expect("deterministic PNG"));
 }
 
+// Pin independently exported pre-row-span native PNG output at maximum
+// admitted A5 DPI. Real grid, ruled and dot styles exercise both stroked
+// rectangles and square dots without importing the same raster algorithm.
+#[test]
+fn a5_high_dpi_paper_marks_keep_previous_encoded_pixels() {
+    use atrament_profile_entry_sha256::sha256_profile_bytes;
+    use std::fmt::Write as _;
+
+    let cases = [
+        (Style::Grid,
+            "395ab3f7aca3bf122e216151e904be39f8f1513ff430eb48acd7b9c63e162ecb"),
+        (Style::Ruled,
+            "7097b55812beebb3231b15744f464e9b1b40d69e215a8dfd18401f2b02c71f7e"),
+        (Style::Dot,
+            "e474ab1e6f05e54e0e13992eae31161fa5a582d449806b7f400ce1def260051e"),
+    ];
+    for (style, expected) in cases {
+        let png = render_png(Options {
+            color: PdfRgb { red: 0xAB, green: 0xCD, blue: 0xEF },
+            style,
+            width_um: 148_000,
+            height_um: 210_000,
+            ..Options::default()
+        }, 300).expect("300-DPI A5 physical paper");
+        let mut digest = String::with_capacity(64);
+        for byte in sha256_profile_bytes(&png).bytes() {
+            write!(&mut digest, "{byte:02x}").expect("hex digest");
+        }
+        assert_eq!(digest, expected, "physical paper PNG output changed");
+    }
+}
+
 // These are deterministic *candidate* image goldens, not an owner's
 // visually approved reference. Pin real compressed PNG, decoded RGBA and
 // vector PDF separately so encoder and physical ink drift are visible.

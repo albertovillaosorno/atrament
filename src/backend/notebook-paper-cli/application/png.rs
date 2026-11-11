@@ -326,20 +326,26 @@ fn paint_rectangle(
     let top = pixel_coordinate(rectangle.top, dpi, false)?.min(height);
     let right = pixel_coordinate(rectangle.right, dpi, true)?.min(width);
     let bottom = pixel_coordinate(rectangle.bottom, dpi, true)?.min(height);
+    // Verify one contiguous RGBA span per row rather than recomputing the
+    // checked pixel offset and channel window for every painted pixel.
+    let stride = width.checked_mul(4)
+        .ok_or("PNG row stride overflow")?;
+    let from = left.checked_mul(4)
+        .ok_or("PNG row start overflow")?;
+    let to = right.checked_mul(4)
+        .ok_or("PNG row end overflow")?;
+    let pigment = [color.red, color.green, color.blue, 255];
     for row in top..bottom {
-        for column in left..right {
-            let pixel_index = row
-                .checked_mul(width)
-                .and_then(|offset| offset.checked_add(column))
-                .and_then(|pixel| pixel.checked_mul(4))
-                .ok_or("PNG pixel offset overflow")?;
-            let end = pixel_index
-                .checked_add(4)
-                .ok_or("PNG channel offset overflow")?;
-            let pixel = pixels
-                .get_mut(pixel_index..end)
-                .ok_or("PNG channel access outside raster")?;
-            pixel.copy_from_slice(&[color.red, color.green, color.blue, 255]);
+        let start = row.checked_mul(stride)
+            .and_then(|offset| offset.checked_add(from))
+            .ok_or("PNG row start overflow")?;
+        let end = row.checked_mul(stride)
+            .and_then(|offset| offset.checked_add(to))
+            .ok_or("PNG row end overflow")?;
+        let span = pixels.get_mut(start..end)
+            .ok_or("PNG row channels outside raster")?;
+        for pixel in span.as_chunks_mut::<4>().0 {
+            pixel.copy_from_slice(&pigment);
         }
     }
     Ok(())
