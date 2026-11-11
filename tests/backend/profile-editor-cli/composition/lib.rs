@@ -468,6 +468,35 @@ fn notebook_preflight_requires_selected_file_operands_before_stdin() {
 }
 
 #[test]
+fn notebook_preflight_refuses_unplaceable_ink_before_selected_source() {
+    for flags in [
+        ["--glyph-file", "-", "--export-paper", "pdf"].as_slice(),
+        ["--glyph-file", "-", "--emit-ink-file"].as_slice(),
+        ["--glyph-file", "-", "--ink-line", "1", "70000", "40000",
+            "71000", "41000", "250", "#123456", "--export-paper",
+            "pdf"].as_slice(),
+    ] {
+        let error = preflight_notebook_sources(&args(flags))
+            .expect_err("unplaced glyph library must refuse before stdin");
+        assert!(error.contains("--glyph-stroke and --place-text require"),
+            "{flags:?}: {error}");
+    }
+    let error = preflight_notebook_sources(&args(&[
+        "--profile", "unopened.json", "--emit-ink-file",
+    ])).expect_err("empty ink export must refuse before opening profile");
+    assert_eq!(error, "page ink export needs at least one physical segment");
+
+    for flags in [
+        ["--glyph-file", "-", "--place-text", "1", "30000", "40000",
+            "a", "--emit-ink-file"].as_slice(),
+        ["--ink-file", "-", "--emit-ink-file"].as_slice(),
+    ] {
+        preflight_notebook_sources(&args(flags))
+            .expect("selected input can supply placed physical ink");
+    }
+}
+
+#[test]
 fn notebook_preflight_detects_invalid_sources_without_input_io() {
     for flags in [
         ["--ink-file", "-", "--glyph-file", "-"].as_slice(),
@@ -823,10 +852,11 @@ fn notebook_preflight_requires_export_for_inline_ink_and_glyphs() {
     }
     for source in [
         ["--ink-file", "-", "--emit-ink-file"].as_slice(),
-        ["--glyph-file", "-", "--export-paper", "pdf"].as_slice(),
+        ["--glyph-file", "-", "--place-text", "1", "30000", "40000",
+            "a", "--export-paper", "pdf"].as_slice(),
     ] {
         preflight_notebook_sources(&args(source))
-            .expect("selected ink/glyph file can feed explicit exports");
+            .expect("selected ink or placed glyphs can feed exports");
     }
 }
 

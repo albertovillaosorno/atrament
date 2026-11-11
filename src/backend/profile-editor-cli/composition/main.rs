@@ -467,6 +467,14 @@ impl NotebookFlagPreflight {
                 "--export-paper pdf or png or --emit-ink-file",
             ).into());
         }
+        if self.export_format == Some(NotebookExportFormat::InkTsv)
+            && inline_ink_count == 0 && flow_format.is_none()
+            && !glyph_has_any && !self.imported_overlay_selected
+        {
+            return Err(
+                "page ink export needs at least one physical segment".into()
+            );
+        }
         Ok(())
     }
 }
@@ -2151,6 +2159,10 @@ fn preflight_notebook_ink_requirements(
                 "and placed text",
             ).into());
         }
+        return Err(concat!(
+            "--glyph-stroke and --place-text require one another; ",
+            "all visible graphemes need an authored shape",
+        ).into());
     }
     Ok(())
 }

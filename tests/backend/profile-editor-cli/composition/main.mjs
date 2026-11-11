@@ -1466,6 +1466,12 @@ test('unavailable glyph and ink inputs refuse without waiting for stdin',
                     /must precede authored strokes and may appear only once/],
                 // Source-independent missing glyphs/placement must refuse
                 // even while the selected stdin pipe remains open.
+                [['notebook', '--glyph-file', '-',
+                    '--export-paper', 'pdf'],
+                    /--glyph-stroke and --place-text require one another/],
+                [['notebook', '--glyph-file', '-',
+                    '--emit-ink-file'],
+                    /--glyph-stroke and --place-text require one another/],
                 [['notebook', '--flow-text-file', '-', '--export-paper', 'pdf'],
                     /flow requires authored glyph shapes/],
                 [['notebook', '--flow-markdown-file', '-',
