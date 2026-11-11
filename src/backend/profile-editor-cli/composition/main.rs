@@ -2437,9 +2437,13 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
         writeln!(io::stdout().lock(), "{USAGE}")?;
         return Ok(());
     };
+    // A flag-looking value can be literal text for an audit or flow.
+    // Only a sole mode option requests help; do not bypass admission for
+    // --audit-text --help, --flow-text --help or invalid numeric operands.
+    let help_only = matches!(rest, [option] if option == "--help");
     match mode.as_str() {
         "paper" => atrament_notebook_paper_cli::run_cli_args(rest)?,
-        "glyphs" if rest.iter().any(|arg| arg == "--help") => {
+        "glyphs" | "handwriting" if help_only => {
             writeln!(io::stdout().lock(), "{USAGE}")?;
         }
         "glyphs" => {
@@ -2447,16 +2451,13 @@ fn run(args: &[String]) -> Result<(), Box<dyn Error>> {
                 io::stdout().lock().write_all(&bytes)?;
             }
         }
-        "notebook" if rest.iter().any(|arg| arg == "--help") => {
+        "notebook" if help_only => {
             writeln!(io::stdout().lock(), "{NOTEBOOK_USAGE}")?;
         }
         "notebook" => {
             if let Some(bytes) = execute_notebook(rest)? {
                 io::stdout().lock().write_all(&bytes)?;
             }
-        }
-        "handwriting" if rest.iter().any(|arg| arg == "--help") => {
-            writeln!(io::stdout().lock(), "{USAGE}")?;
         }
         "handwriting" => {
             if let Some(bytes) = execute_handwriting(rest)? {

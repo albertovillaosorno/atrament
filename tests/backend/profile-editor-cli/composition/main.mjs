@@ -46,6 +46,38 @@ function refused(args, expected, preserved) {
         'selected destination must remain identical after refusal');
 }
 
+test('literal --help data does not bypass CLI admission', () => {
+    for (const [mode, option] of [
+        ['handwriting', '--inventory-text'],
+        ['glyphs', '--audit-text'],
+    ]) {
+        const result = profiles(mode, option, '--help');
+        assert.equal(result.status, 0, result.stderr.toString('utf8'));
+        assert.match(result.stdout.toString('utf8'),
+            /Distinct visible graphemes: 5/);
+        assert.doesNotMatch(result.stdout.toString('utf8'),
+            /Usage: atrament-profiles/);
+    }
+    for (const [mode, flags, expected] of [
+        ['handwriting', ['--seed', '--help'], /invalid seed/],
+        ['glyphs', ['--inspect-glyph', '--help'],
+            /inspection requires one exact/],
+        ['notebook', ['--flow-text', '--help', '--export-paper',
+            'pdf'], /flow requires authored glyph shapes/],
+    ]) {
+        const result = profiles(mode, ...flags);
+        assert.notEqual(result.status, 0);
+        assert.match(result.stderr.toString('utf8'), expected);
+        assert.equal(result.stdout.length, 0);
+    }
+    for (const mode of ['handwriting', 'glyphs', 'notebook']) {
+        const result = profiles(mode, '--help');
+        assert.equal(result.status, 0, result.stderr.toString('utf8'));
+        assert.match(result.stdout.toString('utf8'),
+            /Usage: atrament-profiles/);
+    }
+});
+
 test('native CLI reads selected regular files but never traverses input links',
     { skip: process.platform !== 'linux' }, () => {
         const dir = mkdtempSync(join(root, '.temp/source-open-'));
