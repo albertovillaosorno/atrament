@@ -395,3 +395,17 @@ regressions verify prompt refusal, empty stdout and unchanged selected output.
 Source-dependent glyph coverage and physical page checks still run after the
 selected source is admitted. This is CLI argument safety, not persisted
 notebook text or completed handwriting composition.
+
+## Inline flow content before selected source reads — 2026-11-10
+
+Native notebook preflight now admits inline `--flow-text` and
+`--flow-markdown` with the same bounded `FlowSource` constructor used by
+final composition. Blank/control-only content, CR-only lines, oversized
+UTF-8 and tab-expanded content refuse before an earlier glyph or page-ink
+stdin source is opened. Filename-backed flow still waits for its bounded
+selected-file read, where source encoding and contents remain validated.
+
+Focused Rust cases and five real-process unwritten-pipe cases cover the
+literal forms, exact prior error diagnostics, empty output and preservation
+of a reviewed destination. Valid inline tabs, CRLF and option-like literal
+text remain accepted. No semantic notebook text is persisted by this change.

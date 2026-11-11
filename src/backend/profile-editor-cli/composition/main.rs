@@ -1821,6 +1821,26 @@ fn preflight_notebook_glyph_option(
     }
 }
 
+// Inline source text needs the same admission as its final flow parser.
+// File-backed sources defer their bounded read and content validation.
+fn preflight_notebook_flow_option(
+    option: &str, iter: &mut Iter<'_, String>,
+) -> Result<(FlowFormat, usize, bool), String> {
+    let format = if option.starts_with("--flow-text") {
+        FlowFormat::Plain
+    } else {
+        FlowFormat::Markdown
+    };
+    if option.ends_with("-file") {
+        return Ok((format, 1, true));
+    }
+    let source = iter.next().ok_or(
+        "flow needs a UTF-8 text value or a selected file path"
+    )?;
+    drop(FlowSource::new(format, source)?);
+    Ok((format, 0, false))
+}
+
 // Reject impossible source selections before the first file or stdin read.
 // Count actual operands: Markdown text and glyph values can contain strings
 // that look like flags without selecting another input source.
@@ -1875,12 +1895,10 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                             "only one flow source may be supplied".into()
                         );
                     }
-                    flow_format = Some(if option.starts_with("--flow-text") {
-                        FlowFormat::Plain
-                    } else {
-                        FlowFormat::Markdown
-                    });
-                    (1, option.ends_with("-file"))
+                    let (format, operands, stdin_source) =
+                        preflight_notebook_flow_option(option, &mut iter)?;
+                    flow_format = Some(format);
+                    (operands, stdin_source)
                 }
                 "--ink-file" => (1, true),
                 "--profile" => {

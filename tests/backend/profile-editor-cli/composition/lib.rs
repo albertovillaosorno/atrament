@@ -475,6 +475,42 @@ fn notebook_preflights_exact_typed_glyph_options_without_opening_sources() {
 }
 
 #[test]
+fn inline_flow_is_admitted_before_earlier_selected_stdin_sources() {
+    let overlong = "x".repeat(4097);
+    let expanded = "x\t".repeat(1025);
+    for (flags, diagnostic) in [
+        (["--glyph-file", "-", "--flow-text", ""].as_slice(),
+            "flow text needs 1..4096 UTF-8 bytes"),
+        (["--ink-file", "-", "--flow-markdown", "  \n"].as_slice(),
+            "flow text needs 1..4096 UTF-8 bytes"),
+        (["--glyph-file", "-", "--flow-text", "a\rb"].as_slice(),
+            "flow text needs 1..4096 UTF-8 bytes"),
+        (["--ink-file", "-", "--flow-markdown", "a\u{b}"]
+            .as_slice(), "flow text needs 1..4096 UTF-8 bytes"),
+        (["--ink-file", "-", "--flow-text", overlong.as_str()]
+            .as_slice(), "flow text needs 1..4096 UTF-8 bytes"),
+        (["--glyph-file", "-", "--flow-text", expanded.as_str()]
+            .as_slice(), "expanded flow text exceeds 4096 UTF-8 bytes"),
+    ] {
+        let error = preflight_notebook_sources(&args(flags))
+            .expect_err("invalid literal flow must refuse before source IO");
+        assert!(error.contains(diagnostic), "{error}");
+    }
+    for flags in [
+        ["--glyph-file", "-", "--flow-text", "a\tb",
+            "--export-paper", "pdf"].as_slice(),
+        ["--ink-file", "-", "--flow-markdown", "# ñ\r\n¡a!",
+            "--emit-ink-file"].as_slice(),
+        ["--flow-text", "--output", "--export-paper", "pdf"]
+            .as_slice(),
+    ] {
+        preflight_notebook_sources(&args(flags)).unwrap_or_else(|error| {
+            panic!("valid inline flow {flags:?} refused: {error}")
+        });
+    }
+}
+
+#[test]
 fn invalid_page_ink_tsv_does_not_append_any_valid_prefix() {
     let file = test_path().with_extension("tsv");
     let name = file.to_str().expect("owned TSV path");
