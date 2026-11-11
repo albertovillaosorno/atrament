@@ -10,6 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
+import { inflateSync } from 'node:zlib';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const referenceDir = fileURLToPath(new URL('./', import.meta.url));
@@ -86,6 +87,96 @@ test('native CLI creates exact ruled and squared PDF/PNG references', () => {
         rmSync(directory, { recursive: true, force: true });
     }
 });
+
+// Validate native PNG file framing independently of the Rust encoder.
+// PNG CRC-32 covers each chunk type and payload, not the length header.
+function pngCrc32(bytes) {
+    let crc = 0xffffffff;
+    for (const byte of bytes) {
+        crc ^= byte;
+        for (let bit = 0; bit < 8; bit += 1) {
+            crc = (crc >>> 1) ^ ((crc & 1) ? 0xedb88320 : 0);
+        }
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+}
+
+function decodeNativePng(bytes, dpi) {
+    assert.deepEqual(bytes.subarray(0, 8),
+        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+    const tags = [];
+    const chunks = new Map();
+    let position = 8;
+    while (position < bytes.length) {
+        assert.ok(position + 12 <= bytes.length,
+            'each PNG chunk needs length, type and checksum');
+        const length = bytes.readUInt32BE(position);
+        const end = position + length + 12;
+        assert.ok(end <= bytes.length, 'complete bounded PNG chunk');
+        const tagBytes = bytes.subarray(position + 4, position + 8);
+        const data = bytes.subarray(position + 8, end - 4);
+        const storedCrc = bytes.readUInt32BE(end - 4);
+        assert.equal(storedCrc,
+            pngCrc32(Buffer.concat([tagBytes, data])),
+            `valid PNG chunk checksum for ${tagBytes.toString('ascii')}`);
+        const tag = tagBytes.toString('ascii');
+        assert.ok(!chunks.has(tag), `one ${tag} chunk is expected`);
+        tags.push(tag);
+        chunks.set(tag, data);
+        position = end;
+    }
+    assert.equal(position, bytes.length, 'no junk after terminal chunk');
+    assert.deepEqual(tags, ['IHDR', 'pHYs', 'IDAT', 'IEND']);
+    assert.equal(chunks.get('IEND').length, 0);
+    const header = chunks.get('IHDR');
+    const width = Math.ceil(210000 * dpi / 25400);
+    const height = Math.ceil(297000 * dpi / 25400);
+    assert.equal(header.readUInt32BE(0), width);
+    assert.equal(header.readUInt32BE(4), height);
+    assert.deepEqual(header.subarray(8), Buffer.from([8, 6, 0, 0, 0]));
+    const resolution = chunks.get('pHYs');
+    const pixelsPerMetre = Math.round(dpi * 10000 / 254);
+    assert.equal(resolution.readUInt32BE(0), pixelsPerMetre);
+    assert.equal(resolution.readUInt32BE(4), pixelsPerMetre);
+    assert.equal(resolution[8], 1, 'metre resolution units');
+    const raster = inflateSync(chunks.get('IDAT'));
+    const stride = width * 4 + 1;
+    assert.equal(raster.length, stride * height);
+    for (let row = 0; row < height; row += 1) {
+        assert.equal(raster[row * stride], 0, 'unfiltered RGBA row');
+    }
+    // Blank paper stays entirely transparent, even at the output budget.
+    assert.ok(raster.every(value => value === 0));
+}
+
+test('native transparent PNG passes independent CRC and zlib validation',
+    () => {
+        const directory = mkdtempSync(join(tmpdir(), 'atrament-png-frame-'));
+        try {
+            const output = join(directory, 'blank.png');
+            for (const dpi of [72, 150, 225]) {
+                const run = nativePaper('--style', 'blank',
+                    '--format', 'png', '--dpi', String(dpi),
+                    '--output', output,
+                    ...(dpi === 72 ? [] : ['--replace']));
+                assert.equal(run.status, 0, run.stderr);
+                const png = readFileSync(output);
+                assert.ok(png.length <= 24_000_000,
+                    'bounded native PNG output');
+                decodeNativePng(png, dpi);
+            }
+            const accepted = readFileSync(output);
+            const refused = nativePaper('--style', 'blank',
+                '--format', 'png', '--dpi', '300',
+                '--output', output, '--replace');
+            assert.notEqual(refused.status, 0,
+                '5-million-pixel limit refuses oversized A4 PNG');
+            assert.deepEqual(readFileSync(output), accepted,
+                'over-budget raster cannot replace reviewed output');
+        } finally {
+            rmSync(directory, { recursive: true, force: true });
+        }
+    });
 
 // README examples omit --bin. The package default must remain the harmless
 // paper exporter, never the separately opt-in local printer executable.
