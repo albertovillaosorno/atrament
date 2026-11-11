@@ -545,7 +545,7 @@ impl GlyphOverlay {
         &self, manual: &[NotebookInkLine],
         statistics: Option<&HandwritingStatisticsProfile>,
     ) -> Result<Vec<NotebookInkLine>, String> {
-        self.expand_with_run_boundary(manual, statistics, self.runs.len())
+        self.expand_with_run_boundary(manual, statistics, 0)
             .map(|(ink, _boundary)| ink)
     }
 
@@ -557,6 +557,7 @@ impl GlyphOverlay {
         statistics: Option<&HandwritingStatisticsProfile>,
         boundary_run: usize,
     ) -> Result<(Vec<NotebookInkLine>, usize), String> {
+        validate_run_boundary(self.runs.len(), boundary_run)?;
         // A typed sibling can supply a mutated profile without passing
         // through the CLI's saved-JSON decoder. Refuse malformed versions,
         // duplicate dimensions or unbounded means before placing any ink.
@@ -1856,6 +1857,18 @@ impl GlyphOverlay {
         }
         Ok(())
     }
+}
+
+// Generated flow runs are measured separately; the CLI's 16-run cap only
+// applies to the explicit suffix. Typed callers can bypass option parsing.
+fn validate_run_boundary(total_runs: usize, flow_runs: usize)
+-> Result<(), String> {
+    let placed = total_runs.checked_sub(flow_runs)
+        .ok_or("flow run boundary exceeds positioned text runs")?;
+    if placed > MAX_RUNS {
+        return Err("more than 16 placed text runs refused".into());
+    }
+    Ok(())
 }
 
 // Both explicit CLI placements and internally composed Markdown runs must

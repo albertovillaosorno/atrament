@@ -7851,6 +7851,50 @@ fn typed_placed_text_runs_keep_cli_admission_at_ink_boundary()
 }
 
 #[test]
+fn typed_glyph_expansion_limits_positioned_runs()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "a", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    glyphs.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "a",
+    ]).iter())?;
+    let valid = glyphs.runs[0].clone();
+    glyphs.runs.resize(16, valid.clone());
+    let at_limit = glyphs.expand(&[], None)?;
+    if at_limit.len() != 16 {
+        return Err("16 typed runs must render exact authored strokes".into());
+    }
+    glyphs.runs.push(valid);
+    let Err(error) = glyphs.expand(&[], None) else {
+        return Err("typed 17th text run bypassed CLI admission".into());
+    };
+    if !error.contains("16") {
+        return Err(format!("unexpected positioned run refusal: {error}"));
+    }
+    let (with_flow, boundary) = glyphs.expand_with_run_boundary(
+        &[], None, 1,
+    )?;
+    if with_flow.len() != 17 || boundary != 1 {
+        return Err(
+            "flow prefix plus 16 explicit runs must remain valid".into(),
+        );
+    }
+    let Err(error) = glyphs.expand_with_run_boundary(&[], None, 18) else {
+        return Err("typed out-of-range flow boundary was accepted".into());
+    };
+    if !error.contains("flow run boundary") {
+        return Err(format!("unexpected flow boundary refusal: {error}"));
+    }
+    let _removed = glyphs.runs.pop().ok_or("missing rejected run")?;
+    if glyphs.expand(&[], None)? != at_limit {
+        return Err("rejected run changed accepted physical ink replay".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_glyph_expansion_limits_selected_text_join_pairs()
 -> Result<(), String> {
     let mut glyphs = GlyphOverlay::default();
