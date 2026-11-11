@@ -217,6 +217,44 @@ test('native transparent PNG passes independent CRC and zlib validation',
         }
     });
 
+// A byte-level size budget must admit its exact inclusive ceiling. These
+// millimetre inputs round to precisely 2000 x 2500 physical pixels at 300 DPI.
+test('PNG admits exactly five million pixels and preserves accepted bytes',
+    () => {
+        const directory = mkdtempSync(join(tmpdir(), 'atrament-png-limit-'));
+        try {
+            const output = join(directory, 'reviewed.png');
+            const dimensions = [
+                '--width-mm', '169.333', '--height-mm', '211.666',
+            ];
+            const flags = [
+                '--style', 'blank', '--format', 'png', '--dpi', '300',
+            ];
+            const acceptedRun = nativePaper(...flags, ...dimensions,
+                '--output', output);
+            assert.equal(acceptedRun.status, 0, acceptedRun.stderr);
+            const accepted = readFileSync(output);
+            assert.ok(accepted.length <= 24_000_000);
+            decodeNativePng(accepted, 300, 169333, 211666);
+            for (const larger of [
+                ['--width-mm', '169.334', '--height-mm', '211.666'],
+                ['--width-mm', '169.333', '--height-mm', '211.667'],
+            ]) {
+                const refused = nativePaper(...flags, ...larger,
+                    '--output', output, '--replace');
+                assert.notEqual(refused.status, 0,
+                    'one additional pixel column or row exceeds the budget');
+                assert.match(refused.stderr, /PNG pixel budget exceeded/);
+                assert.equal(refused.stdout, '',
+                    'refusal must not emit partial binary output');
+                assert.deepEqual(readFileSync(output), accepted,
+                    'rejected extra pixels cannot replace approved PNG');
+            }
+        } finally {
+            rmSync(directory, { recursive: true, force: true });
+        }
+    });
+
 // README examples omit --bin. The package default must remain the harmless
 // paper exporter, never the separately opt-in local printer executable.
 test('default Cargo package run selects paper rather than local print', () => {

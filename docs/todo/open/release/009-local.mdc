@@ -608,3 +608,17 @@ must remain transparent. One 300-DPI grid uses custom blue ink to check exact
 selected RGBA channels. Existing 72-DPI ruled/grid PDF and PNG candidate
 bytes remain unchanged; the new checks do not prove real print alignment,
 calibrated handwriting or a complete saved notebook.
+
+## Inclusive five-million-pixel PNG limit — 2026-11-11
+
+An independent native CLI regression now exports a custom 169.333-by-211.666
+mm blank sheet at 300 DPI: the physical raster is exactly 2,000 by 2,500
+pixels, the inclusive five-million-pixel ceiling. The output fits the
+24-million-byte limit and passes independent chunk CRC, zlib, physical DPI,
+filter-byte and fully transparent RGBA decoding.
+
+Increasing either physical dimension by one micrometre increases the rounded
+raster by an entire row or column. Both over-budget requests must refuse with
+the pixel-budget diagnostic, emit no binary stdout and preserve the approved
+PNG byte-for-byte even with explicit `--replace`. This is a tested resource
+boundary, not evidence of a finished notebook or physical printer.
