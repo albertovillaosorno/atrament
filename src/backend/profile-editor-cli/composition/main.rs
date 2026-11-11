@@ -1118,6 +1118,9 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
     let mut inspection_selected = false;
     let mut output_selected = false;
     let mut replace_selected = false;
+    // Authored stroke geometry is independent of an imported glyph library.
+    // Admit it before an earlier --profile - source can wait for stdin EOF.
+    let mut validated_strokes = GlyphOverlay::default();
     while let Some(option) = iter.next() {
         let operands: usize = match option.as_str() {
             "--audit-baseline" => {
@@ -1133,7 +1136,14 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
                     "--replace may appear only once")?;
                 0
             }
-            "--glyph-stroke" => 7,
+            "--glyph-stroke" => {
+                // Retain the existing full-arity diagnostic before the
+                // shared typed parser inspects exact grapheme/pen geometry.
+                let mut complete = iter.clone();
+                preflight_glyph_operands(option, 7, &mut complete)?;
+                validated_strokes.parse(option, &mut iter)?;
+                0
+            }
             "--set-stroke" => 8,
             "--rotate-glyph" | "--translate-path" => 4,
             "--shear-glyph" | "--scale-glyph-height"

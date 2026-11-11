@@ -446,3 +446,15 @@ Valid visible Unicode and flag-shaped literal text remain admissible.
 
 Focused Rust scanner and real open-pipe subprocess cases cover the refusal.
 This is not shape generation, complete bilingual coverage, or document saving.
+
+## Standalone authored-stroke admission before selected sources — 2026-11-10
+
+The glyph-library CLI now parses caller-authored stroke geometry during
+source-independent preflight, before opening a previously selected stdin
+library. The existing typed grapheme, coordinate, distinct-endpoint, pen-width
+and RGB validator is reused; incomplete strokes retain their prior arity
+refusal, and valid authored Unicode strokes remain accepted.
+
+Focused Rust parsing and native deliberately open-pipe subprocess regressions
+verify prompt refusal with untouched reviewed output. This is CLI argument
+safety, not generated glyph outlines or a saved semantic notebook.

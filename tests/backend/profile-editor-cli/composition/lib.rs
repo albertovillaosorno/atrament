@@ -168,6 +168,30 @@ fn glyph_library_preflight_refuses_missing_operands_before_source_io() {
 }
 
 #[test]
+fn glyph_library_preflights_typed_stroke_geometry_before_source_io() {
+    for (stroke, diagnostic) in [
+        (["a", "500", "500", "500", "500", "250", "#123456"],
+            "glyph stroke must have two distinct points"),
+        (["a", "500", "500", "1800", "3000", "79", "#123456"],
+            "glyph ink width requires 80..1500"),
+        (["a", "500", "500", "1800", "3000", "250", "#GGGGGG"],
+            "glyph color requires #RRGGBB"),
+        (["a", "3501", "500", "1800", "3000", "250", "#123456"],
+            "glyph x1 requires 0..3500"),
+    ] {
+        let mut flags = args(&["--profile", "-", "--glyph-stroke"]);
+        flags.extend(stroke.iter().map(|value| (*value).to_owned()));
+        let error = preflight_glyph_profile_sources(&flags)
+            .expect_err("invalid authored geometry must refuse before stdin");
+        assert!(error.contains(diagnostic), "{error}");
+    }
+    preflight_glyph_profile_sources(&args(&[
+        "--profile", "-", "--glyph-stroke", "ñ", "500", "500",
+        "1800", "3000", "250", "#123456",
+    ])).expect("valid exact Unicode shape should survive syntax admission");
+}
+
+#[test]
 fn glyph_library_preflights_audit_text_before_stdin_source_io() {
     let over_limit = "ñ".repeat(2049);
     for input in ["", "  \n", "\u{feff}", "a\u{b}", "a\rb",
