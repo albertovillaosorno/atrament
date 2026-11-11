@@ -509,3 +509,11 @@ keys refuse before opening a selected statistics profile, while valid NFC
 and NFD spellings keep distinct identities. Numeric profile and missing-key
 semantics remain checked after profile loading. Native symlink-refusal tests
 now prove precedence and preservation of an approved output file.
+
+## Statistics range admission before selected profile I/O — 2026-11-10
+
+The `handwriting` CLI also validates the exact five-statistic tuple for
+`--set-global` and `--set-glyph` with the shared scalar domain validator in
+source-independent preflight. Inverted envelopes, out-of-range means and
+impossible deviations now refuse before opening an earlier selected profile.
+Native symlink and Rust tests prove unchanged reviewed output on refusal.

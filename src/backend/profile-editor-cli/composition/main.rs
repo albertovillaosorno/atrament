@@ -685,7 +685,11 @@ fn preflight_handwriting_options(args: &[String]) -> Result<(), String> {
                 }
                 let values = iter.by_ref().take(6).cloned()
                     .collect::<Vec<_>>();
-                let _parameter = parse_parameter(&values)?;
+                let parameter = parse_parameter(&values)?;
+                parameter.statistics.validate(parameter.dimension)
+                    .map_err(|error| format!(
+                        "statistics range refused: {error:?}",
+                    ))?;
                 seen_edit = true;
             }
             "--remove-glyph" | "--remove-glyph-dimension" => {

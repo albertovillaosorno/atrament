@@ -66,6 +66,15 @@ fn handwriting_preflight_rejects_invalid_flags_before_profile_io() {
         (["--profile", "unopened.json", "--set-global",
             "not-a-dimension", "1", "2", "1", "1", "0"]
             .as_slice(), "unknown statistics dimension"),
+        (["--profile", "unopened.json", "--set-global", "width",
+            "2000", "1000", "1500", "1500", "0"]
+            .as_slice(), "statistics range refused: InvertedEnvelope"),
+        (["--profile", "unopened.json", "--set-global", "width",
+            "2000", "3000", "2500", "2500", "600"]
+            .as_slice(), "statistics range refused: DeviationImpossible"),
+        (["--profile", "unopened.json", "--set-glyph", "ñ", "width",
+            "2000", "3000", "5000", "2500", "0"]
+            .as_slice(), "statistics range refused: MeanOutsideEnvelope"),
         (["--profile", "unopened.json", "--remove-glyph-dimension",
             "a", "invalid-dimension"].as_slice(), "unknown dimension"),
         (["--profile", "unopened.json", "--preview-glyph", "a", "-1"]
@@ -106,18 +115,18 @@ fn handwriting_preflight_rejects_invalid_flags_before_profile_io() {
         ["--profile", "unopened.json", "--preview-glyph", "ñ", "0"]
             .as_slice(),
         ["--profile", "unopened.json", "--set-glyph", "n\u{303}",
-            "width", "1", "2", "1", "1", "0"].as_slice(),
+            "width", "1000", "2000", "1500", "1500", "0"].as_slice(),
         ["--profile", "unopened.json", "--remove-glyph", "-"]
             .as_slice(),
         ["--profile", "unopened.json", "--inventory-text", "--output"]
             .as_slice(),
         ["--profile", "unopened.json", "--preview-glyph", "-",
             "42"].as_slice(),
-        ["--set-global", "width", "1", "2", "1", "1", "0"]
+        ["--set-global", "width", "1000", "2000", "1500", "1500", "0"]
             .as_slice(),
     ] {
         // A flag-shaped operand is not a second option selection.
-        // This is a syntax-only pass, not a substitute for domain validation.
+        // Scalar ranges and key shape are now validated before source reads.
         preflight_handwriting_options(&args(flags))
             .expect("complete literal operands should survive early scanning");
     }
