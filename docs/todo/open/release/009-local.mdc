@@ -590,3 +590,21 @@ reviewed PNG.
 
 Focused Rust tests and all-feature workspace tests also pass. This changes
 memory use, not notebook content or physical-print acceptance.
+
+## Independently sampled PNG geometry and faster CRC — 2026-11-11
+
+The native PNG writer now computes chunk CRC-32 through a fixed 256-entry
+compile-time table instead of eight bitwise update rounds per byte. It keeps
+the original bounded output buffer and exact PNG/zlib byte format. In six
+repeat A5 300-DPI local Cargo-run measurements, the old encoder took about
+2.7–2.9 seconds per export and the new encoder about 1.7–2.0 seconds;
+these are environment-specific debug-build timings, not a release benchmark.
+
+The independent Node zlib/PNG decoder also samples actual pixels at physical
+millimetre coordinates. A5 ruled and squared sheets at 300 DPI must have
+pastel horizontal marks at their 27-mm y anchor, only grids may have a
+vertical mark at 25-mm x, and the 24-mm cell interior and outside margins
+must remain transparent. One 300-DPI grid uses custom blue ink to check exact
+selected RGBA channels. Existing 72-DPI ruled/grid PDF and PNG candidate
+bytes remain unchanged; the new checks do not prove real print alignment,
+calibrated handwriting or a complete saved notebook.

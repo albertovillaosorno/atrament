@@ -101,7 +101,8 @@ function pngCrc32(bytes) {
     return (crc ^ 0xffffffff) >>> 0;
 }
 
-function decodeNativePng(bytes, dpi, widthUm, heightUm, marked = false) {
+function decodeNativePng(bytes, dpi, widthUm, heightUm,
+    style = 'blank', color = [197, 212, 231]) {
     assert.deepEqual(bytes.subarray(0, 8),
         Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
     const tags = [];
@@ -145,13 +146,31 @@ function decodeNativePng(bytes, dpi, widthUm, heightUm, marked = false) {
     for (let row = 0; row < height; row += 1) {
         assert.equal(raster[row * stride], 0, 'unfiltered RGBA row');
     }
-    // Blank paper stays fully transparent; selected ruled/grid marks must
-    // contain actual opaque pigment while preserving transparent corners.
-    if (marked) {
-        assert.ok(raster.includes(255), 'marked sheet includes opaque ink');
-        assert.equal(raster[4], 0, 'unmarked upper-left remains clear');
-    } else {
+    // Sample physical millimetre positions independently of the Rust paper
+    // geometry and rasterizer. The first rule begins 22 mm from the top;
+    // 5-mm grid columns begin at 20 mm from the left.
+    const pixelAtMm = (xMm, yMm) => {
+        const x = Math.floor(xMm * dpi / 25.4);
+        const y = Math.floor(yMm * dpi / 25.4);
+        assert.ok(x < width && y < height, 'physical sample on sheet');
+        const offset = y * stride + 1 + 4 * x;
+        return [...raster.subarray(offset, offset + 4)];
+    };
+    const clear = [0, 0, 0, 0];
+    const pigment = [...color, 255];
+    assert.deepEqual(pixelAtMm(2, 2), clear,
+        'outside the writing region remains transparent');
+    assert.deepEqual(pixelAtMm(27, 24), clear,
+        'inside a paper cell remains transparent');
+    if (style === 'blank') {
         assert.ok(raster.every(value => value === 0));
+    } else {
+        assert.deepEqual(pixelAtMm(27, 27), pigment,
+            'a horizontal line lands at its 27-mm physical anchor');
+        assert.deepEqual(pixelAtMm(25, 24),
+            style === 'grid' ? pigment : clear,
+            'vertical lines exist only on the squared grid');
+        assert.equal(raster[4], 0, 'unmarked upper-left remains clear');
     }
 }
 
@@ -162,24 +181,28 @@ test('native transparent PNG passes independent CRC and zlib validation',
             const output = join(directory, 'canvas.png');
             // 300-DPI A4 exceeds five million pixels, but A5 remains
             // admissible and independently decodable at the maximum DPI.
-            for (const { dpi, size, widthUm, heightUm, style = 'blank' } of [
+            for (const { dpi, size, widthUm, heightUm, style = 'blank',
+                color } of [
                 { dpi: 72, size: 'a4', widthUm: 210000, heightUm: 297000 },
                 { dpi: 150, size: 'a4', widthUm: 210000, heightUm: 297000 },
                 { dpi: 225, size: 'a4', widthUm: 210000, heightUm: 297000 },
                 { dpi: 300, size: 'a5', widthUm: 148000, heightUm: 210000 },
                 { dpi: 300, size: 'a5', widthUm: 148000, heightUm: 210000,
-                    style: 'grid' },
+                    style: 'grid', color: '#1A6DD9' },
+                { dpi: 300, size: 'a5', widthUm: 148000, heightUm: 210000,
+                    style: 'ruled' },
             ]) {
                 const run = nativePaper('--style', style,
                     '--paper-size', size, '--format', 'png',
                     '--dpi', String(dpi), '--output', output,
+                    ...(color ? ['--line-color', color] : []),
                     ...(dpi === 72 ? [] : ['--replace']));
                 assert.equal(run.status, 0, run.stderr);
                 const png = readFileSync(output);
                 assert.ok(png.length <= 24_000_000,
                     'bounded native PNG output');
-                decodeNativePng(png, dpi, widthUm, heightUm,
-                    style !== 'blank');
+                decodeNativePng(png, dpi, widthUm, heightUm, style,
+                    color ? [26, 109, 217] : undefined);
             }
             const accepted = readFileSync(output);
             const refused = nativePaper('--style', 'blank',
