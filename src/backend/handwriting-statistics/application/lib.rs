@@ -631,10 +631,14 @@ impl HandwritingStatisticsProfile {
     }
 }
 
-// The layout treats Unicode line/paragraph separators as structural breaks,
-// never drawable glyphs. Preserve other exact Unicode clusters, including
-// ZWJ emoji and the distinct NFC/NFD spellings of accented letters.
-fn valid_exact_glyph<Boundary>(grapheme: &str, boundaries: &Boundary) -> bool
+/// Whether a bounded key is exactly one statistical handwriting grapheme.
+///
+/// Transport adapters can validate this source-independent shape before
+/// reading an otherwise untrusted selected profile. Preserves NFC and NFD.
+/// Unicode source line separators and control characters are not glyphs.
+pub fn valid_exact_glyph<Boundary>(
+    grapheme: &str, boundaries: &Boundary,
+) -> bool
 where
     Boundary: GraphemeBoundaryProvider,
 {

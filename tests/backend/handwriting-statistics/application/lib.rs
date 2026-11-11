@@ -504,6 +504,21 @@ fn numeric_preview_replays_per_seed_exact_glyph_and_occurrence() {
 }
 
 #[test]
+fn exported_exact_key_admission_matches_numeric_preview_domain() {
+    for selected in ["ñ", "n\u{303}", "👩‍💻", "-"] {
+        assert!(atrament_handwriting_statistics::valid_exact_glyph(
+            selected, &BOUNDARIES,
+        ), "valid unchanged Unicode key: {selected:?}");
+    }
+    for invalid in ["", "ab", "a\n", "\u{2028}", "\u{2029}",
+        &"a".repeat(65)] {
+        assert!(!atrament_handwriting_statistics::valid_exact_glyph(
+            invalid, &BOUNDARIES,
+        ), "invalid key must refuse: {invalid:?}");
+    }
+}
+
+#[test]
 fn numeric_preview_rejects_invalid_exact_keys_and_malformed_profiles() {
     let profile = HandwritingStatisticsProfile::baseline(u64::MAX);
     for invalid in [

@@ -70,6 +70,15 @@ fn handwriting_preflight_rejects_invalid_flags_before_profile_io() {
             "a", "invalid-dimension"].as_slice(), "unknown dimension"),
         (["--profile", "unopened.json", "--preview-glyph", "a", "-1"]
             .as_slice(), "preview occurrence requires an unsigned integer"),
+        (["--profile", "unopened.json", "--preview-glyph", "ab", "0"]
+            .as_slice(), "numeric preview requires one exact"),
+        (["--profile", "unopened.json", "--set-glyph", "ab",
+            "width", "1", "2", "1", "1", "0"]
+            .as_slice(), "glyph edit requires one exact"),
+        (["--profile", "unopened.json", "--remove-glyph", "ab"]
+            .as_slice(), "glyph removal requires one exact"),
+        (["--profile", "unopened.json", "--remove-glyph-dimension", "",
+            "width"].as_slice(), "glyph removal requires one exact"),
         (["--profile", "unopened.json", "--inspect", "--output", "out.json"]
             .as_slice(), "--inspect is stdout only"),
         (["--profile", "unopened.json", "--inventory-text", "a",
@@ -94,9 +103,15 @@ fn handwriting_preflight_rejects_invalid_flags_before_profile_io() {
         assert!(error.contains(diagnostic), "{error}");
     }
     for flags in [
+        ["--profile", "unopened.json", "--preview-glyph", "ñ", "0"]
+            .as_slice(),
+        ["--profile", "unopened.json", "--set-glyph", "n\u{303}",
+            "width", "1", "2", "1", "1", "0"].as_slice(),
+        ["--profile", "unopened.json", "--remove-glyph", "-"]
+            .as_slice(),
         ["--profile", "unopened.json", "--inventory-text", "--output"]
             .as_slice(),
-        ["--profile", "unopened.json", "--preview-glyph", "--replace",
+        ["--profile", "unopened.json", "--preview-glyph", "-",
             "42"].as_slice(),
         ["--set-global", "width", "1", "2", "1", "1", "0"]
             .as_slice(),

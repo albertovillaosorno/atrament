@@ -499,3 +499,13 @@ Focused Rust source-free and native open-pipe subprocess tests cover invalid
 removal keys, empty stdout and preservation of already approved output. This
 is a bounded admission correction, not automatic glyph outlines or saved
 notebook content.
+
+## Statistics exact-key admission before selected profile I/O — 2026-11-10
+
+The handwriting statistics CLI now shares the statistics-domain's exact
+Unicode grapheme predicate with source-independent preflight of `--set-glyph`,
+`--remove-glyph`, `--remove-glyph-dimension`, and `--preview-glyph`. Malformed
+keys refuse before opening a selected statistics profile, while valid NFC
+and NFD spellings keep distinct identities. Numeric profile and missing-key
+semantics remain checked after profile loading. Native symlink-refusal tests
+now prove precedence and preservation of an approved output file.

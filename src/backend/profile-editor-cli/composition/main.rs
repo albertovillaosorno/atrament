@@ -579,6 +579,7 @@ fn parse_preview_glyph(
     let glyph = arguments
         .next()
         .ok_or("--preview-glyph requires a grapheme")?;
+    validate_statistics_glyph_key(glyph, "numeric preview")?;
     let count = arguments
         .next()
         .ok_or("--preview-glyph requires an occurrence")?;
@@ -633,6 +634,19 @@ fn validate_handwriting_flags(
     Ok(())
 }
 
+fn validate_statistics_glyph_key(
+    grapheme: &str, operation: &str,
+) -> Result<(), String> {
+    if !atrament_handwriting_statistics::valid_exact_glyph(
+        grapheme, &UnicodeGraphemeSegmentation,
+    ) {
+        return Err(format!(
+            "{operation} requires one exact statistical grapheme",
+        ));
+    }
+    Ok(())
+}
+
 // A saved statistics profile must not be opened for a command that cannot
 // complete regardless of the source bytes. Consume exact operand counts so
 // literal values resembling option names remain ordinary data. This checks
@@ -665,8 +679,9 @@ fn preflight_handwriting_options(args: &[String]) -> Result<(), String> {
             }
             "--set-global" | "--set-glyph" => {
                 if name == "--set-glyph" {
-                    let _grapheme = iter.next()
+                    let grapheme = iter.next()
                         .ok_or("--set-glyph requires a grapheme")?;
+                    validate_statistics_glyph_key(grapheme, "glyph edit")?;
                 }
                 let values = iter.by_ref().take(6).cloned()
                     .collect::<Vec<_>>();
@@ -674,8 +689,9 @@ fn preflight_handwriting_options(args: &[String]) -> Result<(), String> {
                 seen_edit = true;
             }
             "--remove-glyph" | "--remove-glyph-dimension" => {
-                let _grapheme = iter.next()
+                let grapheme = iter.next()
                     .ok_or("removal requires a grapheme")?;
+                validate_statistics_glyph_key(grapheme, "glyph removal")?;
                 if name == "--remove-glyph-dimension" {
                     let key = iter.next()
                         .ok_or("removal requires a dimension")?;
