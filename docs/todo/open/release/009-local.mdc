@@ -622,3 +622,13 @@ raster by an entire row or column. Both over-budget requests must refuse with
 the pixel-budget diagnostic, emit no binary stdout and preserve the approved
 PNG byte-for-byte even with explicit `--replace`. This is a tested resource
 boundary, not evidence of a finished notebook or physical printer.
+
+## Dotted paper and far-margin PNG anchors — 2026-11-11
+
+The maximum-DPI independent PNG decoder now checks all four paper styles,
+including a dotted A5 sheet. At 300 DPI a 5-mm dot intersection must carry
+ink without joining into a continuous horizontal or vertical rule, and the
+last dot near the lower-right writing margin must still be present. The A5
+ruled and squared sheets also retain their last horizontal rule at 192 mm;
+only the grid admits the vertical line at 130 mm. These are actual decoded
+pixel assertions, not checks of a PNG header or synthetic test raster.

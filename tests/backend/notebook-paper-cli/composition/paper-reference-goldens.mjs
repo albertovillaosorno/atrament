@@ -164,12 +164,28 @@ function decodeNativePng(bytes, dpi, widthUm, heightUm,
         'inside a paper cell remains transparent');
     if (style === 'blank') {
         assert.ok(raster.every(value => value === 0));
+    } else if (style === 'dot') {
+        assert.deepEqual(pixelAtMm(25, 27), pigment,
+            'dot lands at the 5-mm grid intersection');
+        assert.deepEqual(pixelAtMm(27, 27), clear,
+            'dots do not join into horizontal rules');
+        assert.deepEqual(pixelAtMm(25, 24), clear,
+            'dots do not join into vertical rules');
+        assert.deepEqual(pixelAtMm(130, 192), pigment,
+            'last A5 dot remains visible near the lower-right margin');
     } else {
         assert.deepEqual(pixelAtMm(27, 27), pigment,
             'a horizontal line lands at its 27-mm physical anchor');
         assert.deepEqual(pixelAtMm(25, 24),
             style === 'grid' ? pigment : clear,
             'vertical lines exist only on the squared grid');
+        if (dpi === 300 && widthUm === 148000) {
+            assert.deepEqual(pixelAtMm(127, 192), pigment,
+                'last A5 horizontal rule reaches the lower-right region');
+            assert.deepEqual(pixelAtMm(130, 189),
+                style === 'grid' ? pigment : clear,
+                'last A5 vertical rule is present only on a grid');
+        }
         assert.equal(raster[4], 0, 'unmarked upper-left remains clear');
     }
 }
@@ -191,6 +207,8 @@ test('native transparent PNG passes independent CRC and zlib validation',
                     style: 'grid', color: '#1A6DD9' },
                 { dpi: 300, size: 'a5', widthUm: 148000, heightUm: 210000,
                     style: 'ruled' },
+                { dpi: 300, size: 'a5', widthUm: 148000, heightUm: 210000,
+                    style: 'dot' },
             ]) {
                 const run = nativePaper('--style', style,
                     '--paper-size', size, '--format', 'png',
