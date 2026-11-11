@@ -34,7 +34,6 @@
 
 #![expect(
     clippy::expect_used,
-    clippy::missing_trait_methods,
     clippy::create_dir,
     clippy::verbose_file_reads,
     reason = "fail-fast, test-owned filesystem and descriptor fixtures"
@@ -367,6 +366,23 @@ fn selected_directory_and_missing_file_are_not_admitted() {
         open_selected_profile_file(&owned.0.join("absent"))
             .expect_err("source does not exist"),
         Error::FileIo(io::ErrorKind::NotFound),
+    );
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn unwritten_fifo_source_refuses_without_waiting_for_a_writer() {
+    use nix::sys::stat::Mode;
+    use nix::unistd::mkfifo;
+
+    let owned = OwnedTestDirectory::new(false);
+    let fifo = owned.0.join("pipe.atrament");
+    mkfifo(&fifo, Mode::S_IRUSR | Mode::S_IWUSR)
+        .expect("create test-owned named pipe without a writer");
+    assert_eq!(
+        open_selected_profile_file(&fifo)
+            .expect_err("file selection must not block on a named pipe"),
+        Error::NotRegularFile,
     );
 }
 

@@ -107,11 +107,13 @@ A separately admitted JSON section may coexist
 with an opaque, non-UTF-8 binary asset, whose bytes remain available without
 parsing.
 
-Five path-open fixtures cover link policy, relative paths, nonregular sources
-and replacement after open. Missing selected sources, links and wrong purposes
-refuse before inspection; a CRC-valid same-length forged member still fails
-SHA-256. Typed profile sections, session Import acceptance, authentic caller
-selection and atomic Export remain open.
+Selected-path opener regressions cover link policy, relative and pinned-CWD
+paths, nonregular sources, and name replacement after opening. An unconnected
+FIFO is refused without waiting for a writer, while directories and missing
+files cannot enter the bounded profile reader. Missing selected sources,
+links, and wrong purposes refuse before inspection; a CRC-valid same-length
+forged member still fails SHA-256. Typed profile sections, session Import
+acceptance, authentic caller selection, and atomic Export remain open.
 
 ### Local read-only profile verification and inspection CLI (Linux)
 
