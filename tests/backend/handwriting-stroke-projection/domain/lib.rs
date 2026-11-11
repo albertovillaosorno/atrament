@@ -527,6 +527,37 @@ fn two_axis_join_limit_matches_independent_physical_distance_oracle() {
 }
 
 #[test]
+fn caller_selected_join_limit_is_respected_without_false_1200_diagnostic() {
+    let before = PhysicalInkSegment {
+        page: 1,
+        start_um: (100, 200),
+        end_um: (200, 200),
+        width_um: 250,
+        rgb: [3, 4, 5],
+    };
+    let after = PhysicalInkSegment {
+        start_um: (1_600, 200),
+        end_um: (1_700, 200),
+        ..before
+    };
+    let expected_bridge = PhysicalInkSegment {
+        start_um: before.end_um,
+        end_um: after.start_um,
+        ..before
+    };
+    assert_eq!(connect_ink_segments(before, after, 1_400),
+        Ok(Some(expected_bridge)));
+    assert_eq!(connect_ink_segments(before, after, 1_399),
+        Err("text join gap exceeds configured maximum"));
+    assert_eq!(connect_ink_segments(before, after, 1_200),
+        Err("text join gap exceeds 1200 um"));
+    assert_eq!(connect_ink_segments(before, after, 0),
+        Err("text join gap exceeds configured maximum"));
+    assert_eq!(connect_ink_segments(before, after, u64::MAX),
+        Ok(Some(expected_bridge)));
+}
+
+#[test]
 fn repeated_projection_replays_identically_for_both_render_paths() {
     for seed_offset in 0..96u32 {
         let shape = AuthoredInkSegment {

@@ -277,7 +277,13 @@ pub fn connect_ink_segments(
     let limit_sq = squared(max_gap_um)
         .ok_or("text join squared distance overflow")?;
     if distance_sq > limit_sq {
-        return Err("text join gap exceeds 1200 um");
+        // Preserve the established native CLI diagnostic, while callers
+        // choosing another limit must not be told they selected 1200 um.
+        return Err(if max_gap_um == 1_200 {
+            "text join gap exceeds 1200 um"
+        } else {
+            "text join gap exceeds configured maximum"
+        });
     }
     Ok(Some(PhysicalInkSegment {
         page: before.page,

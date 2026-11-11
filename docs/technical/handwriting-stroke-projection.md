@@ -67,12 +67,14 @@ or unrepresentable coordinates, nonfinite shear, pen widths outside
 slant angles outside the open (-90°, 90°) interval (including horizontal
 baseline-only contours where an invalid tangent would otherwise be hidden),
 cross-page connections, mismatched pen color or width, and gaps beyond the
-supplied 1200 µm production limit.
+supplied 1200 µm production limit. When a caller supplies a different
+join limit, refusal describes the selected maximum generically; the native
+CLI retains its precise 1200 µm user-facing message.
 
 Because physical ink records have public fields, joining also rejects
 forged zero-page, out-of-range pen-width or zero-length source segments
-instead of treating them as projected ink. Join distance uses checked `u128` arithmetic, including extreme `u32`
-coordinates.
+instead of treating them as projected ink. Join distance uses checked `u128`
+arithmetic, including extreme `u32` coordinates.
 It does not clip or mutate original shapes. The physical export adapter has
 its own additional page-boundary and stroke-margin checks.
 
