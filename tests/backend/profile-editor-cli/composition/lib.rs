@@ -7788,6 +7788,50 @@ fn seeded_variation_keeps_exact_nfd_fallback_and_applies_selected_means() {
 }
 
 #[test]
+fn typed_glyph_library_never_serializes_unreloadable_strokes()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "ñ", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    let accepted = glyphs.encode_file()?;
+    let original = glyphs.strokes.first().cloned()
+        .ok_or("missing valid original stroke")?;
+    let mut invalid_key = original.clone();
+    invalid_key.grapheme = "ab".into();
+    let mut zero_length = original.clone();
+    zero_length.end_um = zero_length.start_um;
+    let mut out_of_cell = original.clone();
+    out_of_cell.start_um.1 = 4501;
+    let mut oversized_pen = original.clone();
+    oversized_pen.width_um = 1501;
+    for (label, invalid) in [
+        ("key", invalid_key),
+        ("zero length", zero_length),
+        ("outside cell", out_of_cell),
+        ("pen width", oversized_pen),
+    ] {
+        glyphs.strokes[0] = invalid;
+        if glyphs.encode_file().is_ok() {
+            return Err(format!("invalid typed {label} serialized"));
+        }
+        glyphs.strokes[0] = original.clone();
+        if glyphs.encode_file()? != accepted {
+            return Err(format!("invalid {label} changed canonical replay"));
+        }
+    }
+    glyphs.strokes.resize(4097, original);
+    if glyphs.encode_file().is_ok() {
+        return Err("typed library over 4096 strokes serialized".into());
+    }
+    glyphs.strokes.truncate(1);
+    if glyphs.encode_file()? != accepted {
+        return Err("over-budget library changed canonical replay".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_stroke_replacement_refuses_invalid_geometry_atomically()
 -> Result<(), String> {
     let mut glyphs = GlyphOverlay::default();

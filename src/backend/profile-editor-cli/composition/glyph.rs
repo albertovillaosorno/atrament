@@ -504,8 +504,12 @@ impl GlyphOverlay {
                 "glyph library needs at least one authored stroke".into()
             );
         }
+        if self.strokes.len() > MAX_STROKES {
+            return Err("glyph library exceeds 4096 strokes".into());
+        }
         let mut text = format!("{GLYPH_LIBRARY_HEADER}\n");
         for stroke in &self.strokes {
+            validate_serializable_stroke(stroke)?;
             let _written = writeln!(
                 text,
                 "{}\t{}\t{}\t{}\t{}\t{}\t#{:02X}{:02X}{:02X}",
@@ -1584,17 +1588,9 @@ impl GlyphOverlay {
                 "replacement glyph identity must match selection".into()
             );
         }
-        // CLI operands are parsed by parse_stroke, but typed sibling callers
-        // must not be able to install a malformed segment into a saved TSV.
-        if replacement.start_um == replacement.end_um
-            || [replacement.start_um.0, replacement.end_um.0]
-                .iter().any(|x| *x > 3500)
-            || [replacement.start_um.1, replacement.end_um.1]
-                .iter().any(|y| *y > 4500)
-            || !(80..=1500).contains(&replacement.width_um) {
-            return Err("replacement glyph geometry outside native bounds"
-                .into());
-        }
+        // A typed sibling can bypass CLI parse_stroke; use the same
+        // serializable-shape admission as canonical TSV encoding.
+        validate_serializable_stroke(&replacement)?;
         let positions = self.matching_stroke_positions(grapheme)?;
         let index = Self::checked_stroke_position(&positions, ordinal)?;
         let selected = *positions.get(index)
@@ -1855,6 +1851,23 @@ impl GlyphOverlay {
         }
         Ok(())
     }
+}
+
+// Typed sibling callers may construct strokes without CLI parsing. Keep
+// canonical writer output loadable under its own exact TSV v1 admission.
+fn validate_serializable_stroke(stroke: &GlyphStroke)
+-> Result<(), String> {
+    if !is_exact_visible_grapheme(
+        &stroke.grapheme, UnicodeGraphemeSegmentation,
+    ) || stroke.start_um == stroke.end_um
+        || [stroke.start_um.0, stroke.end_um.0]
+            .iter().any(|x| *x > 3500)
+        || [stroke.start_um.1, stroke.end_um.1]
+            .iter().any(|y| *y > 4500)
+        || !(80..=1_500).contains(&stroke.width_um) {
+        return Err("glyph stroke geometry outside native bounds".into());
+    }
+    Ok(())
 }
 
 fn validate_glyph_statistics(
