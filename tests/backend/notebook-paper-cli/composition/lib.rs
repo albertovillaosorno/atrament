@@ -796,6 +796,45 @@ fn a5_high_dpi_rounded_border_keeps_candidate_png_bytes() {
     assert_eq!(alpha(590, 1180), 0, "page interior stays transparent");
 }
 
+// These hashes were captured from the unoptimized native CLI, before
+// constraining rounded-border raster iteration. They cover small and large
+// radii, different physical sheets and all three practical DPI settings.
+#[test]
+fn rounded_border_raster_window_preserves_existing_png_bytes() {
+    use atrament_profile_entry_sha256::sha256_profile_bytes;
+    use std::fmt::Write as _;
+
+    let cases = [
+        (148_000, 210_000, 72, 25_000,
+            "3761e464832b18cd8f04dfa871d94e94be1ddd5d916460fe2c6dad46317b6cb8"),
+        (148_000, 210_000, 150, 100,
+            "905412354e4a2df95bbcdcbd976e0561ba972d90ca2e94cee61d42b2c617389d"),
+        (148_000, 210_000, 300, 30_000,
+            "f43ad824eadbdac4a991812196ed31325895127687228a9052f065b4878cd446"),
+        (215_900, 279_400, 150, 12_000,
+            "c9330f1b664c28e82ad3ab62eef674b4848b3b9799244aaa3438e5dbdb1c9d2d"),
+    ];
+    for (width_um, height_um, dpi, radius_um, expected) in cases {
+        let profile = encode_profile(Options {
+            style: Style::Blank,
+            width_um,
+            height_um,
+            ..Options::default()
+        });
+        let png = paper_profile_png_page_with_border(
+            profile.as_bytes(), dpi, false, None, false, 1, radius_um,
+        ).expect("admitted native rounded paper PNG");
+        let mut digest = String::with_capacity(64);
+        for byte in sha256_profile_bytes(&png).bytes() {
+            write!(&mut digest, "{byte:02x}").expect("hex digest");
+        }
+        assert_eq!(
+            digest, expected,
+            "{width_um}x{height_um}, {dpi} DPI, {radius_um} um",
+        );
+    }
+}
+
 #[test]
 fn rounded_border_refuses_unprintable_radius_and_missing_edge_clearance() {
     let paper = default_paper_profile_json();

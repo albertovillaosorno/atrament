@@ -377,20 +377,63 @@ fn paint_rounded_border(
     let bottom_band_start = f64::from(border.bottom_um) - threshold;
     let left_corner_end = f64::from(border.left_um) + radius + threshold;
     let right_corner_start = f64::from(border.right_um) - radius - threshold;
+    // Only the stroke's physical outline can paint. Keep a conservative
+    // half-pixel bound, then retain repeated-addition pixel centers inside
+    // that window so the previous raster's exact pigment stays unchanged.
+    let padding = i64::from(NOTEBOOK_BORDER_STROKE_UM.div_ceil(2))
+        .saturating_add(i64::from(25_400u32.div_ceil(dpi.saturating_mul(2))));
+    let top_row = pixel_coordinate(
+        i64::from(border.top_um).saturating_sub(padding), dpi, false,
+    )?.min(height);
+    let bottom_row = pixel_coordinate(
+        i64::from(border.bottom_um).saturating_add(padding), dpi, true,
+    )?.min(height);
+    let left_column = pixel_coordinate(
+        i64::from(border.left_um).saturating_sub(padding), dpi, false,
+    )?.min(width);
+    let right_column = pixel_coordinate(
+        i64::from(border.right_um).saturating_add(padding), dpi, true,
+    )?.min(width);
     let mut y = pitch / 2.0f64;
-    for row in 0..height {
+    for _ in 0..top_row {
+        y += pitch;
+    }
+    let mut first_x = pitch / 2.0f64;
+    for _ in 0..left_column {
+        first_x += pitch;
+    }
+    // In the vertical sides of a rounded rectangle, the center strip
+    // cannot paint. Find its exact pixel-center interval just once and
+    // jump over it for each interior row, preserving the old accumulated
+    // X coordinate at the first pixel after the transparent strip.
+    let mut skip_start = right_column;
+    let mut skip_end = right_column;
+    let mut skip_end_x = first_x;
+    let mut scan_x = first_x;
+    for column in left_column..right_column {
+        if scan_x > left_corner_end && scan_x < right_corner_start {
+            if skip_start == right_column {
+                skip_start = column;
+            }
+            skip_end = column.checked_add(1)
+                .ok_or("border raster skip overflow")?;
+            skip_end_x = scan_x + pitch;
+        }
+        scan_x += pitch;
+    }
+    for row in top_row..bottom_row {
         if (y - center_y).abs() > half_height + threshold {
             y += pitch;
             continue;
         }
         let between_horizontal_bands =
             y > top_band_end && y < bottom_band_start;
-        let mut x = pitch / 2.0f64;
-        for column in 0..width {
-            if between_horizontal_bands
-                && x > left_corner_end && x < right_corner_start
-            {
-                x += pitch;
+        let mut x = first_x;
+        let mut column = left_column;
+        while column < right_column {
+            if between_horizontal_bands && column == skip_start {
+                column = skip_end;
+                x = skip_end_x;
                 continue;
             }
             if (x - center_x).abs() <= half_width + threshold {
@@ -413,6 +456,8 @@ fn paint_rounded_border(
                     ]);
                 }
             }
+            column = column.checked_add(1)
+                .ok_or("border raster column overflow")?;
             x += pitch;
         }
         y += pitch;
