@@ -825,6 +825,17 @@ fn read_glyph_input(
     Ok(bytes.bytes().to_vec())
 }
 
+// Reject invalid library source order before opening any path or blocking
+// on an unclosed stdin pipe. The parser also checks typed callers.
+fn load_selected_glyph_file(
+    glyphs: &mut GlyphOverlay, path: &str,
+    stdin_selected: &mut bool,
+) -> Result<(), String> {
+    glyphs.ensure_can_load_file()?;
+    let bytes = read_glyph_input(path, stdin_selected)?;
+    glyphs.load_file_bytes(&bytes)
+}
+
 /// An explicit reusable glyph shape file, distinct from numeric statistics.
 /// Keep human-entered shape coverage audits bounded and explicit.
 fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
@@ -857,8 +868,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             "--profile" => {
                 let selected = iter.next()
                     .ok_or("--profile requires a glyph library path")?;
-                glyphs.load_file_bytes(&read_glyph_input(
-                    selected, &mut piped)?)?;
+                load_selected_glyph_file(&mut glyphs, selected, &mut piped)?;
             }
             "--copy-glyph" | "--glyph-stroke" | "--rotate-glyph"
             | "--translate-glyph" | "--shear-glyph"
@@ -1243,9 +1253,7 @@ fn parse_notebook_export_option(
         "--glyph-file" => {
             let selected = iter.next()
                 .ok_or("--glyph-file requires a library path")?;
-            glyphs.load_file_bytes(&read_glyph_input(
-                selected, stdin_selected,
-            )?)?;
+            load_selected_glyph_file(glyphs, selected, stdin_selected)?;
         }
         "--ink-file" => {
             let path = iter.next().ok_or("--ink-file requires a file")?;

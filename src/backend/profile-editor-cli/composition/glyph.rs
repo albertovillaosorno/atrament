@@ -534,6 +534,17 @@ impl GlyphOverlay {
         Ok(text.into_bytes())
     }
 
+    pub(super) fn ensure_can_load_file(&self) -> Result<(), String> {
+        if self.loaded_file || self.has_any() {
+            return Err(concat!(
+                "--glyph-file or --profile must precede authored strokes ",
+                "and may appear only once",
+            )
+            .into());
+        }
+        Ok(())
+    }
+
     pub(super) fn expand(
         &self, manual: &[NotebookInkLine],
         statistics: Option<&HandwritingStatisticsProfile>,
@@ -815,13 +826,9 @@ impl GlyphOverlay {
     pub(super) fn load_file_bytes(
         &mut self, bytes: &[u8],
     ) -> Result<(), String> {
-        if self.loaded_file || self.has_any() {
-            return Err(concat!(
-                "--glyph-file or --profile must precede authored strokes ",
-                "and may appear only once",
-            )
-            .into());
-        }
+        // Typed callers must retain the check even when the CLI has already
+        // refused invalid option order before opening a file or reading stdin.
+        self.ensure_can_load_file()?;
         if bytes.len() > MAX_GLYPH_LIBRARY_BYTES {
             return Err("glyph library exceeds 524288 bytes".into());
         }

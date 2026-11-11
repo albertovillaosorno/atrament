@@ -3104,3 +3104,17 @@ Only one standard-input consumer may be selected per notebook command, shared
 with the existing flow text and physical ink streams. This is a local authoring
 and export convenience, not synthesized glyph coverage or persisted notebook
 content. The P1 geometry and end-to-end writing requirements remain open.
+
+## Glyph source ordering refuses before input I/O — 2026-11-10
+
+The native glyph editor and notebook exporter now check the one-library,
+first-source admission rule before opening `--profile` or `--glyph-file`
+paths or reading the selected `-` pipe. Previously a rejected later source
+could still open an arbitrary path or block awaiting EOF on stdin. The
+typed glyph TSV reader retains its independent precondition check.
+
+A native subprocess regression leaves stdin open without writing any bytes,
+proves prompt refusal for both commands, and checks that a preexisting output
+file remains unchanged. Invalid missing paths also refuse for source order
+without attempting file opening. This does not add inferred glyph shapes or
+change the one-consumer stdin policy; P1 handwriting remains incomplete.

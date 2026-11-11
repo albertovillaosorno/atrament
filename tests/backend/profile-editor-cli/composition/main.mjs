@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: LicenseRef-Proprietary
 // Verify real native CLI selected-source resolution and no-clobber refusal.
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync,
     writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -1156,9 +1156,80 @@ test('glyph library stdin preserves exact Unicode ink and rejects unsafe pipes',
                 '--profile', '-');
             assert.notEqual(double.status, 0);
             assert.match(double.stderr.toString(),
-                /standard input may be selected only once/);
+                /must precede authored strokes and may appear only once/);
+            // Refuse ordering before reading even a missing source or a
+            // second pipe. Invalid commands cannot replace accepted output.
+            const shape = ['--glyph-stroke', 'a', '500', '500',
+                '1800', '3000', '250', '#123456'];
+            const missing = join(dir, 'does-not-exist.tsv');
+            refused(['glyphs', ...shape, '--profile', missing,
+                '--output', destination, '--replace'],
+            /must precede authored strokes and may appear only once/,
+            destination);
+            refused(['notebook', ...shape, '--glyph-file', missing,
+                '--export-paper', 'pdf', '--output', destination, '--replace'],
+            /must precede authored strokes and may appear only once/,
+            destination);
             assert.deepEqual(readFileSync(saved), glyph,
                 'saved source remains untouched by piped replay');
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+// Keep the pipe open and unwritten: an invalid option order must exit before
+// attempting even a bounded stdin read. The native binary was built by the
+// ordinary CLI invocation, so this check does not wait on Cargo's file lock.
+test('out-of-order glyph sources refuse without waiting for stdin',
+    { skip: process.platform !== 'linux' }, async () => {
+        const dir = mkdtempSync(join(root, '.temp/glyph-order-pipe-'));
+        try {
+            const shape = ['--glyph-stroke', 'a', '500', '500',
+                '1800', '3000', '250', '#123456'];
+            accepted('glyphs', ...shape);
+            const destination = join(dir, 'accepted.pdf');
+            writeFileSync(destination, 'previous accepted output');
+            const previous = readFileSync(destination);
+            const executable = join(root,
+                '.cache/cargo-target/debug/atrament-profiles');
+            for (const flags of [
+                ['glyphs', ...shape, '--profile', '-'],
+                ['notebook', ...shape, '--glyph-file', '-',
+                    '--export-paper', 'pdf'],
+            ]) {
+                const args = [...flags, '--output', destination,
+                    '--replace'];
+                const result = await new Promise((resolve, reject) => {
+                    const child = spawn(executable, args, {
+                        cwd: root, stdio: ['pipe', 'pipe', 'pipe'],
+                    });
+                    let stderr = '';
+                    let stdout = '';
+                    child.stderr.setEncoding('utf8');
+                    child.stdout.setEncoding('utf8');
+                    child.stderr.on('data', (chunk) => { stderr += chunk; });
+                    child.stdout.on('data', (chunk) => { stdout += chunk; });
+                    const timeout = setTimeout(() => {
+                        child.kill();
+                        reject(new Error('out-of-order glyph input blocked'));
+                    }, 5_000);
+                    child.on('error', (error) => {
+                        clearTimeout(timeout);
+                        reject(error);
+                    });
+                    child.on('close', (status) => {
+                        clearTimeout(timeout);
+                        resolve({ status, stderr, stdout });
+                    });
+                    // Do not close or write to child.stdin before it exits.
+                });
+                assert.notEqual(result.status, 0);
+                assert.match(result.stderr,
+                    /must precede authored strokes and may appear only once/);
+                assert.equal(result.stdout, '');
+                assert.deepEqual(readFileSync(destination), previous,
+                    'invalid source order preserves accepted file bytes');
+            }
         } finally {
             rmSync(dir, { recursive: true, force: true });
         }
