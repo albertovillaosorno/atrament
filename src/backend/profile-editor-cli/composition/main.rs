@@ -1405,13 +1405,18 @@ fn load_notebook_profile_option(
 }
 
 fn load_notebook_paper_option(
-    iter: &mut Iter<'_, String>,
+    iter: &mut Iter<'_, String>, loaded: &mut bool,
 ) -> Result<String, String> {
+    if *loaded {
+        return Err("--paper-profile may appear only once".into());
+    }
     let path = iter.next().ok_or("--paper-profile requires a file")?;
     let paper = read_notebook_input(
         path, atrament_notebook_paper_cli::MAX_PROFILE_BYTES,
     )?;
-    canonical_paper_profile_json(&paper)
+    let canonical = canonical_paper_profile_json(&paper)?;
+    *loaded = true;
+    Ok(canonical)
 }
 
 fn validate_notebook_flow_selection(
@@ -1458,6 +1463,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut heading = HeadingDecoration::default();
     let mut stdin_selected = false;
     let mut loaded = false;
+    let mut paper_loaded = false;
     let mut edited = false;
     let mut iter = args.iter();
     while let Some(option) = iter.next() {
@@ -1469,7 +1475,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 loaded = true;
             }
             "--paper-profile" => {
-                profile.paper_json = load_notebook_paper_option(&mut iter)?;
+                profile.paper_json = load_notebook_paper_option(
+                    &mut iter, &mut paper_loaded,
+                )?;
                 edited = true;
             }
             "--date-style" | "--date-placement" | "--date-text"

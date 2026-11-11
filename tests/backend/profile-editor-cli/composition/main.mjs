@@ -86,6 +86,14 @@ test('native CLI reads selected regular files but never traverses input links',
                 .toString('latin1').startsWith('%PDF-'));
 
             writeFileSync(destination, 'previous accepted export');
+            refused(['notebook', '--paper-profile', paper,
+                '--paper-profile', join(dir, 'missing-paper.json'),
+                '--output', destination, '--replace'],
+            /--paper-profile may appear only once/, destination);
+            refused(['notebook', '--profile', notebook,
+                '--paper-profile', paper, '--paper-profile', paper,
+                '--output', destination, '--replace'],
+            /--paper-profile may appear only once/, destination);
             const leafLinks = sources.map((source, index) => {
                 const link = join(dir, `link-${index}`);
                 symlinkSync(source, link);

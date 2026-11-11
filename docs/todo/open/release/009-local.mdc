@@ -189,3 +189,16 @@ an ignored repository `.temp` directory.
 Open. Provide the actual bounded Rust/backend or browser integration and an
 accepted/refused example before marking the executable capability complete.
 Theoretical design acceptance alone cannot establish that this feature runs.
+
+## Single native paper source admission — 2026-11-10
+
+The native notebook CLI now refuses a second `--paper-profile` flag rather
+than silently applying the last fully loaded paper profile. This follows the
+existing one-notebook-profile input boundary without preventing edits to a
+single accepted paper profile or its notebook settings. The duplicate is
+rejected before opening its selected path.
+
+A native file-source regression checks duplicates after both a default and a
+loaded notebook profile, including a nonexistent second paper path. All
+refusals retain the accepted output bytes. This does not implement saved
+handwritten notebook content or complete the localhost authoring journey.
