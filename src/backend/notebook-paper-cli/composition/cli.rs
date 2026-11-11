@@ -77,6 +77,42 @@ fn select_output_path(
 pub(super) fn parse_options(
     args: &[String],
 ) -> Result<Option<CliRequest>, String> {
+    // Check every source-independent flag before opening a selected profile.
+    // This uses the same typed parsers as the final pass, so a malformed late
+    // option cannot consume a source or obscure the argument refusal.
+    let preflight = parse_options_with_profile(args, false)?;
+    if preflight.is_none() {
+        return Ok(None);
+    }
+    parse_options_with_profile(args, true)
+}
+
+fn select_once(seen: &mut bool, error: &str) -> Result<(), String> {
+    if *seen {
+        return Err(error.into());
+    }
+    *seen = true;
+    Ok(())
+}
+
+fn source_profile_options(
+    path: &str,
+    read_source: bool,
+) -> Result<Options, String> {
+    if path.is_empty() {
+        return Err("--profile requires one explicit file path".into());
+    }
+    if read_source {
+        read_profile(path)
+    } else {
+        Ok(Options::default())
+    }
+}
+
+fn parse_options_with_profile(
+    args: &[String],
+    read_source: bool,
+) -> Result<Option<CliRequest>, String> {
     let mut opts = Options::default();
     let mut dpi = DEFAULT_PNG_DPI;
     let mut seen_dpi = false;
@@ -99,14 +135,12 @@ pub(super) fn parse_options(
             return Ok(None);
         }
         if name == "--emit-profile" {
-            emit_profile = true;
+            select_once(&mut emit_profile,
+                "--emit-profile may appear only once")?;
             continue;
         }
         if name == "--replace" {
-            if replace {
-                return Err("--replace may appear only once".into());
-            }
-            replace = true;
+            select_once(&mut replace, "--replace may appear only once")?;
             continue;
         }
         if name == "--landscape" || name == "--portrait" {
@@ -126,7 +160,7 @@ pub(super) fn parse_options(
             if seen_edit || seen_profile {
                 return Err("--profile must appear once, before edits".into());
             }
-            opts = read_profile(value)?;
+            opts = source_profile_options(value, read_source)?;
             seen_profile = true;
             continue;
         }

@@ -320,3 +320,18 @@ second selected pipe open and unwritten, and verifies immediate refusal
 without changing accepted output. A missing second file is also refused for
 the exhausted budget before the file opener runs. This is an admission and
 nonblocking improvement, not persisted notebook content or complete export.
+
+## Paper CLI preflight of source-independent options — 2026-11-10
+
+The native `atrament-paper` command now parses and validates its ordered
+output, page, orientation, edit and PNG-quality options before opening an
+explicitly selected `--profile` file. A malformed later option, duplicated
+`--emit-profile`, empty profile filename or explicit help can therefore refuse
+or succeed without reading unavailable or malformed source bytes. Both
+preflight and final parsing use the same typed argument validators; the
+second pass alone reads the real profile and applies edits to its geometry.
+
+Focused Rust regressions prove early diagnostics against a missing source,
+and existing loaded-profile PDF/PNG parity tests preserve profile-relative
+orientation and physical dimensions. This is bounded CLI admission, not the
+requested persisted full notebook body or image overlay rendering.

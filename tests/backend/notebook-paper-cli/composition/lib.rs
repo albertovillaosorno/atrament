@@ -225,6 +225,73 @@ fn paper_profile_must_be_loaded_before_edit_flags() {
 }
 
 #[test]
+fn paper_profile_preflights_later_options_before_selected_source_io() {
+    // An unavailable or malformed profile must not obscure a later typed
+    // argument refusal. All options are parsed in source-free mode first.
+    let nonexistent = "paper-preflight-does-not-exist.json";
+    for (tail, diagnostic) in [
+        (vec!["--line-color", "red"], "line color must be #RRGGBB"),
+        (vec!["--spacing-mm", "1.1234"],
+            "millimeters require up to three decimal places"),
+        (vec!["--pages", "33"], "page count must be an integer"),
+        (vec!["--format", "png", "--pages", "2"],
+            "--pages is only valid for PDF export"),
+        (vec!["--output", "-"], "--output requires one explicit"),
+        (vec!["--quality", "preview"],
+            "--quality requires --format png"),
+        (vec!["--landscape", "--portrait"],
+            "choose only one page orientation"),
+        (vec!["--paper-size", "invalid"],
+            "paper size must be"),
+        (vec!["--emit-profile", "--emit-profile"],
+            "--emit-profile may appear only once"),
+        (vec!["--width-mm"], "missing value for --width-mm"),
+    ] {
+        let mut args = vec!["--profile".to_owned(), nonexistent.to_owned()];
+        args.extend(tail.into_iter().map(str::to_owned));
+        let error = parse_options(&args)
+            .expect_err("invalid late options refuse before reading source");
+        assert!(error.contains(diagnostic), "{args:?}: {error}");
+    }
+    let error = parse_options(&["--profile", ""].map(str::to_owned))
+        .expect_err("empty selected profile path refuses in preflight");
+    assert!(error.contains("--profile requires one explicit file path"));
+    let help = parse_options(&["--profile", nonexistent, "--help"]
+        .map(str::to_owned)).expect("help does not read a selected source");
+    assert!(help.is_none());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn paper_profile_preflight_refuses_bad_flags_before_fifo_and_output_commit() {
+    use nix::sys::stat::Mode;
+    use nix::unistd::mkfifo;
+    use std::fs;
+    use std::process;
+
+    let dir = env::temp_dir().join(format!(
+        "atrament-paper-preflight-{}", process::id(),
+    ));
+    fs::create_dir_all(&dir).expect("test-owned directory");
+    let fifo = dir.join("selected-profile.json");
+    mkfifo(&fifo, Mode::S_IRUSR | Mode::S_IWUSR)
+        .expect("test-owned selected profile pipe");
+    let output = dir.join("approved.pdf");
+    let approved = b"previously reviewed paper export";
+    fs::write(&output, approved).expect("test-owned approved output");
+    let args = ["--profile", fifo.to_str().expect("UTF-8 pipe path"),
+        "--output", output.to_str().expect("UTF-8 output path"),
+        "--replace", "--dpi", "301", "--format", "png"]
+        .map(str::to_owned);
+    let error = parse_options(&args)
+        .expect_err("late bad DPI must refuse before opening selected FIFO");
+    assert!(error.contains("PNG DPI must be between 72 and 300"),
+        "unexpected source-first diagnostic: {error}");
+    assert_eq!(fs::read(&output).expect("approved output survives"), approved);
+    fs::remove_dir_all(dir).expect("remove test-owned preflight fixtures");
+}
+
+#[test]
 fn paper_profile_file_read_is_bounded_and_refuses_corrupt_disk_data() {
     use std::fs;
     use std::process;

@@ -133,3 +133,43 @@ test('paper stdout exactly matches reference PDFs and RGBA PNGs', () => {
         }
     }
 });
+
+// The profile opener is never consulted for source-independent bad options,
+// even when an earlier file was selected and an output overwrite requested.
+test('paper CLI validates late options before loading profile or replacing PDF',
+    () => {
+        const directory = mkdtempSync(join(tmpdir(),
+            'atrament-paper-preflight-'));
+        try {
+            const output = join(directory, 'reviewed.pdf');
+            const baseline = nativePaper('--style', 'ruled',
+                '--output', output);
+            assert.equal(baseline.status, 0, baseline.stderr);
+            const approved = readFileSync(output);
+            const absent = join(directory, 'missing-profile.json');
+            for (const [flags, diagnostic] of [
+                [['--line-color', 'invalid'], /line color must be #RRGGBB/],
+                [['--format', 'png', '--pages', '2'],
+                    /--pages is only valid for PDF export/],
+                [['--dpi', '301', '--format', 'png'],
+                    /PNG DPI must be between 72 and 300/],
+                [['--emit-profile', '--emit-profile'],
+                    /--emit-profile may appear only once/],
+            ]) {
+                const result = nativePaper('--profile', absent,
+                    '--output', output, '--replace', ...flags);
+                assert.notEqual(result.status, 0,
+                    'invalid late option must refuse selected export');
+                assert.match(result.stderr, diagnostic,
+                    'argument diagnostic must precede missing-profile error');
+                assert.equal(result.stdout, '', 'refusal emits no PDF bytes');
+                assert.deepEqual(readFileSync(output), approved,
+                    'preflight refusal must preserve the reviewed PDF');
+            }
+            const help = nativePaper('--profile', absent, '--help');
+            assert.equal(help.status, 0, help.stderr);
+            assert.match(help.stdout, /^Usage: atrament-paper/);
+        } finally {
+            rmSync(directory, { recursive: true, force: true });
+        }
+    });
