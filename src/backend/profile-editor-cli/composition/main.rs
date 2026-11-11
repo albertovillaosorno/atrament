@@ -1573,27 +1573,37 @@ fn parse_ink_line(
         u8::from_str_radix(digits, 16)
             .map_err(|_error| "ink color must be #RRGGBB".into())
     };
-    // A zero-length pen mark or one whose radius crosses the page origin
-    // cannot render on any sheet, regardless of selected paper margins.
-    // Refuse this known-invalid geometry before an earlier stdin read.
-    let clearance = width_um.div_ceil(2);
-    if (x1, y1) == (x2, y2)
-        || [(x1, y1), (x2, y2)].iter().any(|(x, y)| {
-            *x < clearance || *y < clearance
-        })
-    {
-        return Err(format!(
-            "page {page} ink needs printable endpoints and valid width",
-        ));
-    }
-    Ok(NotebookInkLine {
+    let line = NotebookInkLine {
         page: usize::try_from(page)
             .map_err(|error| format!("invalid ink page: {error}"))?,
         start_um: (x1, y1),
         end_um: (x2, y2),
         width_um,
         rgb: [byte(1)?, byte(3)?, byte(5)?],
-    })
+    };
+    validate_native_ink_line(&line)?;
+    Ok(line)
+}
+
+// This profile-independent admission is shared by CLI-parsed manual ink and
+// direct typed callers. The downstream paper renderer additionally verifies
+// the selected sheet's margins and printable region.
+fn validate_native_ink_line(line: &NotebookInkLine) -> Result<(), String> {
+    let clearance = line.width_um.div_ceil(2);
+    if !(1..=32).contains(&line.page)
+        || !(80..=1_500).contains(&line.width_um)
+        || line.start_um == line.end_um
+        || [line.start_um, line.end_um].iter().any(|(x, y)| {
+            *x < clearance || *y < clearance
+                || *x > 700_000 || *y > 700_000
+        })
+    {
+        return Err(format!(
+            "page {} ink needs printable endpoints and valid width",
+            line.page,
+        ));
+    }
+    Ok(())
 }
 
 // Reuse final ink parsing while bounding explicit lines before selected IO.

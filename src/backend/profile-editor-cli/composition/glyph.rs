@@ -562,9 +562,7 @@ impl GlyphOverlay {
         // duplicate dimensions or unbounded means before placing any ink.
         validate_glyph_statistics(statistics)?;
         self.validate_pairing()?;
-        if manual.len() > MAX_NOTEBOOK_INK_LINES {
-            return Err("manual ink exceeds 4096 total pen strokes".into());
-        }
+        validate_manual_ink(manual)?;
         let mut expanded = manual.to_vec();
         let mut boundary_ink_end = (boundary_run == 0)
             .then_some(expanded.len());
@@ -1863,6 +1861,18 @@ impl GlyphOverlay {
         }
         Ok(())
     }
+}
+
+// Manual ink from a typed caller follows the same bounded admission as the
+// CLI's explicit --ink-line and selected TSV source, before glyph expansion.
+fn validate_manual_ink(manual: &[NotebookInkLine]) -> Result<(), String> {
+    if manual.len() > MAX_NOTEBOOK_INK_LINES {
+        return Err("manual ink exceeds 4096 total pen strokes".into());
+    }
+    for line in manual {
+        super::validate_native_ink_line(line)?;
+    }
+    Ok(())
 }
 
 // Generated flow runs are measured separately; the CLI's 16-run cap only

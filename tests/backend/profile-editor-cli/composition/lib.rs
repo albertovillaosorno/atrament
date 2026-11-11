@@ -8133,6 +8133,53 @@ fn typed_stroke_replacement_refuses_invalid_geometry_atomically()
 }
 
 #[test]
+fn typed_manual_ink_matches_cli_line_admission() -> Result<(), String> {
+    let glyphs = GlyphOverlay::default();
+    let accepted = NotebookInkLine {
+        page: 1,
+        start_um: (25_000, 30_000),
+        end_um: (27_000, 32_000),
+        width_um: 250,
+        rgb: [0x12, 0x34, 0x56],
+    };
+    let baseline = glyphs.expand(&[accepted], None)?;
+    if baseline != [accepted] {
+        return Err("valid typed manual ink did not replay exactly".into());
+    }
+    let mut zero_page = accepted;
+    zero_page.page = 0;
+    let mut extra_page = accepted;
+    extra_page.page = 33;
+    let mut outside = accepted;
+    outside.end_um.0 = 700_001;
+    let mut too_close = accepted;
+    too_close.start_um.1 = 124;
+    let mut collapsed = accepted;
+    collapsed.end_um = collapsed.start_um;
+    let mut thin = accepted;
+    thin.width_um = 79;
+    let mut thick = accepted;
+    thick.width_um = 1501;
+    for (name, invalid) in [
+        ("zero page", zero_page),
+        ("page above 32", extra_page),
+        ("out-of-range coordinate", outside),
+        ("pen crossing page origin", too_close),
+        ("zero-length stroke", collapsed),
+        ("pen below 80 um", thin),
+        ("pen above 1500 um", thick),
+    ] {
+        if glyphs.expand(&[invalid], None).is_ok() {
+            return Err(format!("typed manual {name} bypassed CLI admission"));
+        }
+        if glyphs.expand(&[accepted], None)? != baseline {
+            return Err(format!("refused {name} changed accepted ink replay"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_glyph_expansion_refuses_over_budget_manual_ink()
 -> Result<(), String> {
     let mut glyphs = GlyphOverlay::default();
