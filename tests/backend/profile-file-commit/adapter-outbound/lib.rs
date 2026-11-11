@@ -104,10 +104,6 @@ mod linux {
                 .collect()
         }
     }
-    #[expect(
-        clippy::missing_trait_methods,
-        reason = "Drop provides only its required cleanup method"
-    )]
     impl Drop for OwnedDir {
         fn drop(&mut self) {
             fs::remove_dir_all(&self.0).expect("remove only owned fixture");
@@ -269,7 +265,7 @@ mod linux {
                 );
             } else {
                 assert!(!target.exists());
-                assert!(dir.entries().is_empty());
+                assert_eq!(dir.entries(), Vec::<String>::new());
             }
         }
     }
@@ -332,7 +328,7 @@ mod linux {
                 );
             } else {
                 assert!(!target.exists());
-                assert!(dir.entries().is_empty());
+                assert_eq!(dir.entries(), Vec::<String>::new());
             }
         }
     }
@@ -398,7 +394,7 @@ mod linux {
                 );
             } else {
                 assert!(!target.exists());
-                assert!(dir.entries().is_empty());
+                assert_eq!(dir.entries(), Vec::<String>::new());
             }
         }
     }
@@ -468,7 +464,7 @@ mod linux {
                 );
             } else {
                 assert!(!target.exists());
-                assert!(dir.entries().is_empty());
+                assert_eq!(dir.entries(), Vec::<String>::new());
             }
         }
     }
@@ -1448,7 +1444,7 @@ mod linux {
         assert_eq!(outcome, Err(Error::SelectedTargetChanged));
         assert_eq!(observations, 3);
         assert!(!target.exists());
-        assert!(dir.entries().is_empty());
+        assert_eq!(dir.entries(), Vec::<String>::new());
     }
 
     #[test]
@@ -1669,7 +1665,7 @@ mod linux {
                 assert_eq!(cancellation_checks, 0);
             }
         }
-        assert!(dir.entries().is_empty());
+        assert_eq!(dir.entries(), Vec::<String>::new());
     }
 
     #[test]
@@ -1691,7 +1687,7 @@ mod linux {
             Err(Error::CancelledBeforeCommit)
         );
         assert_eq!(observations, 1);
-        assert!(dir.entries().is_empty());
+        assert_eq!(dir.entries(), Vec::<String>::new());
         assert_eq!(
             commit_profile_file_cancellable(
                 &target,
@@ -1719,7 +1715,7 @@ mod linux {
             Err(Error::InvalidTarget)
         );
         assert_eq!(observations, 1);
-        assert!(dir.entries().is_empty());
+        assert_eq!(dir.entries(), Vec::<String>::new());
     }
 
     #[test]
@@ -1819,22 +1815,39 @@ mod linux {
 // Include the private cleanup guard to test replacement of its transient
 // sibling directly, without relying on a nondeterministic rename race.
 #[cfg(target_os = "linux")]
-#[allow(dead_code, unreachable_pub)]
+#[expect(
+    dead_code,
+    unreachable_pub,
+    clippy::redundant_pub_crate,
+    reason = "private transport included to exercise cleanup internals"
+)]
 #[path = "../../../../src/backend/profile-file-commit/adapter-outbound/lib.rs"]
-mod owned_temp_cleanup_regression;
+pub(crate) mod owned_temp_cleanup_regression;
 
 #[cfg(target_os = "linux")]
 mod owned_temp_tests {
     use super::owned_temp_cleanup_regression::OwnedTemp;
+    use std::env;
     use std::fs::{self, File};
     use std::os::unix::fs::MetadataExt as _;
+    use std::path::PathBuf;
+    use std::process;
+
+    #[expect(
+        clippy::create_dir,
+        reason = "unique test fixture must refuse an already-existing path"
+    )]
+    fn fixture_dir(suffix: &str) -> PathBuf {
+        let root = env::temp_dir().join(format!(
+            "atrament-owned-temp-{suffix}-{}", process::id(),
+        ));
+        fs::create_dir(&root).expect("unique fixture directory");
+        root
+    }
 
     #[test]
     fn error_cleanup_never_unlinks_a_replaced_sibling_entry() {
-        let root = std::env::temp_dir().join(format!(
-            "atrament-owned-temp-{}", std::process::id(),
-        ));
-        fs::create_dir(&root).expect("unique fixture directory");
+        let root = fixture_dir("replaced");
         let directory = File::open(&root).expect("open owned directory");
         let sibling = root.join(".atrament-export-test.tmp");
         let original = root.join("original.atrament");
@@ -1863,10 +1876,7 @@ mod owned_temp_tests {
 
     #[test]
     fn error_cleanup_removes_the_original_owned_sibling() {
-        let root = std::env::temp_dir().join(format!(
-            "atrament-owned-temp-original-{}", std::process::id(),
-        ));
-        fs::create_dir(&root).expect("unique fixture directory");
+        let root = fixture_dir("original");
         let directory = File::open(&root).expect("open owned directory");
         let sibling = root.join(".atrament-export-test.tmp");
         fs::write(&sibling, b"owned stage").expect("write owned stage");
@@ -1888,10 +1898,7 @@ mod owned_temp_tests {
     fn error_cleanup_preserves_symlink_to_moved_original_stage() {
         use std::os::unix::fs::symlink;
 
-        let root = std::env::temp_dir().join(format!(
-            "atrament-owned-temp-symlink-{}", std::process::id(),
-        ));
-        fs::create_dir(&root).expect("unique fixture directory");
+        let root = fixture_dir("symlink");
         let directory = File::open(&root).expect("open owned directory");
         let sibling = root.join(".atrament-export-test.tmp");
         let original = root.join("original.atrament");
@@ -1908,7 +1915,7 @@ mod owned_temp_tests {
         symlink(&original, &sibling).expect("replace stage with a symlink");
         drop(owned);
         let foreign_link = fs::symlink_metadata(&sibling)
-            .is_ok_and(|metadata| metadata.file_type().is_symlink());
+            .is_ok_and(|entry| entry.file_type().is_symlink());
         let original_bytes = fs::read(&original);
         fs::remove_dir_all(&root).expect("remove owned fixture");
         assert!(foreign_link, "foreign symlink must remain");
