@@ -419,6 +419,7 @@ impl GlyphOverlay {
         &mut self, source: &str, target: &str,
     ) -> Result<(), String> {
         validate_copy_glyph_keys(source, target)?;
+        self.validate_stroke_library()?;
         if self.strokes.iter().any(|stroke| stroke.grapheme == target) {
             return Err("glyph copy refuses an already authored target".into());
         }
@@ -876,6 +877,7 @@ impl GlyphOverlay {
                 "stroke edit requires one exact visible grapheme".into()
             );
         }
+        self.validate_stroke_library()?;
         let positions = self.strokes.iter().enumerate()
             .filter_map(|(index, stroke)| {
                 (stroke.grapheme == grapheme).then_some(index)
@@ -1202,6 +1204,7 @@ impl GlyphOverlay {
     pub(super) fn remove_glyph(&mut self, grapheme: &str)
         -> Result<(), String> {
         validate_removal_glyph_key(grapheme)?;
+        self.validate_stroke_library()?;
         let before = self.strokes.len();
         self.strokes.retain(|stroke| stroke.grapheme != grapheme);
         if self.strokes.len() == before {

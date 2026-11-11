@@ -61,6 +61,11 @@ function's physical output.
 
 ## Failure Modes
 
+Authored glyph edits first validate the entire bounded stroke library,
+including unrelated glyphs. Copy, deletion, reorder, path and geometric
+edits refuse malformed unused rows or over-budget typed inventories without
+mutating the accepted strokes. This matches inspection and export admission.
+
 The core refuses a zero page index, zero-width/height mean cells, negative
 or unrepresentable coordinates, nonfinite shear, pen widths outside
 80–1500 µm, source or scaled zero-length segments,

@@ -7929,6 +7929,92 @@ fn typed_glyph_inspection_refuses_invalid_unselected_inventory()
 }
 
 #[test]
+fn typed_glyph_mutations_refuse_invalid_unselected_inventory()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    for (grapheme, x1, y1, x2, y2) in [
+        ("a", "600", "500", "1000", "1000"),
+        ("a", "1200", "1000", "1800", "3000"),
+        ("b", "600", "500", "1800", "3000"),
+    ] {
+        glyphs.parse("--glyph-stroke", &mut args(&[
+            grapheme, x1, y1, x2, y2, "250", "#123456",
+        ]).iter())?;
+    }
+    let accepted = glyphs.encode_file()?;
+    let original = glyphs.strokes[2].clone();
+    // Each operation is valid against the original library. None may
+    // mutate an unrelated invalid typed stroke or create further edits
+    // before the complete authored inventory has been admitted.
+    let mutations: [(&str, fn(&mut GlyphOverlay) -> Result<(), String>); 9] = [
+        ("copy glyph", |overlay| overlay.copy_glyph("a", "c")),
+        ("remove glyph", |overlay| overlay.remove_glyph("a")),
+        ("remove stroke", |overlay| overlay.remove_stroke("a", 1)),
+        ("reverse stroke", |overlay| overlay.reverse_stroke("a", 1)),
+        ("move stroke", |overlay| overlay.move_stroke("a", 1, 2)),
+        ("join strokes", |overlay| overlay.join_strokes("a", 1)),
+        ("replace stroke", |overlay| {
+            let replacement = overlay.strokes[0].clone();
+            overlay.set_stroke("a", 1, replacement)
+        }),
+        ("scale glyph", |overlay| overlay.scale_glyph_ink("a", 100)),
+        ("translate glyph", |overlay| {
+            overlay.translate_glyph("a", 10, 0)
+        }),
+    ];
+    let mut collapsed = original.clone();
+    collapsed.end_um = collapsed.start_um;
+    let mut invalid_key = original.clone();
+    invalid_key.grapheme = "ab".into();
+    let mut outside = original.clone();
+    outside.end_um.1 = 4501;
+    let mut invalid_width = original.clone();
+    invalid_width.width_um = 1501;
+    for (case, invalid) in [
+        ("collapsed unused stroke", collapsed),
+        ("invalid unused key", invalid_key),
+        ("unused stroke outside cell", outside),
+        ("invalid unused pen width", invalid_width),
+    ] {
+        glyphs.strokes[2] = invalid;
+        let rejected_state = format!("{:?}", glyphs.strokes);
+        for (name, edit) in mutations {
+            if edit(&mut glyphs).is_ok() {
+                return Err(format!("{name} accepted {case}"));
+            }
+            if format!("{:?}", glyphs.strokes) != rejected_state {
+                return Err(format!("{name} mutated {case}"));
+            }
+        }
+    }
+    glyphs.strokes[2] = original.clone();
+    glyphs.strokes.resize(4097, original);
+    let rejected_state = format!("{:?}", glyphs.strokes);
+    for (name, edit) in mutations {
+        if edit(&mut glyphs).is_ok() {
+            return Err(format!("{name} accepted over-budget typed library"));
+        }
+        if format!("{:?}", glyphs.strokes) != rejected_state {
+            return Err(format!("{name} mutated over-budget typed library"));
+        }
+    }
+    glyphs.strokes.truncate(3);
+    if glyphs.encode_file()? != accepted {
+        return Err("rejected edits changed valid library replay".into());
+    }
+    for (name, edit) in mutations {
+        let mut valid = GlyphOverlay {
+            strokes: glyphs.strokes.clone(), ..GlyphOverlay::default()
+        };
+        if let Err(error) = edit(&mut valid) {
+            return Err(format!("valid {name} refused: {error}"));
+        }
+        let _encoded = valid.encode_file()?;
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_glyph_audit_rejects_unrenderable_inventory()
 -> Result<(), String> {
     let mut glyphs = GlyphOverlay::default();
