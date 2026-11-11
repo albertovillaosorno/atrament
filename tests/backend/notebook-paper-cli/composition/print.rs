@@ -1847,6 +1847,45 @@ fn hybrid_xref_table_pointer_requires_a_complete_prior_stream() {
     assert_eq!(fs::read(&spooled).expect("hybrid spool bytes"), hybrid);
     fs::remove_file(&spooled).expect("clear hybrid spool");
 
+    // The owning entry can appear after a disjoint free-list subsection;
+    // a bounded second pass must not stop at the first subsection.
+    let multi_section_hybrid = [
+        hybrid_stream.as_slice(),
+        format!(
+            "xref\n0 1\n0000000000 65535 f \n\
+             4 1\n{prior:010} 00000 n \n\
+             trailer\n<< /Size 5 /Root 1 0 R /XRefStm {prior} >>\n\
+             startxref\n{}\n%%EOF\n", hybrid_stream.len(),
+        ).as_bytes(),
+    ].concat();
+    assert!(supported_pdf_cross_reference(&multi_section_hybrid),
+        "hybrid ownership in a later table subsection remains eligible");
+    fs::write(&pdf, &multi_section_hybrid)
+        .expect("hybrid PDF with two sections");
+    assert_eq!(submit_selected(&request, &fake_spool)
+        .expect("multi-section hybrid reaches fake spool"),
+        sha256_profile_bytes(&multi_section_hybrid).bytes());
+    assert_eq!(fs::read(&spooled).expect("spooled bytes"),
+        multi_section_hybrid);
+    fs::remove_file(&spooled).expect("clear multi-section spool");
+
+    // A sparse hybrid stream may omit its own /Index row only when the
+    // traditional table actually owns that indirect object. A free-only
+    // table cannot justify the missing self entry merely by naming the
+    // stream through /XRefStm.
+    let unowned = [
+        hybrid_stream.as_slice(),
+        format!(
+            "xref\n0 1\n0000000000 65535 f \n\
+             trailer\n<< /Size 5 /Root 1 0 R /XRefStm {prior} >>\n\
+             startxref\n{}\n%%EOF\n", hybrid_stream.len(),
+        ).as_bytes(),
+    ].concat();
+    assert!(!supported_pdf_cross_reference(&unowned),
+        "hybrid stream without a self-index or table entry must refuse");
+    assert_fake_spool_rejected(
+        &pdf, &request, &fake_spool, &spooled, &unowned);
+
     for trailer in [
         "/XRefStm 0".into(), "/XRefStm -1".into(),
         "/XRefStm abc".into(),

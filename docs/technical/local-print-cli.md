@@ -229,9 +229,12 @@ refuse before CUPS; absent `/Index` retains PDF's implicit range policy.
 A terminal standalone stream with an explicit `/Index` must include its
 own object number; being less than `/Size` alone is insufficient. In a
 hybrid-reference PDF, the traditional table may instead index the stream
-object, so the stream's `/Index` need not repeat it. Sparse incremental
-streams may still index only themselves and inherit earlier objects.
-This does not verify encoded rows or incremental cross-reference chains.
+object at its exact byte offset, so the stream's `/Index` need not repeat it.
+If neither source indexes the stream object, submission refuses before CUPS.
+
+Sparse incremental streams may still index only themselves and inherit
+older objects. This does not verify encoded rows or complete cross-reference
+chains.
 
 A typed cross-reference stream must also
 end with standalone `endstream` and `endobj` keywords, allowing whitespace

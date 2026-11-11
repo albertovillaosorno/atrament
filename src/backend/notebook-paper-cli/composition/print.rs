@@ -255,7 +255,7 @@ fn supported_pdf_cross_reference(bytes: &[u8]) -> bool {
         return false;
     };
     xref_stream_header_end(prefix, Some((bytes, offset)), offset)
-        .is_some_and(|(start, length)| {
+        .is_some_and(|(start, length, _)| {
             supported_xref_stream_tail(target, start, length)
         })
 }
@@ -377,7 +377,7 @@ fn supported_xref_table(
         };
         if first == b"trailer" {
             return seen_entry && supported_xref_table_trailer(
-                bytes.get(at..).unwrap_or_default(), minimum_size,
+                bytes.get(at..).unwrap_or_default(), bytes, minimum_size,
                 document, table_start,
             );
         }
@@ -558,11 +558,42 @@ fn bounded_xref_pointer(
     Some(offset)
 }
 
+// When a hybrid stream's explicit /Index excludes its own object, the
+// enclosing traditional table must own that exact indirect-object offset.
+// The caller already validated each table row against the object header;
+// this second bounded scan avoids retaining potentially millions of rows.
+fn xref_table_owns_stream(table: &[u8], stream_offset: usize) -> bool {
+    let mut at = 0usize;
+    if !xref_table_keyword(table, &mut at) {
+        return false;
+    }
+    loop {
+        let Some(first) = xref_word(table, &mut at) else {
+            return false;
+        };
+        if first == b"trailer" {
+            return false;
+        }
+        let Some((_, count)) = xref_subsection_header(table, &mut at, first)
+        else { return false; };
+        for _ in 0..count {
+            let Some((offset, _, status)) = xref_table_entry(table, &mut at)
+            else { return false; };
+            if status == b"n" && str::from_utf8(offset).ok()
+                .and_then(|digits| digits.parse::<usize>().ok())
+                == Some(stream_offset) {
+                return true;
+            }
+        }
+    }
+}
+
 // A traditional table's /XRefStm hybrid reference must name a complete
 // earlier xref stream, not arbitrary bytes or a traditional table. This
 // bounds its exact stream frame without parsing its compressed contents.
 fn bounded_hybrid_xref_stream(
-    bytes: &[u8], at: &mut usize, document: &[u8], table_start: usize,
+    bytes: &[u8], at: &mut usize, table: &[u8], document: &[u8],
+    table_start: usize,
 ) -> bool {
     if !matches!(document.get(5..8),
         Some([b'1', b'.', b'5'..=b'7'] | [b'2', b'.', b'0'])) {
@@ -575,8 +606,9 @@ fn bounded_hybrid_xref_stream(
     };
     stream.get(..stream.len().min(16_384))
         .and_then(|prefix| xref_stream_header_end(prefix, None, offset))
-        .is_some_and(|(start, length)| {
-            xref_stream_frame_end(stream, start, length).is_some()
+        .is_some_and(|(start, length, needs_table_owner)| {
+            (!needs_table_owner || xref_table_owns_stream(table, offset))
+                && xref_stream_frame_end(stream, start, length).is_some()
         })
 }
 
@@ -601,7 +633,7 @@ fn bounded_previous_xref(
         Some([b'1', b'.', b'5'..=b'7'] | [b'2', b'.', b'0']));
     stream_edition && earlier.get(..earlier.len().min(16_384))
         .and_then(|prefix| xref_stream_header_end(prefix, None, offset))
-        .is_some_and(|(frame_start, length)| {
+        .is_some_and(|(frame_start, length, _)| {
             xref_stream_frame_end(earlier, frame_start, length).is_some()
         })
 }
@@ -612,7 +644,7 @@ fn bounded_previous_xref(
 // mistaking a nested /Size or >> text for the terminal dictionary close.
 // After that close, only whitespace or PDF comments may precede startxref.
 fn supported_xref_table_trailer(
-    bytes: &[u8], minimum_size: usize,
+    bytes: &[u8], table: &[u8], minimum_size: usize,
     document: &[u8], table_start: usize,
 ) -> bool {
     let mut at = pdf_trivia_end(bytes, 0);
@@ -691,7 +723,7 @@ fn supported_xref_table_trailer(
                 } else if depth == 1 && array_depth == 0
                     && pdf_name_is(name, b"XRefStm") {
                     if seen_hybrid || !bounded_hybrid_xref_stream(
-                        bytes, &mut at, document, table_start,
+                        bytes, &mut at, table, document, table_start,
                     ) {
                         return false;
                     }
@@ -984,13 +1016,26 @@ fn bounded_stream_previous(
     }
 }
 
+// The stream keyword is followed by a physical line ending before its
+// exact encoded bytes. Keep this framing probe separate from dictionary
+// admission so both checks remain small and bounded.
+fn xref_stream_data_start(prefix: &[u8], at: usize) -> Option<usize> {
+    let start = pdf_trivia_end(prefix, at);
+    let tail = prefix.get(start..)?;
+    if !tail.starts_with(b"stream")
+        || !matches!(tail.get(6), Some(b'\n' | b'\r')) {
+        return None;
+    }
+    start.checked_add(6)
+}
+
 // A terminal stream may carry /Prev just like a traditional trailer.
 // Only its immediate earlier header is checked; older chains are outside
 // this bounded lexical preflight and are never parsed recursively.
 fn xref_stream_header_end(
     prefix: &[u8], previous: Option<(&[u8], usize)>,
     stream_start: usize,
-) -> Option<(usize, usize)> {
+) -> Option<(usize, usize, bool)> {
     let (mut at, object_number) = xref_stream_object_header(prefix)?;
     if !prefix.get(at..).is_some_and(|tail| tail.starts_with(b"<<")) {
         return None;
@@ -1084,13 +1129,8 @@ fn xref_stream_header_end(
             })) {
         return None;
     }
-    at = pdf_trivia_end(prefix, at);
-    let tail = prefix.get(at..)?;
-    if !tail.starts_with(b"stream")
-        || !matches!(tail.get(6), Some(b'\n' | b'\r')) {
-        return None;
-    }
-    Some((at.checked_add(6)?, declared_length?))
+    Some((xref_stream_data_start(prefix, at)?, declared_length?,
+        index_end.is_some_and(|(_, self_indexed)| !self_indexed)))
 }
 
 // Validate exact encoded bytes and both closing delimiters for every xref
