@@ -493,12 +493,13 @@ fn every_nonempty_proper_request_prefix_rejects_at_eof() {
                 .expect("request prefix write half closes");
         });
         let (mut server, _) = listener.accept().expect("test server accepts");
+        // This test classifies a completed half-close, not a scheduling race
+        // between the reader deadline and the writer's shutdown syscall.
+        writer.join().expect("test writer joins");
         server
             .set_read_timeout(Some(Duration::from_millis(100)))
             .expect("test read timeout");
-        let result = runtime::read_request(&mut server);
-        writer.join().expect("test writer joins");
-        result
+        runtime::read_request(&mut server)
     }
 
     let requests: [&[u8]; 2] = [
