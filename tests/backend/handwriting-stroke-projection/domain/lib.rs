@@ -558,6 +558,69 @@ fn caller_selected_join_limit_is_respected_without_false_1200_diagnostic() {
 }
 
 #[test]
+fn zero_slant_means_match_independent_u128_rounding_oracle() {
+    // Deliberately use a wider calculation than the production u64 scaling
+    // path, including near-u32-maximum mean cells and nontrivial ink weights.
+    let rounded = |local_um: u32, target_um: u32, reference_um: u32| {
+        let numerator = u128::from(local_um) * u128::from(target_um);
+        let expected = (numerator + u128::from(reference_um.div_euclid(2)))
+            .div_euclid(u128::from(reference_um));
+        u32::try_from(expected).expect("oracle coordinates are bounded")
+    };
+    let mut checked = 0usize;
+    for sample in 0..2_048u32 {
+        let very_large = sample.rem_euclid(257) == 0;
+        let means = MeasuredGlyphDimensions {
+            width_um: if very_large {
+                u32::MAX
+            } else {
+                3_500 + sample * 13
+            },
+            height_um: if very_large {
+                u32::MAX
+            } else {
+                4_500 + sample * 29
+            },
+            ink_thickness_um: 250 + (sample * 19).rem_euclid(500),
+            slant_millidegrees: 0,
+        };
+        let origin_x = 10_000u32 + sample * 17;
+        let origin_y = 20_000u32 + sample * 19;
+        let heading_weight = 80 + sample.rem_euclid(80);
+        let color_override = (sample.rem_euclid(3) == 0).then_some([7, 8, 9]);
+        let placed = InkPlacement {
+            page: usize::try_from(sample.rem_euclid(7) + 1)
+                .expect("small page"),
+            origin_um: (i64::from(origin_x), i64::from(origin_y)),
+            dimensions: Some(means),
+            ink_scale_percent: heading_weight,
+            color_override,
+        };
+        let axis = |point: (u32, u32)| {
+            (
+                origin_x + rounded(point.0, means.width_um, 3_500),
+                origin_y + rounded(point.1, means.height_um, 4_500),
+            )
+        };
+        let pen_width = rounded(
+            rounded(ORIGINAL.width_um, means.ink_thickness_um, 300),
+            heading_weight,
+            100,
+        );
+        let expected = PhysicalInkSegment {
+            page: placed.page,
+            start_um: axis(ORIGINAL.start_um),
+            end_um: axis(ORIGINAL.end_um),
+            width_um: pen_width,
+            rgb: color_override.unwrap_or(ORIGINAL.rgb),
+        };
+        assert_eq!(project_ink_segment(ORIGINAL, placed), Ok(expected));
+        checked += 1;
+    }
+    assert_eq!(checked, 2_048);
+}
+
+#[test]
 fn repeated_projection_replays_identically_for_both_render_paths() {
     for seed_offset in 0..96u32 {
         let shape = AuthoredInkSegment {

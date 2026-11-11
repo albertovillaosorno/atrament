@@ -85,7 +85,8 @@ fitted pen-contact response. Those remain separate research/future contracts.
 ## Verification
 
 - `tests/backend/handwriting-stroke-projection/domain/lib.rs`: exact mean,
-  shear, width, color, rounding-collapse refusal, overflow, join and replay.
+  shear, width, color, rounding-collapse refusal, overflow, join and replay,
+  including a 2,048-case independent `u128` mean-coordinate rounding oracle.
 - `tests/backend/profile-editor-cli/composition/lib.rs`: actual Rust CLI
   regression tests for profile means, glyph placement and PDF/PNG output.
 - `tests/backend/profile-editor-cli/composition/joined-varied-handwriting.mjs`:
