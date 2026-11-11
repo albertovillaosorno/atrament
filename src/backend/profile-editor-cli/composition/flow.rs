@@ -1173,7 +1173,7 @@ impl Layout<'_> {
         let mut count = 0usize;
         let mut first = true;
         let mut pending_spaces = 0usize;
-        for (index, word) in content.split(' ').enumerate() {
+        for (index, word) in grapheme_word_slices(content)?.iter().enumerate() {
             if index > 0 {
                 pending_spaces = pending_spaces.checked_add(1)
                     .ok_or("flow spaces overflow")?;
@@ -1766,6 +1766,31 @@ fn word_crosses_row(
         .ok_or("flow word position overflow")?;
     Ok((!matches!(style, LineStyle::Heading(_)) && ink_extent > start)
         || start.checked_add(word_span).is_none_or(|end| end > cap))
+}
+
+// Break only on a standalone ASCII-space grapheme. Splitting on the
+// scalar character would detach a following combining mark from its base,
+// changing the exact authored glyph identity when a physical row wraps.
+fn grapheme_word_slices(content: &str) -> Result<Vec<&str>, String> {
+    let mut words = Vec::new();
+    let mut start = 0usize;
+    let mut offset = 0usize;
+    while offset < content.len() {
+        let suffix = content.get(offset..)
+            .ok_or("flow word suffix refused")?;
+        let (grapheme, _) = first_grapheme(suffix)?;
+        if grapheme == " " {
+            words.push(content.get(start..offset)
+                .ok_or("flow word boundary refused")?);
+            start = offset.checked_add(grapheme.len())
+                .ok_or("flow word offset overflow")?;
+        }
+        offset = offset.checked_add(grapheme.len())
+            .ok_or("flow word offset overflow")?;
+    }
+    words.push(content.get(start..)
+        .ok_or("flow word suffix refused")?);
+    Ok(words)
 }
 
 fn measured_word<'text>(

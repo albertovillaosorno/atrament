@@ -7508,3 +7508,32 @@ fn markdown_fence_and_escaped_marker_samples_match_emitted_pitch()
         "insufficient valid fenced/escaped samples: {accepted}");
     Ok(())
 }
+
+#[test]
+fn wrapping_preserves_combining_marks_attached_to_ascii_spaces()
+-> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let source_text = "a \u{0301}b";
+    let (cluster, _) = super::first_grapheme(" \u{0301}b")?;
+    assert_eq!(cluster, " \u{0301}",
+        "an ASCII space and its attached mark form one grapheme");
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        let source = FlowSource::new(format, source_text)?;
+        let (rows, ornaments, pages) = super::layout_flow_with_region(
+            &source, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+            Some(super::FlowRegion {
+                left: 30_000, top: 40_000,
+                width: 14_000, height: 32_000,
+            }),
+        )?;
+        assert_eq!(pages, 1);
+        assert!(ornaments.is_empty());
+        assert!(rows.len() >= 2, "the short region must cause wrapping");
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<String>(), source_text,
+            "wrapped output must preserve the entire exact source cluster");
+    }
+    Ok(())
+}
