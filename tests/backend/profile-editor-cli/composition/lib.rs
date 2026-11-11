@@ -791,14 +791,33 @@ fn notebook_preflight_rejects_inline_ink_above_budget_before_stdin() {
         "--ink-line", "1", "70000", "40000", "71000", "41000",
         "250", "#123456",
     ]);
-    let mut request = args(&[
-        "--ink-file", "-", "--export-paper", "pdf",
-    ]);
+    let mut request = args(&["--export-paper", "pdf"]);
     for _ in 0..MAX_NOTEBOOK_INK_LINES {
         request.extend(line.iter().cloned());
     }
     preflight_notebook_sources(&request)
-        .expect("exactly 4096 valid inline lines remain admitted");
+        .expect("4096 inline lines without imports remain admitted");
+    for imported_first in [true, false] {
+        let mut importing = args(&["--ink-file", "-"]);
+        if imported_first {
+            importing.extend(request.iter().cloned());
+        } else {
+            importing = request.clone();
+            importing.extend(args(&["--ink-file", "-"]));
+        }
+        assert_eq!(
+            preflight_notebook_sources(&importing).expect_err(
+                "a nonempty imported ink file needs one reserved line",
+            ),
+            "ink exceeds 4096 explicit line segments",
+        );
+    }
+    let mut one_reserved = request.iter().take(
+        request.len().saturating_sub(line.len()),
+    ).cloned().collect::<Vec<_>>();
+    one_reserved.extend(args(&["--ink-file", "-"]));
+    preflight_notebook_sources(&one_reserved)
+        .expect("4095 inline lines plus a minimum imported line fit");
     request.extend(line);
     assert_eq!(
         preflight_notebook_sources(&request).expect_err(

@@ -318,6 +318,7 @@ struct NotebookExportOptions {
 struct NotebookFlagPreflight {
     export_format: Option<NotebookExportFormat>,
     heading: HeadingDecoration,
+    imported_ink_count: usize,
     imported_overlay_selected: bool,
     selected: BTreeSet<String>,
 }
@@ -338,6 +339,9 @@ impl NotebookFlagPreflight {
     fn select_option(
         &mut self, option: &str, iter: &mut Iter<'_, String>,
     ) -> Result<Option<usize>, String> {
+        if option == "--ink-file" {
+            self.imported_ink_count = self.imported_ink_count.saturating_add(1);
+        }
         let operands = match option {
             "--inspect" => {
                 self.unique(option, "--inspect may appear only once")?;
@@ -466,6 +470,13 @@ impl NotebookFlagPreflight {
                 "ink and glyph overlays need ",
                 "--export-paper pdf or png or --emit-ink-file",
             ).into());
+        }
+        // An admitted imported ink TSV always supplies at least one line.
+        // Refuse an impossible total before reading the first source.
+        if inline_ink_count.saturating_add(self.imported_ink_count)
+            > MAX_NOTEBOOK_INK_LINES
+        {
+            return Err("ink exceeds 4096 explicit line segments".into());
         }
         if self.export_format == Some(NotebookExportFormat::InkTsv)
             && inline_ink_count == 0 && flow_format.is_none()

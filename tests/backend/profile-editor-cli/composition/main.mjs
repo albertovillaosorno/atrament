@@ -1433,6 +1433,10 @@ test('unavailable glyph and ink inputs refuse without waiting for stdin',
             const line = '1\t70000\t40000\t71000\t41000\t250\t#123456\n';
             writeFileSync(saturated,
                 'atrament.page-ink.v1\n' + line.repeat(4096));
+            const inline = ['--ink-line', '1', '70000', '40000',
+                '71000', '41000', '250', '#123456'];
+            const fullInline = Array.from({ length: 4096 },
+                () => inline).flat();
             const fallbackDiagnostic = new RegExp(
                 '--fallback-glyph requires authored glyphs and placed text',
             );
@@ -1506,6 +1510,11 @@ test('unavailable glyph and ink inputs refuse without waiting for stdin',
                     fallbackDiagnostic],
                 [['notebook', '--ink-file', saturated, '--ink-file', '-',
                     '--emit-ink-file'], /ink exceeds 4096 explicit/],
+                [['notebook', '--ink-file', '-', '--export-paper', 'pdf',
+                    ...fullInline], /ink exceeds 4096 explicit/],
+                [['notebook', ...fullInline, '--ink-file', '-',
+                    '--export-paper', 'pdf'],
+                /ink exceeds 4096 explicit/],
                 [['notebook', '--ink-file', '-', '--ink-file', '-',
                     '--emit-ink-file'],
                     /standard input may be selected only once/],
