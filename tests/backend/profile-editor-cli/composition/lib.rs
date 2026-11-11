@@ -461,7 +461,8 @@ fn notebook_preflight_requires_selected_file_operands_before_stdin() {
         // A literal option-like filename remains an operand, not an option.
         preflight_notebook_sources(&args(&["--ink-file", "-", option,
             "--output", "--export-paper", "pdf", "--glyph-stroke",
-            "a", "500", "500", "1800", "3000", "250", "#123456"]))
+            "a", "500", "500", "1800", "3000", "250", "#123456",
+            "--place-text", "1", "30000", "40000", "a"]))
             .expect("literal source filenames are preserved");
     }
 }
@@ -725,6 +726,34 @@ fn notebook_preflight_refuses_unrenderable_overlays_before_source_io() {
         "--glyph-file", "unopened.tsv", "--flow-text-file", "-",
         "--export-paper", "pdf",
     ])).expect("imported library may provide the missing shapes");
+    for (flags, expected) in [
+        (["--ink-file", "-", "--glyph-stroke", "a", "500", "500",
+            "1800", "3000", "250", "#123456", "--export-paper", "pdf"]
+            .as_slice(), "--glyph-stroke and --place-text require one another"),
+        (["--ink-file", "-", "--place-text", "1", "30000", "40000",
+            "a", "--export-paper", "pdf"].as_slice(),
+            "--glyph-stroke and --place-text require one another"),
+        (["--ink-file", "-", "--join-text-pair", "a", "b",
+            "--export-paper", "pdf"].as_slice(),
+            "--join-text-pair requires placed text"),
+        (["--glyph-file", "-", "--join-text-pair", "a", "b",
+            "--export-paper", "pdf"].as_slice(),
+            "--join-text-pair requires placed text"),
+        (["--ink-file", "-", "--fallback-glyph", "ñ", "a",
+            "--export-paper", "pdf"].as_slice(),
+            "--fallback-glyph requires authored glyphs and placed text"),
+        (["--glyph-file", "-", "--fallback-glyph", "ñ", "a",
+            "--export-paper", "pdf"].as_slice(),
+            "--fallback-glyph requires authored glyphs and placed text"),
+    ] {
+        let error = preflight_notebook_sources(&args(flags))
+            .expect_err("impossible glyph pairing must refuse before I/O");
+        assert!(error.contains(expected), "{flags:?}: {error}");
+    }
+    preflight_notebook_sources(&args(&[
+        "--glyph-file", "unopened.tsv", "--place-text", "1", "30000",
+        "40000", "a", "--export-paper", "pdf",
+    ])).expect("imported library may supply the missing glyph strokes");
 }
 
 #[test]
@@ -824,8 +853,9 @@ fn notebook_preflights_exact_typed_glyph_options_without_opening_sources() {
             "--join-text-pair", "n\u{303}", "n\u{303}",
             "--export-paper", "pdf"].as_slice(),
         ["--ink-file", "-", "--fallback-glyph", "ñ", "n\u{303}",
-            "--place-text", "1", "30000", "40000", "ñ",
-            "--export-paper", "pdf"].as_slice(),
+            "--glyph-stroke", "n\u{303}", "500", "500", "1800",
+            "3000", "250", "#123456", "--place-text", "1", "30000",
+            "40000", "ñ", "--export-paper", "pdf"].as_slice(),
     ] {
         preflight_notebook_sources(&args(flags))
             .expect("valid option-like and decomposed Unicode operands");

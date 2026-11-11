@@ -2126,10 +2126,27 @@ fn preflight_notebook_ink_requirements(
             "and --place-text",
         ).into());
     }
-    if flow_format.is_none() && glyphs.runs.is_empty()
-        && glyphs.variation.is_some()
-    {
-        return Err("--glyph-variation requires placed text".into());
+    // Without a glyph library or flow, the complete authored ink is already
+    // known: page-ink files cannot supply text or exact glyph outlines.
+    if flow_format.is_none() && !glyph_file_selected {
+        glyphs.validate_pairing()?;
+    }
+    // A selected library can supply glyph strokes, but not placed text.
+    // Preserve its deferred shape checks while rejecting impossible edit
+    // requests before an earlier source might wait on stdin.
+    if flow_format.is_none() && glyph_file_selected && glyphs.runs.is_empty() {
+        if glyphs.variation.is_some() {
+            return Err("--glyph-variation requires placed text".into());
+        }
+        if !glyphs.text_joins.is_empty() {
+            return Err("--join-text-pair requires placed text".into());
+        }
+        if !glyphs.fallbacks.is_empty() {
+            return Err(concat!(
+                "--fallback-glyph requires authored glyphs ",
+                "and placed text",
+            ).into());
+        }
     }
     Ok(())
 }
