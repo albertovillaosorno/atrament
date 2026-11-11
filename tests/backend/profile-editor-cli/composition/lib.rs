@@ -7809,6 +7809,14 @@ fn typed_placed_text_runs_keep_cli_admission_at_ink_boundary()
     spaces.text = "  ".into();
     let mut long_text = valid.clone();
     long_text.text = "a".repeat(97);
+    let mut oversized_utf8 = valid.clone();
+    oversized_utf8.text = "a\u{301}\u{302}\u{303}\u{304}".repeat(43);
+    let mut control_text = valid.clone();
+    control_text.text = "a\n".into();
+    let mut separator_text = valid.clone();
+    separator_text.text = "a\u{2028}".into();
+    let mut zero_page = valid.clone();
+    zero_page.page = 0;
     let mut too_low_heading = valid.clone();
     too_low_heading.heading_ink = Some(HeadingInk {
         color: None, scale_percent: 99,
@@ -7819,10 +7827,14 @@ fn typed_placed_text_runs_keep_cli_admission_at_ink_boundary()
     });
     for (name, invalid) in [
         ("page 33", beyond_page),
+        ("page 0", zero_page),
         ("unbounded origin", beyond_origin),
         ("empty text", no_text),
         ("space-only text", spaces),
         ("97 graphemes", long_text),
+        ("384-byte source limit", oversized_utf8),
+        ("embedded newline", control_text),
+        ("Unicode line separator", separator_text),
         ("heading scale below range", too_low_heading),
         ("heading scale above range", too_high_heading),
     ] {
