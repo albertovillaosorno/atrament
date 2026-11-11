@@ -8015,6 +8015,39 @@ fn typed_glyph_mutations_refuse_invalid_unselected_inventory()
 }
 
 #[test]
+fn typed_glyph_append_refuses_invalid_existing_library()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "á", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    let baseline = glyphs.encode_file()?;
+    let original = glyphs.strokes[0].clone();
+    let mut collapsed = original.clone();
+    collapsed.end_um = collapsed.start_um;
+    glyphs.strokes[0] = collapsed;
+    if glyphs.parse("--glyph-stroke", &mut args(&[
+        "ñ", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter()).is_ok() {
+        return Err("typed glyph append accepted invalid existing ink".into());
+    }
+    if glyphs.strokes.len() != 1 {
+        return Err("rejected typed append mutated existing inventory".into());
+    }
+    glyphs.strokes[0] = original;
+    if glyphs.encode_file()? != baseline {
+        return Err("rejected append changed valid stroke replay".into());
+    }
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "ñ", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    if glyphs.strokes.len() != 2 {
+        return Err("valid second glyph append was refused".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_glyph_audit_rejects_unrenderable_inventory()
 -> Result<(), String> {
     let mut glyphs = GlyphOverlay::default();

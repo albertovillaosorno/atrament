@@ -852,11 +852,16 @@ impl GlyphOverlay {
                     index.saturating_add(2),
                 ));
             }
-            staged.parse("--glyph-stroke", &mut fields.iter())
+            // Incrementally validated TSV rows do not need the typed
+            // mutation path's repeated full-library preflight.
+            let mut tokens = fields.iter();
+            let key = tokens.next().ok_or("missing glyph key")?;
+            let stroke = Self::parse_stroke(key, &mut tokens)
                 .map_err(|error| format!(
                     "glyph library line {}: {error}",
                     index.saturating_add(2),
                 ))?;
+            staged.strokes.push(stroke);
         }
         if staged.strokes.is_empty() {
             return Err(
@@ -966,6 +971,9 @@ impl GlyphOverlay {
             "--scale-glyph-ink" => self.scale_glyph_ink_option(iter)?,
             "--translate-glyph" => self.translate_glyph_option(iter)?,
             "--glyph-stroke" => {
+                // Typed callers can append after altering an earlier row.
+                // An invalid existing inventory must not accept more ink.
+                self.validate_stroke_library()?;
                 if self.strokes.len() == MAX_STROKES {
                     return Err("more than 4096 glyph strokes refused".into());
                 }
