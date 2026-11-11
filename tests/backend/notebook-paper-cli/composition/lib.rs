@@ -1671,3 +1671,22 @@ fn multilingual_sized_ink_batch_renders_pdf_and_selected_png() {
     ).expect("different selected PNG page");
     assert_ne!(png, other, "distinct physical pages isolate authored ink");
 }
+
+#[test]
+fn degenerate_paper_stroke_refuses_png_instead_of_painting_a_square() {
+    let point = PdfPoint { x_um: 25_000, y_um: 25_000 };
+    let path = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point),
+            PdfPathCommand::LineTo(point),
+        ],
+        paint: PdfPathPaint::Stroke {
+            color: DEFAULT_COLOR,
+            width_um: 120,
+        },
+    };
+    let error = png::render_paper_png(
+        210_000, 297_000, 72, &[path], 1, None,
+    ).expect_err("zero-length paper stroke must not be a painted dot");
+    assert_eq!(error, "invalid zero-length paper stroke");
+}

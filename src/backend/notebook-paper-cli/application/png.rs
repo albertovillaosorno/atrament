@@ -132,6 +132,7 @@ fn rectangle_for_path(
             [PdfPathCommand::MoveTo(first), PdfPathCommand::LineTo(last)],
             PdfPathPaint::Stroke { color, width_um },
         ) if width_um > 0
+            && first != last
             && (first.x_um == last.x_um || first.y_um == last.y_um) =>
         {
             let radius = i64::from(width_um.div_ceil(2));
