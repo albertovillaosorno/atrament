@@ -594,7 +594,14 @@ explicitly selected regular files (no symlinks). Instead of a path,
 `--ink-file -` reads the same bounded TSV from standard input and accepts
 piped `--emit-ink-file` output without an intermediate file. Only one stdin
 source may be selected across `--ink-file -`, `--glyph-file -`, and
-`--flow-*-file -`; a second selection refuses. For example:
+`--flow-*-file -`; a second selection refuses.
+
+Notebook input filenames for
+`--profile`, `--paper-profile`, `--glyph-file`, `--ink-file` and
+`--flow-*-file` cannot be bare option-shaped tokens. Prefix `./` to select
+an intentionally dash-prefixed filename, such as `./--notes.md`; `-` remains
+reserved for the three explicitly documented stdin-capable sources. For
+example:
 
 ```sh
 cargo run -q -p atrament_profile_editor_cli -- notebook \

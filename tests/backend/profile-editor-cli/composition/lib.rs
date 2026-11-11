@@ -458,12 +458,17 @@ fn notebook_preflight_requires_selected_file_operands_before_stdin() {
     }
     for option in ["--glyph-file", "--ink-file", "--profile",
         "--paper-profile", "--flow-text-file", "--flow-markdown-file"] {
-        // A literal option-like filename remains an operand, not an option.
-        preflight_notebook_sources(&args(&["--ink-file", "-", option,
-            "--output", "--export-paper", "pdf", "--glyph-stroke",
+        let error = preflight_notebook_sources(&args(&["--ink-file", "-",
+            option, "--output", "--export-paper", "pdf", "--glyph-stroke",
             "a", "500", "500", "1800", "3000", "250", "#123456",
             "--place-text", "1", "30000", "40000", "a"]))
-            .expect("literal source filenames are preserved");
+            .expect_err("option-shaped source is not an implicit filename");
+        assert!(error.contains("explicit"), "{option}: {error}");
+        preflight_notebook_sources(&args(&["--ink-file", "-", option,
+            "./--output", "--export-paper", "pdf", "--glyph-stroke",
+            "a", "500", "500", "1800", "3000", "250", "#123456",
+            "--place-text", "1", "30000", "40000", "a"]))
+            .expect("explicitly relative dash-prefixed source is accepted");
     }
 }
 

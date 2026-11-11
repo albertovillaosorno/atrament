@@ -2020,7 +2020,8 @@ fn preflight_notebook_flow_selection(
 }
 
 // Match final file-option arity before earlier selected stdin or file I/O.
-// Literal flag-shaped filenames are still operands, not new selections.
+// A bare flag-shaped token is not an implicit filename: callers may spell
+// intentional dash-prefixed filenames as ./--name instead.
 fn preflight_notebook_file_operand(
     option: &str, iter: &mut Iter<'_, String>, stdin_source: bool,
     stdin_selected: &mut bool,
@@ -2036,6 +2037,11 @@ fn preflight_notebook_file_operand(
     };
     let value = iter.next().filter(|value| !value.is_empty())
         .ok_or(diagnostic)?;
+    if value.starts_with('-') && (value != "-" || !stdin_source) {
+        return Err(format!(
+            "{option} requires an explicit source path (use ./--name)"
+        ));
+    }
     if stdin_source && value == "-" {
         if *stdin_selected {
             return Err("standard input may be selected only once".into());
