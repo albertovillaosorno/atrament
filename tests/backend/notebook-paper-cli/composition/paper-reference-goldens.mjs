@@ -371,3 +371,50 @@ test('paper CLI validates late options before loading profile or replacing PDF',
             rmSync(directory, { recursive: true, force: true });
         }
     });
+
+// A paper rule touching the physical sheet edge must carry its entire
+// half-stroke in both output formats; no format may truncate it silently.
+test('native PDF and PNG reject edge-clipped paper without clobbering', () => {
+    const directory = mkdtempSync(join(tmpdir(), 'atrament-paper-edges-'));
+    try {
+        for (const format of ['pdf', 'png']) {
+            const formatFlags = format === 'png'
+                ? ['--format', 'png', '--dpi', '72'] : [];
+            const output = join(directory, `reviewed.${format}`);
+            const flags = (left, top) => [
+                '--style', 'grid', ...formatFlags,
+                '--margin-left-mm', left, '--margin-top-mm', top,
+                '--output', output,
+            ];
+            const approved = nativePaper(...flags('0.060', '0.060'));
+            assert.equal(approved.status, 0, approved.stderr);
+            const approvedBytes = readFileSync(output);
+            assert.ok(approvedBytes.length > 0);
+            const expectedError = format === 'png'
+                ? /PNG path extends outside the physical sheet/
+                : /PDF encoding refused: InvalidPath/;
+            for (const [left, top] of [
+                ['0.059', '0.060'],
+                ['0.060', '0.059'],
+                ['0', '0.060'],
+                ['0.060', '0'],
+            ]) {
+                const refused = nativePaper(...flags(left, top), '--replace');
+                assert.notEqual(refused.status, 0,
+                    'one-micrometre paper clipping must not be exported');
+                assert.match(refused.stderr, expectedError);
+                assert.equal(refused.stdout, '',
+                    'no partial binary page on rejected physical geometry');
+                assert.deepEqual(readFileSync(output), approvedBytes,
+                    'invalid geometry cannot replace accepted output');
+            }
+            const replay = nativePaper(...flags('0.060', '0.060'),
+                '--replace');
+            assert.equal(replay.status, 0, replay.stderr);
+            assert.deepEqual(readFileSync(output), approvedBytes,
+                'exact physical boundary reproduces original page bytes');
+        }
+    } finally {
+        rmSync(directory, { recursive: true, force: true });
+    }
+});

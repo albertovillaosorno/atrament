@@ -335,3 +335,28 @@ Focused Rust regressions prove early diagnostics against a missing source,
 and existing loaded-profile PDF/PNG parity tests preserve profile-relative
 orientation and physical dimensions. This is bounded CLI admission, not the
 requested persisted full notebook body or image overlay rendering.
+
+## Refuse physical paper edge clipping in PNG — 2026-11-11
+
+The native paper compositor now uses the PDF serializer's page-bound check
+for transparent PNG rasterization: filled paths may touch the physical edge,
+while stroked paths must retain at least their half-width inside the page.
+Zero-width or out-of-sheet path geometry refuses before raster allocation,
+rather than silently clipping paper rules or turning invalid pen geometry
+into pixels. Zero-length rectangular paper strokes also refuse instead of
+appearing as square marks. Authored ink and previously reviewed golden PNG
+bytes remain unchanged for admitted geometry.
+
+A red/green Rust regression proved that zero-margin paper originally refused
+in PDF but exported as a truncated PNG. Additional Rust cases cover 1-µm
+physical boundaries, negative coordinates, valid edge-touching filled dots,
+zero-width strokes and direction-neutral pen rasterization at 72/150/300 DPI.
+An independent native CLI subprocess verifies that 0.060-mm top/left margins
+replay identical PDF/PNG, while 0.059-mm and zero margins refuse without
+stdout output or replacing previously accepted destination bytes.
+
+Validation: 2,226 offline all-feature Rust tests, strict paper Clippy and
+six native golden/PNG decoder tests passed; the edge subprocess test passed
+independently. Jig check retains 181 unrelated pre-existing findings, zero
+on the owned files. This closes only paper-layer clipping parity; full saved
+notebook content, embedded images and the P5 acceptance remain open.
