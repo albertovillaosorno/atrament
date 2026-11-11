@@ -785,6 +785,144 @@ fn stored_png_pixels(bytes: &[u8]) -> (usize, usize, Vec<u8>) {
     )
 }
 
+// Independently validate PNG chunk CRCs and the RFC 1950 Adler-32 checksum.
+fn assert_png_checksums(bytes: &[u8]) {
+    assert!(bytes.starts_with(b"\x89PNG\r\n\x1a\n"));
+    let mut offset = 8usize;
+    let mut chunk_types = Vec::new();
+    let mut raw = Vec::new();
+    while offset < bytes.len() {
+        let length = u32::from_be_bytes(
+            bytes.get(offset..offset + 4).expect("PNG chunk length")
+                .try_into().expect("four bytes"),
+        );
+        let length = usize::try_from(length).expect("bounded PNG chunk");
+        let tag = bytes.get(offset + 4..offset + 8)
+            .expect("PNG chunk tag");
+        let end = offset.checked_add(8 + length).expect("chunk limit");
+        let content = bytes.get(offset + 4..end)
+            .expect("complete chunk data");
+        let recorded_crc = u32::from_be_bytes(
+            bytes.get(end..end + 4).expect("PNG chunk CRC")
+                .try_into().expect("four bytes"),
+        );
+        let mut crc = !0u32;
+        for byte in content {
+            crc ^= u32::from(*byte);
+            for _ in 0..8 {
+                crc = (crc >> 1) ^ (0xedb8_8320u32 &
+                    0u32.wrapping_sub(crc & 1));
+            }
+        }
+        assert_eq!(!crc, recorded_crc, "PNG {:?} CRC", tag);
+        chunk_types.push(tag.to_vec());
+        if tag == b"IDAT" {
+            let stream = bytes.get(offset + 8..end)
+                .expect("complete zlib stream");
+            assert_eq!(stream.get(..2), Some(&[0x78, 0x01][..]));
+            let mut position = 2usize;
+            loop {
+                let header = *stream.get(position)
+                    .expect("stored DEFLATE block header");
+                assert_eq!(header & !1u8, 0, "stored block only");
+                let length = u16::from_le_bytes(
+                    stream.get(position + 1..position + 3)
+                        .expect("block length").try_into()
+                        .expect("two bytes"),
+                );
+                let complement = u16::from_le_bytes(
+                    stream.get(position + 3..position + 5)
+                        .expect("block complement").try_into()
+                        .expect("two bytes"),
+                );
+                assert_eq!(complement, !length, "stored block length");
+                position += 5;
+                let block_end = position + usize::from(length);
+                raw.extend_from_slice(stream.get(position..block_end)
+                    .expect("whole stored block"));
+                position = block_end;
+                if header & 1 != 0 {
+                    break;
+                }
+            }
+            let recorded_adler = u32::from_be_bytes(
+                stream.get(position..position + 4)
+                    .expect("zlib Adler checksum").try_into()
+                    .expect("four bytes"),
+            );
+            assert_eq!(position + 4, stream.len(), "zlib stream boundary");
+            let (mut a, mut b) = (1u32, 0u32);
+            for chunk in raw.chunks(2_000) {
+                for value in chunk {
+                    a += u32::from(*value);
+                    b += a;
+                }
+                a %= 65_521;
+                b %= 65_521;
+            }
+            assert_eq!((b << 16) | a, recorded_adler,
+                "independent zlib Adler checksum");
+        }
+        offset = end + 4;
+    }
+    assert_eq!(offset, bytes.len(), "no trailing PNG bytes");
+    assert_eq!(chunk_types, [b"IHDR", b"pHYs", b"IDAT", b"IEND"]);
+    let width = usize::try_from(u32::from_be_bytes(
+        bytes[16..20].try_into().expect("width"),
+    )).expect("bounded width");
+    let height = usize::try_from(u32::from_be_bytes(
+        bytes[20..24].try_into().expect("height"),
+    )).expect("bounded height");
+    assert_eq!(raw.len(), (4 * width + 1) * height,
+        "decoded stored bytes match full RGBA scanlines");
+}
+
+#[test]
+fn png_checksums_and_stored_blocks_survive_physical_resolution_boundaries() {
+    // At 72 DPI a 22.5 mm sheet is exactly 64 columns (257 RGBA row
+    // bytes). Heights of 254, 255 and 256 rows straddle precisely 65,535
+    // stored bytes; the middle case needs exactly one full DEFLATE block.
+    for (height_um, expected_bytes) in [
+        (89_500, 65_278),
+        (89_800, 65_535),
+        (90_000, 65_792),
+    ] {
+        let png = png::render_paper_png(
+            22_500, height_um, 72, &[], 0, None,
+        ).expect("bounded transparent physical PNG");
+        assert_png_checksums(&png);
+        assert_eq!(stored_png_pixels(&png).2.len(), expected_bytes);
+    }
+    for (width, height, dpi) in [
+        (148_000, 210_000, 72),
+        (148_000, 210_000, 150),
+        (148_000, 210_000, 300),
+    ] {
+        let png = png::render_paper_png(
+            width, height, dpi, &[], 0, None,
+        ).expect("bounded transparent physical PNG");
+        assert_png_checksums(&png);
+    }
+    let profile = encode_profile(Options {
+        style: Style::Grid,
+        width_um: 148_000,
+        height_um: 210_000,
+        ..Options::default()
+    });
+    let pen = NotebookInkLine {
+        page: 1,
+        rgb: [0x42, 0x90, 0xff],
+        start_um: (22_000, 30_000),
+        end_um: (100_000, 120_000),
+        width_um: 650,
+    };
+    let png = paper_profile_png_page_with_ink(
+        profile.as_bytes(), 300, true, None, true, 1, 1_500,
+        None, &[pen],
+    ).expect("full paper, border and ink PNG");
+    assert_png_checksums(&png);
+}
+
 #[test]
 fn rounded_notebook_border_matches_pdf_and_transparent_png() {
     let paper = default_paper_profile_json();
