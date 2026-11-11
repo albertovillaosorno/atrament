@@ -218,6 +218,18 @@ rejected late ink options while leaving stdin open, with no output clobber.
 This is an argument-admission safety improvement, not automatic handwriting
 or a saved semantic notebook.
 
+## Handwriting source-path preflight (partial) — 2026-11-10
+
+Notebook CLI admission now checks a selected handwriting statistics filename
+before reading earlier glyph, physical ink or Markdown stdin sources. Empty
+and dash-leading path operands reject with the same typed diagnostic in
+early and final parsing. A valid regular-file path still passes admission
+to the existing bounded file decoder, with no new persistence behavior.
+
+Native open-pipe tests and Rust scanner tests prove the refusal does not
+wait for EOF or replace an existing export. This is a narrow CLI fix, not
+a complete saved notebook document or the remaining editor journey.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

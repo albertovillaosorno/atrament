@@ -234,6 +234,14 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         (["--ink-file", "-", "--handwriting-profile", "one.json",
             "--handwriting-profile", "two.json"].as_slice(),
             "--handwriting-profile may appear only once"),
+        (["--ink-file", "-", "--handwriting-profile", ""].as_slice(),
+            "invalid handwriting profile path"),
+        (["--glyph-file", "-", "--handwriting-profile", "-"].as_slice(),
+            "invalid handwriting profile path"),
+        (["--flow-text-file", "-", "--handwriting-profile", "--replace"]
+            .as_slice(), "invalid handwriting profile path"),
+        (["--ink-file", "-", "--handwriting-profile"].as_slice(),
+            "--handwriting-profile requires a saved profile path"),
         (["--flow-text-file", "-", "--flow-region", "20000",
             "30000", "40000", "50000", "--flow-region", "10000",
             "20000", "30000", "40000"].as_slice(),
@@ -413,6 +421,8 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         ["--ink-file", "-", "--export-paper", "png", "--dpi",
             "150", "--png-page", "1", "--output", "out.png",
             "--replace"].as_slice(),
+        ["--ink-file", "-", "--handwriting-profile", "valid.json",
+            "--export-paper", "pdf"].as_slice(),
     ] {
         preflight_notebook_sources(&args(flags))
             .expect("option-looking values are not source flags");

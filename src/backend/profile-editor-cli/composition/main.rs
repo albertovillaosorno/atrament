@@ -1666,6 +1666,20 @@ fn validate_notebook_export_flags(
     Ok(())
 }
 
+// A selected statistics filename is source-independent. Share the same
+// admission boundary before and after any earlier selected stdin source.
+fn parse_notebook_handwriting_path<'source>(
+    iter: &mut Iter<'source, String>,
+) -> Result<&'source str, String> {
+    let path = iter.next().ok_or(
+        "--handwriting-profile requires a saved profile path"
+    )?;
+    if path.is_empty() || path.starts_with('-') {
+        return Err("invalid handwriting profile path".into());
+    }
+    Ok(path)
+}
+
 fn parse_notebook_handwriting_profile(
     iter: &mut Iter<'_, String>,
     statistics: &mut Option<HandwritingStatisticsProfile>,
@@ -1673,12 +1687,7 @@ fn parse_notebook_handwriting_profile(
     if statistics.is_some() {
         return Err("--handwriting-profile may appear only once".into());
     }
-    let path = iter.next().ok_or(
-        "--handwriting-profile requires a saved profile path"
-    )?;
-    if path.is_empty() || path.starts_with('-') {
-        return Err("invalid handwriting profile path".into());
-    }
+    let path = parse_notebook_handwriting_path(iter)?;
     *statistics = Some(read_handwriting_profile(path)?);
     Ok(())
 }
@@ -1806,11 +1815,10 @@ fn preflight_unique_selection(
 fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut iter, mut stdin_selected) = (args.iter(), false);
     let (mut glyph_file_selected, mut glyph_edited) = (false, false);
-    let mut flow_format = None;
+    let (mut flow_format, mut region_selected) = (None, false);
     let (mut profile_selected, mut profile_edited) = (false, false);
     let (mut paper_selected, mut handwriting_selected) = (false, false);
-    let (mut region_selected, mut flags) =
-        (false, NotebookFlagPreflight::default());
+    let mut flags = NotebookFlagPreflight::default();
     while let Some(option) = iter.next() {
         let (operands, stdin_source): (usize, bool) = if let Some(count) =
             flags.select_option(option, &mut iter)?
@@ -1886,7 +1894,8 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 "--handwriting-profile" => {
                     preflight_unique_selection(&mut handwriting_selected,
                         "--handwriting-profile may appear only once")?;
-                    (1, false)
+                    let _path = parse_notebook_handwriting_path(&mut iter)?;
+                    (0, false)
                 }
                 _ => return Err(format!("unknown notebook option: {option}")),
             }
