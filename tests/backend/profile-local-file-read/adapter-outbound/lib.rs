@@ -166,6 +166,36 @@ fn nonregular_linked_and_parent_linked_sources_are_refused() {
     );
 }
 
+#[cfg(target_os = "linux")]
+#[test]
+fn transient_selected_directory_symlink_does_not_redirect_canonical_root() {
+    let fixture = Fixture::new();
+    let chosen = fixture.0.join("selected");
+    let parked = fixture.0.join("parked");
+    let foreign = fixture.0.join("foreign");
+    fs::create_dir(&chosen).expect("original directory");
+    fs::create_dir(&foreign).expect("foreign directory");
+
+    let selected = read_error_mapping::
+        canonical_local_profile_directory_with(&chosen, |path| {
+            fs::rename(&chosen, &parked).expect("park selected inode");
+            symlink(&foreign, &chosen).expect("substitute selected link");
+            let redirected = fs::canonicalize(path);
+            fs::remove_file(&chosen).expect("remove substitute");
+            fs::rename(&parked, &chosen).expect("restore selected inode");
+            redirected
+        });
+    assert_eq!(
+        selected.expect_err("temporary path redirection must refuse").kind(),
+        ErrorKind::InvalidInput,
+    );
+    assert_eq!(
+        canonical_local_profile_directory(&chosen)
+            .expect("restored originally selected directory"),
+        fs::canonicalize(&chosen).expect("original physical path"),
+    );
+}
+
 #[test]
 fn read_error_categories_preserve_host_failures_and_input_refusals() {
     use std::io::ErrorKind;

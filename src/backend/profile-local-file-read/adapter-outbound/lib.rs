@@ -59,20 +59,58 @@ pub enum LocalProfileFileReadError {
 /// Resolve only an existing, non-symlink directory selected by the local host.
 ///
 /// Parent-directory symlinks are allowed because the host explicitly selects
-/// this directory. The selected leaf itself must be a real directory. The
-/// resolved directory remains only a path, not an ownership or lock proof.
+/// this directory. The selected leaf itself must be a real directory. On
+/// Unix, the resolved path and a final selected-leaf observation must still
+/// match the initial directory inode, even if another process replaced the
+/// leaf temporarily during canonicalization. The result is still a pathname,
+/// not a directory lock or a guarantee against later filesystem mutation.
 ///
 /// # Errors
-/// Refuses a missing, linked, or non-directory selection.
+/// Refuses missing, linked, non-directory or observably changed selections.
 pub fn canonical_local_profile_directory(path: &Path) -> io::Result<PathBuf> {
-    let metadata = fs::symlink_metadata(path)?;
-    if !metadata.file_type().is_dir() {
+    canonical_local_profile_directory_with(
+        path,
+        |selected| fs::canonicalize(selected),
+    )
+}
+
+pub(crate) fn canonical_local_profile_directory_with<Resolve>(
+    path: &Path,
+    resolve: Resolve,
+) -> io::Result<PathBuf>
+where
+    Resolve: FnOnce(&Path) -> io::Result<PathBuf>,
+{
+    let before = fs::symlink_metadata(path)?;
+    if !before.file_type().is_dir() {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
             "profile directory must be a real existing directory",
         ));
     }
-    fs::canonicalize(path)
+    let canonical = resolve(path)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt as _;
+
+        // Canonicalization can traverse a replaced selected leaf. Checking
+        // only its final spelling would silently accept the substitute.
+        let resolved = fs::metadata(&canonical)?;
+        let after = fs::symlink_metadata(path)?;
+        if !resolved.is_dir()
+            || !after.file_type().is_dir()
+            || resolved.dev() != before.dev()
+            || resolved.ino() != before.ino()
+            || after.dev() != before.dev()
+            || after.ino() != before.ino()
+        {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "selected profile directory changed while resolving",
+            ));
+        }
+    }
+    Ok(canonical)
 }
 
 /// Preserve the distinction between caller-invalid sources and host failures.
