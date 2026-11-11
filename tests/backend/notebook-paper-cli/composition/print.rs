@@ -135,6 +135,23 @@ fn one_page_xref_stream_pdf(version: &str, index: &str) -> Vec<u8> {
     bytes
 }
 
+// The encoded /Index and /Length are self-consistent, but the stream object
+// itself is unindexed; only a valid enclosing hybrid table could own it.
+fn stream_without_self_index_pdf() -> Vec<u8> {
+    let mut unowned = one_page_xref_stream_pdf("1.5", " /Index [0 4]");
+    let length_key = b"/Length 35";
+    let length_at = unowned.windows(length_key.len())
+        .position(|part| part == length_key)
+        .expect("five-row stream length");
+    unowned[length_at..length_at + length_key.len()]
+        .copy_from_slice(b"/Length 28");
+    let row_start = unowned.windows(b"stream\n".len())
+        .position(|part| part == b"stream\n")
+        .expect("xref stream data") + b"stream\n".len();
+    drop(unowned.drain(row_start + 28..row_start + 35));
+    unowned
+}
+
 #[test]
 fn printing_requires_exact_file_and_named_queue() {
     let valid = ["--pdf", "notebook.pdf", "--printer", "Local_Printer-2"]
@@ -2331,6 +2348,25 @@ fn xref_table_prev_accepts_earlier_xref_stream_on_pdf_15() {
         assert!(!spooled.exists(), "refusal has no spool side effect");
         assert_eq!(fs::read(&pdf).expect("unchanged PDF"), candidate);
     }
+    // A standalone predecessor cannot omit its own xref object from
+    // /Index: no older table is available to own that stream object.
+    let unowned = stream_without_self_index_pdf();
+    let previous = unowned.windows(b"4 0 obj\n".len())
+        .position(|part| part == b"4 0 obj\n")
+        .expect("xref stream object header");
+    let table_at = unowned.len();
+    let candidate = [
+        unowned.as_slice(),
+        format!(
+            "xref\n0 1\n0000000000 65535 f \n\
+             trailer\n<< /Size 5 /Root 1 0 R /Prev {previous} >>\n\
+             startxref\n{table_at}\n%%EOF\n",
+        ).as_bytes(),
+    ].concat();
+    assert!(!supported_pdf_cross_reference(&candidate),
+        "prior standalone stream cannot omit its own indexed row");
+    assert_fake_spool_rejected(
+        &pdf, &request, &fake_spool, &spooled, &candidate);
     fs::remove_dir_all(&directory).expect("remove fixture directory");
 }
 
@@ -2475,6 +2511,37 @@ fn terminal_xref_stream_prev_must_point_back_to_a_prior_xref() {
         assert_eq!(fs::read(&pdf).expect("selected bytes intact"),
             candidate);
     }
+    // The same missing self-index is not rescued by a newer standalone
+    // xref stream's /Prev; the earlier revision has no owning table.
+    let unowned = stream_without_self_index_pdf();
+    let prior = unowned.windows(b"4 0 obj\n".len())
+        .position(|part| part == b"4 0 obj\n")
+        .expect("prior unindexed stream header");
+    let new_at = unowned.len();
+    let mut new_row = vec![1u8];
+    new_row.extend_from_slice(&u32::try_from(new_at)
+        .expect("small new xref offset").to_be_bytes());
+    new_row.extend_from_slice(&0u16.to_be_bytes());
+    let candidate = [
+        unowned.as_slice(),
+        format!(
+            "5 0 obj\n<< /Type /XRef /Size 6 /Index [5 1] \
+             /W [1 4 2] /Root 1 0 R /Prev {prior} \
+             /Length 7 >>\nstream\n",
+        ).as_bytes(),
+        new_row.as_slice(),
+        format!(
+            "\nendstream\nendobj\nstartxref\n{new_at}\n%%EOF\n",
+        ).as_bytes(),
+    ].concat();
+    assert!(!supported_pdf_cross_reference(&candidate),
+        "terminal stream /Prev cannot admit unindexed prior standalone");
+    let request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert_fake_spool_rejected(
+        &pdf, &request, &fake_spool, &spooled, &candidate);
     fs::remove_dir_all(&directory).expect("remove fixture directory");
 }
 

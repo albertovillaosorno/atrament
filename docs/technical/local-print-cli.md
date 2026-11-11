@@ -299,6 +299,12 @@ below the same local object-count ceiling as terminal tables.
 
 Prior xref streams need an admitted dictionary,
 their exact encoded data length, and standalone `endstream`/`endobj` markers.
+A /Prev reference to an earlier standalone xref stream also requires
+its explicit /Index to include that stream's own object. Unlike /XRefStm,
+this predecessor path has no enclosing hybrid table to own an omitted row.
+Both table-to-stream and stream-to-stream revisions refuse an unowned prior
+stream before contacting CUPS.
+
 Further sections, trailers and older revision chains are not recursively
 validated or decoded.
 

@@ -634,8 +634,12 @@ fn bounded_previous_xref(
         Some([b'1', b'.', b'5'..=b'7'] | [b'2', b'.', b'0']));
     stream_edition && earlier.get(..earlier.len().min(16_384))
         .and_then(|prefix| xref_stream_header_end(prefix, None, offset))
-        .is_some_and(|(frame_start, length, _)| {
-            xref_stream_frame_end(earlier, frame_start, length).is_some()
+        .is_some_and(|(frame_start, length, needs_table_owner)| {
+            // /Prev names a standalone stream, unlike a hybrid /XRefStm.
+            // An unindexed stream object needs a real owning table.
+            !needs_table_owner
+                && xref_stream_frame_end(earlier, frame_start, length)
+                    .is_some()
         })
 }
 
