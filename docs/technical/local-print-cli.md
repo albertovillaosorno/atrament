@@ -225,6 +225,10 @@ unsigned decimal object numbers and positive counts. The pairs must be
 ordered and disjoint, with each exclusive endpoint inside `/Size` and the
 same resource ceiling. Invalid, repeated, signed or overflowing entries
 refuse before CUPS; absent `/Index` retains PDF's implicit range policy.
+
+An explicit `/Index` must also include the stream object's own object number;
+being less than `/Size` alone is insufficient. A sparse incremental stream
+may still name only itself and leave earlier objects in previous revisions.
 This does not verify encoded rows or incremental cross-reference chains.
 
 A typed cross-reference stream must also

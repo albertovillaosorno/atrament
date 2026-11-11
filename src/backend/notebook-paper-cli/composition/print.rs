@@ -881,8 +881,11 @@ fn xref_stream_field_widths(bytes: &[u8], at: &mut usize) -> Option<()> {
 
 // /Index is optional, but when present it must enumerate nonempty,
 // increasing disjoint pairs of object start and count within /Size.
-// This checks claimed ranges without allocating or decoding stream rows.
-fn xref_stream_index_end(bytes: &[u8], at: &mut usize) -> Option<usize> {
+// The xref-stream object itself must be represented in the claimed ranges.
+// This checks object coverage without allocating or decoding stream rows.
+fn xref_stream_index_end(
+    bytes: &[u8], at: &mut usize, object_number: usize,
+) -> Option<(usize, bool)> {
     *at = pdf_trivia_end(bytes, *at);
     if bytes.get(*at) != Some(&b'[') {
         return None;
@@ -890,6 +893,7 @@ fn xref_stream_index_end(bytes: &[u8], at: &mut usize) -> Option<usize> {
     *at = at.checked_add(1)?;
     let mut previous_end = 0usize;
     let mut seen_range = false;
+    let mut contains_self = false;
     loop {
         *at = pdf_trivia_end(bytes, *at);
         if bytes.get(*at) == Some(&b']') {
@@ -897,7 +901,7 @@ fn xref_stream_index_end(bytes: &[u8], at: &mut usize) -> Option<usize> {
                 return None;
             }
             *at = at.checked_add(1)?;
-            return Some(previous_end);
+            return Some((previous_end, contains_self));
         }
         let first = xref_stream_index_integer(bytes, at)?;
         let count = xref_stream_index_integer(bytes, at)?;
@@ -906,6 +910,7 @@ fn xref_stream_index_end(bytes: &[u8], at: &mut usize) -> Option<usize> {
             || end > MAX_SUPPORTED_XREF_OBJECTS {
             return None;
         }
+        contains_self |= (first..end).contains(&object_number);
         previous_end = end;
         seen_range = true;
     }
@@ -1050,7 +1055,9 @@ fn xref_stream_header_end(
                 } else if depth == 1 && array_depth == 0
                     && pdf_name_is(name, b"Index") {
                     if index_end.is_some() { return None; }
-                    index_end = Some(xref_stream_index_end(prefix, &mut at)?);
+                    index_end = Some(xref_stream_index_end(
+                        prefix, &mut at, object_number,
+                    )?);
                 } else if depth == 1 && array_depth == 0
                     && pdf_name_is(name, b"Length") {
                     if declared_length.is_some() { return None; }
@@ -1071,7 +1078,9 @@ fn xref_stream_header_end(
     }
     if depth != 0 || array_depth != 0 || !found_type || !found_widths
         || declared_size.is_none_or(|size| object_number >= size
-            || index_end.is_some_and(|end| end > size)) {
+            || index_end.is_some_and(|(end, contains_self)| {
+                end > size || !contains_self
+            })) {
         return None;
     }
     at = pdf_trivia_end(prefix, at);

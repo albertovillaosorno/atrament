@@ -887,8 +887,8 @@ fn xref_stream_index_ranges_are_bounded_disjoint_pairs() {
          stream\n\0\nendstream\nendobj\nstartxref\n9\n%%EOF\n",
     ).into_bytes();
     for valid in [
-        "", "/Index [1 1]", "/Index[0 1 2 1]",
-        "/Index [0% row comment\n 1 2 1]",
+        "", "/Index [1 1]", "/Index[0 2 2 1]",
+        "/Index [0% row comment\n 2]",
         "/Meta << /Index [9 9] >> /Index [1 1]",
     ] {
         let candidate = framed(valid);
@@ -899,6 +899,7 @@ fn xref_stream_index_ranges_are_bounded_disjoint_pairs() {
         "/Index []", "/Index [0]", "/Index [0 0]",
         "/Index [0 -1]", "/Index [0 +1]",
         "/Index [0 2 1]", "/Index [0 2 1 1]",
+        "/Index [0 1 2 1]", "/Index [0 1]",
         "/Index [2 2]", "/Index [3 1]",
         "/Index [9999999999 1]", "/Index [0 9999999999]",
         "/Index [0 1] /Index [1 1]",
@@ -975,6 +976,19 @@ fn genuine_xref_stream_pdf_spools_exact_reviewed_bytes() {
         assert_eq!(fs::read(&pdf).expect("original document"), bytes);
         fs::remove_file(&spooled).expect("reset fake spool capture");
     }
+    // The terminal stream object must identify itself in an explicit
+    // /Index. Merely staying within /Size is insufficient: readers cannot
+    // locate the xref stream from its own claimed object table otherwise.
+    let missing_self = one_page_xref_stream_pdf("1.5", " /Index [0 4]");
+    assert!(!supported_pdf_cross_reference(&missing_self),
+        "a terminal xref stream cannot omit its own object from /Index");
+    let invalid_request = PrintRequest {
+        pdf: pdf.clone(), printer: "Queue_1".into(),
+        dry_run: false, expected_sha256: None,
+    };
+    assert_fake_spool_rejected(
+        &pdf, &invalid_request, &script, &spooled, &missing_self);
+
     // Cross-reference streams arrived in PDF 1.5. A document with this
     // exact binary structure and a 1.4 header may be repairable in a
     // viewer, but the local print preflight intentionally refuses it.
