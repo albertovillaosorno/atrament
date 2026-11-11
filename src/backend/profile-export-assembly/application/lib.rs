@@ -34,6 +34,18 @@
 
 use std::fmt;
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_explicit_file_path_intent as _;
+#[cfg(test)]
+use atrament_profile_import_preflight as _;
+#[cfg(test)]
+use atrament_profile_import_verification as _;
+#[cfg(test)]
+use atrament_profile_manifest_json_codec as _;
+#[cfg(test)]
+use atrament_profile_zip_reader as _;
+
 use atrament_handwriting_profile_container::{
     PROFILE_MANIFEST_PATH, ProfileManifest, ProfileManifestEntry, Sha256Digest,
     ProfileEntryVerificationError,

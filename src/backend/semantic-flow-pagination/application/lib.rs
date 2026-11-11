@@ -43,6 +43,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::ops::Bound::{Excluded, Unbounded};
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_semantic_notebook_port as _;
+#[cfg(test)]
+use atrament_semantic_notebook_session as _;
+
 use atrament_flow_pagination::{
     FragmentSource, MeasuredFlowUnit, PageRegion, PaginationError,
     PaginationPlan, PlacedFragment, paginate,

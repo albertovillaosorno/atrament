@@ -44,6 +44,22 @@ use std::net::{Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::str;
 use std::time::{Duration, Instant};
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_handwriting_statistics as _;
+#[cfg(test)]
+use atrament_handwriting_statistics_json as _;
+#[cfg(test)]
+use atrament_notebook_paper_cli as _;
+#[cfg(test)]
+use atrament_notebook_profile as _;
+#[cfg(test)]
+use atrament_session_draft as _;
+#[cfg(test)]
+use atrament_session_handshake as _;
+#[cfg(test)]
+use atrament_unicode_grapheme_segmentation as _;
+
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, DIAGNOSTIC_VERSION, Diagnostic,
     DiagnosticCode, DiagnosticSet, Evidence, EvidenceUnit, LocationKind,

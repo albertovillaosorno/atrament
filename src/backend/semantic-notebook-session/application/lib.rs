@@ -37,6 +37,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::slice::from_ref;
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_physical_page_profile as _;
+
 use atrament_mathematics_source::analyze;
 use atrament_semantic_command_graph::{
     BoundedDependencyRequirementsError, CommandDependencyNode,

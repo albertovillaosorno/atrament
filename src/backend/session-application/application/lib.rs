@@ -45,6 +45,18 @@ use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_diagnostic as _;
+#[cfg(test)]
+use atrament_english_spanish_grapheme_inventory as _;
+#[cfg(test)]
+use atrament_flow_pagination as _;
+#[cfg(test)]
+use atrament_physical_page_profile as _;
+#[cfg(test)]
+use atrament_unicode_grapheme_segmentation as _;
+
 use atrament_autonomous_output_intent::AutonomousOutputIntentSource;
 use atrament_explicit_file_path_intent::ExplicitFilePathIntent;
 use atrament_export_prerequisite_projection::{

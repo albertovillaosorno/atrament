@@ -34,6 +34,10 @@
 
 //! `unicode-segmentation` adapter for Atrament grapheme-boundary queries.
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_english_spanish_grapheme_inventory as _;
+
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 use unicode_segmentation::UnicodeSegmentation as _;
 

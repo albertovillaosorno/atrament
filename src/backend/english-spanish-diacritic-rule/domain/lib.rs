@@ -33,6 +33,12 @@
 
 //! Exact rule matching for first-release Spanish decomposed diacritics.
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_english_spanish_grapheme_inventory as _;
+#[cfg(test)]
+use atrament_handwriting_glyph_coverage as _;
+
 /// Language-owned compositional rule for one decomposed Spanish grapheme.
 #[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub enum EnglishSpanishDiacriticRule {

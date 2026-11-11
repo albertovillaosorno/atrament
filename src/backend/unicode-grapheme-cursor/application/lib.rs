@@ -40,6 +40,12 @@
 
 use std::cmp::Ordering;
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_english_spanish_grapheme_inventory as _;
+#[cfg(test)]
+use atrament_unicode_grapheme_segmentation as _;
+
 use atrament_unicode_grapheme_boundary_port::GraphemeBoundaryProvider;
 
 /// One validated cursor position at a Unicode extended-grapheme boundary.

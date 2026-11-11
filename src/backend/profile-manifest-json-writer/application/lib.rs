@@ -35,6 +35,24 @@
 
 use std::cmp::Ordering;
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_explicit_file_path_intent as _;
+#[cfg(test)]
+use atrament_profile_entry_sha256 as _;
+#[cfg(test)]
+use atrament_profile_import_preflight as _;
+#[cfg(test)]
+use atrament_profile_import_verification as _;
+#[cfg(test)]
+use atrament_profile_json_syntax as _;
+#[cfg(test)]
+use atrament_profile_manifest_json_codec as _;
+#[cfg(test)]
+use atrament_profile_stored_zip_writer as _;
+#[cfg(test)]
+use atrament_profile_zip_reader as _;
+
 use atrament_handwriting_profile_container::{
     ProfileManifest, ProfileManifestEntry, ProfileManifestError,
     validate_profile_manifest,

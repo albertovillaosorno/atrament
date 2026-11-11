@@ -35,6 +35,10 @@
 
 //! Read-only semantic command-context scope admission.
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_semantic_notebook as _;
+
 use atrament_semantic_notebook_port::{
     CommandApplicationCapability, CommandBehaviorVersion,
     CommandCapabilityCompatibilityOutcome, SemanticCommandApplicationAdmission,

@@ -36,6 +36,12 @@
 use std::collections::BTreeSet;
 use std::fmt::Debug;
 
+// Keep test-only contract dependencies visible to crate-wide linting.
+#[cfg(test)]
+use atrament_semantic_notebook_port as _;
+#[cfg(test)]
+use atrament_semantic_notebook_session as _;
+
 use atrament_diagnostic::{
     BlockingDisposition, Completeness, Diagnostic, DiagnosticCode,
     DiagnosticSet, Evidence, LocationKind, LocationRole, Operation,
