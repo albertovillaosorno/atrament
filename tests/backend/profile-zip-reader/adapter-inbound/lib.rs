@@ -210,6 +210,39 @@ fn truncation_and_trailing_bytes_cannot_be_salvaged_by_zip_scanning() {
 }
 
 #[test]
+fn entire_directory_is_preflighted_before_any_payload_crc() {
+    let original = make_zip(&ENTRIES);
+    let directory = central_start(&original);
+    let second_central = directory + 46 + "manifest.json".len();
+    let first_payload = 30 + "manifest.json".len();
+    // A bad earlier CRC must not mask a later record that cannot be safely
+    // admitted to the bounded, canonical member index.
+    for (case, changes, bounds, expected) in [
+        ("foreign attribute", &[(38usize, 1u32)][..], limits(),
+            ProfileZipReadError::NonCanonical),
+        ("oversized member", &[(20usize, 1_025u32), (24, 1_025)][..],
+            limits(), ProfileZipReadError::ResourceLimit),
+        ("forged local offset", &[(42usize, 0u32)][..], limits(),
+            ProfileZipReadError::NonCanonical),
+        ("cumulative size limit", &[][..], ProfileZipReadLimits {
+            maximum_total_bytes: 10, ..limits()
+        }, ProfileZipReadError::ResourceLimit),
+    ] {
+        let mut bytes = original.clone();
+        bytes[first_payload] ^= 1;
+        for &(field, replacement) in changes {
+            bytes[second_central + field..second_central + field + 4]
+                .copy_from_slice(&replacement.to_le_bytes());
+        }
+        assert_eq!(
+            read_stored_profile_zip(&bytes, bounds),
+            Err(expected),
+            "late central directory {case} must be rejected first",
+        );
+    }
+}
+
+#[test]
 fn local_payload_corruption_cannot_pass_a_matching_directory_checksum() {
     let mut bytes = make_zip(&ENTRIES);
     let offset = 30 + "manifest.json".len();

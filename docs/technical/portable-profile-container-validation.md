@@ -176,11 +176,15 @@ stored bytes, and cumulative stored bytes before the adapter allocates a
 member index. It supports only an ordinary, single-disk ZIP archive with
 stored (uncompressed) entries and a comment-free terminal directory.
 
-The byte reader validates both the ZIP central directory and every local entry
-header, requiring exact agreement of names, sizes, timestamps, CRC-32, flags,
-method and version, as well as contiguous nonoverlapping members, canonical
-lexicographic order, a supported UTF-8 name interpretation, and no prefixes or
-unclaimed trailers. It rejects encrypted, compressed, descriptor-based, ZIP64,
+The byte reader preflights the complete central directory, sorted names,
+member byte budgets and contiguous local record offsets **before allocating
+its member index or checking any stored payload CRC**. A malformed late
+record cannot be masked by an earlier payload checksum failure. It then
+validates every local header, requiring exact agreement of names, sizes,
+timestamps, CRC-32, flags, method and version.
+
+The reader requires supported UTF-8 names and no prefixes, unclaimed gaps or
+trailers. It rejects encrypted, compressed, descriptor-based, ZIP64,
 extra-field, archive-comment, foreign-platform and other unsupported encodings
 rather than trying alternate decoders. Unsafe paths are passed through the
 shared portable-profile path validator before member bytes are exposed.

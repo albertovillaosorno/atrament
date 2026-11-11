@@ -664,6 +664,60 @@ fn read_local_entry<'bytes>(
     Ok(payload)
 }
 
+// Validate the entire central directory and its resource budgets before
+// allocating an entry index or examining any local member payload. Otherwise
+// a malformed late member could be masked by an earlier CRC failure, after
+// already reserving storage for member names that cannot be admitted.
+fn preflight_central_directory(
+    bytes: &[u8],
+    directory_start: usize,
+    directory_end: usize,
+    entry_count: usize,
+    limits: ProfileZipReadLimits,
+) -> Result<(), ProfileZipReadError> {
+    let mut cursor = directory_start;
+    let mut local_end = 0usize;
+    let mut previous_name: Option<&str> = None;
+    let mut total_bytes = 0u64;
+    for _ in 0..entry_count {
+        let central = parse_central_entry(bytes, cursor)?;
+        if central.next_cursor > directory_end {
+            return Err(ProfileZipReadError::InvalidStructure);
+        }
+        if previous_name.is_some_and(|name| name >= central.name) {
+            return Err(ProfileZipReadError::NonCanonical);
+        }
+        if u64::from(central.length) > limits.maximum_entry_bytes {
+            return Err(ProfileZipReadError::ResourceLimit);
+        }
+        total_bytes = total_bytes.checked_add(u64::from(central.length))
+            .ok_or(ProfileZipReadError::ResourceLimit)?;
+        if total_bytes > limits.maximum_total_bytes {
+            return Err(ProfileZipReadError::ResourceLimit);
+        }
+        let local = usize::try_from(central.local_offset).ok()
+            .ok_or(ProfileZipReadError::ResourceLimit)?;
+        if local != local_end {
+            return Err(ProfileZipReadError::NonCanonical);
+        }
+        let stored_size = usize::try_from(central.length).ok()
+            .ok_or(ProfileZipReadError::ResourceLimit)?;
+        local_end = local.checked_add(LOCAL_SIZE)
+            .and_then(|start| start.checked_add(central.name_bytes.len()))
+            .and_then(|start| start.checked_add(stored_size))
+            .ok_or(ProfileZipReadError::ResourceLimit)?;
+        if local_end > directory_start {
+            return Err(ProfileZipReadError::InvalidStructure);
+        }
+        previous_name = Some(central.name);
+        cursor = central.next_cursor;
+    }
+    if cursor != directory_end || local_end != directory_start {
+        return Err(ProfileZipReadError::InvalidStructure);
+    }
+    Ok(())
+}
+
 /// Parse one complete bounded ordinary ZIP archive with stored-only members.
 ///
 /// Fails closed on ZIP64, multi-disk, encryption, descriptors, compression,
@@ -730,15 +784,16 @@ pub fn read_stored_profile_zip(
     if minimum_directory_bytes > central_size {
         return Err(ProfileZipReadError::InvalidStructure);
     }
+    preflight_central_directory(
+        bytes, directory_start, trailer, usize::from(all_entries), limits,
+    )?;
     let mut cursor = directory_start;
     let mut local_end = 0usize;
-    let mut total_bytes = 0u64;
-    // Fallibly reserve exactly the validated member count. Never let an
-    // attacker-selected count enter an infallible allocation path.
+    // Fallibly reserve only after central names, sizes, local offsets and
+    // exact directory framing have passed resource and layout preflight.
     let mut entries = Vec::new();
     entries.try_reserve_exact(usize::from(all_entries))
         .map_err(|_allocation| ProfileZipReadError::AllocationFailed)?;
-    let mut previous_name: Option<&str> = None;
     let mut writer_metadata_matches = true;
     for _ in 0..usize::from(all_entries) {
         let central = parse_central_entry(bytes, cursor)?;
@@ -747,17 +802,8 @@ pub fn read_stored_profile_zip(
             && central.flags == 0x0800
             && central.modified_date == 0
             && central.modified_time == 0;
-        if previous_name.is_some_and(|name| name >= central.name) {
-            return Err(ProfileZipReadError::NonCanonical);
-        }
-        if u64::from(central.length) > limits.maximum_entry_bytes {
-            return Err(ProfileZipReadError::ResourceLimit);
-        }
-        total_bytes = total_bytes.checked_add(u64::from(central.length))
-            .ok_or(ProfileZipReadError::ResourceLimit)?;
-        if total_bytes > limits.maximum_total_bytes {
-            return Err(ProfileZipReadError::ResourceLimit);
-        }
+        // The immutable central records have already passed ordering and
+        // cumulative-size preflight before any member can be inspected.
         let payload = read_local_entry(bytes, &central, local_end,
             directory_start)?;
         local_end = usize::try_from(central.local_offset).ok()
@@ -770,7 +816,6 @@ pub fn read_stored_profile_zip(
             crc32: central.crc32,
             name: central.name,
         });
-        previous_name = Some(central.name);
         cursor = central.next_cursor;
     }
     if cursor != trailer || local_end != directory_start {
