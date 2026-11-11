@@ -1498,6 +1498,9 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let mut glyph_file_selected = false;
     let mut glyph_edited = false;
     let mut flow_selected = false;
+    let mut profile_selected = false;
+    let mut paper_selected = false;
+    let mut profile_edited = false;
     while let Some(option) = iter.next() {
         let (operands, stdin_source): (usize, bool) = match option.as_str() {
             "--inspect" | "--replace" | "--emit-ink-file" => (0, false),
@@ -1534,10 +1537,29 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 (1, option.ends_with("-file"))
             }
             "--ink-file" => (1, true),
-            "--profile" | "--paper-profile" | "--handwriting-profile"
-            | "--date-style" | "--date-placement" | "--date-text"
-            | "--border-radius-um" | "--page-numbers" | "--printed-sheet"
-            | "--heading-style" | "--heading-color"
+            "--profile" => {
+                if profile_selected || profile_edited {
+                    return Err(
+                        "--profile must appear once, before edits".into()
+                    );
+                }
+                profile_selected = true;
+                (1, false)
+            }
+            "--paper-profile" => {
+                if paper_selected {
+                    return Err("--paper-profile may appear only once".into());
+                }
+                paper_selected = true;
+                profile_edited = true;
+                (1, false)
+            }
+            "--date-style" | "--date-placement" | "--date-text"
+            | "--border-radius-um" | "--page-numbers" | "--printed-sheet" => {
+                profile_edited = true;
+                (1, false)
+            }
+            "--handwriting-profile" | "--heading-style" | "--heading-color"
             | "--heading-marker-scale" | "--heading-ink-color"
             | "--heading-ink-scale" | "--export-paper" | "--pages"
             | "--dpi" | "--quality" | "--png-page" | "--output" =>

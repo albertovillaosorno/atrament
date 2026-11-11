@@ -102,6 +102,15 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
             "only one flow source may be supplied"),
         (["--flow-markdown-file", "-", "--flow-text-file", "text.md"]
             .as_slice(), "only one flow source may be supplied"),
+        (["--ink-file", "-", "--paper-profile", "first.json",
+            "--paper-profile", "second.json"].as_slice(),
+            "--paper-profile may appear only once"),
+        (["--flow-text-file", "-", "--profile", "one.json",
+            "--profile", "two.json"].as_slice(),
+            "--profile must appear once, before edits"),
+        (["--glyph-file", "-", "--date-style", "line",
+            "--profile", "notebook.json"].as_slice(),
+            "--profile must appear once, before edits"),
     ] {
         let error = preflight_notebook_sources(&args(flags))
             .expect_err("late invalid source must refuse before read");

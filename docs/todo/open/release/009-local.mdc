@@ -229,3 +229,11 @@ conflict, and a caller's already reviewed PDF remains unchanged.
 Rust flag-operand tests and actual unwritten-pipe subprocess regressions
 cover these cases. This hardens transient CLI admission; it does not provide
 a persistent notebook document or editable semantic content.
+
+## Native profile selection before stdin consumption — 2026-11-10
+
+Notebook CLI preflight now detects a repeated `--paper-profile` or a
+repeated/late `--profile` before consuming a preceding glyph, ink, or flow
+stdin pipe. The original single-profile and pre-edit ordering rules remain
+unchanged. Native live-pipe regressions assert prompt refusal and unchanged
+reviewed output. This is input admission, not saved notebook body support.
