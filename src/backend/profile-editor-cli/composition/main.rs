@@ -1728,7 +1728,8 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 "--flow-region" => {
                     preflight_unique_selection(&mut region_selected,
                         "--flow-region may appear only once")?;
-                    (4, false)
+                    let _validated = FlowRegion::parse(&mut iter)?;
+                    (0, false)
                 }
                 "--place-text" | "--join-text-anchors" => {
                     glyph_edited = true;

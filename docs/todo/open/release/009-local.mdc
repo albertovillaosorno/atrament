@@ -295,3 +295,16 @@ Focused Rust red/green tests and eight additional live-pipe regression cases
 verify early refusal and unchanged reviewed output. All 21 native CLI file
 suites pass. This strengthens argument admission; it does not add persisted
 notebook content or complete the local end-to-end journey.
+
+## Typed flow rectangle before stdin consumption — 2026-11-10
+
+The notebook CLI now parses the four unsigned micrometre dimensions of an
+optional `--flow-region` during source-independent argument preflight. Missing,
+negative, overflowed and zero-size rectangles therefore refuse before a prior
+Markdown, glyph or ink stdin source could block. Both admission phases call
+the same typed rectangle parser; actual paper-margin checks remain bound to
+the selected notebook profile and the eventual expanded ink.
+
+Focused Rust and six native unwritten-pipe regressions verify early refusal,
+consistent diagnostics and no replacement of previously reviewed output.
+This is bounded CLI input safety, not persisted notebook flow or layout editing.
