@@ -45,13 +45,62 @@ use std::sync::atomic::{AtomicU64, Ordering};
 static NEXT_FIXTURE: AtomicU64 = AtomicU64::new(0);
 
 fn fixture_dir() -> PathBuf {
-    let number = NEXT_FIXTURE.fetch_add(1, Ordering::Relaxed);
-    let dir = env::temp_dir().join(format!(
-        "atrament-print-fixture-{}-{number}",
-        process::id(),
-    ));
-    fs::create_dir_all(&dir).expect("create owned fixture directory");
-    dir
+    fixture_dir_with_sequence(&env::temp_dir(), process::id(), &NEXT_FIXTURE)
+        .expect("reserve uniquely owned fixture directory")
+}
+
+fn fixture_dir_with_sequence(
+    base: &Path, process_id: u32, sequence: &AtomicU64,
+) -> io::Result<PathBuf> {
+    // The PID may be reused after a crashed prior test leaves artifacts.
+    // create_dir_all would silently adopt that process's existing files.
+    for _ in 0..64 {
+        let number = sequence.fetch_add(1, Ordering::Relaxed);
+        let dir = base.join(format!(
+            "atrament-print-fixture-{process_id}-{number}",
+        ));
+        match fs::create_dir(&dir) {
+            Ok(()) => return Ok(dir),
+            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
+            Err(error) => return Err(error),
+        }
+    }
+    Err(io::Error::new(io::ErrorKind::AlreadyExists,
+        "print fixtures exhausted 64 exclusive directory attempts"))
+}
+
+#[test]
+fn stale_process_fixture_does_not_get_reused() {
+    let outer = fixture_dir();
+    let stale = outer.join("atrament-print-fixture-42-0");
+    fs::create_dir(&stale).expect("create stale fixture");
+    let sentinel = stale.join("keep-previous-run");
+    fs::write(&sentinel, b"unchanged").expect("write stale sentinel");
+    let sequence = AtomicU64::new(0);
+    let fresh = fixture_dir_with_sequence(&outer, 42, &sequence)
+        .expect("reserve new fixture instead of stale path");
+    assert_ne!(fresh, stale, "a prior run cannot own our fixture");
+    assert!(fresh.is_dir(), "fresh fixture must be a real directory");
+    assert_eq!(fs::read(sentinel).expect("preserve prior fixture"),
+        b"unchanged");
+    fs::remove_dir_all(outer).expect("remove test-owned fixture tree");
+}
+
+#[test]
+fn exhausted_stale_print_fixtures_fail_closed() {
+    let outer = fixture_dir();
+    for number in 0..64 {
+        let occupied = outer.join(format!(
+            "atrament-print-fixture-42-{number}",
+        ));
+        fs::create_dir(occupied).expect("prepopulate stale owned fixture");
+    }
+    let sequence = AtomicU64::new(0);
+    let error = fixture_dir_with_sequence(&outer, 42, &sequence)
+        .expect_err("all 64 stale paths must be refused");
+    assert_eq!(error.kind(), io::ErrorKind::AlreadyExists);
+    assert_eq!(sequence.load(Ordering::Relaxed), 64);
+    fs::remove_dir_all(outer).expect("remove test-owned fixture tree");
 }
 
 // Keep fake CUPS rejection checks identical across backward xref chains.
