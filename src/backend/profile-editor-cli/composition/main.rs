@@ -1841,6 +1841,32 @@ fn preflight_notebook_flow_option(
     Ok((format, 0, false))
 }
 
+// Match final file-option arity before earlier selected stdin or file I/O.
+// Literal flag-shaped filenames are still operands, not new selections.
+fn preflight_notebook_file_operand(
+    option: &str, iter: &mut Iter<'_, String>, stdin_source: bool,
+    stdin_selected: &mut bool,
+) -> Result<(), String> {
+    let diagnostic = match option {
+        "--glyph-file" => "--glyph-file requires a library path",
+        "--flow-text-file" | "--flow-markdown-file" =>
+            "flow needs a UTF-8 text value or a selected file path",
+        "--ink-file" => "--ink-file requires a file",
+        "--profile" => "--profile requires a file",
+        "--paper-profile" => "--paper-profile requires a file",
+        _ => return Err(format!("unknown notebook source option: {option}")),
+    };
+    let value = iter.next().filter(|value| !value.is_empty())
+        .ok_or(diagnostic)?;
+    if stdin_source && value == "-" {
+        if *stdin_selected {
+            return Err("standard input may be selected only once".into());
+        }
+        *stdin_selected = true;
+    }
+    Ok(())
+}
+
 // Reject impossible source selections before the first file or stdin read.
 // Count actual operands: Markdown text and glyph values can contain strings
 // that look like flags without selecting another input source.
@@ -1931,16 +1957,10 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 _ => return Err(format!("unknown notebook option: {option}")),
             }
         };
-        for _ in 0usize..operands {
-            let Some(value) = iter.next() else { break };
-            if stdin_source && value == "-" {
-                if stdin_selected {
-                    return Err(
-                        "standard input may be selected only once".into()
-                    );
-                }
-                stdin_selected = true;
-            }
+        if operands != 0 {
+            preflight_notebook_file_operand(
+                option, &mut iter, stdin_source, &mut stdin_selected,
+            )?;
         }
     }
     flags.validate(flow_format, region_selected)

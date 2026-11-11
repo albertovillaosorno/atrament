@@ -201,6 +201,45 @@ fn early_output_selection_requires_a_literal_filename() {
 }
 
 #[test]
+fn notebook_preflight_requires_selected_file_operands_before_stdin() {
+    for (option, diagnostic) in [
+        ("--glyph-file", "--glyph-file requires a library path"),
+        ("--ink-file", "--ink-file requires a file"),
+        ("--profile", "--profile requires a file"),
+        ("--paper-profile", "--paper-profile requires a file"),
+        ("--flow-text-file",
+            "flow needs a UTF-8 text value or a selected file path"),
+        ("--flow-markdown-file",
+            "flow needs a UTF-8 text value or a selected file path"),
+    ] {
+        for prefix in ["--ink-file", "--glyph-file", "--flow-text-file"] {
+            // An earlier selected source may remain unclosed indefinitely.
+            if (prefix.starts_with("--flow") && option.starts_with("--flow"))
+                || (prefix == "--glyph-file" && option == "--glyph-file")
+            {
+                continue;
+            }
+            let mut flags = args(&[prefix, "-", "--export-paper", "pdf",
+                option]);
+            for selected in [None, Some("")] {
+                if let Some(value) = selected { flags.push(value.into()); }
+                let error = preflight_notebook_sources(&flags)
+                    .expect_err("missing or empty path must refuse first");
+                assert_eq!(error, diagnostic, "{flags:?}");
+                flags.truncate(5);
+            }
+        }
+    }
+    for option in ["--glyph-file", "--ink-file", "--profile",
+        "--paper-profile", "--flow-text-file", "--flow-markdown-file"] {
+        // A literal option-like filename remains an operand, not an option.
+        preflight_notebook_sources(&args(&["--ink-file", "-", option,
+            "--output", "--export-paper", "pdf"]))
+            .expect("literal source filenames are preserved");
+    }
+}
+
+#[test]
 fn notebook_preflight_detects_invalid_sources_without_input_io() {
     for flags in [
         ["--ink-file", "-", "--glyph-file", "-"].as_slice(),

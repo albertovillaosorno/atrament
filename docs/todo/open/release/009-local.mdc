@@ -409,3 +409,15 @@ Focused Rust cases and five real-process unwritten-pipe cases cover the
 literal forms, exact prior error diagnostics, empty output and preservation
 of a reviewed destination. Valid inline tabs, CRLF and option-like literal
 text remain accepted. No semantic notebook text is persisted by this change.
+
+## Selected notebook file operand admission (partial) — 2026-11-10
+
+The CLI preflights required, nonempty filenames for notebook, paper, glyph,
+page-ink and flow sources before opening a previously selected stdin pipe.
+Missing and empty paths now return the matching typed file-option refusal
+without waiting for input or replacing a reviewed PDF. Literal filenames
+that resemble flags remain operands, not silently reinterpreted options.
+
+Focused Rust argument-scanner tests and a real native CLI open-pipe subprocess
+regression exercise each source selector. This changes command admission,
+not notebook content persistence or the incomplete localhost editor journey.
