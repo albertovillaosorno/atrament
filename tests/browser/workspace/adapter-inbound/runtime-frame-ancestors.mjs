@@ -15075,6 +15075,20 @@ test(
             });
             await waitForSessionStatus(bidi, tab.context, "Session ready");
             const baseline = [...requests];
+            // The input handler sends its session update asynchronously.
+            // Subscribe before the gesture so fast and slow POST arrivals
+            // are both observed without a timing-dependent polling sleep.
+            const sourcePosted = new Promise((resolve) => {
+                const observe = (request) => {
+                    if (request.method !== "POST"
+                        || request.url !== "/api/session/source") {
+                        return;
+                    }
+                    server.off("request", observe);
+                    resolve();
+                };
+                server.on("request", observe);
+            });
             const response = await bidi.command("script.evaluate", {
                 awaitPromise: true,
                 expression: String.raw`(async () => {
@@ -15151,6 +15165,7 @@ test(
                 1100, 250, "#243647", { dx: 0, lift: 0 }, "cursive");
             const expected = encodeGlyphLibrary(rows);
             assert.deepEqual(actual.files, [expected, actual.markdown]);
+            await observedWithin(sourcePosted, "connected bilingual source POST");
             assert.deepEqual(requests,
                 [...baseline, "POST /api/session/source"],
                 "source edit updates the authenticated session once; "
