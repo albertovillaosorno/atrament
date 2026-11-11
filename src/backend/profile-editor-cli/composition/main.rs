@@ -318,6 +318,7 @@ struct NotebookExportOptions {
 struct NotebookFlagPreflight {
     export_format: Option<NotebookExportFormat>,
     heading: HeadingDecoration,
+    imported_overlay_selected: bool,
     selected: BTreeSet<String>,
 }
 
@@ -458,7 +459,8 @@ impl NotebookFlagPreflight {
         // Explicit ink and glyph intent needs an output mode even before
         // selected library or stdin bytes are available.
         if self.export_format.is_none()
-            && (inline_ink_count != 0 || glyph_has_any)
+            && (inline_ink_count != 0 || glyph_has_any
+                || self.imported_overlay_selected)
         {
             return Err(concat!(
                 "ink and glyph overlays need ",
@@ -1999,6 +2001,8 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     // only validation evidence; final composition parses its own library.
     let mut glyph_preflight = GlyphOverlay::default();
     while let Some(option) = iter.next() {
+        flags.imported_overlay_selected |=
+            matches!(option.as_str(), "--ink-file" | "--glyph-file");
         let (operands, stdin_source): (usize, bool) = if let Some(count) =
             flags.select_option(option, &mut iter)?
         {

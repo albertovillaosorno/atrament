@@ -811,8 +811,23 @@ fn notebook_preflight_requires_export_for_inline_ink_and_glyphs() {
             .expect_err("inline glyph intent needs explicit output mode");
         assert!(error.contains("ink and glyph overlays need"), "{error}");
     }
-    preflight_notebook_sources(&selected)
-        .expect("unread ink file alone remains source-dependent");
+    for source in [
+        ["--ink-file", "-"].as_slice(),
+        ["--glyph-file", "-"].as_slice(),
+        ["--ink-file", "missing-ink.tsv"].as_slice(),
+        ["--glyph-file", "missing-glyph.tsv"].as_slice(),
+    ] {
+        let error = preflight_notebook_sources(&args(source))
+            .expect_err("imported overlays cannot be saved in notebook v1");
+        assert!(error.contains("ink and glyph overlays need"), "{error}");
+    }
+    for source in [
+        ["--ink-file", "-", "--emit-ink-file"].as_slice(),
+        ["--glyph-file", "-", "--export-paper", "pdf"].as_slice(),
+    ] {
+        preflight_notebook_sources(&args(source))
+            .expect("selected ink/glyph file can feed explicit exports");
+    }
 }
 
 #[test]
