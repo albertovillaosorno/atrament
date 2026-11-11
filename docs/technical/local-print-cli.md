@@ -75,6 +75,10 @@ The local submission path has a fixed 60-second deadline, covering both
 the transfer of selected PDF bytes to `lp` stdin and the process exit.
 A stalled spooler is terminated and its immediate process reaped; the CLI
 returns an **uncertain submission outcome**, not proof of rejection.
+
+An `lp` process that exits early, even with status zero, may close stdin before
+the selected PDF has been transferred completely. A broken or interrupted
+stdin writer is also **uncertain**, not proof that no job was queued.
 Inspect the named CUPS queue before deciding whether to submit again.
 Atrament never retries a job automatically, and does not manage processes
 that `lp` might spawn independently.

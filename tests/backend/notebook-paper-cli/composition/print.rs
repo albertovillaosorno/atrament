@@ -2336,6 +2336,30 @@ fn stalled_cups_submission_is_bounded_even_for_a_full_stdin_pipe() {
 
 #[cfg(unix)]
 #[test]
+fn early_successful_lp_exit_during_transfer_is_an_uncertain_submission() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let directory = fixture_dir();
+    let fake_spool = directory.join("early-lp.sh");
+    fs::write(&fake_spool, "#!/bin/sh\nexec 0<&-\nexit 0\n")
+        .expect("write early-success fake spooler");
+    fs::set_permissions(&fake_spool, fs::Permissions::from_mode(0o700))
+        .expect("make fake spool executable");
+
+    // The fake lp reports success but closes its input before a complete
+    // bounded PDF could be supplied. It might already have queued a job.
+    let error = submit_with_timeout(
+        &fake_spool, "Queue_1", vec![0x42u8; 2_000_000],
+        Duration::from_secs(3),
+    ).expect_err("an incomplete transfer cannot claim spooling success");
+    assert!(error.contains("outcome uncertain"), "unexpected: {error}");
+    assert!(error.contains("inspect the queue before retrying"),
+        "an early lp exit must not invite a blind retry: {error}");
+    fs::remove_dir_all(&directory).expect("remove owned fixture directory");
+}
+
+#[cfg(unix)]
+#[test]
 fn printer_is_only_contacted_on_explicit_selection_and_receives_exact_pdf() {
     use std::os::unix::fs::{PermissionsExt as _, symlink};
 

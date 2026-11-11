@@ -1200,9 +1200,19 @@ fn submit_with_timeout(
             return Err(error);
         }
     };
+    // An early lp exit can report success while closing stdin before the
+    // reviewed PDF is transferred. A partial write is not proof of job
+    // rejection: lp may already have queued an incomplete submission.
     writer.join()
-        .map_err(|_panic| "lp stdin writer stopped unexpectedly".to_owned())?
-        .map_err(|error| format!("cannot supply PDF to lp: {error}"))?;
+        .map_err(|_panic| concat!(
+            "CUPS submission outcome uncertain; ",
+            "inspect the queue before retrying: lp writer stopped",
+        ).to_owned())?
+        .map_err(|error| format!(concat!(
+            "CUPS submission outcome uncertain; ",
+            "inspect the queue before retrying: ",
+            "cannot supply PDF to lp: {}",
+        ), error))?;
     if !status.success() {
         return Err(format!("CUPS refused print submission: {status}"));
     }
