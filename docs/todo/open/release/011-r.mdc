@@ -197,6 +197,40 @@ node --test \
 
 These candidates still require owner visual approval.
 
+## Host temporary-storage quota isolation (test evidence) — 2026-11-11
+
+The real Firefox test `Firefox edits, saves and reopens both profiles through
+Rust localhost` initially failed while consuming an 8.7-MB native PNG
+preview. Its browser-side Blob operation aborted after HTTP 200, but the
+runtime was not shown to have an application-level image encoding defect.
+An independent native PNG save test failed with `FileIo(QuotaExceeded)`.
+The Linux `/tmp` mount had a 12,794-MiB per-user quota with 12,793 MiB
+already occupied, even though `df -h` reported free filesystem capacity.
+
+Retesting the exact Firefox journey with a separately owned temporary
+location on the repository filesystem passed in 14.7 seconds without any
+runtime or browser code change. The complete all-feature Rust workspace
+suite also passed under the same isolation, as did the focused 279-test
+browser editor selection and the 26-test native CLI file selection.
+To reproduce on a similarly quota-limited Linux host from the repository
+root, after confirming the chosen scratch directory is test-owned:
+
+```sh
+mkdir -p .temp/local-test-tmp
+TMPDIR="$PWD/.temp/local-test-tmp" node --test \
+  --test-name-pattern='Firefox edits, saves and reopens both profiles' \
+  tests/browser/workspace/adapter-inbound/runtime-frame-ancestors.mjs
+TMPDIR="$PWD/.temp/local-test-tmp" \
+  .dependencies/rust/1.99.1/bin/cargo test --locked --offline \
+  --workspace --all-features
+```
+
+`quota -s` can reveal a per-user tmpfs limit that `df` does not show.
+Avoid deleting pre-existing host `/tmp` files or changing production
+HTTP write deadlines to compensate for a test host's exhausted quota.
+This validates an environment-specific test failure, not approved visual
+goldens or full keyboard-only coverage; the acceptance task remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by
