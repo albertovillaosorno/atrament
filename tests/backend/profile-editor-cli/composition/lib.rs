@@ -7788,6 +7788,57 @@ fn seeded_variation_keeps_exact_nfd_fallback_and_applies_selected_means() {
 }
 
 #[test]
+fn typed_placed_text_runs_keep_cli_admission_at_ink_boundary()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "a", "600", "500", "1800", "3000", "250", "#123456",
+    ]).iter())?;
+    glyphs.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "a",
+    ]).iter())?;
+    let baseline = glyphs.expand(&[], None)?;
+    let valid = glyphs.runs[0].clone();
+    let mut beyond_page = valid.clone();
+    beyond_page.page = 33;
+    let mut beyond_origin = valid.clone();
+    beyond_origin.origin_um.0 = 700_001;
+    let mut no_text = valid.clone();
+    no_text.text.clear();
+    let mut spaces = valid.clone();
+    spaces.text = "  ".into();
+    let mut long_text = valid.clone();
+    long_text.text = "a".repeat(97);
+    let mut too_low_heading = valid.clone();
+    too_low_heading.heading_ink = Some(HeadingInk {
+        color: None, scale_percent: 99,
+    });
+    let mut too_high_heading = valid.clone();
+    too_high_heading.heading_ink = Some(HeadingInk {
+        color: None, scale_percent: 251,
+    });
+    for (name, invalid) in [
+        ("page 33", beyond_page),
+        ("unbounded origin", beyond_origin),
+        ("empty text", no_text),
+        ("space-only text", spaces),
+        ("97 graphemes", long_text),
+        ("heading scale below range", too_low_heading),
+        ("heading scale above range", too_high_heading),
+    ] {
+        glyphs.runs[0] = invalid;
+        if glyphs.expand(&[], None).is_ok() {
+            return Err(format!("typed {name} escaped run admission"));
+        }
+        glyphs.runs[0] = valid.clone();
+        if glyphs.expand(&[], None)? != baseline {
+            return Err(format!("{name} altered accepted render replay"));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn typed_glyph_expansion_limits_selected_text_join_pairs()
 -> Result<(), String> {
     let mut glyphs = GlyphOverlay::default();

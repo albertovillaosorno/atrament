@@ -979,28 +979,16 @@ impl GlyphOverlay {
                 let x = next_integer(iter, "text x", 0, 700_000)?;
                 let y = next_integer(iter, "text y", 0, 700_000)?;
                 let text = iter.next().ok_or("--place-text needs UTF-8 text")?;
-                let boundaries = UnicodeGraphemeSegmentation;
-                let count = boundaries.grapheme_count(text);
-                if text.is_empty() || text.len() > 384
-                    || count > MAX_RUN_GRAPHEMES
-                    || text.chars().any(|ch| ch.is_control()
-                        || matches!(ch, '\u{2028}' | '\u{2029}'))
-                    || !text.chars().any(|ch| ch != ' ')
-                {
-                    return Err(concat!(
-                        "placed text requires 1..96 graphemes, ",
-                        "at least one non-space, and no controls or ",
-                        "structural separators",
-                    ).into());
-                }
-                self.runs.push(TextRun {
+                let run = TextRun {
                     heading_ink: None,
                     page: usize::try_from(page).map_err(|error| {
                         format!("invalid text page: {error}")
                     })?,
                     origin_um: (x, y),
                     text: text.clone(),
-                });
+                };
+                validate_text_run(&run)?;
+                self.runs.push(run);
             }
             "--fallback-glyph" => self.parse_fallback(iter)?,
             "--glyph-variation" => {
@@ -1782,6 +1770,9 @@ impl GlyphOverlay {
         for stroke in &self.strokes {
             validate_serializable_stroke(stroke)?;
         }
+        for run in &self.runs {
+            validate_text_run(run)?;
+        }
         if self.strokes.is_empty() != self.runs.is_empty() {
             return Err(concat!(
                 "--glyph-stroke and --place-text require one another; ",
@@ -1865,6 +1856,35 @@ impl GlyphOverlay {
         }
         Ok(())
     }
+}
+
+// Both explicit CLI placements and internally composed Markdown runs must
+// obey the same physical-page, text and heading-ink boundaries. Typed callers
+// cannot silently drop empty text or position ink on nonexistent pages.
+fn validate_text_run(run: &TextRun) -> Result<(), String> {
+    if !(1..=32).contains(&run.page)
+        || run.origin_um.0 > 700_000 || run.origin_um.1 > 700_000 {
+        return Err("placed text page or origin outside native bounds".into());
+    }
+    let count = UnicodeGraphemeSegmentation.grapheme_count(&run.text);
+    if run.text.is_empty() || run.text.len() > 384
+        || count > MAX_RUN_GRAPHEMES
+        || run.text.chars().any(|ch| ch.is_control()
+            || matches!(ch, '\u{2028}' | '\u{2029}'))
+        || !run.text.chars().any(|ch| ch != ' ')
+    {
+        return Err(concat!(
+            "placed text requires 1..96 graphemes, ",
+            "at least one non-space, and no controls or ",
+            "structural separators",
+        ).into());
+    }
+    if run.heading_ink.is_some_and(|style| {
+        !(100..=250).contains(&style.scale_percent)
+    }) {
+        return Err("heading ink scale must be 100..250".into());
+    }
+    Ok(())
 }
 
 // Typed sibling callers may construct strokes without CLI parsing. Keep
