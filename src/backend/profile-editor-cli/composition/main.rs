@@ -710,8 +710,14 @@ fn preflight_handwriting_options(args: &[String]) -> Result<(), String> {
                         "--profile must appear once, before edits".into()
                     );
                 }
-                let _selected = iter.next()
+                let selected = iter.next()
                     .ok_or("--profile requires one input file")?;
+                if selected.is_empty() || selected.starts_with('-') {
+                    return Err(concat!(
+                        "handwriting --profile requires an explicit ",
+                        "source path (use ./--name)",
+                    ).into());
+                }
                 seen_profile = true;
             }
             "--seed" => {
@@ -1152,21 +1158,27 @@ fn validate_glyph_audit_text(selected: &str) -> Result<(), String> {
 }
 
 // A later incomplete glyph command must refuse before a previously selected
-// library may block on stdin. Preserve literal flag-looking operands.
+// library may block on stdin. Preserve literal flag-looking authored values,
+// but require an explicit spelling for selected library paths.
 fn preflight_glyph_operands(
     option: &str, count: usize, iter: &mut Iter<'_, String>,
 ) -> Result<(), String> {
     for _ in 0..count {
-        if iter.next().is_none() {
-            return Err(match option {
-                "--profile" => "--profile requires a glyph library path".into(),
-                "--audit-text" => "--audit-text requires UTF-8 text".into(),
-                "--inspect-glyph" | "--inspect-paths" =>
-                    "inspection requires an exact grapheme".into(),
-                "--remove-glyph" =>
-                    "--remove-glyph requires an exact grapheme".into(),
-                _ => format!("{option} requires {count} operands"),
-            });
+        let selected = iter.next().ok_or_else(|| match option {
+            "--profile" => "--profile requires a glyph library path".into(),
+            "--audit-text" => "--audit-text requires UTF-8 text".into(),
+            "--inspect-glyph" | "--inspect-paths" =>
+                "inspection requires an exact grapheme".into(),
+            "--remove-glyph" =>
+                "--remove-glyph requires an exact grapheme".into(),
+            _ => format!("{option} requires {count} operands"),
+        })?;
+        if option == "--profile" && (selected.is_empty()
+            || (selected.starts_with('-') && selected != "-")) {
+            return Err(concat!(
+                "glyphs --profile requires an explicit library path ",
+                "(use ./--name or - for stdin)",
+            ).into());
         }
     }
     Ok(())

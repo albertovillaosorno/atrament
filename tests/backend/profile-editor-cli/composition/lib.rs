@@ -133,6 +133,30 @@ fn handwriting_preflight_rejects_invalid_flags_before_profile_io() {
 }
 
 #[test]
+fn glyph_and_handwriting_profile_paths_need_explicit_spellings() {
+    for source in ["", "-", "--inspect", "--output", "--profile"] {
+        let error = preflight_handwriting_options(&args(&[
+            "--profile", source,
+        ])).expect_err("invalid handwriting source must refuse before IO");
+        assert!(error.contains("explicit"), "{source:?}: {error}");
+    }
+    for source in ["./--inspect", "./-", "profile.json"] {
+        preflight_handwriting_options(&args(&["--profile", source]))
+            .expect("explicit handwriting profile path is valid");
+    }
+    for source in ["", "--inspect-glyph", "--output", "--profile"] {
+        let error = preflight_glyph_profile_sources(&args(&[
+            "--profile", source,
+        ])).expect_err("invalid glyph file source must refuse before IO");
+        assert!(error.contains("explicit"), "{source:?}: {error}");
+    }
+    for source in ["./--output", "./-", "glyphs.tsv", "-"] {
+        preflight_glyph_profile_sources(&args(&["--profile", source]))
+            .expect("explicit glyph library path or stdin is valid");
+    }
+}
+
+#[test]
 fn glyph_library_preflight_rejects_second_source_without_input_io() {
     for flags in [
         ["--profile", "-", "--profile", "missing.tsv"].as_slice(),

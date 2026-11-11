@@ -1374,7 +1374,9 @@ cargo run -q -p atrament_profile_editor_cli -- notebook \
 `glyphs --profile my-glyphs.tsv` prints the canonical library to stdout.
 The exact same 512-KiB-bounded LF-terminated UTF-8 TSV can be piped as
 `glyphs --profile -` or `notebook --glyph-file -`, without an intermediate
-file. For example, using the authored shapes saved above:
+file. `glyphs --profile` requires an explicit file path; prefix `./` for
+dash-prefixed names such as `./--glyphs.tsv`, while plain `-` still selects
+stdin. For example, using the authored shapes saved above:
 
 ```sh
 cat my-glyphs.tsv | cargo run -q -p atrament_profile_editor_cli -- \
@@ -2059,6 +2061,9 @@ before P1-012 can close.
 
 The optional `--handwriting-profile ink.json` reads the existing saved
 `atrament.handwriting.statistics.v1` file through the same strict Rust codec.
+
+The `handwriting --profile` editor also requires an explicit path, not a bare
+option-shaped filename or `-`; use `./--profile.json` for such a file.
 For each exact authored grapheme it applies the **configured mean** of six
 variables: `width`, `height`, `ink_thickness`, `letter_spacing`,
 `baseline_offset` and `slant`. Width and height map the
