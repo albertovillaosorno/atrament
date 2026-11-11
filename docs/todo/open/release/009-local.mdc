@@ -204,6 +204,20 @@ Evidence: 2,198 offline all-feature Rust workspace tests, 23 native CLI
 subprocess cases, and strict production CLI Clippy passed. This closes one
 CLI source-admission gap, not the open browser-editable notebook journey.
 
+## Typed manual ink-line preflight (partial) — 2026-11-10
+
+The native notebook CLI now parses all seven manual physical-ink operands
+during source-independent admission, reusing the final typed line parser.
+An invalid page, coordinate, stroke width or hexadecimal color can no
+longer stall behind an earlier unclosed glyph, page-ink or flow stdin pipe.
+A literal option-like color is rejected as ink syntax, never mistaken for
+a second source selector.
+
+The focused Rust scanner test and real native subprocess test exercise
+rejected late ink options while leaving stdin open, with no output clobber.
+This is an argument-admission safety improvement, not automatic handwriting
+or a saved semantic notebook.
+
 ## Acceptance decision
 
 Open. Provide the actual bounded Rust/backend or browser integration and an

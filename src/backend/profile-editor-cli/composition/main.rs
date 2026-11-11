@@ -1818,7 +1818,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
             (count, false)
         } else {
             match option.as_str() {
-                "--ink-line" => (7, false),
+                "--ink-line" => parse_ink_line(&mut iter).map(|_| (0, false))?,
                 "--glyph-stroke" | "--glyph-variation" => {
                     glyph_edited = true;
                     (7, false)
