@@ -660,3 +660,23 @@ process; this is not a controlled release-build performance guarantee.
 
 This encoder improvement does not add saved notebook semantics, asset layers
 or physical print calibration. The full notebook-to-PDF/PNG journey is open.
+
+## Maximum-DPI authored A5 ink topology and border precedence — 2026-11-11
+
+Two direct Rust decoder regressions now inspect actual 300-DPI, 148-by-210-mm
+A5 transparent RGBA output, not synthetic pixel drawings. A 1.5-mm
+horizontal authored stroke retains round pen caps at physical pixel centers;
+a differently colored 0.7-mm diagonal stays narrow and does not paint its
+entire rectangular bounding box. Both fit the native 1,749-by-2,481-pixel
+canvas with fully transparent untouched corners.
+
+A separate comparison paints the same A5 rounded border with and without an
+authored red segment. At their overlapping top-edge pixel, ink takes the
+foreground color as in vector PDF; a distant border pixel is unchanged and
+the area above the border remains transparent. These assertions extend
+previously 150-DPI-only round-cap and border tests to the maximum supported
+raster resolution without changing production colors or PNG bytes.
+
+These are physical pixel and overlay-order regressions only. They do not
+supply handwriting glyph outlines, source persistence, image overlays,
+full notebook export or physical print/scan accuracy.

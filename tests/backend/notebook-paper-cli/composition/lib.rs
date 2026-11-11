@@ -1375,6 +1375,96 @@ fn authored_horizontal_and_vertical_ink_use_round_png_pen_caps() {
 }
 
 #[test]
+fn maximum_dpi_a5_png_preserves_round_ink_caps_and_transparent_diagonals() {
+    let paper = encode_profile(Options {
+        style: Style::Blank,
+        width_um: 148_000,
+        height_um: 210_000,
+        ..Options::default()
+    });
+    let horizontal = NotebookInkLine {
+        page: 1,
+        start_um: (25_400, 25_400),
+        end_um: (50_800, 25_400),
+        width_um: 1_500,
+        rgb: [0x42, 0x17, 0xc9],
+    };
+    let diagonal = NotebookInkLine {
+        start_um: (76_200, 25_400),
+        end_um: (101_600, 50_800),
+        width_um: 700,
+        rgb: [0xde, 0x11, 0x44],
+        ..horizontal
+    };
+    let png = paper_profile_png_page_with_ink(
+        paper.as_bytes(), 300, false, None, false, 1, 0,
+        None, &[horizontal, diagonal],
+    ).expect("two physical 300-DPI A5 pen paths");
+    let (width, height, raw) = stored_png_pixels(&png);
+    assert_eq!((width, height), (1_749, 2_481));
+    let pixel = |x: usize, y: usize| -> &[u8] {
+        let index = y * (width * 4 + 1) + 1 + x * 4;
+        raw.get(index..index + 4).expect("A5 raster sample")
+    };
+    assert_eq!(pixel(290, 300), &[0, 0, 0, 0],
+        "rounded cap has no opaque enclosing square");
+    assert_eq!(pixel(291, 300), &[0x42, 0x17, 0xc9, 255],
+        "round cap includes the near-edge horizontal pixel");
+    assert_eq!(pixel(291, 291), &[0, 0, 0, 0],
+        "horizontal cap corner remains clear");
+    assert_eq!(pixel(450, 300), &[0x42, 0x17, 0xc9, 255]);
+    assert_eq!(pixel(1_050, 450), &[0xde, 0x11, 0x44, 255]);
+    assert_eq!(pixel(1_020, 480), &[0, 0, 0, 0],
+        "diagonal does not paint its axis-aligned bounding box");
+    assert_eq!(pixel(0, 0), &[0, 0, 0, 0]);
+}
+
+#[test]
+fn maximum_dpi_a5_png_keeps_ink_over_the_rounded_paper_border() {
+    let paper = encode_profile(Options {
+        style: Style::Blank,
+        width_um: 148_000,
+        height_um: 210_000,
+        ..Options::default()
+    });
+    let ink = [NotebookInkLine {
+        page: 1,
+        start_um: (70_000, 22_750),
+        end_um: (100_000, 22_750),
+        width_um: 1_500,
+        rgb: [0xdf, 0x26, 0x53],
+    }];
+    let bordered = paper_profile_png_page_with_ink(
+        paper.as_bytes(), 300, false, None, false, 1, 5_000,
+        None, &[],
+    ).expect("border without any pen ink");
+    let overlaid = paper_profile_png_page_with_ink(
+        paper.as_bytes(), 300, false, None, false, 1, 5_000,
+        None, &ink,
+    ).expect("ink above rounded A5 border");
+    let (width, height, bare) = stored_png_pixels(&bordered);
+    let (overlaid_width, overlaid_height, raw) = stored_png_pixels(&overlaid);
+    assert_eq!((width, height), (1_749, 2_481));
+    assert_eq!((overlaid_width, overlaid_height), (width, height));
+    let offset = |x: usize, y: usize| -> usize {
+        y * (width * 4 + 1) + 1 + x * 4
+    };
+    let pixel = |data: &[u8], x: usize, y: usize| -> [u8; 4] {
+        data.get(offset(x, y)..offset(x, y) + 4)
+            .expect("physical A5 pixel within raster")
+            .try_into().expect("RGBA pixel has four channels")
+    };
+    assert_eq!(pixel(&raw, 945, 260), [0xdf, 0x26, 0x53, 255],
+        "authored red ink covers the selected border edge");
+    assert_ne!(pixel(&bare, 945, 260), pixel(&raw, 945, 260),
+        "same pixel previously belonged to paper outline");
+    assert_eq!(pixel(&raw, 945, 245), [0, 0, 0, 0],
+        "paper remains transparent above the top border");
+    assert_eq!(pixel(&raw, 237, 480), pixel(&bare, 237, 480),
+        "ink does not change the remote left border");
+}
+
+#[test]
 fn transparent_png_draws_authored_ink_above_rounded_paper_border() {
     let paper = default_paper_profile_json();
     let ink = [NotebookInkLine {
