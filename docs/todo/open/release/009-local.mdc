@@ -184,6 +184,33 @@ ink cannot silently corrupt shell-redirection output. The test uses
 isolated operating-system temporary directories rather than requiring
 an ignored repository `.temp` directory.
 
+## Independent native PNG framing and bounds (partial) — 2026-11-11
+
+The existing `atrament-paper` process now has a separate black-box Node
+regression that decodes its generated transparent A4 PNG with the platform's
+zlib library. It verifies every PNG chunk CRC-32, exact `IHDR` dimensions,
+RGBA color mode, physical `pHYs` resolution and unfiltered transparent scanline
+content at 72, 150 and 225 DPI. This checks independently that the Rust
+stored-DEFLATE encoder's output is actually decodable at the larger admitted
+raster sizes, not merely byte-stable against a candidate PNG golden.
+
+An A4 300-DPI request exceeds the explicit five-million-pixel raster ceiling.
+The same black-box regression proves that requesting `--replace` with this
+unsupported resolution refuses and leaves the previously accepted 225-DPI
+file byte-for-byte unchanged. The existing ruled/grid visual candidates and
+default Cargo binary selection tests also still pass.
+
+**Test:**
+
+```sh
+node --test \
+  tests/backend/notebook-paper-cli/composition/paper-reference-goldens.mjs
+```
+This evidence covers native PNG framing, transparent pixel semantics and
+file-preserving refusal. It does not validate physical printer output, general
+notebook content, image overlays or a saved semantic notebook. The full
+ATR-P8-009 journey remains open.
+
 ## Standalone handwriting option preflight (partial) — 2026-11-10
 
 The standalone native handwriting CLI now checks complete source-independent
