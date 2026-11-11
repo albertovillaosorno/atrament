@@ -1135,6 +1135,100 @@ fn date_placeholder_is_physical_and_uses_shared_pdf_png_mark_geometry() {
     assert_eq!(alpha(&right_raw, 480, 42), 255);
 }
 
+// Independently derive Gregorian month lengths instead of mirroring the
+// date parser's admission expression or inferring a locale for slash labels.
+fn reference_gregorian_date(year: u32, month: u32, day: u32) -> bool {
+    let leap = year % 400 == 0 || (year % 4 == 0 && year % 100 != 0);
+    let days = match month {
+        2 if leap => 29,
+        2 => 28,
+        4 | 6 | 9 | 11 => 30,
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        _ => 0,
+    };
+    year > 0 && (1..=days).contains(&day)
+}
+
+#[test]
+#[expect(
+    clippy::integer_division_remainder_used,
+    reason = "test-only independent Gregorian leap-year reference",
+)]
+fn printed_date_parser_matches_full_century_and_month_boundary_oracle() {
+    let check = |year, month, day| {
+        let expected = reference_gregorian_date(year, month, day);
+        let either_order = expected
+            || reference_gregorian_date(year, day, month);
+        let iso = format!("{year:04}-{month:02}-{day:02}");
+        assert_eq!(
+            validate_printed_date_text(&iso).is_ok(),
+            expected,
+            "ISO Gregorian calendar mismatch: {iso}",
+        );
+        let slash = format!("{day:02}/{month:02}/{year:04}");
+        let dot = format!("{month:02}.{day:02}.{year:04}");
+        for label in [slash, dot] {
+            assert_eq!(
+                validate_printed_date_text(&label).is_ok(),
+                either_order,
+                "ambiguous-calendar-format mismatch: {label}",
+            );
+        }
+    };
+    for year in 0..=9_999 {
+        for day in 27..=31 {
+            check(year, 2, day);
+        }
+    }
+    for year in [0, 1, 4, 100, 400, 1582, 1700, 1900, 1999, 2000,
+        2024, 2026, 2100, 2400, 9999] {
+        for month in 0..=13 {
+            for day in 0..=32 {
+                check(year, month, day);
+            }
+        }
+    }
+    assert!(validate_printed_date_text("").is_ok());
+    for invalid in ["2026-2-3", "2026/11/03", "03/11.2026", "٣/١١/٢٠٢٦"] {
+        assert!(validate_printed_date_text(invalid).is_err(), "{invalid}");
+    }
+    assert_eq!(
+        validate_printed_date_text("2024-2-29").expect_err("short month"),
+        "date text must use YYYY-MM-DD, NN/NN/YYYY or NN.NN.YYYY",
+    );
+}
+
+#[test]
+fn printed_date_stays_consistent_across_vector_and_raster_exports() {
+    let paper = default_paper_profile_json();
+    let date = Some(PaperDatePlaceholder::RightBox);
+    let plain_pdf = paper_profile_pdf_pages_with_printed_date(
+        paper.as_bytes(), 1, false, date, false, 0, None,
+    ).expect("blank date box PDF");
+    let plain_png = paper_profile_png_page_with_printed_date(
+        paper.as_bytes(), 72, false, date, false, 1, 0, None,
+    ).expect("blank date box PNG");
+    for label in ["2000-02-29", "29/02/2000", "02.29.2000"] {
+        let pdf = paper_profile_pdf_pages_with_printed_date(
+            paper.as_bytes(), 1, false, date, false, 0, Some(label),
+        ).expect("Gregorian date PDF");
+        let png = paper_profile_png_page_with_printed_date(
+            paper.as_bytes(), 72, false, date, false, 1, 0, Some(label),
+        ).expect("Gregorian date PNG");
+        assert_ne!(plain_pdf, pdf, "date must add printed PDF geometry");
+        assert_ne!(plain_png, png, "date must add printed PNG pixels");
+    }
+    for invalid in ["1900-02-29", "29/02/1900", "02.29.1900"] {
+        assert!(paper_profile_pdf_pages_with_printed_date(
+            paper.as_bytes(), 1, false, date, false, 0, Some(invalid),
+        ).is_err(), "invalid printed PDF date {invalid}");
+        assert!(paper_profile_png_page_with_printed_date(
+            paper.as_bytes(), 72, false, date, false, 1, 0,
+            Some(invalid),
+        ).is_err(), "invalid printed PNG date {invalid}");
+    }
+}
+
 #[test]
 fn date_placeholder_refuses_without_enough_unruled_margin() {
     let paper = default_paper_profile_json();

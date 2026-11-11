@@ -91,7 +91,10 @@ pub fn validate_printed_date_text(value: &str) -> Result<(), String> {
     }
     let bytes = value.as_bytes();
     if bytes.len() != 10 {
-        return Err("date text must use YYYY-MM-DD or NN/NN/YYYY".into());
+        return Err(
+            "date text must use YYYY-MM-DD, NN/NN/YYYY or NN.NN.YYYY"
+                .into(),
+        );
     }
     let same_separator = |first: usize, second: usize| {
         bytes.get(first).is_some_and(|ch| b"-/.".contains(ch))
