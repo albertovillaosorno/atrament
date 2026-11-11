@@ -7076,6 +7076,8 @@ fn adjacent_markdown_block_transitions_measure_only_emitted_glyphs()
     use atrament_notebook_profile::NotebookProfile;
     use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
 
+    // Exercise boundary pairs that combine escaped syntax, Unicode
+    // source breaks and fences; only emitted glyph ink controls pitch.
     const LINES: &[&str] = &[
         "a", "a  ", "a\\", "a a", "# a", "# a ##", "  ## a", "a\n===", "===",
         "---", "- a", "- [ ] a", "- [x] a", "12) a", "> a", ">", "  a", "   a",
@@ -7374,5 +7376,68 @@ fn mixed_markdown_four_line_transitions_preserve_emitted_pitch()
              low={low}, paged={paged}"
         ));
     }
+    Ok(())
+}
+
+#[test]
+fn short_boundary_sequences_measure_only_emitted_markdown_ink()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    const LINES: &[&str] = &[
+        "a", "a  ", "a\\", "a\\\\", "a\\\\\\", "a\\  ",
+        "a\u{2028}a", "a\u{2029}a", "a\r\na", "a\ta",
+        "# a", "# a ###", "## a", "###### a", "\\# a", "    # a",
+        "a\n===", "===", "==", " - - - ", "---", "***", "___",
+        "\\===", "\\---", "  ===", "    ===", "  ---",
+        "- a", "* a", "+ a", "- [x] a", "- [ ] a", "1. a",
+        "12) a", "12\\. a", "1.", "> a", ">", "> a  ",
+        "  > a", "  a", "   a", "    a", "a a", "a\n\na",
+        "```", "~~~", "~~~txt", "```rust", "   ~~~", "    ~~~",
+        "````", "~~~ ", "`a", "~a", "", " ", "  ",
+    ];
+    let tall = ScalarStatistics {
+        minimum: 25_000, maximum: 25_000, mean: 25_000,
+        median: 25_000, standard_deviation: 0,
+    };
+    let mut stats = HandwritingStatisticsProfile::baseline(104);
+    for glyph in ["#", ">", "=", "-", "+", "*", "_", "`", "~",
+        "[", "]", "x", "1", "2", ")", ".", "\\"] {
+        stats = stats.with_glyph(glyph, DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let paper = NotebookProfile::default();
+    let mut accepted = 0usize;
+    let mut seed = 0xe74f_a9bd_59ec_10d3u64;
+    for case in 0..3_000usize {
+        let mut text = String::new();
+        for index in 0..4usize {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let choice = usize::try_from(seed >> 32)
+                .map_err(|_| "boundary index refused")? % LINES.len();
+            if index > 0 { text.push('\n'); }
+            text.push_str(LINES[choice]);
+        }
+        let source = FlowSource::new(FlowFormat::Markdown, &text)?;
+        let Ok((runs, _, _)) = super::layout_flow(
+            &source, &paper, Some(&stats),
+            super::HeadingDecoration::default(),
+        ) else { continue; };
+        let measured = super::measured_pitch(&source, Some(&stats))?;
+        let emitted = emitted_glyph_pitch(&runs, &stats)?;
+        assert_eq!(measured, emitted,
+            "case {case}, source {text:?}, runs {runs:?}");
+        accepted += 1;
+    }
+    assert!(accepted > 1_500,
+        "insufficient admitted Markdown boundary cases: {accepted}");
     Ok(())
 }
