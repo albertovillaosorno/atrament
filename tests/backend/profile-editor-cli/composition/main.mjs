@@ -1212,6 +1212,18 @@ test('unavailable glyph and ink inputs refuse without waiting for stdin',
                     /must precede authored strokes and may appear only once/],
                 [['notebook', '--ink-file', saturated, '--ink-file', '-',
                     '--emit-ink-file'], /ink exceeds 4096 explicit/],
+                [['notebook', '--ink-file', '-', '--ink-file', '-',
+                    '--emit-ink-file'],
+                    /standard input may be selected only once/],
+                [['notebook', '--glyph-file', '-', '--ink-file', '-',
+                    '--export-paper', 'pdf'],
+                    /standard input may be selected only once/],
+                [['notebook', '--flow-markdown-file', '-', '--glyph-file', '-',
+                    '--export-paper', 'pdf'],
+                    /standard input may be selected only once/],
+                [['notebook', '--ink-file', '-', '--flow-text-file', '-',
+                    '--export-paper', 'pdf'],
+                    /standard input may be selected only once/],
             ]) {
                 const args = [...flags, '--output', destination,
                     '--replace'];
@@ -1227,7 +1239,8 @@ test('unavailable glyph and ink inputs refuse without waiting for stdin',
                     child.stdout.on('data', (chunk) => { stdout += chunk; });
                     const timeout = setTimeout(() => {
                         child.kill();
-                        reject(new Error('out-of-order glyph input blocked'));
+                        reject(new Error(
+                            'invalid CLI source blocked on open stdin'));
                     }, 5_000);
                     child.on('error', (error) => {
                         clearTimeout(timeout);

@@ -202,3 +202,19 @@ A native file-source regression checks duplicates after both a default and a
 loaded notebook profile, including a nonexistent second paper path. All
 refusals retain the accepted output bytes. This does not implement saved
 handwritten notebook content or complete the localhost authoring journey.
+
+## Multi-source stdin admission before reads — 2026-11-10
+
+The native `atrament-profiles notebook` CLI now rejects any second explicit
+`-` stdin source among glyph libraries, physical ink and text/Markdown flow
+before opening the **first** pipe. This prevents an impossible command from
+waiting indefinitely for data that it could never commit. The flag scan
+counts operands instead of searching free-form text, so a pasted Markdown
+value or positioned text that looks like `--ink-file` is not interpreted as a
+second source.
+
+A test runs real native subprocesses with unwritten, unclosed stdin and
+checks duplicate/cross-family conflicts exit, emit no output and preserve a
+previously reviewed PDF. Focused Rust tests cover misleading option-like
+operand values. This is command-level refusal only, not notebook content
+persistence or a general source-stream multiplexer. P8-009 remains open.

@@ -57,6 +57,30 @@ fn test_path() -> PathBuf {
 }
 
 #[test]
+fn notebook_preflight_detects_multiple_stdin_sources_without_input_io() {
+    for flags in [
+        ["--ink-file", "-", "--glyph-file", "-"].as_slice(),
+        ["--glyph-file", "-", "--flow-text-file", "-"].as_slice(),
+        ["--flow-markdown-file", "-", "--ink-file", "-"].as_slice(),
+        ["--ink-file", "-", "--ink-file", "-"].as_slice(),
+    ] {
+        let error = preflight_notebook_stdin_sources(&args(flags))
+            .expect_err("multiple stdin consumers must refuse before read");
+        assert_eq!(error, "standard input may be selected only once");
+    }
+    for flags in [
+        ["--flow-text", "--ink-file", "--glyph-file", "-"].as_slice(),
+        ["--place-text", "1", "30000", "40000", "--ink-file",
+            "--glyph-file", "-"].as_slice(),
+        ["--ink-line", "1", "30000", "40000", "40000", "50000",
+            "250", "--ink-file", "--flow-text-file", "-"].as_slice(),
+    ] {
+        preflight_notebook_stdin_sources(&args(flags))
+            .expect("option-looking values are not source flags");
+    }
+}
+
+#[test]
 fn invalid_page_ink_tsv_does_not_append_any_valid_prefix() {
     let file = test_path().with_extension("tsv");
     let name = file.to_str().expect("owned TSV path");

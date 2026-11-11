@@ -1449,7 +1449,50 @@ fn validate_notebook_flow_selection(
     Ok(())
 }
 
+// An impossible two-stream request must be rejected before opening the
+// first source (which could be an unwritten stdin pipe). Count only actual
+// flag operands: Markdown text and authored glyphs can themselves contain
+// strings that look like options or a standalone "-".
+fn preflight_notebook_stdin_sources(args: &[String]) -> Result<(), String> {
+    let mut iter = args.iter();
+    let mut stdin_selected = false;
+    while let Some(option) = iter.next() {
+        let (operands, stdin_source): (usize, bool) = match option.as_str() {
+            "--inspect" | "--replace" | "--emit-ink-file" => (0, false),
+            "--ink-line" | "--glyph-stroke" | "--glyph-variation" =>
+                (7, false),
+            "--place-text" | "--flow-region" | "--join-text-anchors" =>
+                (4, false),
+            "--join-text-pair" | "--fallback-glyph" => (2, false),
+            "--ink-file" | "--glyph-file" | "--flow-text-file"
+            | "--flow-markdown-file" => (1, true),
+            "--profile" | "--paper-profile" | "--handwriting-profile"
+            | "--date-style" | "--date-placement" | "--date-text"
+            | "--border-radius-um" | "--page-numbers" | "--printed-sheet"
+            | "--heading-style" | "--heading-color"
+            | "--heading-marker-scale" | "--heading-ink-color"
+            | "--heading-ink-scale" | "--flow-text" | "--flow-markdown"
+            | "--export-paper" | "--pages" | "--dpi" | "--quality"
+            | "--png-page" | "--output" => (1, false),
+            _ => return Err(format!("unknown notebook option: {option}")),
+        };
+        for _ in 0usize..operands {
+            let Some(value) = iter.next() else { break };
+            if stdin_source && value == "-" {
+                if stdin_selected {
+                    return Err(
+                        "standard input may be selected only once".into()
+                    );
+                }
+                stdin_selected = true;
+            }
+        }
+    }
+    Ok(())
+}
+
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
+    preflight_notebook_stdin_sources(args)?;
     let mut profile = NotebookProfile::default();
     let mut inspect = false;
     let mut output = None;
@@ -1462,8 +1505,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut flow_region = None;
     let mut heading = HeadingDecoration::default();
     let mut stdin_selected = false;
-    let mut loaded = false;
-    let mut paper_loaded = false;
+    let (mut loaded, mut paper_loaded) = (false, false);
     let mut edited = false;
     let mut iter = args.iter();
     while let Some(option) = iter.next() {
