@@ -670,7 +670,7 @@ fn notebook_preflight_detects_invalid_sources_without_input_io() {
         ["--flow-text", "--ink-file", "--ink-file", "-",
             "--export-paper", "pdf"].as_slice(),
         ["--glyph-file", "-", "--place-text", "1", "30000", "40000",
-            "--ink-file"].as_slice(),
+            "--ink-file", "--export-paper", "pdf"].as_slice(),
         ["--flow-markdown", "--export-paper", "--export-paper",
             "pdf", "--pages", "1"].as_slice(),
         ["--flow-markdown", "--heading-style", "--heading-style",
@@ -699,7 +699,9 @@ fn notebook_preflight_rejects_inline_ink_above_budget_before_stdin() {
         "--ink-line", "1", "70000", "40000", "71000", "41000",
         "250", "#123456",
     ]);
-    let mut request = args(&["--ink-file", "-"]);
+    let mut request = args(&[
+        "--ink-file", "-", "--export-paper", "pdf",
+    ]);
     for _ in 0..MAX_NOTEBOOK_INK_LINES {
         request.extend(line.iter().cloned());
     }
@@ -712,6 +714,42 @@ fn notebook_preflight_rejects_inline_ink_above_budget_before_stdin() {
         ),
         "ink exceeds 4096 explicit line segments",
     );
+}
+
+#[test]
+fn notebook_preflight_requires_export_for_inline_ink_and_glyphs() {
+    let line = args(&[
+        "--ink-line", "1", "70000", "40000", "71000", "41000",
+        "250", "#123456",
+    ]);
+    let selected = args(&["--ink-file", "-"]);
+    let mut invalid = selected.clone();
+    invalid.extend(line);
+    assert_eq!(
+        preflight_notebook_sources(&invalid).expect_err(
+            "inline ink without export must refuse before stdin",
+        ),
+        concat!(
+            "ink and glyph overlays need ",
+            "--export-paper pdf or png or --emit-ink-file",
+        ),
+    );
+    let mut valid = invalid;
+    valid.extend(args(&["--export-paper", "pdf"]));
+    preflight_notebook_sources(&valid).expect("explicit PDF export is valid");
+
+    for flags in [
+        ["--glyph-file", "-", "--place-text", "1", "30000",
+            "40000", "a"].as_slice(),
+        ["--ink-file", "-", "--glyph-variation", "1", "1",
+            "1", "1", "1", "1", "1"].as_slice(),
+    ] {
+        let error = preflight_notebook_sources(&args(flags))
+            .expect_err("inline glyph intent needs explicit output mode");
+        assert!(error.contains("ink and glyph overlays need"), "{error}");
+    }
+    preflight_notebook_sources(&selected)
+        .expect("unread ink file alone remains source-dependent");
 }
 
 #[test]
@@ -746,13 +784,14 @@ fn notebook_preflights_exact_typed_glyph_options_without_opening_sources() {
     }
     for flags in [
         ["--glyph-file", "-", "--place-text", "1", "30000", "40000",
-            "--glyph-stroke"].as_slice(),
+            "--glyph-stroke", "--export-paper", "pdf"].as_slice(),
         ["--flow-markdown-file", "-", "--glyph-stroke", "n\u{303}",
             "500", "500", "1800", "3000", "250", "#123456",
             "--join-text-pair", "n\u{303}", "n\u{303}",
             "--export-paper", "pdf"].as_slice(),
         ["--ink-file", "-", "--fallback-glyph", "ñ", "n\u{303}",
-            "--place-text", "1", "30000", "40000", "ñ"].as_slice(),
+            "--place-text", "1", "30000", "40000", "ñ",
+            "--export-paper", "pdf"].as_slice(),
     ] {
         preflight_notebook_sources(&args(flags))
             .expect("valid option-like and decomposed Unicode operands");

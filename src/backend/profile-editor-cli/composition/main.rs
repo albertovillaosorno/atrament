@@ -421,6 +421,7 @@ impl NotebookFlagPreflight {
 
     fn validate(
         self, flow_format: Option<FlowFormat>, region_selected: bool,
+        inline_ink_count: usize, glyph_has_any: bool,
     ) -> Result<(), String> {
         let has = |option: &str| self.selected.contains(option);
         if has("--replace") && !has("--output") {
@@ -453,7 +454,18 @@ impl NotebookFlagPreflight {
         validate_notebook_flow_flag_compatibility(
             flow_format, region_selected, self.heading,
             self.export_format,
-        )
+        )?;
+        // Explicit ink and glyph intent needs an output mode even before
+        // selected library or stdin bytes are available.
+        if self.export_format.is_none()
+            && (inline_ink_count != 0 || glyph_has_any)
+        {
+            return Err(concat!(
+                "ink and glyph overlays need ",
+                "--export-paper pdf or png or --emit-ink-file",
+            ).into());
+        }
+        Ok(())
     }
 }
 
@@ -1523,6 +1535,18 @@ fn parse_ink_line(
     })
 }
 
+// Reuse final ink parsing while bounding explicit lines before selected IO.
+fn preflight_inline_ink_line(
+    iter: &mut Iter<'_, String>, count: &mut usize,
+) -> Result<(), String> {
+    if *count == MAX_NOTEBOOK_INK_LINES {
+        return Err("ink exceeds 4096 explicit line segments".into());
+    }
+    let _line = parse_ink_line(iter)?;
+    *count = count.saturating_add(1);
+    Ok(())
+}
+
 // A caller-selected page ink library is a strict portable source of the
 // same physical segments as --ink-line. It is never notebook v1 state.
 fn load_page_ink_file(
@@ -1982,13 +2006,9 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
         } else {
             match option.as_str() {
                 "--ink-line" => {
-                    if inline_ink_count == MAX_NOTEBOOK_INK_LINES {
-                        return Err(
-                            "ink exceeds 4096 explicit line segments".into()
-                        );
-                    }
-                    let _line = parse_ink_line(&mut iter)?;
-                    inline_ink_count = inline_ink_count.saturating_add(1);
+                    preflight_inline_ink_line(
+                        &mut iter, &mut inline_ink_count,
+                    )?;
                     (0, false)
                 }
                 "--glyph-stroke" | "--glyph-variation" | "--place-text"
@@ -2065,7 +2085,9 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
             )?;
         }
     }
-    flags.validate(flow_format, region_selected)
+    // Imported-only ink is checked after its bounded source read.
+    flags.validate(flow_format, region_selected, inline_ink_count,
+        glyph_preflight.has_any())
 }
 
 fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {

@@ -530,3 +530,17 @@ source reading. The preflight does not infer glyph or notebook content.
 A Rust boundary test verifies the exact inclusive limit and early overflow;
 native children with deliberately unclosed stdin verify prompt refusal,
 empty stdout and unchanged approved output for two source types.
+
+## Notebook explicit-ink export admission before stdin — 2026-11-11
+
+The notebook CLI now checks the selected output mode against caller-authored
+inline pen segments and glyph intent before opening any selected source. A
+request with `--ink-line`, `--place-text` or `--glyph-variation` but without
+`--export-paper pdf|png` or `--emit-ink-file` refuses immediately, even when
+an earlier `--ink-file -` or `--glyph-file -` pipe remains open. Imported-only
+ink stays source-dependent and is checked after its bounded read. The native
+export requirement and existing refusal message are not weakened.
+
+Focused Rust option-scanner cases and deliberately open-pipe native children
+verify both early refusal and preservation of an approved destination.
+This is argument admission, not generated handwriting or saved semantic text.
