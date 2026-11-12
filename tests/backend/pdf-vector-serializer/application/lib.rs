@@ -779,7 +779,7 @@ fn page_object_framing_refuses_before_invalid_path() {
         .push(invalid);
     let minimum_stream = b"q\n1 0 0 -1 0 841.890 cm\nQ\n";
     let content_header =
-        format!("4 0 obj\n<< /Length {} >>\nstream\n", minimum_stream.len(),);
+        format!("4 0 obj\n<< /Length {} >>\nstream\n", minimum_stream.len());
     let minimum_framing = page_header_len
         .saturating_add(content_header.len())
         .saturating_add(minimum_stream.len())
@@ -795,6 +795,85 @@ fn page_object_framing_refuses_before_invalid_path() {
             },),
             Err(PdfVectorError::ResourceLimit),
             "mandatory PDF framing refuses before invalid paths",
+        );
+    }
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "fixture offsets expose PDF /Length digit boundaries"
+)]
+#[test]
+fn stream_length_digit_growth_reserves_dictionary_bytes_before_invalid_ink() {
+    for (line_count, minimum_size, maximum_size, expected_growth) in [
+        (6i32, 100usize, 1_000usize, 1usize),
+        (80i32, 1_000usize, 10_000usize, 2usize),
+    ] {
+        let mut commands = vec![PdfPathCommand::MoveTo(point(20_000, 30_000))];
+        for index in 1i32..line_count {
+            commands.push(PdfPathCommand::LineTo(point(
+                20_000i32.saturating_add(index.saturating_mul(1_000)),
+                30_000,
+            )));
+        }
+        let mut composition = PdfCompositionPlan {
+            assets: Vec::new(),
+            pages: vec![page(vec![PdfVectorPath {
+                commands,
+                paint: stroke().paint,
+            }])],
+            render_manifest_identity: "length-digit-boundary.v1",
+        };
+        let accepted = serialize_vector_pdf(&composition, limits())
+            .expect("valid stroke crosses target /Length boundary");
+        let content_start = accepted
+            .windows(b"4 0 obj\n".len())
+            .position(|part| part == b"4 0 obj\n")
+            .expect("first content object is present");
+        let stream_start = accepted
+            .windows(b"stream\n".len())
+            .position(|part| part == b"stream\n")
+            .expect("stream keyword is present")
+            .saturating_add(b"stream\n".len());
+        let stream_end = accepted
+            .windows(b"endstream\n".len())
+            .position(|part| part == b"endstream\n")
+            .expect("stream terminator is present");
+        let stream_len = stream_end.saturating_sub(stream_start);
+        assert!(
+            (minimum_size..maximum_size).contains(&stream_len),
+            "fixture must cross the targeted /Length digit boundary",
+        );
+        let content_header_len = stream_start.saturating_sub(content_start);
+        let minimum_header_len = format!(
+            "4 0 obj\n<< /Length {} >>\nstream\n",
+            b"q\n1 0 0 -1 0 841.890 cm\nQ\n".len(),
+        )
+        .len();
+        assert_eq!(
+            content_header_len,
+            minimum_header_len.saturating_add(expected_growth),
+            "/Length field expands by the exact new digit count",
+        );
+        let one_byte_short = PdfVectorLimits {
+            maximum_pdf_bytes: stream_end
+                .saturating_add(b"endstream\nendobj\n".len())
+                .saturating_sub(1),
+            ..limits()
+        };
+        assert_eq!(
+            serialize_vector_pdf(&composition, one_byte_short),
+            Err(PdfVectorError::ResourceLimit),
+            "one byte less than the real stream object refuses",
+        );
+        composition.pages[0].vector_authority[0]
+            .commands
+            .push(PdfPathCommand::LineTo(point(-1, 30_000)));
+        assert_eq!(
+            serialize_vector_pdf(&composition, one_byte_short),
+            Err(PdfVectorError::ResourceLimit),
+            "grown /Length must refuse before invalid trailing ink",
         );
     }
 }

@@ -170,6 +170,15 @@ page object. A red/green regression checks a byte budget that is exactly one
 byte shorter than the required minimum framing; successful output remains
 byte-identical at its exact full-document limit.
 
+Content streams can grow from two to three or three to four decimal digits
+in their `/Length` dictionary value. The page reserve now computes the
+largest stream whose bytes *and* decimal length field fit the remaining
+object allowance; reserving only the empty-stream dictionary was one or
+two bytes too optimistic. A red/green regression exercises both digit
+boundaries with a trailing invalid segment and confirms `ResourceLimit`
+preempts `InvalidPath` when that framing byte is already unavailable.
+Accepted PDF bytes are unchanged.
+
 The existing oversized-stream regression, large-content fixture and exact-limit
 boundary regressions still apply. Output bytes and PDF object order are
 unchanged.

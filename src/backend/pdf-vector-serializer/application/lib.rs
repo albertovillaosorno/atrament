@@ -652,19 +652,40 @@ fn reserve_page_object_framing(
          /Contents {content_object} 0 R >>\nendobj\n",
     );
     let minimum_stream = format!("q\n1 0 0 -1 0 {height} cm\nQ\n");
-    let minimum_content_header = format!(
-        "{content_object} 0 obj\n<< /Length {} >>\nstream\n",
-        minimum_stream.len(),
-    );
-    let stream_overhead = minimum_content_header
-        .len()
-        .checked_add(b"endstream\nendobj\n".len())
-        .ok_or(PdfVectorError::ResourceLimit)?;
-    let stream_budget = remaining_bytes
+    // The decimal /Length field grows with the rendered stream. Reserving
+    // only the empty-stream header would give paths one extra byte at 100,
+    // 1_000, etc., allowing invalid geometry to mask a ResourceLimit.
+    let content_header_without_length =
+        format!("{content_object} 0 obj\n<< /Length  >>\nstream\n");
+    let stream_and_length_budget = remaining_bytes
         .checked_sub(page_header.len())
-        .and_then(|remaining| remaining.checked_sub(stream_overhead))
-        .filter(|remaining| *remaining >= minimum_stream.len())
+        .and_then(|remaining| {
+            remaining.checked_sub(content_header_without_length.len())
+        })
+        .and_then(|remaining| {
+            remaining.checked_sub(b"endstream\nendobj\n".len())
+        })
         .ok_or(PdfVectorError::ResourceLimit)?;
+    // Find the largest stream length whose decimal width and data fit.
+    // The predicate is monotonic, including decimal-width transitions.
+    let mut low = 0usize;
+    let mut high = stream_and_length_budget;
+    while low < high {
+        let middle = low.saturating_add(high.saturating_sub(low).div_ceil(2));
+        let digits = middle.to_string().len();
+        if middle
+            .checked_add(digits)
+            .is_some_and(|total| total <= stream_and_length_budget)
+        {
+            low = middle;
+        } else {
+            high = middle.saturating_sub(1);
+        }
+    }
+    let stream_budget = low;
+    if stream_budget < minimum_stream.len() {
+        return Err(PdfVectorError::ResourceLimit);
+    }
     Ok((page_header, stream_budget))
 }
 
