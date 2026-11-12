@@ -155,6 +155,13 @@ The page transform and closing graphics-state operator are also checked
 against that remaining allowance, before an oversized header can defer a
 resource refusal behind malformed path commands.
 
+The fixed `Q` graphics-state close is now reserved from the page stream
+budget *before* inspecting any path. A malformed path cannot mask an already
+unclosable page stream as `InvalidPath` rather than `ResourceLimit`.
+Likewise each mandatory path paint operator (`S`, `f`, `f*`) is reserved
+before processing its geometry. A path that cannot finish painting now refuses
+before a later malformed command can mask the exhausted byte allowance.
+
 The existing oversized-stream regression, large-content fixture and exact-limit
 boundary regressions still apply. Output bytes and PDF object order are
 unchanged.

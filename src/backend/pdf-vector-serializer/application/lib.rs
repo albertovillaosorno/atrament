@@ -398,6 +398,11 @@ fn render_path(
     }
     let (operator, stroke_width_um) =
         apply_path_paint(stream, path.paint, maximum_stream_bytes)?;
+    // The final paint operator is mandatory even if earlier geometry fits.
+    let command_budget = maximum_stream_bytes
+        .checked_sub(operator.len())
+        .filter(|budget| stream.len() <= *budget)
+        .ok_or(PdfVectorError::ResourceLimit)?;
     let fill = matches!(path.paint, PdfPathPaint::Fill { .. });
     let mut active = false;
     let mut drawn = false;
@@ -477,7 +482,7 @@ fn render_path(
                 return Err(PdfVectorError::InvalidPath);
             },
         }
-        if stream.len() > maximum_stream_bytes {
+        if stream.len() > command_budget {
             return Err(PdfVectorError::ResourceLimit);
         }
     }
@@ -516,7 +521,13 @@ fn render_page(
     let mut command_count = 0usize;
     let mut stream =
         format!("q\n1 0 0 -1 0 {} cm\n", page_points(dimensions.height_um));
-    if stream.len() > limits.maximum_pdf_bytes {
+    // A page cannot be emitted without closing its graphics state. Reserve
+    // that fixed terminator before inspecting any path under the byte limit.
+    let drawing_budget = limits
+        .maximum_pdf_bytes
+        .checked_sub(b"Q\n".len())
+        .ok_or(PdfVectorError::ResourceLimit)?;
+    if stream.len() > drawing_budget {
         return Err(PdfVectorError::ResourceLimit);
     }
     for path in &page.vector_authority {
@@ -526,8 +537,8 @@ fn render_page(
         if command_count > limits.maximum_commands_per_page {
             return Err(PdfVectorError::ResourceLimit);
         }
-        render_path(&mut stream, path, dimensions, limits.maximum_pdf_bytes)?;
-        if stream.len() > limits.maximum_pdf_bytes {
+        render_path(&mut stream, path, dimensions, drawing_budget)?;
+        if stream.len() > drawing_budget {
             return Err(PdfVectorError::ResourceLimit);
         }
     }

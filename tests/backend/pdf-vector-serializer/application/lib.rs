@@ -617,6 +617,100 @@ fn exhausted_output_budget_refuses_before_rendering_later_page() {
 
 #[expect(
     clippy::expect_used,
+    reason = "a valid stream anchors the exact stroke operator byte budget"
+)]
+#[test]
+fn path_paint_operator_budget_refuses_before_later_bad_segment() {
+    let mut valid_stroke = stroke();
+    valid_stroke.commands = vec![
+        PdfPathCommand::MoveTo(point(20_000, 30_000)),
+        PdfPathCommand::LineTo(point(50_000, 40_000)),
+    ];
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(vec![valid_stroke])],
+        render_manifest_identity: "reserve-stroke-operator.v1",
+    };
+    let bytes = serialize_vector_pdf(&composition, limits())
+        .expect("the valid one-line stroke has an emitted operator");
+    let page_start = bytes
+        .windows(b"3 0 obj\n".len())
+        .position(|record| record == b"3 0 obj\n")
+        .expect("the first page object exists");
+    let content = pdf_string(&bytes);
+    let stream = content
+        .split_once("stream\n")
+        .expect("the stroke content stream exists")
+        .1
+        .split_once("endstream\n")
+        .expect("the stroke content stream has a terminator")
+        .0;
+    let drawn = stream
+        .strip_suffix("S\nQ\n")
+        .expect("stroke and page operators end the stream");
+    composition
+        .pages
+        .get_mut(0)
+        .expect("the fixture has one page")
+        .vector_authority
+        .get_mut(0)
+        .expect("the fixture has one stroke")
+        .commands
+        .push(PdfPathCommand::LineTo(point(-1, 40_000)));
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: page_start.saturating_add(drawn.len())
+                    .saturating_add(b"Q\n".len()),
+                ..limits()
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+        "the missing final S operator must refuse before later bad geometry",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "the one-page fixture has a known offset and page index"
+)]
+#[test]
+fn page_closing_operator_budget_refuses_before_invalid_paths() {
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(Vec::new())],
+        render_manifest_identity: "reserve-page-closing-operator.v1",
+    };
+    let bytes = serialize_vector_pdf(&composition, limits())
+        .expect("blank page fits the PDF budget");
+    let page_start = bytes
+        .windows(b"3 0 obj\n".len())
+        .position(|record| record == b"3 0 obj\n")
+        .expect("the first page object exists");
+    let initial_stream = b"q\n1 0 0 -1 0 841.890 cm\n";
+    composition.pages[0].vector_authority = vec![PdfVectorPath {
+        commands: Vec::new(),
+        paint: stroke().paint,
+    }];
+    for extra_byte in [0, 1] {
+        let insufficient = PdfVectorLimits {
+            maximum_pdf_bytes: page_start
+                .saturating_add(initial_stream.len())
+                .saturating_add(extra_byte),
+            ..limits()
+        };
+        assert_eq!(
+            serialize_vector_pdf(&composition, insufficient),
+            Err(PdfVectorError::ResourceLimit),
+            "a page that cannot close must refuse before malformed paths",
+        );
+    }
+}
+
+#[expect(
+    clippy::expect_used,
     reason = "accepted PDF framing identifies the next-page byte boundary"
 )]
 #[test]
