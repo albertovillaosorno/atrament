@@ -7636,6 +7636,18 @@ fn ordered_label_preflights_first_space_mark_grapheme()
     assert!(error.contains("ordered list label and first glyph exceed"),
         "unexpected first-glyph boundary: {error}");
 
+    // A marked-space glyph begins before its own hanging-indent advance.
+    // A region that fits that exact contour must not be refused.
+    let (tight_rows, _, tight_pages) = super::layout_flow_with_region(
+        &source, &NotebookProfile::default(), Some(&stats),
+        super::HeadingDecoration::default(),
+        Some(super::FlowRegion { width: 35_000, ..region }),
+    )?;
+    assert_eq!(tight_pages, 2);
+    assert_eq!(tight_rows.iter().map(|row| row.text.as_str())
+        .collect::<String>(), source.text);
+    assert_eq!(tight_rows[0].text, "1.  \u{301}");
+
     // Wide paper keeps the marked space attached to its numeral.
     let accepted = FlowSource::new(
         FlowFormat::Markdown, "1.  \u{301}aaaaaaaaaaaaaaaaaaaa",

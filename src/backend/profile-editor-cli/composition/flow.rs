@@ -1719,6 +1719,7 @@ fn measured_ordered_label<'text>(
         spaces = spaces.checked_add(1)
             .ok_or("ordered label spacing overflow")?;
     }
+    let first_item_spaces = spaces;
     if item.starts_with(' ') {
         spaces = spaces.checked_add(1)
             .ok_or("ordered label spacing overflow")?;
@@ -1759,7 +1760,15 @@ fn measured_ordered_label<'text>(
     let (glyphs, _, _) = measured_word(first_glyph, statistics)?;
     let first_slot = glyphs.first()
         .ok_or("ordered list requires visible item text")?.2;
-    if indent.checked_add(first_slot).is_none_or(|end| end > cap) {
+    // A marked space advances the continuation indent, but its ink
+    // begins before its own advance on the first physical row.
+    let first_item_origin = u32::try_from(first_item_spaces)
+        .map_err(|_error| "ordered label spacing overflow")?
+        .checked_mul(4_000)
+        .and_then(|padding| marker_width.checked_add(padding))
+        .ok_or("ordered label first glyph position overflow")?;
+    if first_item_origin.checked_add(first_slot)
+        .is_none_or(|end| end > cap) {
         return Err(
             "ordered list label and first glyph exceed horizontal region".into()
         );
