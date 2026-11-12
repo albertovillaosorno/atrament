@@ -617,6 +617,44 @@ fn exhausted_output_budget_refuses_before_rendering_later_page() {
 
 #[expect(
     clippy::expect_used,
+    reason = "accepted PDF framing identifies the next-page byte boundary"
+)]
+#[test]
+fn remaining_budget_smaller_than_page_header_refuses_before_path() {
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(Vec::new()), page(Vec::new())],
+        render_manifest_identity: "smaller-than-page-header.v1",
+    };
+    let accepted = serialize_vector_pdf(&composition, limits())
+        .expect("both empty pages fit the baseline PDF budget");
+    let next_page_offset = accepted
+        .windows(b"5 0 obj\n".len())
+        .position(|bytes| bytes == b"5 0 obj\n")
+        .expect("second page object exists");
+    let mut invalid_stroke = stroke();
+    invalid_stroke.commands.clear();
+    composition
+        .pages
+        .get_mut(1)
+        .expect("the fixture has two pages")
+        .vector_authority = vec![invalid_stroke];
+
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: next_page_offset.saturating_add(1),
+                ..limits()
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+        "the page header alone is too large to inspect any path",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
     reason = "the exact PDF page ceiling must emit a valid page tree"
 )]
 #[test]

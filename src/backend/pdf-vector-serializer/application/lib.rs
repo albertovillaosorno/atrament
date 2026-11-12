@@ -478,6 +478,9 @@ fn render_page(
     let mut command_count = 0usize;
     let mut stream =
         format!("q\n1 0 0 -1 0 {} cm\n", page_points(dimensions.height_um));
+    if stream.len() > limits.maximum_pdf_bytes {
+        return Err(PdfVectorError::ResourceLimit);
+    }
     for path in &page.vector_authority {
         command_count = command_count
             .checked_add(path.commands.len())
@@ -491,6 +494,9 @@ fn render_page(
         }
     }
     stream.push_str("Q\n");
+    if stream.len() > limits.maximum_pdf_bytes {
+        return Err(PdfVectorError::ResourceLimit);
+    }
     Ok(stream)
 }
 

@@ -144,6 +144,9 @@ The remaining output allowance now bounds each page's rendering, not only
 the final append. Once preceding PDF objects consume the exact byte budget,
 the assembler refuses before inspecting a later invalid page. A dedicated
 red/green test fixes this refusal order without changing valid PDF bytes.
+The page transform and closing graphics-state operator are also checked
+against that remaining allowance, before an oversized header can defer a
+resource refusal behind malformed path commands.
 
 The existing oversized-stream regression, large-content fixture and exact-limit
 boundary regressions still apply. Output bytes and PDF object order are
