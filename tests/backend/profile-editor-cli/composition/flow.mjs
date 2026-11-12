@@ -7938,3 +7938,55 @@ test('128-row physical flow ceiling yields an exact last-page PNG',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+test('ordered marked-space glyph preserves exact PDF/PNG and atomic refusal',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-ordered-marked-'));
+        try {
+            const source = '1.  \u0301a';
+            const ink = [
+                '--glyph-stroke', '1', '200', '500', '1500',
+                '3000', '250', '#123456',
+                '--glyph-stroke', '.', '200', '500', '1500',
+                '3000', '250', '#123456',
+                '--glyph-stroke', ' \u0301', '200', '500', '1500',
+                '3000', '250', '#D02040',
+            ];
+            const region = ['--flow-region', '30000', '40000',
+                '44000', '20000'];
+            for (const format of ['pdf', 'png']) {
+                const rendered = render(dir, source, format,
+                    [...ink, ...region]);
+                assert.equal(rendered.result.status, 0,
+                    rendered.result.stderr);
+                const expected = readFileSync(rendered.output);
+                const directOutput = join(dir, 'manual-' + format);
+                const direct = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    ...base, ...ink, '--place-text',
+                    '1', '38500', '42500', source,
+                    '--export-paper', format,
+                    ...(format === 'png' ? ['--dpi', '72'] : []),
+                    '--output', directOutput,
+                ], {
+                    cwd: root, encoding: 'utf8', timeout: 120000,
+                });
+                assert.equal(direct.status, 0, direct.stderr);
+                assert.deepEqual(expected, readFileSync(directOutput),
+                    'ordered marked-space native ' + format
+                        + ' must preserve all authored glyphs');
+                const narrow = render(dir, source, format, [
+                    ...ink, '--flow-region', '30000', '40000',
+                    '22000', '20000',
+                ]);
+                assert.notEqual(narrow.result.status, 0);
+                assert.match(narrow.result.stderr,
+                    /ordered list label and first glyph exceed/);
+                assert.deepEqual(readFileSync(narrow.output), expected,
+                    'narrow refusal cannot replace saved ' + format);
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
