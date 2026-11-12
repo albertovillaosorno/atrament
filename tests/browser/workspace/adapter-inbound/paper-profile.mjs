@@ -128,6 +128,27 @@ test("paper editor exports Rust PDF and PNG", async () => {
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(links[0].download, "atrament-paper.json");
         assert.equal(JSON.parse(requests.at(-1).body).spacing_um, 4500);
+        const paperRequests = requests.length;
+        const paperDownloads = links.length;
+        for (const [field, raw] of [
+            ["paper-width", "2.159e2"],
+            ["paper-height", "0x117"],
+            ["paper-spacing", "+4.5"],
+            ["paper-upper", " 22"],
+            ["paper-bottom", "16 "],
+            ["paper-left", "2e1"],
+            ["paper-right", "0xE"],
+        ]) {
+            const input = elements.get(field);
+            const previous = input.value;
+            input.value = raw;
+            elements.get("paper-save").dispatch("click");
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.equal(requests.length, paperRequests,
+                `coerced millimetres ${field}=${raw} reached Rust`);
+            assert.equal(links.length, paperDownloads);
+            input.value = previous;
+        }
         elements.get("paper-export").dispatch("click");
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(links[1].download, "atrament-paper.pdf");

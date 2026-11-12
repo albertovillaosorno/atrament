@@ -80,6 +80,16 @@ function required<T extends Element>(id: string): T {
     return element as unknown as T;
 }
 
+// Decimal millimetres are browser proposals, never an independent paper
+// authority. Preserve the typed form before Number() can coerce exponents,
+// hexadecimal values, leading signs or padded whitespace.
+function decimalMillimetres(raw: string): number | null {
+    if (!/^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/.test(raw)) return null;
+    const number = Number(raw);
+    return Number.isFinite(number) && number >= 0
+        && Number.isSafeInteger(Math.round(number * 1000)) ? number : null;
+}
+
 function isPaperStyle(value: string): value is PaperStyle {
     return value === "blank" || value === "grid"
         || value === "ruled" || value === "dot";
@@ -195,9 +205,9 @@ export function createPaperProfileEditor(
             if (input.value === "" || !input.validity.valid) {
                 throw new Error("Check the highlighted paper dimensions");
             }
-            const mm = Number(input.value);
-            if (!Number.isFinite(mm) || mm < 0) {
-                throw new Error("Paper dimensions must be finite");
+            const mm = decimalMillimetres(input.value);
+            if (mm === null) {
+                throw new Error("Paper dimensions must be decimal");
             }
             candidate[key] = Math.round(mm * 1000);
         }
@@ -786,9 +796,8 @@ export function createNotebookProfileEditor(
             || !radius.validity.valid) {
             throw new Error("Notebook profile is not ready");
         }
-        const millimetres = Number(radius.value);
-        if (!Number.isFinite(millimetres) || millimetres < 0
-            || !Number.isSafeInteger(Math.round(millimetres * 1000))) {
+        const millimetres = decimalMillimetres(radius.value);
+        if (millimetres === null) {
             throw new Error("Invalid border radius");
         }
         return {

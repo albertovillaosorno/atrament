@@ -157,6 +157,18 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.equal(elements.get("notebook-radius").value, "0");
         elements.get("notebook-radius-range").value = "3.5";
         elements.get("notebook-radius-range").dispatch("input");
+        const radiusRequests = requests.length;
+        const radiusDownloads = downloads.length;
+        for (const raw of ["+3.5", "3.5e0", "0x3", " 3.5", "3.5 ",
+            "-0", "0e0"]) {
+            elements.get("notebook-radius").value = raw;
+            elements.get("notebook-save").dispatch("click");
+            await settle();
+            assert.equal(requests.length, radiusRequests,
+                `coerced border radius ${JSON.stringify(raw)} reached Rust`);
+            assert.equal(downloads.length, radiusDownloads);
+        }
+        elements.get("notebook-radius").value = "3.5";
         elements.get("notebook-date-style").value = "box";
         elements.get("notebook-date-placement").value = "top-right";
         elements.get("notebook-date-text").value = "2026-11-03";
