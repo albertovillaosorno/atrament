@@ -63,6 +63,8 @@ fn handwriting_preflight_rejects_invalid_flags_before_profile_io() {
             .as_slice(), "--profile must appear once, before edits"),
         (["--profile", "unopened.json", "--seed", "-1"]
             .as_slice(), "invalid seed"),
+        (["--profile", "unopened.json", "--seed", "+11"]
+            .as_slice(), "invalid seed"),
         (["--profile", "unopened.json", "--set-global",
             "not-a-dimension", "1", "2", "1", "1", "0"]
             .as_slice(), "unknown statistics dimension"),
@@ -1300,6 +1302,15 @@ fn baseline_round_trip_and_inspection_use_single_codec() {
     assert!(display.contains("Seed: 500"));
     assert!(display.contains("Glyph overrides: 0"));
     assert!(display.contains("height (micrometres):"));
+    for seed in ["0", "18446744073709551615"] {
+        let bytes = execute_handwriting(&args(&["--seed", seed]))
+            .expect("full unsigned seed range admitted")
+            .expect("canonical seed JSON");
+        let round_trip = decode_statistics_json(
+            &bytes, &UnicodeGraphemeSegmentation,
+        ).expect("reopening preserves full seed precision");
+        assert_eq!(round_trip.seed.to_string(), seed);
+    }
 }
 
 #[test]
@@ -1383,6 +1394,7 @@ fn invalid_stats_and_unknown_flags_refuse_before_file_effect() {
         args(&["--set-glyph", "\u{f1}", "bogus", "1", "1", "1", "1", "0"]),
         args(&["--set-global", "width", "1", "2"]),
         args(&["--seed", "-1"]),
+        args(&["--seed", "+11"]),
         args(&["--replace"]),
         args(&["--inspect", "--output", "invalid.json"]),
         args(&["--nonexistent"]),

@@ -515,6 +515,17 @@ fn read_handwriting_profile(
         .map_err(|error| format!("handwriting profile refused: {error:?}"))
 }
 
+// The same unsigned decimal seed grammar applies before opening a selected
+// profile and when applying the final edit. Rust integers otherwise accept a
+// leading '+' that cannot occur in the canonical JSON seed representation.
+fn parse_handwriting_seed(value: &str) -> Result<u64, String> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("invalid seed: requires unsigned decimal digits".into());
+    }
+    value.parse::<u64>()
+        .map_err(|error| format!("invalid seed: {error}"))
+}
+
 fn parse_parameter(values: &[String]) -> Result<DimensionStatistics, String> {
     let [name, min, max, mean, median, deviation] = values else {
         return Err(
@@ -723,8 +734,7 @@ fn preflight_handwriting_options(args: &[String]) -> Result<(), String> {
             "--seed" => {
                 let value = iter.next()
                     .ok_or("--seed requires an unsigned integer")?;
-                let _seed = value.parse::<u64>()
-                    .map_err(|error| format!("invalid seed: {error}"))?;
+                let _seed = parse_handwriting_seed(value)?;
                 seen_edit = true;
             }
             "--set-global" | "--set-glyph" => {
@@ -817,9 +827,7 @@ fn parse_handwriting_options(
             "--seed" => {
                 let value =
                     iter.next().ok_or("--seed requires an unsigned integer")?;
-                profile.seed = value
-                    .parse::<u64>()
-                    .map_err(|error| format!("invalid seed: {error}"))?;
+                profile.seed = parse_handwriting_seed(value)?;
                 seen_edit = true;
             }
             "--set-global" => {
