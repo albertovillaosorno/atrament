@@ -441,24 +441,50 @@ fn append_line_command(
 // fractions; even zero has a five-byte spelling. Reserve the shortest possible
 // command before examining untrusted control points, so an impossible output
 // cannot be hidden by a malformed command.
-fn reserve_command_framing(
-    stream_bytes: usize,
-    command: PdfPathCommand,
-    command_budget: usize,
-) -> Result<(), PdfVectorError> {
-    let minimum_command_bytes = match command {
+const fn minimum_command_bytes(command: PdfPathCommand) -> usize {
+    match command {
         PdfPathCommand::MoveTo(_) => b"0.000 0.000 m\n".len(),
         PdfPathCommand::LineTo(_) => b"0.000 0.000 l\n".len(),
         PdfPathCommand::CubicTo(..) => {
             b"0.000 0.000 0.000 0.000 0.000 0.000 c\n".len()
         },
         PdfPathCommand::Close => b"h\n".len(),
-    };
+    }
+}
+
+fn reserve_command_framing(
+    stream_bytes: usize,
+    command: PdfPathCommand,
+    command_budget: usize,
+) -> Result<(), PdfVectorError> {
     if stream_bytes
-        .checked_add(minimum_command_bytes)
+        .checked_add(minimum_command_bytes(command))
         .is_none_or(|size| size > command_budget)
     {
         return Err(PdfVectorError::ResourceLimit);
+    }
+    Ok(())
+}
+
+// Reserve the full caller-owned syntax, not only the first command's minimum.
+// An invalid first point must not conceal a later byte-budget exhaustion.
+fn reserve_path_command_framing(
+    stream_bytes: usize,
+    commands: &[PdfPathCommand],
+    command_budget: usize,
+) -> Result<(), PdfVectorError> {
+    let minimum_path_bytes = commands.iter().try_fold(
+        0usize,
+        |total, command| total.checked_add(minimum_command_bytes(*command)),
+    ).ok_or(PdfVectorError::ResourceLimit)?;
+    if stream_bytes
+        .checked_add(minimum_path_bytes)
+        .is_none_or(|size| size > command_budget)
+    {
+        return Err(PdfVectorError::ResourceLimit);
+    }
+    if commands.is_empty() {
+        return Err(PdfVectorError::InvalidPath);
     }
     Ok(())
 }
@@ -477,9 +503,9 @@ fn render_path(
         .checked_sub(operator.len())
         .filter(|budget| stream.len() <= *budget)
         .ok_or(PdfVectorError::ResourceLimit)?;
-    if path.commands.is_empty() {
-        return Err(PdfVectorError::InvalidPath);
-    }
+    reserve_path_command_framing(
+        stream.len(), &path.commands, command_budget,
+    )?;
     let fill = matches!(path.paint, PdfPathPaint::Fill { .. });
     let mut active = false;
     let mut drawn = false;

@@ -182,6 +182,14 @@ byte boundary from an accepted stroke or fill, then adds invalid commands;
 with an ample budget those same commands remain `InvalidPath`. This changes
 only refusal precedence, not bytes emitted for admissible paths.
 
+The writer also reserves the sum of the *minimum* syntax for every command
+in one path before inspecting its first coordinate. Otherwise an invalid
+first point could hide an impossible trailing path budget. The red/green
+regression covers both stroke and fill with a budget that admits paint and
+one short command but not the entire authored sequence. Empty paths still
+refuse as `InvalidPath` when their mandatory paint bytes can fit, and
+accepted PDF bytes do not change.
+
 The same allowance is checked before refusing an *empty* path: when no room
 remains for its paint setup and operator, `ResourceLimit` takes precedence
 over the malformed empty geometry. With sufficient bytes it still refuses as

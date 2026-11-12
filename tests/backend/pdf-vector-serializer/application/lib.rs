@@ -387,6 +387,52 @@ fn impossible_command_framing_refuses_before_invalid_coordinates() {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a blank PDF anchors a shortage of total command framing",
+)]
+#[test]
+fn total_path_command_framing_preempts_invalid_first_command() {
+    for paint in [stroke().paint, fill().paint] {
+        let mut composition = PdfCompositionPlan {
+            assets: Vec::new(),
+            pages: vec![page(Vec::new())],
+            render_manifest_identity: "total-command-framing.v1",
+        };
+        let blank = serialize_vector_pdf(&composition, limits())
+            .expect("blank page fixes the mandatory document framing");
+        let commands = match paint {
+            PdfPathPaint::Stroke { .. } => vec![
+                PdfPathCommand::MoveTo(point(-1, 30_000)),
+                PdfPathCommand::LineTo(point(50_000, 40_000)),
+            ],
+            PdfPathPaint::Fill { .. } => vec![
+                PdfPathCommand::MoveTo(point(-1, 30_000)),
+                PdfPathCommand::LineTo(point(50_000, 30_000)),
+                PdfPathCommand::LineTo(point(50_000, 40_000)),
+                PdfPathCommand::Close,
+            ],
+        };
+        composition.pages = vec![page(vec![PdfVectorPath {
+            commands,
+            paint,
+        }])];
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidPath),
+            "with ample bytes the first negative coordinate is invalid",
+        );
+        assert_eq!(
+            serialize_vector_pdf(&composition, PdfVectorLimits {
+                maximum_pdf_bytes: blank.len().saturating_add(60),
+                ..limits()
+            }),
+            Err(PdfVectorError::ResourceLimit),
+            "all mandatory command syntax must fit before inspecting ink",
+        );
+    }
+}
+
 #[test]
 fn every_stroked_subpath_requires_real_physical_extent() {
     let origin = point(20_000, 30_000);
