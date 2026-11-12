@@ -148,3 +148,61 @@ test('six native glyph edits match browser decisions and exact TSV bytes',
             assert.ok(rejected > 0, `${operation.name} needs refused edits`);
         }
     });
+
+// Exact TSV agreement also has to survive the independently selected ink
+// source path, through both physical output serializers. This does not infer
+// new shapes: the notebook receives only the two explicit Unicode keys.
+test('browser and native transformed shapes render identical PDF and PNG',
+    { timeout: 90_000 }, () => {
+        const source = [
+            { grapheme: nfc, x1: 700, y1: 1000, x2: 1300, y2: 1700,
+                width: 250, color: colors[0] },
+            { grapheme: nfd, x1: 600, y1: 1100, x2: 1200, y2: 1550,
+                width: 251, color: colors[1] },
+            { grapheme: nfc, x1: 1300, y1: 1700, x2: 1650, y2: 2050,
+                width: 250, color: colors[0] },
+        ];
+        const valuesByOperation = [
+            [8, 1750, 2250], [9, 2250], [115, 2250],
+            [120, 1750], [120], [90, -75],
+        ];
+        for (const [index, operation] of operations.entries()) {
+            const values = valuesByOperation[index];
+            const browserTsv = encodeGlyphLibrary(operation.browser(
+                source, nfc, ...values,
+            ));
+            const transformed = spawnSync(binary, [
+                'glyphs', ...source.flatMap(cliStroke), operation.native,
+                nfc, ...values.map(String),
+            ], { cwd: root, encoding: 'utf8', timeout: 2_000 });
+            assert.equal(transformed.error, undefined);
+            assert.equal(transformed.status, 0,
+                `${operation.name}: ${transformed.stderr}`);
+            assert.equal(transformed.stdout, browserTsv, operation.name);
+            for (const format of ['pdf', 'png']) {
+                const render = (input) => spawnSync(binary, [
+                    'notebook', '--glyph-file', '-', '--place-text',
+                    '1', '25000', '30000', `${nfc}${nfd}${nfc}`,
+                    '--export-paper', format,
+                ], { cwd: root, input: Buffer.from(input, 'utf8'),
+                    timeout: 30_000, maxBuffer: 16 * 1024 * 1024 });
+                const fromBrowser = render(browserTsv);
+                const fromNative = render(transformed.stdout);
+                for (const result of [fromBrowser, fromNative]) {
+                    assert.equal(result.error, undefined,
+                        `${operation.name} ${format}: ${result.error?.message}`);
+                    assert.equal(result.status, 0,
+                        `${operation.name} ${format}: ${result.stderr}`);
+                }
+                assert.deepEqual(fromNative.stdout, fromBrowser.stdout,
+                    `${operation.name} ${format} differs`);
+                if (format === 'pdf') {
+                    assert.ok(fromNative.stdout.subarray(0, 5)
+                        .equals(Buffer.from('%PDF-')), operation.name);
+                } else {
+                    assert.equal(fromNative.stdout.subarray(0, 8)
+                        .toString('hex'), '89504e470d0a1a0a');
+                }
+            }
+        }
+    });
