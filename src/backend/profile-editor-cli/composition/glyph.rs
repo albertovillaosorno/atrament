@@ -315,8 +315,10 @@ impl GlyphOverlay {
         // rescanning all strokes per key makes inspection quadratic.
         let mut stroke_counts: HashMap<&str, usize> = HashMap::new();
         for stroke in &self.strokes {
-            *stroke_counts.entry(stroke.grapheme.as_str())
-                .or_default() += 1;
+            let count = stroke_counts.entry(stroke.grapheme.as_str())
+                .or_default();
+            *count = count.checked_add(1)
+                .ok_or("glyph audit stroke count overflow")?;
         }
         // Hash membership only suppresses repeats. Emit reports in first
         // source occurrence order, never hash iteration order.
