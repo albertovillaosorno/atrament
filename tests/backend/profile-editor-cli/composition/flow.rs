@@ -7537,3 +7537,71 @@ fn wrapping_preserves_combining_marks_attached_to_ascii_spaces()
     }
     Ok(())
 }
+
+#[test]
+fn unicode_space_marks_at_markdown_boundaries_keep_measured_pitch()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let tall = ScalarStatistics {
+        minimum: 25_000, maximum: 25_000, mean: 25_000,
+        median: 25_000, standard_deviation: 0,
+    };
+    let mut stats = HandwritingStatisticsProfile::baseline(218);
+    stats = stats.with_glyph(" \u{301}", DimensionStatistics {
+            dimension: Dimension::Height, statistics: tall,
+    }, &UnicodeGraphemeSegmentation)
+        .map_err(|error| format!("{error:?}"))?;
+    for text in [
+        "1. \u{301}a", "- \u{301}a", "# \u{301}a", "> \u{301}a",
+        "a \u{301}b", "1. a \u{301}b", "# a \u{301}b",
+        "> a \u{301}b", "- a \u{301}b",
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, text)?;
+        let (rows, _, _) = super::layout_flow(
+            &source, &NotebookProfile::default(), Some(&stats),
+            super::HeadingDecoration::default(),
+        )?;
+        let measured = super::measured_pitch(&source, Some(&stats))?;
+        assert_eq!(measured, emitted_glyph_pitch(&rows, &stats)?,
+            "source {text:?}; rows {rows:?}");
+        assert_eq!(measured, 29_000,
+            "a space-mark grapheme must use its exact height override");
+    }
+
+    for (source_text, expected) in [
+        ("# \u{301}a", " \u{301}a"),
+        ("#  \u{301}a", " \u{301}a"),
+        ("- \u{301}a", " \u{301}a"),
+        ("-  \u{301}a", " \u{301}a"),
+        ("- [x] \u{301}a", " \u{301}a"),
+        ("> \u{301}a", " \u{301}a"),
+        (">  \u{301}a", " \u{301}a"),
+        ("1. \u{301}a", "1. \u{301}a"),
+        (" \u{301}a", " \u{301}a"),
+        ("  \u{301}a", " \u{301}a"),
+        (" \u{301}# a", " \u{301}# a"),
+        (" \u{301}- a", " \u{301}- a"),
+        ("- [ ] \u{301}a", " \u{301}a"),
+        ("- [X] \u{301}a", " \u{301}a"),
+        ("- [x]  \u{301}a", " \u{301}a"),
+        ("+ \u{301}a", " \u{301}a"),
+        ("* \u{301}a", " \u{301}a"),
+        (" # \u{301}a", " \u{301}a"),
+    ] {
+        let source = FlowSource::new(FlowFormat::Markdown, source_text)?;
+        let (rows, _, _) = super::layout_flow(
+            &source, &NotebookProfile::default(), None,
+            super::HeadingDecoration::default(),
+        )?;
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<String>(), expected,
+            "Markdown marker must not detach a mark from ASCII space");
+    }
+    Ok(())
+}

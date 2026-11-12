@@ -1936,6 +1936,49 @@ fn empty_ordered_marker(block: &str) -> bool {
             && digits.bytes().all(|digit| digit.is_ascii_digit()))
 }
 
+// A space with attached combining marks is a distinct authored grapheme,
+// not a Markdown delimiter or disposable indentation. Match exact Unicode
+// grapheme boundaries before removing any marker-padding spaces.
+fn strip_standalone_spaces(mut text: &str, limit: usize) -> &str {
+    for _ in 0..limit {
+        match first_grapheme(text) {
+            Ok((" ", rest)) => text = rest,
+            _ => break,
+        }
+    }
+    text
+}
+
+// Keep Unicode-aware marker-padding handling shared by bullets and tasks.
+fn markdown_bullet_line(block: &str) -> Option<(LineStyle, Cow<'_, str>)> {
+    // Empty list markers cannot produce a visible handwritten block.
+    if matches!(block, "-" | "*" | "+") {
+        return Some((LineStyle::Bullet, Cow::Borrowed("")));
+    }
+    let bullet = block.strip_prefix('-')
+        .or_else(|| block.strip_prefix('*'))
+        .or_else(|| block.strip_prefix('+'))?;
+    if !bullet.starts_with(' ') {
+        return None;
+    }
+    // Only the first four standalone spaces delimit a list item.
+    // A space with attached ink is an authored grapheme, not padding.
+    let content = strip_standalone_spaces(bullet, 4);
+    for (marker, checked) in [("[ ]", false), ("[x]", true),
+        ("[X]", true)] {
+        if let Some(after) = content.strip_prefix(marker)
+            && (after.is_empty() || after.starts_with(' ')) {
+            return Some((LineStyle::Task(checked), Cow::Borrowed(
+                strip_standalone_spaces(after, after.len())
+                    .trim_end_matches(' '),
+            )));
+        }
+    }
+    Some((LineStyle::Bullet, Cow::Borrowed(
+        content.trim_end_matches(' '),
+    )))
+}
+
 // Restrict Markdown ordered markers to at most nine ASCII digits followed
 // by ". " or ") ". The number and delimiter remain authored text ink;
 // only unordered bullets receive a synthetic short line ornament.
@@ -1945,7 +1988,7 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
     // Indented block syntax does not consume a visible handwriting space.
     // At four spaces, keep the entire source as literal authored text.
     let block = if indent <= 3 {
-        line.get(indent..).unwrap_or(line)
+        strip_standalone_spaces(line, indent)
     } else {
         line
     };
@@ -1989,41 +2032,19 @@ fn markdown_line(line: &str) -> (LineStyle, Cow<'_, str>) {
                 // printed hash. It will refuse with the other empty blocks.
                 // Tabs are already expanded to physical four-column stops.
                 return (LineStyle::Heading(level), Cow::Borrowed(
-                    heading_body(body.trim_start_matches(' '))));
+                    heading_body(strip_standalone_spaces(body, body.len()))));
             }
         }
     }
-    // Empty list markers have no body ink. Do not silently print an
-    // otherwise caller-authored punctuation glyph in their place.
-    if matches!(block, "-" | "*" | "+") {
-        return (LineStyle::Bullet, Cow::Borrowed(""));
-    }
-    if let Some(bullet) = block.strip_prefix("- ")
-        .or_else(|| block.strip_prefix("* "))
-        .or_else(|| block.strip_prefix("+ "))
-    {
-        // The first through fourth spaces after a list marker delimit
-        // its body. Extra spaces retain physical authored indentation.
-        // Tab stops are already expanded at Unicode source admission.
-        let padding = bullet.bytes().take(3)
-            .take_while(|byte| *byte == b' ').count();
-        let content = bullet.get(padding..).unwrap_or(bullet);
-        for (marker, checked) in [("[ ]", false), ("[x]", true),
-            ("[X]", true)] {
-            if let Some(after) = content.strip_prefix(marker)
-                && (after.is_empty() || after.starts_with(' ')) {
-                return (LineStyle::Task(checked),
-                    Cow::Borrowed(after.trim_matches(' ')));
-            }
-        }
-        return (LineStyle::Bullet,
-            Cow::Borrowed(content.trim_end_matches(' ')));
+    if let Some(list) = markdown_bullet_line(block) {
+        return list;
     }
     if let Some(quote) = block.strip_prefix('>') {
         // One level of Markdown quote syntax, optionally followed by one
         // separator space. Nested > markers remain literal authored text.
-        return (LineStyle::Quote, Cow::Borrowed(quote.strip_prefix(' ')
-            .unwrap_or(quote).trim_end_matches(' ')));
+        return (LineStyle::Quote, Cow::Borrowed(
+            strip_standalone_spaces(quote, 1).trim_end_matches(' '),
+        ));
     }
     if empty_ordered_marker(block) {
         return (LineStyle::Ordered, Cow::Borrowed(""));
