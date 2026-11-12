@@ -2052,12 +2052,20 @@ endpoints; repeated ASCII spaces mark only one word boundary.
 The offset changes neither nominal advances nor wrapping. It has a separate
 random stream from line drift, so both options can be selected simultaneously.
 
+For shared word-level vertical rhythm, select `--glyph-word-rise MAX_UM`
+(0–150 micrometres), also with `--glyph-variation`. All authored strokes in
+one ASCII-space-delimited word move up or down by the same seeded offset,
+including any selected intra-word joining segments. Its random stream is
+independent of horizontal word drift and smoothly interpolated line drift.
+The drawn ink still must fit on the real sheet; row pitch and nominal wrapping
+do not change.
+
 For example, extend the preceding command with
-`--glyph-line-drift 120 --glyph-word-drift 90` to produce reproducible
-line and word rhythms. At `0`, either option is byte-identical to omission
-in PDF/PNG; both still enforce physical ink clearance when nonzero.
-These CLI-only variations do not persist in a saved notebook, are not
-calibrated to a person's writing, and do not create automatic cursive joins.
+`--glyph-line-drift 120 --glyph-word-drift 90 --glyph-word-rise 90`
+to produce reproducible line and word rhythms. At `0`, each rhythm option
+is byte-identical to omission in PDF/PNG. These CLI-only variations do not
+persist in a saved notebook, are not calibrated to a person's writing, and
+do not create automatic cursive joins.
 
 The occurrence sequence continues across manual
 text runs and Markdown flow pages. Rust checks the fully sampled ink and

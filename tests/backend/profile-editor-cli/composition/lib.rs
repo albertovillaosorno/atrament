@@ -10343,3 +10343,222 @@ fn word_drift_native_pdf_png_replay_and_refusal_are_atomic()
     fs::remove_file(&target).map_err(|error| error.to_string())?;
     Ok(())
 }
+
+#[test]
+fn opt_in_word_rise_is_shared_by_exact_words_and_composes_with_line_rhythm()
+-> Result<(), String> {
+    let glyph = "n\u{303}";
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        glyph, "600", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    let text = format!("{glyph}{glyph}  {glyph} {glyph}{glyph}");
+    for y in [30_000u32, 40_000u32] {
+        overlay.parse("--place-text", &mut args(&[
+            "1", "25000", &y.to_string(), &text,
+        ]).iter())?;
+    }
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    let original = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-rise", &mut args(&["150"]).iter())?;
+    let raised = overlay.expand(&[], None)?;
+    if raised.len() != 10 || raised == original {
+        return Err("word rise did not affect ten exact graphemes".into());
+    }
+    let mut shifts = Vec::new();
+    for (before, after) in original.iter().zip(&raised) {
+        let dy = i64::from(after.start_um.1) - i64::from(before.start_um.1);
+        if dy.unsigned_abs() > 150
+            || i64::from(after.end_um.1) - i64::from(before.end_um.1) != dy
+            || before.start_um.0 != after.start_um.0
+            || before.end_um.0 != after.end_um.0
+            || before.width_um != after.width_um
+            || before.rgb != after.rgb {
+            return Err("word rise changed ink or left its bound".into());
+        }
+        shifts.push(dy);
+    }
+    for run in 0..2usize {
+        let start = run * 5;
+        let [first, second, _, fourth, fifth] = shifts.get(start..start + 5)
+            .ok_or("five grapheme word span missing")? else {
+            return Err("five grapheme word span needed".into());
+        };
+        if first != second || fourth != fifth {
+            return Err("word mates received different vertical offsets".into());
+        }
+    }
+    // Independently calculated uint32 avalanche/xorshift samples for the
+    // seed-42 streams: word 0/1/2 on physical rows 0 and 1.
+    if shifts != [-59, -59, 126, 117, 117, 116, 116, -38, 73, 73] {
+        return Err(format!("word rise stream changed: {shifts:?}"));
+    }
+    if overlay.expand(&[], None)? != raised {
+        return Err("word rise seed replay changed".into());
+    }
+    overlay.word_rise_um = Some(0);
+    if overlay.expand(&[], None)? != original {
+        return Err("zero rise is not legacy ink".into());
+    }
+    overlay.word_rise_um = Some(150);
+    overlay.line_drift_um = Some(120);
+    overlay.word_drift_um = Some(90);
+    let combined = overlay.expand(&[], None)?;
+    overlay.word_rise_um = Some(0);
+    let without_rise = overlay.expand(&[], None)?;
+    overlay.word_rise_um = Some(150);
+    overlay.line_drift_um = Some(0);
+    overlay.word_drift_um = Some(0);
+    let rise_only = overlay.expand(&[], None)?;
+    for (((both, base), only), legacy) in combined.iter()
+        .zip(&without_rise).zip(&rise_only).zip(&original) {
+        if both.start_um.0 != base.start_um.0
+            || both.end_um.0 != base.end_um.0
+            || i64::from(both.start_um.1) - i64::from(base.start_um.1)
+                != i64::from(only.start_um.1)
+                    - i64::from(legacy.start_um.1)
+            || i64::from(both.end_um.1) - i64::from(base.end_um.1)
+                != i64::from(only.end_um.1)
+                    - i64::from(legacy.end_um.1) {
+            return Err("word rise did not compose independently".into());
+        }
+    }
+    overlay.word_rise_um = Some(151);
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed out-of-range word rise accepted".into());
+    }
+    overlay.word_rise_um = Some(150);
+    overlay.variation = None;
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed unpaired word rise accepted".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn seeded_word_rise_preserves_directed_short_intra_word_bridges()
+-> Result<(), String> {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "\u{e1}", "500", "1200", "3300", "1200", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "\u{e1}\u{e1}  \u{e1}\u{e1}",
+    ]).iter())?;
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    overlay.add_text_join_pair(&mut args(&["\u{e1}", "\u{e1}"]).iter())?;
+    let baseline = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-rise", &mut args(&["150"]).iter())?;
+    let changed = overlay.expand(&[], None)?;
+    if baseline.len() != 6 || changed.len() != 6 {
+        return Err("two joined words must emit six pen segments".into());
+    }
+    for start in [0usize, 3] {
+        let first = changed.get(start).ok_or("first pen missing")?;
+        let bridge = changed.get(start + 1).ok_or("bridge missing")?;
+        let last = changed.get(start + 2).ok_or("last pen missing")?;
+        if first.end_um != bridge.start_um
+            || bridge.end_um != last.start_um {
+            return Err("word rise disconnected a directed join".into());
+        }
+        let old = baseline.get(start).ok_or("old pen missing")?;
+        let dy = i64::from(first.start_um.1) - i64::from(old.start_um.1);
+        if dy.unsigned_abs() > 150 {
+            return Err("joined word rise exceeded cap".into());
+        }
+        for (before, after) in baseline.get(start..start + 3)
+            .ok_or("old group missing")?.iter().zip([first, bridge, last]) {
+            if before.start_um.0 != after.start_um.0
+                || before.end_um.0 != after.end_um.0
+                || i64::from(after.start_um.1)
+                    - i64::from(before.start_um.1) != dy
+                || i64::from(after.end_um.1)
+                    - i64::from(before.end_um.1) != dy {
+                return Err("joined word did not translate uniformly".into());
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn word_rise_native_pdf_png_replay_and_refusal_preserve_output()
+-> Result<(), String> {
+    let prefix = args(&[
+        "--printed-sheet", "true", "--glyph-stroke", "\u{e1}", "600",
+        "1000", "1600", "2800", "250", "#123456",
+        "--flow-markdown", concat!(
+            "\u{e1}\u{e1}  \u{e1} \u{e1}\u{e1}\n\n",
+            "\u{e1}\u{e1} \u{e1}\u{e1}",
+        ),
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    for format in ["pdf", "png"] {
+        let render = |extra: &[&str], seed: &str| -> Result<Vec<u8>, String> {
+            let mut command = prefix.clone();
+            let seed_index = command.iter()
+                .position(|arg| arg == "--glyph-variation")
+                .ok_or("variation missing")? + 1;
+            *command.get_mut(seed_index).ok_or("seed missing")? = seed.into();
+            command.extend(args(&["--export-paper", format]));
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            command.extend(args(extra));
+            execute_notebook(&command)?
+                .ok_or_else(|| "native output missing".into())
+        };
+        let baseline = render(&[], "42")?;
+        if baseline != render(&["--glyph-word-rise", "0"], "42")? {
+            return Err(format!("{format} zero rise changed native bytes"));
+        }
+        let raised = render(&["--glyph-word-rise", "150"], "42")?;
+        if raised == baseline
+            || raised != render(&["--glyph-word-rise", "150"], "42")?
+            || raised == render(&["--glyph-word-rise", "150"], "43")? {
+            return Err(format!("{format} rise seed replay invalid"));
+        }
+        if format == "pdf" && !raised.starts_with(b"%PDF-1.4") {
+            return Err("word-rise PDF header missing".into());
+        }
+        if format == "png" && !raised.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return Err("word-rise PNG signature missing".into());
+        }
+    }
+    let target = test_path();
+    fs::write(&target, b"accepted bytes").map_err(|error| error.to_string())?;
+    let path = target.to_str().ok_or("output path must be UTF-8")?;
+    for invalid in [
+        args(&["--glyph-word-rise", "-1"]),
+        args(&["--glyph-word-rise", "151"]),
+        args(&["--glyph-word-rise", "4294967296"]),
+        args(&["--glyph-word-rise", "120", "--glyph-word-rise", "150"]),
+    ] {
+        let mut command = prefix.clone();
+        command.extend(args(&["--export-paper", "pdf", "--output", path,
+            "--replace"]));
+        command.extend(invalid);
+        if execute_notebook(&command).is_ok()
+            || fs::read(&target).map_err(|error| error.to_string())?
+                != b"accepted bytes" {
+            return Err("invalid rise overwrote accepted output".into());
+        }
+    }
+    let mut unpaired = prefix;
+    let option = unpaired.iter().position(|arg| arg == "--glyph-variation")
+        .ok_or("expected variation")?;
+    unpaired.drain(option..option + 8).for_each(drop);
+    unpaired.extend(args(&["--glyph-word-rise", "150", "--export-paper",
+        "pdf", "--output", path, "--replace"]));
+    if execute_notebook(&unpaired).is_ok()
+        || fs::read(&target).map_err(|error| error.to_string())?
+            != b"accepted bytes" {
+        return Err("unpaired rise overwrote accepted output".into());
+    }
+    fs::remove_file(&target).map_err(|error| error.to_string())?;
+    Ok(())
+}

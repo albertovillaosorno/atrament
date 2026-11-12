@@ -252,6 +252,24 @@ impl GlyphVariation {
         Self::round_js(random.unit() * f64::from(maximum_um))
     }
 
+    // Separate from horizontal word rhythm: a shared vertical displacement
+    // keeps a word's authored contours and short selected joins together.
+    fn word_rise(
+        self, run_index: usize, word_index: u32, maximum_um: u32,
+    ) -> Result<i32, String> {
+        let run = u32::try_from(run_index)
+            .map_err(|_error| "word rise run index overflow")?;
+        let mut identity = self.seed
+            ^ run.wrapping_add(1).wrapping_mul(0xB529_7A4D)
+            ^ word_index.wrapping_add(1).wrapping_mul(0x68E3_1DA4);
+        identity ^= identity >> 16i32;
+        identity = identity.wrapping_mul(0x7FEB_352D);
+        identity ^= identity >> 15i32;
+        identity = identity.wrapping_mul(0x846C_A68B);
+        identity ^= identity >> 16i32;
+        let mut random = XorShift32::new(identity);
+        Self::round_js(random.unit() * f64::from(maximum_um))
+    }
 }
 
 impl XorShift32 {
@@ -719,7 +737,7 @@ impl GlyphOverlay {
                     run, run_index, word_index, offset_um, tracking,
                 )?;
                 let glyph_y = self.glyph_origin_y(
-                    run, run_index, column, metrics,
+                    run, run_index, word_index, column, metrics,
                 )?;
                 let rendered = selected.iter().map(|shape| {
                     placed_ink(shape, run, (glyph_x, glyph_y), metrics)
@@ -805,12 +823,17 @@ impl GlyphOverlay {
     }
 
     fn glyph_origin_y(
-        &self, run: &TextRun, run_index: usize, column: u32,
-        metrics: Option<GlyphMetrics>,
+        &self, run: &TextRun, run_index: usize, word_index: u32,
+        column: u32, metrics: Option<GlyphMetrics>,
     ) -> Result<i64, String> {
         let drift = match (self.variation, self.line_drift_um) {
             (Some(variation), Some(maximum_um)) =>
                 variation.line_drift(run_index, column, maximum_um)?,
+            _ => 0i32,
+        };
+        let rise = match (self.variation, self.word_rise_um) {
+            (Some(variation), Some(maximum_um)) =>
+                variation.word_rise(run_index, word_index, maximum_um)?,
             _ => 0i32,
         };
         i64::from(run.origin_um.1)
@@ -818,6 +841,7 @@ impl GlyphOverlay {
                 0i32, |values| values.baseline_offset,
             )))
             .and_then(|value| value.checked_add(i64::from(drift)))
+            .and_then(|value| value.checked_add(i64::from(rise)))
             .ok_or_else(|| "glyph vertical origin overflow".into())
     }
 
@@ -826,6 +850,7 @@ impl GlyphOverlay {
             || !self.fallbacks.is_empty() || self.variation.is_some()
             || !self.text_joins.is_empty() || self.line_drift_um.is_some()
             || self.word_drift_um.is_some()
+            || self.word_rise_um.is_some()
     }
 
     // Index once per expansion, retaining authored order for each exact key.
@@ -1161,6 +1186,14 @@ impl GlyphOverlay {
                 }
                 self.word_drift_um = Some(next_integer(
                     iter, "glyph word drift", 0, 150,
+                )?);
+            }
+            "--glyph-word-rise" => {
+                if self.word_rise_um.is_some() {
+                    return Err("duplicate --glyph-word-rise".into());
+                }
+                self.word_rise_um = Some(next_integer(
+                    iter, "glyph word rise", 0, 150,
                 )?);
             }
             "--glyph-variation" => {
@@ -1949,6 +1982,14 @@ impl GlyphOverlay {
             }
             if self.variation.is_none() {
                 return Err("word drift requires --glyph-variation".into());
+            }
+        }
+        if let Some(maximum_um) = self.word_rise_um {
+            if maximum_um > 150 {
+                return Err("glyph word rise must be within 0..150 um".into());
+            }
+            if self.variation.is_none() {
+                return Err("word rise requires --glyph-variation".into());
             }
         }
         Ok(())

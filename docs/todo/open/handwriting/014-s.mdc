@@ -817,3 +817,28 @@ replace an accepted output. The CLI help and README describe the flag.
 These are creative CLI-only offsets, not a saved language-aware word model,
 correlated stroke shapes, stable semantic word identities or calibrated
 human penmanship. The remaining P1-014 work is still open.
+
+## CLI-only shared word baseline rise (partial) — 2026-11-12
+
+`atrament-profiles notebook` now also admits `--glyph-word-rise MAX_UM`
+(0–150 micrometres) with `--glyph-variation`. It samples one bounded signed
+vertical displacement per exact ASCII-space-delimited word and placed run.
+Every stroke in that word, including explicitly joined segments, receives
+that same displacement, without changing authored local geometry, pen
+thickness, nominal glyph advances, row pitch or page count.
+
+The new random stream is distinct from horizontal word drift and smooth
+column-based line drift. Those three opt-in CLI rhythm controls can compose,
+with independent outputs from the same document seed. Exact NFC/NFD text
+and repeated ASCII spaces remain supported without normalization.
+
+Three native regressions check two real rows, shared word translations,
+separate run identities, seed replay, zero-amplitude legacy ink equivalence,
+independence from both earlier rhythm controls, same-pen directed joins,
+real PDF/PNG byte replay and atomic refusal of invalid, duplicate, unpaired
+or directly constructed out-of-range settings. Physical page clearance
+remains a blocking export admission check.
+
+The option does not persist text, inferred word identities, handwriting
+calibration or continuous multi-glyph cursive paths. Full P1-014 acceptance
+remains open.
