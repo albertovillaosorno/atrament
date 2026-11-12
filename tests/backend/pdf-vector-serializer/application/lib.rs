@@ -2419,3 +2419,47 @@ fn complete_compact_resource_text_box_path_and_identity_matrix() {
     assert_eq!(checked, 144, "matrix must cover 144 combinations");
     assert_eq!(accepted, 4, "only four combinations are admissible");
 }
+
+#[test]
+fn later_page_authority_refuses_before_earlier_malformed_path() {
+    // A vector-only export cannot quietly skip a later page's semantic text
+    // or physical page box because an earlier path is already malformed.
+    let mut malformed = stroke();
+    malformed.commands = vec![PdfPathCommand::LineTo(point(40_000, 50_000))];
+    let first = page(vec![malformed]);
+    let mut second = page(vec![stroke()]);
+    second.searchable_text = SearchableSemanticText::Preserved(());
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![first, second],
+        render_manifest_identity: "later-page-authority.v1",
+    };
+    assert_eq!(
+        serialize_vector_pdf(&composition, limits()),
+        Err(PdfVectorError::UnsupportedSearchableText),
+        "unsupported later semantic text must be reported before earlier ink",
+    );
+    composition.pages[1].searchable_text =
+        SearchableSemanticText::OmittedAsIncompatible;
+    for invalid_size in [0, 2_000_001] {
+        composition.pages[1].physical_page_box.width_um = invalid_size;
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidPageBox),
+            "invalid later page width must preempt earlier malformed ink",
+        );
+        composition.pages[1].physical_page_box.width_um = 210_000;
+        composition.pages[1].physical_page_box.height_um = invalid_size;
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidPageBox),
+            "invalid later page height must preempt earlier malformed ink",
+        );
+        composition.pages[1].physical_page_box.height_um = 297_000;
+    }
+    assert_eq!(
+        serialize_vector_pdf(&composition, limits()),
+        Err(PdfVectorError::InvalidPath),
+        "without a later authority error the earlier malformed ink refuses",
+    );
+}

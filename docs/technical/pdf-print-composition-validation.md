@@ -256,6 +256,14 @@ first-page coordinate no longer masks a `ResourceLimit` on a later page with
 too many paths or commands. The two-page red/green regression preserves
 `InvalidPath` when both count ceilings fit; admissible PDF bytes are unchanged.
 
+Page authority is likewise validated across the document before drawing any
+ink. A malformed first-page path can no longer hide later preserved semantic
+text (`UnsupportedSearchableText`) or an invalid physical page box
+(`InvalidPageBox`). The two-page red/green regression covers zero and excessive
+widths and heights. Once later authority is valid, the original
+`InvalidPath` refusal remains. Required document-wide byte framing retains
+its existing priority; accepted PDF bytes do not change.
+
 The same cross-page reserve now includes every future path's minimum paint
 and command syntax, not just empty-page objects. It includes the resulting
 content-stream `/Length` digits, so a malformed earlier stroke cannot mask

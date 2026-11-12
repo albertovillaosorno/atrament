@@ -683,15 +683,17 @@ fn enforce_page_count_limits(
     Ok(())
 }
 
-fn render_page(
+// Page authority is checked for the entire composition before rendering any
+// paths. An earlier invalid stroke must not hide later unsupported text or an
+// invalid physical page box under an otherwise sufficient output allowance.
+const fn validate_page_metadata(
     page: &PdfPagePlan<
         PdfVectorColorIntent,
         PdfVectorPageBox,
         (),
         Vec<PdfVectorPath>,
     >,
-    limits: PdfVectorLimits,
-) -> Result<String, PdfVectorError> {
+) -> Result<(), PdfVectorError> {
     if matches!(page.searchable_text, SearchableSemanticText::Preserved(())) {
         return Err(PdfVectorError::UnsupportedSearchableText);
     }
@@ -703,7 +705,21 @@ fn render_page(
     {
         return Err(PdfVectorError::InvalidPageBox);
     }
+    Ok(())
+}
+
+fn render_page(
+    page: &PdfPagePlan<
+        PdfVectorColorIntent,
+        PdfVectorPageBox,
+        (),
+        Vec<PdfVectorPath>,
+    >,
+    limits: PdfVectorLimits,
+) -> Result<String, PdfVectorError> {
+    validate_page_metadata(page)?;
     enforce_page_count_limits(&page.vector_authority, limits)?;
+    let dimensions = page.physical_page_box;
     let mut stream =
         format!("q\n1 0 0 -1 0 {} cm\n", page_points(dimensions.height_um));
     // A page cannot be emitted without closing its graphics state. Reserve
@@ -998,6 +1014,13 @@ fn append_pages(
         })?;
     if remaining_page_minima > page_limit.saturating_sub(bytes.len()) {
         return Err(PdfVectorError::ResourceLimit);
+    }
+    // Once mandatory document-wide bytes are accounted for, preflight every
+    // page's typed authority before inspecting any drawing coordinates.
+    // Malformed earlier ink cannot conceal unsupported text or an invalid
+    // physical page box on a later page.
+    for page in &composition.pages {
+        validate_page_metadata(page)?;
     }
     // Bound each page by the remaining final-output allowance *less* later
     // pages' mandatory framing. Accepted pages keep their exact original bytes.
