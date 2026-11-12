@@ -298,6 +298,67 @@ fn malformed_geometry_and_spatial_overflow_are_rejected() {
 }
 
 #[test]
+fn every_stroked_subpath_requires_real_physical_extent() {
+    let origin = point(20_000, 30_000);
+    let second = point(50_000, 60_000);
+    let other = point(80_000, 90_000);
+    let zero_line = [
+        PdfPathCommand::MoveTo(origin),
+        PdfPathCommand::LineTo(origin),
+    ];
+    let zero_cubic = [
+        PdfPathCommand::MoveTo(origin),
+        PdfPathCommand::CubicTo(origin, origin, origin),
+    ];
+    let empty_second = [
+        PdfPathCommand::MoveTo(origin),
+        PdfPathCommand::LineTo(second),
+        PdfPathCommand::MoveTo(other),
+        PdfPathCommand::LineTo(other),
+    ];
+    let closed_empty_second = [
+        PdfPathCommand::MoveTo(origin),
+        PdfPathCommand::LineTo(second),
+        PdfPathCommand::Close,
+        PdfPathCommand::MoveTo(other),
+        PdfPathCommand::LineTo(other),
+        PdfPathCommand::Close,
+    ];
+    for commands in [
+        zero_line.as_slice(),
+        zero_cubic.as_slice(),
+        empty_second.as_slice(),
+        closed_empty_second.as_slice(),
+    ] {
+        let mut composition = document();
+        let mut empty_stroke = stroke();
+        empty_stroke.commands = commands.to_vec();
+        composition.pages = vec![page(vec![empty_stroke])];
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidPath),
+            "zero-length stroke subpath must not become invisible or dot ink",
+        );
+    }
+
+    // A cubic loop may start and end at the same point while still tracing
+    // actual physical geometry. A second ordinary subpath is valid too.
+    let mut composition = document();
+    let mut nonzero_stroke = stroke();
+    nonzero_stroke.commands = vec![
+        PdfPathCommand::MoveTo(origin),
+        PdfPathCommand::CubicTo(
+            point(30_000, 50_000), point(50_000, 50_000), origin,
+        ),
+        PdfPathCommand::MoveTo(second),
+        PdfPathCommand::LineTo(other),
+    ];
+    composition.pages = vec![page(vec![nonzero_stroke])];
+    let pdf = serialize_vector_pdf(&composition, limits());
+    assert!(pdf.is_ok(), "real cubic loops and multiple strokes remain valid");
+}
+
+#[test]
 fn filled_contours_refuse_collinear_ink_but_accept_curved_ink() {
     let color = PdfRgb {
         red: 190,

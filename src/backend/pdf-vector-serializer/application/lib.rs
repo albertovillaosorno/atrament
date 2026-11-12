@@ -300,6 +300,36 @@ fn apply_path_paint(
     Ok((operator, stroke_margin_um))
 }
 
+// Keep the path writer focused on subpath admission; the cubic command
+// independently checks its convex-hull control points against the page.
+fn append_cubic_command(
+    stream: &mut String,
+    first: PdfPoint,
+    second: PdfPoint,
+    last: PdfPoint,
+    page: PdfVectorPageBox,
+    stroke_margin_um: u32,
+) -> Result<(), PdfVectorError> {
+    if [first, second, last]
+        .into_iter()
+        .any(|point| !point_inside(point, page, stroke_margin_um))
+    {
+        return Err(PdfVectorError::InvalidPath);
+    }
+    push_formatted(
+        stream,
+        format_args!(
+            "{} {} {} {} {} {} c\n",
+            points(first.x_um),
+            points(first.y_um),
+            points(second.x_um),
+            points(second.y_um),
+            points(last.x_um),
+            points(last.y_um),
+        ),
+    )
+}
+
 fn render_path(
     stream: &mut String,
     path: &PdfVectorPath,
@@ -315,6 +345,8 @@ fn render_path(
     let mut active = false;
     let mut drawn = false;
     let mut saw_segment = false;
+    let mut current = PdfPoint { x_um: 0, y_um: 0 };
+    let mut subpath_has_extent = false;
     let mut contour_area = ContourAreaWitness::default();
     for command in &path.commands {
         match *command {
@@ -324,7 +356,7 @@ fn render_path(
                 {
                     return Err(PdfVectorError::InvalidPath);
                 }
-                if active && fill {
+                if active && (fill || !subpath_has_extent) {
                     return Err(PdfVectorError::InvalidPath);
                 }
                 push_formatted(
@@ -337,6 +369,8 @@ fn render_path(
                 )?;
                 active = true;
                 drawn = false;
+                current = point;
+                subpath_has_extent = false;
                 contour_area = ContourAreaWitness::default();
                 contour_area.include(point);
             },
@@ -354,37 +388,29 @@ fn render_path(
                 )?;
                 drawn = true;
                 saw_segment = true;
+                subpath_has_extent |= current != point;
+                current = point;
                 if fill {
                     contour_area.include(point);
                 }
             },
             PdfPathCommand::CubicTo(first, second, last) if active => {
-                if !point_inside(first, page, stroke_margin_um)
-                    || !point_inside(second, page, stroke_margin_um)
-                    || !point_inside(last, page, stroke_margin_um)
-                {
-                    return Err(PdfVectorError::InvalidPath);
-                }
-                push_formatted(
-                    stream,
-                    format_args!(
-                        "{} {} {} {} {} {} c\n",
-                        points(first.x_um),
-                        points(first.y_um),
-                        points(second.x_um),
-                        points(second.y_um),
-                        points(last.x_um),
-                        points(last.y_um),
-                    ),
+                append_cubic_command(
+                    stream, first, second, last, page, stroke_margin_um,
                 )?;
                 drawn = true;
                 saw_segment = true;
+                subpath_has_extent |=
+                    first != current || second != current || last != current;
+                current = last;
                 if fill {
                     contour_area.include_cubic([first, second, last]);
                 }
             },
             PdfPathCommand::Close if active && drawn => {
-                if fill && !contour_area.spans_plane {
+                if (fill && !contour_area.spans_plane)
+                    || (!fill && !subpath_has_extent)
+                {
                     return Err(PdfVectorError::InvalidPath);
                 }
                 stream.push_str("h\n");
@@ -401,7 +427,9 @@ fn render_path(
             return Err(PdfVectorError::ResourceLimit);
         }
     }
-    if !saw_segment || (active && !drawn) || (fill && active) {
+    if !saw_segment || (active && (!drawn || !subpath_has_extent))
+        || (fill && active)
+    {
         return Err(PdfVectorError::InvalidPath);
     }
     stream.push_str(operator);
