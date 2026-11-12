@@ -433,6 +433,68 @@ fn total_path_command_framing_preempts_invalid_first_command() {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "a blank page anchors the future-path minimum byte budget",
+)]
+#[test]
+fn later_path_framing_preempts_invalid_earlier_path() {
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(Vec::new())],
+        render_manifest_identity: "later-path-framing.v1",
+    };
+    let blank = serialize_vector_pdf(&composition, limits())
+        .expect("a blank page gives the exact minimal document length");
+    let mut invalid = stroke();
+    invalid.commands = vec![
+        PdfPathCommand::MoveTo(point(-1, 30_000)),
+        PdfPathCommand::LineTo(point(50_000, 40_000)),
+    ];
+    for later in [stroke(), fill()] {
+        composition.pages = vec![page(vec![invalid.clone(), later])];
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidPath),
+            "with room for both paths the negative point is invalid",
+        );
+        assert_eq!(
+            serialize_vector_pdf(&composition, PdfVectorLimits {
+                maximum_pdf_bytes: blank.len().saturating_add(100),
+                ..limits()
+            }),
+            Err(PdfVectorError::ResourceLimit),
+            "later paths must reserve their minimum bytes up front",
+        );
+    }
+}
+
+#[test]
+fn later_command_count_limit_preempts_invalid_earlier_path() {
+    let mut invalid = stroke();
+    invalid.commands = vec![
+        PdfPathCommand::MoveTo(point(-1, 30_000)),
+        PdfPathCommand::LineTo(point(50_000, 40_000)),
+    ];
+    let mut later = stroke();
+    later.commands = vec![PdfPathCommand::MoveTo(point(20_000, 30_000))];
+    for index in 0i32..100i32 {
+        later.commands.push(PdfPathCommand::LineTo(point(
+            30_000 + index * 100, 40_000,
+        )));
+    }
+    let composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(vec![invalid, later])],
+        render_manifest_identity: "later-command-limit.v1",
+    };
+    assert_eq!(
+        serialize_vector_pdf(&composition, limits()),
+        Err(PdfVectorError::ResourceLimit),
+        "a page with too many commands must refuse before malformed ink",
+    );
+}
+
 #[test]
 fn every_stroked_subpath_requires_real_physical_extent() {
     let origin = point(20_000, 30_000);

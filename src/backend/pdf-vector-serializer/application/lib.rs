@@ -599,6 +599,23 @@ fn render_path(
     Ok(())
 }
 
+// Every path spends a paint setup/operator and its command syntax. Reserve
+// all later paths before validating earlier geometry on the same page.
+fn minimum_path_framing_bytes(path: &PdfVectorPath) -> Option<usize> {
+    let paint_bytes = match path.paint {
+        PdfPathPaint::Fill { rule, .. } => match rule {
+            PdfFillRule::EvenOdd => b"0.000 0.000 0.000 rg\nf*\n".len(),
+            PdfFillRule::NonZero => b"0.000 0.000 0.000 rg\nf\n".len(),
+        },
+        PdfPathPaint::Stroke { .. } => {
+            b"0.000 0.000 0.000 RG\n0.003 w\n1 J\n1 j\nS\n".len()
+        },
+    };
+    path.commands.iter().try_fold(paint_bytes, |total, command| {
+        total.checked_add(minimum_command_bytes(*command))
+    })
+}
+
 fn render_page(
     page: &PdfPagePlan<
         PdfVectorColorIntent,
@@ -622,7 +639,14 @@ fn render_page(
     if page.vector_authority.len() > limits.maximum_paths_per_page {
         return Err(PdfVectorError::ResourceLimit);
     }
-    let mut command_count = 0usize;
+    // A malformed early path must not hide a later command-count overrun.
+    let command_count = page.vector_authority.iter().try_fold(
+        0usize,
+        |total, path| total.checked_add(path.commands.len()),
+    ).ok_or(PdfVectorError::ResourceLimit)?;
+    if command_count > limits.maximum_commands_per_page {
+        return Err(PdfVectorError::ResourceLimit);
+    }
     let mut stream =
         format!("q\n1 0 0 -1 0 {} cm\n", page_points(dimensions.height_um));
     // A page cannot be emitted without closing its graphics state. Reserve
@@ -631,16 +655,18 @@ fn render_page(
         .maximum_pdf_bytes
         .checked_sub(b"Q\n".len())
         .ok_or(PdfVectorError::ResourceLimit)?;
-    if stream.len() > drawing_budget {
+    // Minimal syntax for the *whole page* belongs to the stream budget,
+    // even when a malformed first path would refuse before later paint.
+    let minimum_paths = page.vector_authority.iter().try_fold(
+        0usize,
+        |total, path| total.checked_add(minimum_path_framing_bytes(path)?),
+    ).ok_or(PdfVectorError::ResourceLimit)?;
+    if stream.len().checked_add(minimum_paths)
+        .is_none_or(|size| size > drawing_budget)
+    {
         return Err(PdfVectorError::ResourceLimit);
     }
     for path in &page.vector_authority {
-        command_count = command_count
-            .checked_add(path.commands.len())
-            .ok_or(PdfVectorError::ResourceLimit)?;
-        if command_count > limits.maximum_commands_per_page {
-            return Err(PdfVectorError::ResourceLimit);
-        }
         render_path(&mut stream, path, dimensions, drawing_budget)?;
         if stream.len() > drawing_budget {
             return Err(PdfVectorError::ResourceLimit);

@@ -190,6 +190,14 @@ one short command but not the entire authored sequence. Empty paths still
 refuse as `InvalidPath` when their mandatory paint bytes can fit, and
 accepted PDF bytes do not change.
 
+At the page level, the writer now checks the aggregate command-count limit
+and reserves each path's minimum paint and command syntax before drawing the
+first path. A malformed first point can no longer conceal a later path that
+cannot fit, or a later path that raises the page above its command limit.
+Red/green regressions cover stroke/fill followers, a 100-command ceiling,
+and the unchanged `InvalidPath` result when sufficient output bytes exist.
+The preflight does not increase the accepted PDF size or rewrite path order.
+
 The same allowance is checked before refusing an *empty* path: when no room
 remains for its paint setup and operator, `ResourceLimit` takes precedence
 over the malformed empty geometry. With sufficient bytes it still refuses as
