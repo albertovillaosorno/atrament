@@ -1706,11 +1706,23 @@ fn measured_ordered_label<'text>(
     cap: u32,
     statistics: Option<&HandwritingStatisticsProfile>,
 ) -> Result<(u32, &'text str), String> {
-    let (marker, after) = content.split_once(' ')
+    let (marker, _) = content.split_once(' ')
         .ok_or("ordered list requires a numeral and text")?;
-    let spaces = after.bytes().take_while(|byte| *byte == b' ')
-        .count().checked_add(1)
-        .ok_or("ordered label spacing overflow")?;
+    // The separating ASCII space can itself be part of an authored
+    // grapheme (space + combining mark). Its space advance still counts
+    // toward the hanging indent; its attached ink must be measured whole.
+    let mut item = content.get(marker.len()..)
+        .ok_or("ordered label item boundary refused")?;
+    let mut spaces = 0usize;
+    while let Ok((" ", rest)) = first_grapheme(item) {
+        item = rest;
+        spaces = spaces.checked_add(1)
+            .ok_or("ordered label spacing overflow")?;
+    }
+    if item.starts_with(' ') {
+        spaces = spaces.checked_add(1)
+            .ok_or("ordered label spacing overflow")?;
+    }
     let (marker_glyphs, marker_width, _) =
         measured_word(marker, statistics)?;
     // A compressed advance can be shorter than the actual pen contour.
@@ -1742,9 +1754,9 @@ fn measured_ordered_label<'text>(
     if indent < marker_extent {
         return Err("ordered list marker ink overlaps first item glyph".into());
     }
-    let first_word = after.trim_start_matches(' ')
-        .split(' ').next().unwrap_or("");
-    let (glyphs, _, _) = measured_word(first_word, statistics)?;
+    let (first_glyph, _) = first_grapheme(item)
+        .map_err(|_error| "ordered list requires visible item text")?;
+    let (glyphs, _, _) = measured_word(first_glyph, statistics)?;
     let first_slot = glyphs.first()
         .ok_or("ordered list requires visible item text")?.2;
     if indent.checked_add(first_slot).is_none_or(|end| end > cap) {

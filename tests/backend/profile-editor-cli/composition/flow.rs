@@ -7605,3 +7605,56 @@ fn unicode_space_marks_at_markdown_boundaries_keep_measured_pitch()
     }
     Ok(())
 }
+
+#[test]
+fn ordered_label_preflights_first_space_mark_grapheme()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(227);
+    stats = stats.with_glyph(" \u{301}", DimensionStatistics {
+        dimension: Dimension::Width,
+        statistics: ScalarStatistics {
+            minimum: 14_000, maximum: 14_000, mean: 14_000,
+            median: 14_000, standard_deviation: 0,
+        },
+    }, &UnicodeGraphemeSegmentation)
+        .map_err(|error| format!("{error:?}"))?;
+    let source = FlowSource::new(FlowFormat::Markdown, "1.  \u{301}a")?;
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 32_000, height: 20_000,
+    };
+    let error = super::layout_flow_with_region(
+        &source, &NotebookProfile::default(), Some(&stats),
+        super::HeadingDecoration::default(), Some(region),
+    ).expect_err("the marker and first marked-space glyph cannot fit");
+    assert!(error.contains("ordered list label and first glyph exceed"),
+        "unexpected first-glyph boundary: {error}");
+
+    // Wide paper keeps the marked space attached to its numeral.
+    let accepted = FlowSource::new(
+        FlowFormat::Markdown, "1.  \u{301}aaaaaaaaaaaaaaaaaaaa",
+    )?;
+    let (rows, marks, _) = super::layout_flow_with_region(
+        &accepted, &NotebookProfile::default(), Some(&stats),
+        super::HeadingDecoration::default(),
+        Some(super::FlowRegion { width: 44_000, height: 80_000, ..region }),
+    )?;
+    assert!(marks.is_empty());
+    assert!(rows.len() > 1, "long item must wrap after its first glyph");
+    assert!(rows[0].text.starts_with("1.  \u{301}"));
+    assert_eq!(rows.iter().map(|row| row.text.as_str())
+        .collect::<String>(), accepted.text);
+    let (_, marker_width, _) = super::measured_word("1.", Some(&stats))?;
+    for row in rows.iter().skip(1) {
+        assert_eq!(row.origin_um.0,
+            region.left + 8_500 + marker_width + 8_000,
+            "continuations retain the 2-space hanging indent");
+    }
+    Ok(())
+}
