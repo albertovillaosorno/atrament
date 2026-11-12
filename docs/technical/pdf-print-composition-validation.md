@@ -142,6 +142,25 @@ all cross-reference offsets and that its exact final byte count succeeds
 unchanged while one byte less refuses as `ResourceLimit`. This validates
 serializer consistency, not rendered output or complete PDF conformance.
 
+An independent three-page content-stream fixture also pins the **exact emitted
+operator sequence**, beyond xref and `/Length` framing. It crosses a cubic
+stroke with multiple subpaths and a closed subpath, an even-odd compound fill,
+a nonzero triangular fill, later red pen ink, and a blank maximum-size page.
+The oracle compares every page's complete stream to a literal known-good PDF
+operator sequence, including physical page transforms, round caps/joins,
+DeviceRGB channels, fill rules, page-local graphics-state closure and original
+paint order. It separately checks the document's xref, stream lengths, exact
+byte allowance and one-byte-short refusal. This guards vector authority
+preservation in the isolated codec; it is not a font/image or full notebook
+Export acceptance test.
+
+A further 512-case DeviceRGB oracle tests all 256 byte values in each of the
+stroke and fill paint families. It independently computes expected three-digit
+PDF color operands using integer rational rounding, then verifies the emitted
+red, green and blue channel order and values. This pins the codec's current
+8-bit color projection; it does not establish calibrated color output or
+printer fidelity.
+
 The adapter refuses *every* accepted asset and preserved searchable text:
 image/color-profile embedding and font/semantic-text rendering do not exist
 here. It also refuses malformed paths, invalid page boxes, unsafe manifest

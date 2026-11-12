@@ -2860,3 +2860,240 @@ fn mixed_page_stream_lengths_and_exact_document_budgets_remain_consistent() {
         }
     }
 }
+
+// The stream-length and xref oracles verify framing, but cannot detect a
+// valid-looking PDF that silently changes the caller's ordered paint/path
+// authority. These independently fixed streams pin the actual PDF grammar,
+// physical coordinates, per-page graphics state and overlay precedence.
+fn ordered_multicolor_fixture() -> PdfVectorComposition<'static> {
+    let rose_stroke = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(12_700, 25_400)),
+            PdfPathCommand::LineTo(point(25_400, 38_100)),
+            PdfPathCommand::CubicTo(
+                point(38_100, 25_400),
+                point(50_800, 50_800),
+                point(63_500, 38_100),
+            ),
+            PdfPathCommand::MoveTo(point(25_400, 63_500)),
+            PdfPathCommand::LineTo(point(38_100, 76_200)),
+            PdfPathCommand::Close,
+        ],
+        paint: PdfPathPaint::Stroke {
+            color: PdfRgb {
+                red: 255,
+                green: 0,
+                blue: 128,
+            },
+            width_um: 1_270,
+        },
+    };
+    let green_hole = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(12_700, 12_700)),
+            PdfPathCommand::LineTo(point(38_100, 12_700)),
+            PdfPathCommand::LineTo(point(38_100, 38_100)),
+            PdfPathCommand::LineTo(point(12_700, 38_100)),
+            PdfPathCommand::Close,
+            PdfPathCommand::MoveTo(point(19_050, 19_050)),
+            PdfPathCommand::LineTo(point(31_750, 19_050)),
+            PdfPathCommand::LineTo(point(31_750, 31_750)),
+            PdfPathCommand::LineTo(point(19_050, 31_750)),
+            PdfPathCommand::Close,
+        ],
+        paint: PdfPathPaint::Fill {
+            color: PdfRgb {
+                red: 0,
+                green: 255,
+                blue: 0,
+            },
+            rule: PdfFillRule::EvenOdd,
+        },
+    };
+    let yellow_triangle = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(25_400, 50_800)),
+            PdfPathCommand::LineTo(point(50_800, 50_800)),
+            PdfPathCommand::LineTo(point(38_100, 76_200)),
+            PdfPathCommand::Close,
+        ],
+        paint: PdfPathPaint::Fill {
+            color: PdfRgb {
+                red: 255,
+                green: 255,
+                blue: 0,
+            },
+            rule: PdfFillRule::NonZero,
+        },
+    };
+    let red_stroke = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(76_200, 101_600)),
+            PdfPathCommand::LineTo(point(101_600, 127_000)),
+        ],
+        paint: PdfPathPaint::Stroke {
+            color: PdfRgb {
+                red: 255,
+                green: 0,
+                blue: 0,
+            },
+            width_um: 254,
+        },
+    };
+    let mut letter = page(vec![yellow_triangle, red_stroke]);
+    letter.physical_page_box = PdfVectorPageBox {
+        width_um: 215_900,
+        height_um: 279_400,
+    };
+    let mut large_blank = page(Vec::new());
+    large_blank.physical_page_box = PdfVectorPageBox {
+        width_um: 2_000_000,
+        height_um: 2_000_000,
+    };
+    PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(vec![rose_stroke, green_hole]), letter, large_blank],
+        render_manifest_identity: "ordered-path-authority.v1",
+    }
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "test-only PDF grammar snapshots have three known page streams"
+)]
+#[test]
+fn ordered_multi_page_paint_and_path_authority_has_exact_content_streams() {
+    let composition = ordered_multicolor_fixture();
+    let pdf = serialize_vector_pdf(&composition, limits())
+        .expect("all original paint and path authority is valid");
+    assert_xref_integrity(&pdf);
+    assert_stream_length_integrity(&pdf, 3);
+    let text = pdf_string(&pdf);
+    let streams: Vec<&str> = text
+        .split("\nstream\n")
+        .skip(1)
+        .map(|tail| {
+            tail.split_once("endstream\n").expect("stream terminator").0
+        })
+        .collect();
+    assert_eq!(streams.len(), 3, "one independent stream per page");
+    assert_eq!(
+        streams[0],
+        concat!(
+            "q\n1 0 0 -1 0 841.890 cm\n",
+            "1.000 0.000 0.502 RG\n3.600 w\n1 J\n1 j\n",
+            "36.000 72.000 m\n72.000 108.000 l\n",
+            "108.000 72.000 144.000 144.000 180.000 108.000 c\n",
+            "72.000 180.000 m\n108.000 216.000 l\nh\nS\n",
+            "0.000 1.000 0.000 rg\n",
+            "36.000 36.000 m\n108.000 36.000 l\n",
+            "108.000 108.000 l\n36.000 108.000 l\nh\n",
+            "54.000 54.000 m\n90.000 54.000 l\n",
+            "90.000 90.000 l\n54.000 90.000 l\nh\nf*\nQ\n",
+        ),
+        "first page retains stroke subpaths and both fill contours"
+    );
+    assert_eq!(
+        streams[1],
+        concat!(
+            "q\n1 0 0 -1 0 792.000 cm\n",
+            "1.000 1.000 0.000 rg\n",
+            "72.000 144.000 m\n144.000 144.000 l\n",
+            "108.000 216.000 l\nh\nf\n",
+            "1.000 0.000 0.000 RG\n0.720 w\n1 J\n1 j\n",
+            "216.000 288.000 m\n288.000 360.000 l\nS\nQ\n",
+        ),
+        "second page retains original different physical box and paint order"
+    );
+    assert_eq!(
+        streams[2], "q\n1 0 0 -1 0 5669.291 cm\nQ\n",
+        "the blank maximum-size page has its own closed graphics state"
+    );
+    assert_eq!(
+        serialize_vector_pdf(&composition, PdfVectorLimits {
+            maximum_pdf_bytes: pdf.len(),
+            ..limits()
+        }),
+        Ok(pdf.clone()),
+        "complete ordered stream content must survive the exact byte budget",
+    );
+    assert_eq!(
+        serialize_vector_pdf(&composition, PdfVectorLimits {
+            maximum_pdf_bytes: pdf.len() - 1,
+            ..limits()
+        }),
+        Err(PdfVectorError::ResourceLimit),
+    );
+}
+
+// The PDF DeviceRGB operands are rounded to three decimal places. Test all
+// byte values against an integer oracle, including combinations that reveal
+// swapped red/blue channels and the sharpest rounding boundaries.
+#[expect(
+    clippy::expect_used,
+    clippy::integer_division,
+    clippy::integer_division_remainder_used,
+    reason = "bounded color oracle compares an exact rational with PDF numbers"
+)]
+#[test]
+fn all_eight_bit_rgb_channels_preserve_order_and_rounded_values() {
+    fn expected_channel(byte: u8) -> String {
+        let milli = (u32::from(byte) * 1_000 + 127) / 255;
+        format!("{}.{:03}", milli / 1_000, milli % 1_000)
+    }
+    let mut cases = 0usize;
+    for value in 0u8..=255 {
+        let color = PdfRgb {
+            red: value,
+            green: 255 - value,
+            blue: value / 2,
+        };
+        let operands = format!(
+            "{} {} {}",
+            expected_channel(color.red),
+            expected_channel(color.green),
+            expected_channel(color.blue),
+        );
+        for paint in [
+            PdfPathPaint::Stroke { color, width_um: 127 },
+            PdfPathPaint::Fill {
+                color,
+                rule: PdfFillRule::NonZero,
+            },
+        ] {
+            let commands = if matches!(paint, PdfPathPaint::Stroke { .. }) {
+                vec![
+                    PdfPathCommand::MoveTo(point(1_270, 1_270)),
+                    PdfPathCommand::LineTo(point(2_540, 2_540)),
+                ]
+            } else {
+                vec![
+                    PdfPathCommand::MoveTo(point(1_270, 1_270)),
+                    PdfPathCommand::LineTo(point(2_540, 1_270)),
+                    PdfPathCommand::LineTo(point(1_270, 2_540)),
+                    PdfPathCommand::Close,
+                ]
+            };
+            let document = PdfCompositionPlan {
+                assets: Vec::new(),
+                pages: vec![page(vec![PdfVectorPath { commands, paint }])],
+                render_manifest_identity: "all-device-rgb-channels.v1",
+            };
+            let bytes = serialize_vector_pdf(&document, limits())
+                .expect("valid three-channel RGB paint must serialize");
+            let operator = if matches!(paint, PdfPathPaint::Stroke { .. }) {
+                "RG\n"
+            } else {
+                "rg\n"
+            };
+            assert!(
+                pdf_string(&bytes).contains(&format!("{operands} {operator}")),
+                "RGB components must remain in order and exactly rounded: \
+                 channel={value} paint={paint:?}",
+            );
+            cases += 1;
+        }
+    }
+    assert_eq!(cases, 512, "all byte values in both PDF paint families");
+}
