@@ -135,6 +135,35 @@ fn handwriting_preflight_rejects_invalid_flags_before_profile_io() {
 }
 
 #[test]
+fn handwriting_statistics_cli_requires_exact_decimal_scalar_text() {
+    let canonical = ["width", "2000", "3000", "2500", "2500", "0"];
+    for field in 1..canonical.len() {
+        for invalid in ["+2000", "2e3", "0x7d0", " 2000", "2000 "] {
+            let mut fields = canonical;
+            fields[field] = invalid;
+            let mut flags = args(&[
+                "--profile", "unopened.json", "--set-global",
+            ]);
+            flags.extend(fields.map(str::to_owned));
+            let error = preflight_handwriting_options(&flags)
+                .expect_err("coerced scalar must refuse before profile read");
+            assert!(error.contains("decimal"), "{invalid}: {error}");
+            assert!(parse_handwriting_options(&args(&[
+                "--set-global", fields[0], fields[1], fields[2],
+                fields[3], fields[4], fields[5],
+            ])).is_err(), "final parser accepted {invalid}");
+        }
+    }
+    let signed = args(&[
+        "--set-global", "slant", "-1000", "1000", "-100", "-100", "0",
+    ]);
+    preflight_handwriting_options(&signed)
+        .expect("negative decimal statistics remain valid");
+    let _admitted = parse_handwriting_options(&signed)
+        .expect("negative decimal statistics survive final CLI admission");
+}
+
+#[test]
 fn glyph_and_handwriting_profile_paths_need_explicit_spellings() {
     for source in ["", "-", "--inspect", "--output", "--profile"] {
         let error = preflight_handwriting_options(&args(&[

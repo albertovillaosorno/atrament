@@ -534,11 +534,26 @@ fn parse_parameter(values: &[String]) -> Result<DimensionStatistics, String> {
     };
     let dimension = Dimension::from_key(name)
         .ok_or_else(|| format!("unknown statistics dimension: {name}"))?;
+    // Rust's integer parser permits a leading '+', while canonical JSON
+    // and the local browser editor use explicit decimal scalar syntax.
+    // Validate the original CLI text before reading a selected profile.
     let integer = |value: &str| {
-        value
-            .parse::<i32>()
+        let digits = value.strip_prefix('-').unwrap_or(value);
+        if digits.is_empty()
+            || !digits.bytes().all(|byte| byte.is_ascii_digit())
+        {
+            return Err(
+                "statistics integer requires signed decimal digits".into()
+            );
+        }
+        value.parse::<i32>()
             .map_err(|error| format!("invalid statistics integer: {error}"))
     };
+    if deviation.is_empty()
+        || !deviation.bytes().all(|byte| byte.is_ascii_digit())
+    {
+        return Err("deviation requires unsigned decimal digits".into());
+    }
     let standard_deviation = deviation
         .parse::<u32>()
         .map_err(|error| format!("deviation must be non-negative: {error}"))?;
