@@ -749,6 +749,58 @@ fn remaining_budget_smaller_than_page_header_refuses_before_path() {
 
 #[expect(
     clippy::expect_used,
+    reason = "real PDF objects anchor the page-framing byte boundary"
+)]
+#[test]
+fn page_object_framing_refuses_before_invalid_path() {
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(Vec::new())],
+        render_manifest_identity: "page-object-budget.v1",
+    };
+    let accepted = serialize_vector_pdf(&composition, limits())
+        .expect("a blank page produces inspectable PDF object framing");
+    let page_start = accepted
+        .windows(b"3 0 obj\n".len())
+        .position(|part| part == b"3 0 obj\n")
+        .expect("the page object exists");
+    let content_start = accepted
+        .windows(b"4 0 obj\n".len())
+        .position(|part| part == b"4 0 obj\n")
+        .expect("the content object follows the page object");
+    let page_header_len = content_start.saturating_sub(page_start);
+    let mut invalid = stroke();
+    invalid.commands.clear();
+    composition
+        .pages
+        .get_mut(0)
+        .expect("the fixture has one page")
+        .vector_authority
+        .push(invalid);
+    let minimum_stream = b"q\n1 0 0 -1 0 841.890 cm\nQ\n";
+    let content_header =
+        format!("4 0 obj\n<< /Length {} >>\nstream\n", minimum_stream.len(),);
+    let minimum_framing = page_header_len
+        .saturating_add(content_header.len())
+        .saturating_add(minimum_stream.len())
+        .saturating_add(b"endstream\nendobj\n".len());
+    for allowance in [
+        page_header_len.saturating_sub(1),
+        minimum_framing.saturating_sub(1),
+    ] {
+        assert_eq!(
+            serialize_vector_pdf(&composition, PdfVectorLimits {
+                maximum_pdf_bytes: page_start.saturating_add(allowance),
+                ..limits()
+            },),
+            Err(PdfVectorError::ResourceLimit),
+            "mandatory PDF framing refuses before invalid paths",
+        );
+    }
+}
+
+#[expect(
+    clippy::expect_used,
     reason = "the exact PDF page ceiling must emit a valid page tree"
 )]
 #[test]

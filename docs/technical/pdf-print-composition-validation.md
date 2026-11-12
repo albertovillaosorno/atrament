@@ -162,6 +162,14 @@ Likewise each mandatory path paint operator (`S`, `f`, `f*`) is reserved
 before processing its geometry. A path that cannot finish painting now refuses
 before a later malformed command can mask the exhausted byte allowance.
 
+The page serializer also reserves the mandatory PDF page object, minimum
+content-stream dictionary and terminator before inspecting any authored path.
+It subtracts that framing from the available page-stream budget, so a malformed
+path cannot hide the fact that there is insufficient room even for an empty
+page object. A red/green regression checks a byte budget that is exactly one
+byte shorter than the required minimum framing; successful output remains
+byte-identical at its exact full-document limit.
+
 The existing oversized-stream regression, large-content fixture and exact-limit
 boundary regressions still apply. Output bytes and PDF object order are
 unchanged.

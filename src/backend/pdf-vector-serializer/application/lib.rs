@@ -635,6 +635,39 @@ fn append_xref_and_trailer(
     Ok(())
 }
 
+// A page consumes its own PDF object and stream dictionary/terminator in
+// addition to the drawing instructions. Reserve the mandatory empty-page
+// framing before examining potentially malformed geometry.
+fn reserve_page_object_framing(
+    dimensions: PdfVectorPageBox,
+    object: usize,
+    remaining_bytes: usize,
+) -> Result<(String, usize), PdfVectorError> {
+    let content_object = object.saturating_add(1);
+    let width = page_points(dimensions.width_um);
+    let height = page_points(dimensions.height_um);
+    let page_header = format!(
+        "{object} 0 obj\n<< /Type /Page /Parent 2 0 R \
+         /MediaBox [0 0 {width} {height}] /Resources << >> \
+         /Contents {content_object} 0 R >>\nendobj\n",
+    );
+    let minimum_stream = format!("q\n1 0 0 -1 0 {height} cm\nQ\n");
+    let minimum_content_header = format!(
+        "{content_object} 0 obj\n<< /Length {} >>\nstream\n",
+        minimum_stream.len(),
+    );
+    let stream_overhead = minimum_content_header
+        .len()
+        .checked_add(b"endstream\nendobj\n".len())
+        .ok_or(PdfVectorError::ResourceLimit)?;
+    let stream_budget = remaining_bytes
+        .checked_sub(page_header.len())
+        .and_then(|remaining| remaining.checked_sub(stream_overhead))
+        .filter(|remaining| *remaining >= minimum_stream.len())
+        .ok_or(PdfVectorError::ResourceLimit)?;
+    Ok((page_header, stream_budget))
+}
+
 /// Serialize a complete vector-only PDF without touching filesystem paths.
 ///
 /// The input must already contain accepted path coordinates in micrometers.
@@ -707,30 +740,23 @@ pub fn serialize_vector_pdf(
             .checked_sub(bytes.len())
             .filter(|remaining| *remaining > 0)
             .ok_or(PdfVectorError::ResourceLimit)?;
+        let object = 3usize.saturating_add(index.saturating_mul(2));
+        let content_object = object.saturating_add(1);
+        let (page_header, stream_budget) = reserve_page_object_framing(
+            page.physical_page_box,
+            object,
+            remaining_bytes,
+        )?;
         let page_limits = PdfVectorLimits {
-            maximum_pdf_bytes: remaining_bytes,
+            maximum_pdf_bytes: stream_budget,
             ..limits
         };
         let stream = render_page(page, page_limits)?;
-        let object = 3usize.saturating_add(index.saturating_mul(2));
-        let width = page_points(page.physical_page_box.width_um);
-        let height = page_points(page.physical_page_box.height_um);
-        append_object(
-            &mut bytes,
-            &mut offsets,
-            format!(
-                "{object} 0 obj\n<< /Type /Page /Parent 2 0 R \
-                 /MediaBox [0 0 {width} {height}] /Resources << >> \
-                 /Contents {} 0 R >>\nendobj\n",
-                object.saturating_add(1),
-            )
-            .as_bytes(),
-            limit,
-        )?;
+        append_object(&mut bytes, &mut offsets, page_header.as_bytes(), limit)?;
         append_stream_object(
             &mut bytes,
             &mut offsets,
-            object.saturating_add(1),
+            content_object,
             &stream,
             limit,
         )?;
