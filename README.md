@@ -2070,10 +2070,25 @@ Equal input widths remain equal within a word, allowing valid short pen
 joins when the underlying per-glyph thickness jitter is zero. Nonzero
 per-glyph thickness jitter can still make adjacent pens incompatible.
 
+For shared italic rhythm, add `--glyph-word-slant MAX_MDEG` (0–5000
+millidegrees, or up to five degrees), again with `--glyph-variation`.
+Each ASCII-space-delimited word receives one seeded, signed shear angle;
+its letters retain the same lower-baseline tilt while their authored
+contours and pen order stay unchanged. This shear composes with the selected
+handwriting profile's mean slant in Rust's physical-stroke engine, including
+its checked geometry and printable-ink admission.
+
+It does not modify the saved glyph library, nominal advances or page flow.
+A zero maximum uses the legacy geometry exactly; a nonzero maximum can
+make ink unprintable and safely refuse the entire export. Distinct seeded
+streams keep word slant, pressure, word position and line drift
+independently selectable.
+
 For example, extend the preceding command with
 `--glyph-line-drift 120 --glyph-word-drift 90 --glyph-word-rise 90`
-and `--glyph-word-pressure 12` to produce reproducible line, word and ink
-rhythms. At `0`, each extra option is byte-identical to omission for
+and `--glyph-word-pressure 12 --glyph-word-slant 3000` to produce
+reproducible line, word, ink and italic rhythms. At `0`, each extra
+option is byte-identical to omission for
 PDF/PNG and emitted ink TSV. Widths outside 80–1500 µm and unprintable
 pen clearance refuse before output commit; there is no silent clipping.
 These CLI-only variations do not persist in a saved notebook, are not

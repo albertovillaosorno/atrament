@@ -295,6 +295,24 @@ impl GlyphVariation {
         let mut random = XorShift32::new(identity);
         Self::round_js(random.unit() * f64::from(maximum_um))
     }
+    // A single lower-baseline shear per word keeps authored pen directions
+    // and neighboring equal-height joins coherent without rewriting a glyph.
+    fn word_slant(
+        self, run_index: usize, word_index: u32, maximum_mdeg: u32,
+    ) -> Result<i32, String> {
+        let run = u32::try_from(run_index)
+            .map_err(|_error| "word slant run index overflow")?;
+        let mut identity = self.seed
+            ^ run.wrapping_add(1).wrapping_mul(0x517C_C1B7)
+            ^ word_index.wrapping_add(1).wrapping_mul(0x9E37_79B1);
+        identity ^= identity >> 16i32;
+        identity = identity.wrapping_mul(0x7FEB_352D);
+        identity ^= identity >> 15i32;
+        identity = identity.wrapping_mul(0x846C_A68B);
+        identity ^= identity >> 16i32;
+        let mut random = XorShift32::new(identity);
+        Self::round_js(random.unit() * f64::from(maximum_mdeg))
+    }
 }
 
 impl XorShift32 {
@@ -765,8 +783,9 @@ impl GlyphOverlay {
                     run, run_index, word_index, column, metrics,
                 )?;
                 let pressure = self.glyph_pressure(run_index, word_index)?;
+                let slant = self.glyph_slant(run_index, word_index)?;
                 let rendered = selected.iter().map(|shape| placed_ink(
-                    shape, run, (glyph_x, glyph_y), metrics, pressure,
+                    shape, run, (glyph_x, glyph_y), metrics, pressure, slant,
                 )).collect::<Result<Vec<_>, _>>()?;
                 append_text_ink(
                     &mut expanded, &rendered,
@@ -881,6 +900,16 @@ impl GlyphOverlay {
         }
     }
 
+    fn glyph_slant(
+        &self, run_index: usize, word_index: u32,
+    ) -> Result<i32, String> {
+        match (self.variation, self.word_slant_millidegrees) {
+            (Some(variation), Some(maximum)) =>
+                variation.word_slant(run_index, word_index, maximum),
+            _ => Ok(0),
+        }
+    }
+
     pub(super) const fn has_any(&self) -> bool {
         !self.runs.is_empty() || !self.strokes.is_empty()
             || !self.fallbacks.is_empty() || self.variation.is_some()
@@ -888,6 +917,7 @@ impl GlyphOverlay {
             || self.word_drift_um.is_some()
             || self.word_rise_um.is_some()
             || self.word_pressure_percent.is_some()
+            || self.word_slant_millidegrees.is_some()
     }
 
     // Index once per expansion, retaining authored order for each exact key.
@@ -1231,6 +1261,14 @@ impl GlyphOverlay {
                 }
                 self.word_rise_um = Some(next_integer(
                     iter, "glyph word rise", 0, 150,
+                )?);
+            }
+            "--glyph-word-slant" => {
+                if self.word_slant_millidegrees.is_some() {
+                    return Err("duplicate --glyph-word-slant".into());
+                }
+                self.word_slant_millidegrees = Some(next_integer(
+                    iter, "glyph word slant", 0, 5_000,
                 )?);
             }
             "--glyph-word-pressure" => {
@@ -2037,6 +2075,16 @@ impl GlyphOverlay {
                 return Err("word rise requires --glyph-variation".into());
             }
         }
+        if let Some(maximum) = self.word_slant_millidegrees {
+            if maximum > 5_000 {
+                return Err(
+                    "glyph word slant must be within 0..5000 mdeg".into()
+                );
+            }
+            if self.variation.is_none() {
+                return Err("word slant requires --glyph-variation".into());
+            }
+        }
         if let Some(maximum) = self.word_pressure_percent {
             if maximum > 20 {
                 return Err("glyph word pressure must be within 0..20%".into());
@@ -2418,6 +2466,7 @@ pub(super) fn validate_removal_glyph_key(
 fn placed_ink(
     shape: &GlyphStroke, run: &TextRun, origin: (i64, i64),
     metrics: Option<GlyphMetrics>, pressure_percent: u32,
+    word_slant_mdeg: i32,
 ) -> Result<NotebookInkLine, String> {
     // Compose word pressure and heading treatment before delegating final
     // width admission to the renderer-independent physical pen engine.
@@ -2427,16 +2476,30 @@ fn placed_ink(
         .and_then(|value| value.checked_add(50))
         .and_then(|value| value.checked_div(100))
         .ok_or("combined ink scale exceeds numeric bounds")?;
+    // When uncalibrated, use the projection engine's exact reference cell
+    // only if an actual word shear was selected. Zero stays on the legacy
+    // no-dimensions path, preserving byte identity and authored geometry.
+    let dimensions = match (metrics, word_slant_mdeg) {
+        (None, 0i32) => None,
+        (maybe_metrics, slant) => {
+            let values = maybe_metrics.unwrap_or(GlyphMetrics {
+                baseline_offset: 0, height: 4_500, ink_thickness: 300,
+                letter_spacing: 0, slant: 0, width: 3_500,
+            });
+            Some(MeasuredGlyphDimensions {
+                width_um: values.width, height_um: values.height,
+                ink_thickness_um: values.ink_thickness,
+                slant_millidegrees: values.slant.checked_add(slant)
+                    .ok_or("combined glyph word slant exceeds numeric bounds")?,
+            })
+        }
+    };
     let projected = project_ink_segment(AuthoredInkSegment {
         start_um: shape.start_um, end_um: shape.end_um,
         width_um: shape.width_um, rgb: shape.rgb,
     }, InkPlacement {
         page: run.page, origin_um: origin,
-        dimensions: metrics.map(|values| MeasuredGlyphDimensions {
-            width_um: values.width, height_um: values.height,
-            ink_thickness_um: values.ink_thickness,
-            slant_millidegrees: values.slant,
-        }),
+        dimensions,
         ink_scale_percent,
         color_override: run.heading_ink.and_then(|style| style.color),
     }).map_err(str::to_owned)?;

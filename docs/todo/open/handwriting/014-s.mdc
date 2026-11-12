@@ -869,3 +869,27 @@ widths. The selected file remains unchanged after each invalid export.
 This is an opt-in creative pressure *proxy*, not a calibrated human pen
 model, local pressure measurement, persisted notebook setting, or automatic
 cursive join. The P1-014 finite two-line handwriting task remains open.
+
+## CLI-only word-level slant rhythm (partial) — 2026-11-12
+
+`atrament-profiles notebook` now accepts the explicit
+`--glyph-word-slant MAX_MDEG` (0–5000, signed seeded angles up to five
+degrees) only with `--glyph-variation`. The same lower-baseline tangent
+shear is selected for every glyph of one ASCII-space-delimited word and
+composes with optional saved statistical mean slant. Both uncalibrated and
+mean-scaled strokes pass through the independent Rust physical pen engine;
+no separate PDF/PNG geometry or glyph rewrite is introduced.
+
+Five native regression tests cover hard-coded independent seed/physical
+coordinate samples for two rows of exact Unicode accented words, zero-value
+byte compatibility, composition with positional and pressure rhythms,
+selected same-pen directed intra-word joins, composability with authored
+statistical mean geometry, and seed-stable PDF, transparent PNG and page-ink
+TSV bytes. Invalid, duplicate, overrange and unpaired flags refuse without
+replacing a pre-existing file. Seeded out-of-printable-area shear also
+refuses atomically after valid baseline ink has been demonstrated.
+
+Word-level tilt is a deliberate, export-only creative variation. It does
+not infer handwriting, manage persistent word path identities, implement
+continuous cursive curves or calibrate to a particular writer. Full
+P1-014 completion remains open.

@@ -10823,3 +10823,315 @@ fn word_pressure_refuses_physical_pen_limits_and_scales_heading_ink()
     fs::remove_file(&target).map_err(|e| e.to_string())?;
     Ok(())
 }
+
+#[test]
+fn seeded_word_slant_shares_shear_per_unicode_word_and_preserves_zero_bytes()
+-> Result<(), String> {
+    let glyph = "n\u{303}";
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        glyph, "600", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    let text = format!("{glyph}{glyph}  {glyph} {glyph}{glyph}");
+    for y in [30_000u32, 40_000u32] {
+        overlay.parse("--place-text", &mut args(&[
+            "1", "25000", &y.to_string(), &text,
+        ]).iter())?;
+    }
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    let baseline = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-slant", &mut args(&["5000"]).iter())?;
+    let slanted = overlay.expand(&[], None)?;
+    // Independent uint32 avalanche/xorshift samples for seed 42, two runs
+    // and three exact ASCII-space-delimited words. The expected shifts use
+    // lower-baseline tangent shear with Rust's nearest-integer rounding.
+    let shifts = [
+        (272i64, 132i64), (-250, -121), (122, 59),
+        (287, 139), (-214, -104), (-156, -76),
+    ];
+    let positions = [25_000i64, 29_000, 41_000, 49_000, 53_000];
+    for (run_index, row) in slanted.as_chunks::<5>().0.iter().enumerate() {
+        let row_y = if run_index == 0 { 30_000u32 } else { 40_000u32 };
+        for (index, stroke) in row.iter().enumerate() {
+            let word = match index { 0 | 1 => 0, 2 => 1, _ => 2 };
+            let (top, bottom) = *shifts.get(run_index * 3 + word)
+                .ok_or("missing seeded word fixture")?;
+            let x = *positions.get(index)
+                .ok_or("missing word position fixture")?;
+            let start_x = u32::try_from(x + 600 + top)
+                .map_err(|error| error.to_string())?;
+            let end_x = u32::try_from(x + 1600 + bottom)
+                .map_err(|error| error.to_string())?;
+            if stroke.start_um != (start_x, row_y + 1000)
+                || stroke.end_um != (end_x, row_y + 2800)
+                || stroke.width_um != 250 || stroke.rgb != [0x12, 0x34, 0x56] {
+                return Err(format!(
+                    "incorrect shared word slant at run {run_index} {index}: \
+                     {stroke:?}"
+                ));
+            }
+        }
+    }
+    if slanted.len() != 10 || slanted == baseline
+        || slanted != overlay.expand(&[], None)? {
+        return Err("word slant must change and replay ten strokes".into());
+    }
+    overlay.word_slant_millidegrees = Some(0);
+    if baseline != overlay.expand(&[], None)? {
+        return Err("zero word slant changed legacy ink".into());
+    }
+    overlay.word_slant_millidegrees = Some(5_000);
+    overlay.word_drift_um = Some(90);
+    overlay.word_rise_um = Some(90);
+    overlay.line_drift_um = Some(120);
+    overlay.word_pressure_percent = Some(20);
+    let composed = overlay.expand(&[], None)?;
+    overlay.word_slant_millidegrees = Some(0);
+    let without_slant = overlay.expand(&[], None)?;
+    for (index, (before, after)) in without_slant.iter()
+        .zip(&composed).enumerate() {
+        let run_index = index.div_euclid(5);
+        let word = match index.rem_euclid(5) { 0 | 1 => 0, 2 => 1, _ => 2 };
+        let (top, bottom) = *shifts.get(run_index * 3 + word)
+                .ok_or("missing seeded word fixture")?;
+        if i64::from(after.start_um.0) - i64::from(before.start_um.0)
+            != top || i64::from(after.end_um.0)
+            - i64::from(before.end_um.0) != bottom
+            || after.start_um.1 != before.start_um.1
+            || after.end_um.1 != before.end_um.1
+            || after.width_um != before.width_um {
+            return Err("word shear changed independent rhythm".into());
+        }
+    }
+    overlay.word_slant_millidegrees = Some(5_001);
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed out-of-range word slant accepted".into());
+    }
+    overlay.word_slant_millidegrees = Some(5_000);
+    overlay.variation = None;
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed unpaired word slant accepted".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn seeded_word_slant_keeps_same_pen_directed_word_bridges()
+-> Result<(), String> {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "\u{e1}", "500", "1200", "3300", "1200", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "\u{e1}\u{e1} \u{e1}\u{e1}",
+    ]).iter())?;
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    overlay.add_text_join_pair(
+        &mut args(&["\u{e1}", "\u{e1}"]).iter(),
+    )?;
+    overlay.parse("--glyph-word-slant", &mut args(&["5000"]).iter())?;
+    let joined = overlay.expand(&[], None)?;
+    if joined.len() != 6 {
+        return Err("word slant lost a selected join".into());
+    }
+    for offset in [0usize, 3] {
+        let [first, bridge, last] = joined.get(offset..offset + 3)
+            .ok_or("missing joined word")? else {
+            return Err("joined word must contain three lines".into());
+        };
+        if first.end_um != bridge.start_um
+            || bridge.end_um != last.start_um
+            || first.width_um != bridge.width_um
+            || bridge.width_um != last.width_um
+            || bridge.end_um.0 - bridge.start_um.0 != 1_200
+            || bridge.start_um.1 != bridge.end_um.1 {
+            return Err("shared word slant broke the directed join".into());
+        }
+    }
+    if joined != overlay.expand(&[], None)? {
+        return Err("joined slanted word changed on replay".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn word_slant_composes_with_statistical_mean_in_physical_engine()
+-> Result<(), String> {
+    let stats_bytes = execute_handwriting(&args(&[
+        "--set-glyph", "\u{e1}", "width", "3500", "3500", "3500",
+        "3500", "0",
+        "--set-glyph", "\u{e1}", "height", "4500", "4500", "4500",
+        "4500", "0",
+        "--set-glyph", "\u{e1}", "slant", "3000", "3000", "3000",
+        "3000", "0",
+    ]))?.ok_or("missing statistical profile")?;
+    let statistics = decode_statistics_json(
+        &stats_bytes, &UnicodeGraphemeSegmentation,
+    ).map_err(|error| format!("statistics: {error:?}"))?;
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "\u{e1}", "600", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "\u{e1}",
+    ]).iter())?;
+    let default = overlay.expand(&[], Some(&statistics))?;
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    overlay.parse("--glyph-word-slant", &mut args(&["5000"]).iter())?;
+    let combined = overlay.expand(&[], Some(&statistics))?;
+    // Mean 3000 mdeg plus independently seeded 4445 mdeg for run 0,
+    // word 0. The core rounds (4500-Y)*tan(7.445 degrees) on each point.
+    let original = default.first().ok_or("missing original ink")?;
+    let varied = combined.first().ok_or("missing varied ink")?;
+    if default.len() != 1 || combined.len() != 1
+        || original.start_um != (25_783, 31_000)
+        || original.end_um != (26_689, 32_800)
+        || varied.start_um != (26_057, 31_000)
+        || varied.end_um != (26_822, 32_800)
+        || varied.width_um != 250 {
+        return Err(format!(
+            "word and mean slant did not compose: {default:?} {combined:?}"
+        ));
+    }
+    overlay.word_slant_millidegrees = Some(0);
+    if overlay.expand(&[], Some(&statistics))? != default {
+        return Err("zero word shear changed mean slant".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn word_slant_pdf_png_ink_replay_and_atomic_refusals()
+-> Result<(), String> {
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "\u{e1}", "600", "1000", "1600", "2800",
+        "250", "#123456",
+        "--flow-markdown", concat!(
+            "\u{e1}\u{e1} \u{e1} \u{e1}\u{e1}\n\n",
+            "\u{e1}\u{e1} \u{e1}\u{e1}",
+        ),
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    for format in ["pdf", "png", "ink"] {
+        let render = |seed: &str, extras: &[&str]|
+            -> Result<Vec<u8>, String> {
+            let mut command = prefix.clone();
+            let at = command.iter().position(|value| {
+                value == "--glyph-variation"
+            }).ok_or("variation flag missing")? + 1;
+            *command.get_mut(at).ok_or("seed missing")? = seed.into();
+            if format == "ink" {
+                command.push("--emit-ink-file".into());
+            } else {
+                command.extend(args(&["--export-paper", format]));
+            }
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            command.extend(args(extras));
+            execute_notebook(&command)?.ok_or_else(|| "missing output".into())
+        };
+        let original = render("42", &[])?;
+        if original != render("42", &["--glyph-word-slant", "0"])? {
+            return Err(format!("{format} zero word shear changed output"));
+        }
+        let changed = render("42", &["--glyph-word-slant", "5000"])?;
+        if changed == original
+            || changed != render("42", &["--glyph-word-slant", "5000"])?
+            || changed == render("43", &["--glyph-word-slant", "5000"])? {
+            return Err(format!("{format} word-shear replay failed"));
+        }
+        if format == "pdf" && !changed.starts_with(b"%PDF-1.4") {
+            return Err("sheared PDF signature missing".into());
+        }
+        if format == "png" && !changed.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return Err("sheared PNG signature missing".into());
+        }
+        if format == "ink"
+            && !changed.starts_with(b"atrament.page-ink.v1\n") {
+            return Err("sheared ink manifest missing".into());
+        }
+    }
+    let target = test_path();
+    fs::write(&target, b"accepted bytes").map_err(|error| error.to_string())?;
+    let path = target.to_str().ok_or("non-UTF8 output path")?;
+    for invalid in [
+        args(&["--glyph-word-slant", "-1"]),
+        args(&["--glyph-word-slant", "5001"]),
+        args(&["--glyph-word-slant", "4294967296"]),
+        args(&["--glyph-word-slant", "5000",
+            "--glyph-word-slant", "1"]),
+    ] {
+        let mut command = prefix.clone();
+        command.extend(args(&[
+            "--export-paper", "pdf", "--output", path, "--replace",
+        ]));
+        command.extend(invalid);
+        if execute_notebook(&command).is_ok()
+            || fs::read(&target).map_err(|error| error.to_string())?
+                != b"accepted bytes" {
+            return Err("invalid word slant replaced output".into());
+        }
+    }
+    let mut unpaired = prefix;
+    let at = unpaired.iter().position(|value| {
+        value == "--glyph-variation"
+    }).ok_or("variation flag missing")?;
+    unpaired.drain(at..at + 8).for_each(drop);
+    unpaired.extend(args(&[
+        "--glyph-word-slant", "5000", "--export-paper", "pdf",
+        "--output", path, "--replace",
+    ]));
+    if execute_notebook(&unpaired).is_ok()
+        || fs::read(&target).map_err(|error| error.to_string())?
+            != b"accepted bytes" {
+        return Err("unpaired word slant replaced output".into());
+    }
+    fs::remove_file(&target).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[test]
+fn word_slant_refuses_off_page_shear_before_replacing_existing_export()
+-> Result<(), String> {
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "\u{e1}", "200", "1000", "1600", "2800",
+        "250", "#123456",
+        "--place-text", "1", "20000", "30000", "\u{e1}",
+        "--glyph-variation", "7", "0", "0", "0", "0", "0", "0",
+    ]);
+    let mut plain = prefix.clone();
+    plain.extend(args(&["--export-paper", "pdf"]));
+    if !execute_notebook(&plain)?.is_some_and(|bytes| {
+        bytes.starts_with(b"%PDF-1.4")
+    }) {
+        return Err("boundary fixture must render without word shear".into());
+    }
+    let target = test_path();
+    fs::write(&target, b"accepted export").map_err(|error| error.to_string())?;
+    let path = target.to_str().ok_or("non-UTF8 output path")?;
+    let mut refused = prefix;
+    refused.extend(args(&[
+        "--glyph-word-slant", "5000", "--export-paper", "pdf",
+        "--output", path, "--replace",
+    ]));
+    let refusal = execute_notebook(&refused)
+        .expect_err("seed-7 negative word shear must move ink off-page");
+    if !refusal.contains("page 1 ink needs printable endpoints")
+        || fs::read(&target).map_err(|error| error.to_string())?
+            != b"accepted export" {
+        return Err(format!(
+            "unprintable word slant changed existing output: {refusal}"
+        ));
+    }
+    fs::remove_file(&target).map_err(|error| error.to_string())?;
+    Ok(())
+}
