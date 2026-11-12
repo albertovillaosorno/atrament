@@ -250,6 +250,12 @@ Red/green tests pin the one-byte-short two-page case plus twelve pages with
 alternating page sizes and two-digit PDF object numbers. Valid exact-budget
 output remains byte-identical, including cross-reference offsets.
 
+The writer also preflights each page's path-count and command-count
+ceilings across the entire composition before rendering page one. A malformed
+first-page coordinate no longer masks a `ResourceLimit` on a later page with
+too many paths or commands. The two-page red/green regression preserves
+`InvalidPath` when both count ceilings fit; admissible PDF bytes are unchanged.
+
 The same cross-page reserve now includes every future path's minimum paint
 and command syntax, not just empty-page objects. It includes the resulting
 content-stream `/Length` digits, so a malformed earlier stroke cannot mask

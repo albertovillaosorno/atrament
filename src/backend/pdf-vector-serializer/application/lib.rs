@@ -664,6 +664,25 @@ fn minimum_path_framing_bytes(
         })
 }
 
+// Count limits apply to the whole composition before any earlier page ink
+// is inspected. A malformed page must not hide an oversized later page.
+fn enforce_page_count_limits(
+    paths: &[PdfVectorPath],
+    limits: PdfVectorLimits,
+) -> Result<(), PdfVectorError> {
+    if paths.len() > limits.maximum_paths_per_page {
+        return Err(PdfVectorError::ResourceLimit);
+    }
+    let command_count = paths.iter().try_fold(
+        0usize,
+        |total, path| total.checked_add(path.commands.len()),
+    ).ok_or(PdfVectorError::ResourceLimit)?;
+    if command_count > limits.maximum_commands_per_page {
+        return Err(PdfVectorError::ResourceLimit);
+    }
+    Ok(())
+}
+
 fn render_page(
     page: &PdfPagePlan<
         PdfVectorColorIntent,
@@ -684,17 +703,7 @@ fn render_page(
     {
         return Err(PdfVectorError::InvalidPageBox);
     }
-    if page.vector_authority.len() > limits.maximum_paths_per_page {
-        return Err(PdfVectorError::ResourceLimit);
-    }
-    // A malformed early path must not hide a later command-count overrun.
-    let command_count = page.vector_authority.iter().try_fold(
-        0usize,
-        |total, path| total.checked_add(path.commands.len()),
-    ).ok_or(PdfVectorError::ResourceLimit)?;
-    if command_count > limits.maximum_commands_per_page {
-        return Err(PdfVectorError::ResourceLimit);
-    }
+    enforce_page_count_limits(&page.vector_authority, limits)?;
     let mut stream =
         format!("q\n1 0 0 -1 0 {} cm\n", page_points(dimensions.height_um));
     // A page cannot be emitted without closing its graphics state. Reserve
@@ -978,14 +987,15 @@ fn append_pages(
         .iter()
         .enumerate()
         .try_fold(0usize, |total, (index, page)| {
+            enforce_page_count_limits(&page.vector_authority, limits)?;
             let object = 3usize.saturating_add(index.saturating_mul(2));
-            total.checked_add(minimum_page_object_bytes(
+            let minimum = minimum_page_object_bytes(
                 page.physical_page_box,
                 object,
                 &page.vector_authority,
-            )?)
-        })
-        .ok_or(PdfVectorError::ResourceLimit)?;
+            ).ok_or(PdfVectorError::ResourceLimit)?;
+            total.checked_add(minimum).ok_or(PdfVectorError::ResourceLimit)
+        })?;
     if remaining_page_minima > page_limit.saturating_sub(bytes.len()) {
         return Err(PdfVectorError::ResourceLimit);
     }

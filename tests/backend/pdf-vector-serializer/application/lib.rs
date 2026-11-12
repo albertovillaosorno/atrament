@@ -495,6 +495,49 @@ fn later_command_count_limit_preempts_invalid_earlier_path() {
     );
 }
 
+#[expect(
+    clippy::indexing_slicing,
+    reason = "two-page fixture has a known first path",
+)]
+#[test]
+fn later_page_path_and_command_limits_preempt_invalid_earlier_ink() {
+    let mut invalid = stroke();
+    invalid.commands[0] = PdfPathCommand::MoveTo(point(-1, 30_000));
+    let cases = [
+        (
+            vec![stroke(), stroke()],
+            PdfVectorLimits {
+                maximum_paths_per_page: 1,
+                ..limits()
+            },
+        ),
+        (
+            vec![stroke()],
+            PdfVectorLimits {
+                maximum_commands_per_page: 2,
+                ..limits()
+            },
+        ),
+    ];
+    for (later_paths, limits_with_later_overrun) in cases {
+        let composition = PdfCompositionPlan {
+            assets: Vec::new(),
+            pages: vec![page(vec![invalid.clone()]), page(later_paths)],
+            render_manifest_identity: "later-page-count-budget.v1",
+        };
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidPath),
+            "without a page-level overrun the first point is invalid",
+        );
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits_with_later_overrun),
+            Err(PdfVectorError::ResourceLimit),
+            "later-page count limits must be checked before drawing page one",
+        );
+    }
+}
+
 #[test]
 fn every_stroked_subpath_requires_real_physical_extent() {
     let origin = point(20_000, 30_000);
