@@ -7670,3 +7670,65 @@ fn ordered_label_preflights_first_space_mark_grapheme()
     }
     Ok(())
 }
+
+#[test]
+fn marked_space_mixed_markdown_pitch_matches_emitted_glyphs()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut statistics = HandwritingStatisticsProfile::baseline(718);
+    for (glyph, height) in [
+        (" \u{301}", 25_000), ("#", 19_000), ("-", 17_000),
+        (">", 21_000), ("=", 16_000), ("*", 23_000),
+        ("+", 14_000), ("`", 20_000),
+    ] {
+        statistics = statistics.with_glyph(glyph, DimensionStatistics {
+            dimension: Dimension::Height,
+            statistics: ScalarStatistics {
+                minimum: height, maximum: height, mean: height,
+                median: height, standard_deviation: 0,
+            },
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    const LINES: [&str; 27] = [
+        "a \u{301}b", " \u{301}# a", "## \u{301}a", "#  \u{301}a",
+        "> \u{301}a", "> a \u{301}b", "- \u{301}a", "- [x] \u{301}a",
+        "1.  \u{301}a", "  a \u{301}b", "   \u{301}a", "    a \u{301}b",
+        "- - -", "===", "---", "* * *", "\\# a", "\\> a",
+        "```", "~~~", "```rust", "a  ", "a\\", "a", "",
+        "  - [ ] a", "a\u{2029} \u{301}b",
+    ];
+    let paper = NotebookProfile::default();
+    let mut seed = 0x7cab_1de9_a33a_c51bu64;
+    let mut accepted = 0usize;
+    for case in 0..4_000usize {
+        let mut source_text = String::new();
+        for index in 0..4usize {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            let choice = usize::try_from(seed >> 32)
+                .map_err(|_| "source index refused")? % LINES.len();
+            if index != 0 { source_text.push_str("\n"); }
+            source_text.push_str(LINES[choice]);
+        }
+        let source = FlowSource::new(FlowFormat::Markdown, &source_text)?;
+        let Ok((runs, _, _)) = super::layout_flow(
+            &source, &paper, Some(&statistics),
+            super::HeadingDecoration::default(),
+        ) else { continue; };
+        let measured = super::measured_pitch(&source, Some(&statistics))?;
+        let emitted = emitted_glyph_pitch(&runs, &statistics)?;
+        assert_eq!(measured, emitted,
+            "case {case}, source {source_text:?}, runs {runs:?}");
+        accepted += 1;
+    }
+    assert!(accepted > 800,
+        "insufficient valid marked-space samples: {accepted}");
+    Ok(())
+}
