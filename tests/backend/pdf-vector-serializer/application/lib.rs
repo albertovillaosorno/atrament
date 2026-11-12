@@ -550,6 +550,17 @@ fn exhausted_output_budget_refuses_before_rendering_later_page() {
     };
     let accepted = serialize_vector_pdf(&composition, limits())
         .expect("a pair of blank pages is valid");
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: accepted.len(),
+                ..limits()
+            },
+        ),
+        Ok(accepted.clone()),
+        "two-page PDF must fit its exact total byte budget",
+    );
     let next_page_offset = accepted
         .windows(b"5 0 obj\n".len())
         .position(|bytes| bytes == b"5 0 obj\n")
