@@ -10006,7 +10006,9 @@ fn opt_in_line_drift_is_bounded_smooth_per_run_and_seed_replayable()
             .ok_or("bounded run span missing")?.iter().enumerate() {
             let delta = i64::from(segment.start_um.1) - baseline;
             if delta.unsigned_abs() > 150 {
-                return Err(format!("run {run} col {index} drift {delta} exceeds cap"));
+                return Err(format!(
+                    "run {run} col {index} drift {delta} exceeds cap"
+                ));
             }
             if let Some(earlier) = previous
                 && (delta - earlier).unsigned_abs() > 38 {
@@ -10060,7 +10062,8 @@ fn line_drift_cli_refuses_invalid_options_before_overwriting_output()
         if execute_notebook(&command).is_ok() {
             return Err(format!("invalid line drift accepted: {command:?}"));
         }
-        if fs::read(&target).map_err(|error| error.to_string())? != b"preserve" {
+        if fs::read(&target).map_err(|error| error.to_string())?
+            != b"preserve" {
             return Err("refused line drift changed accepted output".into());
         }
     }
@@ -10085,7 +10088,10 @@ fn line_drift_cli_refuses_invalid_options_before_overwriting_output()
 #[test]
 fn line_drift_changes_native_flow_pdf_and_png_with_stable_seed()
 -> Result<(), String> {
-    let source = format!("{}  \n{} {}", "\u{e1}".repeat(12), "\u{e1}", "\u{e1}".repeat(11));
+    let source = format!(
+        "{}  \n{} {}", "\u{e1}".repeat(12), "\u{e1}",
+        "\u{e1}".repeat(11),
+    );
     let bare = args(&[
         "--printed-sheet", "true", "--glyph-stroke", "\u{e1}", "600",
         "1000", "1600", "2800", "250", "#123456",
@@ -10099,21 +10105,25 @@ fn line_drift_changes_native_flow_pdf_and_png_with_stable_seed()
             command.extend(args(&["--dpi", "72"]));
         }
         command.extend(args(extra));
-        execute_notebook(&command)?.ok_or_else(|| "native output bytes missing".into())
+        execute_notebook(&command)?
+            .ok_or_else(|| "native output bytes missing".into())
     };
     for format in ["pdf", "png"] {
         let original = run(format, &[])?;
         let zero = run(format, &["--glyph-line-drift", "0"])?;
         let changed = run(format, &["--glyph-line-drift", "150"])?;
         if original != zero || original == changed {
-            return Err(format!("{format} lost optional line-drift compatibility"));
+            return Err(format!(
+                "{format} lost optional line-drift compatibility"
+            ));
         }
         if changed != run(format, &["--glyph-line-drift", "150"])? {
             return Err(format!("{format} drift did not replay"));
         }
         let different = {
             let mut alternate = bare.clone();
-            let seed = alternate.iter().position(|arg| arg == "--glyph-variation")
+            let seed = alternate.iter()
+                .position(|arg| arg == "--glyph-variation")
                 .ok_or("variation flag missing")?;
             *alternate.get_mut(seed + 1).ok_or("seed missing")? = "43".into();
             let mut command = alternate;

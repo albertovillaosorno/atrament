@@ -2037,8 +2037,9 @@ and requires `--glyph-variation`; it uses that document seed and a distinct
 stream for each physical run. Every eight source grapheme columns (including
 ordinary spaces), an independently seeded offset is chosen, and intermediate
 columns interpolate smoothly. All strokes within one grapheme receive the
-same vertical offset, preserving authored contours and pen direction. The
-printed row pitch and nominal wrapping do not change. `0` produces the same
+same vertical offset, preserving authored contours and pen direction.
+
+The printed row pitch and nominal wrapping do not change. `0` produces the same
 PDF/PNG bytes as omitting the option, while nonzero values can move strokes
 outside printable bounds and therefore still refuse before output commit.
 

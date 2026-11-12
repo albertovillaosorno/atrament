@@ -642,7 +642,7 @@ impl GlyphOverlay {
                     previous = None;
                     offset_um = offset_um.checked_add(i64::from(ADVANCE_UM))
                         .ok_or("space advance overflow")?;
-                    column = column.checked_add(1).ok_or("line drift column overflow")?;
+                    column = column.checked_add(1).ok_or("column overflow")?;
                     continue;
                 }
                 let authored = self.fallbacks.iter()
@@ -703,7 +703,7 @@ impl GlyphOverlay {
                     .ok_or("glyph text advance overflow")?;
                 occurrence = occurrence.checked_add(1)
                     .ok_or("variation occurrence overflow")?;
-                column = column.checked_add(1).ok_or("line drift column overflow")?;
+                column = column.checked_add(1).ok_or("column overflow")?;
             }
             if run_index.saturating_add(1) == boundary_run {
                 boundary_ink_end = Some(expanded.len());
@@ -1077,7 +1077,7 @@ impl GlyphOverlay {
             "--fallback-glyph" => self.parse_fallback(iter)?,
             "--glyph-line-drift" => {
                 if self.line_drift_um.is_some() {
-                    return Err("--glyph-line-drift may appear only once".into());
+                    return Err("duplicate --glyph-line-drift".into());
                 }
                 self.line_drift_um = Some(next_integer(
                     iter, "glyph line drift", 0, 150,
@@ -1860,7 +1860,7 @@ impl GlyphOverlay {
                 return Err("glyph line drift must be within 0..150 um".into());
             }
             if self.variation.is_none() {
-                return Err("--glyph-line-drift requires --glyph-variation".into());
+                return Err("line drift requires --glyph-variation".into());
             }
         }
         Ok(())
