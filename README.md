@@ -2088,7 +2088,9 @@ For shared letter-width rhythm, add `--glyph-word-width MAX_PERCENT`
 (0–15) with `--glyph-variation`. Each ASCII-space-delimited word gets
 one seeded, signed width percentage. Rust applies it to the authored
 horizontal stroke coordinates without changing pen widths, stroke order,
-nominal advances or wrapping. It composes with saved mean glyph width and
+nominal advances or wrapping.
+
+It composes with saved mean glyph width and
 the selected word slant through the same physical-ink engine. Whole-word
 pen joins are recomputed from their actual final endpoints; an overlong
 bridge or a stroke crossing printable margins refuses before export. The
@@ -2108,11 +2110,28 @@ export refuses instead of clipping or replacing the previous output. Shared
 height preserves same-pen intra-word joins and directed stroke order. It is
 an opt-in, CLI-only creative variation, not learned writer calibration.
 
+For independent word-local letter spacing, select
+`--glyph-word-tracking MAX_UM` (0–150) with `--glyph-variation`. Each
+ASCII-space-delimited word gets one signed seeded tracking step; the first
+glyph keeps its nominal origin, the next receives one step, and later glyphs
+receive proportionally more. Two consecutive spaces still mark one boundary.
+
+Each placed run gets independent word samples, and the next word returns to
+its nominal start. Exact Unicode grapheme keys and caller-authored strokes
+are unchanged, and even with a saved mean letter-spacing profile the native
+layout advance is not recalculated from sampled tracking.
+
+This command-only treatment composes with word height, width, pressure, slant,
+line drift and word offsets. Opt-in same-pen joins still use actual endpoints;
+tracking beyond a permitted join gap or physical page edge refuses instead
+of dropping strokes. `0` preserves exact PDF, PNG and page-ink TSV bytes.
+
 For example, extend the preceding command with
 `--glyph-line-drift 120 --glyph-word-drift 90 --glyph-word-rise 90`
 and `--glyph-word-pressure 12 --glyph-word-slant 3000`
-with `--glyph-word-width 10 --glyph-word-height 10` to produce
-reproducible line, word, ink, width, height and italic rhythms. At `0`,
+with `--glyph-word-width 10 --glyph-word-height 10` and
+`--glyph-word-tracking 100` to produce reproducible line, word,
+letter-spacing, ink, width, height and italic rhythms. At `0`,
 each extra option is
 byte-identical to omission for PDF/PNG and emitted ink TSV. Widths outside
 80–1500 µm and unprintable

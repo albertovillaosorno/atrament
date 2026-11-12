@@ -11738,3 +11738,325 @@ fn word_height_refuses_top_margin_clipping_without_changing_exports()
     fs::remove_file(destination).map_err(|error| error.to_string())?;
     Ok(())
 }
+
+#[test]
+fn word_tracking_replays_exact_unicode_positions_and_resets_at_spaces()
+-> Result<(), String> {
+    let glyph = "n\u{303}";
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        glyph, "600", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    let line = format!("{glyph}{glyph}  {glyph} {glyph}{glyph}");
+    for y in [30_000u32, 40_000u32] {
+        overlay.parse("--place-text", &mut args(&[
+            "1", "25000", &y.to_string(), &line,
+        ]).iter())?;
+    }
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    let original = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-tracking", &mut args(&["150"]).iter())?;
+    let changed = overlay.expand(&[], None)?;
+    // Independent avalanche/xorshift seed oracle for three words per run.
+    // Consecutive glyphs in one word take the same signed 1-column step.
+    let steps = [89i64, 36, -76, -9, -91, -133];
+    let advances = [0u32, 4_000, 16_000, 24_000, 28_000];
+    let position = [0i64, 1, 0, 0, 1];
+    if changed.len() != 10 || original == changed
+        || changed != overlay.expand(&[], None)? {
+        return Err("word tracking did not deterministically place ink".into());
+    }
+    for (run, row) in changed.chunks_exact(5).enumerate() {
+        let y = if run == 0 { 30_000u32 } else { 40_000u32 };
+        for (index, stroke) in row.iter().enumerate() {
+            let word = match index { 0 | 1 => 0, 2 => 1, _ => 2 };
+            let drift = steps[run * 3 + word] * position[index];
+            let base = i64::from(25_000 + advances[index]) + drift;
+            let expected_start = (
+                u32::try_from(base + 600).map_err(|e| e.to_string())?,
+                y + 1_000,
+            );
+            let expected_end = (
+                u32::try_from(base + 1_600).map_err(|e| e.to_string())?,
+                y + 2_800,
+            );
+            if stroke.start_um != expected_start
+                || stroke.end_um != expected_end
+                || stroke.width_um != 250 || stroke.rgb != [0x12, 0x34, 0x56] {
+                return Err(format!(
+                    "word tracking moved wrong glyph {run}/{index}: {stroke:?}"
+                ));
+            }
+        }
+    }
+    overlay.word_tracking_um = Some(0);
+    if overlay.expand(&[], None)? != original {
+        return Err("zero tracking changed legacy ink".into());
+    }
+    overlay.word_tracking_um = Some(150);
+    overlay.word_drift_um = Some(90);
+    overlay.word_rise_um = Some(90);
+    overlay.line_drift_um = Some(120);
+    overlay.word_width_percent = Some(12);
+    overlay.word_height_percent = Some(12);
+    overlay.word_slant_millidegrees = Some(3_000);
+    overlay.word_pressure_percent = Some(15);
+    let combined = overlay.expand(&[], None)?;
+    overlay.word_tracking_um = Some(0);
+    let without = overlay.expand(&[], None)?;
+    for (index, (baseline, tracked)) in without.iter().zip(&combined)
+        .enumerate() {
+        let run = index / 5;
+        let word = match index % 5 { 0 | 1 => 0, 2 => 1, _ => 2 };
+        let delta = steps[run * 3 + word] * position[index % 5];
+        if i64::from(tracked.start_um.0)
+            - i64::from(baseline.start_um.0) != delta
+            || i64::from(tracked.end_um.0)
+                - i64::from(baseline.end_um.0) != delta
+            || tracked.start_um.1 != baseline.start_um.1
+            || tracked.end_um.1 != baseline.end_um.1
+            || tracked.width_um != baseline.width_um
+            || tracked.rgb != baseline.rgb {
+            return Err("tracking changed independent word treatments".into());
+        }
+    }
+    overlay.word_tracking_um = Some(151);
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed out-of-range tracking was accepted".into());
+    }
+    overlay.word_tracking_um = Some(150);
+    overlay.variation = None;
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed unpaired tracking was accepted".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn word_tracking_preserves_directed_joins_and_statistical_mean_spacing()
+-> Result<(), String> {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "á", "150", "1200", "3370", "1200", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "áá áá",
+    ]).iter())?;
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    overlay.add_text_join_pair(&mut args(&["á", "á"]).iter())?;
+    overlay.parse("--glyph-word-tracking", &mut args(&["150"]).iter())?;
+    let joined = overlay.expand(&[], None)?;
+    if joined.len() != 6 {
+        return Err(format!(
+            "word tracking dropped joined segments: {joined:?}"
+        ));
+    }
+    for offset in [0usize, 3] {
+        let [left, bridge, right] = joined.get(offset..offset + 3)
+            .ok_or("missing directed join")? else {
+            return Err("expected three strokes per joined word".into());
+        };
+        if left.end_um != bridge.start_um
+            || bridge.end_um != right.start_um
+            || bridge.width_um != left.width_um
+            || bridge.width_um != right.width_um
+            || bridge.start_um.1 != bridge.end_um.1
+            || bridge.end_um.0 <= bridge.start_um.0
+            || bridge.end_um.0 - bridge.start_um.0 > 1_200 {
+            return Err(format!(
+                "word tracking changed directed pen: {joined:?}"
+            ));
+        }
+    }
+    if joined[2].start_um.0 != 29_239
+        || joined[5].start_um.0 != 41_186 {
+        return Err(format!("wrong tracking join endpoints: {joined:?}"));
+    }
+
+    let profile = execute_handwriting(&args(&[
+        "--set-glyph", "á", "width", "3900", "3900", "3900",
+        "3900", "0",
+    ]))?.ok_or("missing statistical profile")?;
+    let statistics = decode_statistics_json(
+        &profile, &UnicodeGraphemeSegmentation,
+    ).map_err(|error| format!("statistics: {error:?}"))?;
+    overlay.text_joins.clear();
+    overlay.runs.clear();
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "áá",
+    ]).iter())?;
+    let tracked = overlay.expand(&[], Some(&statistics))?;
+    overlay.word_tracking_um = Some(0);
+    let baseline = overlay.expand(&[], Some(&statistics))?;
+    if baseline.len() != 2 || tracked.len() != 2
+        || baseline[0] != tracked[0]
+        || i64::from(tracked[1].start_um.0)
+            - i64::from(baseline[1].start_um.0) != 89
+        || i64::from(tracked[1].end_um.0)
+            - i64::from(baseline[1].end_um.0) != 89
+        || tracked[1].start_um.1 != baseline[1].start_um.1
+        || tracked[1].end_um.1 != baseline[1].end_um.1
+        || tracked[1].width_um != baseline[1].width_um {
+        return Err(format!("tracking violated statistical means: {tracked:?}"));
+    }
+    Ok(())
+}
+
+#[test]
+fn word_tracking_pdf_png_and_ink_replay_with_atomic_option_refusal()
+-> Result<(), String> {
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "á", "600", "1000", "1600", "2800",
+        "250", "#123456",
+        "--flow-markdown", "áá á áá\n\náá áá",
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    let render = |format: &str, seed: &str, extras: &[&str]|
+        -> Result<Vec<u8>, String> {
+        let mut command = prefix.clone();
+        let position = command.iter().position(|v| v == "--glyph-variation")
+            .ok_or("missing variation seed")? + 1;
+        *command.get_mut(position).ok_or("missing seed")? = seed.into();
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        command.extend(args(extras));
+        execute_notebook(&command)?.ok_or("missing native export".into())
+    };
+    for format in ["pdf", "png", "ink"] {
+        let original = render(format, "42", &[])?;
+        if original != render(format, "42", &[
+            "--glyph-word-tracking", "0",
+        ])? {
+            return Err(format!("zero tracking changed {format} bytes"));
+        }
+        let tracked = render(format, "42", &[
+            "--glyph-word-tracking", "150",
+        ])?;
+        if tracked == original
+            || tracked != render(format, "42", &[
+                "--glyph-word-tracking", "150",
+            ])?
+            || tracked == render(format, "43", &[
+                "--glyph-word-tracking", "150",
+            ])? {
+            return Err(format!("word tracking {format} replay failed"));
+        }
+        let signature = match format {
+            "pdf" => b"%PDF-1.4".as_slice(),
+            "png" => b"\x89PNG\r\n\x1a\n".as_slice(),
+            _ => b"atrament.page-ink.v1\n".as_slice(),
+        };
+        if !tracked.starts_with(signature) {
+            return Err(format!("missing {format} native signature"));
+        }
+    }
+    let ink = render("ink", "42", &["--glyph-word-tracking", "150"])?;
+    let source = test_path().with_extension("tsv");
+    fs::write(&source, ink).map_err(|error| error.to_string())?;
+    let source_name = source.to_str().ok_or("non-UTF8 source path")?;
+    for format in ["pdf", "png"] {
+        let mut command = args(&[
+            "--printed-sheet", "true", "--ink-file", source_name,
+            "--export-paper", format,
+        ]);
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        if execute_notebook(&command)? != Some(render(
+            format, "42", &["--glyph-word-tracking", "150"],
+        )?) {
+            return Err(format!("tracking {format} changed TSV replay"));
+        }
+    }
+    fs::remove_file(source).map_err(|error| error.to_string())?;
+
+    let target = test_path();
+    fs::write(&target, b"preserved ink").map_err(|error| error.to_string())?;
+    let name = target.to_str().ok_or("non-UTF8 target path")?;
+    for invalid in [
+        args(&["--glyph-word-tracking", "-1"]),
+        args(&["--glyph-word-tracking", "151"]),
+        args(&["--glyph-word-tracking", "4294967296"]),
+        args(&["--glyph-word-tracking", "150",
+            "--glyph-word-tracking", "1"]),
+    ] {
+        let mut command = prefix.clone();
+        command.extend(args(&[
+            "--export-paper", "pdf", "--output", name, "--replace",
+        ]));
+        command.extend(invalid);
+        if execute_notebook(&command).is_ok()
+            || fs::read(&target).map_err(|error| error.to_string())?
+                != b"preserved ink" {
+            return Err("invalid tracking replaced accepted file".into());
+        }
+    }
+    let mut unpaired = prefix;
+    let index = unpaired.iter().position(|v| v == "--glyph-variation")
+        .ok_or("missing variation")?;
+    unpaired.drain(index..index + 8).for_each(drop);
+    unpaired.extend(args(&[
+        "--glyph-word-tracking", "150", "--export-paper", "pdf",
+        "--output", name, "--replace",
+    ]));
+    if execute_notebook(&unpaired).is_ok()
+        || fs::read(&target).map_err(|error| error.to_string())?
+            != b"preserved ink" {
+        return Err("unpaired tracking replaced accepted file".into());
+    }
+    fs::remove_file(target).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[test]
+fn word_tracking_refuses_right_margin_clipping_in_pdf_and_png()
+-> Result<(), String> {
+    // A4 right printable edge is 196 mm. The baseline right endpoint
+    // 195800 um clears a 125-um half-pen; seed 42 adds 89 um at glyph 2.
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "á", "600", "1000", "1600", "2800",
+        "250", "#123456",
+        "--place-text", "1", "190200", "30000", "áá",
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    let target = test_path();
+    let name = target.to_str().ok_or("non-UTF8 target path")?;
+    for format in ["pdf", "png"] {
+        let mut valid = prefix.clone();
+        valid.extend(args(&["--export-paper", format]));
+        if format == "png" {
+            valid.extend(args(&["--dpi", "72"]));
+        }
+        if execute_notebook(&valid)?.is_none() {
+            return Err("original right-margin stroke did not export".into());
+        }
+        fs::write(&target, b"preserved output")
+            .map_err(|error| error.to_string())?;
+        valid.extend(args(&[
+            "--glyph-word-tracking", "150", "--output", name, "--replace",
+        ]));
+        let error = execute_notebook(&valid)
+            .expect_err("tracked ink should cross right printable margin");
+        if !error.contains("page 1 ink needs printable endpoints")
+            || fs::read(&target).map_err(|e| e.to_string())?
+                != b"preserved output" {
+            return Err(format!(
+                "word tracking incorrectly accepted {format}: {error}"
+            ));
+        }
+    }
+    fs::remove_file(target).map_err(|error| error.to_string())?;
+    Ok(())
+}

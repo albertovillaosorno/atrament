@@ -337,6 +337,26 @@ impl GlyphVariation {
         let mut random = XorShift32::new(identity);
         Self::round_js(random.unit() * f64::from(maximum_mdeg))
     }
+    // Each successive glyph in the same word receives the same additional
+    // horizontal tracking step. The following word retains its nominal start
+    // and flow wrapping remains tied to measured rather than sampled advance.
+    fn word_tracking(
+        self, run_index: usize, word_index: u32, maximum_um: u32,
+    ) -> Result<i32, String> {
+        let run = u32::try_from(run_index)
+            .map_err(|_error| "word tracking run index overflow")?;
+        let mut identity = self.seed
+            ^ run.wrapping_add(1).wrapping_mul(0x3C6E_F372)
+            ^ word_index.wrapping_add(1).wrapping_mul(0xBB67_AE85);
+        identity ^= identity >> 16i32;
+        identity = identity.wrapping_mul(0x7FEB_352D);
+        identity ^= identity >> 15i32;
+        identity = identity.wrapping_mul(0x846C_A68B);
+        identity ^= identity >> 16i32;
+        let mut random = XorShift32::new(identity);
+        Self::round_js(random.unit() * f64::from(maximum_um))
+    }
+
     // One bounded, seeded width multiplier per whole word. The scalar is
     // shared across its letters and independent of pressure and pen tilt.
     // Nominal advances stay unchanged; physical clearance is checked later.
@@ -427,20 +447,25 @@ impl GlyphMetrics {
 struct WordColumns {
     in_word: bool,
     index: u32,
+    letter_index: u32,
     seen_word: bool,
 }
 
 impl WordColumns {
-    fn next(&mut self) -> Result<u32, String> {
-        if !self.in_word {
+    fn next(&mut self) -> Result<(u32, u32), String> {
+        if self.in_word {
+            self.letter_index = self.letter_index.checked_add(1)
+                .ok_or("word letter index overflow")?;
+        } else {
             if self.seen_word {
                 self.index = self.index.checked_add(1)
                     .ok_or("word index overflow")?;
             }
+            self.letter_index = 0;
             self.in_word = true;
             self.seen_word = true;
         }
-        Ok(self.index)
+        Ok((self.index, self.letter_index))
     }
 
     const fn space(&mut self) {
@@ -808,7 +833,7 @@ impl GlyphOverlay {
                     column = column.checked_add(1).ok_or("column overflow")?;
                     continue;
                 }
-                let word_index = words.next()?;
+                let (word_index, letter_index) = words.next()?;
                 let authored = self.fallbacks.iter()
                     .find(|entry| entry.missing == grapheme)
                     .map_or(grapheme, |entry| entry.authored.as_str());
@@ -833,7 +858,8 @@ impl GlyphOverlay {
                     matches.iter().map(|shape| (*shape).clone()).collect()
                 };
                 let glyph_x = self.glyph_origin_x(
-                    run, run_index, word_index, offset_um, tracking)?;
+                    run, run_index, word_index, letter_index,
+                    offset_um, tracking)?;
                 let glyph_y = self.glyph_origin_y(
                     run, run_index, word_index, column, metrics,
                 )?;
@@ -918,14 +944,23 @@ impl GlyphOverlay {
 
     fn glyph_origin_x(
         &self, run: &TextRun, run_index: usize, word_index: u32,
-        offset_um: i64, tracking: i32,
+        letter_index: u32, offset_um: i64, tracking: i32,
     ) -> Result<i64, String> {
         let drift = match (self.variation, self.word_drift_um) {
             (Some(variation), Some(maximum_um)) => variation
                 .word_drift(run_index, word_index, maximum_um)?,
             _ => 0i32,
         };
+        let word_step = match (self.variation, self.word_tracking_um) {
+            (Some(variation), Some(maximum_um)) => variation
+                .word_tracking(run_index, word_index, maximum_um)?,
+            _ => 0i32,
+        };
+        let offset = i64::from(word_step)
+            .checked_mul(i64::from(letter_index))
+            .ok_or("word tracking offset overflow")?;
         i64::from(run.origin_um.0).checked_add(offset_um)
+            .and_then(|value| value.checked_add(offset))
             .and_then(|value| value.checked_add(i64::from(tracking)))
             .and_then(|value| value.checked_add(i64::from(drift)))
             .ok_or_else(|| "glyph horizontal origin overflow".into())
@@ -1005,6 +1040,7 @@ impl GlyphOverlay {
             || self.word_slant_millidegrees.is_some()
             || self.word_width_percent.is_some()
             || self.word_height_percent.is_some()
+            || self.word_tracking_um.is_some()
     }
 
     // Index once per expansion, retaining authored order for each exact key.
@@ -1367,6 +1403,7 @@ impl GlyphOverlay {
                 )?);
             }
             "--glyph-word-height" => self.parse_height_rhythm(iter)?,
+            "--glyph-word-tracking" => self.parse_tracking_rhythm(iter)?,
             "--glyph-word-pressure" => {
                 if self.word_pressure_percent.is_some() {
                     return Err("duplicate --glyph-word-pressure".into());
@@ -1473,6 +1510,18 @@ impl GlyphOverlay {
             width_um,
             rgb: [channel(1)?, channel(3)?, channel(5)?],
         })
+    }
+
+    fn parse_tracking_rhythm(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        if self.word_tracking_um.is_some() {
+            return Err("duplicate --glyph-word-tracking".into());
+        }
+        self.word_tracking_um = Some(next_integer(
+            iter, "glyph word tracking", 0, 150,
+        )?);
+        Ok(())
     }
 
     /// Admit typed edit operands without consulting an imported glyph file.
@@ -2199,6 +2248,16 @@ impl GlyphOverlay {
             }
             if self.variation.is_none() {
                 return Err("word width requires --glyph-variation".into());
+            }
+        }
+        if let Some(maximum_um) = self.word_tracking_um {
+            if maximum_um > 150 {
+                return Err(
+                    "glyph word tracking must be within 0..150 um".into()
+                );
+            }
+            if self.variation.is_none() {
+                return Err("word tracking requires --glyph-variation".into());
             }
         }
         if let Some(maximum) = self.word_height_percent {

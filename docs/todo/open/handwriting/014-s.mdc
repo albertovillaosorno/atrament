@@ -904,8 +904,9 @@ xorshift stream. The physical pen engine scales each letter's horizontal
 contour within its own authored template cell; it does not alter nominal
 inter-letter advances, wrapping, row pitch, pen widths or saved glyph TSV.
 The multiplier combines with optional statistical mean glyph width and
-previously selected word-level slant and pressure. A zero multiplier spread
-is byte-identical to omission.
+previously selected word-level slant and pressure.
+
+A zero multiplier spread is byte-identical to omission.
 
 Four focused native tests verify independent hard-coded physical coordinates
 across NFD Unicode words and two text runs; composition with line/word drift,
@@ -929,9 +930,11 @@ ASCII-space-delimited word, shared by its exact Unicode letters within a
 physical run. The Rust physical pen
 engine scales vertical contours around each letter's lower baseline and
 retains original glyph TSV, stroke order, pen widths, nominal advances,
-row pitch and optional same-pen word joins. Saved statistical mean height
-and independently selected line/word displacement, word width and pressure
-compose without a second geometry renderer. Zero spread is byte-identical
+row pitch and optional same-pen word joins.
+
+Saved statistical mean height and independently selected line/word
+displacement, word width and pressure compose without a second geometry
+renderer. Zero spread is byte-identical
 to an omitted option.
 
 Four focused Rust tests verify fixed independent height percentages over NFD
@@ -943,3 +946,32 @@ crossing A4's physical top printable margin, retaining existing file bytes.
 
 This remains caller-authored ink with command-only creative variation, not a
 calibrated writer, saved notebook text or automatic cursive. P1-014 stays open.
+
+## CLI-only seeded word-local letter tracking (partial) — 2026-11-12
+
+The native `atrament-profiles notebook` compositor now supports
+`--glyph-word-tracking MAX_UM` (0–150) with `--glyph-variation`. For each
+ASCII-space-delimited word within a physical run, one independent seeded
+signed micrometre step is selected. The first glyph retains its nominal
+origin; subsequent glyphs shift by their zero-based ordinal times that step.
+The next word starts at its own nominal origin even across repeated spaces;
+exact Unicode glyph keys and saved glyph TSV remain unchanged.
+
+The compositor preserves legacy nominal advances and Markdown wrapping, and
+uses the physical Rust stroke engine to place final letter contours. Saved
+statistical width/letter spacing, seeded slant/height/width/pressure and
+positional rhythms can coexist. Explicit short, same-pen directed joins are
+recomputed from actual endpoints; collisions, inadmissible joins and any
+physical page-margin overrun refuse the export instead of clipping ink.
+
+Four native regressions cover fixed independently sampled two-run NFD word
+positions; reset after repeated spaces; zero-option byte parity and other
+word-rhythm independence; directed physical joins and mean glyph dimensions;
+PDF, transparent PNG and emitted TSV replay, including exact TSV reimport;
+and atomic refusal of malformed, repeated, unpaired, overrange and right-edge
+clipping requests. Both PDF and PNG reject unprintable seeded ink without
+replacing a previously accepted output file.
+
+This remains command-only variation of caller-authored ink, not saved
+semantic text, inferred cursive connections or a calibrated personal writer.
+Full P1-014 acceptance remains open.
