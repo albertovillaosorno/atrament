@@ -3097,3 +3097,168 @@ fn all_eight_bit_rgb_channels_preserve_order_and_rounded_values() {
     }
     assert_eq!(cases, 512, "all byte values in both PDF paint families");
 }
+
+// Locate a PDF page content stream by its real byte offsets. The binary
+// PDF header makes lossy UTF-8 string indices unsuitable for this oracle.
+#[expect(
+    clippy::expect_used,
+    clippy::arithmetic_side_effects,
+    reason = "test-only byte parser fails explicitly on missing PDF framing"
+)]
+fn raw_page_stream_bounds(pdf: &[u8], page_index: usize) -> (usize, usize) {
+    let marker = b"\nstream\n";
+    let begin = pdf
+        .windows(marker.len())
+        .enumerate()
+        .filter(|(_offset, window)| *window == marker)
+        .nth(page_index)
+        .map(|(offset, _window)| offset + marker.len())
+        .expect("page has a content stream");
+    let terminator = b"endstream\n";
+    let end = pdf
+        .get(begin..)
+        .expect("page content start")
+        .windows(terminator.len())
+        .position(|window| window == terminator)
+        .map(|offset| begin + offset)
+        .expect("page stream ends");
+    (begin, end)
+}
+
+// Create four different physical page boxes and both paint families
+// without sharing mutable resource or color state between pages.
+fn paint_locality_fixture(
+    seed: u8,
+    identity: &str,
+) -> PdfVectorComposition<'_> {
+    let pages = (0u8..4)
+        .map(|index| {
+            let mut sheet = page(vec![stroke(), fill()]);
+            sheet.physical_page_box = match index {
+                0 => PdfVectorPageBox {
+                    width_um: 210_000,
+                    height_um: 297_000,
+                },
+                1 => PdfVectorPageBox {
+                    width_um: 215_900,
+                    height_um: 279_400,
+                },
+                2 => PdfVectorPageBox {
+                    width_um: 500_000,
+                    height_um: 500_000,
+                },
+                _ => PdfVectorPageBox {
+                    width_um: 2_000_000,
+                    height_um: 2_000_000,
+                },
+            };
+            for path in &mut sheet.vector_authority {
+                let color = PdfRgb {
+                    red: seed.wrapping_add(index.wrapping_mul(37)),
+                    green: seed.wrapping_mul(3).wrapping_add(index),
+                    blue: 255u8.wrapping_sub(seed).wrapping_sub(index),
+                };
+                match &mut path.paint {
+                    PdfPathPaint::Stroke { color: ink, .. }
+                    | PdfPathPaint::Fill { color: ink, .. } => {
+                        *ink = color;
+                    },
+                }
+            }
+            sheet
+        })
+        .collect();
+    PdfCompositionPlan {
+        pages,
+        assets: Vec::new(),
+        render_manifest_identity: identity,
+    }
+}
+
+// PDF resources are deliberately page-local here. Changing one paint or the
+// manifest identity must not leak into another page or the document index.
+// Unlike a fixed operator snapshot, this tests noninterference across many
+// distinct colors, page boxes, path families, and unchanged xref offsets.
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "test fixture owns exact bounded page and path indices"
+)]
+#[test]
+fn page_paint_and_manifest_edits_are_byte_local() {
+    let mut paint_cases = 0usize;
+    let mut identity_cases = 0usize;
+    for seed in 0u8..64 {
+        let identity = format!("manifest-locality-A-{seed:03}");
+        let other_identity = format!("manifest-locality-B-{seed:03}");
+        let source = paint_locality_fixture(seed, &identity);
+        let generous = PdfVectorLimits {
+            maximum_pages: 4,
+            maximum_paths_per_page: 2,
+            maximum_commands_per_page: 10,
+            maximum_pdf_bytes: 20_000,
+        };
+        let original = serialize_vector_pdf(&source, generous)
+            .expect("valid varied pages serialize");
+        assert_xref_integrity(&original);
+        assert_stream_length_integrity(&original, 4);
+        for page_index in 0..4 {
+            for path_index in 0..2 {
+                let mut edited = source.clone();
+                let selected = &mut edited.pages[page_index].vector_authority;
+                let paint = &mut selected[path_index].paint;
+                match paint {
+                    PdfPathPaint::Stroke { color, .. }
+                    | PdfPathPaint::Fill { color, .. } => {
+                        color.red = !color.red;
+                    },
+                }
+                let changed = serialize_vector_pdf(&edited, generous)
+                    .expect("single paint edit remains valid");
+                assert_eq!(changed.len(), original.len());
+                assert_xref_integrity(&changed);
+                assert_stream_length_integrity(&changed, 4);
+                let (begin, end) =
+                    raw_page_stream_bounds(&original, page_index);
+                assert_eq!(
+                    &original[..begin],
+                    &changed[..begin],
+                    "earlier objects changed: {seed}/{page_index}/{path_index}"
+                );
+                assert_ne!(
+                    &original[begin..end],
+                    &changed[begin..end],
+                    "selected page paint must change"
+                );
+                assert_eq!(
+                    &original[end..],
+                    &changed[end..],
+                    "later pages, Info and xref must be unchanged"
+                );
+                paint_cases += 1;
+            }
+        }
+
+        let mut edited = source.clone();
+        edited.render_manifest_identity = other_identity.as_str();
+        let changed = serialize_vector_pdf(&edited, generous)
+            .expect("same-length manifest change remains valid");
+        let label = b"/AtramentManifestID (";
+        let begin = original
+            .windows(label.len())
+            .position(|window| window == label)
+            .map(|offset| offset + label.len())
+            .expect("original PDF has manifest Info field");
+        let end = begin + identity.len();
+        assert_eq!(identity.len(), other_identity.len());
+        assert_eq!(&original[begin..end], identity.as_bytes());
+        assert_eq!(&changed[begin..end], other_identity.as_bytes());
+        assert_eq!(&original[..begin], &changed[..begin]);
+        assert_eq!(&original[end..], &changed[end..]);
+        assert_xref_integrity(&changed);
+        assert_stream_length_integrity(&changed, 4);
+        identity_cases += 1;
+    }
+    assert_eq!(paint_cases, 512);
+    assert_eq!(identity_cases, 64);
+}

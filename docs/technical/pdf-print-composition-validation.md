@@ -162,6 +162,16 @@ red, green and blue channel order and values. This pins the codec's current
 8-bit color projection; it does not establish calibrated color output or
 printer fidelity.
 
+A separate byte-locality oracle checks 512 one-paint edits spanning four
+different physical page boxes, both stroke and fill families, and 64
+deterministically varied color seeds. Each edit changes only its selected
+page content stream; all earlier bytes, later page objects, Info metadata,
+cross-references and stream framing remain byte-identical. Another 64
+same-length manifest-ID edits affect only the declared Info string, not
+page bytes or offsets. These metamorphic checks demonstrate isolation for
+fixed-width paint and identity changes, not general incremental PDF edits
+or a complete notebook Export contract.
+
 The adapter refuses *every* accepted asset and preserved searchable text:
 image/color-profile embedding and font/semantic-text rendering do not exist
 here. It also refuses malformed paths, invalid page boxes, unsafe manifest
