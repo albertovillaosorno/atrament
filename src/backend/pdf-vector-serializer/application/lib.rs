@@ -424,6 +424,32 @@ fn append_line_command(
     )
 }
 
+// PDF geometry uses unsigned page-local coordinates and fixed three-digit
+// fractions; even zero has a five-byte spelling. Reserve the shortest possible
+// command before examining untrusted control points, so an impossible output
+// cannot be hidden by a malformed command.
+fn reserve_command_framing(
+    stream_bytes: usize,
+    command: PdfPathCommand,
+    command_budget: usize,
+) -> Result<(), PdfVectorError> {
+    let minimum_command_bytes = match command {
+        PdfPathCommand::MoveTo(_) => b"0.000 0.000 m\n".len(),
+        PdfPathCommand::LineTo(_) => b"0.000 0.000 l\n".len(),
+        PdfPathCommand::CubicTo(..) => {
+            b"0.000 0.000 0.000 0.000 0.000 0.000 c\n".len()
+        },
+        PdfPathCommand::Close => b"h\n".len(),
+    };
+    if stream_bytes
+        .checked_add(minimum_command_bytes)
+        .is_none_or(|size| size > command_budget)
+    {
+        return Err(PdfVectorError::ResourceLimit);
+    }
+    Ok(())
+}
+
 fn render_path(
     stream: &mut String,
     path: &PdfVectorPath,
@@ -449,6 +475,7 @@ fn render_path(
     let mut subpath_has_extent = false;
     let mut contour_area = FilledContourWitness::default();
     for command in &path.commands {
+        reserve_command_framing(stream.len(), *command, command_budget)?;
         match *command {
             PdfPathCommand::MoveTo(point) => {
                 if !point_inside(point, page, stroke_width_um)

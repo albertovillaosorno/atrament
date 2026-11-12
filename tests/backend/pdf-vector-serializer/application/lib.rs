@@ -331,6 +331,62 @@ fn a_path_without_commands_cannot_hide_exhausted_paint_budget() {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "accepted PDF bytes establish a command-only shortage"
+)]
+#[test]
+fn impossible_command_framing_refuses_before_invalid_coordinates() {
+    for (mut path, invalid_command) in [
+        (stroke(), PdfPathCommand::LineTo(point(-1, 40_000))),
+        (
+            stroke(),
+            PdfPathCommand::CubicTo(
+                point(-1, 40_000),
+                point(60_000, 40_000),
+                point(70_000, 40_000),
+            ),
+        ),
+        (stroke(), PdfPathCommand::MoveTo(point(-1, 40_000))),
+        (fill(), PdfPathCommand::Close),
+    ] {
+        path.commands = match path.paint {
+            PdfPathPaint::Stroke { .. } => vec![
+                PdfPathCommand::MoveTo(point(20_000, 30_000)),
+                PdfPathCommand::LineTo(point(50_000, 40_000)),
+            ],
+            PdfPathPaint::Fill { .. } => fill().commands,
+        };
+        let mut composition = PdfCompositionPlan {
+            assets: Vec::new(),
+            pages: vec![page(vec![path])],
+            render_manifest_identity: "command-framing-budget.v1",
+        };
+        let accepted = serialize_vector_pdf(&composition, limits())
+            .expect("baseline fully painted path is valid");
+        composition.pages[0].vector_authority[0]
+            .commands
+            .push(invalid_command);
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidPath),
+            "a malformed trailing command is invalid with enough room",
+        );
+        assert_eq!(
+            serialize_vector_pdf(
+                &composition,
+                PdfVectorLimits {
+                    maximum_pdf_bytes: accepted.len(),
+                    ..limits()
+                },
+            ),
+            Err(PdfVectorError::ResourceLimit),
+            "no space for another command must refuse before its coordinates",
+        );
+    }
+}
+
 #[test]
 fn every_stroked_subpath_requires_real_physical_extent() {
     let origin = point(20_000, 30_000);

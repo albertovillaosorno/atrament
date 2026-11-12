@@ -166,6 +166,14 @@ Likewise each mandatory path paint operator (`S`, `f`, `f*`) is reserved
 before processing its geometry. A path that cannot finish painting now refuses
 before a later malformed command can mask the exhausted byte allowance.
 
+Each path command additionally reserves its smallest possible PDF syntax
+before inspecting its coordinates. `MoveTo`, `LineTo`, `CubicTo` and `Close`
+therefore report `ResourceLimit` rather than a malformed trailing command when
+the output has no room for even that command. The regression derives the exact
+byte boundary from an accepted stroke or fill, then adds invalid commands;
+with an ample budget those same commands remain `InvalidPath`. This changes
+only refusal precedence, not bytes emitted for admissible paths.
+
 The same allowance is checked before refusing an *empty* path: when no room
 remains for its paint setup and operator, `ResourceLimit` takes precedence
 over the malformed empty geometry. With sufficient bytes it still refuses as
