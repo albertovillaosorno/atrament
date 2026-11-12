@@ -2420,6 +2420,71 @@ fn complete_compact_resource_text_box_path_and_identity_matrix() {
     assert_eq!(accepted, 4, "only four combinations are admissible");
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "admitted metadata identities must produce inspectable PDF bytes"
+)]
+#[test]
+fn manifest_identity_ascii_admission_and_length_boundaries() {
+    let mut checked = 0usize;
+    let mut admitted = 0usize;
+    for byte in 0u8..=127u8 {
+        let identity = char::from(byte).to_string();
+        let composition = PdfCompositionPlan {
+            assets: Vec::new(),
+            pages: vec![page(Vec::new())],
+            render_manifest_identity: identity.as_str(),
+        };
+        let permitted = byte.is_ascii_alphanumeric()
+            || matches!(byte, b'-' | b'_' | b'.');
+        let result = serialize_vector_pdf(&composition, limits());
+        if permitted {
+            let bytes = result.expect("admitted ASCII identity must serialize");
+            let expected = format!("/AtramentManifestID ({identity})");
+            assert!(
+                pdf_string(&bytes).contains(&expected),
+                "ASCII byte {byte} must retain its exact metadata spelling",
+            );
+            assert_xref_integrity(&bytes);
+            admitted = admitted.saturating_add(1);
+        } else {
+            assert_eq!(
+                result,
+                Err(PdfVectorError::InvalidManifestIdentity),
+                "ASCII byte {byte} must not escape the PDF Info string",
+            );
+        }
+        checked = checked.saturating_add(1);
+    }
+    assert_eq!(checked, 128, "every ASCII byte has a classification");
+    assert_eq!(admitted, 65, "only ASCII alphanumeric, -, _, . are safe");
+
+    for (identity, is_valid) in [
+        ("A".repeat(127), true),
+        ("A".repeat(128), true),
+        ("A".repeat(129), false),
+        (String::from("\u{f1}"), false),
+        (String::new(), false),
+    ] {
+        let composition = PdfCompositionPlan {
+            assets: Vec::new(),
+            pages: vec![page(Vec::new())],
+            render_manifest_identity: identity.as_str(),
+        };
+        let result = serialize_vector_pdf(&composition, limits());
+        if is_valid {
+            let bytes = result.expect("bounded identity must serialize");
+            assert!(pdf_string(&bytes).contains(&format!(
+                "/AtramentManifestID ({identity})"
+            )));
+            assert_xref_integrity(&bytes);
+            assert_eq!(serialize_vector_pdf(&composition, limits()), Ok(bytes));
+        } else {
+            assert_eq!(result, Err(PdfVectorError::InvalidManifestIdentity));
+        }
+    }
+}
+
 #[test]
 fn later_page_authority_refuses_before_earlier_malformed_path() {
     // A vector-only export cannot quietly skip a later page's semantic text
@@ -2439,23 +2504,31 @@ fn later_page_authority_refuses_before_earlier_malformed_path() {
         Err(PdfVectorError::UnsupportedSearchableText),
         "unsupported later semantic text must be reported before earlier ink",
     );
-    composition.pages[1].searchable_text =
-        SearchableSemanticText::OmittedAsIncompatible;
+    assert_eq!(composition.pages.len(), 2, "two-page test fixture");
+    for later in composition.pages.iter_mut().skip(1) {
+        later.searchable_text = SearchableSemanticText::OmittedAsIncompatible;
+    }
     for invalid_size in [0, 2_000_001] {
-        composition.pages[1].physical_page_box.width_um = invalid_size;
+        for later in composition.pages.iter_mut().skip(1) {
+            later.physical_page_box.width_um = invalid_size;
+        }
         assert_eq!(
             serialize_vector_pdf(&composition, limits()),
             Err(PdfVectorError::InvalidPageBox),
             "invalid later page width must preempt earlier malformed ink",
         );
-        composition.pages[1].physical_page_box.width_um = 210_000;
-        composition.pages[1].physical_page_box.height_um = invalid_size;
+        for later in composition.pages.iter_mut().skip(1) {
+            later.physical_page_box.width_um = 210_000;
+            later.physical_page_box.height_um = invalid_size;
+        }
         assert_eq!(
             serialize_vector_pdf(&composition, limits()),
             Err(PdfVectorError::InvalidPageBox),
             "invalid later page height must preempt earlier malformed ink",
         );
-        composition.pages[1].physical_page_box.height_um = 297_000;
+        for later in composition.pages.iter_mut().skip(1) {
+            later.physical_page_box.height_um = 297_000;
+        }
     }
     assert_eq!(
         serialize_vector_pdf(&composition, limits()),

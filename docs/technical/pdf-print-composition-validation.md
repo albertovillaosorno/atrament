@@ -111,6 +111,13 @@ Every sampled accepted stroke stays inside its PDF page, and every sampled
 clipped stroke refuses as `InvalidPath`. This is an exhaustive bounded sweep,
 not a claim of exhaustive geometry or printer-device verification.
 
+A bounded manifest-identity admission oracle now checks all 128 ASCII byte
+values against the PDF Info string whitelist, followed by 127-, 128- and
+129-byte boundary strings, empty identity and non-ASCII input. Every admitted
+identity is retained verbatim with valid cross-reference offsets, while
+control characters and PDF string delimiters are rejected without output.
+This checks metadata injection boundaries, not manifest authenticity.
+
 The adapter refuses *every* accepted asset and preserved searchable text:
 image/color-profile embedding and font/semantic-text rendering do not exist
 here. It also refuses malformed paths, invalid page boxes, unsafe manifest
@@ -260,9 +267,11 @@ Page authority is likewise validated across the document before drawing any
 ink. A malformed first-page path can no longer hide later preserved semantic
 text (`UnsupportedSearchableText`) or an invalid physical page box
 (`InvalidPageBox`). The two-page red/green regression covers zero and excessive
-widths and heights. Once later authority is valid, the original
-`InvalidPath` refusal remains. Required document-wide byte framing retains
-its existing priority; accepted PDF bytes do not change.
+widths and heights.
+
+Once later authority is valid, the original `InvalidPath` refusal remains.
+Required document-wide byte framing retains its existing priority; accepted
+PDF bytes do not change.
 
 The same cross-page reserve now includes every future path's minimum paint
 and command syntax, not just empty-page objects. It includes the resulting
