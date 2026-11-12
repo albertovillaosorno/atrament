@@ -749,3 +749,245 @@ fn repeated_projection_replays_identically_for_both_render_paths() {
         );
     }
 }
+
+#[test]
+fn affine_origin_shifts_and_reversed_strokes_preserve_slanted_ink() {
+    // A page placement moves already selected authored ink, not its shape.
+    // Reversing one directed stroke must swap its physical endpoints only.
+    // Cross both shear directions, descenders, rounded means and heading ink.
+    let mut checked = 0usize;
+    for angle in [
+        -60_000i32, -45_000i32, -17_000i32, 0i32, 17_000i32,
+        45_000i32, 60_000i32,
+    ] {
+        for sample in 0..256u32 {
+            let source = AuthoredInkSegment {
+                start_um: (200 + sample * 3, sample * 13),
+                end_um: (2_400 + sample * 2, 4_800 - sample * 7),
+                width_um: 180 + sample.rem_euclid(80),
+                rgb: [11, 22, 33],
+            };
+            let parameters = InkPlacement {
+                page: 3,
+                origin_um: (50_000, 60_000),
+                dimensions: Some(MeasuredGlyphDimensions {
+                    width_um: 3_100 + sample * 5,
+                    height_um: 3_900 + sample * 3,
+                    ink_thickness_um: 260 + sample.rem_euclid(100),
+                    slant_millidegrees: angle,
+                }),
+                ink_scale_percent: 115,
+                color_override: Some([40, 50, 60]),
+            };
+            let original = project_ink_segment(source, parameters)
+                .expect("bounded shear and mean must project");
+            let reversed = project_ink_segment(
+                AuthoredInkSegment {
+                    start_um: source.end_um,
+                    end_um: source.start_um,
+                    ..source
+                },
+                parameters,
+            ).expect("reversing an admitted segment must project");
+            assert_eq!(
+                reversed,
+                PhysicalInkSegment {
+                    start_um: original.end_um,
+                    end_um: original.start_um,
+                    ..original
+                },
+                "reverse angle {angle}, sample {sample}",
+            );
+            for (dx, dy) in [
+                (-40_000i64, -50_000i64),
+                (-17_000, 5_000),
+                (0, 0),
+                (11_000, 29_000),
+            ] {
+                let moved = project_ink_segment(
+                    source,
+                    InkPlacement {
+                        origin_um: (
+                            parameters.origin_um.0 + dx,
+                            parameters.origin_um.1 + dy,
+                        ),
+                        ..parameters
+                    },
+                ).expect("translated valid physical ink must remain valid");
+                let translated = |point: (u32, u32)| (
+                    u32::try_from(i64::from(point.0) + dx)
+                        .expect("bounded shifted x"),
+                    u32::try_from(i64::from(point.1) + dy)
+                        .expect("bounded shifted y"),
+                );
+                assert_eq!(
+                    moved,
+                    PhysicalInkSegment {
+                        start_um: translated(original.start_um),
+                        end_um: translated(original.end_um),
+                        ..original
+                    },
+                    "translation angle {angle}, sample {sample}, {dx}, {dy}",
+                );
+                checked += 1;
+            }
+        }
+    }
+    assert_eq!(checked, 7_168);
+}
+
+#[test]
+fn slanted_projection_admits_exact_unsigned_edge_and_refuses_next_um() {
+    let stroke = AuthoredInkSegment {
+        start_um: (500, 0),
+        end_um: (500, 4_500),
+        ..ORIGINAL
+    };
+    let dimensions = MeasuredGlyphDimensions {
+        width_um: 3_500,
+        height_um: 4_500,
+        ink_thickness_um: 300,
+        slant_millidegrees: 45_000,
+    };
+    let at_right_edge = InkPlacement {
+        origin_um: (i64::from(u32::MAX) - 5_000, 0),
+        dimensions: Some(dimensions),
+        ..placement()
+    };
+    assert_eq!(
+        project_ink_segment(stroke, at_right_edge),
+        Ok(PhysicalInkSegment {
+            page: 1,
+            start_um: (u32::MAX, 0),
+            end_um: (u32::MAX - 4_500, 4_500),
+            width_um: ORIGINAL.width_um,
+            rgb: ORIGINAL.rgb,
+        }),
+    );
+    assert_eq!(
+        project_ink_segment(stroke, InkPlacement {
+            origin_um: (at_right_edge.origin_um.0 + 1, 0),
+            ..at_right_edge
+        }),
+        Err("slanted glyph must stay on page"),
+    );
+    let at_left_edge = InkPlacement {
+        origin_um: (4_000, 0),
+        dimensions: Some(MeasuredGlyphDimensions {
+            slant_millidegrees: -45_000,
+            ..dimensions
+        }),
+        ..placement()
+    };
+    assert_eq!(
+        project_ink_segment(stroke, at_left_edge),
+        Ok(PhysicalInkSegment {
+            page: 1,
+            start_um: (0, 0),
+            end_um: (4_500, 4_500),
+            width_um: ORIGINAL.width_um,
+            rgb: ORIGINAL.rgb,
+        }),
+    );
+    assert_eq!(
+        project_ink_segment(stroke, InkPlacement {
+            origin_um: (3_999, 0),
+            ..at_left_edge
+        }),
+        Err("slanted glyph must stay on page"),
+    );
+    assert_eq!(
+        project_ink_segment(stroke, InkPlacement {
+            origin_um: (i64::MAX, 0),
+            ..at_right_edge
+        }),
+        Err("slanted glyph x position overflow"),
+    );
+}
+
+#[test]
+fn projected_slanted_pen_joins_match_exact_endpoint_distance() {
+    // Join the physical output of two independently placed strokes, never
+    // guessed local-space endpoints. The source heights differ after scaling.
+    let mut inspected = 0usize;
+    for angle in [-60_000i32, -30_000i32, 0i32, 30_000i32, 60_000i32] {
+        for sample in 0..96u32 {
+            let dimensions = MeasuredGlyphDimensions {
+                width_um: 3_500 + sample * 3,
+                height_um: 3_900 + sample * 4,
+                ink_thickness_um: 300,
+                slant_millidegrees: angle,
+            };
+            let source_before = AuthoredInkSegment {
+                start_um: (250, 700),
+                end_um: (2_800, 2_400),
+                ..ORIGINAL
+            };
+            let source_after = AuthoredInkSegment {
+                start_um: (300, 2_600),
+                end_um: (1_700, 4_000),
+                ..ORIGINAL
+            };
+            let before = project_ink_segment(
+                source_before,
+                InkPlacement {
+                    origin_um: (20_000, 30_000),
+                    dimensions: Some(dimensions),
+                    ..placement()
+                },
+            ).expect("first slanted stroke is physical");
+            let after = project_ink_segment(
+                source_after,
+                InkPlacement {
+                    origin_um: (
+                        21_900 + i64::from(sample) * 17, 30_000,
+                    ),
+                    dimensions: Some(dimensions),
+                    ..placement()
+                },
+            ).expect("second slanted stroke is physical");
+            let dx = i128::from(before.end_um.0) - i128::from(after.start_um.0);
+            let dy = i128::from(before.end_um.1) - i128::from(after.start_um.1);
+            let squared_distance = dx * dx + dy * dy;
+            for limit in [0u64, 500u64, 1_200u64] {
+                let expected = if squared_distance == 0 {
+                    Ok(None)
+                } else if squared_distance
+                    <= i128::from(limit) * i128::from(limit)
+                {
+                    Ok(Some(PhysicalInkSegment {
+                        start_um: before.end_um,
+                        end_um: after.start_um,
+                        ..before
+                    }))
+                } else {
+                    Err(if limit == 1_200 {
+                        "text join gap exceeds 1200 um"
+                    } else {
+                        "text join gap exceeds configured maximum"
+                    })
+                };
+                assert_eq!(
+                    connect_ink_segments(before, after, limit), expected,
+                    "angle {angle}, sample {sample}, limit {limit}",
+                );
+                inspected += 1;
+            }
+            assert_eq!(
+                connect_ink_segments(before, PhysicalInkSegment {
+                    page: 2,
+                    ..after
+                }, 1_200),
+                Err("text join cannot cross physical pages"),
+            );
+            assert_eq!(
+                connect_ink_segments(before, PhysicalInkSegment {
+                    rgb: [44, 55, 66],
+                    ..after
+                }, 1_200),
+                Err("text join requires matching physical pen and RGB"),
+            );
+        }
+    }
+    assert_eq!(inspected, 1_440);
+}

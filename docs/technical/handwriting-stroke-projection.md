@@ -114,6 +114,15 @@ fitted pen-contact response. Those remain separate research/future contracts.
 - `tests/backend/handwriting-stroke-projection/domain/lib.rs`: exact mean,
   shear, width, color, rounding-collapse refusal, overflow, join and replay,
   including a 2,048-case independent `u128` mean-coordinate rounding oracle.
+  Another 7,168-case metamorphic sweep checks translation of already resolved
+  slanted ink over seven angles, 256 shapes and four signed-origin shifts;
+  reversing an authored stroke must swap only its projected endpoints.
+  Exact right and left unsigned-coordinate edge fixtures additionally require
+  one-micrometre overflow refusal instead of saturation or clipping. A separate
+  1,440-case two-stroke oracle joins independently projected, slanted pen
+  segments using `i128` squared endpoint distances, checking exact caller
+  limits and rejecting cross-page or cross-color joins; the checks concern
+  geometry authority, not printable page bounds or generated glyphs.
 - `tests/backend/profile-editor-cli/composition/lib.rs`: actual Rust CLI
   regression tests for profile means, glyph placement and PDF/PNG output.
 - `tests/backend/profile-editor-cli/composition/joined-varied-handwriting.mjs`:
