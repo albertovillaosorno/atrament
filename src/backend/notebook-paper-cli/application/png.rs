@@ -277,7 +277,8 @@ fn validate_page_path_bounds(
     height_um: u32,
 ) -> Result<(), String> {
     let stroke_width_um = match path.paint {
-        PdfPathPaint::Stroke { width_um, .. } if width_um > 0 => width_um,
+        PdfPathPaint::Stroke { width_um: pen_width_um, .. }
+            if pen_width_um > 0 => pen_width_um,
         PdfPathPaint::Stroke { .. } => {
             return Err("PNG stroke width must be positive".into());
         },

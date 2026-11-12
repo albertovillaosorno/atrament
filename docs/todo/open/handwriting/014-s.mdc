@@ -842,3 +842,30 @@ remains a blocking export admission check.
 The option does not persist text, inferred word identities, handwriting
 calibration or continuous multi-glyph cursive paths. Full P1-014 acceptance
 remains open.
+
+## CLI-only word-level pen-pressure rhythm (partial) — 2026-11-12
+
+The Rust notebook compositor now optionally accepts
+`--glyph-word-pressure MAX_PERCENT` (0–20) with `--glyph-variation`.
+An independent, seed-derived width percentage is selected per placed
+run and ASCII-space-delimited word. All authored segments within a word
+receive the same multiplier after their per-occurrence stroke selection,
+statistical ink mean and optional heading styling. The physical stroke
+projection engine remains the authority for the final 80–1500 µm width.
+
+No glyph coordinates, ink colors, nominal wrapping or saved TSV source
+strokes change. Equal pen-width segments of neighboring letters retain
+matching widths across a selected intra-word bridge, provided independent
+per-glyph thickness jitter has not already made those widths different.
+A zero percentage is exactly byte-compatible with omitted word pressure.
+
+Four new Rust regressions verify two runs of NFC/NFD word groupings with
+hard-coded independent seed samples; composability with line/word position
+rhythm; exact, directed same-pen join continuity; real PDF, PNG and page-ink
+TSV byte replay; combined heading ink width and color; and atomic refusals
+for negative, repeated, unpaired, over-range or physically unprintable pen
+widths. The selected file remains unchanged after each invalid export.
+
+This is an opt-in creative pressure *proxy*, not a calibrated human pen
+model, local pressure measurement, persisted notebook setting, or automatic
+cursive join. The P1-014 finite two-line handwriting task remains open.

@@ -10562,3 +10562,264 @@ fn word_rise_native_pdf_png_replay_and_refusal_preserve_output()
     fs::remove_file(&target).map_err(|error| error.to_string())?;
     Ok(())
 }
+
+#[test]
+fn seeded_word_pressure_shares_physical_width_without_moving_authored_ink()
+-> Result<(), String> {
+    let glyph = "n\u{303}";
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        glyph, "600", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    let text = format!("{glyph}{glyph}  {glyph} {glyph}{glyph}");
+    for y in [30_000u32, 40_000u32] {
+        overlay.parse("--place-text", &mut args(&[
+            "1", "25000", &y.to_string(), &text,
+        ]).iter())?;
+    }
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    let baseline = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-pressure", &mut args(&["20"]).iter())?;
+    let pressured = overlay.expand(&[], None)?;
+    let widths = pressured.iter().map(|ink| ink.width_um)
+        .collect::<Vec<_>>();
+    // Independent uint32 avalanche/xorshift oracle: word indices 0, 1, 2
+    // for each distinct run, using seed 42 and max 20 percent.
+    if widths != [285, 285, 203, 285, 285, 205, 205, 225, 208, 208] {
+        return Err(format!("word-pressure sample changed: {widths:?}"));
+    }
+    for (plain, varied) in baseline.iter().zip(&pressured) {
+        if plain.start_um != varied.start_um
+            || plain.end_um != varied.end_um || plain.rgb != varied.rgb
+            || !(200..=300).contains(&varied.width_um) {
+            return Err("word pressure moved ink or left width bounds".into());
+        }
+    }
+    if overlay.expand(&[], None)? != pressured {
+        return Err("word-pressure replay changed physical ink".into());
+    }
+    overlay.word_pressure_percent = Some(0);
+    if overlay.expand(&[], None)? != baseline {
+        return Err("zero word pressure differs from legacy ink".into());
+    }
+    overlay.word_pressure_percent = Some(20);
+    overlay.word_rise_um = Some(150);
+    overlay.line_drift_um = Some(120);
+    overlay.word_drift_um = Some(90);
+    let combined = overlay.expand(&[], None)?;
+    overlay.word_pressure_percent = Some(0);
+    let unpressured = overlay.expand(&[], None)?;
+    for (pressure, unchanged) in combined.iter().zip(&unpressured) {
+        if pressure.start_um != unchanged.start_um
+            || pressure.end_um != unchanged.end_um
+            || pressure.rgb != unchanged.rgb {
+            return Err("word pressure changed independent rhythm".into());
+        }
+    }
+    overlay.word_pressure_percent = Some(21);
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed out-of-range word pressure accepted".into());
+    }
+    overlay.word_pressure_percent = Some(20);
+    overlay.variation = None;
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed unpaired word pressure accepted".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn seeded_word_pressure_preserves_same_pen_directed_intra_word_bridges()
+-> Result<(), String> {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "\u{e1}", "500", "1200", "3300", "1200", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "\u{e1}\u{e1} \u{e1}\u{e1}",
+    ]).iter())?;
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    overlay.add_text_join_pair(
+        &mut args(&["\u{e1}", "\u{e1}"]).iter(),
+    )?;
+    let original = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-pressure", &mut args(&["20"]).iter())?;
+    let actual = overlay.expand(&[], None)?;
+    if original.len() != 6 || actual.len() != 6 {
+        return Err("two joined word groups must contain six lines".into());
+    }
+    for (offset, expected_width) in [(0usize, 285u32), (3, 203)] {
+        let [first, bridge, last] = actual.get(offset..offset + 3)
+            .ok_or("word group missing")? else {
+            return Err("word group must contain three strokes".into());
+        };
+        if first.end_um != bridge.start_um
+            || bridge.end_um != last.start_um
+            || first.width_um != expected_width
+            || bridge.width_um != expected_width
+            || last.width_um != expected_width {
+            return Err("word pressure broke the selected pen join".into());
+        }
+    }
+    for (before, after) in original.iter().zip(&actual) {
+        if before.start_um != after.start_um
+            || before.end_um != after.end_um
+            || before.rgb != after.rgb {
+            return Err("word pressure moved a directed join".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn word_pressure_pdf_png_and_ink_file_replay_with_atomic_refusal()
+-> Result<(), String> {
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "\u{e1}", "600", "1000", "1600", "2800",
+        "250", "#123456",
+        "--flow-markdown", concat!(
+            "\u{e1}\u{e1} \u{e1} \u{e1}\u{e1}\n\n",
+            "\u{e1}\u{e1} \u{e1}\u{e1}",
+        ),
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    for format in ["pdf", "png", "ink"] {
+        let render = |seed: &str, extras: &[&str]|
+            -> Result<Vec<u8>, String> {
+            let mut command = prefix.clone();
+            let seed_index = command.iter().position(|value| {
+                value == "--glyph-variation"
+            }).ok_or("variation flag missing")? + 1;
+            *command.get_mut(seed_index).ok_or("seed missing")? = seed.into();
+            if format == "ink" {
+                command.push("--emit-ink-file".into());
+            } else {
+                command.extend(args(&["--export-paper", format]));
+            }
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            command.extend(args(extras));
+            execute_notebook(&command)?.ok_or("export bytes missing".into())
+        };
+        let original = render("42", &[])?;
+        if original != render("42", &["--glyph-word-pressure", "0"])? {
+            return Err(format!("{format} zero pressure changed bytes"));
+        }
+        let changed = render("42", &["--glyph-word-pressure", "20"])?;
+        if changed == original
+            || changed != render("42", &["--glyph-word-pressure", "20"])?
+            || changed == render("43", &["--glyph-word-pressure", "20"])? {
+            return Err(format!("{format} word-pressure replay invalid"));
+        }
+        if format == "pdf" && !changed.starts_with(b"%PDF-1.4") {
+            return Err("word-pressure PDF header missing".into());
+        }
+        if format == "png" && !changed.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return Err("word-pressure PNG signature missing".into());
+        }
+        if format == "ink"
+            && !changed.starts_with(b"atrament.page-ink.v1\n") {
+            return Err("word-pressure ink format header missing".into());
+        }
+    }
+    let target = test_path();
+    fs::write(&target, b"accepted bytes").map_err(|e| e.to_string())?;
+    let path = target.to_str().ok_or("non-UTF8 output path")?;
+    for invalid in [
+        args(&["--glyph-word-pressure", "-1"]),
+        args(&["--glyph-word-pressure", "21"]),
+        args(&["--glyph-word-pressure", "4294967296"]),
+        args(&["--glyph-word-pressure", "20",
+            "--glyph-word-pressure", "1"]),
+    ] {
+        let mut command = prefix.clone();
+        command.extend(args(&[
+            "--export-paper", "pdf", "--output", path, "--replace",
+        ]));
+        command.extend(invalid);
+        if execute_notebook(&command).is_ok()
+            || fs::read(&target).map_err(|e| e.to_string())?
+                != b"accepted bytes" {
+            return Err("invalid word pressure replaced output".into());
+        }
+    }
+    let mut unpaired = prefix;
+    let at = unpaired.iter().position(|value| {
+        value == "--glyph-variation"
+    }).ok_or("variation flag missing")?;
+    unpaired.drain(at..at + 8).for_each(drop);
+    unpaired.extend(args(&[
+        "--glyph-word-pressure", "20", "--export-paper", "pdf",
+        "--output", path, "--replace",
+    ]));
+    if execute_notebook(&unpaired).is_ok()
+        || fs::read(&target).map_err(|e| e.to_string())?
+            != b"accepted bytes" {
+        return Err("unpaired word pressure replaced output".into());
+    }
+    fs::remove_file(&target).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[test]
+fn word_pressure_refuses_physical_pen_limits_and_scales_heading_ink()
+-> Result<(), String> {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "\u{e1}", "1000", "1000", "2000", "2000", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "\u{e1}\u{e1}",
+    ]).iter())?;
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    overlay.parse("--glyph-word-pressure", &mut args(&["20"]).iter())?;
+    let first = overlay.expand(&[], None)?;
+    let run = overlay.runs.get_mut(0).ok_or("text run missing")?;
+    run.heading_ink = Some(HeadingInk {
+        color: Some([0x45, 0x67, 0x89]), scale_percent: 150,
+    });
+    let themed = overlay.expand(&[], None)?;
+    if first.len() != 2 || first[0].width_um != 285
+        || themed.len() != 2 || themed[0].width_um != 428
+        || themed[1].width_um != 428
+        || themed[0].rgb != [0x45, 0x67, 0x89]
+        || themed[0].start_um != first[0].start_um {
+        return Err("combined heading/pressure width is incorrect".into());
+    }
+
+    let target = test_path();
+    fs::write(&target, b"accepted pdf").map_err(|e| e.to_string())?;
+    let path = target.to_str().ok_or("non-UTF8 output path")?;
+    for (width, text, start, end) in [
+        ("80", "\u{e1} \u{e1}", "600", "1600"),
+        ("1500", "\u{e1}", "1000", "2000"),
+    ] {
+        let command = args(&[
+            "--printed-sheet", "true", "--glyph-stroke", "\u{e1}",
+            start, "1000", end, "2000", width, "#123456",
+            "--place-text", "1", "25000", "30000", text,
+            "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+            "--glyph-word-pressure", "20", "--export-paper", "pdf",
+            "--output", path, "--replace",
+        ]);
+        let failure = execute_notebook(&command);
+        if !failure.as_ref().err().is_some_and(|error| {
+            error.contains("scaled glyph ink width exceeds 80..1500 um")
+        }) || fs::read(&target).map_err(|e| e.to_string())?
+            != b"accepted pdf" {
+            return Err(format!(
+                "invalid physical pressure committed: {failure:?}"
+            ));
+        }
+    }
+    fs::remove_file(&target).map_err(|e| e.to_string())?;
+    Ok(())
+}

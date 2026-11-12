@@ -2060,12 +2060,24 @@ independent of horizontal word drift and smoothly interpolated line drift.
 The drawn ink still must fit on the real sheet; row pitch and nominal wrapping
 do not change.
 
+For shared pen-width rhythm, add `--glyph-word-pressure MAX_PERCENT` (0–20)
+with the same `--glyph-variation` seed. Each ASCII-space-delimited word
+receives one independent, signed width percentage from 100 ± the selected
+maximum. All its strokes receive that multiplier after their local jitter
+and selected statistical mean, combined with heading-ink scaling.
+
+Equal input widths remain equal within a word, allowing valid short pen
+joins when the underlying per-glyph thickness jitter is zero. Nonzero
+per-glyph thickness jitter can still make adjacent pens incompatible.
+
 For example, extend the preceding command with
 `--glyph-line-drift 120 --glyph-word-drift 90 --glyph-word-rise 90`
-to produce reproducible line and word rhythms. At `0`, each rhythm option
-is byte-identical to omission in PDF/PNG. These CLI-only variations do not
-persist in a saved notebook, are not calibrated to a person's writing, and
-do not create automatic cursive joins.
+and `--glyph-word-pressure 12` to produce reproducible line, word and ink
+rhythms. At `0`, each extra option is byte-identical to omission for
+PDF/PNG and emitted ink TSV. Widths outside 80–1500 µm and unprintable
+pen clearance refuse before output commit; there is no silent clipping.
+These CLI-only variations do not persist in a saved notebook, are not
+calibrated to a person's writing, and do not create automatic cursive joins.
 
 The occurrence sequence continues across manual
 text runs and Markdown flow pages. Rust checks the fully sampled ink and

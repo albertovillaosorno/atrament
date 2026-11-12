@@ -252,6 +252,31 @@ impl GlyphVariation {
         Self::round_js(random.unit() * f64::from(maximum_um))
     }
 
+    // One independent width multiplier per word. All segments with equal
+    // authored pen widths retain equal widths, so optional joins can use
+    // the same physical pen throughout an ASCII-space-delimited word.
+    fn word_pressure(
+        self, run_index: usize, word_index: u32, maximum_percent: u32,
+    ) -> Result<u32, String> {
+        let run = u32::try_from(run_index)
+            .map_err(|_error| "word pressure run index overflow")?;
+        let mut identity = self.seed
+            ^ run.wrapping_add(1).wrapping_mul(0xC2B2_AE35)
+            ^ word_index.wrapping_add(1).wrapping_mul(0x27D4_EB2F);
+        identity ^= identity >> 16i32;
+        identity = identity.wrapping_mul(0x7FEB_352D);
+        identity ^= identity >> 15i32;
+        identity = identity.wrapping_mul(0x846C_A68B);
+        identity ^= identity >> 16i32;
+        let mut random = XorShift32::new(identity);
+        let delta = Self::round_js(
+            random.unit() * f64::from(maximum_percent),
+        )?;
+        u32::try_from(100i32.checked_add(delta)
+            .ok_or("word pressure overflow")?)
+            .map_err(|_error| "word pressure must be positive".into())
+    }
+
     // Separate from horizontal word rhythm: a shared vertical displacement
     // keeps a word's authored contours and short selected joins together.
     fn word_rise(
@@ -739,9 +764,10 @@ impl GlyphOverlay {
                 let glyph_y = self.glyph_origin_y(
                     run, run_index, word_index, column, metrics,
                 )?;
-                let rendered = selected.iter().map(|shape| {
-                    placed_ink(shape, run, (glyph_x, glyph_y), metrics)
-                }).collect::<Result<Vec<_>, _>>()?;
+                let pressure = self.glyph_pressure(run_index, word_index)?;
+                let rendered = selected.iter().map(|shape| placed_ink(
+                    shape, run, (glyph_x, glyph_y), metrics, pressure,
+                )).collect::<Result<Vec<_>, _>>()?;
                 append_text_ink(
                     &mut expanded, &rendered,
                     previous.as_ref().map(|(glyph, strokes)| (
@@ -845,12 +871,23 @@ impl GlyphOverlay {
             .ok_or_else(|| "glyph vertical origin overflow".into())
     }
 
+    fn glyph_pressure(
+        &self, run_index: usize, word_index: u32,
+    ) -> Result<u32, String> {
+        match (self.variation, self.word_pressure_percent) {
+            (Some(variation), Some(maximum)) =>
+                variation.word_pressure(run_index, word_index, maximum),
+            _ => Ok(100),
+        }
+    }
+
     pub(super) const fn has_any(&self) -> bool {
         !self.runs.is_empty() || !self.strokes.is_empty()
             || !self.fallbacks.is_empty() || self.variation.is_some()
             || !self.text_joins.is_empty() || self.line_drift_um.is_some()
             || self.word_drift_um.is_some()
             || self.word_rise_um.is_some()
+            || self.word_pressure_percent.is_some()
     }
 
     // Index once per expansion, retaining authored order for each exact key.
@@ -1194,6 +1231,14 @@ impl GlyphOverlay {
                 }
                 self.word_rise_um = Some(next_integer(
                     iter, "glyph word rise", 0, 150,
+                )?);
+            }
+            "--glyph-word-pressure" => {
+                if self.word_pressure_percent.is_some() {
+                    return Err("duplicate --glyph-word-pressure".into());
+                }
+                self.word_pressure_percent = Some(next_integer(
+                    iter, "glyph word pressure", 0, 20,
                 )?);
             }
             "--glyph-variation" => {
@@ -1992,6 +2037,14 @@ impl GlyphOverlay {
                 return Err("word rise requires --glyph-variation".into());
             }
         }
+        if let Some(maximum) = self.word_pressure_percent {
+            if maximum > 20 {
+                return Err("glyph word pressure must be within 0..20%".into());
+            }
+            if self.variation.is_none() {
+                return Err("word pressure requires --glyph-variation".into());
+            }
+        }
         Ok(())
     }
 
@@ -2364,8 +2417,16 @@ pub(super) fn validate_removal_glyph_key(
 // transform; this CLI adapter maps admitted profile and output fields.
 fn placed_ink(
     shape: &GlyphStroke, run: &TextRun, origin: (i64, i64),
-    metrics: Option<GlyphMetrics>,
+    metrics: Option<GlyphMetrics>, pressure_percent: u32,
 ) -> Result<NotebookInkLine, String> {
+    // Compose word pressure and heading treatment before delegating final
+    // width admission to the renderer-independent physical pen engine.
+    let ink_scale_percent = run.heading_ink.map_or(100, |style| {
+        style.scale_percent
+    }).checked_mul(pressure_percent)
+        .and_then(|value| value.checked_add(50))
+        .and_then(|value| value.checked_div(100))
+        .ok_or("combined ink scale exceeds numeric bounds")?;
     let projected = project_ink_segment(AuthoredInkSegment {
         start_um: shape.start_um, end_um: shape.end_um,
         width_um: shape.width_um, rgb: shape.rgb,
@@ -2376,9 +2437,7 @@ fn placed_ink(
             ink_thickness_um: values.ink_thickness,
             slant_millidegrees: values.slant,
         }),
-        ink_scale_percent: run.heading_ink.map_or(100, |style| {
-            style.scale_percent
-        }),
+        ink_scale_percent,
         color_override: run.heading_ink.and_then(|style| style.color),
     }).map_err(str::to_owned)?;
     Ok(NotebookInkLine {
