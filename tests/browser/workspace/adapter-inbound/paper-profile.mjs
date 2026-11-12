@@ -146,6 +146,17 @@ test("paper editor exports Rust PDF and PNG", async () => {
         elements.get("paper-export-png").dispatch("click");
         await new Promise((resolve) => setImmediate(resolve));
         assert.equal(requests.length, pngRequests);
+        for (const raw of ["+200", "2e2", "0xC8", "200.0", " 200",
+            "200 "]) {
+            elements.get("paper-png-dpi").value = raw;
+            elements.get("paper-export-png").dispatch("click");
+            await new Promise((resolve) => setImmediate(resolve));
+            assert.equal(requests.length, pngRequests,
+                `nondecimal DPI ${JSON.stringify(raw)} reached Rust`);
+            assert.equal(links.length, 3,
+                "invalid DPI cannot download another PNG");
+        }
+        elements.get("paper-png-dpi").value = "200";
         const fileText = JSON.stringify({ ...defaults, style: "ruled" });
         const corrupt = new TextEncoder().encode(fileText);
         corrupt[fileText.indexOf("ruled") + 2] = 0xFF;

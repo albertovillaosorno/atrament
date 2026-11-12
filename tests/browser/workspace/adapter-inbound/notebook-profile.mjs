@@ -290,6 +290,30 @@ test("notebook form validates page metadata and downloads native JSON", async ()
         assert.equal(requests.length, beforeInvalid,
             "invalid export count refused before network effect");
         assert.equal(downloads.length, 3);
+        elements.get("notebook-pdf-pages").value = "3";
+        elements.get("notebook-png-dpi").value = "72";
+        elements.get("notebook-png-page").value = "10";
+        for (const [id, action, notation] of [
+            ["notebook-pdf-pages", "notebook-export-pdf", "3"],
+            ["notebook-png-dpi", "notebook-export-png", "200"],
+            ["notebook-png-page", "notebook-preview", "10"],
+        ]) {
+            const field = elements.get(id);
+            const original = field.value;
+            const value = Number(notation);
+            for (const raw of [`+${notation}`, `${value}e0`,
+                `0x${value.toString(16)}`, `${notation}.0`,
+                ` ${notation}`, `${notation} `]) {
+                field.value = raw;
+                const before = requests.length;
+                elements.get(action).dispatch("click");
+                await settle();
+                assert.equal(requests.length, before,
+                    `${id} accepted ${JSON.stringify(raw)}`);
+                assert.equal(downloads.length, 3);
+            }
+            field.value = original;
+        }
         const file = { size: 8193, text: async () => "{}" };
         elements.get("notebook-load").files = { item: () => file };
         elements.get("notebook-load").dispatch("change");

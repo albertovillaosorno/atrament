@@ -390,7 +390,8 @@ export function createPaperProfileEditor(context) {
                 throw new Error("Choose a valid PNG resolution");
             }
             const dpi = Number(pngDpi.value);
-            if (!Number.isSafeInteger(dpi) || dpi < 72 || dpi > 300) {
+            if (!/^[0-9]+$/.test(pngDpi.value)
+                || !Number.isSafeInteger(dpi) || dpi < 72 || dpi > 300) {
                 throw new Error("PNG DPI must be 72 through 300");
             }
             const response = await requestPaper(secret, "/api/paper/png", proposedJson(), dpi);
@@ -712,7 +713,7 @@ export function createNotebookProfileEditor(context) {
     }
     function validExportNumber(input, minimum, maximum) {
         const number = Number(input.value);
-        if (input.value === "" || !input.validity.valid
+        if (!/^[0-9]+$/.test(input.value) || !input.validity.valid
             || !Number.isSafeInteger(number)
             || number < minimum || number > maximum) {
             throw new Error("Invalid notebook paper export settings");
