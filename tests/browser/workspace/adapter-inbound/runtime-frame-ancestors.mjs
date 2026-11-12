@@ -12963,8 +12963,9 @@ test(
             assert.match(result.guideStatus,
                 /preview only, draft unchanged/);
             assert.equal(result.invalidGuide, 0);
-            assert.match(result.invalidStatus, /offsets require signed whole/);
-            assert.match(result.refused, /offsets require signed whole/);
+            assert.match(result.invalidStatus,
+                /Transform needs whole decimal units/);
+            assert.match(result.refused, /Transform needs whole decimal units/);
             assert.match(result.accepted,
                 /Moved all authored ó strokes; unsaved/);
             assert.equal(result.undoReady, true);
