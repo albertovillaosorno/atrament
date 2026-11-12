@@ -599,6 +599,58 @@ function mountEditor() {
     };
 }
 
+test("authored glyph transforms reject numeric coercions", () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor } = ui;
+        editor.start();
+        get("x1").value = "300";
+        get("add").dispatch("click");
+        assert.equal(get("preview").children.length, 1);
+        const original = get("preview").children.map((item) =>
+            [...item.attributes]);
+        const invalid = [
+            ["authored-angle", "+12", "slant-authored", "slant-preview"],
+            ["authored-baseline", "3.55e3", "slant-authored",
+                "slant-preview"],
+            ["height-percent", "1e2", "scale-height", "height-preview"],
+            ["height-baseline", "0x8ca", "scale-height",
+                "height-preview"],
+            ["width-percent", "1e2", "scale-width", "width-preview"],
+            ["width-anchor", "2.25e3", "scale-width", "width-preview"],
+            ["ink-percent", "1e2", "scale-ink", "ink-preview"],
+            ["rotate-angle", "0e0", "rotate-all", "rotate-preview"],
+            ["rotate-pivot-x", "1.75e3", "rotate-all",
+                "rotate-preview"],
+            ["rotate-pivot-y", "0x8ca", "rotate-all",
+                "rotate-preview"],
+            ["move-x", "0e0", "move-all", "move-preview"],
+            ["move-y", "+0", "move-all", "move-preview"],
+        ];
+        for (const [field, raw, action, preview] of invalid) {
+            const control = get(field);
+            const before = control.value;
+            control.value = raw;
+            control.dispatch("input");
+            assert.equal(get(preview).children.length, 0,
+                `${field} accepted ${JSON.stringify(raw)} in preview`);
+            get(action).dispatch("click");
+            assert.match(get("status").textContent, /whole decimal/,
+                `${field} accepted ${JSON.stringify(raw)} in draft`);
+            assert.deepEqual(get("preview").children.map((item) =>
+                [...item.attributes]), original);
+            control.value = before;
+            control.dispatch("input");
+        }
+        get("move-y").value = "-20";
+        get("move-y").dispatch("input");
+        assert.equal(get("move-preview").children.length, 1,
+            "signed decimal physical offsets remain supported");
+    } finally {
+        ui.restore();
+    }
+});
+
 test("two-row accented comparison keeps authored TSV", async () => {
     const ui = mountEditor();
     try {

@@ -4190,6 +4190,17 @@ export function createGlyphStrokeEditor(): {
         kind: TransformKind;
     } | null = null;
 
+    // User-authored geometry is integral in micrometres/percent/degrees.
+    // Do not reinterpret exponent, hexadecimal or signed-plus input before
+    // producing a preview or committing a transform to the TSV draft.
+    const decimalWhole = (raw: string, signed = false): number => {
+        const grammar = signed ? /^-?[0-9]+$/ : /^[0-9]+$/;
+        const value = Number(raw);
+        if (!grammar.test(raw) || !Number.isSafeInteger(value)) {
+            throw new Error("Transform needs whole decimal units");
+        }
+        return value;
+    };
     const message = (text: string): void => { status.textContent = text; };
     const download = (bytes: string, filename: string): void => {
         const blob = new Blob([bytes], { type: "text/tab-separated-values" });
@@ -4889,8 +4900,8 @@ export function createGlyphStrokeEditor(): {
             if (authored.length > 128) {
                 throw new Error("Preview limited to 128 authored segments");
             }
-            const angle = Number(authoredAngle.value);
-            const baseline = Number(authoredBaseline.value);
+            const angle = decimalWhole(authoredAngle.value);
+            const baseline = decimalWhole(authoredBaseline.value);
             const shear = italicizeGlyphStrokes;
             const candidate = shear(strokes, target, angle, baseline);
             const chosen = candidate.filter((item) =>
@@ -4936,7 +4947,8 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Preview limited to 128 authored segments");
             }
             const candidate = scaleGlyphHeight(strokes, target,
-                Number(heightPercent.value), Number(heightBaseline.value));
+                decimalWhole(heightPercent.value),
+                decimalWhole(heightBaseline.value));
             const lines = candidate.filter((item) =>
                 item.grapheme === target).map((item) => {
                 const line = document.createElementNS(SVG_NS, "line");
@@ -4979,7 +4991,8 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Preview limited to 128 authored segments");
             }
             const candidate = scaleGlyphWidth(strokes, target,
-                Number(widthPercent.value), Number(widthAnchor.value));
+                decimalWhole(widthPercent.value),
+                decimalWhole(widthAnchor.value));
             const lines = candidate.filter((item) =>
                 item.grapheme === target).map((item) => {
                 const line = document.createElementNS(SVG_NS, "line");
@@ -5021,7 +5034,7 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Preview limited to 128 authored segments");
             }
             const candidate = scaleGlyphInk(strokes, target,
-                Number(inkPercent.value));
+                decimalWhole(inkPercent.value));
             const lines = candidate.filter((item) =>
                 item.grapheme === target).map((item) => {
                 const line = document.createElementNS(SVG_NS, "line");
@@ -5064,8 +5077,9 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Preview limited to 128 authored segments");
             }
             const candidate = rotateGlyphStrokes(strokes, target,
-                Number(rotateAngle.value), Number(rotatePivotX.value),
-                Number(rotatePivotY.value));
+                decimalWhole(rotateAngle.value, true),
+                decimalWhole(rotatePivotX.value),
+                decimalWhole(rotatePivotY.value));
             const lines = candidate.filter((item) =>
                 item.grapheme === target).map((item) => {
                 const line = document.createElementNS(SVG_NS, "line");
@@ -5107,7 +5121,8 @@ export function createGlyphStrokeEditor(): {
                 throw new Error("Preview limited to 128 authored segments");
             }
             const candidate = translateGlyphStrokes(strokes, target,
-                Number(moveX.value), Number(moveY.value));
+                decimalWhole(moveX.value, true),
+                decimalWhole(moveY.value, true));
             const lines = candidate.filter((item) =>
                 item.grapheme === target).map((item) => {
                 const line = document.createElementNS(SVG_NS, "line");
@@ -5554,8 +5569,8 @@ export function createGlyphStrokeEditor(): {
                 || authoredBaseline.value === "") {
                 throw new Error("Choose an italic angle and baseline");
             }
-            const angle = Number(authoredAngle.value);
-            const pivot = Number(authoredBaseline.value);
+            const angle = decimalWhole(authoredAngle.value);
+            const pivot = decimalWhole(authoredBaseline.value);
             const target = character.value;
             const next = italicizeGlyphStrokes(
                 strokes, target, angle, pivot,
@@ -5578,7 +5593,8 @@ export function createGlyphStrokeEditor(): {
             }
             const target = character.value;
             const next = scaleGlyphHeight(strokes, target,
-                Number(heightPercent.value), Number(heightBaseline.value));
+                decimalWhole(heightPercent.value),
+                decimalWhole(heightBaseline.value));
             applyGlyphTransform(next, target, "height");
             message(`Resized all authored ${target} height; unsaved`);
         } catch (error) {
@@ -5596,7 +5612,8 @@ export function createGlyphStrokeEditor(): {
             }
             const target = character.value;
             const next = scaleGlyphWidth(strokes, target,
-                Number(widthPercent.value), Number(widthAnchor.value));
+                decimalWhole(widthPercent.value),
+                decimalWhole(widthAnchor.value));
             applyGlyphTransform(next, target, "width");
             message(`Resized all authored ${target} width; unsaved`);
         } catch (error) {
@@ -5615,8 +5632,9 @@ export function createGlyphStrokeEditor(): {
             }
             const target = character.value;
             const next = rotateGlyphStrokes(strokes, target,
-                Number(rotateAngle.value), Number(rotatePivotX.value),
-                Number(rotatePivotY.value));
+                decimalWhole(rotateAngle.value, true),
+                decimalWhole(rotatePivotX.value),
+                decimalWhole(rotatePivotY.value));
             applyGlyphTransform(next, target, "rotation");
             message(`Rotated all authored ${target} strokes; unsaved`);
         } catch (error) {
@@ -5634,7 +5652,8 @@ export function createGlyphStrokeEditor(): {
             }
             const target = character.value;
             const next = translateGlyphStrokes(strokes, target,
-                Number(moveX.value), Number(moveY.value));
+                decimalWhole(moveX.value, true),
+                decimalWhole(moveY.value, true));
             applyGlyphTransform(next, target, "move");
             message(`Moved all authored ${target} strokes; unsaved`);
         } catch (error) {
@@ -5652,7 +5671,7 @@ export function createGlyphStrokeEditor(): {
             }
             const target = character.value;
             const next = scaleGlyphInk(strokes, target,
-                Number(inkPercent.value));
+                decimalWhole(inkPercent.value));
             applyGlyphTransform(next, target, "ink");
             message(`Resized all authored ${target} pen thickness; unsaved`);
         } catch (error) {
