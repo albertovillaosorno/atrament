@@ -2536,3 +2536,189 @@ fn later_page_authority_refuses_before_earlier_malformed_path() {
         "without a later authority error the earlier malformed ink refuses",
     );
 }
+
+#[expect(
+    clippy::expect_used,
+    reason = "bounded maximum PDF page tree must be fully inspectable"
+)]
+#[test]
+fn maximum_supported_page_tree_retains_all_page_streams_and_offsets() {
+    // Exercise the hard 1024-page serializer ceiling, not only caller budgets.
+    // Object IDs cross four digits and the cross-reference table grows past
+    // 2000 entries while every page remains a separate physical page.
+    let composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: (0usize..1024)
+            .map(|index| {
+                let mut sheet = page(Vec::new());
+                if index & 1 == 1 {
+                    sheet.physical_page_box = PdfVectorPageBox {
+                        width_um: 215_900,
+                        height_um: 279_400,
+                    };
+                }
+                sheet
+            })
+            .collect(),
+        render_manifest_identity: "maximum-page-tree.v1",
+    };
+    let extended = PdfVectorLimits {
+        maximum_pages: 1024,
+        maximum_pdf_bytes: 1_000_000,
+        ..limits()
+    };
+    let bytes = serialize_vector_pdf(&composition, extended)
+        .expect("1024 blank physical PDF pages must serialize");
+    assert_xref_integrity(&bytes);
+    let text = pdf_string(&bytes);
+    assert!(text.contains("/Count 1024"));
+    assert_eq!(text.matches("/Type /Page /Parent").count(), 1024);
+    assert_eq!(text.matches("/MediaBox [0 0 595.276 841.890]").count(), 512);
+    assert_eq!(text.matches("/MediaBox [0 0 612.000 792.000]").count(), 512);
+    assert_eq!(text.matches("stream\nq\n").count(), 1024);
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: bytes.len(),
+                ..extended
+            },
+        ),
+        Ok(bytes.clone()),
+        "the maximum bounded document must fit exactly",
+    );
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: bytes.len().saturating_sub(1),
+                ..extended
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+    );
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pages: 1023,
+                ..extended
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+    );
+    let mut too_many = composition;
+    too_many.pages.push(page(Vec::new()));
+    assert_eq!(
+        serialize_vector_pdf(
+            &too_many,
+            PdfVectorLimits {
+                maximum_pages: 1025,
+                ..extended
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+        "the hard 1024-page limit cannot be bypassed by caller limits",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "the bounded miniature-page oracle uses representable micrometers"
+)]
+#[test]
+fn rounded_stroke_clearance_oracle_covers_miniature_and_maximum_page_boxes() {
+    // Clipping is relative to the serialized page box, not only A4. Include
+    // physical dimensions smaller than the pen width and both digit edges.
+    let dimensions = [
+        1u32, 2, 3, 4, 5, 7, 8, 9, 10, 15, 16, 17, 31, 32, 33,
+        63, 64, 65, 126, 127, 128, 129, 255, 256, 257, 350,
+        999, 1_000, 1_001, 10_000, 100_000, 1_999_999, 2_000_000,
+    ];
+    let widths = [1u32, 2, 3, 4, 5, 7, 8, 9, 15, 16, 31, 32, 65, 130, 350];
+    let mut checked = 0usize;
+    let mut admitted = 0usize;
+    for dimension in dimensions {
+        for width_um in widths {
+            let margin = width_um.div_ceil(2);
+            for clearance in [
+                margin.saturating_sub(1), margin, margin.saturating_add(1),
+            ] {
+                for edge in 0u8..4u8 {
+                    let box_size = if edge < 2 {
+                        PdfVectorPageBox {
+                            width_um: dimension,
+                            height_um: 1_000,
+                        }
+                    } else {
+                        PdfVectorPageBox {
+                            width_um: 1_000,
+                            height_um: dimension,
+                        }
+                    };
+                    let start = match edge {
+                        0 => (clearance, 400),
+                        1 => (dimension.saturating_sub(clearance), 400),
+                        2 => (400, clearance),
+                        _ => (400, dimension.saturating_sub(clearance)),
+                    };
+                    let end = if edge < 2 {
+                        (start.0, 600)
+                    } else {
+                        (600, start.1)
+                    };
+                    let test_page = PdfPagePlan {
+                        color_intent: PdfVectorColorIntent::DeviceRgb,
+                        physical_page_box: box_size,
+                        searchable_text:
+                            SearchableSemanticText::OmittedAsIncompatible,
+                        vector_authority: vec![PdfVectorPath {
+                            commands: vec![
+                                PdfPathCommand::MoveTo(point(
+                                    i32::try_from(start.0).expect("bounded x"),
+                                    i32::try_from(start.1).expect("bounded y"),
+                                )),
+                                PdfPathCommand::LineTo(point(
+                                    i32::try_from(end.0).expect("bounded x"),
+                                    i32::try_from(end.1).expect("bounded y"),
+                                )),
+                            ],
+                            paint: PdfPathPaint::Stroke {
+                                color: PdfRgb {
+                                    red: 0, green: 0, blue: 0,
+                                },
+                                width_um,
+                            },
+                        }],
+                    };
+                    let composition = PdfCompositionPlan {
+                        assets: Vec::new(),
+                        pages: vec![test_page],
+                        render_manifest_identity: "miniature-page-edge.v1",
+                    };
+                    let should_accept = oracle_stroke_point_inside(
+                        start.0, start.1, width_um, box_size,
+                    ) && oracle_stroke_point_inside(
+                        end.0, end.1, width_um, box_size,
+                    );
+                    let result = serialize_vector_pdf(&composition, limits());
+                    if should_accept {
+                        let bytes = result.expect("rounded stroke must fit");
+                        assert_xref_integrity(&bytes);
+                        admitted = admitted.saturating_add(1);
+                    } else {
+                        assert_eq!(
+                            result,
+                            Err(PdfVectorError::InvalidPath),
+                            "p={dimension} w={width_um} e={edge} c={clearance}",
+                        );
+                    }
+                    checked = checked.saturating_add(1);
+                }
+            }
+        }
+    }
+    assert_eq!(checked, 5_940, "all small and maximum page edges covered");
+    assert!(admitted > 0, "the sweep must include drawable ink");
+    assert!(admitted < checked, "the sweep must refuse clipped ink");
+}

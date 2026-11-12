@@ -118,6 +118,20 @@ identity is retained verbatim with valid cross-reference offsets, while
 control characters and PDF string delimiters are rejected without output.
 This checks metadata injection boundaries, not manifest authenticity.
 
+An independent maximum-page-tree regression now exercises the hard 1,024-page
+serializer ceiling (beyond the caller-supplied count). It preserves alternating
+A4 and US Letter MediaBoxes across every page and verifies all page objects,
+streams and cross-reference entries, including four-digit object numbers.
+The exact full-document byte budget admits byte-identical output; a one-byte
+shortage and the 1,025th page refuse as `ResourceLimit`.
+
+Another 5,940-state oracle crosses 33 page dimensions, fifteen stroke widths,
+three half-width clearances and all four edges. It includes one-micrometer
+pages, larger-than-page pen widths, decimal rounding boundaries and the maximum
+two-metre page size. Independently formatted and parsed three-decimal PDF
+numbers predict stroke clipping; every admitted case has valid cross-references.
+This is not a claim that every physical printer can reproduce miniature ink.
+
 The adapter refuses *every* accepted asset and preserved searchable text:
 image/color-profile embedding and font/semantic-text rendering do not exist
 here. It also refuses malformed paths, invalid page boxes, unsafe manifest
