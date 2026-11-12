@@ -1153,6 +1153,9 @@ test('malformed and untrusted physical ink files cannot replace exports',
                 '#broken') + '\n', /ink color must be #RRGGBB/);
             check('atrament.page-ink.v1\n' + line.replace('140000',
                 '0') + '\n', /page 31 ink needs printable endpoints/);
+            check('atrament.page-ink.v1\n' + line + '\n'
+                + '31\t699876\t50000\t699875\t51000\t250\t#123456\n',
+            /page 31 ink needs printable endpoints/);
             check(Buffer.from([0xff, 0xfe, 0xfd]), /UTF-8/);
             check(Buffer.alloc(262_145, 0x61), /input refused/);
             check(`atrament.page-ink.v1\n${Array(4097).fill(line)

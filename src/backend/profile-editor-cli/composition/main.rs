@@ -1610,7 +1610,8 @@ fn parse_ink_line(
 }
 
 // This profile-independent admission is shared by CLI-parsed manual ink and
-// direct typed callers. The downstream paper renderer additionally verifies
+// direct typed callers. The 700-mm coordinate ceiling includes pen clearance,
+// not just the centerline. The downstream paper renderer additionally verifies
 // the selected sheet's margins and printable region.
 fn validate_native_ink_line(line: &NotebookInkLine) -> Result<(), String> {
     let clearance = line.width_um.div_ceil(2);
@@ -1619,7 +1620,10 @@ fn validate_native_ink_line(line: &NotebookInkLine) -> Result<(), String> {
         || line.start_um == line.end_um
         || [line.start_um, line.end_um].iter().any(|(x, y)| {
             *x < clearance || *y < clearance
-                || *x > 700_000 || *y > 700_000
+                || x.checked_add(clearance)
+                    .is_none_or(|edge| edge > 700_000)
+                || y.checked_add(clearance)
+                    .is_none_or(|edge| edge > 700_000)
         })
     {
         return Err(format!(

@@ -1258,6 +1258,34 @@ fn inline_flow_is_admitted_before_earlier_selected_stdin_sources() {
 }
 
 #[test]
+fn physical_ink_needs_upper_canvas_clearance_before_source_io() {
+    // The pen extends beyond both endpoints. A nominal endpoint on the
+    // 700-mm canvas edge must not survive the reusable ink export gate.
+    for invalid in [
+        ("699876", "50000", "699875", "51000"),
+        ("50000", "699876", "51000", "699875"),
+        ("700000", "50000", "699875", "51000"),
+        ("50000", "700000", "51000", "699875"),
+    ] {
+        let flags = args(&[
+            "--ink-file", "unopened.tsv", "--ink-line", "1",
+            invalid.0, invalid.1, invalid.2, invalid.3, "250", "#123456",
+            "--emit-ink-file",
+        ]);
+        let error = preflight_notebook_sources(&flags)
+            .expect_err("upper pen clearance must refuse before file read");
+        assert!(error.contains("printable endpoints"), "{error}");
+    }
+    let admitted = NotebookInkLine {
+        page: 1, start_um: (699_875, 50_000),
+        end_um: (699_875, 51_000), width_um: 250,
+        rgb: [0x12, 0x34, 0x56],
+    };
+    validate_native_ink_line(&admitted)
+        .expect("centerline exactly one half-width inside limit");
+}
+
+#[test]
 fn invalid_page_ink_tsv_does_not_append_any_valid_prefix() {
     let file = test_path().with_extension("tsv");
     let name = file.to_str().expect("owned TSV path");
@@ -1278,6 +1306,8 @@ fn invalid_page_ink_tsv_does_not_append_any_valid_prefix() {
             "line 4 needs seven tab-separated fields"),
         (format!("{source}4\t80000\t50000\t81000\t51000\t0\t#ABCDEF\n"),
             "line 4 refused: ink width"),
+        (format!("{source}4\t699876\t50000\t699875\t51000\t250\t#ABCDEF\n"),
+            "line 4 refused: page 4 ink needs printable endpoints"),
     ];
     for (contents, diagnostic) in &invalid {
         fs::write(&file, contents).expect("owned invalid file");
