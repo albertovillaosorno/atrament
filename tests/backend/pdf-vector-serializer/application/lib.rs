@@ -742,6 +742,213 @@ fn rounded_pdf_fill_contours_must_retain_noncollinear_ink() {
 #[expect(
     clippy::expect_used,
     clippy::indexing_slicing,
+    reason = "an exact two-page PDF anchors mandatory decimal coordinate widths"
+)]
+#[test]
+fn future_page_coordinate_widths_preempt_invalid_earlier_ink() {
+    let first = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(50_000, 40_000)),
+            PdfPathCommand::LineTo(point(60_000, 50_000)),
+        ],
+        paint: stroke().paint,
+    };
+    let second = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(150_000, 180_000)),
+            PdfPathCommand::LineTo(point(160_000, 190_000)),
+        ],
+        paint: stroke().paint,
+    };
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(vec![first]), page(vec![second])],
+        render_manifest_identity: "future-coordinate-widths.v1",
+    };
+    let accepted = serialize_vector_pdf(&composition, limits())
+        .expect("both positive-coordinate strokes fit a full PDF");
+    assert_xref_integrity(&accepted);
+    assert_eq!(
+        serialize_vector_pdf(&composition, PdfVectorLimits {
+            maximum_pdf_bytes: accepted.len(),
+            ..limits()
+        }),
+        Ok(accepted.clone()),
+        "exact document budget still admits unchanged PDF bytes",
+    );
+    // This keeps both decimal widths unchanged but makes page 1's line
+    // zero length. The fully known page-2 coordinates require more than
+    // the generic five-byte minimum of each PDF number.
+    composition.pages[0].vector_authority[0].commands[1] =
+        PdfPathCommand::LineTo(point(50_000, 40_000));
+    assert_eq!(
+        serialize_vector_pdf(&composition, limits()),
+        Err(PdfVectorError::InvalidPath),
+        "enough bytes reveal the collapsed first-page stroke",
+    );
+    assert_eq!(
+        serialize_vector_pdf(&composition, PdfVectorLimits {
+            maximum_pdf_bytes: accepted.len().saturating_sub(1),
+            ..limits()
+        }),
+        Err(PdfVectorError::ResourceLimit),
+        "an unfinishable later page must reserve its real numeric syntax",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "a wide valid stroke anchors the PDF width decimal spelling"
+)]
+#[test]
+fn future_page_stroke_width_digits_preempt_invalid_earlier_ink() {
+    let first = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(50_000, 40_000)),
+            PdfPathCommand::LineTo(point(60_000, 50_000)),
+        ],
+        paint: stroke().paint,
+    };
+    let later = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(100_000, 180_000)),
+            PdfPathCommand::LineTo(point(110_000, 190_000)),
+        ],
+        paint: PdfPathPaint::Stroke {
+            color: PdfRgb {
+                red: 5,
+                green: 22,
+                blue: 240,
+            },
+            width_um: 100_000,
+        },
+    };
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(vec![first]), page(vec![later])],
+        render_manifest_identity: "future-stroke-width-digits.v1",
+    };
+    let accepted = serialize_vector_pdf(&composition, limits())
+        .expect("wide in-page stroke fits the complete document");
+    assert_xref_integrity(&accepted);
+    assert!(pdf_string(&accepted).contains("283.465 w\n"));
+    assert_eq!(
+        serialize_vector_pdf(&composition, PdfVectorLimits {
+            maximum_pdf_bytes: accepted.len(),
+            ..limits()
+        }),
+        Ok(accepted.clone()),
+    );
+    composition.pages[0].vector_authority[0].commands[1] =
+        PdfPathCommand::LineTo(point(50_000, 40_000));
+    assert_eq!(
+        serialize_vector_pdf(&composition, limits()),
+        Err(PdfVectorError::InvalidPath),
+    );
+    assert_eq!(
+        serialize_vector_pdf(&composition, PdfVectorLimits {
+            maximum_pdf_bytes: accepted.len().saturating_sub(1),
+            ..limits()
+        }),
+        Err(PdfVectorError::ResourceLimit),
+        "later stroke width digits cannot borrow missing framing bytes",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "fixed-coordinate oracle mutates one known valid page/path"
+)]
+#[test]
+fn varied_pdf_decimal_widths_preserve_exact_budget_and_xref() {
+    // Each selected x crosses or approaches a rounded PDF integer width,
+    // from 0.000 to the supported two-metre page edge. The fill's cubic
+    // checks the six-coordinate command as well as ordinary line syntax.
+    for x in [
+        0i32, 1i32, 352i32, 353i32, 354i32, 3_527i32, 3_528i32,
+        3_529i32, 35_277i32, 35_278i32, 35_279i32, 100_000i32,
+        999_999i32, 1_999_996i32,
+    ] {
+        let first = PdfVectorPath {
+            commands: vec![
+                PdfPathCommand::MoveTo(point(50_000, 40_000)),
+                PdfPathCommand::LineTo(point(60_000, 50_000)),
+            ],
+            paint: stroke().paint,
+        };
+        let contour = PdfVectorPath {
+            commands: vec![
+                PdfPathCommand::MoveTo(point(x, 120_000)),
+                PdfPathCommand::LineTo(point(x.saturating_add(1), 120_000)),
+                PdfPathCommand::CubicTo(
+                    point(x.saturating_add(2), 120_003),
+                    point(x.saturating_add(3), 120_002),
+                    point(x, 120_005),
+                ),
+                PdfPathCommand::Close,
+            ],
+            paint: PdfPathPaint::Fill {
+                color: PdfRgb {
+                    red: 0,
+                    green: 0,
+                    blue: 0,
+                },
+                rule: PdfFillRule::EvenOdd,
+            },
+        };
+        let thick_stroke = PdfVectorPath {
+            commands: vec![
+                PdfPathCommand::MoveTo(point(1_000_000, 1_000_000)),
+                PdfPathCommand::LineTo(point(1_010_000, 1_010_000)),
+            ],
+            paint: PdfPathPaint::Stroke {
+                color: PdfRgb {
+                    red: 5,
+                    green: 22,
+                    blue: 240,
+                },
+                width_um: 100_000,
+            },
+        };
+        let mut large_page = page(vec![contour, thick_stroke]);
+        large_page.physical_page_box = PdfVectorPageBox {
+            width_um: 2_000_000,
+            height_um: 2_000_000,
+        };
+        let mut composition = PdfCompositionPlan {
+            assets: Vec::new(),
+            pages: vec![page(vec![first]), large_page],
+            render_manifest_identity: "varied-decimal-geometry.v1",
+        };
+        let accepted = serialize_vector_pdf(&composition, limits())
+            .expect("bounded geometry must serialize at varied widths");
+        assert_xref_integrity(&accepted);
+        assert_eq!(
+            serialize_vector_pdf(&composition, PdfVectorLimits {
+                maximum_pdf_bytes: accepted.len(),
+                ..limits()
+            }),
+            Ok(accepted.clone()),
+            "x={x} exact output bytes remain sufficient",
+        );
+        composition.pages[0].vector_authority[0].commands[1] =
+            PdfPathCommand::LineTo(point(50_000, 40_000));
+        assert_eq!(
+            serialize_vector_pdf(&composition, PdfVectorLimits {
+                maximum_pdf_bytes: accepted.len().saturating_sub(1),
+                ..limits()
+            }),
+            Err(PdfVectorError::ResourceLimit),
+            "x={x} known future coordinates and width preempt bad ink",
+        );
+    }
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
     reason = "a minimal two-page PDF anchors cross-page drawing syntax"
 )]
 #[test]

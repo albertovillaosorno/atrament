@@ -259,6 +259,20 @@ transitions, an even-odd triangular fill, and exact-fit unchanged PDF bytes.
 This is a lower bound on mandatory emitted syntax, not a claim that all
 later pages are fully rendered before earlier geometry is validated.
 
+The cross-page lower bound also retains the **real decimal character width**
+of already in-page coordinates and valid stroke widths, rather than treating
+every PDF number as the five-byte `0.000` minimum. Page-local invalid
+coordinates retain the shortest possible spelling so refusal stays bounded.
+Previously a one-byte-short two-page PDF could return `InvalidPath` for a
+collapsed first-page line before accounting for longer numbers and a thick
+stroke on page two.
+
+Red/green regressions exercise both missing widths, then
+sweep fourteen physical positions from zero to the 2-metre page limit with
+a six-coordinate cubic contour, exact-budget PDF replay, and xref integrity.
+Valid output remains byte-for-byte unchanged; no glyphs, fonts, or asset
+support are added.
+
 The existing oversized-stream regression, large-content fixture and exact-limit
 boundary regressions still apply. Output bytes and PDF object order are
 unchanged.

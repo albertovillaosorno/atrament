@@ -437,16 +437,49 @@ fn append_line_command(
     )
 }
 
-// PDF geometry uses unsigned page-local coordinates and fixed three-digit
-// fractions; even zero has a five-byte spelling. Reserve the shortest possible
-// command before examining untrusted control points, so an impossible output
-// cannot be hidden by a malformed command.
-const fn minimum_command_bytes(command: PdfPathCommand) -> usize {
+// In-page PDF coordinates use three decimal places, but a variable-width
+// integer part. Reserve their exact textual width; invalid coordinates retain
+// the shortest valid spelling so geometry still has its own refusal path.
+fn minimum_coordinate_bytes(value_um: i32, bound_um: u32) -> usize {
+    let Ok(value) = u32::try_from(value_um) else {
+        return b"0.000".len();
+    };
+    if value > bound_um {
+        return b"0.000".len();
+    }
+    let mut integer_part = pdf_millipoints(value).div_euclid(1_000);
+    let mut digits = 1usize;
+    while integer_part >= 10 {
+        integer_part = integer_part.div_euclid(10);
+        digits = digits.saturating_add(1);
+    }
+    digits.saturating_add(b".000".len())
+}
+
+fn minimum_point_bytes(point: PdfPoint, page: PdfVectorPageBox) -> usize {
+    minimum_coordinate_bytes(point.x_um, page.width_um)
+        .saturating_add(b" ".len())
+        .saturating_add(minimum_coordinate_bytes(point.y_um, page.height_um))
+}
+
+fn minimum_command_bytes(
+    command: PdfPathCommand,
+    page: PdfVectorPageBox,
+) -> usize {
     match command {
-        PdfPathCommand::MoveTo(_) => b"0.000 0.000 m\n".len(),
-        PdfPathCommand::LineTo(_) => b"0.000 0.000 l\n".len(),
-        PdfPathCommand::CubicTo(..) => {
-            b"0.000 0.000 0.000 0.000 0.000 0.000 c\n".len()
+        PdfPathCommand::MoveTo(point) => {
+            minimum_point_bytes(point, page).saturating_add(b" m\n".len())
+        },
+        PdfPathCommand::LineTo(point) => {
+            minimum_point_bytes(point, page).saturating_add(b" l\n".len())
+        },
+        PdfPathCommand::CubicTo(first, second, last) => {
+            minimum_point_bytes(first, page)
+                .saturating_add(b" ".len())
+                .saturating_add(minimum_point_bytes(second, page))
+                .saturating_add(b" ".len())
+                .saturating_add(minimum_point_bytes(last, page))
+                .saturating_add(b" c\n".len())
         },
         PdfPathCommand::Close => b"h\n".len(),
     }
@@ -455,10 +488,11 @@ const fn minimum_command_bytes(command: PdfPathCommand) -> usize {
 fn reserve_command_framing(
     stream_bytes: usize,
     command: PdfPathCommand,
+    page: PdfVectorPageBox,
     command_budget: usize,
 ) -> Result<(), PdfVectorError> {
     if stream_bytes
-        .checked_add(minimum_command_bytes(command))
+        .checked_add(minimum_command_bytes(command, page))
         .is_none_or(|size| size > command_budget)
     {
         return Err(PdfVectorError::ResourceLimit);
@@ -466,17 +500,19 @@ fn reserve_command_framing(
     Ok(())
 }
 
-// Reserve the full caller-owned syntax, not only the first command's minimum.
-// An invalid first point must not conceal a later byte-budget exhaustion.
+// Reserve later command syntax before inspecting the first path coordinate.
 fn reserve_path_command_framing(
     stream_bytes: usize,
     commands: &[PdfPathCommand],
+    page: PdfVectorPageBox,
     command_budget: usize,
 ) -> Result<(), PdfVectorError> {
-    let minimum_path_bytes = commands.iter().try_fold(
-        0usize,
-        |total, command| total.checked_add(minimum_command_bytes(*command)),
-    ).ok_or(PdfVectorError::ResourceLimit)?;
+    let minimum_path_bytes = commands
+        .iter()
+        .try_fold(0usize, |total, command| {
+            total.checked_add(minimum_command_bytes(*command, page))
+        })
+        .ok_or(PdfVectorError::ResourceLimit)?;
     if stream_bytes
         .checked_add(minimum_path_bytes)
         .is_none_or(|size| size > command_budget)
@@ -504,7 +540,7 @@ fn render_path(
         .filter(|budget| stream.len() <= *budget)
         .ok_or(PdfVectorError::ResourceLimit)?;
     reserve_path_command_framing(
-        stream.len(), &path.commands, command_budget,
+        stream.len(), &path.commands, page, command_budget,
     )?;
     let fill = matches!(path.paint, PdfPathPaint::Fill { .. });
     let mut active = false;
@@ -514,7 +550,7 @@ fn render_path(
     let mut subpath_has_extent = false;
     let mut contour_area = FilledContourWitness::default();
     for command in &path.commands {
-        reserve_command_framing(stream.len(), *command, command_budget)?;
+        reserve_command_framing(stream.len(), *command, page, command_budget)?;
         match *command {
             PdfPathCommand::MoveTo(point) => {
                 if !point_inside(point, page, stroke_width_um)
@@ -601,19 +637,31 @@ fn render_path(
 
 // Every path spends a paint setup/operator and its command syntax. Reserve
 // all later paths before validating earlier geometry on the same page.
-fn minimum_path_framing_bytes(path: &PdfVectorPath) -> Option<usize> {
+fn minimum_path_framing_bytes(
+    path: &PdfVectorPath,
+    page: PdfVectorPageBox,
+) -> Option<usize> {
     let paint_bytes = match path.paint {
         PdfPathPaint::Fill { rule, .. } => match rule {
             PdfFillRule::EvenOdd => b"0.000 0.000 0.000 rg\nf*\n".len(),
             PdfFillRule::NonZero => b"0.000 0.000 0.000 rg\nf\n".len(),
         },
-        PdfPathPaint::Stroke { .. } => {
-            b"0.000 0.000 0.000 RG\n0.003 w\n1 J\n1 j\nS\n".len()
+        PdfPathPaint::Stroke { width_um, .. } => {
+            let width_bytes = i32::try_from(width_um)
+                .ok()
+                .map_or(b"0.003".len(), |value| {
+                    minimum_coordinate_bytes(value, MAX_PAGE_SIZE_UM)
+                });
+            b"0.000 0.000 0.000 RG\n0.003 w\n1 J\n1 j\nS\n"
+                .len()
+                .saturating_add(width_bytes.saturating_sub(b"0.003".len()))
         },
     };
-    path.commands.iter().try_fold(paint_bytes, |total, command| {
-        total.checked_add(minimum_command_bytes(*command))
-    })
+    path.commands
+        .iter()
+        .try_fold(paint_bytes, |total, command| {
+            total.checked_add(minimum_command_bytes(*command, page))
+        })
 }
 
 fn render_page(
@@ -659,7 +707,9 @@ fn render_page(
     // even when a malformed first path would refuse before later paint.
     let minimum_paths = page.vector_authority.iter().try_fold(
         0usize,
-        |total, path| total.checked_add(minimum_path_framing_bytes(path)?),
+        |total, path| {
+            total.checked_add(minimum_path_framing_bytes(path, dimensions)?)
+        },
     ).ok_or(PdfVectorError::ResourceLimit)?;
     if stream.len().checked_add(minimum_paths)
         .is_none_or(|size| size > drawing_budget)
@@ -846,7 +896,9 @@ fn minimum_page_object_bytes(
     let content_object = object.checked_add(1)?;
     let minimum_stream_bytes = paths.iter().try_fold(
         minimum_page_stream(dimensions).len(),
-        |total, path| total.checked_add(minimum_path_framing_bytes(path)?),
+        |total, path| {
+            total.checked_add(minimum_path_framing_bytes(path, dimensions)?)
+        },
     )?;
     page_object_header(dimensions, object)
         .len()
