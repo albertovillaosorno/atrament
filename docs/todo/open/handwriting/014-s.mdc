@@ -961,8 +961,9 @@ The compositor preserves legacy nominal advances and Markdown wrapping, and
 uses the physical Rust stroke engine to place final letter contours. Saved
 statistical width/letter spacing, seeded slant/height/width/pressure and
 positional rhythms can coexist. Explicit short, same-pen directed joins are
-recomputed from actual endpoints; collisions, inadmissible joins and any
-physical page-margin overrun refuse the export instead of clipping ink.
+recomputed from actual endpoints. Inadmissible joins and physical
+page-margin overruns refuse the export instead of clipping ink; tracking
+does not diagnose visual overlap between neighboring letter contours.
 
 Four native regressions cover fixed independently sampled two-run NFD word
 positions; reset after repeated spaces; zero-option byte parity and other
