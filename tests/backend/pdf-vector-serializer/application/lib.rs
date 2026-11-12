@@ -758,6 +758,81 @@ fn large_page_stream_preserves_exact_length_and_xref_without_truncation() {
     );
 }
 
+#[test]
+fn serialized_stroke_edges_must_not_escape_rounded_pdf_page() {
+    // The PDF codec emits points and line width to three decimal places.
+    // Physical half-width admission alone permits an edge center whose
+    // independently rounded PDF width clips by half a millipoint.
+    let cases = [
+        (8, point(4, 1_000), point(1_000, 1_000), false, false),
+        (8, point(1_000, 4), point(1_000, 1_000), false, false),
+        (
+            130,
+            point(296_935, 1_000),
+            point(296_935, 2_000),
+            true,
+            false,
+        ),
+        (
+            130,
+            point(1_000, 296_935),
+            point(2_000, 296_935),
+            false,
+            false,
+        ),
+        (8, point(5, 1_000), point(1_000, 1_000), false, true),
+        (8, point(1_000, 5), point(1_000, 1_000), false, true),
+        (
+            130,
+            point(296_934, 1_000),
+            point(296_934, 2_000),
+            true,
+            true,
+        ),
+        (
+            130,
+            point(1_000, 296_934),
+            point(2_000, 296_934),
+            false,
+            true,
+        ),
+    ];
+    for (width_um, start, end, landscape, admitted) in cases {
+        let mut composition = document();
+        let mut test_page = page(vec![PdfVectorPath {
+            commands: vec![
+                PdfPathCommand::MoveTo(start),
+                PdfPathCommand::LineTo(end),
+            ],
+            paint: PdfPathPaint::Stroke {
+                color: PdfRgb {
+                    red: 0,
+                    green: 0,
+                    blue: 0,
+                },
+                width_um,
+            },
+        }]);
+        if landscape {
+            test_page.physical_page_box.width_um = 297_000;
+        }
+        composition.pages = vec![test_page];
+        let outcome = serialize_vector_pdf(&composition, limits());
+        if admitted {
+            assert!(
+                outcome.is_ok(),
+                "a one-micrometer clearance must preserve the vector stroke",
+            );
+        } else {
+            assert_eq!(
+                outcome,
+                Err(PdfVectorError::InvalidPath),
+                "rounded PDF {width_um}um stroke must not clip the page",
+            );
+        }
+    }
+}
+
 #[expect(
     clippy::indexing_slicing,
     reason = "fixture has one known page and two paths"

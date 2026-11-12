@@ -96,6 +96,13 @@ Top-left physical coordinates
 map to PDF points by an explicit page transform. Bounds include the round
 stroke's half-width, so an otherwise in-page centerline cannot clip silently.
 
+The serializer checks both the physical half-width and the *serialized*
+three-decimal-point coordinates and stroke width. Independent rounding of
+these PDF numbers could otherwise leave a nominally admissible 8 µm stroke
+half a thousandth of a point outside the sheet edge. The exact fixed-point
+boundary check refuses such paths as `InvalidPath`, preserving nearby strokes
+with another micrometer of clearance and leaving admitted PDF bytes unchanged.
+
 The adapter refuses *every* accepted asset and preserved searchable text:
 image/color-profile embedding and font/semantic-text rendering do not exist
 here. It also refuses malformed paths, invalid page boxes, unsafe manifest

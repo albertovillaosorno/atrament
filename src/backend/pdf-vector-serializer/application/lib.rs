@@ -246,20 +246,58 @@ fn color_channels(color: PdfRgb) -> String {
     )
 }
 
+// PDF numbers are rounded to three decimal points. In thousandths of a
+// point, 1 micrometer is exactly 360/127, and an exact half-way tie is
+// impossible because the denominator is odd. Match the serialized numbers
+// rather than accepting a stroke that the PDF quantization clips.
+#[expect(
+    clippy::integer_division,
+    clippy::integer_division_remainder_used,
+    reason = "fixed-point rounding must match emitted PDF numbers"
+)]
+fn pdf_millipoints(value_um: u32) -> u64 {
+    u64::from(value_um).saturating_mul(360).saturating_add(63) / 127
+}
+
 fn point_inside(
     point: PdfPoint,
     page: PdfVectorPageBox,
-    stroke_margin_um: u32,
+    stroke_width_um: u32,
 ) -> bool {
-    let right = page.width_um.checked_sub(stroke_margin_um);
-    let bottom = page.height_um.checked_sub(stroke_margin_um);
-    u32::try_from(point.x_um).is_ok_and(|x| {
-        right.is_some_and(|right_edge| x >= stroke_margin_um && x <= right_edge)
-    }) && u32::try_from(point.y_um).is_ok_and(|y| {
-        bottom.is_some_and(|bottom_edge| {
-            y >= stroke_margin_um && y <= bottom_edge
-        })
-    })
+    let stroke_margin_um = stroke_width_um.div_ceil(2);
+    let Some(right) = page.width_um.checked_sub(stroke_margin_um) else {
+        return false;
+    };
+    let Some(bottom) = page.height_um.checked_sub(stroke_margin_um) else {
+        return false;
+    };
+    let (Ok(x), Ok(y)) = (u32::try_from(point.x_um), u32::try_from(point.y_um))
+    else {
+        return false;
+    };
+    if !(x >= stroke_margin_um
+        && x <= right
+        && y >= stroke_margin_um
+        && y <= bottom)
+    {
+        return false;
+    }
+    if stroke_width_um == 0 {
+        return true;
+    }
+    let width = pdf_millipoints(stroke_width_um);
+    let page_width = pdf_millipoints(page.width_um);
+    let page_height = pdf_millipoints(page.height_um);
+    let x_points = pdf_millipoints(x);
+    let y_points = pdf_millipoints(y);
+    width
+        <= x_points
+            .min(page_width.saturating_sub(x_points))
+            .saturating_mul(2)
+        && width
+            <= y_points
+                .min(page_height.saturating_sub(y_points))
+                .saturating_mul(2)
 }
 
 fn apply_path_paint(
@@ -267,7 +305,7 @@ fn apply_path_paint(
     paint: PdfPathPaint,
     maximum_stream_bytes: usize,
 ) -> Result<(&'static str, u32), PdfVectorError> {
-    let (operator, stroke_margin_um) = match paint {
+    let (operator, stroke_width_um) = match paint {
         PdfPathPaint::Fill { color, rule } => {
             push_formatted(
                 stream,
@@ -291,13 +329,13 @@ fn apply_path_paint(
                     page_points(width_um)
                 ),
             )?;
-            ("S\n", width_um.div_ceil(2))
+            ("S\n", width_um)
         },
     };
     if stream.len() > maximum_stream_bytes {
         return Err(PdfVectorError::ResourceLimit);
     }
-    Ok((operator, stroke_margin_um))
+    Ok((operator, stroke_width_um))
 }
 
 // Keep the path writer focused on subpath admission; the cubic command
@@ -308,11 +346,11 @@ fn append_cubic_command(
     second: PdfPoint,
     last: PdfPoint,
     page: PdfVectorPageBox,
-    stroke_margin_um: u32,
+    stroke_width_um: u32,
 ) -> Result<(), PdfVectorError> {
     if [first, second, last]
         .into_iter()
-        .any(|point| !point_inside(point, page, stroke_margin_um))
+        .any(|point| !point_inside(point, page, stroke_width_um))
     {
         return Err(PdfVectorError::InvalidPath);
     }
@@ -335,11 +373,11 @@ fn append_line_command(
     point: PdfPoint,
     current: PdfPoint,
     page: PdfVectorPageBox,
-    stroke_margin_um: u32,
+    stroke_width_um: u32,
     fill: bool,
 ) -> Result<(), PdfVectorError> {
     if (!fill && point == current)
-        || !point_inside(point, page, stroke_margin_um)
+        || !point_inside(point, page, stroke_width_um)
     {
         return Err(PdfVectorError::InvalidPath);
     }
@@ -358,7 +396,7 @@ fn render_path(
     if path.commands.is_empty() {
         return Err(PdfVectorError::InvalidPath);
     }
-    let (operator, stroke_margin_um) =
+    let (operator, stroke_width_um) =
         apply_path_paint(stream, path.paint, maximum_stream_bytes)?;
     let fill = matches!(path.paint, PdfPathPaint::Fill { .. });
     let mut active = false;
@@ -370,7 +408,7 @@ fn render_path(
     for command in &path.commands {
         match *command {
             PdfPathCommand::MoveTo(point) => {
-                if !point_inside(point, page, stroke_margin_um)
+                if !point_inside(point, page, stroke_width_um)
                     || (active && !drawn)
                 {
                     return Err(PdfVectorError::InvalidPath);
@@ -395,7 +433,7 @@ fn render_path(
             },
             PdfPathCommand::LineTo(point) if active => {
                 append_line_command(
-                    stream, point, current, page, stroke_margin_um, fill,
+                    stream, point, current, page, stroke_width_um, fill,
                 )?;
                 drawn = true;
                 saw_segment = true;
@@ -412,7 +450,7 @@ fn render_path(
                     return Err(PdfVectorError::InvalidPath);
                 }
                 append_cubic_command(
-                    stream, first, second, last, page, stroke_margin_um,
+                    stream, first, second, last, page, stroke_width_um,
                 )?;
                 drawn = true;
                 saw_segment = true;
