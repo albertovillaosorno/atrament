@@ -163,6 +163,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--join-text-anchors LEFT RIGHT EXIT_STROKE ENTRY_STROKE] \
     [--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY] \
     [--glyph-line-drift MAX_UM (requires --glyph-variation)] \
+    [--glyph-word-drift MAX_UM (requires --glyph-variation)] \
     [--heading-style underline|double-underline|marker|none] \
     [--heading-color '#RRGGBB'] [--heading-marker-scale 50..105] \
     [--heading-ink-color '#RRGGBB'] [--heading-ink-scale 100..250] \
@@ -222,6 +223,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     the six spreads use percent, percent, percent, degrees, um, um. \
     --glyph-line-drift adds optional seeded smooth run-local vertical \
     motion (0..150 um), keeping authored shapes and row pitch fixed. \
+    --glyph-word-drift adds a seeded run-local horizontal offset per word \
+    (0..150 um) without changing nominal advances or pen contours. \
     No synthesized glyphs, inline Markdown styles or images are rendered.";
 
 #[derive(Clone, Debug)]
@@ -271,6 +274,7 @@ struct GlyphOverlay {
     strokes: Vec<GlyphStroke>,
     text_joins: Vec<TextJoin>,
     variation: Option<GlyphVariation>,
+    word_drift_um: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -1796,7 +1800,7 @@ fn parse_notebook_export_option(
                 .map_err(|error| format!("PNG page refused: {error}"))?);
         }
         "--glyph-stroke" | "--place-text" | "--fallback-glyph"
-        | "--glyph-variation" | "--glyph-line-drift" => {
+        | "--glyph-variation" | "--glyph-line-drift" | "--glyph-word-drift" => {
             glyphs.parse(option, iter)?;
         }
         "--join-text-pair" => glyphs.add_text_join_pair(iter)?,
@@ -2129,11 +2133,11 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut paper_selected, mut handwriting_selected) = (false, false);
     let mut preview = NotebookProfile::default();
     let mut flags = NotebookFlagPreflight::default();
-    let mut inline_ink = Vec::new();
     // Reuse the exact, side-effect-free glyph parser before opening any
     // selected library, profile, or flow source. These temporary shapes are
     // only validation evidence; final composition parses its own library.
-    let mut glyph_preflight = GlyphOverlay::default();
+    let (mut inline_ink, mut glyph_preflight) =
+        (Vec::new(), GlyphOverlay::default());
     while let Some(option) = iter.next() {
         flags.imported_overlay_selected |=
             matches!(option.as_str(), "--ink-file" | "--glyph-file");
@@ -2147,9 +2151,10 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                     preflight_inline_ink_line(&mut iter, &mut inline_ink)?;
                     (0, false)
                 }
-                "--glyph-stroke" | "--glyph-variation" | "--glyph-line-drift"
-                | "--place-text" | "--fallback-glyph" | "--join-text-anchors"
-                | "--join-text-pair" => {
+                "--glyph-stroke" | "--glyph-variation"
+                | "--glyph-line-drift" | "--glyph-word-drift"
+                | "--place-text" | "--fallback-glyph"
+                | "--join-text-anchors" | "--join-text-pair" => {
                     glyph_edited = true;
                     preflight_notebook_glyph_option(
                         option, &mut glyph_preflight, &mut iter,
@@ -2212,13 +2217,12 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
         }
     }
     // Imported-only ink is checked after its bounded source read.
-    glyph_preflight.validate_line_drift_option()?;
+    glyph_preflight.validate_optional_rhythm()?;
     preflight_notebook_export_and_ink(flags, flow_format, region_selected,
         &inline_ink, glyph_file_selected, handwriting_selected,
         &glyph_preflight)?;
-    preflight_default_notebook_metadata(
-        &preview, profile_edited, profile_selected, paper_selected,
-    )?;
+    preflight_default_notebook_metadata(&preview, profile_edited,
+        profile_selected, paper_selected)?;
     // A caller-selected notebook/paper profile may change the margins.
     // Defer all physical geometry that depends on those source bytes.
     if !profile_selected && !paper_selected {
@@ -2414,8 +2418,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--emit-ink-file" | "--export-paper" | "--pages" | "--dpi"
             | "--quality" | "--png-page" | "--ink-line" | "--ink-file"
             | "--glyph-stroke" | "--glyph-file" | "--place-text"
-            | "--fallback-glyph" | "--glyph-variation" | "--glyph-line-drift"
-            | "--join-text-pair"
+            | "--fallback-glyph" | "--glyph-variation"
+            | "--glyph-line-drift" | "--glyph-word-drift" | "--join-text-pair"
             | "--join-text-anchors" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,

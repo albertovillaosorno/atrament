@@ -231,6 +231,27 @@ impl GlyphVariation {
     const fn variation_seed(seed: u32, occurrence: u32) -> u32 {
         seed ^ occurrence.wrapping_add(1).wrapping_mul(0x9E37_79B9)
     }
+
+    // This is one horizontal offset per ASCII-space-delimited word, not
+    // independent letter tracking. The distinct seeded stream preserves the
+    // line-rhythm samples and keeps all intra-word joins aligned.
+    fn word_drift(
+        self, run_index: usize, word_index: u32, maximum_um: u32,
+    ) -> Result<i32, String> {
+        let run = u32::try_from(run_index)
+            .map_err(|_error| "word drift run index overflow")?;
+        let mut identity = self.seed
+            ^ run.wrapping_add(1).wrapping_mul(0x6C8E_9CF5)
+            ^ word_index.wrapping_add(1).wrapping_mul(0xA24B_AED4);
+        identity ^= identity >> 16i32;
+        identity = identity.wrapping_mul(0x7FEB_352D);
+        identity ^= identity >> 15i32;
+        identity = identity.wrapping_mul(0x846C_A68B);
+        identity ^= identity >> 16i32;
+        let mut random = XorShift32::new(identity);
+        Self::round_js(random.unit() * f64::from(maximum_um))
+    }
+
 }
 
 impl XorShift32 {
@@ -280,6 +301,33 @@ impl GlyphMetrics {
             slant: mean(Dimension::Slant)?,
             width: positive(Dimension::Width)?,
         })
+    }
+}
+
+// A word is delimited only by literal ASCII spaces, matching native
+// placement's structural gap rule; exact Unicode glyph keys stay intact.
+#[derive(Default)]
+struct WordColumns {
+    in_word: bool,
+    index: u32,
+    seen_word: bool,
+}
+
+impl WordColumns {
+    fn next(&mut self) -> Result<u32, String> {
+        if !self.in_word {
+            if self.seen_word {
+                self.index = self.index.checked_add(1)
+                    .ok_or("word index overflow")?;
+            }
+            self.in_word = true;
+            self.seen_word = true;
+        }
+        Ok(self.index)
+    }
+
+    const fn space(&mut self) {
+        self.in_word = false;
     }
 }
 
@@ -618,11 +666,7 @@ impl GlyphOverlay {
         // repeatedly scanning every unrelated shape for each text glyph
         // makes long paginated documents needlessly quadratic. Append in
         // original order so authored paths and seeded sampling are stable.
-        let mut by_grapheme: HashMap<&str, Vec<&GlyphStroke>> = HashMap::new();
-        for shape in &self.strokes {
-            by_grapheme.entry(shape.grapheme.as_str())
-                .or_default().push(shape);
-        }
+        let by_grapheme = self.index_strokes();
         let mut expanded = manual.to_vec();
         let mut boundary_ink_end = (boundary_run == 0)
             .then_some(expanded.len());
@@ -632,6 +676,7 @@ impl GlyphOverlay {
         for (run_index, run) in self.runs.iter().enumerate() {
             let mut offset_um = 0i64;
             let mut column = 0u32;
+            let mut words = WordColumns::default();
             // A pen lift is implicit at every run/row or authored space.
             let mut previous: Option<(&str, Vec<NotebookInkLine>)> = None;
             let mut remaining = run.text.as_str();
@@ -639,12 +684,14 @@ impl GlyphOverlay {
                 let (grapheme, rest) = first_grapheme(remaining)?;
                 remaining = rest;
                 if grapheme == " " {
+                    words.space();
                     previous = None;
                     offset_um = offset_um.checked_add(i64::from(ADVANCE_UM))
                         .ok_or("space advance overflow")?;
                     column = column.checked_add(1).ok_or("column overflow")?;
                     continue;
                 }
+                let word_index = words.next()?;
                 let authored = self.fallbacks.iter()
                     .find(|entry| entry.missing == grapheme)
                     .map_or(grapheme, |entry| entry.authored.as_str());
@@ -668,10 +715,9 @@ impl GlyphOverlay {
                 } else {
                     matches.iter().map(|shape| (*shape).clone()).collect()
                 };
-                let glyph_x = i64::from(run.origin_um.0)
-                    .checked_add(offset_um)
-                    .and_then(|value| value.checked_add(i64::from(tracking)))
-                    .ok_or("glyph horizontal origin overflow")?;
+                let glyph_x = self.glyph_origin_x(
+                    run, run_index, word_index, offset_um, tracking,
+                )?;
                 let glyph_y = self.glyph_origin_y(
                     run, run_index, column, metrics,
                 )?;
@@ -743,6 +789,21 @@ impl GlyphOverlay {
             metrics.width))
     }
 
+    fn glyph_origin_x(
+        &self, run: &TextRun, run_index: usize, word_index: u32,
+        offset_um: i64, tracking: i32,
+    ) -> Result<i64, String> {
+        let drift = match (self.variation, self.word_drift_um) {
+            (Some(variation), Some(maximum_um)) => variation
+                .word_drift(run_index, word_index, maximum_um)?,
+            _ => 0i32,
+        };
+        i64::from(run.origin_um.0).checked_add(offset_um)
+            .and_then(|value| value.checked_add(i64::from(tracking)))
+            .and_then(|value| value.checked_add(i64::from(drift)))
+            .ok_or_else(|| "glyph horizontal origin overflow".into())
+    }
+
     fn glyph_origin_y(
         &self, run: &TextRun, run_index: usize, column: u32,
         metrics: Option<GlyphMetrics>,
@@ -764,6 +825,17 @@ impl GlyphOverlay {
         !self.runs.is_empty() || !self.strokes.is_empty()
             || !self.fallbacks.is_empty() || self.variation.is_some()
             || !self.text_joins.is_empty() || self.line_drift_um.is_some()
+            || self.word_drift_um.is_some()
+    }
+
+    // Index once per expansion, retaining authored order for each exact key.
+    fn index_strokes(&self) -> HashMap<&str, Vec<&GlyphStroke>> {
+        let mut by_grapheme = HashMap::new();
+        for shape in &self.strokes {
+            by_grapheme.entry(shape.grapheme.as_str())
+                .or_insert_with(Vec::new).push(shape);
+        }
+        by_grapheme
     }
 
     /// Inspect consecutive directed pen segments as contiguous candidate
@@ -1081,6 +1153,14 @@ impl GlyphOverlay {
                 }
                 self.line_drift_um = Some(next_integer(
                     iter, "glyph line drift", 0, 150,
+                )?);
+            }
+            "--glyph-word-drift" => {
+                if self.word_drift_um.is_some() {
+                    return Err("duplicate --glyph-word-drift".into());
+                }
+                self.word_drift_um = Some(next_integer(
+                    iter, "glyph word drift", 0, 150,
                 )?);
             }
             "--glyph-variation" => {
@@ -1854,7 +1934,7 @@ impl GlyphOverlay {
         Ok(())
     }
 
-    pub(super) fn validate_line_drift_option(&self) -> Result<(), String> {
+    pub(super) fn validate_optional_rhythm(&self) -> Result<(), String> {
         if let Some(maximum_um) = self.line_drift_um {
             if maximum_um > 150 {
                 return Err("glyph line drift must be within 0..150 um".into());
@@ -1863,11 +1943,19 @@ impl GlyphOverlay {
                 return Err("line drift requires --glyph-variation".into());
             }
         }
+        if let Some(maximum_um) = self.word_drift_um {
+            if maximum_um > 150 {
+                return Err("glyph word drift must be within 0..150 um".into());
+            }
+            if self.variation.is_none() {
+                return Err("word drift requires --glyph-variation".into());
+            }
+        }
         Ok(())
     }
 
     pub(super) fn validate_pairing(&self) -> Result<(), String> {
-        self.validate_line_drift_option()?;
+        self.validate_optional_rhythm()?;
         // A typed sibling may supply unused shapes directly. Reject the
         // complete invalid library before rendering just the selected text,
         // rather than silently overlooking malformed unselected strokes.

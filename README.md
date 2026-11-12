@@ -2043,10 +2043,21 @@ The printed row pitch and nominal wrapping do not change. `0` produces the same
 PDF/PNG bytes as omitting the option, while nonzero values can move strokes
 outside printable bounds and therefore still refuse before output commit.
 
+For opt-in horizontal word rhythm, add `--glyph-word-drift MAX_UM` (0–150
+micrometres) with `--glyph-variation`. It draws one seeded offset for every
+ASCII-space-delimited word in each placed row. Adjacent letters of that word
+shift together, so explicit intra-word pen joins still touch their original
+endpoints; repeated ASCII spaces mark only one word boundary.
+
+The offset changes neither nominal advances nor wrapping. It has a separate
+random stream from line drift, so both options can be selected simultaneously.
+
 For example, extend the preceding command with
-`--glyph-line-drift 120` to produce a repeatable line-level rhythm. These
-CLI-only variations do not persist in a saved notebook, are not calibrated
-to a person's writing, and do not create automatic cursive joins.
+`--glyph-line-drift 120 --glyph-word-drift 90` to produce reproducible
+line and word rhythms. At `0`, either option is byte-identical to omission
+in PDF/PNG; both still enforce physical ink clearance when nonzero.
+These CLI-only variations do not persist in a saved notebook, are not
+calibrated to a person's writing, and do not create automatic cursive joins.
 
 The occurrence sequence continues across manual
 text runs and Markdown flow pages. Rust checks the fully sampled ink and
@@ -2060,8 +2071,8 @@ physical overshoot refused rather than silently clipped.
 This is an explicit creative perturbation of caller-authored strokes, not
 learned or calibrated handwriting. The seed/settings and text placement are
 still command-only, not saved in `atrament.notebook.v1`. Joined cursive,
-word-level/contextual correlation, stable semantic-line identity, and a
-persisted complete notebook-to-PDF workflow remain unfinished.
+cross-word contextual shape variation, stable semantic-line identity, and
+a persisted complete notebook-to-PDF workflow remain unfinished.
 
 Session end drops the unsaved draft. The browser generates explicit
 print-starter strokes for the frozen 114-character bilingual text inventory

@@ -792,3 +792,28 @@ this option is absent.
 This is bounded *CLI-only* line rhythm, not a saved handwriting profile or
 semantic line identity. Per-word contextual correlation, automatic cursive
 joins, handwriting recognition and the complete P1-014 task remain open.
+
+## CLI-only correlated word offsets (partial) — 2026-11-12
+
+The same Rust notebook compositor now accepts `--glyph-word-drift MAX_UM`
+(0–150 micrometres) alongside the existing seeded `--glyph-variation`.
+It applies one reproducible horizontal offset to every exact Unicode
+grapheme in an ASCII-space-delimited word, with a distinct random stream
+for each word and physical run. Multiple adjacent ASCII spaces still
+count as one boundary.
+
+Word offsets do not alter nominal text advances,
+pen widths, authored contours or physical run ordering; optional short
+intra-word joins translate with both endpoints. All downstream page/ink
+bounds continue to refuse overshoot instead of clipping it.
+
+Three native regressions cover two lines of decomposed Unicode text,
+shared within-word displacements bounded by 150 um, separate run seeds,
+independent composition with vertical line rhythm and zero-amplitude
+legacy parity. They also check directed joins and exact native PDF/PNG
+byte replay, and ensure invalid, duplicate or unpaired settings cannot
+replace an accepted output. The CLI help and README describe the flag.
+
+These are creative CLI-only offsets, not a saved language-aware word model,
+correlated stroke shapes, stable semantic word identities or calibrated
+human penmanship. The remaining P1-014 work is still open.

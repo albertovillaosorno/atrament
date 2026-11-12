@@ -10146,3 +10146,200 @@ fn line_drift_changes_native_flow_pdf_and_png_with_stable_seed()
     }
     Ok(())
 }
+
+#[test]
+fn opt_in_word_drift_is_shared_per_exact_unicode_word_and_run()
+-> Result<(), String> {
+    let glyph = "n\u{303}";
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        glyph, "600", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    let text = format!("{glyph}{glyph}  {glyph} {glyph}{glyph}");
+    for y in [30_000u32, 40_000u32] {
+        overlay.parse("--place-text", &mut args(&[
+            "1", "25000", &y.to_string(), &text,
+        ]).iter())?;
+    }
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    let original = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-drift", &mut args(&["150"]).iter())?;
+    let changed = overlay.expand(&[], None)?;
+    if changed.len() != 10 || changed == original {
+        return Err("word drift did not change ten exact graphemes".into());
+    }
+    let mut shifts = Vec::new();
+    for (before, after) in original.iter().zip(&changed) {
+        let dx = i64::from(after.start_um.0) - i64::from(before.start_um.0);
+        if dx.unsigned_abs() > 150
+            || i64::from(after.end_um.0) - i64::from(before.end_um.0) != dx
+            || before.start_um.1 != after.start_um.1
+            || before.end_um.1 != after.end_um.1
+            || before.width_um != after.width_um
+        {
+            return Err("word drift changed pen shape or left its cap".into());
+        }
+        shifts.push(dx);
+    }
+    for row in 0..2usize {
+        let start = row * 5;
+        let [first, second, _, fourth, fifth] = shifts
+            .get(start..start + 5).ok_or("word shift row missing")? else {
+            return Err("five glyph shifts required per row".into());
+        };
+        if first != second || fourth != fifth {
+            return Err("adjacent letters lost shared word offset".into());
+        }
+    }
+    let first_shift = shifts.first().ok_or("word shifts missing")?;
+    if shifts.iter().all(|shift| shift == first_shift) {
+        return Err("all seeded word offsets unexpectedly coincide".into());
+    }
+    if overlay.expand(&[], None)? != changed {
+        return Err("word drift lost seed replay".into());
+    }
+    overlay.word_drift_um = Some(0);
+    if overlay.expand(&[], None)? != original {
+        return Err("zero word offset changed legacy ink".into());
+    }
+    overlay.word_drift_um = Some(150);
+    overlay.line_drift_um = Some(120);
+    let combined = overlay.expand(&[], None)?;
+    overlay.word_drift_um = Some(0);
+    let vertical = overlay.expand(&[], None)?;
+    for ((both, horizontal), vertical_line) in combined.iter()
+        .zip(&changed).zip(&vertical) {
+        if both.start_um.0 != horizontal.start_um.0
+            || both.end_um.0 != horizontal.end_um.0
+            || both.start_um.1 != vertical_line.start_um.1
+            || both.end_um.1 != vertical_line.end_um.1 {
+            return Err("word and line rhythm did not compose".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn seeded_word_drift_preserves_short_selected_intra_word_joins()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "\u{e1}", "500", "1200", "3300", "1200", "250", "#123456",
+    ]).iter())?;
+    glyphs.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "\u{e1}\u{e1} \u{e1}\u{e1}",
+    ]).iter())?;
+    glyphs.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    glyphs.add_text_join_pair(&mut args(&["\u{e1}", "\u{e1}"]).iter())?;
+    let plain = glyphs.expand(&[], None)?;
+    glyphs.parse("--glyph-word-drift", &mut args(&["150"]).iter())?;
+    let drifted = glyphs.expand(&[], None)?;
+    if drifted.len() != 6 || plain.len() != 6 {
+        return Err("two selected intra-word bridges missing".into());
+    }
+    for (group, start) in [0usize, 3].into_iter().enumerate() {
+        let [first, bridge, last] = drifted
+            .get(start..start + 3).ok_or("joined word missing")? else {
+            return Err("joined word needs three pen segments".into());
+        };
+        let original = plain.get(start..start + 3)
+            .ok_or("original word missing")?;
+        let original_first = original.first().ok_or("first pen missing")?;
+        let offset = i64::from(first.start_um.0)
+            - i64::from(original_first.start_um.0);
+        if offset.unsigned_abs() > 150 {
+            return Err(format!("word {group} offset exceeds bound"));
+        }
+        for (before, after) in original.iter().zip([first, bridge, last]) {
+            if i64::from(after.start_um.0)
+                - i64::from(before.start_um.0) != offset
+                || i64::from(after.end_um.0)
+                    - i64::from(before.end_um.0) != offset
+                || after.start_um.1 != before.start_um.1 {
+                return Err("word shift disconnected the selected join".into());
+            }
+        }
+        if first.end_um != bridge.start_um
+            || bridge.end_um != last.start_um {
+            return Err("short join no longer touches its pen endpoints".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn word_drift_native_pdf_png_replay_and_refusal_are_atomic()
+-> Result<(), String> {
+    let prefix = args(&[
+        "--printed-sheet", "true", "--glyph-stroke", "\u{e1}", "600",
+        "1000", "1600", "2800", "250", "#123456",
+        "--flow-markdown", concat!(
+            "\u{e1}\u{e1} \u{e1} \u{e1}\u{e1}\n\n",
+            "\u{e1}\u{e1} \u{e1}\u{e1}",
+        ),
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    for format in ["pdf", "png"] {
+        let render = |extra: &[&str]| -> Result<Vec<u8>, String> {
+            let mut command = prefix.clone();
+            command.extend(args(&["--export-paper", format]));
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            command.extend(args(extra));
+            execute_notebook(&command)?
+                .ok_or_else(|| "missing native output".into())
+        };
+        let baseline = render(&[])?;
+        if baseline != render(&["--glyph-word-drift", "0"])? {
+            return Err(format!("{format} zero word drift changed bytes"));
+        }
+        let shifted = render(&["--glyph-word-drift", "150"])?;
+        if shifted == baseline
+            || shifted != render(&["--glyph-word-drift", "150"])? {
+            return Err(format!("{format} failed seeded word replay"));
+        }
+        if format == "pdf" && !shifted.starts_with(b"%PDF-1.4") {
+            return Err("word-drifted PDF header missing".into());
+        }
+        if format == "png" && !shifted.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return Err("word-drifted PNG signature missing".into());
+        }
+    }
+    let target = test_path();
+    fs::write(&target, b"accepted output").map_err(|error| error.to_string())?;
+    let name = target.to_str().ok_or("output path needs UTF-8")?;
+    for invalid in [
+        args(&["--glyph-word-drift", "-1"]),
+        args(&["--glyph-word-drift", "151"]),
+        args(&["--glyph-word-drift", "4294967296"]),
+        args(&["--glyph-word-drift", "150", "--glyph-word-drift", "5"]),
+    ] {
+        let mut command = prefix.clone();
+        command.extend(args(&["--export-paper", "pdf", "--output", name,
+            "--replace"]));
+        command.extend(invalid);
+        if execute_notebook(&command).is_ok()
+            || fs::read(&target).map_err(|error| error.to_string())?
+                != b"accepted output" {
+            return Err("invalid word drift modified existing export".into());
+        }
+    }
+    let mut unpaired = prefix;
+    let option = unpaired.iter().position(|value| value == "--glyph-variation")
+        .ok_or("expected variation option")?;
+    unpaired.drain(option..option + 8).for_each(drop);
+    unpaired.extend(args(&["--glyph-word-drift", "150", "--export-paper",
+        "pdf", "--output", name, "--replace"]));
+    if execute_notebook(&unpaired).is_ok()
+        || fs::read(&target).map_err(|error| error.to_string())?
+            != b"accepted output" {
+        return Err("unpaired word drift modified existing export".into());
+    }
+    fs::remove_file(&target).map_err(|error| error.to_string())?;
+    Ok(())
+}
