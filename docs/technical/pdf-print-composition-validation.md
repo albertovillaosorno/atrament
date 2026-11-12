@@ -140,6 +140,11 @@ confirmed that the old all-pages-first approach could inspect a later invalid
 page even after the final PDF overhead had already exhausted the byte budget.
 It now refuses as `ResourceLimit` before that later page is rendered.
 
+The remaining output allowance now bounds each page's rendering, not only
+the final append. Once preceding PDF objects consume the exact byte budget,
+the assembler refuses before inspecting a later invalid page. A dedicated
+red/green test fixes this refusal order without changing valid PDF bytes.
+
 The existing oversized-stream regression, large-content fixture and exact-limit
 boundary regressions still apply. Output bytes and PDF object order are
 unchanged.

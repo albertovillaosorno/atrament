@@ -645,11 +645,18 @@ pub fn serialize_vector_pdf(
         .as_bytes(),
         limit,
     )?;
-    // Build each page only when its preceding PDF bytes have fit the
-    // budget. A completed page stream is needed only until its own object
-    // is appended, never retained alongside all other page streams.
+    // Bound each page by the remaining final-output allowance. A completed
+    // page stream is held only until its own object has been appended.
     for (index, page) in composition.pages.iter().enumerate() {
-        let stream = render_page(page, limits)?;
+        let remaining_bytes = limit
+            .checked_sub(bytes.len())
+            .filter(|remaining| *remaining > 0)
+            .ok_or(PdfVectorError::ResourceLimit)?;
+        let page_limits = PdfVectorLimits {
+            maximum_pdf_bytes: remaining_bytes,
+            ..limits
+        };
+        let stream = render_page(page, page_limits)?;
         let object = 3usize.saturating_add(index.saturating_mul(2));
         let width = page_points(page.physical_page_box.width_um);
         let height = page_points(page.physical_page_box.height_um);

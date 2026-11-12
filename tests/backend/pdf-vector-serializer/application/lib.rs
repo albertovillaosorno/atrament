@@ -539,6 +539,73 @@ fn final_pdf_overhead_refuses_before_later_invalid_page() {
 
 #[expect(
     clippy::expect_used,
+    reason = "accepted PDF framing identifies the exact next-page boundary"
+)]
+#[test]
+fn exhausted_output_budget_refuses_before_rendering_later_page() {
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(Vec::new()), page(Vec::new())],
+        render_manifest_identity: "exhausted-before-next-page.v1",
+    };
+    let accepted = serialize_vector_pdf(&composition, limits())
+        .expect("a pair of blank pages is valid");
+    let next_page_offset = accepted
+        .windows(b"5 0 obj\n".len())
+        .position(|bytes| bytes == b"5 0 obj\n")
+        .expect("second page object follows the first page content");
+    composition
+        .pages
+        .get_mut(1)
+        .expect("the fixture has two pages")
+        .physical_page_box
+        .width_um = 0;
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: next_page_offset,
+                ..limits()
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+        "no room for another object must refuse before inspecting that page",
+    );
+
+    // A positive but insufficient remaining allowance must also stop a
+    // later page before its trailing, independently invalid command.
+    let mut commands = vec![PdfPathCommand::MoveTo(point(20_000, 30_000))];
+    for index in 0i32..10i32 {
+        commands.push(PdfPathCommand::LineTo(point(
+            30_000i32.saturating_add(index),
+            40_000,
+        )));
+    }
+    commands.push(PdfPathCommand::LineTo(point(-1, 40_000)));
+    let second_page = composition
+        .pages
+        .get_mut(1)
+        .expect("the fixture has two pages");
+    second_page.physical_page_box.width_um = 210_000;
+    second_page.vector_authority = vec![PdfVectorPath {
+        commands,
+        paint: stroke().paint,
+    }];
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: next_page_offset.saturating_add(150),
+                ..limits()
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+        "remaining stream budget must stop before malformed later geometry",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
     reason = "the exact PDF page ceiling must emit a valid page tree"
 )]
 #[test]
