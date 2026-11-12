@@ -9976,3 +9976,163 @@ fn native_whole_glyph_rotation_is_bounded_and_preserves_exact_identity() {
     fs::remove_file(source).expect("cleanup source");
     fs::remove_file(output).expect("cleanup destination");
 }
+
+#[test]
+fn opt_in_line_drift_is_bounded_smooth_per_run_and_seed_replayable()
+-> Result<(), String> {
+    let mut glyphs = GlyphOverlay::default();
+    glyphs.parse("--glyph-stroke", &mut args(&[
+        "\u{e1}", "600", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    for y in [30_000u32, 40_000u32] {
+        glyphs.parse("--place-text", &mut args(&[
+            "1", "25000", &y.to_string(), &"\u{e1}".repeat(16),
+        ]).iter())?;
+    }
+    glyphs.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    let legacy = glyphs.expand(&[], None)?;
+    glyphs.parse("--glyph-line-drift", &mut args(&["150"]).iter())?;
+    let drifted = glyphs.expand(&[], None)?;
+    if drifted.len() != 32 || drifted == legacy {
+        return Err("opt-in line drift did not change both rows".into());
+    }
+    for run in 0..2usize {
+        let start = run * 16;
+        let baseline = if run == 0 { 31_000i64 } else { 41_000i64 };
+        let mut previous: Option<i64> = None;
+        for (index, segment) in drifted.get(start..start + 16)
+            .ok_or("bounded run span missing")?.iter().enumerate() {
+            let delta = i64::from(segment.start_um.1) - baseline;
+            if delta.unsigned_abs() > 150 {
+                return Err(format!("run {run} col {index} drift {delta} exceeds cap"));
+            }
+            if let Some(earlier) = previous
+                && (delta - earlier).unsigned_abs() > 38 {
+                return Err(format!("run {run} col {index} drift jumped"));
+            }
+            previous = Some(delta);
+            if segment.end_um.1 != segment.start_um.1 + 1800 {
+                return Err("line drift changed authored segment shape".into());
+            }
+        }
+    }
+    if drifted.get(..16).ok_or("first run missing")?.iter()
+        .zip(drifted.get(16..).ok_or("second run missing")?)
+        .all(|(left, right)| left.start_um.1 + 10_000 == right.start_um.1) {
+        return Err("different lines unexpectedly share the same drift".into());
+    }
+    if glyphs.expand(&[], None)? != drifted {
+        return Err("replayed line drift was not identical".into());
+    }
+    glyphs.line_drift_um = Some(0);
+    if glyphs.expand(&[], None)? != legacy {
+        return Err("zero line drift changed legacy ink".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn line_drift_cli_refuses_invalid_options_before_overwriting_output()
+-> Result<(), String> {
+    let target = test_path();
+    fs::write(&target, b"preserve").map_err(|error| error.to_string())?;
+    let name = target.to_str().ok_or("target needs UTF-8")?;
+    let valid = args(&[
+        "--export-paper", "pdf", "--glyph-stroke", "\u{e1}", "600",
+        "1000", "1600", "2800", "250", "#123456",
+        "--place-text", "1", "25000", "30000", "\u{e1}\u{e1}",
+        "--output", name, "--replace",
+    ]);
+    for rejected in [
+        args(&["--glyph-line-drift", "-1"]),
+        args(&["--glyph-line-drift", "151"]),
+        args(&["--glyph-line-drift", "4294967296"]),
+        args(&["--glyph-line-drift", "150"]),
+        args(&[
+            "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+            "--glyph-line-drift", "5", "--glyph-line-drift", "6",
+        ]),
+    ] {
+        let mut command = valid.clone();
+        command.extend(rejected);
+        if execute_notebook(&command).is_ok() {
+            return Err(format!("invalid line drift accepted: {command:?}"));
+        }
+        if fs::read(&target).map_err(|error| error.to_string())? != b"preserve" {
+            return Err("refused line drift changed accepted output".into());
+        }
+    }
+    let mut command = valid;
+    command.extend(args(&[
+        "--glyph-line-drift", "150", "--glyph-variation",
+        "42", "0", "0", "0", "0", "0", "0",
+    ]));
+    let output = execute_notebook(&command)?;
+    if output.is_some() {
+        return Err("explicit output unexpectedly wrote stdout".into());
+    }
+    let bytes = fs::read(&target).map_err(|error| error.to_string())?;
+    if !bytes.starts_with(b"%PDF-1.4") || bytes == b"preserve" {
+        return Err("admitted line drift did not produce PDF".into());
+    }
+    fs::remove_file(&target).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+
+#[test]
+fn line_drift_changes_native_flow_pdf_and_png_with_stable_seed()
+-> Result<(), String> {
+    let source = format!("{}  \n{} {}", "\u{e1}".repeat(12), "\u{e1}", "\u{e1}".repeat(11));
+    let bare = args(&[
+        "--printed-sheet", "true", "--glyph-stroke", "\u{e1}", "600",
+        "1000", "1600", "2800", "250", "#123456",
+        "--flow-markdown", &source,
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    let run = |format: &str, extra: &[&str]| -> Result<Vec<u8>, String> {
+        let mut command = bare.clone();
+        command.extend(args(&["--export-paper", format]));
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        command.extend(args(extra));
+        execute_notebook(&command)?.ok_or_else(|| "native output bytes missing".into())
+    };
+    for format in ["pdf", "png"] {
+        let original = run(format, &[])?;
+        let zero = run(format, &["--glyph-line-drift", "0"])?;
+        let changed = run(format, &["--glyph-line-drift", "150"])?;
+        if original != zero || original == changed {
+            return Err(format!("{format} lost optional line-drift compatibility"));
+        }
+        if changed != run(format, &["--glyph-line-drift", "150"])? {
+            return Err(format!("{format} drift did not replay"));
+        }
+        let different = {
+            let mut alternate = bare.clone();
+            let seed = alternate.iter().position(|arg| arg == "--glyph-variation")
+                .ok_or("variation flag missing")?;
+            *alternate.get_mut(seed + 1).ok_or("seed missing")? = "43".into();
+            let mut command = alternate;
+            command.extend(args(&["--export-paper", format,
+                "--glyph-line-drift", "150"]));
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            execute_notebook(&command)?.ok_or("alternate output missing")?
+        };
+        if changed == different {
+            return Err(format!("{format} did not respond to drift seed"));
+        }
+        if format == "pdf" && !changed.starts_with(b"%PDF-1.4") {
+            return Err("drifted PDF header missing".into());
+        }
+        if format == "png" && !changed.starts_with(b"\x89PNG\r\n\x1a\n") {
+            return Err("drifted PNG header missing".into());
+        }
+    }
+    Ok(())
+}

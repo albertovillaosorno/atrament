@@ -767,3 +767,28 @@ browser's explicit join and path-close actions follow the same refusal as
 the CLI `--join-strokes` and `--close-path`. This only constrains newly
 inserted physical pen ink, not all caller-authored source segments, nor
 automatic joining between neighboring letters or correlated line variation.
+
+## CLI-only correlated run-baseline drift (partial) — 2026-11-12
+
+The native `atrament-profiles notebook` compositor now admits optional
+`--glyph-line-drift MAX_UM` (0–150 micrometres) alongside the existing
+seeded `--glyph-variation`. For each physical text run, it selects separate
+seeded vertical offsets at eight-grapheme-column intervals and linearly
+interpolates the intervening source columns, including literal spaces.
+Every segment in an occurrence receives the same offset after authored
+shape jitter and before physical mean placement; source glyph TSV remains
+unchanged. The existing nominal flow wrapping and row pitch are preserved.
+
+A red-green regression caught weak mixing of adjacent seeds: local xorshift
+streams could round to the same physical displacement with seeds 42 and 43.
+The new run/anchor sampler avalanches its seed and identifiers before
+xorshift. Focused native tests verify a 150-um envelope, at most 38-um
+adjacent movement, independent two-row sequences, byte-identical replay,
+zero-amplitude PDF/PNG compatibility, different-seed PDF/PNG output, and
+refusal of invalid, repeated or unpaired options without overwriting an
+accepted file. The existing per-occurrence seed behavior is unchanged when
+this option is absent.
+
+This is bounded *CLI-only* line rhythm, not a saved handwriting profile or
+semantic line identity. Per-word contextual correlation, automatic cursive
+joins, handwriting recognition and the complete P1-014 task remain open.

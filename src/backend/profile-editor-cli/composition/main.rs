@@ -162,6 +162,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--join-text-pair LEFT RIGHT (repeatable, max 32)] \
     [--join-text-anchors LEFT RIGHT EXIT_STROKE ENTRY_STROKE] \
     [--glyph-variation SEED WIDTH HEIGHT THICKNESS SLANT SPACING REGULARITY] \
+    [--glyph-line-drift MAX_UM (requires --glyph-variation)] \
     [--heading-style underline|double-underline|marker|none] \
     [--heading-color '#RRGGBB'] [--heading-marker-scale 50..105] \
     [--heading-ink-color '#RRGGBB'] [--heading-ink-scale 100..250] \
@@ -219,6 +220,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     shapes, not statistical sampling. --glyph-variation explicitly \
     applies reproducible per-occurrence creative jitter to the same shapes; \
     the six spreads use percent, percent, percent, degrees, um, um. \
+    --glyph-line-drift adds optional seeded smooth run-local vertical \
+    motion (0..150 um), keeping authored shapes and row pitch fixed. \
     No synthesized glyphs, inline Markdown styles or images are rendered.";
 
 #[derive(Clone, Debug)]
@@ -262,6 +265,7 @@ struct TextJoin {
 #[derive(Debug, Default)]
 struct GlyphOverlay {
     fallbacks: Vec<GlyphFallback>,
+    line_drift_um: Option<u32>,
     loaded_file: bool,
     runs: Vec<TextRun>,
     strokes: Vec<GlyphStroke>,
@@ -798,12 +802,9 @@ fn preflight_handwriting_options(args: &[String]) -> Result<(), String> {
                     &mut iter, output.is_some(),
                 )?);
             }
-            "--replace" => {
-                if replace {
-                    return Err("--replace may appear only once".into());
-                }
-                replace = true;
-            }
+            "--replace" if replace =>
+                return Err("--replace may appear only once".into()),
+            "--replace" => replace = true,
             _ => return Err(format!("unknown handwriting option: {name}")),
         }
     }
@@ -1795,7 +1796,7 @@ fn parse_notebook_export_option(
                 .map_err(|error| format!("PNG page refused: {error}"))?);
         }
         "--glyph-stroke" | "--place-text" | "--fallback-glyph"
-        | "--glyph-variation" => {
+        | "--glyph-variation" | "--glyph-line-drift" => {
             glyphs.parse(option, iter)?;
         }
         "--join-text-pair" => glyphs.add_text_join_pair(iter)?,
@@ -2146,8 +2147,8 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                     preflight_inline_ink_line(&mut iter, &mut inline_ink)?;
                     (0, false)
                 }
-                "--glyph-stroke" | "--glyph-variation" | "--place-text"
-                | "--fallback-glyph" | "--join-text-anchors"
+                "--glyph-stroke" | "--glyph-variation" | "--glyph-line-drift"
+                | "--place-text" | "--fallback-glyph" | "--join-text-anchors"
                 | "--join-text-pair" => {
                     glyph_edited = true;
                     preflight_notebook_glyph_option(
@@ -2211,6 +2212,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
         }
     }
     // Imported-only ink is checked after its bounded source read.
+    glyph_preflight.validate_line_drift_option()?;
     preflight_notebook_export_and_ink(flags, flow_format, region_selected,
         &inline_ink, glyph_file_selected, handwriting_selected,
         &glyph_preflight)?;
@@ -2360,8 +2362,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     preflight_notebook_sources(args)?;
     let mut profile = NotebookProfile::default();
     let mut inspect = false;
-    let mut output = None;
-    let mut replace = false;
+    let (mut output, mut replace) = (None, false);
     let mut export = NotebookExportOptions::default();
     let mut ink = Vec::new();
     let mut glyphs = GlyphOverlay::default();
@@ -2413,7 +2414,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--emit-ink-file" | "--export-paper" | "--pages" | "--dpi"
             | "--quality" | "--png-page" | "--ink-line" | "--ink-file"
             | "--glyph-stroke" | "--glyph-file" | "--place-text"
-            | "--fallback-glyph" | "--glyph-variation" | "--join-text-pair"
+            | "--fallback-glyph" | "--glyph-variation" | "--glyph-line-drift"
+            | "--join-text-pair"
             | "--join-text-anchors" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,

@@ -94,6 +94,43 @@ pub(super) struct GlyphVariation {
 struct XorShift32(u32);
 
 impl GlyphVariation {
+    // A new stream is chosen per physical text run. Interpolate seeded
+    // anchors eight grapheme columns apart; the shared baseline changes
+    // slowly across letters and spaces without deforming authored contours.
+    fn line_drift(
+        self, run_index: usize, column: u32, maximum_um: u32,
+    ) -> Result<i32, String> {
+        let run = u32::try_from(run_index)
+            .map_err(|_error| "line drift run index overflow")?;
+        let anchor = column.div_euclid(8);
+        let step = column.rem_euclid(8);
+        let sample = |index: u32| -> Result<i32, String> {
+            // Avalanche the three identities before xorshift: adjacent
+            // document seeds otherwise differ only in low bits and can
+            // round to the same physical micrometre at this small spread.
+            let mut identity = self.seed
+                ^ run.wrapping_add(1).wrapping_mul(0xD1B5_4A32)
+                ^ index.wrapping_add(1).wrapping_mul(0x94D0_49BB);
+            identity ^= identity >> 16i32;
+            identity = identity.wrapping_mul(0x7FEB_352D);
+            identity ^= identity >> 15i32;
+            identity = identity.wrapping_mul(0x846C_A68B);
+            identity ^= identity >> 16i32;
+            let mut random = XorShift32::new(identity);
+            Self::round_js(random.unit() * f64::from(maximum_um))
+        };
+        let from = i64::from(sample(anchor)?);
+        let to = i64::from(sample(anchor.checked_add(1)
+            .ok_or("line drift anchor overflow")?)?);
+        let numerator = from.checked_mul(i64::from(8u32.saturating_sub(step)))
+            .and_then(|first| to.checked_mul(i64::from(step))
+                .and_then(|second| first.checked_add(second)))
+            .ok_or("line drift interpolation overflow")?;
+        let value = numerator.checked_div(8)
+            .ok_or("line drift interpolation division failed")?;
+        i32::try_from(value).map_err(|_error| "line drift overflow".into())
+    }
+
     pub(super) fn parse(iter: &mut Iter<'_, String>) -> Result<Self, String> {
         let seed = next_integer(iter, "variation seed", 0, u32::MAX)?;
         let width = next_integer(iter, "variation width", 0, 20)?;
@@ -594,6 +631,7 @@ impl GlyphOverlay {
         let mut joined_pairs = vec![false; self.text_joins.len()];
         for (run_index, run) in self.runs.iter().enumerate() {
             let mut offset_um = 0i64;
+            let mut column = 0u32;
             // A pen lift is implicit at every run/row or authored space.
             let mut previous: Option<(&str, Vec<NotebookInkLine>)> = None;
             let mut remaining = run.text.as_str();
@@ -604,6 +642,7 @@ impl GlyphOverlay {
                     previous = None;
                     offset_um = offset_um.checked_add(i64::from(ADVANCE_UM))
                         .ok_or("space advance overflow")?;
+                    column = column.checked_add(1).ok_or("line drift column overflow")?;
                     continue;
                 }
                 let authored = self.fallbacks.iter()
@@ -633,11 +672,9 @@ impl GlyphOverlay {
                     .checked_add(offset_um)
                     .and_then(|value| value.checked_add(i64::from(tracking)))
                     .ok_or("glyph horizontal origin overflow")?;
-                let glyph_y = i64::from(run.origin_um.1)
-                    .checked_add(i64::from(metrics.map_or(
-                        0i32, |values| values.baseline_offset,
-                    )))
-                    .ok_or("glyph vertical origin overflow")?;
+                let glyph_y = self.glyph_origin_y(
+                    run, run_index, column, metrics,
+                )?;
                 let rendered = selected.iter().map(|shape| {
                     placed_ink(shape, run, (glyph_x, glyph_y), metrics)
                 }).collect::<Result<Vec<_>, _>>()?;
@@ -666,6 +703,7 @@ impl GlyphOverlay {
                     .ok_or("glyph text advance overflow")?;
                 occurrence = occurrence.checked_add(1)
                     .ok_or("variation occurrence overflow")?;
+                column = column.checked_add(1).ok_or("line drift column overflow")?;
             }
             if run_index.saturating_add(1) == boundary_run {
                 boundary_ink_end = Some(expanded.len());
@@ -705,10 +743,27 @@ impl GlyphOverlay {
             metrics.width))
     }
 
+    fn glyph_origin_y(
+        &self, run: &TextRun, run_index: usize, column: u32,
+        metrics: Option<GlyphMetrics>,
+    ) -> Result<i64, String> {
+        let drift = match (self.variation, self.line_drift_um) {
+            (Some(variation), Some(maximum_um)) =>
+                variation.line_drift(run_index, column, maximum_um)?,
+            _ => 0i32,
+        };
+        i64::from(run.origin_um.1)
+            .checked_add(i64::from(metrics.map_or(
+                0i32, |values| values.baseline_offset,
+            )))
+            .and_then(|value| value.checked_add(i64::from(drift)))
+            .ok_or_else(|| "glyph vertical origin overflow".into())
+    }
+
     pub(super) const fn has_any(&self) -> bool {
         !self.runs.is_empty() || !self.strokes.is_empty()
             || !self.fallbacks.is_empty() || self.variation.is_some()
-            || !self.text_joins.is_empty()
+            || !self.text_joins.is_empty() || self.line_drift_um.is_some()
     }
 
     /// Inspect consecutive directed pen segments as contiguous candidate
@@ -1020,6 +1075,14 @@ impl GlyphOverlay {
                 self.runs.push(run);
             }
             "--fallback-glyph" => self.parse_fallback(iter)?,
+            "--glyph-line-drift" => {
+                if self.line_drift_um.is_some() {
+                    return Err("--glyph-line-drift may appear only once".into());
+                }
+                self.line_drift_um = Some(next_integer(
+                    iter, "glyph line drift", 0, 150,
+                )?);
+            }
             "--glyph-variation" => {
                 if self.variation.is_some() {
                     return Err("--glyph-variation may appear only once".into());
@@ -1791,7 +1854,20 @@ impl GlyphOverlay {
         Ok(())
     }
 
+    pub(super) fn validate_line_drift_option(&self) -> Result<(), String> {
+        if let Some(maximum_um) = self.line_drift_um {
+            if maximum_um > 150 {
+                return Err("glyph line drift must be within 0..150 um".into());
+            }
+            if self.variation.is_none() {
+                return Err("--glyph-line-drift requires --glyph-variation".into());
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn validate_pairing(&self) -> Result<(), String> {
+        self.validate_line_drift_option()?;
         // A typed sibling may supply unused shapes directly. Reject the
         // complete invalid library before rendering just the selected text,
         // rather than silently overlooking malformed unselected strokes.

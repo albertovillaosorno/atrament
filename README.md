@@ -2031,6 +2031,22 @@ per-occurrence horizontal tracking (0–500 µm), and endpoint regularity
 (0–150 µm). It uses the same xorshift samples and exact Unicode glyph keys
 as the browser preview.
 
+For optional slow baseline rhythm across each placed text row, append
+`--glyph-line-drift MAX_UM` to the same command. `MAX_UM` is 0–150 micrometres
+and requires `--glyph-variation`; it uses that document seed and a distinct
+stream for each physical run. Every eight source grapheme columns (including
+ordinary spaces), an independently seeded offset is chosen, and intermediate
+columns interpolate smoothly. All strokes within one grapheme receive the
+same vertical offset, preserving authored contours and pen direction. The
+printed row pitch and nominal wrapping do not change. `0` produces the same
+PDF/PNG bytes as omitting the option, while nonzero values can move strokes
+outside printable bounds and therefore still refuse before output commit.
+
+For example, extend the preceding command with
+`--glyph-line-drift 120` to produce a repeatable line-level rhythm. These
+CLI-only variations do not persist in a saved notebook, are not calibrated
+to a person's writing, and do not create automatic cursive joins.
+
 The occurrence sequence continues across manual
 text runs and Markdown flow pages. Rust checks the fully sampled ink and
 pen clearance (up to 128 template segments per glyph) before creating a
@@ -2043,8 +2059,8 @@ physical overshoot refused rather than silently clipped.
 This is an explicit creative perturbation of caller-authored strokes, not
 learned or calibrated handwriting. The seed/settings and text placement are
 still command-only, not saved in `atrament.notebook.v1`. Joined cursive,
-word/line-level correlation, letter context, and a persisted complete
-notebook-to-PDF workflow remain unfinished.
+word-level/contextual correlation, stable semantic-line identity, and a
+persisted complete notebook-to-PDF workflow remain unfinished.
 
 Session end drops the unsaved draft. The browser generates explicit
 print-starter strokes for the frozen 114-character bilingual text inventory
