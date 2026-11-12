@@ -172,6 +172,17 @@ page bytes or offsets. These metamorphic checks demonstrate isolation for
 fixed-width paint and identity changes, not general incremental PDF edits
 or a complete notebook Export contract.
 
+A further 104-edit variable-width oracle changes 96 in-page coordinates and
+stroke widths and eight ASCII manifest-identity lengths (1–128 bytes) on a
+three-page document. It parses PDF objects through emitted cross-reference
+offsets, requiring only the selected page stream or Info object to change.
+
+Every edited PDF retains valid page-stream lengths and xref entries. The exact
+updated byte allowance must preserve the output, while one byte less must
+refuse as `ResourceLimit`. Unlike fixed-width locality checks, these cases
+exercise downstream offset and `startxref` changes without rewriting
+unrelated object content; they are not incremental PDF editing support.
+
 The adapter refuses *every* accepted asset and preserved searchable text:
 image/color-profile embedding and font/semantic-text rendering do not exist
 here. It also refuses malformed paths, invalid page boxes, unsafe manifest

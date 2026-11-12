@@ -3262,3 +3262,179 @@ fn page_paint_and_manifest_edits_are_byte_local() {
     assert_eq!(paint_cases, 512);
     assert_eq!(identity_cases, 64);
 }
+
+// Rebuild PDF object boundaries from the emitted xref, not from an assumed
+// serializer object size. The lossy header is used only to locate startxref;
+// the actual offsets index the original binary PDF byte array.
+#[expect(
+    clippy::arithmetic_side_effects,
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "independent test-only PDF xref parser fails at corrupt fields"
+)]
+fn pdf_objects_by_xref(bytes: &[u8]) -> Vec<&[u8]> {
+    let text = pdf_string(bytes);
+    let start = text.rfind("startxref\n").expect("PDF has startxref");
+    let xref_offset = text
+        .get(start + "startxref\n".len()..)
+        .expect("marker ends on UTF-8 boundary")
+        .lines()
+        .next()
+        .expect("PDF has xref offset")
+        .parse::<usize>()
+        .expect("xref offset is decimal");
+    let xref = from_utf8(&bytes[xref_offset..]).expect("xref is ASCII");
+    let mut lines = xref.lines();
+    assert_eq!(lines.next(), Some("xref"), "xref keyword");
+    let section = lines.next().expect("xref section header");
+    let mut section_parts = section.split_ascii_whitespace();
+    assert_eq!(section_parts.next(), Some("0"), "first xref object");
+    let count = section_parts
+        .next()
+        .expect("xref object count")
+        .parse::<usize>()
+        .expect("xref count is decimal");
+    assert_eq!(lines.next(), Some("0000000000 65535 f "), "free xref entry");
+    let offsets: Vec<usize> = lines
+        .take(count.saturating_sub(1))
+        .map(|line| {
+            line.split_ascii_whitespace()
+                .next()
+                .expect("xref entry has offset")
+                .parse::<usize>()
+                .expect("xref offset is decimal")
+        })
+        .collect();
+    assert_eq!(
+        offsets.len(),
+        count.saturating_sub(1),
+        "one xref entry per allocated object"
+    );
+    offsets
+        .iter()
+        .enumerate()
+        .map(|(index, begin)| {
+            let end = offsets.get(index + 1).copied().unwrap_or(xref_offset);
+            &bytes[*begin..end]
+        })
+        .collect()
+}
+
+fn assert_only_pdf_object_changed(
+    original: &[u8],
+    edited: &[u8],
+    changed_object_index: usize,
+) {
+    assert_xref_integrity(edited);
+    assert_stream_length_integrity(edited, 3);
+    let original_objects = pdf_objects_by_xref(original);
+    let edited_objects = pdf_objects_by_xref(edited);
+    assert_eq!(original_objects.len(), 9, "three page objects and Info");
+    assert_eq!(edited_objects.len(), original_objects.len(), "object count");
+    for (object_index, (before, after)) in
+        original_objects.iter().zip(edited_objects).enumerate()
+    {
+        if object_index == changed_object_index {
+            assert_ne!(before, &after, "selected object must change");
+        } else {
+            assert_eq!(
+                before, &after,
+                "unrelated PDF object {object_index} must not change"
+            );
+        }
+    }
+}
+
+fn assert_exact_pdf_budget(
+    document: &PdfVectorComposition<'_>,
+    bytes: &[u8],
+    generous: PdfVectorLimits,
+) {
+    let exact = PdfVectorLimits {
+        maximum_pdf_bytes: bytes.len(),
+        ..generous
+    };
+    assert_eq!(
+        serialize_vector_pdf(document, exact),
+        Ok(bytes.to_vec()),
+        "exact size limit must preserve the PDF bytes"
+    );
+    assert_eq!(
+        serialize_vector_pdf(document, PdfVectorLimits {
+            maximum_pdf_bytes: bytes.len().saturating_sub(1),
+            ..exact
+        }),
+        Err(PdfVectorError::ResourceLimit),
+        "one byte short must refuse before publishing output"
+    );
+}
+
+// Fixed-width edits cannot show that earlier stream lengths, later object
+// offsets and startxref are rebuilt when geometry or Info metadata grows.
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "bounded three-page fixture owns known path indices"
+)]
+#[test]
+fn variable_width_geometry_and_metadata_edits_preserve_other_pdf_objects() {
+    let mut original_document = document();
+    original_document.pages[0].physical_page_box = PdfVectorPageBox {
+        width_um: 2_000_000,
+        height_um: 2_000_000,
+    };
+    original_document.pages.push(page(vec![fill()]));
+    original_document.pages.push(page(vec![stroke()]));
+    let generous = PdfVectorLimits {
+        maximum_pages: 3,
+        maximum_paths_per_page: 3,
+        maximum_commands_per_page: 12,
+        maximum_pdf_bytes: 20_000,
+    };
+    let original = serialize_vector_pdf(&original_document, generous)
+        .expect("three physical sheets serialize");
+    assert_xref_integrity(&original);
+    assert_stream_length_integrity(&original, 3);
+
+    let mut length_changing_paths = 0usize;
+    for index in 0i32..96i32 {
+        let mut edited = original_document.clone();
+        let path = &mut edited.pages[0].vector_authority[0];
+        path.commands[0] =
+            PdfPathCommand::MoveTo(point(30_000 + index * 18_000, 50_000));
+        path.commands[1] =
+            PdfPathCommand::LineTo(point(40_000 + index * 18_000, 60_000));
+        if let PdfPathPaint::Stroke { width_um, .. } = &mut path.paint {
+            *width_um = 160 + u32::try_from(index).expect("index fits") * 300;
+        }
+        let bytes = serialize_vector_pdf(&edited, generous)
+            .expect("varying widths and point magnitudes remain in page");
+        assert_only_pdf_object_changed(&original, &bytes, 3);
+        if bytes.len() != original.len() {
+            length_changing_paths += 1;
+        }
+        assert_exact_pdf_budget(&edited, &bytes, generous);
+    }
+    assert!(
+        length_changing_paths > 50,
+        "exercise variable-width numbers"
+    );
+
+    let mut length_changing_identities = 0usize;
+    for length in [1, 7, 9, 10, 20, 99, 127, 128] {
+        let identity = "M".repeat(length);
+        let edited = PdfCompositionPlan {
+            pages: original_document.pages.clone(),
+            assets: Vec::new(),
+            render_manifest_identity: identity.as_str(),
+        };
+        let bytes = serialize_vector_pdf(&edited, generous)
+            .expect("bounded ASCII manifest identity serializes");
+        assert_only_pdf_object_changed(&original, &bytes, 8);
+        if bytes.len() != original.len() {
+            length_changing_identities += 1;
+        }
+        assert_exact_pdf_budget(&edited, &bytes, generous);
+    }
+    assert_eq!(length_changing_identities, 8);
+}
