@@ -742,6 +742,167 @@ fn rounded_pdf_fill_contours_must_retain_noncollinear_ink() {
 #[expect(
     clippy::expect_used,
     clippy::indexing_slicing,
+    reason = "a minimal two-page PDF anchors cross-page drawing syntax"
+)]
+#[test]
+fn later_page_drawing_minima_refuse_before_earlier_invalid_geometry() {
+    let tiny_stroke = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(1, 1)),
+            PdfPathCommand::LineTo(point(2, 1)),
+        ],
+        paint: PdfPathPaint::Stroke {
+            color: PdfRgb {
+                red: 0,
+                green: 0,
+                blue: 0,
+            },
+            width_um: 1,
+        },
+    };
+    // The last page's /Length changes from two to three and then from
+    // three to four digits; every real command has minimum-length syntax.
+    for (line_count, length_digits) in [
+        (1usize, 2usize), (2, 3), (65, 3), (66, 4),
+    ] {
+        let mut later_stroke = tiny_stroke.clone();
+        for index in 1..line_count {
+            let x = if index & 1 == 0 { 2i32 } else { 1i32 };
+            later_stroke
+                .commands
+                .push(PdfPathCommand::LineTo(point(x, 1)));
+        }
+        let mut composition = PdfCompositionPlan {
+            assets: Vec::new(),
+            pages: vec![
+                page(vec![tiny_stroke.clone()]),
+                page(vec![later_stroke]),
+            ],
+            render_manifest_identity: "cross-page-ink-framing.v1",
+        };
+        let accepted = serialize_vector_pdf(&composition, limits())
+            .expect("two pages with minimal round strokes fit exactly");
+        assert_xref_integrity(&accepted);
+        let last_stream_bytes = pdf_string(&accepted)
+            .split("6 0 obj\n<< /Length ")
+            .nth(1)
+            .expect("second page stream header")
+            .split(" >>")
+            .next()
+            .expect("stream length")
+            .parse::<usize>()
+            .expect("decimal stream byte length");
+        assert_eq!(last_stream_bytes, 79 + 14 * line_count);
+        assert_eq!(last_stream_bytes.to_string().len(), length_digits);
+        assert_eq!(
+            serialize_vector_pdf(
+                &composition,
+                PdfVectorLimits {
+                    maximum_pdf_bytes: accepted.len(),
+                    ..limits()
+                },
+            ),
+            Ok(accepted.clone()),
+            "the two-page PDF fits at its exact byte limit",
+        );
+        composition.pages[0].vector_authority[0].commands[0] =
+            PdfPathCommand::MoveTo(point(-1, 1));
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidPath),
+            "with sufficient bytes malformed earlier geometry refuses",
+        );
+        assert_eq!(
+            serialize_vector_pdf(
+                &composition,
+                PdfVectorLimits {
+                    maximum_pdf_bytes: accepted.len().saturating_sub(1),
+                    ..limits()
+                },
+            ),
+            Err(PdfVectorError::ResourceLimit),
+            "later page ink syntax and its length digits must fit first",
+        );
+    }
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "a small compound fill anchors mandatory later-page syntax",
+)]
+#[test]
+fn later_page_fill_framing_preempts_earlier_invalid_stroke() {
+    let first = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(1, 1)),
+            PdfPathCommand::LineTo(point(2, 1)),
+        ],
+        paint: PdfPathPaint::Stroke {
+            color: PdfRgb {
+                red: 0,
+                green: 0,
+                blue: 0,
+            },
+            width_um: 1,
+        },
+    };
+    let tiny_fill = PdfVectorPath {
+        commands: vec![
+            PdfPathCommand::MoveTo(point(0, 0)),
+            PdfPathCommand::LineTo(point(1, 0)),
+            PdfPathCommand::LineTo(point(0, 1)),
+            PdfPathCommand::Close,
+        ],
+        paint: PdfPathPaint::Fill {
+            color: PdfRgb {
+                red: 0,
+                green: 0,
+                blue: 0,
+            },
+            rule: PdfFillRule::EvenOdd,
+        },
+    };
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(vec![first]), page(vec![tiny_fill])],
+        render_manifest_identity: "later-fill-framing.v1",
+    };
+    let accepted = serialize_vector_pdf(&composition, limits())
+        .expect("valid stroke and tiny triangular fill must serialize");
+    assert_xref_integrity(&accepted);
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: accepted.len(),
+                ..limits()
+            },
+        ),
+        Ok(accepted.clone()),
+    );
+    composition.pages[0].vector_authority[0].commands[0] =
+        PdfPathCommand::MoveTo(point(-1, 1));
+    assert_eq!(
+        serialize_vector_pdf(&composition, limits()),
+        Err(PdfVectorError::InvalidPath),
+    );
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: accepted.len().saturating_sub(1),
+                ..limits()
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+        "the later filled contour cannot borrow bytes from invalid ink",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
     reason = "an exactly fitting two-page fixture anchors future-page allowance"
 )]
 #[test]

@@ -250,6 +250,15 @@ Red/green tests pin the one-byte-short two-page case plus twelve pages with
 alternating page sizes and two-digit PDF object numbers. Valid exact-budget
 output remains byte-identical, including cross-reference offsets.
 
+The same cross-page reserve now includes every future path's minimum paint
+and command syntax, not just empty-page objects. It includes the resulting
+content-stream `/Length` digits, so a malformed earlier stroke cannot mask
+an impossible later stroke or filled contour as `InvalidPath`. Red/green
+regressions cover the two-to-three- and three-to-four-digit `/Length`
+transitions, an even-odd triangular fill, and exact-fit unchanged PDF bytes.
+This is a lower bound on mandatory emitted syntax, not a claim that all
+later pages are fully rendered before earlier geometry is validated.
+
 The existing oversized-stream regression, large-content fixture and exact-limit
 boundary regressions still apply. Output bytes and PDF object order are
 unchanged.

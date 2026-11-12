@@ -841,19 +841,23 @@ fn minimum_page_stream(dimensions: PdfVectorPageBox) -> String {
 fn minimum_page_object_bytes(
     dimensions: PdfVectorPageBox,
     object: usize,
+    paths: &[PdfVectorPath],
 ) -> Option<usize> {
     let content_object = object.checked_add(1)?;
-    let minimum_stream = minimum_page_stream(dimensions);
+    let minimum_stream_bytes = paths.iter().try_fold(
+        minimum_page_stream(dimensions).len(),
+        |total, path| total.checked_add(minimum_path_framing_bytes(path)?),
+    )?;
     page_object_header(dimensions, object)
         .len()
         .checked_add(
             format!(
-                "{content_object} 0 obj\n<< /Length {} >>\nstream\n",
-                minimum_stream.len()
+                "{content_object} 0 obj\n<< /Length \
+                 {minimum_stream_bytes} >>\nstream\n"
             )
             .len(),
         )?
-        .checked_add(minimum_stream.len())?
+        .checked_add(minimum_stream_bytes)?
         .checked_add(b"endstream\nendobj\n".len())
 }
 
@@ -914,9 +918,9 @@ fn append_pages(
     limits: PdfVectorLimits,
     page_limit: usize,
 ) -> Result<(), PdfVectorError> {
-    // Reserve the *minimum* Page and Contents objects of every later page.
-    // Without this allowance, a malformed command on page 1 could be inspected
-    // before discovering that even an empty page 2 cannot fit in the document.
+    // Reserve every page's mandatory object, paint and command syntax, and
+    // its resulting /Length field, before inspecting any earlier geometry.
+    // A malformed page 1 cannot mask an unfinishable later drawn page.
     let mut remaining_page_minima = composition
         .pages
         .iter()
@@ -926,6 +930,7 @@ fn append_pages(
             total.checked_add(minimum_page_object_bytes(
                 page.physical_page_box,
                 object,
+                &page.vector_authority,
             )?)
         })
         .ok_or(PdfVectorError::ResourceLimit)?;
@@ -938,7 +943,9 @@ fn append_pages(
         let object = 3usize.saturating_add(index.saturating_mul(2));
         remaining_page_minima = remaining_page_minima
             .checked_sub(
-                minimum_page_object_bytes(page.physical_page_box, object)
+                minimum_page_object_bytes(
+                    page.physical_page_box, object, &page.vector_authority,
+                )
                     .ok_or(PdfVectorError::ResourceLimit)?,
             )
             .ok_or(PdfVectorError::ResourceLimit)?;
