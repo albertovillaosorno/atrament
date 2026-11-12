@@ -146,6 +146,7 @@ An independent three-page content-stream fixture also pins the **exact emitted
 operator sequence**, beyond xref and `/Length` framing. It crosses a cubic
 stroke with multiple subpaths and a closed subpath, an even-odd compound fill,
 a nonzero triangular fill, later red pen ink, and a blank maximum-size page.
+
 The oracle compares every page's complete stream to a literal known-good PDF
 operator sequence, including physical page transforms, round caps/joins,
 DeviceRGB channels, fill rules, page-local graphics-state closure and original
