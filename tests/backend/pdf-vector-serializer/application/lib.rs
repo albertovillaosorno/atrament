@@ -1530,6 +1530,119 @@ fn serialized_stroke_edges_must_not_escape_rounded_pdf_page() {
     }
 }
 
+// Independently parse the same decimal point units emitted by a PDF reader,
+// rather than relying on the serializer's integer fixed-point rounding code.
+#[expect(
+    clippy::expect_used,
+    reason = "the oracle parses bounded fixed-three-decimal PDF units",
+)]
+fn emitted_pdf_millipoints(value_um: u32) -> u64 {
+    format!("{:.3}", f64::from(value_um) * (72.0 / 25_400.0))
+        .replace('.', "")
+        .parse::<u64>()
+        .expect("PDF decimal number is a nonnegative millipoint integer")
+}
+
+fn oracle_stroke_point_inside(
+    x: u32, y: u32, width_um: u32, page_box: PdfVectorPageBox,
+) -> bool {
+    let margin = width_um.div_ceil(2);
+    if x < margin || y < margin
+        || x > page_box.width_um.saturating_sub(margin)
+        || y > page_box.height_um.saturating_sub(margin)
+    {
+        return false;
+    }
+    let width = emitted_pdf_millipoints(width_um);
+    let x_pdf = emitted_pdf_millipoints(x);
+    let y_pdf = emitted_pdf_millipoints(y);
+    let page_width = emitted_pdf_millipoints(page_box.width_um);
+    let page_height = emitted_pdf_millipoints(page_box.height_um);
+    width <= x_pdf.min(page_width.saturating_sub(x_pdf)).saturating_mul(2)
+        && width <= y_pdf.min(page_height.saturating_sub(y_pdf))
+            .saturating_mul(2)
+}
+
+#[expect(
+    clippy::expect_used,
+    reason = "the bounded oracle coordinates are representable as i32",
+)]
+#[test]
+fn exhaustive_rounded_stroke_edge_clearance_oracle() {
+    let page_box = PdfVectorPageBox {
+        width_um: 210_000,
+        height_um: 297_000,
+    };
+    let mut widths: Vec<u32> = (1u32..=256u32).collect();
+    widths.extend([350, 700, 1_500, 1_999, 2_000]);
+    let mut checked = 0usize;
+    for width_um in widths {
+        let margin = width_um.div_ceil(2);
+        for clearance in [
+            margin.saturating_sub(1), margin, margin.saturating_add(1),
+            margin.saturating_add(2),
+        ] {
+            for edge in 0u8..4u8 {
+                let (x, y, end_x, end_y) = match edge {
+                    0 => (clearance, 20_000, clearance, 30_000),
+                    1 => (
+                        page_box.width_um.saturating_sub(clearance),
+                        20_000,
+                        page_box.width_um.saturating_sub(clearance),
+                        30_000,
+                    ),
+                    2 => (20_000, clearance, 30_000, clearance),
+                    _ => (
+                        20_000,
+                        page_box.height_um.saturating_sub(clearance),
+                        30_000,
+                        page_box.height_um.saturating_sub(clearance),
+                    ),
+                };
+                let mut test_page = page(vec![PdfVectorPath {
+                    commands: vec![
+                        PdfPathCommand::MoveTo(point(
+                            i32::try_from(x).expect("bounded x"),
+                            i32::try_from(y).expect("bounded y"),
+                        )),
+                        PdfPathCommand::LineTo(point(
+                            i32::try_from(end_x).expect("bounded end x"),
+                            i32::try_from(end_y).expect("bounded end y"),
+                        )),
+                    ],
+                    paint: PdfPathPaint::Stroke {
+                        color: PdfRgb {
+                            red: 0, green: 0, blue: 0,
+                        },
+                        width_um,
+                    },
+                }]);
+                test_page.physical_page_box = page_box;
+                let composition = PdfCompositionPlan {
+                    assets: Vec::new(),
+                    pages: vec![test_page],
+                    render_manifest_identity: "rounded-edge-sweep.v1",
+                };
+                let accepted = oracle_stroke_point_inside(
+                    x, y, width_um, page_box,
+                ) && oracle_stroke_point_inside(
+                    end_x, end_y, width_um, page_box,
+                );
+                let result = serialize_vector_pdf(&composition, limits());
+                if accepted {
+                    assert!(result.is_ok(),
+                        "width {width_um}, edge {edge}, clearance {clearance}");
+                } else {
+                    assert_eq!(result, Err(PdfVectorError::InvalidPath),
+                        "width {width_um}, edge {edge}, clearance {clearance}");
+                }
+                checked = checked.saturating_add(1);
+            }
+        }
+    }
+    assert_eq!(checked, 4_176, "all four-edge cases were exercised");
+}
+
 #[expect(
     clippy::expect_used,
     reason = "blank PDF establishes a budget with no room for stroke paint"

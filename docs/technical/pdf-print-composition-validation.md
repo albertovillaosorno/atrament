@@ -103,6 +103,14 @@ half a thousandth of a point outside the sheet edge. The exact fixed-point
 boundary check refuses such paths as `InvalidPath`, preserving nearby strokes
 with another micrometer of clearance and leaving admitted PDF bytes unchanged.
 
+An independent 4,176-state stroke-edge oracle checks 261 widths (1–256 µm
+and five larger samples), four clearances around each physical half-width,
+and all four A4 page edges. It derives expected clipping from PDF's emitted
+three-decimal numbers rather than the serializer's integer rounding helper.
+Every sampled accepted stroke stays inside its PDF page, and every sampled
+clipped stroke refuses as `InvalidPath`. This is an exhaustive bounded sweep,
+not a claim of exhaustive geometry or printer-device verification.
+
 The adapter refuses *every* accepted asset and preserved searchable text:
 image/color-profile embedding and font/semantic-text rendering do not exist
 here. It also refuses malformed paths, invalid page boxes, unsafe manifest
