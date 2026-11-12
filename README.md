@@ -2084,12 +2084,23 @@ make ink unprintable and safely refuse the entire export. Distinct seeded
 streams keep word slant, pressure, word position and line drift
 independently selectable.
 
+For shared letter-width rhythm, add `--glyph-word-width MAX_PERCENT`
+(0–15) with `--glyph-variation`. Each ASCII-space-delimited word gets
+one seeded, signed width percentage. Rust applies it to the authored
+horizontal stroke coordinates without changing pen widths, stroke order,
+nominal advances or wrapping. It composes with saved mean glyph width and
+the selected word slant through the same physical-ink engine. Whole-word
+pen joins are recomputed from their actual final endpoints; an overlong
+bridge or a stroke crossing printable margins refuses before export. The
+source glyph library is never rewritten; zero is byte-identical to omission.
+
 For example, extend the preceding command with
 `--glyph-line-drift 120 --glyph-word-drift 90 --glyph-word-rise 90`
-and `--glyph-word-pressure 12 --glyph-word-slant 3000` to produce
-reproducible line, word, ink and italic rhythms. At `0`, each extra
-option is byte-identical to omission for
-PDF/PNG and emitted ink TSV. Widths outside 80–1500 µm and unprintable
+and `--glyph-word-pressure 12 --glyph-word-slant 3000`
+with `--glyph-word-width 10` to produce reproducible line, word,
+ink, width and italic rhythms. At `0`, each extra option is
+byte-identical to omission for PDF/PNG and emitted ink TSV. Widths outside
+80–1500 µm and unprintable
 pen clearance refuse before output commit; there is no silent clipping.
 These CLI-only variations do not persist in a saved notebook, are not
 calibrated to a person's writing, and do not create automatic cursive joins.

@@ -11135,3 +11135,303 @@ fn word_slant_refuses_off_page_shear_before_replacing_existing_export()
     fs::remove_file(&target).map_err(|error| error.to_string())?;
     Ok(())
 }
+
+#[test]
+fn seeded_word_width_shares_letter_scale_and_preserves_zero_bytes()
+-> Result<(), String> {
+    let glyph = "n\u{303}";
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        glyph, "600", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    let text = format!("{glyph}{glyph}  {glyph} {glyph}{glyph}");
+    for y in [30_000u32, 40_000u32] {
+        overlay.parse("--place-text", &mut args(&[
+            "1", "25000", &y.to_string(), &text,
+        ]).iter())?;
+    }
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    let original = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-width", &mut args(&["15"]).iter())?;
+    let widened = overlay.expand(&[], None)?;
+    // Independent unsigned avalanche/xorshift samples for two physical
+    // runs and three exact words each (seed 42, maximum 15 percent).
+    let percent = [107u32, 108, 92, 107, 90, 96];
+    let offsets = [0u32, 4_000, 16_000, 24_000, 28_000];
+    for (run_index, row) in widened.as_chunks::<5>().0.iter().enumerate() {
+        let origin_y = if run_index == 0 { 30_000 } else { 40_000 };
+        for (index, stroke) in row.iter().enumerate() {
+            let word = match index { 0 | 1 => 0, 2 => 1, _ => 2 };
+            let chosen = percent[run_index * 3 + word];
+            let target_width = (3_500 * chosen + 50) / 100;
+            // The independent physical reference performs both specified
+            // integer roundings: word cell then authored local coordinate.
+            let scaled = |x: u32| -> u32 {
+                (x * target_width + 1_750) / 3_500
+            };
+            let x = 25_000 + offsets[index];
+            if stroke.start_um != (x + scaled(600), origin_y + 1_000)
+                || stroke.end_um != (x + scaled(1600), origin_y + 2_800)
+                || stroke.width_um != 250 || stroke.rgb != [0x12, 0x34, 0x56] {
+                return Err(format!(
+                    "word width changed at {run_index} {index}: {stroke:?}"
+                ));
+            }
+        }
+    }
+    if widened.len() != 10 || widened == original
+        || widened != overlay.expand(&[], None)? {
+        return Err("word-width seed replay or glyph count changed".into());
+    }
+    overlay.word_width_percent = Some(0);
+    if overlay.expand(&[], None)? != original {
+        return Err("zero word width changed previous output".into());
+    }
+    overlay.word_width_percent = Some(15);
+    overlay.word_drift_um = Some(90);
+    overlay.word_rise_um = Some(90);
+    overlay.line_drift_um = Some(120);
+    overlay.word_slant_millidegrees = Some(3_000);
+    overlay.word_pressure_percent = Some(15);
+    let combined = overlay.expand(&[], None)?;
+    overlay.word_width_percent = Some(0);
+    let before = overlay.expand(&[], None)?;
+    for (index, (old, updated)) in before.iter().zip(&combined).enumerate() {
+        let word = match index % 5 { 0 | 1 => 0, 2 => 1, _ => 2 };
+        let chosen = percent[index / 5 * 3 + word];
+        let width = (3_500 * chosen + 50) / 100;
+        let scaled = |x: u32| (x * width + 1_750) / 3_500;
+        if i64::from(updated.start_um.0) - i64::from(old.start_um.0)
+            != i64::from(scaled(600)) - 600
+            || i64::from(updated.end_um.0) - i64::from(old.end_um.0)
+                != i64::from(scaled(1600)) - 1600
+            || updated.start_um.1 != old.start_um.1
+            || updated.end_um.1 != old.end_um.1
+            || updated.width_um != old.width_um
+            || updated.rgb != old.rgb {
+            return Err("word width changed independent ink rhythms".into());
+        }
+    }
+    overlay.word_width_percent = Some(16);
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed out-of-range word width accepted".into());
+    }
+    overlay.word_width_percent = Some(15);
+    overlay.variation = None;
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed unpaired word width accepted".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn word_width_keeps_joined_words_continuous_and_mean_scaling_explicit()
+-> Result<(), String> {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "\u{e1}", "150", "1200", "3370", "1200", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "\u{e1}\u{e1} \u{e1}\u{e1}",
+    ]).iter())?;
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    overlay.add_text_join_pair(
+        &mut args(&["\u{e1}", "\u{e1}"]).iter(),
+    )?;
+    overlay.parse("--glyph-word-width", &mut args(&["15"]).iter())?;
+    let joined = overlay.expand(&[], None)?;
+    if joined.len() != 6 {
+        return Err(format!("width variation lost directed joins: {joined:?}"));
+    }
+    for offset in [0usize, 3] {
+        let [first, bridge, last] = joined.get(offset..offset + 3)
+            .ok_or("missing joined word")? else {
+            return Err("joined word must have exactly three strokes".into());
+        };
+        if first.end_um != bridge.start_um
+            || bridge.end_um != last.start_um
+            || first.width_um != bridge.width_um
+            || bridge.width_um != last.width_um
+            || bridge.start_um.1 != bridge.end_um.1
+            || bridge.end_um.0 <= bridge.start_um.0
+            || bridge.end_um.0 - bridge.start_um.0 > 1_200 {
+            return Err(format!("scaled word join changed pen: {joined:?}"));
+        }
+    }
+
+    let profile = execute_handwriting(&args(&[
+        "--set-glyph", "\u{e1}", "width", "3900", "3900",
+        "3900", "3900", "0",
+    ]))?.ok_or("missing statistical profile")?;
+    let statistics = decode_statistics_json(
+        &profile, &UnicodeGraphemeSegmentation,
+    ).map_err(|error| format!("statistics: {error:?}"))?;
+    overlay.text_joins.clear();
+    overlay.runs.clear();
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "\u{e1}",
+    ]).iter())?;
+    let scaled = overlay.expand(&[], Some(&statistics))?;
+    let stroke = scaled.first().ok_or("mean and width must render")?;
+    // Target cell 3900 * 107%, rounded, is 4173 um. The mean
+    // projector independently rounds each authored local X coordinate.
+    if scaled.len() != 1
+        || stroke.start_um != (25_179, 30_800)
+        || stroke.end_um != (29_018, 30_800)
+        || stroke.width_um != 250 {
+        return Err(format!("word width did not compose with mean: {scaled:?}"));
+    }
+    overlay.word_width_percent = Some(0);
+    let baseline = overlay.expand(&[], Some(&statistics))?;
+    if baseline.len() != 1
+        || baseline[0].start_um != (25_167, 30_800)
+        || baseline[0].end_um != (28_755, 30_800) {
+        return Err(format!("zero word width modified mean: {baseline:?}"));
+    }
+    Ok(())
+}
+
+#[test]
+fn word_width_pdf_png_ink_replay_and_atomic_option_refusals()
+-> Result<(), String> {
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "\u{e1}", "600", "1000", "1600", "2800",
+        "250", "#123456",
+        "--flow-markdown", concat!(
+            "\u{e1}\u{e1} \u{e1} \u{e1}\u{e1}\n\n",
+            "\u{e1}\u{e1} \u{e1}\u{e1}",
+        ),
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    for format in ["pdf", "png", "ink"] {
+        let render = |seed: &str, extras: &[&str]|
+            -> Result<Vec<u8>, String> {
+            let mut command = prefix.clone();
+            let seed_index = command.iter()
+                .position(|value| value == "--glyph-variation")
+                .ok_or("variation flag missing")? + 1;
+            *command.get_mut(seed_index).ok_or("seed missing")? = seed.into();
+            if format == "ink" {
+                command.push("--emit-ink-file".into());
+            } else {
+                command.extend(args(&["--export-paper", format]));
+            }
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            command.extend(args(extras));
+            execute_notebook(&command)?.ok_or("missing native output".into())
+        };
+        let original = render("42", &[])?;
+        if original != render("42", &["--glyph-word-width", "0"])? {
+            return Err(format!("{format} zero word width changed bytes"));
+        }
+        let changed = render("42", &["--glyph-word-width", "15"])?;
+        if changed == original
+            || changed != render("42", &["--glyph-word-width", "15"])?
+            || changed == render("43", &["--glyph-word-width", "15"])? {
+            return Err(format!("{format} width replay/seed failed"));
+        }
+        let signature = match format {
+            "pdf" => b"%PDF-1.4".as_slice(),
+            "png" => b"\x89PNG\r\n\x1a\n".as_slice(),
+            _ => b"atrament.page-ink.v1\n".as_slice(),
+        };
+        if !changed.starts_with(signature) {
+            return Err(format!("{format} native output header missing"));
+        }
+    }
+
+    let target = test_path();
+    fs::write(&target, b"accepted export").map_err(|e| e.to_string())?;
+    let path = target.to_str().ok_or("non-UTF8 path")?;
+    for invalid in [
+        args(&["--glyph-word-width", "-1"]),
+        args(&["--glyph-word-width", "16"]),
+        args(&["--glyph-word-width", "4294967296"]),
+        args(&["--glyph-word-width", "15",
+            "--glyph-word-width", "1"]),
+    ] {
+        let mut command = prefix.clone();
+        command.extend(args(&[
+            "--export-paper", "pdf", "--output", path, "--replace",
+        ]));
+        command.extend(invalid);
+        if execute_notebook(&command).is_ok()
+            || fs::read(&target).map_err(|e| e.to_string())?
+                != b"accepted export" {
+            return Err("invalid width flag changed accepted output".into());
+        }
+    }
+    let mut unpaired = prefix;
+    let at = unpaired.iter().position(|value| value == "--glyph-variation")
+        .ok_or("missing variation")?;
+    unpaired.drain(at..at + 8).for_each(drop);
+    unpaired.extend(args(&[
+        "--glyph-word-width", "15", "--export-paper", "pdf",
+        "--output", path, "--replace",
+    ]));
+    if execute_notebook(&unpaired).is_ok()
+        || fs::read(&target).map_err(|e| e.to_string())?
+            != b"accepted export" {
+        return Err("unpaired word width changed accepted output".into());
+    }
+    fs::remove_file(&target).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[test]
+fn word_width_refuses_off_printable_region_without_replacing_pdf_or_png()
+-> Result<(), String> {
+    // A4's writable right edge is 196000 um. At this position, the
+    // original 1600um endpoint and 125um half-pen fit; seed 42 widens
+    // the same first word to 107%, crossing the printable edge.
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "\u{e1}", "600", "1000", "1600", "2800",
+        "250", "#123456",
+        "--place-text", "1", "194200", "30000", "\u{e1}",
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    let target = test_path();
+    let path = target.to_str().ok_or("non-UTF8 output path")?;
+    for format in ["pdf", "png"] {
+        let mut valid = prefix.clone();
+        valid.extend(args(&["--export-paper", format]));
+        if format == "png" {
+            valid.extend(args(&["--dpi", "72"]));
+        }
+        let output = execute_notebook(&valid)?.ok_or("missing baseline bytes")?;
+        if !output.starts_with(if format == "pdf" {
+            b"%PDF-1.4"
+        } else {
+            b"\x89PNG\r\n\x1a\n"
+        }) {
+            return Err("baseline near-margin export is invalid".into());
+        }
+        fs::write(&target, b"accepted export")
+            .map_err(|error| error.to_string())?;
+        let mut invalid = prefix.clone();
+        invalid.extend(args(&[
+            "--glyph-word-width", "15", "--export-paper", format,
+            "--output", path, "--replace",
+        ]));
+        if format == "png" {
+            invalid.extend(args(&["--dpi", "72"]));
+        }
+        let refused = execute_notebook(&invalid)
+            .expect_err("word width should cross writable boundary");
+        if !refused.contains("page 1 ink needs printable endpoints")
+            || fs::read(&target).map_err(|error| error.to_string())?
+                != b"accepted export" {
+            return Err(format!("word width clipped or overwrote: {refused}"));
+        }
+    }
+    fs::remove_file(&target).map_err(|error| error.to_string())?;
+    Ok(())
+}

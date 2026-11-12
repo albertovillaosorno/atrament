@@ -167,6 +167,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--glyph-word-rise MAX_UM (requires --glyph-variation)] \
     [--glyph-word-pressure MAX_PERCENT (requires --glyph-variation)] \
     [--glyph-word-slant MAX_MDEG (requires --glyph-variation)] \
+    [--glyph-word-width MAX_PERCENT (requires --glyph-variation)] \
     [--heading-style underline|double-underline|marker|none] \
     [--heading-color '#RRGGBB'] [--heading-marker-scale 50..105] \
     [--heading-ink-color '#RRGGBB'] [--heading-ink-scale 100..250] \
@@ -234,6 +235,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     (0..20 percent), with invalid ink refused before commit. \
     --glyph-word-slant adds a shared baseline shear per word (0..5000 \
     millidegrees), with invalid physical pen geometry refused. \
+    --glyph-word-width scales authored letter contours together per word \
+    (0..15 percent) without changing measured text advances. Unprintable \
+    physical ink refuses instead of clipping. \
     No synthesized glyphs, inline Markdown styles or images are rendered.";
 
 #[derive(Clone, Debug)]
@@ -287,6 +291,7 @@ struct GlyphOverlay {
     word_pressure_percent: Option<u32>,
     word_rise_um: Option<u32>,
     word_slant_millidegrees: Option<u32>,
+    word_width_percent: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -1814,7 +1819,8 @@ fn parse_notebook_export_option(
         "--glyph-stroke" | "--place-text" | "--fallback-glyph"
         | "--glyph-variation" | "--glyph-line-drift"
         | "--glyph-word-drift" | "--glyph-word-rise"
-        | "--glyph-word-pressure" | "--glyph-word-slant" => {
+        | "--glyph-word-pressure" | "--glyph-word-slant"
+        | "--glyph-word-width" => {
             glyphs.parse(option, iter)?;
         }
         "--join-text-pair" => glyphs.add_text_join_pair(iter)?,
@@ -2142,10 +2148,9 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
     let (mut iter, mut stdin_selected) = (args.iter(), false);
     let (mut glyph_file_selected, mut glyph_edited) = (false, false);
     let (mut flow_format, mut region_selected) = (None, false);
-    let mut region_geometry = None;
+    let (mut region_geometry, mut preview) = (None, NotebookProfile::default());
     let (mut profile_selected, mut profile_edited) = (false, false);
     let (mut paper_selected, mut handwriting_selected) = (false, false);
-    let mut preview = NotebookProfile::default();
     let mut flags = NotebookFlagPreflight::default();
     // Reuse the exact, side-effect-free glyph parser before opening any
     // selected library, profile, or flow source. These temporary shapes are
@@ -2166,9 +2171,10 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                     (0, false)
                 }
                 "--glyph-stroke" | "--glyph-variation" | "--glyph-word-pressure"
-                | "--glyph-word-slant" | "--glyph-line-drift" | "--place-text"
-                | "--glyph-word-rise" | "--fallback-glyph" | "--join-text-pair"
-                | "--glyph-word-drift" | "--join-text-anchors" => {
+                | "--glyph-word-slant" | "--glyph-word-width" | "--place-text"
+                | "--glyph-line-drift" | "--glyph-word-rise"
+                | "--fallback-glyph" | "--join-text-pair" | "--glyph-word-drift"
+                | "--join-text-anchors" => {
                     glyph_edited = true;
                     preflight_notebook_glyph_option(
                         option, &mut glyph_preflight, &mut iter,
@@ -2381,12 +2387,10 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let mut profile = NotebookProfile::default();
     let mut inspect = false;
     let (mut output, mut replace) = (None, false);
-    let mut export = NotebookExportOptions::default();
-    let mut ink = Vec::new();
+    let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let mut glyphs = GlyphOverlay::default();
     let mut statistics = None;
-    let mut flow = None;
-    let mut flow_region = None;
+    let (mut flow, mut flow_region) = (None, None);
     let mut heading = HeadingDecoration::default();
     let mut stdin_selected = false;
     let (mut loaded, mut paper_loaded) = (false, false);
@@ -2434,7 +2438,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             | "--glyph-stroke" | "--glyph-file" | "--place-text"
             | "--fallback-glyph" | "--glyph-variation" | "--glyph-word-rise"
             | "--glyph-line-drift" | "--glyph-word-drift" | "--join-text-pair"
-            | "--glyph-word-pressure" | "--glyph-word-slant" | "--quality" => {
+            | "--glyph-word-pressure" | "--glyph-word-slant"
+            | "--glyph-word-width" | "--quality" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
                     &mut glyphs, &mut stdin_selected,

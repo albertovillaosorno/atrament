@@ -893,3 +893,29 @@ Word-level tilt is a deliberate, export-only creative variation. It does
 not infer handwriting, manage persistent word path identities, implement
 continuous cursive curves or calibrate to a particular writer. Full
 P1-014 completion remains open.
+
+## CLI-only word-level letter-width rhythm (partial) — 2026-11-12
+
+The Rust `atrament-profiles notebook` CLI now accepts opt-in
+`--glyph-word-width MAX_PERCENT` (0–15, signed seeded width offsets)
+only alongside `--glyph-variation`. Each ASCII-space-delimited word
+in one placed run receives a deterministic width multiplier from a distinct
+xorshift stream. The physical pen engine scales each letter's horizontal
+contour within its own authored template cell; it does not alter nominal
+inter-letter advances, wrapping, row pitch, pen widths or saved glyph TSV.
+The multiplier combines with optional statistical mean glyph width and
+previously selected word-level slant and pressure. A zero multiplier spread
+is byte-identical to omission.
+
+Four focused native tests verify independent hard-coded physical coordinates
+across NFD Unicode words and two text runs; composition with line/word drift,
+rise, slant and pressure; exact directed same-pen joins after width scaling;
+independent mean-width projection; and genuine PDF, transparent PNG and
+page-ink TSV replay with different seeds. Invalid, repeated, over-range or
+unpaired options refuse without changing an existing file. Both PDF and PNG
+reject a seeded word expansion crossing the physical printable edge and
+preserve the previous selected output.
+
+This is command-only creative deformation of caller-authored ink, not
+calibrated handwriting, learned letterforms, saved semantic text, or automatic
+cross-letter joining. The full P1-014 task remains open.
