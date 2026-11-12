@@ -182,13 +182,13 @@ pub enum PdfVectorError {
 // have zero signed area while still legitimately painting visible regions.
 #[derive(Default)]
 struct ContourAreaWitness {
-    axis: Option<PdfPoint>,
-    first: Option<PdfPoint>,
+    axis: Option<(i64, i64)>,
+    first: Option<(i64, i64)>,
     spans_plane: bool,
 }
 
 impl ContourAreaWitness {
-    fn include(&mut self, point: PdfPoint) {
+    fn include(&mut self, point: (i64, i64)) {
         let Some(first) = self.first else {
             self.first = Some(point);
             return;
@@ -197,14 +197,10 @@ impl ContourAreaWitness {
             if self.spans_plane {
                 return;
             }
-            let base_x =
-                i64::from(axis.x_um).saturating_sub(i64::from(first.x_um));
-            let base_y =
-                i64::from(axis.y_um).saturating_sub(i64::from(first.y_um));
-            let point_x =
-                i64::from(point.x_um).saturating_sub(i64::from(first.x_um));
-            let point_y =
-                i64::from(point.y_um).saturating_sub(i64::from(first.y_um));
+            let base_x = axis.0.saturating_sub(first.0);
+            let base_y = axis.1.saturating_sub(first.1);
+            let point_x = point.0.saturating_sub(first.0);
+            let point_y = point.1.saturating_sub(first.1);
             self.spans_plane = base_x.saturating_mul(point_y)
                 != base_y.saturating_mul(point_x);
         } else if point != first {
@@ -212,10 +208,41 @@ impl ContourAreaWitness {
         }
     }
 
+    fn include_physical(&mut self, point: PdfPoint) {
+        self.include((i64::from(point.x_um), i64::from(point.y_um)));
+    }
+
+    fn include_serialized(&mut self, point: PdfPoint) {
+        self.include((
+            serialized_millipoints(point.x_um),
+            serialized_millipoints(point.y_um),
+        ));
+    }
+}
+
+// A filled contour must span a plane both at source micrometer precision and
+// after PDF coordinate rounding. Otherwise valid physical geometry could
+// silently collapse into an unpaintable serialized line.
+#[derive(Default)]
+struct FilledContourWitness {
+    physical: ContourAreaWitness,
+    serialized: ContourAreaWitness,
+}
+
+impl FilledContourWitness {
+    fn include(&mut self, point: PdfPoint) {
+        self.physical.include_physical(point);
+        self.serialized.include_serialized(point);
+    }
+
     fn include_cubic(&mut self, points: [PdfPoint; 3]) {
         for point in points {
             self.include(point);
         }
+    }
+
+    const fn spans_plane(&self) -> bool {
+        self.physical.spans_plane && self.serialized.spans_plane
     }
 }
 
@@ -231,6 +258,16 @@ fn push_formatted(
 
 fn points(value_um: i32) -> String {
     format!("{:.3}", f64::from(value_um) * PDF_POINTS_PER_UM)
+}
+
+// PDF content coordinates are rounded to exactly three decimal places.
+// The positive page-admitted coordinates use the same nearest-integer ratio
+// as points(); there are no ties because the denominator is odd.
+fn serialized_millipoints(value_um: i32) -> i64 {
+    i64::from(value_um)
+        .saturating_mul(360)
+        .saturating_add(63)
+        .div_euclid(127)
 }
 
 fn page_points(value_um: u32) -> String {
@@ -410,7 +447,7 @@ fn render_path(
     let mut saw_segment = false;
     let mut current = PdfPoint { x_um: 0, y_um: 0 };
     let mut subpath_has_extent = false;
-    let mut contour_area = ContourAreaWitness::default();
+    let mut contour_area = FilledContourWitness::default();
     for command in &path.commands {
         match *command {
             PdfPathCommand::MoveTo(point) => {
@@ -434,7 +471,7 @@ fn render_path(
                 drawn = false;
                 current = point;
                 subpath_has_extent = false;
-                contour_area = ContourAreaWitness::default();
+                contour_area = FilledContourWitness::default();
                 contour_area.include(point);
             },
             PdfPathCommand::LineTo(point) if active => {
@@ -468,7 +505,7 @@ fn render_path(
                 }
             },
             PdfPathCommand::Close if active && drawn => {
-                if (fill && !contour_area.spans_plane)
+                if (fill && !contour_area.spans_plane())
                     || (!fill && !subpath_has_extent)
                 {
                     return Err(PdfVectorError::InvalidPath);

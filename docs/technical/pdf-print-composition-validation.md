@@ -112,10 +112,14 @@ filesystem effect, or user-authorized Export operation. It is not evidence
 that a pasted assignment can be turned into a PDF by the current UI/CLI.
 
 Each closed filled contour must have a non-collinear geometric witness among
-its endpoints and cubic control points. A closed line segment, an all-collinear
-polygon, or an all-collinear cubic refuses as `InvalidPath` rather than
-silently producing invisible fill ink. One degenerate member refuses an
-entire compound fill, even when other contours are valid.
+its endpoints and cubic control points **both in original micrometers and in
+serialized three-decimal PDF points**. A closed line segment, an all-collinear
+polygon, an all-collinear cubic, or a contour that becomes collinear only after
+PDF coordinate rounding refuses as `InvalidPath` rather than silently
+producing invisible fill ink. A reproduced 14–19 µm triangle and an equivalent
+cubic loop collapse after rounding; one micrometer of displacement restores
+admissible non-collinear PDF geometry. One degenerate member refuses an entire
+compound fill, even when other contours are valid.
 
 This check is necessary, not a full visible-area proof. Legitimate curved
 loops and self-crossing contours remain admitted without using a signed-area

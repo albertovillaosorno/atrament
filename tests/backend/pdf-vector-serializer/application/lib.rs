@@ -506,6 +506,76 @@ fn filled_contours_refuse_collinear_ink_but_accept_curved_ink() {
 }
 
 #[expect(
+    clippy::indexing_slicing,
+    reason = "the fixture has exactly one page, one path and three vertices"
+)]
+#[test]
+fn rounded_pdf_fill_contours_must_retain_noncollinear_ink() {
+    let start = point(20_000, 20_000);
+    let along_a = point(20_014, 20_016);
+    let along_b = point(20_017, 20_019);
+    // Distinct source vectors make a non-collinear triangle in micrometers,
+    // but its three PDF 0.001-point coordinates fall on one exact line.
+    // The nominal triangle must not silently disappear on PDF export.
+    let mut composition = document();
+    let commands = [
+        PdfPathCommand::MoveTo(start),
+        PdfPathCommand::LineTo(along_a),
+        PdfPathCommand::LineTo(along_b),
+        PdfPathCommand::Close,
+    ];
+    composition.pages = vec![page(vec![PdfVectorPath {
+        commands: commands.to_vec(),
+        paint: fill().paint,
+    }])];
+    assert_eq!(
+        serialize_vector_pdf(&composition, limits()),
+        Err(PdfVectorError::InvalidPath),
+        "source area that collapses under PDF rounding must refuse",
+    );
+
+    // One micrometer of displacement restores a noncollinear serialized
+    // contour, so the guard must not reject all very small filled shapes.
+    composition.pages[0].vector_authority[0].commands[2] =
+        PdfPathCommand::LineTo(point(20_017, 20_020));
+    assert!(
+        serialize_vector_pdf(&composition, limits()).is_ok(),
+        "a tiny but still two-dimensional PDF contour remains printable",
+    );
+
+    // A cubic loop can also lose all its area after quantizing its control
+    // points, even when its start and end are identical and source controls
+    // span the plane. The same admission applies to curved contours.
+    composition.pages[0].vector_authority[0].commands = vec![
+        PdfPathCommand::MoveTo(start),
+        PdfPathCommand::CubicTo(along_a, along_b, start),
+        PdfPathCommand::Close,
+    ];
+    assert_eq!(
+        serialize_vector_pdf(&composition, limits()),
+        Err(PdfVectorError::InvalidPath),
+        "rounding cannot turn a two-dimensional cubic loop into a line",
+    );
+    composition.pages[0].vector_authority[0].commands[1] =
+        PdfPathCommand::CubicTo(along_a, point(20_017, 20_020), start);
+    assert!(
+        serialize_vector_pdf(&composition, limits()).is_ok(),
+        "a small cubic loop with two-dimensional PDF controls remains valid",
+    );
+
+    // Compound fills must not hide one quantization-collapsed member just
+    // because an earlier and larger contour is printable.
+    let mut compound = fill();
+    compound.commands.extend(commands);
+    composition.pages[0].vector_authority = vec![compound];
+    assert_eq!(
+        serialize_vector_pdf(&composition, limits()),
+        Err(PdfVectorError::InvalidPath),
+        "every filled subpath must retain its own serialized area witness",
+    );
+}
+
+#[expect(
     clippy::expect_used,
     clippy::indexing_slicing,
     reason = "an exactly fitting two-page fixture anchors future-page allowance"
