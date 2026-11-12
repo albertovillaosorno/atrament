@@ -471,6 +471,106 @@ fn filled_contours_refuse_collinear_ink_but_accept_curved_ink() {
     }
 }
 
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "an exactly fitting two-page fixture anchors future-page allowance"
+)]
+#[test]
+fn earlier_page_cannot_spend_minimum_framing_reserved_for_later_pages() {
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(vec![stroke()]), page(Vec::new())],
+        render_manifest_identity: "future-page-framing.v1",
+    };
+    let accepted = serialize_vector_pdf(&composition, limits())
+        .expect("valid first-page ink and an empty second page fit");
+    assert_xref_integrity(&accepted);
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: accepted.len(),
+                ..limits()
+            },
+        ),
+        Ok(accepted.clone()),
+        "the original complete PDF must fit at its exact byte limit",
+    );
+    // The first page's valid ink is already one byte too large once the
+    // minimum second-page objects are reserved. Its additional bad command
+    // must not mask the document's impossible byte budget.
+    composition.pages[0].vector_authority[0]
+        .commands
+        .push(PdfPathCommand::LineTo(point(-1, 40_000)));
+    assert_eq!(
+        serialize_vector_pdf(
+            &composition,
+            PdfVectorLimits {
+                maximum_pdf_bytes: accepted.len().saturating_sub(1),
+                ..limits()
+            },
+        ),
+        Err(PdfVectorError::ResourceLimit),
+        "a future page's mandatory bytes cannot be used by earlier ink",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "bounded multi-page fixtures exercise exact object sizes"
+)]
+#[test]
+fn future_page_framing_counts_variable_boxes_and_two_digit_object_numbers() {
+    for drawn_index in [0usize, 6usize] {
+        let mut pages = vec![page(Vec::new()); 12];
+        for page in pages.iter_mut().step_by(2) {
+            page.physical_page_box.width_um = 148_000;
+            page.physical_page_box.height_um = 210_000;
+        }
+        pages[drawn_index].vector_authority.push(stroke());
+        let mut composition = PdfCompositionPlan {
+            assets: Vec::new(),
+            pages,
+            render_manifest_identity: "mixed-page-framing.v1",
+        };
+        let high_limits = PdfVectorLimits {
+            maximum_pages: 12,
+            maximum_pdf_bytes: 40_000,
+            ..limits()
+        };
+        let accepted = serialize_vector_pdf(&composition, high_limits)
+            .expect("mixed-size twelve-page PDF must serialize");
+        assert_xref_integrity(&accepted);
+        assert_eq!(
+            serialize_vector_pdf(
+                &composition,
+                PdfVectorLimits {
+                    maximum_pdf_bytes: accepted.len(),
+                    ..high_limits
+                }
+            ),
+            Ok(accepted.clone()),
+            "all twelve pages must fit their exact combined byte budget",
+        );
+        composition.pages[drawn_index].vector_authority[0]
+            .commands
+            .push(PdfPathCommand::LineTo(point(-1, 40_000)));
+        assert_eq!(
+            serialize_vector_pdf(
+                &composition,
+                PdfVectorLimits {
+                    maximum_pdf_bytes: accepted.len().saturating_sub(1),
+                    ..high_limits
+                }
+            ),
+            Err(PdfVectorError::ResourceLimit),
+            "later pages and object numbers reserve their exact framing",
+        );
+    }
+}
+
 #[test]
 fn oversized_page_stream_refuses_before_later_invalid_page() {
     let mut commands = vec![PdfPathCommand::MoveTo(point(20_000, 30_000))];

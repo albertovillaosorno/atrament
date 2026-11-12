@@ -687,6 +687,46 @@ fn append_xref_and_trailer(
     Ok(())
 }
 
+// Keep minimum object framing consistent with the exact generated page header
+// and the page transform. This is required for every page in the PDF, even
+// when there are no authored drawing paths.
+fn page_object_header(dimensions: PdfVectorPageBox, object: usize) -> String {
+    let content_object = object.saturating_add(1);
+    let width = page_points(dimensions.width_um);
+    let height = page_points(dimensions.height_um);
+    format!(
+        "{object} 0 obj\n<< /Type /Page /Parent 2 0 R \
+         /MediaBox [0 0 {width} {height}] /Resources << >> \
+         /Contents {content_object} 0 R >>\nendobj\n",
+    )
+}
+
+fn minimum_page_stream(dimensions: PdfVectorPageBox) -> String {
+    format!(
+        "q\n1 0 0 -1 0 {} cm\nQ\n",
+        page_points(dimensions.height_um)
+    )
+}
+
+fn minimum_page_object_bytes(
+    dimensions: PdfVectorPageBox,
+    object: usize,
+) -> Option<usize> {
+    let content_object = object.checked_add(1)?;
+    let minimum_stream = minimum_page_stream(dimensions);
+    page_object_header(dimensions, object)
+        .len()
+        .checked_add(
+            format!(
+                "{content_object} 0 obj\n<< /Length {} >>\nstream\n",
+                minimum_stream.len()
+            )
+            .len(),
+        )?
+        .checked_add(minimum_stream.len())?
+        .checked_add(b"endstream\nendobj\n".len())
+}
+
 // A page consumes its own PDF object and stream dictionary/terminator in
 // addition to the drawing instructions. Reserve the mandatory empty-page
 // framing before examining potentially malformed geometry.
@@ -696,14 +736,8 @@ fn reserve_page_object_framing(
     remaining_bytes: usize,
 ) -> Result<(String, usize), PdfVectorError> {
     let content_object = object.saturating_add(1);
-    let width = page_points(dimensions.width_um);
-    let height = page_points(dimensions.height_um);
-    let page_header = format!(
-        "{object} 0 obj\n<< /Type /Page /Parent 2 0 R \
-         /MediaBox [0 0 {width} {height}] /Resources << >> \
-         /Contents {content_object} 0 R >>\nendobj\n",
-    );
-    let minimum_stream = format!("q\n1 0 0 -1 0 {height} cm\nQ\n");
+    let page_header = page_object_header(dimensions, object);
+    let minimum_stream = minimum_page_stream(dimensions);
     // The decimal /Length field grows with the rendered stream. Reserving
     // only the empty-stream header would give paths one extra byte at 100,
     // 1_000, etc., allowing invalid geometry to mask a ResourceLimit.
@@ -739,6 +773,76 @@ fn reserve_page_object_framing(
         return Err(PdfVectorError::ResourceLimit);
     }
     Ok((page_header, stream_budget))
+}
+
+// Admit and append each page while retaining the complete framing for later
+// pages; the document Info and xref allowance is already reserved by caller.
+fn append_pages(
+    bytes: &mut Vec<u8>,
+    offsets: &mut Vec<usize>,
+    composition: &PdfVectorComposition<'_>,
+    limits: PdfVectorLimits,
+    page_limit: usize,
+) -> Result<(), PdfVectorError> {
+    // Reserve the *minimum* Page and Contents objects of every later page.
+    // Without this allowance, a malformed command on page 1 could be inspected
+    // before discovering that even an empty page 2 cannot fit in the document.
+    let mut remaining_page_minima = composition
+        .pages
+        .iter()
+        .enumerate()
+        .try_fold(0usize, |total, (index, page)| {
+            let object = 3usize.saturating_add(index.saturating_mul(2));
+            total.checked_add(minimum_page_object_bytes(
+                page.physical_page_box,
+                object,
+            )?)
+        })
+        .ok_or(PdfVectorError::ResourceLimit)?;
+    if remaining_page_minima > page_limit.saturating_sub(bytes.len()) {
+        return Err(PdfVectorError::ResourceLimit);
+    }
+    // Bound each page by the remaining final-output allowance *less* later
+    // pages' mandatory framing. Accepted pages keep their exact original bytes.
+    for (index, page) in composition.pages.iter().enumerate() {
+        let object = 3usize.saturating_add(index.saturating_mul(2));
+        remaining_page_minima = remaining_page_minima
+            .checked_sub(
+                minimum_page_object_bytes(page.physical_page_box, object)
+                    .ok_or(PdfVectorError::ResourceLimit)?,
+            )
+            .ok_or(PdfVectorError::ResourceLimit)?;
+        let remaining_bytes = page_limit
+            .checked_sub(bytes.len())
+            .and_then(|available| available.checked_sub(remaining_page_minima))
+            .filter(|remaining| *remaining > 0)
+            .ok_or(PdfVectorError::ResourceLimit)?;
+        let content_object = object.saturating_add(1);
+        let (page_header, stream_budget) = reserve_page_object_framing(
+            page.physical_page_box,
+            object,
+            remaining_bytes,
+        )?;
+        let page_limits = PdfVectorLimits {
+            maximum_pdf_bytes: stream_budget,
+            ..limits
+        };
+        let stream = render_page(page, page_limits)?;
+        append_object(
+            bytes,
+            offsets,
+            page_header.as_bytes(),
+            page_limit,
+        )?;
+        append_stream_object(
+            bytes,
+            offsets,
+            content_object,
+            &stream,
+            page_limit,
+        )?;
+    }
+    Ok(())
 }
 
 /// Serialize a complete vector-only PDF without touching filesystem paths.
@@ -813,39 +917,7 @@ pub fn serialize_vector_pdf(
         .as_bytes(),
         page_limit,
     )?;
-    // Bound each page by the remaining final-output allowance. A completed
-    // page stream is held only until its own object has been appended.
-    for (index, page) in composition.pages.iter().enumerate() {
-        let remaining_bytes = page_limit
-            .checked_sub(bytes.len())
-            .filter(|remaining| *remaining > 0)
-            .ok_or(PdfVectorError::ResourceLimit)?;
-        let object = 3usize.saturating_add(index.saturating_mul(2));
-        let content_object = object.saturating_add(1);
-        let (page_header, stream_budget) = reserve_page_object_framing(
-            page.physical_page_box,
-            object,
-            remaining_bytes,
-        )?;
-        let page_limits = PdfVectorLimits {
-            maximum_pdf_bytes: stream_budget,
-            ..limits
-        };
-        let stream = render_page(page, page_limits)?;
-        append_object(
-            &mut bytes,
-            &mut offsets,
-            page_header.as_bytes(),
-            page_limit,
-        )?;
-        append_stream_object(
-            &mut bytes,
-            &mut offsets,
-            content_object,
-            &stream,
-            page_limit,
-        )?;
-    }
+    append_pages(&mut bytes, &mut offsets, composition, limits, page_limit)?;
     append_object(&mut bytes, &mut offsets, info.as_bytes(), limit)?;
     append_xref_and_trailer(&mut bytes, &offsets, info_object, limit)?;
     Ok(bytes)

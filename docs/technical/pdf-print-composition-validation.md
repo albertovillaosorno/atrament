@@ -184,10 +184,21 @@ space even after the last content stream. The assembler now reserves their
 exact byte count *before* drawing any page, including decimal digit growth
 in the trailer's `startxref` value. Otherwise a malformed last segment could
 mask an unfinishable one-byte-short document as `InvalidPath` rather than
-`ResourceLimit`. Red/green checks cover a two-page fixture and three-, four-,
-and five-digit cross-reference offsets. An exact full-document byte limit
+`ResourceLimit`.
+
+Red/green checks cover a two-page fixture and three-, four-, and five-digit
+cross-reference offsets. An exact full-document byte limit
 still admits the original byte-identical PDF, with no additional policy or
 asset/text support.
+
+A multi-page document additionally reserves the mandatory page header,
+minimum graphics stream, content-stream dictionary, and stream terminator
+for *every later page* before reading earlier page drawing commands. Without
+this allowance, the first page could spend bytes required for an empty later
+page, allowing a malformed stroke to mask a document-wide `ResourceLimit`.
+Red/green tests pin the one-byte-short two-page case plus twelve pages with
+alternating page sizes and two-digit PDF object numbers. Valid exact-budget
+output remains byte-identical, including cross-reference offsets.
 
 The existing oversized-stream regression, large-content fixture and exact-limit
 boundary regressions still apply. Output bytes and PDF object order are
