@@ -78,6 +78,39 @@ test('literal --help data does not bypass CLI admission', () => {
     }
 });
 
+test('signed RGB pairs refuse before selected source or output effects', () => {
+    const dir = mkdtempSync(join(root, '.temp/signed-color-refusal-'));
+    try {
+        const destination = join(dir, 'approved.pdf');
+        const missingGlyphs = join(dir, 'missing-glyphs.tsv');
+        const missingInk = join(dir, 'missing-ink.tsv');
+        const missingMarkdown = join(dir, 'missing-flow.md');
+        writeFileSync(destination, 'previously approved bytes');
+
+        for (const color of ['#+A1122', '#11+A22', '#1122+A']) {
+            const glyph = ['glyphs', '--profile', missingGlyphs,
+                '--glyph-stroke', 'ñ', '500', '500', '1800',
+                '3000', '250', color];
+            const manual = ['notebook', '--ink-file', missingInk,
+                '--ink-line', '1', '30000', '40000', '32000',
+                '42000', '250', color, '--export-paper', 'pdf'];
+            refused([...glyph, '--output', destination, '--replace'],
+                /glyph color requires #RRGGBB/, destination);
+            refused([...manual, '--output', destination, '--replace'],
+                /ink color must be #RRGGBB/, destination);
+
+            for (const flag of ['--heading-color', '--heading-ink-color']) {
+                const heading = ['notebook', '--flow-markdown-file',
+                    missingMarkdown, flag, color, '--export-paper', 'pdf',
+                    '--output', destination, '--replace'];
+                refused(heading, /requires #RRGGBB/, destination);
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('native CLI reads selected regular files but never traverses input links',
     { skip: process.platform !== 'linux' }, () => {
         const dir = mkdtempSync(join(root, '.temp/source-open-'));
