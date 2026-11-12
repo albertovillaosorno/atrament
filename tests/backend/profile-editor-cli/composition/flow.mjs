@@ -8060,3 +8060,85 @@ test('soft-joined combining ink sets native PDF/PNG page pitch and refusal',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+// Tab expansion creates an authored space-mark grapheme, but a Unicode
+// hard line break must not create that glyph across the physical row.
+// Both paths are compared against explicitly placed native pen strokes.
+test('tab-attached and hard-broken marks render exact native PDF/PNG ink',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-tab-mark-'));
+        try {
+            const profile = join(dir, 'marked-space-profile.json');
+            const marked = ' \u0301';
+            const standalone = '\u0301';
+            const configured = spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--',
+                'handwriting', '--set-glyph', marked, 'height',
+                '25000', '25000', '25000', '25000', '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(profile, configured.stdout);
+            const ink = [
+                '--handwriting-profile', profile,
+                '--glyph-stroke', marked, '200', '500',
+                '1500', '3000', '250', '#D02040',
+                '--glyph-stroke', standalone, '200', '500',
+                '1500', '3000', '250', '#2060D0',
+            ];
+            const region = [
+                '--flow-region', '30000', '40000', '40000', '35000',
+            ];
+            const cases = [
+                {
+                    name: 'tab', source: 'a\t\u0301a',
+                    positions: ['--place-text', '1', '32500', '42500',
+                        'a   \u0301a'],
+                },
+                {
+                    name: 'unicode hard break',
+                    source: 'a\u2028\u0301a',
+                    positions: [
+                        '--place-text', '1', '32500', '42500', 'a',
+                        '--place-text', '1', '32500', '51500', '\u0301a',
+                    ],
+                },
+            ];
+            for (const format of ['pdf', 'png']) {
+                for (const sample of cases) {
+                    const rendered = render(dir, sample.source, format,
+                        [...ink, ...region]);
+                    assert.equal(rendered.result.status, 0,
+                        sample.name + ': ' + rendered.result.stderr);
+                    const expected = readFileSync(rendered.output);
+                    const reference = join(dir,
+                        `direct-${sample.name.replaceAll(' ', '-')}.${format}`);
+                    const manual = spawnSync(cargo, [
+                        'run', '--offline', '--quiet',
+                        '-p', 'atrament_profile_editor_cli', '--',
+                        ...base, ...ink, ...sample.positions,
+                        '--export-paper', format,
+                        ...(format === 'png' ? ['--dpi', '72'] : []),
+                        '--output', reference,
+                    ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                    assert.equal(manual.status, 0,
+                        sample.name + ': ' + manual.stderr);
+                    assert.deepEqual(expected, readFileSync(reference),
+                        `${sample.name} ${format} matches exact authored ink`);
+                    if (sample.name === 'tab') {
+                        const narrow = render(dir, sample.source, format, [
+                            ...ink, '--flow-region', '30000', '40000',
+                            '40000', '27000',
+                        ]);
+                        assert.notEqual(narrow.result.status, 0);
+                        assert.match(narrow.result.stderr,
+                            /flow line cannot fit printable vertical region/);
+                        assert.deepEqual(readFileSync(narrow.output), expected,
+                            `${format} keeps selected ink after refusal`);
+                    }
+                }
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });

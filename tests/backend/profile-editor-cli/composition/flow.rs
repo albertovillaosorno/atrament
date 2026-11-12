@@ -8125,3 +8125,146 @@ fn unicode_soft_join_pitch_matches_emitted_ink_across_mixed_blocks()
         "insufficient successfully laid-out joined sources: {accepted}");
     Ok(())
 }
+
+// Unicode marks can attach to a synthetic Markdown joining space, or remain
+// attached to an authored space when syntax introduces a new block. The
+// preflight pitch must agree with the emitted exact grapheme in both cases.
+#[test]
+fn unicode_adjacency_pitch_matches_emitted_ink() -> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(16);
+    for (glyph, height) in [
+        (" \u{0301}", 26_000),
+        (" \u{0327}", 20_000),
+        (" \u{0301}\u{0327}", 27_000),
+        ("\u{0301}", 17_000),
+        ("\u{0327}", 15_000),
+        ("a\u{0301}", 28_000),
+        ("\u{00a0}\u{0301}", 24_000),
+        ("#", 29_000),
+        (">", 22_000),
+        ("-", 23_000),
+        ("=", 25_000),
+        ("\\", 18_000),
+    ] {
+        stats = stats
+            .with_glyph(
+                glyph,
+                DimensionStatistics {
+                    dimension: Dimension::Height,
+                    statistics: ScalarStatistics {
+                        minimum: height,
+                        maximum: height,
+                        mean: height,
+                        median: height,
+                        standard_deviation: 0,
+                    },
+                },
+                &UnicodeGraphemeSegmentation,
+            )
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    const LINES: &[&str] = &[
+        "a",
+        "a\u{0301}",
+        "a  ",
+        "a\\",
+        "a\n\n",
+        "  a",
+        "\u{0301}a",
+        "\u{0327}a",
+        "\u{0301}\u{0327}a",
+        " \u{0301}a",
+        " \u{0327}a",
+        " \u{0301}\u{0327}a",
+        "\u{00a0}\u{0301}a",
+        "a \u{0301}a",
+        "a \u{0327}a",
+        "  \u{0301}a",
+        "   \u{0327}a",
+        "    \u{0301}a",
+        "> a",
+        "> \u{0301}a",
+        "> \u{0327}a",
+        ">",
+        "> a  ",
+        "- a",
+        "- \u{0301}a",
+        "- [x] a",
+        "- [ ] \u{0327}a",
+        "1. a",
+        "1. \u{0301}a",
+        "12) \u{0327}a",
+        "# a",
+        "## a",
+        "# \u{0301}a",
+        "a\n===",
+        "===",
+        "---",
+        "```",
+        "~~~",
+        "~~~rust",
+        "\\# a",
+        "\\- a",
+        "    # a",
+        "",
+        " ",
+        "a\u{0301}\n\u{0327}a",
+        "a\u{2028}\u{0301}a",
+        "a\u{2029}\u{0327}a",
+        "a\t\u{0301}a",
+        "\t\u{0327}a",
+        "a\r\n\u{0301}a",
+        "  \u{2028}\u{0301}a",
+    ];
+    let paper = NotebookProfile::default();
+    let mut seed = 0xc182_f4a9_1357_0db3u64;
+    let mut admitted = 0usize;
+    let mut tall = 0usize;
+    let mut short = 0usize;
+    for case in 0..24_000 {
+        let mut text = String::new();
+        for line in 0..2 + case % 4 {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let index = usize::try_from(
+                seed % u64::try_from(LINES.len())
+                    .map_err(|_| "line count overflow")?,
+            )
+            .map_err(|_| "line index overflow")?;
+            if line != 0 {
+                text.push('\n');
+            }
+            text.push_str(LINES[index]);
+        }
+        let Ok(source) = FlowSource::new(FlowFormat::Markdown, &text) else {
+            continue;
+        };
+        let Ok((rows, _, _)) = super::layout_flow(
+            &source,
+            &paper,
+            Some(&stats),
+            super::HeadingDecoration::default(),
+        ) else {
+            continue;
+        };
+        let measured = super::measured_pitch(&source, Some(&stats))?;
+        let emitted = emitted_glyph_pitch(&rows, &stats)?;
+        assert_eq!(measured, emitted, "case {case}: {text:?} => {rows:?}");
+        admitted += 1;
+        tall += usize::from(measured > 9_000);
+        short += usize::from(measured == 9_000);
+    }
+    assert!(
+        admitted > 10_000 && tall > 5_000 && short > 100,
+        "insufficient mixed joins: {admitted} {tall} {short}"
+    );
+    Ok(())
+}
