@@ -132,6 +132,16 @@ two-metre page size. Independently formatted and parsed three-decimal PDF
 numbers predict stroke clipping; every admitted case has valid cross-references.
 This is not a claim that every physical printer can reproduce miniature ink.
 
+A separate 48-state matrix independently parses each emitted page content
+stream and confirms that its declared PDF `/Length` ends precisely at
+`endstream`, with balanced page graphics-state operators. It combines twelve
+page counts (including the 9/10, 31/32, and 99/100 object-tree boundaries),
+four repeating sequences of blank pages, fills, strokes and layered paints,
+and A4, US Letter and maximum physical page boxes. Each variant verifies
+all cross-reference offsets and that its exact final byte count succeeds
+unchanged while one byte less refuses as `ResourceLimit`. This validates
+serializer consistency, not rendered output or complete PDF conformance.
+
 The adapter refuses *every* accepted asset and preserved searchable text:
 image/color-profile embedding and font/semantic-text rendering do not exist
 here. It also refuses malformed paths, invalid page boxes, unsafe manifest

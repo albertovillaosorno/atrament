@@ -1835,6 +1835,7 @@ fn large_page_stream_preserves_exact_length_and_xref_without_truncation() {
     let bytes = serialize_vector_pdf(&composition, large_limits)
         .expect("10,001-command stream fits its admitted byte budget");
     assert_xref_integrity(&bytes);
+    assert_stream_length_integrity(&bytes, 2);
     let pdf = pdf_string(&bytes);
     let stream = pdf
         .split_once("stream\n")
@@ -2570,6 +2571,7 @@ fn maximum_supported_page_tree_retains_all_page_streams_and_offsets() {
     let bytes = serialize_vector_pdf(&composition, extended)
         .expect("1024 blank physical PDF pages must serialize");
     assert_xref_integrity(&bytes);
+    assert_stream_length_integrity(&bytes, 1024);
     let text = pdf_string(&bytes);
     assert!(text.contains("/Count 1024"));
     assert_eq!(text.matches("/Type /Page /Parent").count(), 1024);
@@ -2721,4 +2723,140 @@ fn rounded_stroke_clearance_oracle_covers_miniature_and_maximum_page_boxes() {
     assert_eq!(checked, 5_940, "all small and maximum page edges covered");
     assert!(admitted > 0, "the sweep must include drawable ink");
     assert!(admitted < checked, "the sweep must refuse clipped ink");
+}
+
+// Parse the exact /Length of each emitted stream independently of the page
+// writer. A correct xref table alone cannot reveal a truncated stream or a
+// stale dictionary length after cumulative page-budget reservations.
+#[expect(
+    clippy::expect_used,
+    clippy::arithmetic_side_effects,
+    clippy::indexing_slicing,
+    reason = "test-only byte parser requires exact PDF offsets and lengths"
+)]
+fn assert_stream_length_integrity(bytes: &[u8], expected_pages: usize) {
+    const LENGTH: &[u8] = b"/Length ";
+    const STREAM: &[u8] = b" >>\nstream\n";
+    const END: &[u8] = b"endstream\nendobj\n";
+    let mut remaining = bytes;
+    let mut observed = 0usize;
+    while let Some(start) = remaining
+        .windows(LENGTH.len())
+        .position(|window| window == LENGTH)
+    {
+        let digits_start = start + LENGTH.len();
+        let digits_end = remaining[digits_start..]
+            .iter()
+            .position(|byte| *byte == b' ')
+            .expect("a decimal /Length must terminate");
+        let length =
+            from_utf8(&remaining[digits_start..digits_start + digits_end])
+                .expect("stream length must be ASCII")
+                .parse::<usize>()
+                .expect("stream length must be decimal");
+        let marker = digits_start + digits_end;
+        assert!(
+            remaining[marker..].starts_with(STREAM),
+            "stream {observed} dictionary must end before stream data",
+        );
+        let stream_start = marker + STREAM.len();
+        let stream_end = stream_start + length;
+        let contents = remaining
+            .get(stream_start..stream_end)
+            .expect("declared stream length fits PDF bytes");
+        assert!(contents.starts_with(b"q\n"), "page graphics state opens");
+        assert!(contents.ends_with(b"Q\n"), "page graphics state closes");
+        assert_eq!(
+            remaining.get(stream_end..stream_end + END.len()),
+            Some(END),
+            "declared length exactly precedes the endstream operator",
+        );
+        remaining = &remaining[stream_end + END.len()..];
+        observed += 1;
+    }
+    assert_eq!(observed, expected_pages, "one stream per ordered page");
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::integer_division_remainder_used,
+    reason = "bounded deterministic PDF matrix checks independent byte framing"
+)]
+#[test]
+fn mixed_page_stream_lengths_and_exact_document_budgets_remain_consistent() {
+    // Vary the page tree across object-ID digit boundaries, stream-length
+    // digit boundaries, blank/ink pages, both paint rules, and maximum boxes.
+    // The parser independently checks that every /Length ends at endstream;
+    // the existing xref oracle checks all object offsets and trailer size.
+    let counts = [1usize, 2, 3, 4, 9, 10, 15, 31, 32, 99, 100, 129];
+    for count in counts {
+        for variant in 0usize..4 {
+            let pages = (0..count)
+                .map(|index| {
+                    let mut sheet = match (index + variant) % 5 {
+                        0 => page(Vec::new()),
+                        1 => page(vec![stroke()]),
+                        2 => page(vec![fill()]),
+                        3 => {
+                            let mut path = fill();
+                            path.paint = PdfPathPaint::Fill {
+                                color: PdfRgb {
+                                    red: 255,
+                                    green: 0,
+                                    blue: 128,
+                                },
+                                rule: PdfFillRule::EvenOdd,
+                            };
+                            page(vec![stroke(), path])
+                        },
+                        _ => page(vec![stroke(), fill(), stroke()]),
+                    };
+                    if index % 3 == 1 {
+                        sheet.physical_page_box = PdfVectorPageBox {
+                            width_um: 215_900,
+                            height_um: 279_400,
+                        };
+                    } else if index % 3 == 2 {
+                        sheet.physical_page_box = PdfVectorPageBox {
+                            width_um: 2_000_000,
+                            height_um: 2_000_000,
+                        };
+                    }
+                    sheet
+                })
+                .collect();
+            let identity = format!("page-stream-length.{count}.{variant}");
+            let composition = PdfCompositionPlan {
+                assets: Vec::new(),
+                pages,
+                render_manifest_identity: identity.as_str(),
+            };
+            let generous = PdfVectorLimits {
+                maximum_pages: count,
+                maximum_paths_per_page: 4,
+                maximum_commands_per_page: 40,
+                maximum_pdf_bytes: 500_000,
+            };
+            let actual = serialize_vector_pdf(&composition, generous)
+                .expect("mixed physical pages serialize within high limits");
+            assert_xref_integrity(&actual);
+            assert_stream_length_integrity(&actual, count);
+            assert_eq!(
+                serialize_vector_pdf(&composition, PdfVectorLimits {
+                    maximum_pdf_bytes: actual.len(),
+                    ..generous
+                },),
+                Ok(actual.clone()),
+                "exact document budget: {count}/{variant}",
+            );
+            assert_eq!(
+                serialize_vector_pdf(&composition, PdfVectorLimits {
+                    maximum_pdf_bytes: actual.len() - 1,
+                    ..generous
+                },),
+                Err(PdfVectorError::ResourceLimit),
+                "one-byte shortage: {count}/{variant}",
+            );
+        }
+    }
 }
