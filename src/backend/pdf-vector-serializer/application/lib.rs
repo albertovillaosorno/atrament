@@ -355,6 +355,19 @@ fn apply_path_paint(
             (operator, 0)
         },
         PdfPathPaint::Stroke { color, width_um } => {
+            // Reserve a minimal color, positive width, cap/join setup and
+            // paint operator before checking malformed width authority.
+            // Otherwise an unpaintable output could report InvalidStrokeWidth
+            // even though no possible valid stroke would fit its byte budget.
+            let minimum_paint_bytes =
+                b"0.000 0.000 0.000 RG\n0.003 w\n1 J\n1 j\nS\n".len();
+            if stream
+                .len()
+                .checked_add(minimum_paint_bytes)
+                .is_none_or(|size| size > maximum_stream_bytes)
+            {
+                return Err(PdfVectorError::ResourceLimit);
+            }
             if width_um == 0 || width_um > MAX_PAGE_SIZE_UM {
                 return Err(PdfVectorError::InvalidStrokeWidth);
             }

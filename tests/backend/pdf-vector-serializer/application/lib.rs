@@ -1423,6 +1423,50 @@ fn serialized_stroke_edges_must_not_escape_rounded_pdf_page() {
 }
 
 #[expect(
+    clippy::expect_used,
+    reason = "blank PDF establishes a budget with no room for stroke paint"
+)]
+#[test]
+fn impossible_stroke_paint_framing_refuses_before_invalid_width() {
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(Vec::new())],
+        render_manifest_identity: "stroke-width-paint-budget.v1",
+    };
+    let blank = serialize_vector_pdf(&composition, limits())
+        .expect("a blank page fits and establishes its exact byte length");
+    for width_um in [0, 2_000_001] {
+        composition.pages = vec![page(vec![PdfVectorPath {
+            commands: stroke().commands,
+            paint: PdfPathPaint::Stroke {
+                color: PdfRgb {
+                    red: 5,
+                    green: 22,
+                    blue: 240,
+                },
+                width_um,
+            },
+        }])];
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidStrokeWidth),
+            "an out-of-range stroke width is invalid with adequate room",
+        );
+        assert_eq!(
+            serialize_vector_pdf(
+                &composition,
+                PdfVectorLimits {
+                    maximum_pdf_bytes: blank.len(),
+                    ..limits()
+                },
+            ),
+            Err(PdfVectorError::ResourceLimit),
+            "no paint can fit, regardless of the invalid stroke width",
+        );
+    }
+}
+
+#[expect(
     clippy::indexing_slicing,
     reason = "fixture has one known page and two paths"
 )]

@@ -166,6 +166,14 @@ Likewise each mandatory path paint operator (`S`, `f`, `f*`) is reserved
 before processing its geometry. A path that cannot finish painting now refuses
 before a later malformed command can mask the exhausted byte allowance.
 
+For a stroked path, the minimum color, positive width, round cap/join setup
+and final `S` operator are reserved before validating the stroke-width value.
+A zero or oversized width therefore reports `ResourceLimit` when even the
+shortest valid stroke paint would not fit, rather than masking the shortage
+as `InvalidStrokeWidth`. With adequate bytes, both widths remain invalid.
+A blank-page byte ceiling establishes the no-room boundary independently of
+paint geometry, and the change leaves accepted PDF bytes unchanged.
+
 Each path command additionally reserves its smallest possible PDF syntax
 before inspecting its coordinates. `MoveTo`, `LineTo`, `CubicTo` and `Close`
 therefore report `ResourceLimit` rather than a malformed trailing command when
