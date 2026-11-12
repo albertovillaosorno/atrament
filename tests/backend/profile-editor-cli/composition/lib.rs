@@ -241,6 +241,54 @@ fn glyph_library_preflights_typed_stroke_geometry_before_source_io() {
 }
 
 #[test]
+fn native_ink_and_heading_colors_require_exact_ascii_hex_pairs() {
+    for color in ["#+A1122", "#11+A22", "#1122+A", "#11G222"] {
+        let mut glyph = args(&[
+            "--profile", "-", "--glyph-stroke", "ñ", "500", "500",
+            "1800", "3000", "250",
+        ]);
+        glyph.push(color.into());
+        let error = preflight_glyph_profile_sources(&glyph)
+            .expect_err("signed glyph channel refuses before source read");
+        assert!(error.contains("glyph color requires #RRGGBB"), "{error}");
+
+        let mut manual = args(&[
+            "--ink-file", "-", "--ink-line", "1", "30000", "40000",
+            "32000", "42000", "250",
+        ]);
+        manual.push(color.into());
+        manual.extend(args(&["--export-paper", "pdf"]));
+        let error = preflight_notebook_sources(&manual)
+            .expect_err("signed manual ink channel refuses before source read");
+        assert!(error.contains("ink color must be #RRGGBB"), "{error}");
+
+        for option in ["--heading-color", "--heading-ink-color"] {
+            let flags = args(&[
+                "--flow-markdown-file", "-", option, color,
+                "--export-paper", "pdf",
+            ]);
+            let error = preflight_notebook_sources(&flags)
+                .expect_err(
+                "signed heading channel refuses before source read"
+            );
+            assert!(
+                error.contains(&format!("{option} requires #RRGGBB")),
+                "{option}: {error}"
+            );
+        }
+    }
+    let valid = ["#012345", "#AabbCC"];
+    for color in valid {
+        let glyph = args(&[
+            "--profile", "-", "--glyph-stroke", "ñ", "500", "500",
+            "1800", "3000", "250", color,
+        ]);
+        preflight_glyph_profile_sources(&glyph)
+            .expect("exact six-digit hex is valid");
+    }
+}
+
+#[test]
 fn glyph_library_preflights_typed_stroke_and_path_edits() {
     for (tail, diagnostic) in [
         (["--reverse-stroke", "a", "0"].as_slice(),

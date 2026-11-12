@@ -1088,7 +1088,8 @@ impl GlyphOverlay {
             iter, "glyph ink width", 80, 1_500,
         )?;
         let color = iter.next().ok_or("glyph color requires #RRGGBB")?;
-        if color.len() != 7 || !color.starts_with('#') {
+        if color.len() != 7 || !color.starts_with('#')
+            || !color.bytes().skip(1).all(|byte| byte.is_ascii_hexdigit()) {
             return Err("glyph color requires #RRGGBB".into());
         }
         let channel = |index: usize| -> Result<u8, String> {

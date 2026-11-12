@@ -1564,7 +1564,8 @@ fn parse_ink_line(
         iter.next().map(String::as_str), "ink width", 80, 1_500,
     )?;
     let color = iter.next().ok_or("ink line needs #RRGGBB")?;
-    if color.len() != 7 || !color.is_ascii() || !color.starts_with('#') {
+    if color.len() != 7 || !color.starts_with('#')
+        || !color.bytes().skip(1).all(|byte| byte.is_ascii_hexdigit()) {
         return Err("ink color must be #RRGGBB".into());
     }
     let byte = |start: usize| -> Result<u8, String> {

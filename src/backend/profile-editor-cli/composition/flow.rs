@@ -350,8 +350,9 @@ impl HeadingDecoration {
                 if destination.is_some() {
                     return Err(format!("{flag} may appear only once"));
                 }
-                if selected.len() != 7 || !selected.is_ascii()
-                    || !selected.starts_with('#') {
+                if selected.len() != 7 || !selected.starts_with('#')
+                    || !selected.bytes().skip(1)
+                        .all(|byte| byte.is_ascii_hexdigit()) {
                     return Err(format!("{flag} requires #RRGGBB"));
                 }
                 let byte = |start: usize| -> Result<u8, String> {
