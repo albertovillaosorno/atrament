@@ -252,6 +252,30 @@ impl GlyphVariation {
         Self::round_js(random.unit() * f64::from(maximum_um))
     }
 
+    // A word shares one height multiplier, anchored at its lower baseline.
+    // Keep it independent of glyph-level jitter and all other word rhythms.
+    fn word_height(
+        self, run_index: usize, word_index: u32, maximum_percent: u32,
+    ) -> Result<u32, String> {
+        let run = u32::try_from(run_index)
+            .map_err(|_error| "word height run index overflow")?;
+        let mut identity = self.seed
+            ^ run.wrapping_add(1).wrapping_mul(0x94D0_49BB)
+            ^ word_index.wrapping_add(1).wrapping_mul(0x369D_EA0F);
+        identity ^= identity >> 16i32;
+        identity = identity.wrapping_mul(0x7FEB_352D);
+        identity ^= identity >> 15i32;
+        identity = identity.wrapping_mul(0x846C_A68B);
+        identity ^= identity >> 16i32;
+        let mut random = XorShift32::new(identity);
+        let delta = Self::round_js(
+            random.unit() * f64::from(maximum_percent),
+        )?;
+        u32::try_from(100i32.checked_add(delta)
+            .ok_or("word height overflow")?)
+            .map_err(|_error| "word height must be positive".into())
+    }
+
     // One independent width multiplier per word. All segments with equal
     // authored pen widths retain equal widths, so optional joins can use
     // the same physical pen throughout an ASCII-space-delimited word.
@@ -337,7 +361,14 @@ impl GlyphVariation {
             .ok_or("word width overflow")?)
             .map_err(|_error| "word width must be positive".into())
     }
+}
 
+#[derive(Clone, Copy)]
+struct WordInkStyle {
+    height_percent: u32,
+    pressure_percent: u32,
+    slant_mdeg: i32,
+    width_percent: u32,
 }
 
 impl XorShift32 {
@@ -806,11 +837,9 @@ impl GlyphOverlay {
                 let glyph_y = self.glyph_origin_y(
                     run, run_index, word_index, column, metrics,
                 )?;
-                let press = self.glyph_pressure(run_index, word_index)?;
-                let slant = self.glyph_slant(run_index, word_index)?;
-                let pct = self.glyph_width(run_index, word_index)?;
+                let style = self.glyph_style(run_index, word_index)?;
                 let rendered = selected.iter().map(|shape| placed_ink(
-                    shape, run, (glyph_x, glyph_y), metrics, press, slant, pct,
+                    shape, run, (glyph_x, glyph_y), metrics, style,
                 )).collect::<Result<Vec<_>, _>>()?;
                 append_text_ink(
                     &mut expanded, &rendered,
@@ -877,6 +906,16 @@ impl GlyphOverlay {
             metrics.width))
     }
 
+    fn glyph_height(
+        &self, run_index: usize, word_index: u32,
+    ) -> Result<u32, String> {
+        match (self.variation, self.word_height_percent) {
+            (Some(variation), Some(maximum)) =>
+                variation.word_height(run_index, word_index, maximum),
+            _ => Ok(100),
+        }
+    }
+
     fn glyph_origin_x(
         &self, run: &TextRun, run_index: usize, word_index: u32,
         offset_um: i64, tracking: i32,
@@ -935,6 +974,17 @@ impl GlyphOverlay {
         }
     }
 
+    fn glyph_style(
+        &self, run_index: usize, word_index: u32,
+    ) -> Result<WordInkStyle, String> {
+        Ok(WordInkStyle {
+            height_percent: self.glyph_height(run_index, word_index)?,
+            pressure_percent: self.glyph_pressure(run_index, word_index)?,
+            slant_mdeg: self.glyph_slant(run_index, word_index)?,
+            width_percent: self.glyph_width(run_index, word_index)?,
+        })
+    }
+
     fn glyph_width(
         &self, run_index: usize, word_index: u32,
     ) -> Result<u32, String> {
@@ -954,6 +1004,7 @@ impl GlyphOverlay {
             || self.word_pressure_percent.is_some()
             || self.word_slant_millidegrees.is_some()
             || self.word_width_percent.is_some()
+            || self.word_height_percent.is_some()
     }
 
     // Index once per expansion, retaining authored order for each exact key.
@@ -1315,6 +1366,7 @@ impl GlyphOverlay {
                     iter, "glyph word width", 0, 15,
                 )?);
             }
+            "--glyph-word-height" => self.parse_height_rhythm(iter)?,
             "--glyph-word-pressure" => {
                 if self.word_pressure_percent.is_some() {
                     return Err("duplicate --glyph-word-pressure".into());
@@ -1364,6 +1416,18 @@ impl GlyphOverlay {
         self.fallbacks.push(GlyphFallback {
             authored: authored.clone(), missing: missing.clone(),
         });
+        Ok(())
+    }
+
+    fn parse_height_rhythm(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        if self.word_height_percent.is_some() {
+            return Err("duplicate --glyph-word-height".into());
+        }
+        self.word_height_percent = Some(next_integer(
+            iter, "glyph word height", 0, 15,
+        )?);
         Ok(())
     }
 
@@ -2137,6 +2201,14 @@ impl GlyphOverlay {
                 return Err("word width requires --glyph-variation".into());
             }
         }
+        if let Some(maximum) = self.word_height_percent {
+            if maximum > 15 {
+                return Err("glyph word height must be within 0..15%".into());
+            }
+            if self.variation.is_none() {
+                return Err("word height requires --glyph-variation".into());
+            }
+        }
         if let Some(maximum) = self.word_pressure_percent {
             if maximum > 20 {
                 return Err("glyph word pressure must be within 0..20%".into());
@@ -2517,23 +2589,25 @@ pub(super) fn validate_removal_glyph_key(
 // transform; this CLI adapter maps admitted profile and output fields.
 fn placed_ink(
     shape: &GlyphStroke, run: &TextRun, origin: (i64, i64),
-    metrics: Option<GlyphMetrics>, pressure_percent: u32,
-    word_slant_mdeg: i32, word_width_percent: u32,
+    metrics: Option<GlyphMetrics>, word_style: WordInkStyle,
 ) -> Result<NotebookInkLine, String> {
     // Compose word pressure and heading treatment before delegating final
     // width admission to the renderer-independent physical pen engine.
     let ink_scale_percent = run.heading_ink.map_or(100, |style| {
         style.scale_percent
-    }).checked_mul(pressure_percent)
+    }).checked_mul(word_style.pressure_percent)
         .and_then(|value| value.checked_add(50))
         .and_then(|value| value.checked_div(100))
         .ok_or("combined ink scale exceeds numeric bounds")?;
     // When uncalibrated, use the projection engine's exact reference cell
     // only if an actual word shear was selected. Zero stays on the legacy
     // no-dimensions path, preserving byte identity and authored geometry.
-    let dimensions = match (metrics, word_slant_mdeg, word_width_percent) {
-        (None, 0i32, 100) => None,
-        (maybe_metrics, slant, width_percent) => {
+    let dimensions = match (
+        metrics, word_style.slant_mdeg, word_style.width_percent,
+        word_style.height_percent,
+    ) {
+        (None, 0i32, 100, 100) => None,
+        (maybe_metrics, slant, width_percent, height_percent) => {
             let values = maybe_metrics.unwrap_or(GlyphMetrics {
                 baseline_offset: 0, height: 4_500, ink_thickness: 300,
                 letter_spacing: 0, slant: 0, width: 3_500,
@@ -2546,18 +2620,35 @@ fn placed_ink(
                         .and_then(|value| value.checked_div(100))
                         .ok_or("combined glyph word width overflow")?,
                 ).map_err(|_error| "combined glyph word width overflow")?,
-                height_um: values.height,
+                height_um: u32::try_from(
+                    u64::from(values.height)
+                        .checked_mul(u64::from(height_percent))
+                        .and_then(|value| value.checked_add(50))
+                        .and_then(|value| value.checked_div(100))
+                        .ok_or("combined glyph word height overflow")?,
+                ).map_err(|_error| "combined glyph word height overflow")?,
                 ink_thickness_um: values.ink_thickness,
                 slant_millidegrees: values.slant.checked_add(slant)
                     .ok_or("combined glyph word slant exceeds numeric bounds")?,
             })
         }
     };
+    // Retain the original lower baseline when letters become taller or
+    // shorter; a word's chosen height is not an additional row offset.
+    let projected_y = if let Some(values) = dimensions {
+        origin.1.checked_add(i64::from(metrics.map_or(
+            4_500, |mean| mean.height,
+        )))
+            .and_then(|value| value.checked_sub(i64::from(values.height_um)))
+            .ok_or("word height baseline origin overflow")?
+    } else {
+        origin.1
+    };
     let projected = project_ink_segment(AuthoredInkSegment {
         start_um: shape.start_um, end_um: shape.end_um,
         width_um: shape.width_um, rgb: shape.rgb,
     }, InkPlacement {
-        page: run.page, origin_um: origin,
+        page: run.page, origin_um: (origin.0, projected_y),
         dimensions,
         ink_scale_percent,
         color_override: run.heading_ink.and_then(|style| style.color),

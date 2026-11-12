@@ -2094,11 +2094,26 @@ pen joins are recomputed from their actual final endpoints; an overlong
 bridge or a stroke crossing printable margins refuses before export. The
 source glyph library is never rewritten; zero is byte-identical to omission.
 
+For shared letter-height rhythm, add `--glyph-word-height MAX_PERCENT`
+(0–15) with `--glyph-variation`. Each ASCII-space-delimited word receives a
+separate seeded height percentage, applied to all its authored contours through
+the same Rust physical-stroke projection. The lower writing baseline stays
+fixed: taller glyphs grow upward and shorter glyphs retreat toward it. This
+composes with saved mean glyph height and the other selected word variations,
+without changing nominal text advances, row pitch, or the original TSV.
+
+The zero spread leaves PDF/PNG and emitted page-ink TSV bytes identical to
+omission. Longer ascenders can cross the page's printable top margin; the
+export refuses instead of clipping or replacing the previous output. Shared
+height preserves same-pen intra-word joins and directed stroke order. It is
+an opt-in, CLI-only creative variation, not learned writer calibration.
+
 For example, extend the preceding command with
 `--glyph-line-drift 120 --glyph-word-drift 90 --glyph-word-rise 90`
 and `--glyph-word-pressure 12 --glyph-word-slant 3000`
-with `--glyph-word-width 10` to produce reproducible line, word,
-ink, width and italic rhythms. At `0`, each extra option is
+with `--glyph-word-width 10 --glyph-word-height 10` to produce
+reproducible line, word, ink, width, height and italic rhythms. At `0`,
+each extra option is
 byte-identical to omission for PDF/PNG and emitted ink TSV. Widths outside
 80–1500 µm and unprintable
 pen clearance refuse before output commit; there is no silent clipping.

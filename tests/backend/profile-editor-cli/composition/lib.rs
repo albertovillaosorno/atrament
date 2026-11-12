@@ -11435,3 +11435,306 @@ fn word_width_refuses_off_printable_region_without_replacing_pdf_or_png()
     fs::remove_file(&target).map_err(|error| error.to_string())?;
     Ok(())
 }
+
+#[test]
+fn seeded_word_height_scales_unicode_words_around_the_lower_baseline()
+-> Result<(), String> {
+    let glyph = "n\u{303}";
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        glyph, "600", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    let line = format!("{glyph}{glyph}  {glyph} {glyph}{glyph}");
+    for y in [30_000u32, 40_000u32] {
+        overlay.parse("--place-text", &mut args(&[
+            "1", "25000", &y.to_string(), &line,
+        ]).iter())?;
+    }
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    let original = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-height", &mut args(&["15"]).iter())?;
+    let varied = overlay.expand(&[], None)?;
+    // Independently fixed xorshift percentages for exact UTF-8 NFD words.
+    // Spaces reset the word; two repeated spaces do not create a new word.
+    let percent = [89i64, 101, 102, 93, 93, 99];
+    let offsets = [0u32, 4_000, 16_000, 24_000, 28_000];
+    if varied.len() != 10 || varied == original
+        || varied != overlay.expand(&[], None)? {
+        return Err("word height must replay ten distinct strokes".into());
+    }
+    for (run, row) in varied.chunks_exact(5).enumerate() {
+        let origin_y = if run == 0 { 30_000i64 } else { 40_000i64 };
+        for (index, stroke) in row.iter().enumerate() {
+            let word = match index { 0 | 1 => 0, 2 => 1, _ => 2 };
+            let chosen = percent[run * 3 + word];
+            let height = (4_500 * chosen + 50) / 100;
+            let place = |local_y: i64| -> Result<u32, String> {
+                u32::try_from(origin_y + 4_500 - height
+                    + (local_y * height + 2_250) / 4_500)
+                    .map_err(|error| error.to_string())
+            };
+            let x = 25_000 + offsets[index];
+            if stroke.start_um != (x + 600, place(1_000)?)
+                || stroke.end_um != (x + 1600, place(2_800)?)
+                || stroke.width_um != 250 || stroke.rgb != [0x12, 0x34, 0x56] {
+                return Err(format!(
+                    "wrong seeded height in run {run}, glyph {index}: \
+                     {stroke:?}"
+                ));
+            }
+        }
+    }
+    overlay.word_height_percent = Some(0);
+    if overlay.expand(&[], None)? != original {
+        return Err("zero word height changed legacy ink".into());
+    }
+    overlay.word_height_percent = Some(15);
+    overlay.word_drift_um = Some(90);
+    overlay.word_rise_um = Some(90);
+    overlay.line_drift_um = Some(120);
+    overlay.word_width_percent = Some(12);
+    overlay.word_pressure_percent = Some(15);
+    let combined = overlay.expand(&[], None)?;
+    overlay.word_height_percent = Some(0);
+    let without_height = overlay.expand(&[], None)?;
+    for (index, (before, after)) in without_height.iter().zip(&combined)
+        .enumerate() {
+        let word = match index % 5 { 0 | 1 => 0, 2 => 1, _ => 2 };
+        let height = (4_500 * percent[index / 5 * 3 + word] + 50) / 100;
+        let delta = |local_y: i64| (4_500 - height)
+            + (local_y * height + 2_250) / 4_500 - local_y;
+        if i64::from(after.start_um.1) - i64::from(before.start_um.1)
+            != delta(1_000)
+            || i64::from(after.end_um.1) - i64::from(before.end_um.1)
+                != delta(2_800)
+            || after.start_um.0 != before.start_um.0
+            || after.end_um.0 != before.end_um.0
+            || after.width_um != before.width_um || after.rgb != before.rgb {
+            return Err("word height modified independent word rhythms".into());
+        }
+    }
+    overlay.word_height_percent = Some(16);
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed out-of-range word height accepted".into());
+    }
+    overlay.word_height_percent = Some(15);
+    overlay.variation = None;
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed unpaired word height accepted".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn seeded_word_height_preserves_joins_and_statistical_mean_baselines()
+-> Result<(), String> {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "á", "150", "1200", "3370", "1200", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "áá áá",
+    ]).iter())?;
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    overlay.add_text_join_pair(&mut args(&["á", "á"]).iter())?;
+    overlay.parse("--glyph-word-height", &mut args(&["15"]).iter())?;
+    let joined = overlay.expand(&[], None)?;
+    if joined.len() != 6 {
+        return Err(format!("word height lost directed joins: {joined:?}"));
+    }
+    for start in [0usize, 3] {
+        let [first, bridge, second] = joined.get(start..start + 3)
+            .ok_or("missing joined word")? else {
+            return Err("joined word must have three segments".into());
+        };
+        if first.end_um != bridge.start_um
+            || bridge.end_um != second.start_um
+            || first.width_um != bridge.width_um
+            || bridge.width_um != second.width_um
+            || bridge.start_um.1 != bridge.end_um.1
+            || bridge.end_um.0 <= bridge.start_um.0
+            || bridge.end_um.0 - bridge.start_um.0 > 1_200 {
+            return Err(format!("word height changed joins: {joined:?}"));
+        }
+    }
+    let profile = execute_handwriting(&args(&[
+        "--set-glyph", "á", "height", "5000", "5000", "5000",
+        "5000", "0", "--set-glyph", "á", "width", "3500",
+        "3500", "3500", "3500", "0",
+    ]))?.ok_or("missing statistical profile")?;
+    let statistics = decode_statistics_json(
+        &profile, &UnicodeGraphemeSegmentation,
+    ).map_err(|error| format!("statistics: {error:?}"))?;
+    overlay.runs.clear();
+    overlay.text_joins.clear();
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "á",
+    ]).iter())?;
+    let mean = overlay.expand(&[], Some(&statistics))?;
+    if mean.len() != 1
+        || mean[0].start_um != (25_150, 31_737)
+        || mean[0].end_um != (28_370, 31_737) {
+        return Err(format!("word height and mean disagreed: {mean:?}"));
+    }
+    overlay.word_height_percent = Some(0);
+    let baseline = overlay.expand(&[], Some(&statistics))?;
+    if baseline.len() != 1
+        || baseline[0].start_um != (25_150, 31_333)
+        || baseline[0].end_um != (28_370, 31_333) {
+        return Err(format!("zero word height changed mean: {baseline:?}"));
+    }
+    Ok(())
+}
+
+#[test]
+fn word_height_pdf_png_and_page_ink_replay_with_atomic_option_refusals()
+-> Result<(), String> {
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "á", "600", "1000", "1600", "2800",
+        "250", "#123456",
+        "--flow-markdown", "áá á áá\n\náá áá",
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    let render = |format: &str, seed: &str, extras: &[&str]|
+        -> Result<Vec<u8>, String> {
+        let mut command = prefix.clone();
+        let position = command.iter().position(|v| v == "--glyph-variation")
+            .ok_or("missing variation seed")? + 1;
+        *command.get_mut(position).ok_or("seed missing")? = seed.into();
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        command.extend(args(extras));
+        execute_notebook(&command)?.ok_or("native export missing".into())
+    };
+    for format in ["pdf", "png", "ink"] {
+        let base = render(format, "42", &[])?;
+        if base != render(format, "42", &["--glyph-word-height", "0"])? {
+            return Err(format!("zero height changed {format} bytes"));
+        }
+        let altered = render(format, "42", &["--glyph-word-height", "15"])?;
+        if altered == base
+            || altered != render(format, "42", &["--glyph-word-height", "15"])?
+            || altered == render(
+                format, "43", &["--glyph-word-height", "15"],
+            )? {
+            return Err(format!("word height {format} replay failed"));
+        }
+        let signature = match format {
+            "pdf" => b"%PDF-1.4".as_slice(),
+            "png" => b"\x89PNG\r\n\x1a\n".as_slice(),
+            _ => b"atrament.page-ink.v1\n".as_slice(),
+        };
+        if !altered.starts_with(signature) {
+            return Err(format!("word height {format} signature missing"));
+        }
+    }
+    let source = test_path().with_extension("tsv");
+    let ink = render("ink", "42", &["--glyph-word-height", "15"])?;
+    fs::write(&source, &ink).map_err(|error| error.to_string())?;
+    let source_name = source.to_str().ok_or("non-UTF8 ink path")?;
+    for format in ["pdf", "png"] {
+        let mut replay = args(&[
+            "--printed-sheet", "true", "--ink-file", source_name,
+            "--export-paper", format,
+        ]);
+        if format == "png" {
+            replay.extend(args(&["--dpi", "72"]));
+        }
+        if execute_notebook(&replay)?
+            != Some(render(format, "42", &["--glyph-word-height", "15"])?) {
+            return Err(format!("word height {format} differs from TSV replay"));
+        }
+    }
+    fs::remove_file(source).map_err(|error| error.to_string())?;
+
+    let target = test_path();
+    fs::write(&target, b"preserved PDF").map_err(|error| error.to_string())?;
+    let name = target.to_str().ok_or("non-UTF8 output path")?;
+    for invalid in [
+        args(&["--glyph-word-height", "-1"]),
+        args(&["--glyph-word-height", "16"]),
+        args(&["--glyph-word-height", "4294967296"]),
+        args(&["--glyph-word-height", "15",
+            "--glyph-word-height", "1"]),
+    ] {
+        let mut command = prefix.clone();
+        command.extend(args(&[
+            "--export-paper", "pdf", "--output", name, "--replace",
+        ]));
+        command.extend(invalid);
+        if execute_notebook(&command).is_ok()
+            || fs::read(&target).map_err(|error| error.to_string())?
+                != b"preserved PDF" {
+            return Err("invalid height options overwrote PDF".into());
+        }
+    }
+    let mut unpaired = prefix;
+    let index = unpaired.iter().position(|v| v == "--glyph-variation")
+        .ok_or("missing variation")?;
+    unpaired.drain(index..index + 8).for_each(drop);
+    unpaired.extend(args(&[
+        "--glyph-word-height", "15", "--export-paper", "pdf",
+        "--output", name, "--replace",
+    ]));
+    if execute_notebook(&unpaired).is_ok()
+        || fs::read(&target).map_err(|error| error.to_string())?
+            != b"preserved PDF" {
+        return Err("unpaired word height overwrote PDF".into());
+    }
+    fs::remove_file(target).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[test]
+fn word_height_refuses_top_margin_clipping_without_changing_exports()
+-> Result<(), String> {
+    // A4 top margin is 22 mm. The 125-um half-pen clears it at 22150 um;
+    // seed 48 chooses 115% height, moving this upper vertex 525 um up.
+    let prefix = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "á", "600", "1000", "1600", "2800",
+        "250", "#123456",
+        "--place-text", "1", "25000", "21150", "á",
+        "--glyph-variation", "48", "0", "0", "0", "0", "0", "0",
+    ]);
+    let destination = test_path();
+    let name = destination.to_str().ok_or("non-UTF8 output path")?;
+    for format in ["pdf", "png"] {
+        let mut original = prefix.clone();
+        original.extend(args(&["--export-paper", format]));
+        if format == "png" {
+            original.extend(args(&["--dpi", "72"]));
+        }
+        if execute_notebook(&original)?.is_none() {
+            return Err("valid near-top baseline has no ink export".into());
+        }
+        fs::write(&destination, b"accepted export")
+            .map_err(|error| error.to_string())?;
+        let mut invalid = original;
+        invalid.extend(args(&[
+            "--glyph-word-height", "15", "--output", name, "--replace",
+        ]));
+        let refused = execute_notebook(&invalid)
+            .expect_err("higher word must leave printable region");
+        if !refused.contains("page 1 ink needs printable endpoints")
+            || fs::read(&destination).map_err(|error| error.to_string())?
+                != b"accepted export" {
+            return Err(format!(
+                "clipped word height overwrote {format}: {refused}"
+            ));
+        }
+    }
+    fs::remove_file(destination).map_err(|error| error.to_string())?;
+    Ok(())
+}

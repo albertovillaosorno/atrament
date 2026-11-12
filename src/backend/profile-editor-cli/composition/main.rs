@@ -168,6 +168,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--glyph-word-pressure MAX_PERCENT (requires --glyph-variation)] \
     [--glyph-word-slant MAX_MDEG (requires --glyph-variation)] \
     [--glyph-word-width MAX_PERCENT (requires --glyph-variation)] \
+    [--glyph-word-height MAX_PERCENT (requires --glyph-variation)] \
     [--heading-style underline|double-underline|marker|none] \
     [--heading-color '#RRGGBB'] [--heading-marker-scale 50..105] \
     [--heading-ink-color '#RRGGBB'] [--heading-ink-scale 100..250] \
@@ -236,7 +237,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --glyph-word-slant adds a shared baseline shear per word (0..5000 \
     millidegrees), with invalid physical pen geometry refused. \
     --glyph-word-width scales authored letter contours together per word \
-    (0..15 percent) without changing measured text advances. Unprintable \
+    (0..15 percent) without changing measured text advances. \
+    --glyph-word-height scales each word's letters about their lower \
+    baseline (0..15 percent), preserving nominal row layout. Unprintable \
     physical ink refuses instead of clipping. \
     No synthesized glyphs, inline Markdown styles or images are rendered.";
 
@@ -288,6 +291,7 @@ struct GlyphOverlay {
     text_joins: Vec<TextJoin>,
     variation: Option<GlyphVariation>,
     word_drift_um: Option<u32>,
+    word_height_percent: Option<u32>,
     word_pressure_percent: Option<u32>,
     word_rise_um: Option<u32>,
     word_slant_millidegrees: Option<u32>,
@@ -1820,7 +1824,7 @@ fn parse_notebook_export_option(
         | "--glyph-variation" | "--glyph-line-drift"
         | "--glyph-word-drift" | "--glyph-word-rise"
         | "--glyph-word-pressure" | "--glyph-word-slant"
-        | "--glyph-word-width" => {
+        | "--glyph-word-width" | "--glyph-word-height" => {
             glyphs.parse(option, iter)?;
         }
         "--join-text-pair" => glyphs.add_text_join_pair(iter)?,
@@ -2174,7 +2178,7 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 | "--glyph-word-slant" | "--glyph-word-width" | "--place-text"
                 | "--glyph-line-drift" | "--glyph-word-rise"
                 | "--fallback-glyph" | "--join-text-pair" | "--glyph-word-drift"
-                | "--join-text-anchors" => {
+                | "--join-text-anchors" | "--glyph-word-height" => {
                     glyph_edited = true;
                     preflight_notebook_glyph_option(
                         option, &mut glyph_preflight, &mut iter,
@@ -2439,7 +2443,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             | "--fallback-glyph" | "--glyph-variation" | "--glyph-word-rise"
             | "--glyph-line-drift" | "--glyph-word-drift" | "--join-text-pair"
             | "--glyph-word-pressure" | "--glyph-word-slant"
-            | "--glyph-word-width" | "--quality" => {
+            | "--glyph-word-width" | "--glyph-word-height"
+            | "--quality" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
                     &mut glyphs, &mut stdin_selected,
