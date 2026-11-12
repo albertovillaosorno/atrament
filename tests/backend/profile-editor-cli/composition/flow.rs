@@ -7984,3 +7984,144 @@ fn multiple_marks_on_spaces_survive_markdown_layout()
         "coverage: {accepted} accepted, {wrapped} wrapped");
     Ok(())
 }
+
+// Markdown soft joins create an ASCII space. A standalone combining mark
+// at the start of the next source line then belongs to that new space
+// grapheme, with independent height and baseline statistics.
+#[test]
+fn markdown_soft_join_does_not_undermeasure_attached_combining_ink()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let joined = " \u{0301}";
+    let mut stats = HandwritingStatisticsProfile::baseline(11);
+    stats = stats.with_glyph(joined, DimensionStatistics {
+        dimension: Dimension::Height,
+        statistics: ScalarStatistics {
+            minimum: 25_000, maximum: 25_000, mean: 25_000,
+            median: 25_000, standard_deviation: 0,
+        },
+    }, &UnicodeGraphemeSegmentation)
+        .map_err(|error| format!("{error:?}"))?;
+    let cases = [
+        ("body", FlowFormat::Markdown, "a\n\u{0301}b", true),
+        ("indented body", FlowFormat::Markdown, "a\n  \u{0301}b", true),
+        ("quoted lines", FlowFormat::Markdown, "> a\n> \u{0301}b", true),
+        ("quote continuation", FlowFormat::Markdown,
+            "> a\n  \u{0301}b", true),
+        ("bullet continuation", FlowFormat::Markdown,
+            "- a\n  \u{0301}b", true),
+        ("task continuation", FlowFormat::Markdown,
+            "- [x] a\n  \u{0301}b", true),
+        ("ordered continuation", FlowFormat::Markdown,
+            "1. a\n  \u{0301}b", true),
+        ("blank boundary", FlowFormat::Markdown,
+            "a\n\n\u{0301}b", false),
+        ("hard break", FlowFormat::Markdown,
+            "a  \n\u{0301}b", false),
+        ("literal indent", FlowFormat::Markdown,
+            "a\n    \u{0301}b", true),
+        ("quote to body", FlowFormat::Markdown,
+            "> a\n\u{0301}b", false),
+        ("body to quote", FlowFormat::Markdown,
+            "a\n> \u{0301}b", true),
+        ("list to body", FlowFormat::Markdown,
+            "- a\n\u{0301}b", false),
+        ("setext boundary", FlowFormat::Markdown,
+            "a\n===\n\u{0301}b", false),
+        ("fenced boundary", FlowFormat::Markdown,
+            "a\n~~~\n\u{0301}b\n~~~", false),
+        ("heading to body", FlowFormat::Markdown,
+            "# a\n\u{0301}b", false),
+        ("plain newline", FlowFormat::Plain, "a\n\u{0301}b", false),
+    ];
+    for (name, format, text, has_marked_space) in cases {
+        let source = FlowSource::new(format, text)?;
+        let (rows, _, _) = super::layout_flow(
+            &source, &NotebookProfile::default(), Some(&stats),
+            super::HeadingDecoration::default(),
+        )?;
+        let contains_marked_space =
+            rows.iter().any(|row| row.text.contains(joined));
+        assert_eq!(contains_marked_space, has_marked_space,
+            "{name}: unexpected grapheme join: {rows:?}");
+        let measured = super::measured_pitch(&source, Some(&stats))?;
+        let emitted = emitted_glyph_pitch(&rows, &stats)?;
+        assert_eq!(measured, emitted,
+            "{name}: source {text:?} and emitted {rows:?} disagree");
+        assert_eq!(measured, if has_marked_space { 29_000 } else { 9_000 },
+            "{name}: incorrect exact glyph statistics");
+    }
+    Ok(())
+}
+
+// Randomized Markdown line transitions must measure the *joined* Unicode
+// graphemes, not independent source-line fragments. Some transitions do
+// not join, even if the next line starts with a combining mark.
+#[test]
+fn unicode_soft_join_pitch_matches_emitted_ink_across_mixed_blocks()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(12);
+    for (grapheme, value) in [(" \u{0301}", 25_000),
+        (" \u{0327}", 22_000)] {
+        stats = stats.with_glyph(grapheme, DimensionStatistics {
+            dimension: Dimension::Height,
+            statistics: ScalarStatistics {
+                minimum: value, maximum: value, mean: value,
+                median: value, standard_deviation: 0,
+            },
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let lines = [
+        "a", "\u{0301}b", "\u{0327}b", "  \u{0301}b",
+        "  \u{0327}b", "> \u{0301}b", "> a", "> a  ",
+        "- a", "1. a", "- [x] a", "a  ", "  b", "    b",
+        "", "===", "---", "# a", "a\\", "~~~", "~~~ rust",
+        "\\# a", "\\- a", "  - a", "a \u{0301}b",
+        "\u{0301}b  ", "b \u{0327}c",
+    ];
+    let mut seed = 0xa502_4f31_20cb_d9e1u64;
+    let mut accepted = 0usize;
+    let paper = NotebookProfile::default();
+    for case in 0..6_000 {
+        let line_count = 2 + case % 5;
+        let mut parts = Vec::new();
+        for _ in 0..line_count {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            let index = usize::try_from(seed % u64::try_from(lines.len())
+                .map_err(|_| "line inventory exceeds u64")?)
+                .map_err(|_| "line index exceeds usize")?;
+            parts.push(lines[index]);
+        }
+        let text = parts.join("\n");
+        let Ok(source) = FlowSource::new(FlowFormat::Markdown, &text)
+        else { continue; };
+        let Ok((runs, _, _)) = super::layout_flow(
+            &source, &paper, Some(&stats),
+            super::HeadingDecoration::default(),
+        ) else { continue; };
+        let pitch = super::measured_pitch(&source, Some(&stats))?;
+        let emitted = emitted_glyph_pitch(&runs, &stats)?;
+        assert_eq!(pitch, emitted,
+            "case {case}: {text:?} => {runs:?}");
+        accepted += 1;
+    }
+    assert!(accepted > 2_000,
+        "insufficient successfully laid-out joined sources: {accepted}");
+    Ok(())
+}

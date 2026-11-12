@@ -2567,6 +2567,14 @@ fn measured_pitch(
                     && (2..=3).contains(&indent)
                     && matches!(style, LineStyle::Body)
                     && markdown_setext_level(raw).is_none();
+                // The physical paragraph compiler inserts a separating
+                // space on soft joins. A leading combining mark then
+                // belongs to that *new* space grapheme, not the standalone
+                // source-line grapheme. Measure that exact resulting ink.
+                let joins_paragraph = list_continuation || quote_continuation
+                    || (pending_setext && indent < 4
+                        && matches!(style, LineStyle::Body))
+                    || (pending_quote && matches!(style, LineStyle::Quote));
                 pending_list = !hard_break && (list_continuation
                     || matches!(style, LineStyle::Bullet | LineStyle::Ordered
                         | LineStyle::Task(_)));
@@ -2580,7 +2588,11 @@ fn measured_pitch(
                     && indent < 4
                     && !visible.trim_matches(' ').is_empty()
                     && !hard_break;
-                Cow::Owned(visible.to_owned())
+                Cow::Owned(if joins_paragraph {
+                    format!(" {visible}")
+                } else {
+                    visible.to_owned()
+                })
             }
         } else {
             Cow::Borrowed(raw)
