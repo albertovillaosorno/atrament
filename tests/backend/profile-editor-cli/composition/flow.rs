@@ -7803,3 +7803,102 @@ fn marked_space_boundary_combinations_match_emitted_pitch()
     assert!(accepted > 2_000, "coverage collapsed: {accepted}");
     Ok(())
 }
+
+#[test]
+fn marked_space_ordered_labels_keep_every_nominal_contour_on_page()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let paper = NotebookProfile::default();
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 50_000, height: 14_000,
+    };
+    let mut admitted = 0usize;
+    let mut rejected = 0usize;
+    let mut marker_refused = 0usize;
+    let mut glyph_refused = 0usize;
+    let mut wrapped = 0usize;
+    for sample in 0..864usize {
+        let mut stats = HandwritingStatisticsProfile::baseline(837);
+        let width = 4_000 + i32::try_from(sample % 9)
+            .map_err(|_| "width index refused")? * 1_750;
+        let spacing = -(i32::try_from(sample % 7)
+            .map_err(|_| "spacing index refused")? * 400);
+        let marker_width = 3_000 + i32::try_from(sample % 5)
+            .map_err(|_| "marker index refused")? * 1_500;
+        let mark_width = 4_000 + i32::try_from(sample % 8)
+            .map_err(|_| "mark index refused")? * 1_500;
+        for (glyph, glyph_width, glyph_spacing) in [
+            ("a", width, spacing), ("1", marker_width, -1_000),
+            (".", marker_width, -1_000),
+            (" \u{301}", mark_width, spacing),
+        ] {
+            for (dimension, value) in [
+                (Dimension::Width, glyph_width),
+                (Dimension::LetterSpacing, glyph_spacing),
+            ] {
+                let stats_value = ScalarStatistics {
+                    minimum: value, maximum: value, mean: value,
+                    median: value, standard_deviation: 0,
+                };
+                stats = stats.with_glyph(glyph, DimensionStatistics {
+                    dimension, statistics: stats_value,
+                }, &UnicodeGraphemeSegmentation)
+                    .map_err(|error| format!("{error:?}"))?;
+            }
+        }
+        let prefix = if sample % 2 == 0 { "1." } else { "1)" };
+        let count = 1 + (sample / 2) % 4;
+        let suffix = "a".repeat(2 + (sample / 3) % 7);
+        let source_text = format!(
+            "{prefix}{}{}{suffix}", " ".repeat(count), "\u{301}"
+        );
+        let source = FlowSource::new(FlowFormat::Markdown, &source_text)?;
+        let region = super::FlowRegion {
+            width: 28_000 + u32::try_from((sample / 5) % 14)
+                .map_err(|_| "region index refused")? * 3_000,
+            ..region
+        };
+        let result = super::layout_flow_with_region(
+            &source, &paper, Some(&stats),
+            super::HeadingDecoration::default(), Some(region),
+        );
+        let (rows, marks, pages) = match result {
+            Ok(accepted) => accepted,
+            Err(error) if error.contains(
+                "ordered list label and first glyph exceed"
+            ) => { marker_refused += 1; rejected += 1; continue; },
+            Err(error) if error.contains(
+                "glyph exceeds horizontal printable region"
+            ) => { glyph_refused += 1; rejected += 1; continue; },
+            Err(error) => return Err(format!(
+                "unexpected sample {sample} refusal: {error}"
+            )),
+        };
+        assert!(marks.is_empty());
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<String>(), source_text,
+            "sample {sample}, rows {rows:?}");
+        assert_eq!(pages, rows.len(),
+            "single-row page sample {sample}, rows {rows:?}");
+        assert!(rows[0].text.starts_with(&format!(
+            "{prefix}{}{}", " ".repeat(count), "\u{301}")),
+            "first marked glyph split from label: {rows:?}");
+        let right = region.left + region.width - super::EXTRA_RIGHT_UM;
+        for row in &rows {
+            nominal_row_right_clearance(row, &stats, right)?;
+        }
+        wrapped += usize::from(rows.len() > 1);
+        admitted += 1;
+    }
+    assert!(admitted > 150 && rejected > 150 && wrapped > 100
+        && marker_refused > 75 && glyph_refused > 75,
+        "insufficient boundary coverage: {admitted}, {rejected}, {wrapped}, \
+         marker={marker_refused}, glyph={glyph_refused}");
+    Ok(())
+}
