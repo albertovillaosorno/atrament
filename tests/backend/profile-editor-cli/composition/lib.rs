@@ -3561,6 +3561,63 @@ fn large_unicode_glyph_audit_keeps_exact_source_order_and_counts()
 }
 
 #[test]
+fn saved_full_unicode_glyph_library_audit_replays_exact_cli_report()
+-> Result<(), String> {
+    // Exercise the real TSV loader and public stdout audit, not only the
+    // typed in-memory overlay. An exact accented pair, a visible base with
+    // an attached nonmarking mark and its bare base must remain distinct.
+    let keys = ["n\u{303}", "ñ", "a\u{34f}", "a"];
+    let mut source = String::from("atrament.glyph-strokes.v1\n");
+    for _ in 0..1024 {
+        for key in keys {
+            source.push_str(&format!(
+                "{key}\t500\t500\t1800\t3000\t250\t#123456\n"
+            ));
+        }
+    }
+    let path = test_path().with_extension("tsv");
+    fs::write(&path, source.as_bytes())
+        .map_err(|error| error.to_string())?;
+    let file = path.to_str().ok_or("invalid test-owned library path")?;
+    let selected = format!(
+        "{} {} {} {} ∞ {}",
+        keys[0], keys[1], keys[2], keys[3], keys[0],
+    );
+    let mut expected = String::from(concat!(
+        "Exact authored glyph audit (not a font or sampler)\n",
+        "Distinct visible graphemes: 5\n",
+        "Missing authored glyphs: 1\n",
+    ));
+    for key in keys {
+        let codepoints = key.chars().map(|ch| {
+            format!("U+{:04X}", u32::from(ch))
+        }).collect::<Vec<_>>().join(" ");
+        expected.push_str(&format!(
+            "\"{}\" [{codepoints}]: 1024 authored strokes\n",
+            key.escape_debug(),
+        ));
+    }
+    expected.push_str("\"∞\" [U+221E]: missing authored strokes\n");
+    for selected in [selected.clone(), format!("\u{feff}{selected}")] {
+        let report = execute_glyph_library(&args(&[
+            "--profile", file, "--audit-text", &selected,
+        ]))?.ok_or("read-only CLI audit returned no report")?;
+        if report != expected.as_bytes() {
+            return Err("full TSV CLI audit lost exact report ordering".into());
+        }
+    }
+    let reopened = execute_glyph_library(&args(&["--profile", file]))?
+        .ok_or("real glyph TSV readback returned no bytes")?;
+    if reopened != source.as_bytes()
+        || fs::read(&path).map_err(|error| error.to_string())?
+            != source.as_bytes() {
+        return Err("read-only audit changed selected TSV bytes".into());
+    }
+    fs::remove_file(path).map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[test]
 fn glyph_audit_accepts_whitespace_only_when_a_glyph_can_be_authored() {
     for glyph in ["\u{a0}", "\u{2009}", "\u{202f}"] {
         let unicode = u32::from(glyph.chars().next().expect("one codepoint"));

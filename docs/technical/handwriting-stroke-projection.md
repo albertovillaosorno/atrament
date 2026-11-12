@@ -59,6 +59,28 @@ for **every** authored stroke; `append_text_ink` delegates explicit adjacent
 joins to the same core. The requested export format does not change either
 function's physical output.
 
+### Exact Unicode inventory audit
+
+The read-only **atrament-profiles glyphs --audit-text** reports first-seen
+exact Unicode graphemes in supplied text, not a normalized font inventory.
+The bounded native library permits 4,096 interleaved authored strokes;
+auditing many distinct keys indexes validated stroke counts once per
+request. Hash lookup and duplicate suppression never determine report order.
+
+NFC/NFD forms, visible glyphs with attached format marks and authored
+non-ASCII whitespace retain their independent exact keys. Only literal
+ASCII spaces and structural source separators are implicit non-ink gaps.
+
+The full-boundary Rust regression
+**large_unicode_glyph_audit_keeps_exact_source_order_and_counts** checks
+1,024 distinct source keys and 4,096 interleaved strokes with exact
+first-occurrence order and deterministic missing-shape diagnostics.
+The **saved_full_unicode_glyph_library_audit_replays_exact_cli_report** test
+independently reopens the full TSV through the actual CLI, checks
+ordinary and leading-BOM audit transports, and confirms the selected
+source bytes remain unchanged.
+This inspection does not grant automatic Unicode glyph coverage.
+
 ## Failure Modes
 
 Authored glyph edits first validate the entire bounded stroke library,
