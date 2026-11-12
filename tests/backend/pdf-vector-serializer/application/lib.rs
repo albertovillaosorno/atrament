@@ -297,6 +297,40 @@ fn malformed_geometry_and_spatial_overflow_are_rejected() {
     );
 }
 
+#[expect(
+    clippy::expect_used,
+    reason = "empty-page bytes anchor the minimum per-path paint allowance"
+)]
+#[test]
+fn a_path_without_commands_cannot_hide_exhausted_paint_budget() {
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(Vec::new())],
+        render_manifest_identity: "empty-path-paint-budget.v1",
+    };
+    let blank = serialize_vector_pdf(&composition, limits())
+        .expect("a page without drawing commands fits");
+    for paint in [stroke().paint, fill().paint] {
+        composition.pages = vec![page(vec![PdfVectorPath {
+            commands: Vec::new(),
+            paint,
+        }])];
+        assert_eq!(
+            serialize_vector_pdf(&composition, PdfVectorLimits {
+                maximum_pdf_bytes: blank.len(),
+                ..limits()
+            },),
+            Err(PdfVectorError::ResourceLimit),
+            "the paint framing cannot fit even if geometry is malformed",
+        );
+        assert_eq!(
+            serialize_vector_pdf(&composition, limits()),
+            Err(PdfVectorError::InvalidPath),
+            "without a byte shortage the path remains invalid",
+        );
+    }
+}
+
 #[test]
 fn every_stroked_subpath_requires_real_physical_extent() {
     let origin = point(20_000, 30_000);

@@ -162,6 +162,12 @@ Likewise each mandatory path paint operator (`S`, `f`, `f*`) is reserved
 before processing its geometry. A path that cannot finish painting now refuses
 before a later malformed command can mask the exhausted byte allowance.
 
+The same allowance is checked before refusing an *empty* path: when no room
+remains for its paint setup and operator, `ResourceLimit` takes precedence
+over the malformed empty geometry. With sufficient bytes it still refuses as
+`InvalidPath`, for both stroke and fill. The regression uses the exact
+blank-page output length as its insufficient paint budget.
+
 The page serializer also reserves the mandatory PDF page object, minimum
 content-stream dictionary and terminator before inspecting any authored path.
 It subtracts that framing from the available page-stream budget, so a malformed

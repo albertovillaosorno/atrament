@@ -393,16 +393,17 @@ fn render_path(
     page: PdfVectorPageBox,
     maximum_stream_bytes: usize,
 ) -> Result<(), PdfVectorError> {
-    if path.commands.is_empty() {
-        return Err(PdfVectorError::InvalidPath);
-    }
     let (operator, stroke_width_um) =
         apply_path_paint(stream, path.paint, maximum_stream_bytes)?;
-    // The final paint operator is mandatory even if earlier geometry fits.
+    // Both paint state and the final operator are mandatory even if the
+    // path contains malformed or missing drawing commands.
     let command_budget = maximum_stream_bytes
         .checked_sub(operator.len())
         .filter(|budget| stream.len() <= *budget)
         .ok_or(PdfVectorError::ResourceLimit)?;
+    if path.commands.is_empty() {
+        return Err(PdfVectorError::InvalidPath);
+    }
     let fill = matches!(path.paint, PdfPathPaint::Fill { .. });
     let mut active = false;
     let mut drawn = false;
