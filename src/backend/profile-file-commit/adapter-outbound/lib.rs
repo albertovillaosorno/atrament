@@ -166,14 +166,7 @@ struct ReplaceTargetObservation {
     modified: (i64, i64),
 }
 
-// Rust supplies PinDrop-related default hooks that are not applicable to
-// ordinary, unpinned temporary file staging. Its regular Drop method owns
-// the complete cleanup contract.
 #[cfg(target_os = "linux")]
-#[expect(
-    clippy::missing_trait_methods,
-    reason = "unneeded default pin-drop hook for unpinned temporary files"
-)]
 impl Drop for OwnedTemp<'_> {
     fn drop(&mut self) {
         // A competing actor can move or replace the random sibling before
