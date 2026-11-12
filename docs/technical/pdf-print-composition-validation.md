@@ -117,11 +117,15 @@ The same collinearity check does not apply to stroked lines.
 
 Each stroked subpath instead needs nonzero physical extent: a lone line whose
 endpoints coincide, a cubic whose start, controls and end all coincide, or a
-second collapsed subpath refuses as `InvalidPath`. PDF round caps must not
-silently create a dot from a zero-length authored pen stroke that the native
-transparent PNG renderer already refuses. A genuinely curved cubic loop may
-start and end at the same point, and multiple nonempty subpaths remain valid.
-The regression checks both refusal and those admitted counterexamples.
+second collapsed subpath refuses as `InvalidPath`. Every individually collapsed
+line or cubic also refuses, even inside an otherwise nonempty stroke. PDF round
+caps must not silently create a dot from a zero-length authored pen stroke
+that the native transparent PNG renderer already refuses.
+
+A genuinely curved cubic loop may start and end at the same point, and
+multiple nonempty subpaths remain valid. A harmless repeated fill vertex also
+remains valid. The regression checks both refusal and those admitted
+counterexamples.
 
 For multi-page output, the PDF assembler now renders and appends one page
 at a time, checking the exact current output byte count before rendering the

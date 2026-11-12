@@ -330,6 +330,25 @@ fn append_cubic_command(
     )
 }
 
+fn append_line_command(
+    stream: &mut String,
+    point: PdfPoint,
+    current: PdfPoint,
+    page: PdfVectorPageBox,
+    stroke_margin_um: u32,
+    fill: bool,
+) -> Result<(), PdfVectorError> {
+    if (!fill && point == current)
+        || !point_inside(point, page, stroke_margin_um)
+    {
+        return Err(PdfVectorError::InvalidPath);
+    }
+    push_formatted(
+        stream,
+        format_args!("{} {} l\n", points(point.x_um), points(point.y_um)),
+    )
+}
+
 fn render_path(
     stream: &mut String,
     path: &PdfVectorPath,
@@ -375,16 +394,8 @@ fn render_path(
                 contour_area.include(point);
             },
             PdfPathCommand::LineTo(point) if active => {
-                if !point_inside(point, page, stroke_margin_um) {
-                    return Err(PdfVectorError::InvalidPath);
-                }
-                push_formatted(
-                    stream,
-                    format_args!(
-                        "{} {} l\n",
-                        points(point.x_um),
-                        points(point.y_um)
-                    ),
+                append_line_command(
+                    stream, point, current, page, stroke_margin_um, fill,
                 )?;
                 drawn = true;
                 saw_segment = true;
@@ -395,6 +406,11 @@ fn render_path(
                 }
             },
             PdfPathCommand::CubicTo(first, second, last) if active => {
+                if !fill && first == current && second == current
+                    && last == current
+                {
+                    return Err(PdfVectorError::InvalidPath);
+                }
                 append_cubic_command(
                     stream, first, second, last, page, stroke_margin_um,
                 )?;

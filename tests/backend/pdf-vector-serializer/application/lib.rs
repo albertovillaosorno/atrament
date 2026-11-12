@@ -324,7 +324,21 @@ fn every_stroked_subpath_requires_real_physical_extent() {
         PdfPathCommand::LineTo(other),
         PdfPathCommand::Close,
     ];
+    let zero_inside_nonempty = [
+        PdfPathCommand::MoveTo(origin),
+        PdfPathCommand::LineTo(second),
+        PdfPathCommand::LineTo(second),
+        PdfPathCommand::LineTo(other),
+    ];
+    let zero_cubic_inside_nonempty = [
+        PdfPathCommand::MoveTo(origin),
+        PdfPathCommand::LineTo(second),
+        PdfPathCommand::CubicTo(second, second, second),
+        PdfPathCommand::LineTo(other),
+    ];
     for commands in [
+        zero_inside_nonempty.as_slice(),
+        zero_cubic_inside_nonempty.as_slice(),
         zero_line.as_slice(),
         zero_cubic.as_slice(),
         empty_second.as_slice(),
@@ -337,7 +351,7 @@ fn every_stroked_subpath_requires_real_physical_extent() {
         assert_eq!(
             serialize_vector_pdf(&composition, limits()),
             Err(PdfVectorError::InvalidPath),
-            "zero-length stroke subpath must not become invisible or dot ink",
+            "zero-length stroke command must not become invisible or dot ink",
         );
     }
 
@@ -419,6 +433,13 @@ fn filled_contours_refuse_collinear_ink_but_accept_curved_ink() {
     }
     for commands in [
         square,
+        vec![
+            PdfPathCommand::MoveTo(point(20_000, 20_000)),
+            PdfPathCommand::LineTo(point(80_000, 20_000)),
+            PdfPathCommand::LineTo(point(80_000, 20_000)),
+            PdfPathCommand::LineTo(point(80_000, 80_000)),
+            PdfPathCommand::Close,
+        ],
         vec![
             PdfPathCommand::MoveTo(point(20_000, 20_000)),
             PdfPathCommand::CubicTo(
@@ -560,7 +581,7 @@ fn large_page_stream_preserves_exact_length_and_xref_without_truncation() {
     let mut commands = vec![PdfPathCommand::MoveTo(point(20_000, 30_000))];
     for index in 0i32..10_000i32 {
         commands.push(PdfPathCommand::LineTo(point(
-            20_000i32.saturating_add(index),
+            20_001i32.saturating_add(index),
             30_000,
         )));
     }
