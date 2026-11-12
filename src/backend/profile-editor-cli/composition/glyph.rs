@@ -33,7 +33,7 @@
 
 //! Exact, explicitly authored glyph contours for a bounded CLI text overlay.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::f64::consts::PI;
 use std::fmt::Write as _;
 use std::mem::{replace, swap};
@@ -309,7 +309,18 @@ impl GlyphOverlay {
         -> Result<Vec<u8>, String> {
         super::validate_glyph_audit_text(text)?;
         self.validate_stroke_library()?;
-        let mut seen = Vec::new();
+        // Count each exact authored key once after validating the *whole*
+        // library, including unused rows. A bounded Unicode audit can
+        // mention over a thousand distinct keys against 4096 strokes;
+        // rescanning all strokes per key makes inspection quadratic.
+        let mut stroke_counts: HashMap<&str, usize> = HashMap::new();
+        for stroke in &self.strokes {
+            *stroke_counts.entry(stroke.grapheme.as_str())
+                .or_default() += 1;
+        }
+        // Hash membership only suppresses repeats. Emit reports in first
+        // source occurrence order, never hash iteration order.
+        let mut seen = HashSet::new();
         let mut missing = 0usize;
         let mut details = String::new();
         let mut remaining = strip_leading_source_bom(text);
@@ -321,12 +332,10 @@ impl GlyphOverlay {
             // visible ink and must appear in this exact coverage audit.
             // Source line and paragraph separators are non-ink structure.
             if is_non_ink_audit_grapheme(grapheme)
-                || seen.contains(&grapheme) {
+                || !seen.insert(grapheme) {
                 continue;
             }
-            seen.push(grapheme);
-            let strokes = self.strokes.iter()
-                .filter(|stroke| stroke.grapheme == grapheme).count();
+            let strokes = stroke_counts.get(grapheme).copied().unwrap_or(0);
             if strokes == 0 {
                 missing = missing.saturating_add(1);
             }

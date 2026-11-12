@@ -3502,6 +3502,65 @@ fn glyph_library_audit_separates_nfc_nfd_math_and_missing_punctuation() {
 }
 
 #[test]
+fn large_unicode_glyph_audit_keeps_exact_source_order_and_counts()
+-> Result<(), String> {
+    // 1024 distinct keys and 4096 interleaved authored strokes exercise
+    // both report uniqueness and the full admitted inventory boundary.
+    // Exact NFD, NFC and an ink-bearing marked space are independent keys.
+    let mut keys = vec![
+        "ñ".to_owned(), "n\u{303}".to_owned(), " \u{301}".to_owned(),
+    ];
+    for ordinal in 0..1021u32 {
+        keys.push(char::from_u32(0x4E00 + ordinal)
+            .ok_or("missing unique test CJK scalar")?.to_string());
+    }
+    let mut overlay = GlyphOverlay::default();
+    for stroke_ordinal in 0..4usize {
+        for key in &keys {
+            overlay.strokes.push(GlyphStroke {
+                grapheme: key.clone(),
+                start_um: (500, 600 + u32::try_from(stroke_ordinal)
+                    .map_err(|error| error.to_string())? * 100),
+                end_um: (1800, 3000),
+                width_um: 250,
+                rgb: [18, 52, 86],
+            });
+        }
+    }
+    let mut source = keys.concat();
+    source.push_str(&keys.iter().rev().take(256)
+        .map(String::as_str).collect::<String>());
+    source.push('¿');
+    if source.len() > 4096 || overlay.strokes.len() != 4096 {
+        return Err("test exceeded native audit bounds".into());
+    }
+    let report = String::from_utf8(overlay.audit_text(&source)?)
+        .map_err(|error| error.to_string())?;
+    let mut expected = String::from(concat!(
+        "Exact authored glyph audit (not a font or sampler)\n",
+        "Distinct visible graphemes: 1025\n",
+        "Missing authored glyphs: 1\n",
+    ));
+    for key in &keys {
+        let codes = key.chars().map(|ch| format!(
+            "U+{:04X}", u32::from(ch),
+        )).collect::<Vec<_>>().join(" ");
+        expected.push_str(&format!(
+            "\"{}\" [{codes}]: 4 authored strokes\n",
+            key.escape_debug(),
+        ));
+    }
+    expected.push_str("\"¿\" [U+00BF]: missing authored strokes\n");
+    if report != expected {
+        return Err("large exact audit lost first-use order or counts".into());
+    }
+    if overlay.audit_text(&source)? != report.as_bytes() {
+        return Err("large exact audit is not reproducible".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn glyph_audit_accepts_whitespace_only_when_a_glyph_can_be_authored() {
     for glyph in ["\u{a0}", "\u{2009}", "\u{202f}"] {
         let unicode = u32::from(glyph.chars().next().expect("one codepoint"));
