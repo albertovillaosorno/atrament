@@ -186,6 +186,51 @@ test("native numeric preview uses unsaved glyph edits and is not persisted", asy
     }
 });
 
+test("handwriting numeric drafts refuse nondecimal spellings", async () => {
+    const b = mountBackend();
+    try {
+        await b.editor.start("private-session-credential");
+        edit(b.elements, "handwriting-dimension", "height", "change");
+        const baselineRequests = b.requests.length;
+        for (const raw of ["+3000", "3e3", "0xBB8", "3000.0",
+            " 3000", "3000 ", "Infinity"]) {
+            edit(b.elements, "handwriting-mean", raw);
+            b.elements.get("handwriting-save").dispatch("click");
+            await tick();
+            assert.equal(b.requests.length, baselineRequests,
+                `invalid spelling ${JSON.stringify(raw)} sent to Rust`);
+            assert.equal(b.links.length, 0);
+            assert.match(b.elements.get("handwriting-status").textContent,
+                /no file saved/);
+            b.elements.get("handwriting-sample").dispatch("click");
+            await tick();
+            assert.equal(b.requests.length, baselineRequests,
+                `invalid spelling ${JSON.stringify(raw)} sent to preview`);
+            b.elements.get("handwriting-local-save").dispatch("click");
+            await tick();
+            assert.equal(b.requests.length, baselineRequests,
+                `invalid spelling ${JSON.stringify(raw)} touched local file`);
+        }
+        edit(b.elements, "handwriting-mean", "3000");
+        b.elements.get("handwriting-save").dispatch("click");
+        await tick();
+        assert.equal(b.requests.length, baselineRequests + 1);
+        assert.equal(b.links.length, 1);
+        edit(b.elements, "handwriting-dimension", "baseline_offset", "change");
+        for (const field of ["minimum", "maximum", "mean", "median"]) {
+            edit(b.elements, `handwriting-${field}`, "-500");
+        }
+        b.elements.get("handwriting-save").dispatch("click");
+        await tick();
+        const negative = JSON.parse(b.requests.at(-1).body);
+        assert.equal(negative.globals.find((p) =>
+            p.dimension === "baseline_offset").mean, -500);
+        assert.equal(b.requests.length, baselineRequests + 2);
+    } finally {
+        b.restore();
+    }
+});
+
 test("native numeric preview refuses malformed response without retaining output", async () => {
     const b = mountBackend({
         fetch(endpoint, init) {

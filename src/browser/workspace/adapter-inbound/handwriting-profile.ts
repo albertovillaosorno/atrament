@@ -530,7 +530,11 @@ export function createHandwritingProfileEditor(context: EditorContext): Editor {
                         const upper = field === "standard_deviation"
                             ? (dim?.maximum ?? 0) - (dim?.minimum ?? 0)
                             : dim?.maximum ?? 0;
-                        if (!raw || !Number.isSafeInteger(value)
+                        // The numeric input may expose exponent or signed-plus
+                        // spellings. Never coerce them into different integers
+                        // before asking Rust to validate the proposal.
+                        if (!/^-?[0-9]+$/.test(raw)
+                            || !Number.isSafeInteger(value)
                             || value < lower || value > upper) {
                             throw new Error(
                                 "Fix out-of-range statistical fields");
