@@ -11,12 +11,14 @@ import {
     encodeGlyphLibrary, italicizeGlyphStrokes, rotateGlyphStrokes,
     scaleGlyphHeight, scaleGlyphInk, scaleGlyphWidth,
     translateGlyphStrokes,
+// jig-ignore-next-line: static ESM import needs a literal path.
 } from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
 const root = fileURLToPath(new URL('../../../../', import.meta.url));
 const cargo = join(root, '.dependencies/rust/1.99.1/bin/cargo');
-const binary = join(root, '.cache/cargo-target/debug',
-    process.platform === 'win32' ? 'atrament-profiles.exe' : 'atrament-profiles');
+const binaryName = process.platform === 'win32'
+    ? 'atrament-profiles.exe' : 'atrament-profiles';
+const binary = join(root, '.cache/cargo-target/debug', binaryName);
 const nfc = 'ó';
 const nfd = 'o\u0301';
 const colors = ['#345678', '#A1B2C3'];
@@ -190,7 +192,8 @@ test('browser and native transformed shapes render identical PDF and PNG',
                 const fromNative = render(transformed.stdout);
                 for (const result of [fromBrowser, fromNative]) {
                     assert.equal(result.error, undefined,
-                        `${operation.name} ${format}: ${result.error?.message}`);
+                        `${operation.name} ${format}: `
+                        + `${result.error?.message}`);
                     assert.equal(result.status, 0,
                         `${operation.name} ${format}: ${result.stderr}`);
                 }
