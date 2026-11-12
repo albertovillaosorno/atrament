@@ -139,6 +139,35 @@ fn invalid_options_are_refused_before_pdf_bytes_exist() {
 }
 
 #[test]
+fn paper_color_requires_six_ascii_hex_digits_in_cli_and_profile() {
+    let canonical = encode_profile(Options::default());
+    for color in [
+        "#+A1122", "#11+A22", "#1122+A", "#-A1122", "#11G222", "#11_222",
+        "#11 222",
+    ] {
+        let args = ["--line-color", color].map(str::to_owned);
+        assert!(
+            parse_options(&args).is_err(),
+            "invalid color accepted from CLI: {color}"
+        );
+        let profile = canonical.replace("#C5D4E7", color);
+        assert!(
+            decode_profile(profile.as_bytes()).is_err(),
+            "invalid color accepted from paper profile: {color}"
+        );
+    }
+    for color in ["#012345", "#AABBCC", "#aaBBcc"] {
+        let args = ["--line-color", color].map(str::to_owned);
+        assert!(parse_options(&args).is_ok(), "valid color: {color}");
+        let profile = canonical.replace("#C5D4E7", color);
+        assert!(
+            decode_profile(profile.as_bytes()).is_ok(),
+            "valid profile color: {color}"
+        );
+    }
+}
+
+#[test]
 fn versioned_paper_json_round_trips_without_altering_pdf() {
     for style in [Style::Blank, Style::Ruled, Style::Grid, Style::Dot] {
         let options = Options {

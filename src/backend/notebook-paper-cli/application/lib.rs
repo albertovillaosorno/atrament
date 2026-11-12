@@ -251,7 +251,10 @@ fn hex_byte(segment: Option<&str>) -> Result<u8, String> {
 }
 
 fn line_color(value: &str) -> Result<PdfRgb, String> {
-    if value.len() != 7 || !value.starts_with('#') || !value.is_ascii() {
+    if value.len() != 7
+        || !value.starts_with('#')
+        || !value.bytes().skip(1).all(|byte| byte.is_ascii_hexdigit())
+    {
         return Err("line color must be #RRGGBB".into());
     }
     Ok(PdfRgb {
