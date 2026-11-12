@@ -2259,3 +2259,372 @@ fn paper_margin_clearance_matches_pdf_at_both_png_dpi_extremes() {
         }
     }
 }
+
+// The PNG implementation uses floating-point projection onto a finite pen
+// segment. This independent reference uses rational physical pixel centers:
+// each axis is scaled by 2 * DPI, so a pixel center has coordinate
+// (2 * pixel + 1) * 25_400 and each authored endpoint is integral. The
+// half-pixel antialiasing allowance is integral at the same scale.
+fn integer_pen_pixel_covers(
+    x: usize,
+    y: usize,
+    dpi: u32,
+    start: PdfPoint,
+    end: PdfPoint,
+    width_um: u32,
+) -> bool {
+    let scale = i128::from(dpi) * 2;
+    let (px, py) = (
+        (i128::try_from(x).expect("bounded pixel x") * 2 + 1) * 25_400,
+        (i128::try_from(y).expect("bounded pixel y") * 2 + 1) * 25_400,
+    );
+    let (ax, ay) = (
+        i128::from(start.x_um) * scale,
+        i128::from(start.y_um) * scale,
+    );
+    let (dx, dy) = (
+        (i128::from(end.x_um) - i128::from(start.x_um)) * scale,
+        (i128::from(end.y_um) - i128::from(start.y_um)) * scale,
+    );
+    let (from_x, from_y) = (px - ax, py - ay);
+    let length_squared = dx * dx + dy * dy;
+    assert!(length_squared > 0, "oracle requires directed pen length");
+    let projection = from_x * dx + from_y * dy;
+    let threshold = i128::from(width_um) * i128::from(dpi) + 25_400;
+    let threshold_squared = threshold * threshold;
+    if projection <= 0 {
+        from_x * from_x + from_y * from_y <= threshold_squared
+    } else if projection >= length_squared {
+        let (to_x, to_y) = (from_x - dx, from_y - dy);
+        to_x * to_x + to_y * to_y <= threshold_squared
+    } else {
+        let cross = from_x * dy - from_y * dx;
+        cross * cross <= threshold_squared * length_squared
+    }
+}
+
+#[test]
+fn authored_round_pen_pixels_match_independent_integer_geometry_oracle() {
+    const SHEET_UM: u32 = 24_000;
+    let color = PdfRgb {
+        red: 19,
+        green: 107,
+        blue: 233,
+    };
+    let mut seed = 0x943a_f872_70c9_7e51u64;
+    let random = |seed: &mut u64| -> u32 {
+        *seed = seed
+            .wrapping_mul(6_364_136_223_846_793_005)
+            .wrapping_add(1_442_695_040_888_963_407);
+        u32::try_from(*seed >> 32).expect("high word fits in u32")
+    };
+    let mut segments = vec![
+        (PdfPoint { x_um: 3_000, y_um: 3_000 }, PdfPoint {
+            x_um: 21_000,
+            y_um: 3_000,
+        }),
+        (PdfPoint { x_um: 3_000, y_um: 3_000 }, PdfPoint {
+            x_um: 3_000,
+            y_um: 21_000,
+        }),
+        (PdfPoint { x_um: 3_000, y_um: 3_000 }, PdfPoint {
+            x_um: 21_000,
+            y_um: 21_000,
+        }),
+        (
+            PdfPoint {
+                x_um: 3_000,
+                y_um: 21_000,
+            },
+            PdfPoint {
+                x_um: 21_000,
+                y_um: 3_000,
+            },
+        ),
+        (PdfPoint { x_um: 3_000, y_um: 3_000 }, PdfPoint {
+            x_um: 21_000,
+            y_um: 3_001,
+        }),
+        (PdfPoint { x_um: 3_000, y_um: 3_000 }, PdfPoint {
+            x_um: 3_001,
+            y_um: 21_000,
+        }),
+        (
+            PdfPoint {
+                x_um: 12_000,
+                y_um: 12_000,
+            },
+            PdfPoint {
+                x_um: 12_001,
+                y_um: 12_000,
+            },
+        ),
+    ];
+    for _ in 0..65 {
+        let start = PdfPoint {
+            x_um: i32::try_from(2_000 + random(&mut seed) % 20_000)
+                .expect("bounded x"),
+            y_um: i32::try_from(2_000 + random(&mut seed) % 20_000)
+                .expect("bounded y"),
+        };
+        let mut end = PdfPoint {
+            x_um: i32::try_from(2_000 + random(&mut seed) % 20_000)
+                .expect("bounded x"),
+            y_um: i32::try_from(2_000 + random(&mut seed) % 20_000)
+                .expect("bounded y"),
+        };
+        if end == start {
+            end.x_um += 1;
+        }
+        segments.push((start, end));
+    }
+    let pen_widths = [80, 125, 250, 700, 1_500];
+    for dpi in [72, 150, 300] {
+        for (index, (start, end)) in segments.iter().enumerate() {
+            let width_um = pen_widths[index % pen_widths.len()];
+            let pen = PdfVectorPath {
+                commands: vec![
+                    PdfPathCommand::MoveTo(*start),
+                    PdfPathCommand::LineTo(*end),
+                ],
+                paint: PdfPathPaint::Stroke { color, width_um },
+            };
+            let png =
+                png::render_paper_png(SHEET_UM, SHEET_UM, dpi, &[pen], 0, None)
+                    .expect("physical round-capped PNG must render");
+            let (width, height, raw) = stored_png_pixels(&png);
+            assert_eq!(
+                width,
+                usize::try_from(
+                    (u64::from(SHEET_UM) * u64::from(dpi)).div_ceil(25_400)
+                )
+                .expect("bounded PNG width")
+            );
+            assert_eq!(width, height);
+            let row_bytes = width * 4 + 1;
+            let mut ink_count = 0usize;
+            for y in 0..height {
+                assert_eq!(raw[y * row_bytes], 0, "unfiltered PNG row");
+                for x in 0..width {
+                    let offset = y * row_bytes + 1 + x * 4;
+                    let actual = &raw[offset..offset + 4];
+                    let covers = integer_pen_pixel_covers(
+                        x, y, dpi, *start, *end, width_um,
+                    );
+                    let expected = if covers {
+                        ink_count += 1;
+                        [color.red, color.green, color.blue, 255]
+                    } else {
+                        [0, 0, 0, 0]
+                    };
+                    assert_eq!(
+                        actual, expected,
+                        "{dpi} DPI case {index} pixel ({x},{y}), \
+                         width {width_um}, {start:?} to {end:?}"
+                    );
+                }
+            }
+            if index < 6 {
+                assert!(
+                    ink_count > 0,
+                    "extended pen must paint in {dpi} DPI case {index}"
+                );
+            }
+        }
+    }
+}
+
+// Use independent integer PDF millipoints here, rather than consulting the
+// exported stroke-clearance predicate, so this also catches an accidental
+// weakening of PNG admission when PDF coordinates are rounded for printing.
+#[test]
+fn png_stroke_edge_admission_matches_three_decimal_pdf_coordinates() {
+    const PAGE: u32 = 24_000;
+    let millipoints = |um: u32| -> u64 { (u64::from(um) * 360 + 63) / 127 };
+    let page_points = millipoints(PAGE);
+    let widths = [80u32, 92, 104, 116, 128, 140, 250, 700, 1_500];
+    for pen_width in widths {
+        let half = pen_width.div_ceil(2);
+        let offsets = [
+            half.saturating_sub(1),
+            half,
+            half + 1,
+            half + 2,
+            half + 3,
+            half + 4,
+        ];
+        for edge in 0..4u8 {
+            for distance in offsets {
+                let position = if edge.is_multiple_of(2) {
+                    distance
+                } else {
+                    PAGE - distance
+                };
+                let mut at = PdfPoint {
+                    x_um: 12_000,
+                    y_um: 12_000,
+                };
+                match edge {
+                    0 | 1 => {
+                        at.x_um = i32::try_from(position).expect("bounded x")
+                    },
+                    _ => at.y_um = i32::try_from(position).expect("bounded y"),
+                }
+                let center = PdfPoint {
+                    x_um: 12_000,
+                    y_um: 12_000,
+                };
+                let coordinate = position;
+                let opposite_edge = PAGE - position;
+                let physical = coordinate >= half && opposite_edge >= half;
+                let x_points = millipoints(coordinate);
+                let serialized = millipoints(pen_width)
+                    <= 2 * x_points.min(page_points - x_points);
+                let expected = physical && serialized;
+                for dpi in [72, 150, 300] {
+                    let path = PdfVectorPath {
+                        commands: vec![
+                            PdfPathCommand::MoveTo(at),
+                            PdfPathCommand::LineTo(center),
+                        ],
+                        paint: PdfPathPaint::Stroke {
+                            color: DEFAULT_COLOR,
+                            width_um: pen_width,
+                        },
+                    };
+                    let rendered = png::render_paper_png(
+                        PAGE,
+                        PAGE,
+                        dpi,
+                        &[path],
+                        0,
+                        None,
+                    );
+                    assert_eq!(
+                        rendered.is_ok(),
+                        expected,
+                        "PNG/PDF mismatch at {dpi} DPI, edge {edge}, \
+                         coordinate {coordinate}, pen width {pen_width}: \
+                         {:?}",
+                        rendered.as_ref().err()
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn actual_vector_pdf_and_transparent_png_refuse_same_rounded_edge_ink() {
+    use atrament_pdf_composition_plan::{
+        PdfCompositionPlan, PdfPagePlan, SearchableSemanticText,
+    };
+    use atrament_pdf_vector_serializer::{
+        PdfVectorColorIntent, PdfVectorError, PdfVectorLimits,
+        PdfVectorPageBox, serialize_vector_pdf,
+    };
+
+    const PAGE: u32 = 24_000;
+    let middle = PdfPoint {
+        x_um: 12_000,
+        y_um: 12_000,
+    };
+    let page_box = PdfVectorPageBox {
+        width_um: PAGE,
+        height_um: PAGE,
+    };
+    let limits = PdfVectorLimits {
+        maximum_pages: 1,
+        maximum_paths_per_page: 1,
+        maximum_commands_per_page: 2,
+        maximum_pdf_bytes: 5_000,
+    };
+    for (edge, clipped, safe) in [
+        ("left", PdfPoint { x_um: 40, y_um: 12_000 }, PdfPoint {
+            x_um: 41,
+            y_um: 12_000,
+        }),
+        (
+            "right",
+            PdfPoint {
+                x_um: 23_960,
+                y_um: 12_000,
+            },
+            PdfPoint {
+                x_um: 23_959,
+                y_um: 12_000,
+            },
+        ),
+        ("top", PdfPoint { x_um: 12_000, y_um: 40 }, PdfPoint {
+            x_um: 12_000,
+            y_um: 41,
+        }),
+        (
+            "bottom",
+            PdfPoint {
+                x_um: 12_000,
+                y_um: 23_960,
+            },
+            PdfPoint {
+                x_um: 12_000,
+                y_um: 23_959,
+            },
+        ),
+    ] {
+        for (point, admitted) in [(clipped, false), (safe, true)] {
+            let line = PdfVectorPath {
+                commands: vec![
+                    PdfPathCommand::MoveTo(point),
+                    PdfPathCommand::LineTo(middle),
+                ],
+                paint: PdfPathPaint::Stroke {
+                    color: DEFAULT_COLOR,
+                    width_um: 80,
+                },
+            };
+            let composition = PdfCompositionPlan {
+                pages: vec![PdfPagePlan {
+                    color_intent: PdfVectorColorIntent::DeviceRgb,
+                    physical_page_box: page_box,
+                    searchable_text:
+                        SearchableSemanticText::OmittedAsIncompatible,
+                    vector_authority: vec![line.clone()],
+                }],
+                assets: Vec::new(),
+                render_manifest_identity: "rounded-edge-parity",
+            };
+            let pdf = serialize_vector_pdf(&composition, limits);
+            assert_eq!(
+                pdf.is_ok(),
+                admitted,
+                "PDF edge {edge} at {point:?}: {:?}",
+                pdf.as_ref().err()
+            );
+            if !admitted {
+                assert_eq!(pdf, Err(PdfVectorError::InvalidPath));
+            }
+            for dpi in [72, 150, 300] {
+                let png = png::render_paper_png(
+                    PAGE,
+                    PAGE,
+                    dpi,
+                    &[line.clone()],
+                    0,
+                    None,
+                );
+                assert_eq!(
+                    png.is_ok(),
+                    admitted,
+                    "PNG edge {edge} at {point:?} {dpi} DPI: {:?}",
+                    png.as_ref().err()
+                );
+                if admitted {
+                    assert!(
+                        png.expect("admitted real PNG")
+                            .starts_with(b"\x89PNG\r\n\x1a\n")
+                    );
+                }
+            }
+        }
+    }
+}

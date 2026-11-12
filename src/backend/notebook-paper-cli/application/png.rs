@@ -37,7 +37,8 @@
 use std::iter;
 
 use atrament_pdf_vector_serializer::{
-    PdfPathCommand, PdfPathPaint, PdfPoint, PdfRgb, PdfVectorPath,
+    PdfPathCommand, PdfPathPaint, PdfPoint, PdfRgb, PdfVectorPageBox,
+    PdfVectorPath, pdf_painted_point_inside_page,
 };
 
 use super::{MAX_OUTPUT_BYTES, NOTEBOOK_BORDER_STROKE_UM, RoundedPaperBorder};
@@ -275,25 +276,16 @@ fn validate_page_path_bounds(
     width_um: u32,
     height_um: u32,
 ) -> Result<(), String> {
-    let clearance = match path.paint {
-        PdfPathPaint::Stroke { width_um: pen_width_um, .. }
-            if pen_width_um > 0 =>
-        {
-            pen_width_um.div_ceil(2)
-        }
+    let stroke_width_um = match path.paint {
+        PdfPathPaint::Stroke { width_um, .. } if width_um > 0 => width_um,
         PdfPathPaint::Stroke { .. } => {
             return Err("PNG stroke width must be positive".into());
-        }
+        },
         PdfPathPaint::Fill { .. } => 0,
     };
-    let right = width_um.checked_sub(clearance);
-    let bottom = height_um.checked_sub(clearance);
+    let page = PdfVectorPageBox { width_um, height_um };
     let inside = |point: PdfPoint| -> bool {
-        u32::try_from(point.x_um).is_ok_and(|x| {
-            right.is_some_and(|edge| x >= clearance && x <= edge)
-        }) && u32::try_from(point.y_um).is_ok_and(|y| {
-            bottom.is_some_and(|edge| y >= clearance && y <= edge)
-        })
+        pdf_painted_point_inside_page(point, page, stroke_width_um)
     };
     for command in &path.commands {
         let valid = match *command {

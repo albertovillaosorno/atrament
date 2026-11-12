@@ -337,6 +337,22 @@ fn point_inside(
                 .saturating_mul(2)
 }
 
+/// Check physical point clearance after the vector PDF's three-decimal
+/// point and stroke-width serialization. A stroke that fits in micrometres
+/// may still clip at the rounded PDF page edge.
+///
+/// Pass a zero stroke width for filled paths; fill edges can touch the sheet.
+/// Transparent raster projections can use this same admission rule so PNG
+/// does not accept marks that would be refused in physical PDF output.
+#[must_use]
+pub fn pdf_painted_point_inside_page(
+    point: PdfPoint,
+    page: PdfVectorPageBox,
+    stroke_width_um: u32,
+) -> bool {
+    point_inside(point, page, stroke_width_um)
+}
+
 fn apply_path_paint(
     stream: &mut String,
     paint: PdfPathPaint,

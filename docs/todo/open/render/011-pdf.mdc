@@ -360,3 +360,29 @@ six native golden/PNG decoder tests passed; the edge subprocess test passed
 independently. Jig check retains 181 unrelated pre-existing findings, zero
 on the owned files. This closes only paper-layer clipping parity; full saved
 notebook content, embedded images and the P5 acceptance remain open.
+
+## Serialized PDF and transparent PNG pen clearance parity — 2026-11-12
+
+The native PNG compositor now uses the PDF vector serializer's shared
+point-clearance predicate, including the PDF's three-decimal point rounding.
+A physically in-page pen can still extend beyond its serialized PDF page:
+for example, an 80-µm-wide stroke centered 40 µm from the left edge becomes
+a 0.227-point stroke at 0.113 points, exceeding its rounded clearance.
+Previously the transparent PNG admitted that stroke while PDF refused it;
+now both refuse before producing output. One additional micrometre of
+clearance remains admissible at that edge in both formats.
+
+A deterministic 648-case boundary matrix covers widths, all four physical
+edges and all supported 72/150/300 DPI selections against an independent
+fixed-point rounding oracle. An actual vector PDF/PNG regression asserts the
+same acceptance and refusal for four page edges, including the adjacent
+accepted coordinate. Another 216-case pixel oracle reconstructs transparent
+RGBA pen footprints from integer rational pixel centers, segment projection
+and round caps across angles, widths and DPI. Very short legal strokes may
+cover no pixel at low DPI; this is not treated as a false refusal.
+
+The existing paper-only and admitted-ink PNG bytes remain unchanged; only
+geometry that would clip after PDF serialization is refused. This is a
+cross-format output boundary correction, not automatic glyph synthesis,
+image embedding or persistence of a complete two-page notebook. P5-011
+remains open.
