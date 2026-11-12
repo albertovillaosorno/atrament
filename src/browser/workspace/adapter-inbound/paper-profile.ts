@@ -82,9 +82,11 @@ function required<T extends Element>(id: string): T {
 
 // Decimal millimetres are browser proposals, never an independent paper
 // authority. Preserve the typed form before Number() can coerce exponents,
-// hexadecimal values, leading signs or padded whitespace.
+// hexadecimal values, leading signs or padded whitespace. Require the
+// same 0..3 fractional decimal digits as the native millimetre CLI so an
+// extra digit cannot silently round into a different physical page.
 function decimalMillimetres(raw: string): number | null {
-    if (!/^(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)$/.test(raw)) return null;
+    if (!/^[0-9]+(?:\.[0-9]{1,3})?$/.test(raw)) return null;
     const number = Number(raw);
     return Number.isFinite(number) && number >= 0
         && Number.isSafeInteger(Math.round(number * 1000)) ? number : null;

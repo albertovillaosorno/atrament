@@ -353,6 +353,8 @@ test('paper CLI validates late options before loading profile or replacing PDF',
                     /PNG DPI must be between 72 and 300/],
                 [['--dpi', '+150', '--format', 'png'],
                     /--dpi requires unsigned decimal digits/],
+                [['--width-mm', '210.'],
+                    /millimeters require up to three decimal places/],
                 [['--emit-profile', '--emit-profile'],
                     /--emit-profile may appear only once/],
             ]) {

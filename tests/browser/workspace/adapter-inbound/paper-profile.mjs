@@ -138,6 +138,13 @@ test("paper editor exports Rust PDF and PNG", async () => {
             ["paper-bottom", "16 "],
             ["paper-left", "2e1"],
             ["paper-right", "0xE"],
+            ["paper-width", "215."],
+            ["paper-height", ".5"],
+            ["paper-spacing", "4.5000"],
+            ["paper-upper", "22.0001"],
+            ["paper-bottom", "16..0"],
+            ["paper-left", "20.1234"],
+            ["paper-right", "14."],
         ]) {
             const input = elements.get(field);
             const previous = input.value;

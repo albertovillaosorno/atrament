@@ -139,6 +139,28 @@ fn invalid_options_are_refused_before_pdf_bytes_exist() {
 }
 
 #[test]
+fn paper_millimetres_require_digits_after_a_decimal_point() {
+    for dimension in [
+        "--width-mm", "--height-mm", "--spacing-mm",
+        "--margin-top-mm", "--margin-bottom-mm",
+        "--margin-left-mm", "--margin-right-mm",
+    ] {
+        for rejected in ["210.", "210..0", ".5", "210.0000"] {
+            let args = [dimension, rejected].map(str::to_owned);
+            let refusal = parse_options(&args)
+                .expect_err("noncanonical millimetres must refuse");
+            assert!(refusal.contains("decimal places"),
+                "{dimension} {rejected}: {refusal}");
+        }
+        for admitted in ["210", "210.0", "210.000"] {
+            let args = [dimension, admitted].map(str::to_owned);
+            let _options = parse_options(&args)
+                .expect("valid decimal micrometres");
+        }
+    }
+}
+
+#[test]
 fn paper_color_requires_six_ascii_hex_digits_in_cli_and_profile() {
     let canonical = encode_profile(Options::default());
     for color in [

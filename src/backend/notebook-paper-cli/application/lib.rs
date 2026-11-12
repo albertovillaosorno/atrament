@@ -215,6 +215,7 @@ fn millimetres(text: &str) -> Result<u32, String> {
     let (integral_text, decimals) = text.split_once('.').unwrap_or((text, ""));
     if integral_text.is_empty()
         || !integral_text.bytes().all(|byte| byte.is_ascii_digit())
+        || text.ends_with('.')
         || decimals.len() > 3
         || !decimals.bytes().all(|byte| byte.is_ascii_digit())
     {
