@@ -7823,6 +7823,65 @@ fn seeded_notebook_markdown_flow_varies_across_physical_pages() {
 
 
 #[test]
+fn indexed_unicode_stroke_lookup_preserves_interleaved_library_order()
+-> Result<(), String> {
+    // A full native library can interleave matching strokes among thousands
+    // of unrelated exact glyphs. Lookup must preserve authored stroke order,
+    // fallback identity and per-occurrence variation (not hash-map order).
+    let mut dense = GlyphOverlay::default();
+    let mut sparse = GlyphOverlay::default();
+    for index in 0..4096usize {
+        let matching = matches!(index, 0 | 2048 | 4095);
+        let grapheme = if matching {
+            "a".to_owned()
+        } else {
+            char::from_u32(0x4E00 + u32::try_from(index)
+                .map_err(|error| error.to_string())?)
+                .ok_or("test CJK glyph out of range")?.to_string()
+        };
+        let shape = GlyphStroke {
+            grapheme,
+            start_um: (600 + u32::from(matching), 550),
+            end_um: (2000, 2800),
+            width_um: 250,
+            rgb: [u8::try_from(index % 255)
+                .map_err(|error| error.to_string())?, 48, 70],
+        };
+        if matching {
+            sparse.strokes.push(shape.clone());
+        }
+        dense.strokes.push(shape);
+    }
+    for overlay in [&mut dense, &mut sparse] {
+        overlay.fallbacks.push(GlyphFallback {
+            missing: "ó".into(), authored: "a".into(),
+        });
+        overlay.runs.push(TextRun {
+            heading_ink: None, origin_um: (25000, 30000),
+            page: 1, text: "aóa aó".into(),
+        });
+    }
+    let ordinary = sparse.expand(&[], None)?;
+    if ordinary.len() != 15 || dense.expand(&[], None)? != ordinary {
+        return Err("full library changed exact authored stroke order".into());
+    }
+    for overlay in [&mut dense, &mut sparse] {
+        overlay.parse("--glyph-variation", &mut args(&[
+            "42", "4", "4", "5", "3", "50", "15",
+        ]).iter())?;
+    }
+    let sampled = sparse.expand(&[], None)?;
+    if sampled.len() != ordinary.len()
+        || sampled == ordinary || dense.expand(&[], None)? != sampled {
+        return Err("full library changed seeded exact fallback ink".into());
+    }
+    if dense.expand(&[], None)? != sampled {
+        return Err("indexed Unicode ink is not deterministic".into());
+    }
+    Ok(())
+}
+
+#[test]
 fn seeded_variation_keeps_exact_nfd_fallback_and_applies_selected_means() {
     // The target NFD identity controls statistics, even when an exact
     // separately authored source provides the fallback pen gesture.

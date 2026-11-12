@@ -33,6 +33,7 @@
 
 //! Exact, explicitly authored glyph contours for a bounded CLI text overlay.
 
+use std::collections::HashMap;
 use std::f64::consts::PI;
 use std::fmt::Write as _;
 use std::mem::{replace, swap};
@@ -564,6 +565,16 @@ impl GlyphOverlay {
         validate_glyph_statistics(statistics)?;
         self.validate_pairing()?;
         validate_manual_ink(manual)?;
+        // Index the already-admitted library once per export. A native
+        // library can contain 4096 interleaved exact Unicode strokes;
+        // repeatedly scanning every unrelated shape for each text glyph
+        // makes long paginated documents needlessly quadratic. Append in
+        // original order so authored paths and seeded sampling are stable.
+        let mut by_grapheme: HashMap<&str, Vec<&GlyphStroke>> = HashMap::new();
+        for shape in &self.strokes {
+            by_grapheme.entry(shape.grapheme.as_str())
+                .or_default().push(shape);
+        }
         let mut expanded = manual.to_vec();
         let mut boundary_ink_end = (boundary_run == 0)
             .then_some(expanded.len());
@@ -587,16 +598,13 @@ impl GlyphOverlay {
                 let authored = self.fallbacks.iter()
                     .find(|entry| entry.missing == grapheme)
                     .map_or(grapheme, |entry| entry.authored.as_str());
-                let matches = self.strokes.iter()
-                    .filter(|shape| shape.grapheme == authored)
-                    .collect::<Vec<_>>();
-                if matches.is_empty() {
+                let Some(matches) = by_grapheme.get(authored) else {
                     previous = None;
                     if !missing.contains(&grapheme) {
                         missing.push(grapheme);
                     }
                     continue;
-                }
+                };
                 let metrics = statistics
                     .map(|profile| {
                         GlyphMetrics::from_profile(profile, grapheme)
@@ -606,7 +614,7 @@ impl GlyphOverlay {
                     variation.tracking(occurrence)
                 })?;
                 let selected = if let Some(variation) = self.variation {
-                    variation.sample(&matches, occurrence)?
+                    variation.sample(matches, occurrence)?
                 } else {
                     matches.iter().map(|shape| (*shape).clone()).collect()
                 };
