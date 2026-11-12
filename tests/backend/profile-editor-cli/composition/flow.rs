@@ -7902,3 +7902,85 @@ fn marked_space_ordered_labels_keep_every_nominal_contour_on_page()
          marker={marker_refused}, glyph={glyph_refused}");
     Ok(())
 }
+
+// A space can own several combining marks; neither a Markdown boundary nor a
+// physical wrap may split its exact authored glyph or discard its height.
+#[test]
+fn multiple_marks_on_spaces_survive_markdown_layout()
+-> Result<(), String> {
+    use atrament_handwriting_statistics::{
+        Dimension, DimensionStatistics, HandwritingStatisticsProfile,
+        ScalarStatistics,
+    };
+    use atrament_notebook_profile::NotebookProfile;
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let marked = " \u{301}\u{327}";
+    assert_eq!(super::first_grapheme(&format!("{marked}a"))?.0, marked);
+    let mut stats = HandwritingStatisticsProfile::baseline(975);
+    for (dimension, value) in [
+        (Dimension::Height, 25_000),
+        (Dimension::Width, 13_000),
+    ] {
+        stats = stats.with_glyph(marked, DimensionStatistics {
+            dimension,
+            statistics: ScalarStatistics {
+                minimum: value, maximum: value, mean: value,
+                median: value, standard_deviation: 0,
+            },
+        }, &UnicodeGraphemeSegmentation)
+            .map_err(|error| format!("{error:?}"))?;
+    }
+    let patterns = [
+        format!("a{marked}a"),
+        format!("a{marked}aaaaaaaaaaaa"),
+        format!("> a{marked}aaaaaaaaaaaa"),
+        format!("# {marked}a"),
+        format!("- {marked}a"),
+        format!("- [x] {marked}a"),
+        format!("12. {marked}a"),
+        format!("> {marked}a"),
+        format!("    a{marked}a"),
+        format!("~~~\na{marked}a\n~~~"),
+        format!("a\t\u{301}\u{327}a"),
+    ];
+    let paper = NotebookProfile::default();
+    let mut accepted = 0usize;
+    let mut wrapped = 0usize;
+    for width in [32_000u32, 42_000, 58_000, 110_000] {
+        for pattern in &patterns {
+            let source = FlowSource::new(FlowFormat::Markdown, pattern)?;
+            let region = super::FlowRegion {
+                left: 30_000, top: 40_000, width, height: 55_000,
+            };
+            let Ok((rows, marks, _)) = super::layout_flow_with_region(
+                &source, &paper, Some(&stats),
+                super::HeadingDecoration::default(), Some(region),
+            ) else { continue; };
+            let pitch = super::measured_pitch(&source, Some(&stats))?;
+            assert_eq!(pitch, emitted_glyph_pitch(&rows, &stats)?,
+                "source {pattern:?}, width={width}, rows {rows:?}");
+            assert_eq!(pitch, 29_000, "marked glyph controls row pitch");
+            let rendered = rows.iter().map(|row| row.text.as_str())
+                .collect::<String>();
+            assert!(rendered.contains(marked),
+                "marked glyph lost: {pattern:?} => {rows:?}");
+            for row in &rows {
+                let mut remaining = row.text.as_str();
+                while !remaining.is_empty() {
+                    let (glyph, rest) = super::first_grapheme(remaining)?;
+                    assert!(!glyph.starts_with('\u{301}')
+                        && !glyph.starts_with('\u{327}'),
+                        "detached mark: {pattern:?} => {rows:?}");
+                    remaining = rest;
+                }
+            }
+            region.validate_ink(paper.printable_rect_um()?, &marks)?;
+            wrapped += usize::from(rows.len() > 1);
+            accepted += 1;
+        }
+    }
+    assert!(accepted >= 15 && wrapped >= 4,
+        "coverage: {accepted} accepted, {wrapped} wrapped");
+    Ok(())
+}
