@@ -4017,6 +4017,17 @@ export function createGlyphStrokeEditor() {
         }
         return value;
     };
+    // Read the original decimal DOM text before Number() can coerce
+    // hexadecimal, exponent, plus-prefixed or whitespace-padded values.
+    const starterGeometry = () => [
+        decimalWhole(centerX.value), decimalWhole(centerY.value),
+        decimalWhole(radius.value), decimalWhole(numeric.width.value),
+        color.value,
+    ];
+    const accentPosition = () => ({
+        dx: decimalWhole(accentShift.value, true),
+        lift: decimalWhole(accentLift.value),
+    });
     const message = (text) => { status.textContent = text; };
     const download = (bytes, filename) => {
         const blob = new Blob([bytes], { type: "text/tab-separated-values" });
@@ -4066,13 +4077,12 @@ export function createGlyphStrokeEditor() {
     const starterFromInputs = () => {
         const chosen = selectedForm();
         const values = [
-            chosen.grapheme, Number(centerX.value), Number(centerY.value),
-            Number(radius.value), Number(numeric.width.value), color.value,
+            chosen.grapheme, ...starterGeometry(),
         ];
         const position = {
-            dx: Number(accentShift.value), lift: Number(accentLift.value),
+            ...accentPosition(),
             italicDegrees: italicAngle.value === ""
-                ? NaN : Number(italicAngle.value),
+                ? NaN : decimalWhole(italicAngle.value),
         };
         return geometricStarter(...values, position, chosen.variant);
     };
@@ -5526,11 +5536,8 @@ export function createGlyphStrokeEditor() {
                 message("All 26 lowercase glyphs already have authored ink");
                 return;
             }
-            const x = Number(centerX.value);
-            const y = Number(centerY.value);
-            const r = Number(radius.value);
-            const pen = Number(numeric.width.value);
-            const added = missing.flatMap((glyph) => geometricStarter(glyph, x, y, r, pen, color.value));
+            const values = starterGeometry();
+            const added = missing.flatMap((glyph) => geometricStarter(glyph, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             strokes = next;
@@ -5550,7 +5557,7 @@ export function createGlyphStrokeEditor() {
             if (drawing !== null) {
                 throw new Error("Finish the current pen trace before seeding");
             }
-            const next = fillMissingConnectedLowercase(strokes, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value);
+            const next = fillMissingConnectedLowercase(strokes, ...starterGeometry());
             if (next === strokes) {
                 message("All 26 lowercase glyphs already have authored ink");
                 return;
@@ -5597,8 +5604,7 @@ export function createGlyphStrokeEditor() {
             if (drawing !== null) {
                 throw new Error("Finish the current pen trace before seeding");
             }
-            const next = fillMissingBilingualBaseline(strokes, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value, { dx: Number(accentShift.value),
-                lift: Number(accentLift.value) }, form);
+            const next = fillMissingBilingualBaseline(strokes, ...starterGeometry(), accentPosition(), form);
             if (next === strokes) {
                 message("All 114 bilingual text glyphs already have ink");
                 return;
@@ -5636,7 +5642,8 @@ export function createGlyphStrokeEditor() {
                 message("All six basic punctuation glyphs have authored ink");
                 return;
             }
-            const added = missing.flatMap((g) => geometricStarter(g, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value));
+            const values = starterGeometry();
+            const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             strokes = next;
@@ -5663,7 +5670,8 @@ export function createGlyphStrokeEditor() {
                 message("All six quotation glyphs already have authored ink");
                 return;
             }
-            const added = missing.flatMap((g) => geometricStarter(g, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value));
+            const values = starterGeometry();
+            const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             strokes = next;
@@ -5691,7 +5699,8 @@ export function createGlyphStrokeEditor() {
                     + " have authored ink");
                 return;
             }
-            const added = missing.flatMap((g) => geometricStarter(g, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value));
+            const values = starterGeometry();
+            const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             strokes = next;
@@ -5717,7 +5726,8 @@ export function createGlyphStrokeEditor() {
                 message("All ten numeral glyphs already have authored ink");
                 return;
             }
-            const added = missing.flatMap((g) => geometricStarter(g, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value));
+            const values = starterGeometry();
+            const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             strokes = next;
@@ -5744,7 +5754,8 @@ export function createGlyphStrokeEditor() {
                 message("All 26 uppercase glyphs already have authored ink");
                 return;
             }
-            const added = missing.flatMap((g) => geometricStarter(g, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value));
+            const values = starterGeometry();
+            const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             strokes = next;
@@ -5770,7 +5781,8 @@ export function createGlyphStrokeEditor() {
                 message("All eleven text punctuation glyphs are authored");
                 return;
             }
-            const added = missing.flatMap((g) => geometricStarter(g, Number(centerX.value), Number(centerY.value), Number(radius.value), Number(numeric.width.value), color.value));
+            const values = starterGeometry();
+            const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             strokes = next;
@@ -5813,9 +5825,8 @@ export function createGlyphStrokeEditor() {
                 throw new Error(`Author ${letterCase} base glyphs first: `
                     + [...new Set(withoutBases)].join(", "));
             }
-            const shift = Number(accentShift.value);
-            const lift = Number(accentLift.value);
-            const added = missing.flatMap(([base, target]) => composeAccentedGlyph(strokes, base, target, color.value, { dx: shift, lift }));
+            const position = accentPosition();
+            const added = missing.flatMap(([base, target]) => composeAccentedGlyph(strokes, base, target, color.value, position));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
             strokes = next;
@@ -5872,10 +5883,7 @@ export function createGlyphStrokeEditor() {
         try {
             const target = character.value;
             const sourceGlyph = copyFrom.value;
-            const lines = composeAccentedGlyph(strokes, sourceGlyph, target, color.value, {
-                dx: Number(accentShift.value),
-                lift: Number(accentLift.value),
-            });
+            const lines = composeAccentedGlyph(strokes, sourceGlyph, target, color.value, accentPosition());
             const next = [
                 ...strokes.filter((stroke) => stroke.grapheme !== target),
                 ...lines,

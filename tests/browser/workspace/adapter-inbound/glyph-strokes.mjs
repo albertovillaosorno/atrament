@@ -599,6 +599,111 @@ function mountEditor() {
     };
 }
 
+test("geometric glyph authoring refuses coerced decimal inputs", async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        editor.start();
+        get("character").value = "o";
+        get("form").value = "o";
+        get("construct").dispatch("click");
+        get("save").dispatch("click");
+        const accepted = await downloads.at(-1).text();
+        assert.equal(parseGlyphLibrary(accepted).length, 48);
+
+        // Single-glyph previews and every bulk family must not reinterpret
+        // hexadecimal, exponent, positive sign or surrounding whitespace.
+        const invalid = [
+            ["circle-x", "+1550", "construct"],
+            ["circle-y", "2.45e3", "seed-lowercase"],
+            ["circle-radius", "0x44c", "seed-connected"],
+            ["width", "2.5e2", "seed-baseline"],
+            ["circle-x", " 1550", "seed-punctuation"],
+            ["circle-y", "2.45e3", "seed-quotes"],
+            ["circle-radius", "0x44c", "seed-math"],
+            ["width", "+250", "seed-digits"],
+            ["circle-x", "1.55e3", "seed-capitals"],
+            ["circle-y", "+2450", "seed-text-marks"],
+            ["accent-shift", "+0", "seed-connected-baseline"],
+            ["accent-lift", "0e0", "seed-baseline"],
+        ];
+        for (const [field, raw, action] of invalid) {
+            const input = get(field);
+            const previous = input.value;
+            input.value = raw;
+            input.dispatch("input");
+            get(action).dispatch("click");
+            assert.match(get("status").textContent, /whole decimal/,
+                `${action} accepted ${field}=${raw}`);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), accepted,
+                `${action} changed the previously authored TSV`);
+            input.value = previous;
+            input.dispatch("input");
+        }
+
+        get("form").value = "o-italic";
+        get("italic-angle").value = "1.2e1";
+        get("italic-angle").dispatch("input");
+        get("construct").dispatch("click");
+        assert.match(get("status").textContent, /whole decimal/);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), accepted);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("accent composition rejects coerced offsets without losing ink",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            get("seed-lowercase").dispatch("click");
+            get("save").dispatch("click");
+            const accepted = await downloads.at(-1).text();
+            assert.ok(parseGlyphLibrary(accepted).length > 200);
+
+            const invalid = [
+                ["accent-shift", "+0", "seed-spanish"],
+                ["accent-lift", "0e0", "seed-spanish-nfd"],
+                ["accent-shift", "-5e1", "seed-spanish"],
+                ["accent-lift", "0x0", "seed-spanish-nfd"],
+            ];
+            for (const [field, raw, action] of invalid) {
+                const control = get(field);
+                const previous = control.value;
+                control.value = raw;
+                get(action).dispatch("click");
+                assert.match(get("status").textContent, /whole decimal/,
+                    `${action} accepted ${field}=${raw}`);
+                get("save").dispatch("click");
+                assert.equal(await downloads.at(-1).text(), accepted);
+                control.value = previous;
+            }
+            get("character").value = "ñ";
+            get("copy-from").value = "n";
+            get("accent-shift").value = "+0";
+            get("compose").dispatch("click");
+            assert.match(get("status").textContent, /whole decimal/);
+            get("save").dispatch("click");
+            assert.equal(await downloads.at(-1).text(), accepted);
+
+            // The same controls still admit a negative decimal offset,
+            // emitting independently editable exact Unicode accent ink.
+            get("accent-shift").value = "-100";
+            get("accent-lift").value = "50";
+            get("compose").dispatch("click");
+            assert.match(get("status").textContent, /[Cc]omposed/);
+            get("save").dispatch("click");
+            const composed = parseGlyphLibrary(await downloads.at(-1).text());
+            assert.ok(composed.some((stroke) => stroke.grapheme === "ñ"));
+        } finally {
+            ui.restore();
+        }
+    });
+
 test("authored glyph transforms reject numeric coercions", () => {
     const ui = mountEditor();
     try {
