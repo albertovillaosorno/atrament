@@ -7990,3 +7990,73 @@ test('ordered marked-space glyph preserves exact PDF/PNG and atomic refusal',
             rmSync(dir, { recursive: true, force: true });
         }
     });
+
+// A soft-joined source-line combining mark becomes a space-mark glyph.
+// Its selected handwriting height must drive native page pitch, matching
+// equivalent manual positions in both vector PDF and transparent PNG.
+test('soft-joined combining ink sets native PDF/PNG page pitch and refusal',
+    () => {
+        const dir = mkdtempSync(join(root, '.temp/flow-joined-pitch-'));
+        try {
+            const profile = join(dir, 'tall-joined-space.json');
+            const combined = ' \u0301';
+            const configured = spawnSync(cargo, [
+                'run', '--offline', '--quiet',
+                '-p', 'atrament_profile_editor_cli', '--',
+                'handwriting', '--set-glyph', combined, 'height',
+                '25000', '25000', '25000', '25000', '0',
+            ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+            assert.equal(configured.status, 0, configured.stderr);
+            writeFileSync(profile, configured.stdout);
+            const options = [
+                '--handwriting-profile', profile,
+                '--glyph-stroke', combined, '200', '500',
+                '1500', '3000', '250', '#D02040',
+            ];
+            const region = [
+                '--flow-region', '30000', '40000', '40000', '35000',
+            ];
+            const source = 'a\n\u0301a\n\na';
+            const placed = 'a \u0301a';
+            for (const [format, page] of [
+                ['pdf', 1], ['png', 1], ['png', 2],
+            ]) {
+                const flags = [...options, ...region,
+                    ...(format === 'pdf' ? ['--pages', '2'] : [])];
+                const rendered = render(dir, source, format, flags,
+                    '--flow-markdown', page);
+                assert.equal(rendered.result.status, 0,
+                    rendered.result.stderr);
+                const expected = readFileSync(rendered.output);
+                const manualOutput = join(dir, 'manual-' + format + '-' + page);
+                const direct = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--', ...base,
+                    ...options, '--place-text', '1', '32500', '42500',
+                    placed, '--place-text', '2', '32500', '42500', 'a',
+                    ...(format === 'pdf' ? ['--pages', '2'] : []),
+                    '--export-paper', format,
+                    ...(format === 'png'
+                        ? ['--png-page', String(page), '--dpi', '72']
+                        : []),
+                    '--output', manualOutput,
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(direct.status, 0, direct.stderr);
+                assert.deepEqual(expected, readFileSync(manualOutput),
+                    format + ' page ' + page + ' follows 29-mm pitch');
+
+                const short = render(dir, source, format, [
+                    ...options, '--flow-region', '30000', '40000',
+                    '40000', '14000',
+                    ...(format === 'pdf' ? ['--pages', '2'] : []),
+                ], '--flow-markdown', page);
+                assert.notEqual(short.result.status, 0);
+                assert.match(short.result.stderr,
+                    /flow line cannot fit printable vertical region/);
+                assert.deepEqual(readFileSync(short.output), expected,
+                    format + ' page ' + page + ' keeps ink on refusal');
+            }
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
