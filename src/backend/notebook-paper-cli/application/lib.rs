@@ -455,6 +455,9 @@ fn parse_output_format(value: &str) -> Result<OutputFormat, String> {
 }
 
 fn parse_png_dpi(value: &str) -> Result<u32, String> {
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("--dpi requires unsigned decimal digits".into());
+    }
     let dpi = value.parse::<u32>()
         .map_err(|error| format!("--dpi requires an integer: {error}"))?;
     if !(72..=300).contains(&dpi) {
