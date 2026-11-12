@@ -880,6 +880,110 @@ fn stream_length_digit_growth_reserves_dictionary_bytes_before_invalid_ink() {
 
 #[expect(
     clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "real PDF bytes anchor the final metadata and xref budget"
+)]
+#[test]
+fn final_document_framing_is_reserved_before_invalid_trailing_ink() {
+    let mut composition = PdfCompositionPlan {
+        assets: Vec::new(),
+        pages: vec![page(Vec::new()), page(vec![stroke()])],
+        render_manifest_identity: "document-tail-budget.v1",
+    };
+    let accepted = serialize_vector_pdf(&composition, limits())
+        .expect("the two-page PDF has a complete Info and xref trailer");
+    assert_xref_integrity(&accepted);
+    let exact = PdfVectorLimits {
+        maximum_pdf_bytes: accepted.len(),
+        ..limits()
+    };
+    assert_eq!(
+        serialize_vector_pdf(&composition, exact),
+        Ok(accepted.clone()),
+        "the full-document byte budget still admits the exact PDF",
+    );
+    // The original drawing fits; only the mandatory Info/xref/trailer
+    // framing is one byte short. Invalid geometry appended *after* all
+    // original drawing must not mask that unfinishable document budget.
+    composition.pages[1].vector_authority[0]
+        .commands
+        .push(PdfPathCommand::LineTo(point(-1, 40_000)));
+    assert_eq!(
+        serialize_vector_pdf(&composition, PdfVectorLimits {
+            maximum_pdf_bytes: accepted.len().saturating_sub(1),
+            ..limits()
+        }),
+        Err(PdfVectorError::ResourceLimit),
+        "mandatory final PDF objects refuse before trailing invalid ink",
+    );
+}
+
+#[expect(
+    clippy::expect_used,
+    clippy::indexing_slicing,
+    reason = "xref offsets and invalid trailing geometry are fixture-owned"
+)]
+#[test]
+fn final_document_budget_tracks_startxref_decimal_growth() {
+    let fixtures = [(1i32, 3usize), (40i32, 4usize), (800i32, 5usize)];
+    for (line_count, expected_digits) in fixtures {
+        let mut commands = vec![PdfPathCommand::MoveTo(point(20_000, 30_000))];
+        for index in 1i32..=line_count {
+            commands.push(PdfPathCommand::LineTo(point(
+                20_000i32.saturating_add(index.saturating_mul(100)),
+                40_000,
+            )));
+        }
+        let mut composition = PdfCompositionPlan {
+            assets: Vec::new(),
+            pages: vec![page(vec![PdfVectorPath {
+                commands,
+                paint: stroke().paint,
+            }])],
+            render_manifest_identity: "startxref-digits.v1",
+        };
+        let high_limits = PdfVectorLimits {
+            maximum_commands_per_page: 900,
+            maximum_pdf_bytes: 40_000,
+            ..limits()
+        };
+        let accepted = serialize_vector_pdf(&composition, high_limits)
+            .expect("startxref digit fixture is a valid PDF");
+        assert_xref_integrity(&accepted);
+        let xref_offset = accepted
+            .windows(b"xref\n".len())
+            .position(|window| window == b"xref\n")
+            .expect("xref keyword exists");
+        assert_eq!(
+            xref_offset.to_string().len(),
+            expected_digits,
+            "the fixture crosses the selected startxref decimal width",
+        );
+        let exact = PdfVectorLimits {
+            maximum_pdf_bytes: accepted.len(),
+            ..high_limits
+        };
+        assert_eq!(
+            serialize_vector_pdf(&composition, exact),
+            Ok(accepted.clone()),
+            "new startxref digit width must fit the exact document budget",
+        );
+        composition.pages[0].vector_authority[0]
+            .commands
+            .push(PdfPathCommand::LineTo(point(-1, 40_000)));
+        assert_eq!(
+            serialize_vector_pdf(&composition, PdfVectorLimits {
+                maximum_pdf_bytes: accepted.len().saturating_sub(1),
+                ..high_limits
+            }),
+            Err(PdfVectorError::ResourceLimit),
+            "one missing final byte must preempt later invalid geometry",
+        );
+    }
+}
+
+#[expect(
+    clippy::expect_used,
     reason = "the exact PDF page ceiling must emit a valid page tree"
 )]
 #[test]

@@ -602,6 +602,71 @@ fn append_stream_object(
     append(bytes, b"endstream\nendobj\n", maximum_pdf_bytes)
 }
 
+// The final Info, cross-reference rows and trailer are mandatory even
+// though they come after every page. Reserve their *exact* byte allowance
+// before rendering paths, including startxref decimal-width transitions.
+fn xref_header(offset_count: usize) -> String {
+    format!(
+        "xref\n0 {}\n0000000000 65535 f \n",
+        offset_count.saturating_add(1),
+    )
+}
+
+fn xref_trailer(
+    offset_count: usize,
+    info_object: usize,
+    startxref: usize,
+) -> String {
+    format!(
+        "trailer\n<< /Size {} /Root 1 0 R /Info {info_object} 0 R >>\n\
+         startxref\n{startxref}\n%%EOF\n",
+        offset_count.saturating_add(1),
+    )
+}
+
+fn complete_pdf_size(
+    prefix_bytes: usize,
+    info_bytes: usize,
+    info_object: usize,
+) -> Option<usize> {
+    let startxref = prefix_bytes.checked_add(info_bytes)?;
+    prefix_bytes
+        .checked_add(info_bytes)?
+        .checked_add(xref_header(info_object).len())?
+        // Every accepted offset fits exactly ten PDF decimal digits.
+        .checked_add(info_object.checked_mul(b"0000000000 00000 n \n".len())?)?
+        .checked_add(xref_trailer(info_object, info_object, startxref).len())
+}
+
+fn reserve_document_tail(
+    maximum_pdf_bytes: usize,
+    info_bytes: usize,
+    info_object: usize,
+) -> Result<usize, PdfVectorError> {
+    // PDF 1.4 xref entries use ten decimal digits; append() also enforces
+    // this u32 ceiling on every intermediate buffer.
+    let document_limit =
+        maximum_pdf_bytes.min(usize::try_from(u32::MAX).unwrap_or(usize::MAX));
+    if complete_pdf_size(0, info_bytes, info_object)
+        .is_none_or(|size| size > document_limit)
+    {
+        return Err(PdfVectorError::ResourceLimit);
+    }
+    let mut low = 0usize;
+    let mut high = document_limit;
+    while low < high {
+        let middle = low.saturating_add(high.saturating_sub(low).div_ceil(2));
+        if complete_pdf_size(middle, info_bytes, info_object)
+            .is_some_and(|size| size <= document_limit)
+        {
+            low = middle;
+        } else {
+            high = middle.saturating_sub(1);
+        }
+    }
+    Ok(low)
+}
+
 fn append_xref_and_trailer(
     bytes: &mut Vec<u8>,
     offsets: &[usize],
@@ -610,26 +675,13 @@ fn append_xref_and_trailer(
 ) -> Result<(), PdfVectorError> {
     let limit = maximum_pdf_bytes;
     let startxref = bytes.len();
-    append(
-        bytes,
-        format!(
-            "xref\n0 {}\n0000000000 65535 f \n",
-            offsets.len().saturating_add(1)
-        )
-        .as_bytes(),
-        limit,
-    )?;
+    append(bytes, xref_header(offsets.len()).as_bytes(), limit)?;
     for offset in offsets {
         append(bytes, format!("{offset:010} 00000 n \n").as_bytes(), limit)?;
     }
     append(
         bytes,
-        format!(
-            "trailer\n<< /Size {} /Root 1 0 R /Info {info_object} 0 R >>\n\
-             startxref\n{startxref}\n%%EOF\n",
-            offsets.len().saturating_add(1),
-        )
-        .as_bytes(),
+        xref_trailer(offsets.len(), info_object, startxref).as_bytes(),
         limit,
     )?;
     Ok(())
@@ -724,15 +776,22 @@ pub fn serialize_vector_pdf(
     {
         return Err(PdfVectorError::InvalidManifestIdentity);
     }
+    let info_object =
+        3usize.saturating_add(composition.pages.len().saturating_mul(2));
+    let info = format!(
+        "{info_object} 0 obj\n<< /Producer (Atrament vector-only PDF v1) \
+         /AtramentManifestID ({identity}) >>\nendobj\n",
+    );
+    let limit = limits.maximum_pdf_bytes;
+    let page_limit = reserve_document_tail(limit, info.len(), info_object)?;
     let mut bytes = Vec::new();
     let mut offsets = Vec::new();
-    let limit = limits.maximum_pdf_bytes;
-    append(&mut bytes, b"%PDF-1.4\n%\xD0\xD4\xC5\xD8\n", limit)?;
+    append(&mut bytes, b"%PDF-1.4\n%\xD0\xD4\xC5\xD8\n", page_limit)?;
     append_object(
         &mut bytes,
         &mut offsets,
         b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n",
-        limit,
+        page_limit,
     )?;
     let mut kids = String::new();
     for index in 0..composition.pages.len() {
@@ -752,12 +811,12 @@ pub fn serialize_vector_pdf(
             composition.pages.len(),
         )
         .as_bytes(),
-        limit,
+        page_limit,
     )?;
     // Bound each page by the remaining final-output allowance. A completed
     // page stream is held only until its own object has been appended.
     for (index, page) in composition.pages.iter().enumerate() {
-        let remaining_bytes = limit
+        let remaining_bytes = page_limit
             .checked_sub(bytes.len())
             .filter(|remaining| *remaining > 0)
             .ok_or(PdfVectorError::ResourceLimit)?;
@@ -773,27 +832,21 @@ pub fn serialize_vector_pdf(
             ..limits
         };
         let stream = render_page(page, page_limits)?;
-        append_object(&mut bytes, &mut offsets, page_header.as_bytes(), limit)?;
+        append_object(
+            &mut bytes,
+            &mut offsets,
+            page_header.as_bytes(),
+            page_limit,
+        )?;
         append_stream_object(
             &mut bytes,
             &mut offsets,
             content_object,
             &stream,
-            limit,
+            page_limit,
         )?;
     }
-    let info_object =
-        3usize.saturating_add(composition.pages.len().saturating_mul(2));
-    append_object(
-        &mut bytes,
-        &mut offsets,
-        format!(
-            "{info_object} 0 obj\n<< /Producer (Atrament vector-only PDF v1) \
-             /AtramentManifestID ({identity}) >>\nendobj\n",
-        )
-        .as_bytes(),
-        limit,
-    )?;
+    append_object(&mut bytes, &mut offsets, info.as_bytes(), limit)?;
     append_xref_and_trailer(&mut bytes, &offsets, info_object, limit)?;
     Ok(bytes)
 }

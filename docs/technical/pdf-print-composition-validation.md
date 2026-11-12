@@ -179,6 +179,16 @@ boundaries with a trailing invalid segment and confirms `ResourceLimit`
 preempts `InvalidPath` when that framing byte is already unavailable.
 Accepted PDF bytes are unchanged.
 
+The final Info object, complete cross-reference rows, and trailer also need
+space even after the last content stream. The assembler now reserves their
+exact byte count *before* drawing any page, including decimal digit growth
+in the trailer's `startxref` value. Otherwise a malformed last segment could
+mask an unfinishable one-byte-short document as `InvalidPath` rather than
+`ResourceLimit`. Red/green checks cover a two-page fixture and three-, four-,
+and five-digit cross-reference offsets. An exact full-document byte limit
+still admits the original byte-identical PDF, with no additional policy or
+asset/text support.
+
 The existing oversized-stream regression, large-content fixture and exact-limit
 boundary regressions still apply. Output bytes and PDF object order are
 unchanged.
