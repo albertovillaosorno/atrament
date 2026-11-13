@@ -52,7 +52,8 @@ const { geometricStarter, encodeGlyphLibrary,
     fillMissingBilingualBaseline, fillMissingConnectedLowercase,
     italicizeGlyphStrokes, scaleGlyphHeight,
     scaleGlyphWidth, scaleGlyphInk,
-    translateGlyphStrokes, reflectGlyphStrokes } = await import(new URL(
+    translateGlyphStrokes, reflectGlyphStrokes,
+    subdivideGlyphStroke } = await import(new URL(
     "../../../../src/browser/workspace/adapter-inbound/generated/"
         + "glyph-strokes.js", import.meta.url,
 ).href);
@@ -15439,6 +15440,187 @@ test(
             const flags = ["notebook", "--printed-sheet", "true",
                 "--glyph-file", file, "--place-text", "1", "25400",
                 "30000", nfd + "ó" + nfd];
+            const pdf = invoke(...flags, "--export-paper", "pdf");
+            assert.equal(pdf.status, 0, pdf.stderr.toString());
+            assert.match(pdf.stdout.toString("latin1"), /^%PDF-1\.4/);
+            const png = invoke(...flags, "--export-paper", "png",
+                "--png-page", "1", "--dpi", "72");
+            assert.equal(png.status, 0, png.stderr.toString());
+            assert.deepEqual(png.stdout.subarray(0, 8),
+                Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+            assert.equal(png.stdout[25], 6, "transparent RGBA ink");
+            assert.equal(fs.readFileSync(file, "utf8"), after);
+        } finally {
+            bidi?.close();
+            await closeFixtureServer(server);
+            for (const child of children.reverse()) await stopChild(child);
+            fs.rmSync(profile, { recursive: true, force: true });
+        }
+    },
+);
+
+
+test(
+    "Firefox selected Unicode stroke subdivision preserves native pen paths",
+    { skip: !FIREFOX_AVAILABLE, timeout: 120_000 },
+    async () => {
+        fs.mkdirSync(".temp", { recursive: true });
+        const profile = fs.mkdtempSync(".temp/glyph-subdivide-browser-");
+        const requests = [];
+        const server = createSessionFixtureServer(requests);
+        const children = [];
+        let bidi;
+        try {
+            server.listen(0, "127.0.0.1");
+            await once(server, "listening");
+            const address = server.address();
+            assert.notEqual(address, null);
+            assert.notEqual(typeof address, "string");
+            bidi = await startBidiFirefox(profile, children);
+            const tab = await bidi.command("browsingContext.create", {
+                type: "tab",
+            });
+            await bidi.command("browsingContext.navigate", {
+                context: tab.context,
+                url: `http://127.0.0.1:${address.port}/`
+                    + `#session=${REFRESH_SECRET}`,
+                wait: "complete",
+            });
+            await waitForSessionStatus(bidi, tab.context, "Session ready");
+            const baseline = [...requests];
+            const response = await bidi.command("script.evaluate", {
+                awaitPromise: true,
+                expression: String.raw`(async () => {
+                    const find = (id) =>
+                        document.getElementById("glyph-" + id);
+                    const nfd = "n" + String.fromCharCode(771);
+                    const add = (glyph, values) => {
+                        find("character").value = glyph;
+                        find("character").dispatchEvent(
+                            new Event("input", { bubbles: true }));
+                        for (const [key, value] of Object.entries({
+                            x1: values[0], y1: values[1],
+                            x2: values[2], y2: values[3], width: 251,
+                        })) find(key).value = String(value);
+                        find("color").value = "#243647";
+                        find("add").click();
+                    };
+                    const choose = (glyph, index) => {
+                        find("character").value = glyph;
+                        find("character").dispatchEvent(
+                            new Event("input", { bubbles: true }));
+                        find("selected").value = String(index);
+                        find("selected").dispatchEvent(
+                            new Event("change", { bubbles: true }));
+                    };
+                    const names = [];
+                    const blobs = [];
+                    const create = URL.createObjectURL;
+                    const click = HTMLAnchorElement.prototype.click;
+                    try {
+                        URL.createObjectURL = (blob) => {
+                            blobs.push(blob);
+                            return create.call(URL, blob);
+                        };
+                        HTMLAnchorElement.prototype.click = function () {
+                            names.push(this.download);
+                        };
+                        const download = async () => {
+                            find("save").click();
+                            return blobs.at(-1).text();
+                        };
+                        const emptyDisabled = find("subdivide").disabled;
+                        add(nfd, [1000, 900, 1601, 1702]);
+                        add("ñ", [400, 800, 500, 1200]);
+                        add(nfd, [1601, 1702, 2000, 2200]);
+                        choose(nfd, 0);
+                        const before = await download();
+                        const eligible = !find("subdivide").disabled;
+                        const downloadCount = blobs.length;
+                        find("subdivide").click();
+                        const afterSelection = find("selected").value;
+                        const midpoint = [find("x1").value, find("y1").value];
+                        const history = find("slant-undo").textContent;
+                        const noImplicitDownload =
+                            blobs.length === downloadCount;
+                        const after = await download();
+                        choose("ñ", 2);
+                        const otherUndoDisabled = find("slant-undo").disabled;
+                        const otherInk = await download();
+                        choose(nfd, 1);
+                        find("slant-undo").click();
+                        const restored = await download();
+                        find("slant-redo").click();
+                        const redone = await download();
+                        return JSON.stringify({
+                            before, after, afterSelection, midpoint, history,
+                            emptyDisabled, eligible, noImplicitDownload,
+                            otherUndoDisabled, otherInk, restored, redone,
+                            names, media: blobs.map((blob) => blob.type),
+                        });
+                    } finally {
+                        URL.createObjectURL = create;
+                        HTMLAnchorElement.prototype.click = click;
+                    }
+                })()`,
+                resultOwnership: "none",
+                target: { context: tab.context },
+            }, FIREFOX_BIDI_READY_TIMEOUT_MS);
+            assert.equal(response.type, "success");
+            assert.equal(response.result.type, "string");
+            const actual = JSON.parse(response.result.value);
+            const nfd = "n" + String.fromCharCode(771);
+            const original = [
+                { grapheme: nfd, x1: 1000, y1: 900,
+                    x2: 1601, y2: 1702, width: 251, color: "#243647" },
+                { grapheme: "ñ", x1: 400, y1: 800,
+                    x2: 500, y2: 1200, width: 251, color: "#243647" },
+                { grapheme: nfd, x1: 1601, y1: 1702,
+                    x2: 2000, y2: 2200, width: 251, color: "#243647" },
+            ];
+            const before = encodeGlyphLibrary(original);
+            const after = encodeGlyphLibrary(
+                subdivideGlyphStroke(original, nfd, 0));
+            assert.equal(actual.before, before);
+            assert.equal(actual.after, after);
+            assert.equal(actual.afterSelection, "1");
+            assert.deepEqual(actual.midpoint, ["1301", "1301"]);
+            assert.equal(actual.history, "Undo last stroke subdivision");
+            assert.equal(actual.emptyDisabled, true);
+            assert.equal(actual.eligible, true);
+            assert.equal(actual.noImplicitDownload, true);
+            assert.equal(actual.otherUndoDisabled, true);
+            assert.equal(actual.otherInk, after);
+            assert.equal(actual.restored, before);
+            assert.equal(actual.redone, after);
+            assert.deepEqual(actual.names,
+                Array(5).fill("my-glyph-strokes.tsv"));
+            assert.deepEqual(actual.media,
+                Array(5).fill("text/tab-separated-values"));
+            assert.deepEqual(requests, baseline,
+                "subdivision and downloads remain browser-local");
+
+            const file = path.join(profile, "subdivided.tsv");
+            fs.writeFileSync(file, after);
+            const build = spawnSync(PINNED_CARGO, ["build", "--offline",
+                "--quiet", "-p", "atrament_profile_editor_cli", "--bin",
+                "atrament-profiles"], { timeout: 90_000, stdio: "pipe",
+                    env: { ...process.env, CARGO_TARGET_DIR: TARGET_DIR,
+                        TMPDIR: path.resolve(".temp") } });
+            assert.equal(build.status, 0, build.stderr.toString());
+            const cli = path.join(TARGET_DIR, "debug", "atrament-profiles");
+            const invoke = (...args) => spawnSync(cli, args,
+                { timeout: 20_000, maxBuffer: 16 * 1024 * 1024 });
+            const reopen = invoke("glyphs", "--profile", file);
+            assert.equal(reopen.status, 0, reopen.stderr.toString());
+            assert.equal(reopen.stdout.toString(), after);
+            const paths = invoke("glyphs", "--profile", file,
+                "--inspect-paths", nfd);
+            assert.equal(paths.status, 0, paths.stderr.toString());
+            assert.match(paths.stdout.toString(),
+                /Strokes: 3\nPaths: 1\nPen lifts: 0/);
+            const flags = ["notebook", "--glyph-file", file,
+                "--place-text", "1", "25400", "30000", nfd + "ñ"];
             const pdf = invoke(...flags, "--export-paper", "pdf");
             assert.equal(pdf.status, 0, pdf.stderr.toString());
             assert.match(pdf.stdout.toString("latin1"), /^%PDF-1\.4/);

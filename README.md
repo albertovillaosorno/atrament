@@ -2115,6 +2115,12 @@ A one-unit-long stroke or the 4,096-segment limit refuses; no hidden pen
 lift, saved parametric curve, or implicit TSV download is introduced. The
 eight-step editor recovery can undo/redo the whole split.
 
+A real headless Firefox/localhost test verifies the split button, exact
+selected coordinates, NFC/NFD recovery boundaries and explicit TSV
+download with no additional backend requests. Rust independently
+reopens that browser-created file, verifies one continuous pen path
+and renders physical PDF and transparent PNG ink.
+
 New edits after undo discard the redo tail, and the oldest step is evicted
 after eight successful edits. Identity transforms and refused edits preserve
 history; a successful TSV import or session reset clears it. Download

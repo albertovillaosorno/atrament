@@ -1169,6 +1169,13 @@ full browser glyph suite passes 274 tests. A separate native integration
 reopens the exact browser-produced TSV, checks pen paths and emits actual
 PDF and RGBA PNG bytes with byte-identical replay.
 
+A separate headless Firefox/WebDriver BiDi test navigates the real
+authenticated localhost editor, selects one exact NFD stroke, splits
+it and verifies the chosen second half, undo/redo, NFC isolation and
+explicit-only TSV download. Rust reopens the actual browser-generated
+TSV, inspects the continuous pen path and exports genuine PDF and
+transparent RGBA PNG ink. The browser emits no new backend requests.
+
 This is deliberately a local sampled-stroke edit. The rounded midpoint
 need not lie exactly on the original Euclidean line at submicrometre
 precision; no analytic curve control point, persisted pen lift or new Rust
