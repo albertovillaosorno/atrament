@@ -176,6 +176,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--glyph-word-tracking MAX_UM (requires --glyph-variation)] \
     [--glyph-word-baseline-step MAX_UM (requires --glyph-variation)] \
     [--heading-style underline|double-underline|marker|none] \
+    [--heading-align left|center|right (Markdown only)] \
     [--heading-color '#RRGGBB'] [--heading-marker-scale 50..105] \
     [--heading-ink-color '#RRGGBB'] [--heading-ink-scale 100..250] \
     [--flow-text TEXT | --flow-markdown MARKDOWN | \
@@ -236,8 +237,11 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     rectangle, but do not reserve flow space or prevent collisions. \
     PDF page count includes the last manual ink page, with or without \
     flow; explicit --pages remains a strict upper bound. \
-    Markdown headings default to dark underlines; select a user-colored \
-    single/double underline, opaque pastel marker band or no ornament. \
+    Markdown headings default to left-aligned dark underlines; choose \
+    --heading-align center|right to shift titles and their ornaments \
+    by measured ink contour within the selected physical flow region. \
+    Select a user-colored single/double underline, opaque pastel \
+    marker band or no ornament. \
     --heading-marker-scale adjusts the marker underlay pen width (percent) \
     only with --heading-style marker; the default is 100. \
     --heading-ink-color recolors heading glyph ink, and \
@@ -507,7 +511,7 @@ impl NotebookFlagPreflight {
                 let _pitch = parse_notebook_flow_pitch(iter)?;
                 0
             }
-            "--heading-style" | "--heading-color"
+            "--heading-style" | "--heading-align" | "--heading-color"
             | "--heading-marker-scale" | "--heading-ink-color"
             | "--heading-ink-scale" => {
                 self.select_heading_setting(option, iter)?;
@@ -2675,9 +2679,9 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--inspect" => inspect = true,
             "--handwriting-profile" =>
                 parse_notebook_handwriting_profile(&mut iter, &mut statistics)?,
-            "--heading-style" | "--heading-color" | "--heading-ink-color"
-            | "--heading-ink-scale" | "--heading-marker-scale" =>
-                heading.parse(option, &mut iter)?,
+            "--heading-style" | "--heading-align" | "--heading-color"
+            | "--heading-ink-color" | "--heading-ink-scale"
+            | "--heading-marker-scale" => heading.parse(option, &mut iter)?,
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
             "--flow-pitch-um" | "--flow-paragraph-gap-um"

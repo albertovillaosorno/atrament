@@ -13848,3 +13848,208 @@ fn invalid_markdown_list_quote_right_inset_is_preflight_atomic() {
         b"keep-existing-PDF");
     fs::remove_file(target).expect("test-owned cleanup");
 }
+
+#[test]
+fn markdown_heading_alignment_moves_titles_and_ornaments_only() {
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "# a\n\n- a\n\n> a\n\na\n===",
+    ).expect("ATX, structural rows and Setext heading");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 60_000, height: 160_000,
+    };
+    let paper = NotebookProfile::default();
+    let render = |alignment: Option<&str>| {
+        let mut heading = HeadingDecoration::default();
+        if let Some(alignment) = alignment {
+            heading.parse("--heading-align", &mut args(&[alignment]).iter())
+                .expect("admitted title alignment");
+        }
+        layout_flow_with_typography(
+            &source, &paper, None, heading, Some(region),
+            FlowTypography::default(),
+        ).expect("physical heading layout")
+    };
+    let legacy = render(None);
+    let left = render(Some("left"));
+    assert_eq!(legacy.0.len(), 4);
+    let rows = |runs: &[TextRun]| runs.iter()
+        .map(|row| (row.page, row.origin_um, row.text.clone()))
+        .collect::<Vec<_>>();
+    assert_eq!(rows(&legacy.0), rows(&left.0),
+        "explicit left keeps all physical text rows");
+    assert_eq!(legacy.1, left.1, "explicit left keeps every pen mark");
+    assert_eq!(legacy.2, left.2);
+    assert_eq!(legacy.0.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(), ["a", "a", "a", "a"]);
+    let baseline_x = region.left + 2_500;
+    let capacity = region.width - 2_500 - 1_500;
+    let heading_ink_width = 4_000;
+    for (selected, offset) in [
+        ("center", (capacity - heading_ink_width) / 2),
+        ("right", capacity - heading_ink_width),
+    ] {
+        let moved = render(Some(selected));
+        assert_eq!(moved.2, legacy.2);
+        assert_eq!(moved.0.len(), legacy.0.len());
+        for (index, row) in moved.0.iter().enumerate() {
+            assert_eq!(row.page, legacy.0[index].page);
+            assert_eq!(row.origin_um.1, legacy.0[index].origin_um.1);
+            let shift = if matches!(index, 0 | 3) { offset } else { 0 };
+            assert_eq!(row.origin_um.0, baseline_x
+                + if matches!(index, 1 | 2) { 6_000 } else { shift },
+                "row {index} in {selected}");
+        }
+        assert_eq!(moved.1.len(), legacy.1.len());
+        for (original, shifted) in legacy.1.iter().zip(&moved.1) {
+            let heading_ornament = original.width_um == 550;
+            let shift = if heading_ornament { offset } else { 0 };
+            assert_eq!(shifted.start_um.0, original.start_um.0 + shift);
+            assert_eq!(shifted.end_um.0, original.end_um.0 + shift);
+            assert_eq!(shifted.start_um.1, original.start_um.1);
+            assert_eq!(shifted.end_um.1, original.end_um.1);
+            assert_eq!(shifted.width_um, original.width_um);
+        }
+    }
+}
+
+#[test]
+fn markdown_heading_alignment_keeps_page_turns_and_exact_contours() {
+    let paper = NotebookProfile::default();
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 30_000, height: 19_000,
+    };
+    let source = FlowSource::new(
+        FlowFormat::Markdown, "# a\n\n## a\n\na\n===",
+    ).expect("multiple title levels");
+    let render = |alignment| {
+        let mut heading = HeadingDecoration::default();
+        heading.parse("--heading-align", &mut args(&[alignment]).iter())
+            .expect("selected alignment");
+        layout_flow_with_typography(
+            &source, &paper, None, heading, Some(region),
+            FlowTypography::default(),
+        ).expect("each heading on its own physical page")
+    };
+    let left = render("left");
+    let center = render("center");
+    let right = render("right");
+    assert_eq!(left.2, 3);
+    let baseline_x = region.left + 2_500;
+    let cap = region.width - 2_500 - 1_500;
+    for (index, row) in left.0.iter().enumerate() {
+        assert_eq!(row.page, index + 1);
+        assert_eq!(center.0[index].page, row.page);
+        assert_eq!(right.0[index].page, row.page);
+        assert_eq!(center.0[index].origin_um.0,
+            baseline_x + (cap - 4_000) / 2);
+        assert_eq!(right.0[index].origin_um.0,
+            baseline_x + cap - 4_000);
+        assert_eq!(center.0[index].origin_um.1, row.origin_um.1);
+        assert_eq!(right.0[index].origin_um.1, row.origin_um.1);
+    }
+    for (original, changed) in left.1.iter().zip(&right.1) {
+        assert_eq!(changed.page, original.page);
+        assert_eq!(changed.start_um.0 - original.start_um.0,
+            cap - 4_000);
+        assert_eq!(changed.end_um.0 - original.end_um.0,
+            cap - 4_000);
+    }
+}
+
+#[test]
+fn selected_markdown_heading_alignment_replays_native_exports() {
+    let base = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--flow-markdown", "# a\n\n## a\n\na\n===",
+        "--flow-region", "30000", "40000", "52000", "90000",
+        "--heading-style", "marker", "--heading-color", "#c5b4e6",
+    ]);
+    let export = |align: Option<&str>, format: &str| {
+        let mut command = base.clone();
+        if let Some(align) = align {
+            command.extend(args(&["--heading-align", align]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        execute_notebook(&command).expect("native heading export")
+            .expect("PDF PNG or TSV bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let original = export(None, format);
+        assert_eq!(original, export(Some("left"), format),
+            "explicit left preserves {format} bytes");
+        let centered = export(Some("center"), format);
+        let right = export(Some("right"), format);
+        assert_eq!(centered, export(Some("center"), format));
+        assert_eq!(right, export(Some("right"), format));
+        assert_ne!(centered, original, "center changes {format} ink");
+        assert_ne!(right, centered, "right changes {format} ink");
+        if format == "pdf" {
+            assert!(right.starts_with(b"%PDF-1.4"));
+        } else if format == "png" {
+            assert!(right.starts_with(b"\x89PNG\r\n\x1a\n"));
+        } else {
+            let tsv = String::from_utf8(right).expect("valid ink TSV");
+            assert!(tsv.starts_with("atrament.page-ink.v1\n"));
+            assert!(tsv.lines().skip(1).any(|line| line.starts_with("1\t")));
+        }
+    }
+}
+
+#[test]
+fn invalid_heading_alignment_preflights_and_preserves_existing_pdf() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, expected) in [
+        (vec!["--heading-align", "middle"], "requires left, center or right"),
+        (vec!["--heading-align", ""], "requires left, center or right"),
+        (vec!["--heading-align"], "requires a heading setting"),
+        (vec!["--heading-align", "right", "--heading-align", "left"],
+            "may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        let error = preflight_notebook_sources(&command)
+            .expect_err("invalid heading alignment must precede source IO");
+        assert!(error.contains(expected), "{tokens:?}: {error}");
+    }
+    let mut plain = args(&[
+        "--flow-text", "a", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf", "--heading-align", "left",
+    ]);
+    assert_eq!(preflight_notebook_sources(&plain)
+        .expect_err("Markdown-only heading alignment"),
+        "heading customization requires --flow-markdown");
+    plain[0] = "--flow-markdown".into();
+    assert!(preflight_notebook_sources(&plain).is_ok());
+
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"keep-existing-heading-PDF").expect("sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "# a a",
+        "--flow-region", "30000", "40000", "12000", "32000",
+        "--heading-align", "right",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("path"), "--replace",
+    ]));
+    let error = execute_notebook(&command)
+        .expect_err("heading must refuse its one-line fixed region");
+    assert!(error.contains("heading exceeds one-line fixed region"),
+        "{error}");
+    assert_eq!(fs::read(&target).expect("preserved PDF"),
+        b"keep-existing-heading-PDF");
+    fs::remove_file(target).expect("clean test-owned sentinel");
+}

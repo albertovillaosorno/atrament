@@ -503,6 +503,27 @@ the underline color. Select `--heading-style double-underline` to add a
 second level-weighted ink line 0.9 mm above the original, optionally with
 `--heading-color '#64A3C5'`; `--heading-style none` removes ornaments.
 
+For an opt-in title position, select `--heading-align center` or
+`--heading-align right`. Native layout measures the farthest nominal
+authored glyph contour, then moves both ATX (`#` through `######`) and
+Setext (`===` or `---`) titles with their underlines or marker strokes
+inside the printable page or selected fixed flow region. Ordinary prose,
+lists, quotes, thematic rules and code keep their original positions.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --heading-align center --heading-style double-underline \
+  --export-paper pdf --output centered-titles.pdf
+```
+
+Omitting alignment or selecting `--heading-align left` preserves
+prior ink bytes. This option requires Markdown flow, admits only
+`left|center|right` once and refuses an unfit one-line heading or
+out-of-region projected ink without overwriting existing output.
+Alignment is a transient export setting, not a saved notebook style.
+It does not calculate optical center from final varied pen-stroke paths.
+
 For independent **handwritten title lettering**, use
 `--heading-ink-color '#BD376A' --heading-ink-scale 180`. This recolors only
 Markdown heading glyphs and increases their pen thickness to 180 percent;

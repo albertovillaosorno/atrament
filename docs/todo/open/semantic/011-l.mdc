@@ -4330,3 +4330,18 @@ PDF/transparent PNG/versioned TSV replay, early CLI and typed rejection,
 and atomic preservation of an existing PDF when the region is too narrow.
 The setting is export-only, does not persist paragraph styles and does not
 complete saved semantic notebook-to-handwriting output. ATR-P2-011 stays open.
+
+## Selected native Markdown heading alignment (partial) — 2026-11-12
+
+The native CLI accepts `--heading-align left|center|right` for ATX and
+Setext titles. Center/right selection shifts the authored title glyph
+origin and its underline/marker geometry together within the selected
+physical flow rectangle, using the measured farthest nominal contour.
+Omitted or explicit left preserves existing PDF/PNG/TSV export bytes.
+
+Four native regressions cover ordinary rows remaining anchored, heading
+levels and page turns, deterministic real PDF/transparent PNG/ink TSV,
+invalid or duplicate preflight, and preservation of an existing PDF when
+a heading cannot fit its one-line region. Ink still receives final native
+physical bounds checks after variation, and the setting is CLI-only.
+This does not persist semantic heading styles or complete the P1 journey.

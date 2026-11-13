@@ -318,9 +318,17 @@ enum HeadingStyle {
     Underline,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum HeadingAlign {
+    Center,
+    Left,
+    Right,
+}
+
 #[derive(Clone, Copy, Debug, Default)]
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
 pub(super) struct HeadingDecoration {
+    align: Option<HeadingAlign>,
     color: Option<[u8; 3]>,
     glyph_color: Option<[u8; 3]>,
     glyph_scale: Option<u32>,
@@ -344,9 +352,9 @@ impl HeadingDecoration {
     }
 
     pub(super) const fn is_selected(self) -> bool {
-        self.color.is_some() || self.style.is_some()
-            || self.glyph_color.is_some() || self.glyph_scale.is_some()
-            || self.marker_scale.is_some()
+        self.align.is_some() || self.color.is_some()
+            || self.style.is_some() || self.glyph_color.is_some()
+            || self.glyph_scale.is_some() || self.marker_scale.is_some()
     }
 
     pub(super) fn parse(
@@ -356,6 +364,19 @@ impl HeadingDecoration {
             format!("{flag} requires a heading setting")
         })?;
         match flag {
+            "--heading-align" => {
+                if self.align.is_some() {
+                    return Err("--heading-align may appear only once".into());
+                }
+                self.align = Some(match selected.as_str() {
+                    "left" => HeadingAlign::Left,
+                    "center" => HeadingAlign::Center,
+                    "right" => HeadingAlign::Right,
+                    _ => return Err(
+                        "--heading-align requires left, center or right".into()
+                    ),
+                });
+            }
             "--heading-color" | "--heading-ink-color" => {
                 let destination = if flag == "--heading-color" {
                     &mut self.color
@@ -581,6 +602,36 @@ impl Layout<'_> {
             .checked_add(self.paragraph_gap_um)
             .ok_or("paragraph gap overflow")?;
         Ok(())
+    }
+
+    // Horizontal placement includes every visible nominal glyph contour,
+    // not merely the post-glyph advance cursor. Keep alignment independent
+    // from the page number and the chosen heading ornament.
+    fn aligned_heading_origin(
+        &self, text: &str, extent: u32, start_x: u32,
+    ) -> Result<(u32, u32), String> {
+        let ink_extent = heading_contour_extent(
+            text, extent, self.statistics,
+        )?;
+        let offset = match self.heading.align {
+            None | Some(HeadingAlign::Left) => 0,
+            Some(align) => {
+                let capacity = self.line_measurements(
+                    LineStyle::Heading(HeadingLevel::Primary),
+                )?.1;
+                let clearance = capacity.checked_sub(ink_extent)
+                    .ok_or("heading exceeds one-line fixed region")?;
+                if align == HeadingAlign::Center {
+                    clearance.checked_div(2)
+                        .ok_or("heading center offset overflow")?
+                } else {
+                    clearance
+                }
+            }
+        };
+        let x = start_x.checked_add(offset)
+            .ok_or("heading alignment position overflow")?;
+        Ok((x, ink_extent))
     }
 
     fn arrange_wrapped_block(
@@ -1474,6 +1525,28 @@ impl Layout<'_> {
         Ok(())
     }
 
+    fn write_quote_rule(
+        &mut self, start_x: u32, y: u32,
+    ) -> Result<(), String> {
+        // Every physical continuation row retains a quiet quote bar.
+        // The literal Markdown > is syntax, never an invented glyph.
+        let rule_x = start_x.checked_sub(3_000)
+            .ok_or("quote bar left inset overflow")?;
+        let rule_top = y.checked_add(500)
+            .ok_or("quote bar top overflow")?;
+        let rule_bottom = y.checked_add(self.pitch)
+            .and_then(|end| end.checked_sub(600))
+            .ok_or("quote bar bottom overflow")?;
+        self.ornaments.push(NotebookInkLine {
+            page: self.page,
+            start_um: (rule_x, rule_top),
+            end_um: (rule_x, rule_bottom),
+            width_um: 400,
+            rgb: [30, 48, 74],
+        });
+        Ok(())
+    }
+
     fn write_row(
         &mut self,
         text: String,
@@ -1493,17 +1566,22 @@ impl Layout<'_> {
                 "flow indentation cannot fit first visible glyph".into()
             );
         }
+        // Preserve previous left-aligned ink with or without an explicit
+        // left selection. Move the heading glyphs and ornaments together.
+        let (row_x, heading_extent) =
+            if matches!(style, LineStyle::Heading(_)) {
+                let (x, ink_extent) = self.aligned_heading_origin(
+                    &text, extent, start_x,
+                )?;
+                (x, Some(ink_extent))
+            } else {
+                (start_x, None)
+            };
         let y = self.begin_row()?;
         self.remember_heading_chain(style, y);
         if let LineStyle::Heading(level) = style {
-            // A compressed letter advance may end well before its visible
-            // glyph contour. Decorations must cover actual authored ink,
-            // not only the cursor position after the final grapheme.
-            let ink_extent = heading_contour_extent(
-                &text, extent, self.statistics,
-            )?;
-            let mark_end = start_x
-                .checked_add(ink_extent)
+            let mark_end = row_x
+                .checked_add(heading_extent.ok_or("missing heading extent")?)
                 .ok_or("heading ornament exceeds page")?;
             match self.heading.style.unwrap_or(HeadingStyle::Underline) {
                 HeadingStyle::DoubleUnderline | HeadingStyle::Underline => {
@@ -1516,7 +1594,7 @@ impl Layout<'_> {
                             .ok_or("double underline position overflow")?;
                         self.ornaments.push(NotebookInkLine {
                             page: self.page,
-                            start_um: (start_x, upper),
+                            start_um: (row_x, upper),
                             end_um: (mark_end, upper),
                             width_um: level.underline_width_um(),
                             rgb: self.heading.color.unwrap_or([30, 48, 74]),
@@ -1524,7 +1602,7 @@ impl Layout<'_> {
                     }
                     self.ornaments.push(NotebookInkLine {
                         page: self.page,
-                        start_um: (start_x, mark_y),
+                        start_um: (row_x, mark_y),
                         end_um: (mark_end, mark_y),
                         width_um: level.underline_width_um(),
                         rgb: self.heading.color.unwrap_or([30, 48, 74]),
@@ -1543,7 +1621,7 @@ impl Layout<'_> {
                             .ok_or("heading marker position overflow")?;
                         self.ornaments.push(NotebookInkLine {
                             page: self.page,
-                            start_um: (start_x, mark_y),
+                            start_um: (row_x, mark_y),
                             end_um: (mark_end, mark_y),
                             width_um: width,
                             rgb: self.heading.color.unwrap_or([255, 237, 159]),
@@ -1554,24 +1632,9 @@ impl Layout<'_> {
             }
         }
         if matches!(style, LineStyle::Quote) {
-            // Every physical continuation row retains a quiet quote bar.
-            // The literal Markdown > is syntax, never an invented glyph.
-            let rule_x = start_x.checked_sub(3_000)
-                .ok_or("quote bar left inset overflow")?;
-            let rule_top = y.checked_add(500)
-                .ok_or("quote bar top overflow")?;
-            let rule_bottom = y.checked_add(self.pitch)
-                .and_then(|end| end.checked_sub(600))
-                .ok_or("quote bar bottom overflow")?;
-            self.ornaments.push(NotebookInkLine {
-                page: self.page,
-                start_um: (rule_x, rule_top),
-                end_um: (rule_x, rule_bottom),
-                width_um: 400,
-                rgb: [30, 48, 74],
-            });
+            self.write_quote_rule(row_x, y)?;
         }
-        self.write_list_marker(style, first, start_x, y)?;
+        self.write_list_marker(style, first, row_x, y)?;
         if matches!(style, LineStyle::Heading(_)) {
             self.heading_attached_to_prior =
                 self.last_visible_heading || self.last_visible_rule;
@@ -1585,7 +1648,7 @@ impl Layout<'_> {
                 None
             },
             page: self.page,
-            origin_um: (start_x, y),
+            origin_um: (row_x, y),
             text,
         });
         self.y = y
