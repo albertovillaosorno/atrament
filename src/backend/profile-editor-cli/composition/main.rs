@@ -166,6 +166,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--glyph-word-drift MAX_UM (requires --glyph-variation)] \
     [--glyph-word-rise MAX_UM (requires --glyph-variation)] \
     [--glyph-word-pressure MAX_PERCENT (requires --glyph-variation)] \
+    [--glyph-word-pigment MAX_PERCENT (requires --glyph-variation)] \
     [--glyph-word-slant MAX_MDEG (requires --glyph-variation)] \
     [--glyph-word-width MAX_PERCENT (requires --glyph-variation)] \
     [--glyph-word-height MAX_PERCENT (requires --glyph-variation)] \
@@ -235,6 +236,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     --glyph-word-rise adds an independent seeded vertical offset per word \
     (0..150 um) without changing row pitch or pen contours. \
     --glyph-word-pressure varies shared physical pen width per word \
+    --glyph-word-pigment varies shared ink lightness by 0..20 percent \
     (0..20 percent), with invalid ink refused before commit. \
     --glyph-word-slant adds a shared baseline shear per word (0..5000 \
     millidegrees), with invalid physical pen geometry refused. \
@@ -299,6 +301,7 @@ struct GlyphOverlay {
     word_baseline_step_um: Option<u32>,
     word_drift_um: Option<u32>,
     word_height_percent: Option<u32>,
+    word_pigment_percent: Option<u32>,
     word_pressure_percent: Option<u32>,
     word_rise_um: Option<u32>,
     word_slant_millidegrees: Option<u32>,
@@ -1831,8 +1834,9 @@ fn parse_notebook_export_option(
         "--glyph-stroke" | "--place-text" | "--fallback-glyph"
         | "--glyph-variation" | "--glyph-line-drift"
         | "--glyph-word-drift" | "--glyph-word-rise"
-        | "--glyph-word-pressure" | "--glyph-word-slant"
-        | "--glyph-word-width" | "--glyph-word-height"
+        | "--glyph-word-height" | "--glyph-word-slant"
+        | "--glyph-word-pressure" | "--glyph-word-pigment"
+        | "--glyph-word-width"
         | "--glyph-word-tracking" | "--glyph-word-baseline-step" => {
             glyphs.parse(option, iter)?;
         }
@@ -2187,8 +2191,8 @@ fn preflight_notebook_sources(args: &[String]) -> Result<(), String> {
                 | "--join-text-anchors" | "--glyph-word-height" | "--place-text"
                 | "--glyph-line-drift" | "--glyph-word-drift" | "--glyph-stroke"
                 | "--glyph-variation" | "--glyph-word-rise" | "--join-text-pair"
-                | "--glyph-word-pressure" | "--glyph-word-tracking"
-                | "--glyph-word-baseline-step" => {
+                | "--glyph-word-pressure" | "--glyph-word-pigment"
+                | "--glyph-word-tracking" | "--glyph-word-baseline-step" => {
                     glyph_edited = true;
                     preflight_notebook_glyph_option(
                         option, &mut glyph_preflight, &mut iter)?;
@@ -2447,13 +2451,13 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 )?,
             "--emit-ink-file" | "--export-paper" | "--pages" | "--dpi"
             | "--png-page" | "--ink-line" | "--ink-file" | "--join-text-anchors"
-            | "--glyph-stroke" | "--glyph-file" | "--place-text"
+            | "--glyph-stroke" | "--glyph-file" | "--place-text" | "--quality"
             | "--fallback-glyph" | "--glyph-variation" | "--glyph-word-rise"
             | "--glyph-line-drift" | "--glyph-word-drift" | "--join-text-pair"
-            | "--glyph-word-pressure" | "--glyph-word-slant"
+            | "--glyph-word-pressure" | "--glyph-word-pigment"
+            | "--glyph-word-slant"
             | "--glyph-word-width" | "--glyph-word-height"
-            | "--glyph-word-tracking" | "--glyph-word-baseline-step"
-            | "--quality" => {
+            | "--glyph-word-tracking" | "--glyph-word-baseline-step" => {
                 parse_notebook_export_option(
                     option, &mut iter, &mut export, &mut ink,
                     &mut glyphs, &mut stdin_selected,

@@ -296,6 +296,26 @@ impl GlyphVariation {
             .map_err(|_error| "word height must be positive".into())
     }
 
+    // Shared pigment concentration is independent of pressure, ink thickness
+    // and each positional stream. One shade spans all strokes of a word so
+    // selected same-pen joins retain exactly matching RGB channels.
+    fn word_pigment(
+        self, run_index: usize, word_index: u32, maximum_percent: u32,
+    ) -> Result<i32, String> {
+        let run = u32::try_from(run_index)
+            .map_err(|_error| "word pigment run index overflow")?;
+        let mut identity = self.seed
+            ^ run.wrapping_add(1).wrapping_mul(0xA1B3_6E29)
+            ^ word_index.wrapping_add(1).wrapping_mul(0x5D47_C8F3);
+        identity ^= identity >> 16i32;
+        identity = identity.wrapping_mul(0x7FEB_352D);
+        identity ^= identity >> 15i32;
+        identity = identity.wrapping_mul(0x846C_A68B);
+        identity ^= identity >> 16i32;
+        let mut random = XorShift32::new(identity);
+        Self::round_js(random.unit() * f64::from(maximum_percent))
+    }
+
     // One independent width multiplier per word. All segments with equal
     // authored pen widths retain equal widths, so optional joins can use
     // the same physical pen throughout an ASCII-space-delimited word.
@@ -406,6 +426,7 @@ impl GlyphVariation {
 #[derive(Clone, Copy)]
 struct WordInkStyle {
     height_percent: u32,
+    pigment_percent: i32,
     pressure_percent: u32,
     slant_mdeg: i32,
     width_percent: u32,
@@ -1017,6 +1038,16 @@ impl GlyphOverlay {
             .ok_or_else(|| "glyph vertical origin overflow".into())
     }
 
+    fn glyph_pigment(
+        &self, run_index: usize, word_index: u32,
+    ) -> Result<i32, String> {
+        match (self.variation, self.word_pigment_percent) {
+            (Some(variation), Some(maximum)) =>
+                variation.word_pigment(run_index, word_index, maximum),
+            _ => Ok(0),
+        }
+    }
+
     fn glyph_pressure(
         &self, run_index: usize, word_index: u32,
     ) -> Result<u32, String> {
@@ -1042,6 +1073,7 @@ impl GlyphOverlay {
     ) -> Result<WordInkStyle, String> {
         Ok(WordInkStyle {
             height_percent: self.glyph_height(run_index, word_index)?,
+            pigment_percent: self.glyph_pigment(run_index, word_index)?,
             pressure_percent: self.glyph_pressure(run_index, word_index)?,
             slant_mdeg: self.glyph_slant(run_index, word_index)?,
             width_percent: self.glyph_width(run_index, word_index)?,
@@ -1065,6 +1097,7 @@ impl GlyphOverlay {
             || self.word_drift_um.is_some()
             || self.word_rise_um.is_some()
             || self.word_pressure_percent.is_some()
+            || self.word_pigment_percent.is_some()
             || self.word_slant_millidegrees.is_some()
             || self.word_width_percent.is_some()
             || self.word_height_percent.is_some()
@@ -1434,6 +1467,7 @@ impl GlyphOverlay {
             "--glyph-word-height" => self.parse_height_rhythm(iter)?,
             "--glyph-word-tracking" => self.parse_tracking_rhythm(iter)?,
             "--glyph-word-baseline-step" => self.parse_baseline_step(iter)?,
+            "--glyph-word-pigment" => self.parse_pigment_rhythm(iter)?,
             "--glyph-word-pressure" => {
                 if self.word_pressure_percent.is_some() {
                     return Err("duplicate --glyph-word-pressure".into());
@@ -1506,6 +1540,18 @@ impl GlyphOverlay {
         }
         self.word_height_percent = Some(next_integer(
             iter, "glyph word height", 0, 15,
+        )?);
+        Ok(())
+    }
+
+    fn parse_pigment_rhythm(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        if self.word_pigment_percent.is_some() {
+            return Err("duplicate --glyph-word-pigment".into());
+        }
+        self.word_pigment_percent = Some(next_integer(
+            iter, "glyph word pigment", 0, 20,
         )?);
         Ok(())
     }
@@ -2322,6 +2368,14 @@ impl GlyphOverlay {
                 return Err("word height requires --glyph-variation".into());
             }
         }
+        if let Some(maximum) = self.word_pigment_percent {
+            if maximum > 20 {
+                return Err("glyph word pigment must be within 0..20%".into());
+            }
+            if self.variation.is_none() {
+                return Err("word pigment requires --glyph-variation".into());
+            }
+        }
         if let Some(maximum) = self.word_pressure_percent {
             if maximum > 20 {
                 return Err("glyph word pressure must be within 0..20%".into());
@@ -2698,6 +2752,34 @@ pub(super) fn validate_removal_glyph_key(
     Ok(())
 }
 
+// Tint toward white for positive pigment percentages and toward black for
+// negative values. The same bounded tone is applied after heading overrides,
+// and an exact zero preserves every historical authored RGB byte.
+fn shade_pigment(rgb: [u8; 3], percent: i32) -> Result<[u8; 3], String> {
+    if !(-20i32..=20i32).contains(&percent) {
+        return Err("word pigment percentage outside 0..20%".into());
+    }
+    let shade = percent.unsigned_abs();
+    let channel = |original: u8| -> Result<u8, String> {
+        let base = u32::from(original);
+        let delta = if percent >= 0i32 {
+            255u32.saturating_sub(base)
+        } else {
+            base
+        }.checked_mul(shade)
+            .and_then(|value| value.checked_add(50))
+            .and_then(|value| value.checked_div(100))
+            .ok_or("word pigment channel overflow")?;
+        u8::try_from(if percent >= 0i32 {
+            base.checked_add(delta)
+        } else {
+            base.checked_sub(delta)
+        }.ok_or("word pigment channel overflow")?)
+            .map_err(|_error| "word pigment channel overflow".into())
+    };
+    Ok([channel(rgb[0])?, channel(rgb[1])?, channel(rgb[2])?])
+}
+
 // The renderer-independent Rust handwriting engine owns every physical
 // transform; this CLI adapter maps admitted profile and output fields.
 fn placed_ink(
@@ -2757,14 +2839,18 @@ fn placed_ink(
     } else {
         origin.1
     };
+    let pigment = word_style.pigment_percent;
+    let ink_rgb = shade_pigment(shape.rgb, pigment)?;
+    let heading_rgb = run.heading_ink.and_then(|style| style.color)
+        .map(|rgb| shade_pigment(rgb, pigment)).transpose()?;
     let projected = project_ink_segment(AuthoredInkSegment {
         start_um: shape.start_um, end_um: shape.end_um,
-        width_um: shape.width_um, rgb: shape.rgb,
+        width_um: shape.width_um, rgb: ink_rgb,
     }, InkPlacement {
         page: run.page, origin_um: (origin.0, projected_y),
         dimensions,
         ink_scale_percent,
-        color_override: run.heading_ink.and_then(|style| style.color),
+        color_override: heading_rgb,
     }).map_err(str::to_owned)?;
     Ok(NotebookInkLine {
         page: projected.page, start_um: projected.start_um,

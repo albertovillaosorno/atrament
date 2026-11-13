@@ -1006,3 +1006,23 @@ refusing without replacing an earlier accepted PDF or PNG.
 This does not model a real writer's baseline statistics or infer cursive
 motion, and the CLI does not persist the option in a notebook document.
 Full P1-014 acceptance remains open.
+
+## CLI-only seeded word-level pigment shade (partial) — 2026-11-12
+
+`atrament-profiles notebook --glyph-word-pigment MAX_PERCENT` (0–20)
+provides opt-in, deterministic lightening or darkening of authored RGB ink
+per ASCII-space-delimited word in each physical run. A distinct seeded
+stream selects one signed percentage per word; positive values blend the
+selected color toward white, negative values toward black. An explicit
+heading-ink color override receives the same treatment. Original glyph
+TSV, pen geometry, stroke order, widths, text advances and page flow stay
+unchanged, and zero maximum is byte-identical to omission.
+
+Three focused Rust regressions verify independent hard-coded RGB samples
+across two runs of exact decomposed Unicode words and repeated spaces,
+composability with word width and baseline rhythms, opt-in directed same-pen
+joins and heading-ink overrides, and seed-stable native vector PDF,
+transparent PNG and reusable page-ink TSV. Malformed, duplicate, unpaired,
+over-range and typed bypass requests refuse without changing accepted
+file bytes. The pigment is a bounded creative preview effect, not an
+ink-absorption or physical plotter color model; P1-014 remains open.

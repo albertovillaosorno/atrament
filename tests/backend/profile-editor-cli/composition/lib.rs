@@ -12423,3 +12423,227 @@ fn word_baseline_step_rejects_overlong_directed_bridges_atomically()
     fs::remove_file(target).map_err(|error| error.to_string())?;
     Ok(())
 }
+
+#[test]
+fn word_pigment_has_exact_seeded_unicode_word_samples_and_independent_ink()
+-> Result<(), String> {
+    let glyph = "n\u{303}";
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        glyph, "500", "1000", "1600", "2800", "250", "#123456",
+    ]).iter())?;
+    let text = format!("{glyph}{glyph}  {glyph} {glyph}{glyph}");
+    for y in [30_000u32, 40_000u32] {
+        overlay.parse("--place-text", &mut args(&[
+            "1", "25000", &y.to_string(), &text,
+        ]).iter())?;
+    }
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    let original = overlay.expand(&[], None)?;
+    overlay.parse("--glyph-word-pigment", &mut args(&["20"]).iter())?;
+    let changed = overlay.expand(&[], None)?;
+    // Independent uint32 stream oracle. Three words per run, with repeated
+    // ASCII spaces creating exactly one word boundary.
+    let colors = [
+        [[23, 56, 89], [25, 58, 91], [35, 66, 98]],
+        [[32, 64, 96], [32, 64, 96], [15, 43, 71]],
+    ];
+    if changed.len() != 10 || original.len() != 10
+        || changed == original || changed != overlay.expand(&[], None)? {
+        return Err("seeded word pigment did not replay".into());
+    }
+    for (run, row) in changed.chunks_exact(5).enumerate() {
+        for (index, line) in row.iter().enumerate() {
+            let word = match index { 0 | 1 => 0, 2 => 1, _ => 2 };
+            let baseline = &original[run * 5 + index];
+            if line.rgb != colors[run][word]
+                || line.start_um != baseline.start_um
+                || line.end_um != baseline.end_um
+                || line.width_um != baseline.width_um {
+                return Err(format!(
+                    "word pigment mismatch at {run}/{index}: {line:?}"
+                ));
+            }
+        }
+    }
+    overlay.word_pigment_percent = Some(0);
+    if overlay.expand(&[], None)? != original {
+        return Err("zero word pigment changed legacy bytes".into());
+    }
+    overlay.word_pigment_percent = Some(20);
+    overlay.word_rise_um = Some(90);
+    overlay.word_width_percent = Some(10);
+    overlay.word_baseline_step_um = Some(90);
+    let combined = overlay.expand(&[], None)?;
+    overlay.word_pigment_percent = Some(0);
+    let without = overlay.expand(&[], None)?;
+    for (tinted, untouched) in combined.iter().zip(&without) {
+        if tinted.start_um != untouched.start_um
+            || tinted.end_um != untouched.end_um
+            || tinted.width_um != untouched.width_um {
+            return Err("word pigment altered independent geometry".into());
+        }
+    }
+    overlay.word_pigment_percent = Some(21);
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed out-of-range word pigment accepted".into());
+    }
+    overlay.word_pigment_percent = Some(20);
+    overlay.variation = None;
+    if overlay.expand(&[], None).is_ok() {
+        return Err("typed unpaired word pigment accepted".into());
+    }
+    Ok(())
+}
+
+#[test]
+fn word_pigment_preserves_directed_joins_and_heading_color_override()
+-> Result<(), String> {
+    let mut overlay = GlyphOverlay::default();
+    overlay.parse("--glyph-stroke", &mut args(&[
+        "á", "500", "1200", "3300", "1200", "250", "#123456",
+    ]).iter())?;
+    overlay.parse("--place-text", &mut args(&[
+        "1", "25000", "30000", "áá áá",
+    ]).iter())?;
+    overlay.parse("--glyph-variation", &mut args(&[
+        "42", "0", "0", "0", "0", "0", "0",
+    ]).iter())?;
+    overlay.add_text_join_pair(&mut args(&["á", "á"]).iter())?;
+    overlay.parse("--glyph-word-pigment", &mut args(&["20"]).iter())?;
+    let joined = overlay.expand(&[], None)?;
+    if joined.len() != 6 { return Err("two joins need six strokes".into()); }
+    for (start, expected) in [
+        (0usize, [23, 56, 89]), (3, [25, 58, 91]),
+    ] {
+        let [first, bridge, last] = joined.get(start..start + 3)
+            .ok_or("joined word missing")? else {
+            return Err("joined word needs three strokes".into());
+        };
+        if first.end_um != bridge.start_um
+            || bridge.end_um != last.start_um
+            || [first.rgb, bridge.rgb, last.rgb] != [expected; 3]
+            || [first.width_um, bridge.width_um, last.width_um]
+                != [250; 3] {
+            return Err(format!("pigment broke same-pen join: {joined:?}"));
+        }
+    }
+    let run = overlay.runs.get_mut(0).ok_or("missing heading run")?;
+    run.heading_ink = Some(HeadingInk {
+        color: Some([0x45, 0x67, 0x89]), scale_percent: 150,
+    });
+    let heading = overlay.expand(&[], None)?;
+    for (line, other) in heading.iter().zip(&joined) {
+        if line.rgb == other.rgb || line.start_um != other.start_um
+            || line.end_um != other.end_um
+            || line.width_um != 375 {
+            return Err("word tint and heading override did not compose".into());
+        }
+    }
+    for group in heading.chunks_exact(3) {
+        if group[0].rgb != group[1].rgb
+            || group[1].rgb != group[2].rgb {
+            return Err("heading tint disconnected physical pen".into());
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn word_pigment_native_pdf_png_tsv_replay_and_invalid_output_are_atomic()
+-> Result<(), String> {
+    let source = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "á", "500", "1200", "3300", "1200",
+        "250", "#123456",
+        "--flow-text", "áá áá\náá áá",
+        "--glyph-variation", "42", "0", "0", "0", "0", "0", "0",
+    ]);
+    let render = |format: &str, seed: &str, options: &[&str]|
+        -> Result<Vec<u8>, String> {
+        let mut command = source.clone();
+        let index = command.iter().position(|arg| arg == "--glyph-variation")
+            .ok_or("missing variation option")? + 1;
+        *command.get_mut(index).ok_or("missing seed")? = seed.into();
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" { command.extend(args(&["--dpi", "72"])); }
+        command.extend(args(options));
+        execute_notebook(&command)?.ok_or("missing native export".into())
+    };
+    for (format, signature) in [
+        ("pdf", b"%PDF-1.4".as_slice()),
+        ("png", b"\x89PNG\r\n\x1a\n".as_slice()),
+        ("ink", b"atrament.page-ink.v1\n".as_slice()),
+    ] {
+        let plain = render(format, "42", &[])?;
+        if plain != render(format, "42", &[
+            "--glyph-word-pigment", "0",
+        ])? {
+            return Err(format!("zero pigment changed {format} bytes"));
+        }
+        let shaded = render(format, "42", &[
+            "--glyph-word-pigment", "20",
+        ])?;
+        if !shaded.starts_with(signature) || shaded == plain
+            || shaded != render(format, "42", &[
+                "--glyph-word-pigment", "20",
+            ])? {
+            return Err(format!("seeded {format} pigment cannot replay"));
+        }
+        if shaded == render(format, "43", &[
+            "--glyph-word-pigment", "20",
+        ])? {
+            return Err(format!("different seed unchanged {format}"));
+        }
+        if format == "ink" && !shaded.windows(7)
+            .any(|bytes| bytes == b"#173859") {
+            return Err("native page-ink TSV lacks physical tint".into());
+        }
+    }
+    let target = test_path();
+    fs::write(&target, b"accepted export")
+        .map_err(|error| error.to_string())?;
+    let name = target.to_str().ok_or("non-UTF8 output path")?;
+    for format in ["pdf", "png"] {
+        for invalid in [
+            args(&["--glyph-word-pigment", "-1"]),
+            args(&["--glyph-word-pigment", "21"]),
+            args(&["--glyph-word-pigment", "20",
+                "--glyph-word-pigment", "1"]),
+        ] {
+            let mut command = source.clone();
+            command.extend(args(&["--export-paper", format]));
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            command.extend(args(&["--output", name, "--replace"]));
+            command.extend(invalid);
+            if execute_notebook(&command).is_ok()
+                || fs::read(&target).map_err(|error| error.to_string())?
+                    != b"accepted export" {
+                return Err(format!("invalid pigment modified {format}"));
+            }
+        }
+    }
+    let mut unpaired = source;
+    let index = unpaired.iter().position(|arg| arg == "--glyph-variation")
+        .ok_or("missing variation")?;
+    unpaired.drain(index..index + 8).for_each(drop);
+    unpaired.extend(args(&[
+        "--glyph-word-pigment", "20", "--export-paper", "pdf",
+        "--output", name, "--replace",
+    ]));
+    if execute_notebook(&unpaired).is_ok()
+        || fs::read(&target).map_err(|error| error.to_string())?
+            != b"accepted export" {
+        return Err("unpaired pigment modified output".into());
+    }
+    fs::remove_file(target).map_err(|error| error.to_string())?;
+    Ok(())
+}

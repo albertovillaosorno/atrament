@@ -2070,6 +2070,17 @@ Equal input widths remain equal within a word, allowing valid short pen
 joins when the underlying per-glyph thickness jitter is zero. Nonzero
 per-glyph thickness jitter can still make adjacent pens incompatible.
 
+For shared pigment-lightness rhythm, select
+`--glyph-word-pigment MAX_PERCENT` (0–20) with `--glyph-variation`. Each ASCII-space-delimited
+word gets one seeded signed percentage from an independent stream. Positive
+values lighten its RGB toward white; negative values darken it toward black.
+The same shade applies to all authored segments and selected same-pen joins,
+including any heading-ink color override. It changes only displayed pigment,
+never stroke shape, pen width, nominal advance, or the canonical glyph TSV.
+This is a deterministic print-preview color treatment, not simulated ink
+absorption, a calibrated writer or a physical color-change instruction.
+Zero spread preserves original PDF, PNG and page-ink TSV bytes exactly.
+
 For shared italic rhythm, add `--glyph-word-slant MAX_MDEG` (0–5000
 millidegrees, or up to five degrees), again with `--glyph-variation`.
 Each ASCII-space-delimited word receives one seeded, signed shear angle;
@@ -2146,7 +2157,8 @@ writer's baseline or a saved notebook setting.
 
 For example, extend the preceding command with
 `--glyph-line-drift 120 --glyph-word-drift 90 --glyph-word-rise 90`
-and `--glyph-word-pressure 12 --glyph-word-slant 3000`
+and `--glyph-word-pressure 12 --glyph-word-pigment 12`
+with `--glyph-word-slant 3000`
 with `--glyph-word-width 10 --glyph-word-height 10`,
 `--glyph-word-tracking 100` and `--glyph-word-baseline-step 90` to produce
 reproducible line, word, letter-spacing, baseline, ink, width, height and
