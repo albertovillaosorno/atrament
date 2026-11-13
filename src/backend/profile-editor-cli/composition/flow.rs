@@ -53,6 +53,7 @@ const INSET_UM: u32 = 2_500;
 const EXTRA_RIGHT_UM: u32 = 1_500;
 const DEFAULT_PARAGRAPH_GAP_UM: u32 = 4_000;
 const MAX_PARAGRAPH_GAP_UM: u32 = 12_000;
+const MAX_BODY_INSET_UM: u32 = 12_000;
 const DEFAULT_PITCH_UM: u32 = 9_000;
 const MAX_SELECTED_PITCH_UM: u32 = 30_000;
 const SEPARATOR_CENTER_UM: u32 = 4_500;
@@ -62,6 +63,15 @@ const SEPARATOR_CENTER_UM: u32 = 4_500;
 pub(super) enum FlowFormat {
     Markdown,
     Plain,
+}
+
+/// CLI-only layout selections; absent fields keep previous physical ink.
+#[derive(Clone, Copy, Debug, Default)]
+#[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+pub(super) struct FlowTypography {
+    pub(super) body_inset: Option<u32>,
+    pub(super) paragraph_gap: Option<u32>,
+    pub(super) pitch: Option<u32>,
 }
 
 #[derive(Debug)]
@@ -532,6 +542,7 @@ struct RuleChain {
 }
 
 struct Layout<'model> {
+    body_inset_um: u32,
     bottom: u32,
     heading: HeadingDecoration,
     // Whether the last heading was itself bound to an earlier title/rule.
@@ -850,6 +861,23 @@ impl Layout<'_> {
         Ok(Some(gaps))
     }
 
+    // Only flowing Markdown prose receives the optional left inset.
+    // Literal code, indented source, headings, quotes and list markers
+    // retain their original physical anchors and measured row widths.
+    fn flowing_row_measurements(
+        &self, style: LineStyle, protect_body: bool,
+    ) -> Result<(u32, u32), String> {
+        let (mut start_x, mut cap) = self.line_measurements(style)?;
+        if protect_body && matches!(style, LineStyle::Body) {
+            start_x = start_x.checked_add(self.body_inset_um)
+                .ok_or("flow body inset position overflow")?;
+            cap = cap.checked_sub(self.body_inset_um)
+                .filter(|width| *width >= 4_000)
+                .ok_or("flow body inset leaves no writing row")?;
+        }
+        Ok((start_x, cap))
+    }
+
     // Delay empty physical rows until real ink follows them. This keeps
     // deliberate interior spacing without exporting blank trailing pages
     // or exhausting line/page budgets on invisible end-of-source rows.
@@ -1165,9 +1193,9 @@ impl Layout<'_> {
     ) -> Result<(), String> {
         let (run_start, mark_start) = (self.lines.len(), self.ornaments.len());
         let heading_before_block = self.last_visible_heading;
-        let preceding_reservation =
-            heading_before_block || self.last_visible_rule;
-        let (mut start_x, mut cap) = self.line_measurements(style)?;
+        let preceding_reservation = heading_before_block || self.last_visible_rule;
+        let (mut start_x, mut cap) =
+            self.flowing_row_measurements(style, protect_body)?;
         let (hang, ordered_marker) = ordered_hang_and_label(
             style, content, cap, self.statistics,
         )?;
@@ -2637,7 +2665,7 @@ fn initialize_layout<'model>(
     profile: &NotebookProfile,
     statistics: Option<&'model HandwritingStatisticsProfile>,
     heading: HeadingDecoration, format: FlowFormat,
-    region: Option<FlowRegion>, pitch: u32, paragraph_gap_um: u32,
+    region: Option<FlowRegion>, pitch: u32, spacing: FlowTypography,
 ) -> Result<Layout<'model>, String> {
     heading.validate().map_err(str::to_owned)?;
     if heading.is_selected() && format != FlowFormat::Markdown {
@@ -2650,6 +2678,7 @@ fn initialize_layout<'model>(
         printable
     };
     Ok(Layout {
+        body_inset_um: spacing.body_inset.unwrap_or(0),
         heading,
         heading_attached_to_prior: false,
         heading_chain: None,
@@ -2669,7 +2698,8 @@ fn initialize_layout<'model>(
         right,
         row_count: 0,
         pitch,
-        paragraph_gap_um,
+        paragraph_gap_um: spacing.paragraph_gap
+            .unwrap_or(DEFAULT_PARAGRAPH_GAP_UM),
     })
 }
 
@@ -2773,6 +2803,7 @@ pub(super) fn layout_flow_with_min_pitch(
 /// The selected minimum row pitch cannot compress measured glyph clearance.
 /// The paragraph gap is a bounded export-only spacing policy.
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+#[cfg(test)]
 pub(super) fn layout_flow_with_spacing(
     source: &FlowSource,
     profile: &NotebookProfile,
@@ -2782,16 +2813,47 @@ pub(super) fn layout_flow_with_spacing(
     min_pitch_um: Option<u32>,
     paragraph_gap_um: Option<u32>,
 ) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
-    if paragraph_gap_um.is_some_and(|gap| gap > MAX_PARAGRAPH_GAP_UM) {
+    layout_flow_with_typography(
+        source, profile, statistics, decoration, region, FlowTypography {
+            pitch: min_pitch_um, paragraph_gap: paragraph_gap_um,
+            ..FlowTypography::default()
+        },
+    )
+}
+
+/// An optional physical inset applies to every row of a Markdown prose
+/// paragraph. It does not shift structural markers or literal code rows.
+#[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
+pub(super) fn layout_flow_with_typography(
+    source: &FlowSource,
+    profile: &NotebookProfile,
+    statistics: Option<&HandwritingStatisticsProfile>,
+    decoration: HeadingDecoration,
+    region: Option<FlowRegion>,
+    spacing: FlowTypography,
+) -> Result<(Vec<TextRun>, Vec<NotebookInkLine>, usize), String> {
+    if spacing.paragraph_gap
+        .is_some_and(|gap| gap > MAX_PARAGRAPH_GAP_UM) {
         return Err("flow paragraph gap must be within 0..12000 um".into());
     }
-    if paragraph_gap_um.is_some() && source.format != FlowFormat::Markdown {
+    if spacing.paragraph_gap.is_some()
+        && source.format != FlowFormat::Markdown {
         return Err("flow paragraph gap requires Markdown flow".into());
     }
-    let pitch = measured_pitch_with_minimum(source, statistics, min_pitch_um)?;
+    if spacing.body_inset
+        .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {
+        return Err("flow body inset must be within 0..12000 um".into());
+    }
+    if spacing.body_inset.is_some()
+        && source.format != FlowFormat::Markdown {
+        return Err("flow body inset requires Markdown flow".into());
+    }
+    let pitch = measured_pitch_with_minimum(
+        source, statistics, spacing.pitch,
+    )?;
     let layout = initialize_layout(
-        profile, statistics, decoration, source.format, region, pitch,
-        paragraph_gap_um.unwrap_or(DEFAULT_PARAGRAPH_GAP_UM),
+        profile, statistics, decoration, source.format, region,
+        pitch, spacing,
     )?;
     compose_flow_rows(source, layout)
 }

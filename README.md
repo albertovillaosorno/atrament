@@ -586,6 +586,29 @@ Normal 32-page, 128-row, selected-region, ink-clearance, explicit PDF-page
 and PNG-page limits continue to apply; this is not automatic word spacing
 or persistent semantic paragraph styling.
 
+Use `--flow-body-inset-um 6000` to move **flowing Markdown prose** 6 mm
+right of its normal writing origin, across every wrapped row and explicit
+hard break. The accepted range is 0–12,000 µm; default zero keeps exact
+previous output. Heading ornaments, bullets, numbered labels, checkboxes,
+quote bars and their text, and literal fenced/four-space-indented rows keep
+their own origins. The selected inset reduces the prose writing width, so
+narrow fixed regions may wrap onto extra pages or refuse when less than
+4 mm of writing width remains.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-body-inset-um 6000 --flow-paragraph-gap-um 6000 \
+  --export-paper pdf --output inset-notes.pdf
+```
+
+The body inset is export-only, requires Markdown flow, and does not change
+notebook JSON, plain-text flow, or positioned manual ink. Invalid, duplicate
+or unsupported selections refuse before opening selected source files or
+stdin. Native Rust regressions compare unchanged default output, physically
+measured wrapping, structural markers, deterministic PDF/PNG/ink TSV, and
+refusal without overwriting a chosen PDF.
+
 The CLI continues content on the next physical page when needed;
 `--pages` and `--png-page` still refuse impossible selections. Invalid,
 overlapping-margins or too-small areas refuse before any selected file

@@ -13074,3 +13074,191 @@ fn invalid_paragraph_gap_refuses_before_input_and_preserves_existing_pdf() {
     assert_eq!(fs::read(&target).expect("sentinel survives"), b"keep-old-PDF");
     fs::remove_file(target).expect("delete test-owned sentinel");
 }
+
+#[test]
+fn selected_markdown_body_inset_moves_only_flowing_prose_rows() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "# a\n\na a a  \na\n\n- a\n\n> a\n\n    a\n\n~~~\na\n~~~")
+        .expect("mixed Markdown");
+    let paper = NotebookProfile::default();
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 52_000, height: 185_000,
+    };
+    let render = |inset| layout_flow_with_typography(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(region), FlowTypography { body_inset: inset,
+            ..FlowTypography::default() },
+    );
+    let legacy = layout_flow_with_spacing(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(region), None, None,
+    ).expect("original layout");
+    let zero = render(Some(0)).expect("explicit zero");
+    let signature = |(runs, marks, pages):
+        (Vec<TextRun>, Vec<NotebookInkLine>, usize)| {
+        (runs.into_iter().map(|run| (run.page, run.origin_um, run.text))
+            .collect::<Vec<_>>(), marks, pages)
+    };
+    assert_eq!(signature(render(None).expect("implicit zero")),
+        signature(render(Some(0)).expect("explicit zero")));
+    assert_eq!(signature(legacy), signature(zero));
+    let (baseline, marks, _) = render(None).expect("original layout");
+    let (shifted, new_marks, _) = render(Some(6_000))
+        .expect("selected body inset");
+    assert_eq!(marks, new_marks, "list and quote ornaments do not move");
+    assert_eq!(baseline.len(), shifted.len(), "this source does not reflow");
+    let first_list = baseline.iter().position(|run| run.origin_um.0 == 38_500)
+        .expect("first visible list row");
+    for (index, (old, new)) in baseline.iter().zip(&shifted).enumerate() {
+        assert_eq!(old.text, new.text);
+        assert_eq!(old.page, new.page);
+        assert_eq!(old.origin_um.1, new.origin_um.1);
+        assert_eq!(new.origin_um.0 - old.origin_um.0,
+            if (1..first_list).contains(&index) { 6_000 } else { 0 },
+            "{old:?}");
+    }
+    assert!(shifted.iter().any(|run| run.text.starts_with("a a")
+        && run.origin_um.0 == 38_500));
+    assert_eq!(shifted.iter().filter(|run| run.text == "    a").count(), 1);
+}
+
+#[test]
+fn selected_markdown_body_inset_measures_wrapping_and_refuses_narrow_rows() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a a a a a a a a a a a a").expect("visible prose");
+    let paper = NotebookProfile::default();
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 32_000, height: 32_000,
+    };
+    let render = |inset, fixed| layout_flow_with_typography(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(fixed), FlowTypography { body_inset: inset,
+            ..FlowTypography::default() },
+    );
+    let (legacy, _, _) = render(None, region).expect("default wrap");
+    let (shifted, _, pages) = render(Some(10_000), region)
+        .expect("inset wraps onto multiple pages");
+    assert!(shifted.len() > legacy.len(), "inset reduces physical capacity");
+    assert!(pages >= 2, "narrow inset should paginate");
+    assert!(shifted.iter().all(|row| row.origin_um.0 == 42_500));
+    let narrow = FlowRegion {
+        left: 30_000, top: 40_000, width: 9_000, height: 32_000,
+    };
+    assert_eq!(render(Some(3_000), narrow)
+        .expect_err("body inset cannot consume entire writing row"),
+        "flow body inset leaves no writing row");
+    for invalid in [12_001, u32::MAX] {
+        assert_eq!(render(Some(invalid), region)
+            .expect_err("typed maximum"),
+            "flow body inset must be within 0..12000 um");
+    }
+    let plain = FlowSource::new(FlowFormat::Plain, "a").expect("plain text");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &paper, None, HeadingDecoration::default(),
+        Some(region), FlowTypography { body_inset: Some(0),
+            ..FlowTypography::default() },
+    ).expect_err("plain text cannot opt into Markdown prose inset"),
+        "flow body inset requires Markdown flow");
+}
+
+#[test]
+fn selected_markdown_body_inset_exports_replayable_pdf_png_and_ink() {
+    let base = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--flow-markdown", "a a a a a\n\n# a\n\n- a\n\n> a",
+        "--flow-region", "30000", "40000", "52000", "100000",
+    ]);
+    let export = |inset: Option<&str>, format: &str| {
+        let mut command = base.clone();
+        if let Some(value) = inset {
+            command.extend(args(&["--flow-body-inset-um", value]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        execute_notebook(&command).expect("native export")
+            .expect("export bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let original = export(None, format);
+        assert_eq!(original, export(Some("0"), format),
+            "zero inset must retain exact original {format} bytes");
+        let selected = export(Some("6000"), format);
+        assert_eq!(selected, export(Some("6000"), format),
+            "selected {format} must be byte-deterministic");
+        assert_ne!(original, selected,
+            "selected inset must change native {format} ink");
+        if format == "pdf" {
+            assert!(selected.starts_with(b"%PDF-1.4"));
+        } else if format == "png" {
+            assert!(selected.starts_with(b"\x89PNG\r\n\x1a\n"));
+        } else {
+            let text = String::from_utf8(selected).expect("versioned TSV");
+            assert!(text.starts_with("atrament.page-ink.v1\n"));
+            assert!(text.lines().skip(1)
+                .any(|line| line.starts_with("1\t39400\t")));
+        }
+    }
+}
+
+#[test]
+fn invalid_markdown_body_inset_preflight_and_export_are_atomic() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "not-opened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, diagnostic) in [
+        (vec!["--flow-body-inset-um", "12001"], "within 0..12000"),
+        (vec!["--flow-body-inset-um", "-1"], "within 0..12000"),
+        (vec!["--flow-body-inset-um", "+0"], "within 0..12000"),
+        (vec!["--flow-body-inset-um", "4294967296"], "within 0..12000"),
+        (vec!["--flow-body-inset-um", ""], "within 0..12000"),
+        (vec!["--flow-body-inset-um"], "requires 0..12000"),
+        (vec!["--flow-body-inset-um", "0",
+            "--flow-body-inset-um", "1"], "may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        let error = preflight_notebook_sources(&command)
+            .expect_err("late invalid inset cannot consume selected stdin");
+        assert!(error.contains(diagnostic), "{tokens:?}: {error}");
+    }
+    for (flag, value) in [
+        ("--flow-text", "a"), ("--ink-file", "not-opened.tsv"),
+    ] {
+        let mut command = args(&[
+            "--export-paper", "pdf", "--glyph-file", "not-opened.tsv",
+            flag, value,
+        ]);
+        command.extend(args(&["--flow-body-inset-um", "0"]));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("body inset requires Markdown"),
+            "--flow-body-inset-um requires a Markdown flow");
+    }
+
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"keep-existing-PDF").expect("sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "a",
+        "--flow-region", "30000", "40000", "9000", "32000",
+        "--flow-body-inset-um", "3000",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test filename"), "--replace",
+    ]));
+    let error = execute_notebook(&command)
+        .expect_err("inset removes usable text width");
+    assert_eq!(error, "flow body inset leaves no writing row");
+    assert_eq!(fs::read(&target).expect("preserved output"),
+        b"keep-existing-PDF");
+    fs::remove_file(target).expect("test-owned file cleanup");
+}

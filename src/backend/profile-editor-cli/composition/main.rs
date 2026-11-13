@@ -49,10 +49,11 @@ use std::slice::{Iter, from_ref};
 #[cfg(test)]
 use flow::{
     layout_flow, layout_flow_with_min_pitch, layout_flow_with_region,
+    layout_flow_with_spacing,
 };
 use flow::{
-    FlowFormat, FlowRegion, FlowSource, HeadingDecoration,
-    layout_flow_with_spacing,
+    FlowFormat, FlowRegion, FlowSource, FlowTypography, HeadingDecoration,
+    layout_flow_with_typography,
 };
 use glyph::{GlyphVariation, first_grapheme};
 
@@ -182,6 +183,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-region LEFT_UM TOP_UM WIDTH_UM HEIGHT_UM] \
     [--flow-pitch-um MIN_UM (9000..30000)] \
     [--flow-paragraph-gap-um GAP_UM (0..12000, Markdown only)] \
+    [--flow-body-inset-um INSET_UM (0..12000, Markdown only)] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
     [--output FILE [--replace]]\n\
     Flow requires --export-paper pdf|png or --emit-ink-file; text is not \
@@ -220,8 +222,10 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     every sheet, refusing invalid regions or unfit glyphs/rows. \
     --flow-pitch-um selects minimum 9..30 mm physical row spacing; \
     taller measured glyphs retain their necessary clearance. \
-    --flow-paragraph-gap-um selects Markdown blank-line spacing, \
+    --flow-paragraph-gap-um selects Markdown blank-line spacing \
     from 0..12 mm; default is 4 mm. Plain rows are unchanged. \
+    --flow-body-inset-um shifts flowing Markdown prose right 0..12 mm, \
+    leaving list markers, titles, quotes and literal code unchanged; \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
     PDF page count includes the last manual ink page, with or without \
@@ -332,9 +336,8 @@ struct NotebookRequest {
     dpi: u32,
     export_format: Option<NotebookExportFormat>,
     flow: Option<FlowSource>,
-    flow_paragraph_gap_um: Option<u32>,
-    flow_pitch_um: Option<u32>,
     flow_region: Option<FlowRegion>,
+    flow_typography: FlowTypography,
     glyphs: GlyphOverlay,
     heading: HeadingDecoration,
     ink: Vec<NotebookInkLine>,
@@ -466,6 +469,12 @@ impl NotebookFlagPreflight {
                 let _gap = parse_notebook_flow_paragraph_gap(iter)?;
                 0
             }
+            "--flow-body-inset-um" => {
+                self.unique(option,
+                    "--flow-body-inset-um may appear only once")?;
+                let _inset = parse_notebook_flow_body_inset(iter)?;
+                0
+            }
             "--flow-pitch-um" => {
                 self.unique(option, "--flow-pitch-um may appear only once")?;
                 let _pitch = parse_notebook_flow_pitch(iter)?;
@@ -530,9 +539,12 @@ impl NotebookFlagPreflight {
         // supplied by a previous flow, glyph library or page-ink source.
         validate_notebook_flow_flag_compatibility(
             flow_format, region_selected,
-            has("--flow-pitch-um"),
-            has("--flow-paragraph-gap-um"), self.heading,
-            self.export_format,
+            FlowTypography {
+                pitch: has("--flow-pitch-um").then_some(9_000),
+                paragraph_gap: has("--flow-paragraph-gap-um")
+                    .then_some(0),
+                body_inset: has("--flow-body-inset-um").then_some(0),
+            }, self.heading, self.export_format,
         )?;
         // Explicit ink and glyph intent needs an output mode even before
         // selected library or stdin bytes are available.
@@ -2054,6 +2066,33 @@ fn select_notebook_flow_paragraph_gap(
     Ok(())
 }
 
+// Reuse the physical 0..12 mm bound on both preflight and typed layout.
+fn parse_notebook_flow_body_inset(
+    iter: &mut Iter<'_, String>,
+) -> Result<u32, String> {
+    let raw = iter.next()
+        .ok_or("--flow-body-inset-um requires 0..12000 um")?;
+    if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
+        return Err("flow body inset must be within 0..12000 um".into());
+    }
+    let inset = raw.parse::<u32>()
+        .map_err(|_error| "flow body inset must be within 0..12000 um")?;
+    if inset > 12_000 {
+        return Err("flow body inset must be within 0..12000 um".into());
+    }
+    Ok(inset)
+}
+
+fn select_notebook_flow_body_inset(
+    iter: &mut Iter<'_, String>, selected: &mut Option<u32>,
+) -> Result<(), String> {
+    if selected.is_some() {
+        return Err("--flow-body-inset-um may appear only once".into());
+    }
+    *selected = Some(parse_notebook_flow_body_inset(iter)?);
+    Ok(())
+}
+
 fn parse_notebook_flow_region(
     iter: &mut Iter<'_, String>, selected: bool,
 ) -> Result<FlowRegion, String> {
@@ -2092,8 +2131,7 @@ fn load_notebook_paper_option(
 
 fn validate_notebook_flow_flag_compatibility(
     flow_format: Option<FlowFormat>, region_selected: bool,
-    pitch_selected: bool, paragraph_gap_selected: bool,
-    heading: HeadingDecoration,
+    typography: FlowTypography, heading: HeadingDecoration,
     export_format: Option<NotebookExportFormat>,
 ) -> Result<(), String> {
     // Transient text is not a field in the saved notebook v1 profile.
@@ -2107,11 +2145,16 @@ fn validate_notebook_flow_flag_compatibility(
     if region_selected && flow_format.is_none() {
         return Err("--flow-region requires a text or Markdown flow".into());
     }
-    if pitch_selected && flow_format.is_none() {
+    if typography.pitch.is_some() && flow_format.is_none() {
         return Err("--flow-pitch-um requires a text or Markdown flow".into());
     }
-    if paragraph_gap_selected && flow_format != Some(FlowFormat::Markdown) {
+    if typography.paragraph_gap.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-paragraph-gap-um requires a Markdown flow".into());
+    }
+    if typography.body_inset.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err("--flow-body-inset-um requires a Markdown flow".into());
     }
     heading.validate().map_err(str::to_owned)?;
     if heading.is_selected() && flow_format != Some(FlowFormat::Markdown) {
@@ -2123,13 +2166,11 @@ fn validate_notebook_flow_flag_compatibility(
 fn validate_notebook_flow_selection(
     flow: Option<&FlowSource>, glyphs: &GlyphOverlay,
     heading: HeadingDecoration, region: Option<FlowRegion>,
-    pitch_um: Option<u32>, paragraph_gap_um: Option<u32>,
-    export: &NotebookExportOptions,
+    typography: FlowTypography, export: &NotebookExportOptions,
 ) -> Result<(), String> {
     validate_notebook_flow_flag_compatibility(
         flow.map(|source| source.format), region.is_some(),
-        pitch_um.is_some(), paragraph_gap_um.is_some(), heading,
-        export.format,
+        typography, heading, export.format,
     )?;
     if flow.is_none() {
         glyphs.validate_pairing()?;
@@ -2492,8 +2533,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     let (mut output, mut replace) = (None, false);
     let (mut export, mut ink) = (NotebookExportOptions::default(), Vec::new());
     let (mut glyphs, mut statistics) = (GlyphOverlay::default(), None);
-    let (mut flow, mut flow_paragraph_gap_um, mut flow_pitch_um,
-        mut flow_region) = (None, None, None, None);
+    let (mut flow, mut flow_region) = (None, None);
+    let mut flow_typography = FlowTypography::default();
     let mut heading = HeadingDecoration::default();
     let mut stdin_selected = false;
     let (mut loaded, mut paper_loaded) = (false, false);
@@ -2530,9 +2571,11 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
             "--flow-pitch-um" => select_notebook_flow_pitch(
-                &mut iter, &mut flow_pitch_um)?,
+                &mut iter, &mut flow_typography.pitch)?,
             "--flow-paragraph-gap-um" => select_notebook_flow_paragraph_gap(
-                &mut iter, &mut flow_paragraph_gap_um)?,
+                &mut iter, &mut flow_typography.paragraph_gap)?,
+            "--flow-body-inset-um" => select_notebook_flow_body_inset(
+                &mut iter, &mut flow_typography.body_inset)?,
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" =>
                 parse_notebook_flow(&mut iter, option, &mut flow,
@@ -2558,8 +2601,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
         }
     }
     validate_notebook_flow_selection(
-        flow.as_ref(), &glyphs, heading, flow_region, flow_pitch_um,
-        flow_paragraph_gap_um, &export,
+        flow.as_ref(), &glyphs, heading, flow_region, flow_typography,
+        &export,
     )?;
     validate_notebook_export_flags(
         replace, output.as_deref(), inspect, &export, &ink,
@@ -2568,8 +2611,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
     profile.validate()?;
     Ok(NotebookRequest {
         flow,
-        flow_pitch_um,
-        flow_paragraph_gap_um,
+        flow_typography,
         flow_region,
         pages_explicit: export.pages.is_some(),
         glyphs,
@@ -2698,10 +2740,9 @@ fn execute_notebook(args: &[String]) -> Result<Option<Vec<u8>>, String> {
     let manual_ink_count = request.ink.len();
     let mut flow_run_count = None;
     if let Some(source) = &request.flow {
-        let (runs, ornaments, flow_pages) = layout_flow_with_spacing(
+        let (runs, ornaments, flow_pages) = layout_flow_with_typography(
             source, &request.profile, request.statistics.as_ref(),
-            request.heading, request.flow_region, request.flow_pitch_um,
-            request.flow_paragraph_gap_um,
+            request.heading, request.flow_region, request.flow_typography,
         )?;
         admit_flow_page_selection(&mut request, flow_pages)?;
         flow_run_count = Some(runs.len());
