@@ -1508,6 +1508,15 @@
               integer midpoint is selected for further editing. Very short
               strokes and a full 4,096-segment library refuse. The unsaved
               change uses one Undo step; download TSV explicitly.</p>
+            <button id="glyph-merge" type="button" disabled>
+              Merge selected stroke with next straight segment (undoable)
+            </button>
+            <p class="field-help">Merge replaces two touching, forward,
+              exactly collinear segments of the selected Unicode glyph with
+              one identical round-pen path. It refuses turns, reversed
+              movement, different pen widths or colors, and midpoint
+              rounding that changes a straight line. Interleaved other
+              glyphs are preserved. This is an unsaved, undoable edit.</p>
             <button id="glyph-reverse" type="button" disabled>
               Reverse selected pen direction
             </button>

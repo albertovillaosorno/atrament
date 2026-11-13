@@ -237,6 +237,54 @@ export function subdivideGlyphStroke(
     return candidate;
 }
 
+// Co-directed collinear pieces have exactly the same round-pen footprint as
+// their union. A rounded midpoint that falls off the original line, a turn,
+// reverse travel, color/width mismatch or pen lift cannot be joined losslessly.
+// The "next" stroke is in exact-glyph order, not necessarily the next TSV row.
+function mergeableStrokePair(
+    source: Stroke[], grapheme: string, index: number,
+): { first: Stroke; nextIndex: number; next: Stroke } | null {
+    if (!Number.isSafeInteger(index) || index < 0
+        || source[index]?.grapheme !== grapheme) return null;
+    const nextIndex = source.findIndex((line, position) => {
+        return position > index && line.grapheme === grapheme;
+    });
+    if (nextIndex < 0) return null;
+    const first = validateStroke(source[index]!);
+    const next = validateStroke(source[nextIndex]!);
+    if (first.x2 !== next.x1 || first.y2 !== next.y1
+        || first.width !== next.width || first.color !== next.color) {
+        return null;
+    }
+    const ax = first.x2 - first.x1;
+    const ay = first.y2 - first.y1;
+    const bx = next.x2 - next.x1;
+    const by = next.y2 - next.y1;
+    if (ax * by !== ay * bx || ax * bx + ay * by <= 0) return null;
+    return { first, nextIndex, next };
+}
+
+export function mergeGlyphStrokes(
+    source: Stroke[], grapheme: string, index: number,
+): Stroke[] {
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Stroke merge requires an exact visible glyph");
+    }
+    encodeGlyphLibrary(source);
+    const pair = mergeableStrokePair(source, grapheme, index);
+    if (pair === null) {
+        throw new Error("Merge needs touching, straight, co-directed "
+            + "same-glyph strokes with matching pen width and color");
+    }
+    const candidate = source.slice();
+    candidate[index] = validateStroke({ ...pair.first,
+        x2: pair.next.x2, y2: pair.next.y2,
+    });
+    candidate.splice(pair.nextIndex, 1);
+    encodeGlyphLibrary(candidate);
+    return candidate;
+}
+
 // Match the Rust --inspect-paths definition: exact directed endpoints and
 // identical pen width/RGB across consecutive strokes of one exact grapheme.
 // These are candidate paths, not persisted pen-down/pen-lift metadata.
@@ -4199,6 +4247,7 @@ export function createGlyphStrokeEditor(): {
     const update = required<HTMLButtonElement>("glyph-update");
     const remove = required<HTMLButtonElement>("glyph-remove");
     const subdivide = required<HTMLButtonElement>("glyph-subdivide");
+    const merge = required<HTMLButtonElement>("glyph-merge");
     const clearGlyph = required<HTMLButtonElement>("glyph-clear");
     const reverse = required<HTMLButtonElement>("glyph-reverse");
     const reversePath = required<HTMLButtonElement>("glyph-reverse-path");
@@ -4258,7 +4307,7 @@ export function createGlyphStrokeEditor(): {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, subdivide, clearGlyph, reverse, reversePath,
+        remove, subdivide, merge, clearGlyph, reverse, reversePath,
         startPath, closePath,
         translatePath,
         pathDx, pathDy,
@@ -4285,7 +4334,7 @@ export function createGlyphStrokeEditor(): {
     type TransformKind = "slant" | "height" | "width" | "ink"
         | "move" | "rotation" | "reflection";
     type EditKind = TransformKind | "pen trace" | "stroke addition"
-        | "stroke edit" | "stroke subdivision"
+        | "stroke edit" | "stroke subdivision" | "stroke merge"
         | "stroke direction" | "stroke order"
         | "pen path direction" | "pen path start"
         | "pen path closure" | "pen path move"
@@ -5459,6 +5508,9 @@ export function createGlyphStrokeEditor(): {
         subdivide.disabled = !active || drawing !== null
             || selectedIndex === null || strokes.length >= MAX_STROKES
             || subdivisionMidpoint(strokes[selectedIndex]!) === null;
+        const mergeTarget = selectedIndex === null ? null
+            : mergeableStrokePair(strokes, character.value, selectedIndex);
+        merge.disabled = !active || drawing !== null || mergeTarget === null;
         clearGlyph.disabled = !active || shown.length === 0
             || drawing !== null;
         reverse.disabled = !active || selectedIndex === null;
@@ -6392,6 +6444,18 @@ export function createGlyphStrokeEditor(): {
             const next = subdivideGlyphStroke(strokes, target, index);
             commitInkEdit(next, target, "stroke subdivision", index + 1);
             message("Subdivided selected directed stroke; unsaved");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    merge.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null) return;
+        try {
+            const index = selectedIndex;
+            const target = character.value;
+            const next = mergeGlyphStrokes(strokes, target, index);
+            commitInkEdit(next, target, "stroke merge", index);
+            message("Merged touching straight ink into one stroke; unsaved");
         } catch (error) {
             message(String(error));
         }

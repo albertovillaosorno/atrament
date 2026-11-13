@@ -6,7 +6,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, SELECTABLE_MATH_GLYPHS, italicizeGlyphStrokes,
     scaleGlyphHeight, scaleGlyphWidth,
     scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
-    reflectGlyphStrokes, subdivideGlyphStroke,
+    reflectGlyphStrokes, subdivideGlyphStroke, mergeGlyphStrokes,
     composeAccentedGlyph, fillMissingBilingualBaseline,
     fillMissingConnectedLowercase,
     missingBilingualBaseline, varyGlyphStrokes,
@@ -517,6 +517,7 @@ function mountEditor() {
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
         "glyph-ideal-accent", "glyph-ideal-diacritic",
         "glyph-update", "glyph-remove", "glyph-subdivide",
+        "glyph-merge",
         "glyph-clear", "glyph-reverse",
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
         "glyph-path-earlier", "glyph-path-later",
@@ -11829,6 +11830,166 @@ test("selected stroke subdivision is one recoverable, browser-only edit",
             "Undo last stroke addition");
         editor.reset();
         assert.equal(split.disabled, true);
+        assert.equal(get("slant-undo").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+
+test("lossless stroke merge preserves forward ink and exact Unicode TSV slots",
+    () => {
+    const nfd = "n\u0303";
+    const first = { ...stroke(nfd), x1: 400, y1: 600,
+        x2: 800, y2: 1000, width: 251, color: "#112233" };
+    const second = { ...first, x1: 800, y1: 1000,
+        x2: 1600, y2: 1800, color: "#112233" };
+    const other = stroke("ñ");
+    const more = { ...stroke(nfd), x1: 2200, y1: 2300,
+        x2: 2800, y2: 2900 };
+    const source = [first, other, second, stroke("∞"), more];
+    const before = structuredClone(source);
+    const merged = mergeGlyphStrokes(source, nfd, 0);
+    assert.deepEqual(merged, [
+        { ...first, x2: 1600, y2: 1800 }, other, stroke("∞"), more,
+    ], "next glyph-order segment can be interleaved with other glyphs");
+    assert.deepEqual(source, before, "source remains unchanged");
+    assert.equal(encodeGlyphLibrary(merged),
+        encodeGlyphLibrary(parseGlyphLibrary(encodeGlyphLibrary(merged))));
+    assert.deepEqual(candidatePenPaths(merged, nfd), [
+        { first: 1, last: 1, start: { x: 400, y: 600 },
+            end: { x: 1600, y: 1800 }, width: 251,
+            color: "#112233" },
+        { first: 2, last: 2, start: { x: 2200, y: 2300 },
+            end: { x: 2800, y: 2900 }, width: 250,
+            color: "#A1B2C3" },
+    ]);
+    assert.deepEqual(mergeGlyphStrokes([
+        first, { ...second, color: "#112233" },
+    ], nfd, 0), [{ ...first, x2: 1600, y2: 1800 }]);
+    const even = { ...first, x1: 1000, y1: 1000,
+        x2: 2000, y2: 3000 };
+    const halves = subdivideGlyphStroke([even], nfd, 0);
+    assert.deepEqual(mergeGlyphStrokes(halves, nfd, 0), [even],
+        "exact integer midpoint subdivision admits a lossless inverse");
+    assert.deepEqual(mergeGlyphStrokes([
+        { ...first, color: "#a1b2c3" },
+        { ...second, color: "#A1B2C3" },
+    ], nfd, 0), [{ ...first, color: "#A1B2C3",
+        x2: 1600, y2: 1800 }], "RGB comparison is canonical");
+});
+
+test("stroke merge refuses non-lossless seams and unadmitted sources", () => {
+    const nfd = "n\u0303";
+    const first = { ...stroke(nfd), x1: 500, y1: 500,
+        x2: 1000, y2: 1500 };
+    const second = { ...first, x1: 1000, y1: 1500,
+        x2: 1500, y2: 2500 };
+    const good = [first, stroke("ñ"), second];
+    for (const [glyph, index] of [["ñ", 0], ["n", 0],
+        [nfd, 1], [nfd, 2], [nfd, -1], [nfd, 0.5], ["ab", 0]]) {
+        assert.throws(() => mergeGlyphStrokes(good, glyph, index));
+    }
+    const refused = [
+        { ...second, x1: 1001 }, // one micrometre gap
+        { ...second, x2: 1501 }, // turn, not a straight path
+        { ...second, x2: 500, y2: 500 }, // backtrack
+        { ...second, width: 260 }, // different round pen
+        { ...second, color: "#FFFFFF" }, // different pigment
+    ];
+    for (const next of refused) {
+        const candidate = [first, stroke("ñ"), next];
+        const before = encodeGlyphLibrary(candidate);
+        assert.throws(() => mergeGlyphStrokes(candidate, nfd, 0),
+            /touching, straight, co-directed/);
+        assert.equal(encodeGlyphLibrary(candidate), before,
+            "rejected merge cannot mutate caller ink");
+    }
+    const roundedOffLine = subdivideGlyphStroke([
+        { ...first, x1: 1000, y1: 900, x2: 1601, y2: 1702 },
+    ], nfd, 0);
+    assert.throws(() => mergeGlyphStrokes(roundedOffLine, nfd, 0),
+        /straight/, "rounded off-line split cannot be called lossless");
+    assert.throws(() => mergeGlyphStrokes([
+        first, { ...second, width: 79 },
+    ], nfd, 0), /bounds/, "unadmitted unrelated pen data refuses");
+    const atLimit = Array.from({ length: 4096 }, (_, i) => ({
+        ...first, x1: 500 + (i % 3), x2: 1000 + (i % 3),
+    }));
+    atLimit[0] = first;
+    atLimit[1] = second;
+    assert.equal(mergeGlyphStrokes(atLimit, nfd, 0).length, 4095,
+        "merging can reduce an exact full-cap library");
+});
+
+test("merge control offers atomic exact-Unicode recovery and no implicit save",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const nfd = "n\u0303";
+        const merge = get("merge");
+        const choose = (glyph, index) => {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            get("selected").value = String(index);
+            get("selected").dispatch("change");
+        };
+        const add = (glyph, x1, y1, x2, y2) => {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            for (const [key, value] of Object.entries({
+                x1, y1, x2, y2, width: 251,
+            })) get(key).value = String(value);
+            get("add").dispatch("click");
+        };
+        assert.equal(merge.disabled, true);
+        editor.start();
+        add(nfd, 1000, 1000, 1600, 1600);
+        add("ñ", 300, 500, 700, 900);
+        add(nfd, 1600, 1600, 2200, 2200);
+        choose(nfd, 0);
+        assert.equal(merge.disabled, false);
+        get("save").dispatch("click");
+        const original = await downloads.at(-1).text();
+        const previousDownloads = downloads.length;
+        merge.dispatch("click");
+        assert.equal(downloads.length, previousDownloads,
+            "authoring must never silently commit a file");
+        const expected = mergeGlyphStrokes(parseGlyphLibrary(original),
+            nfd, 0);
+        assert.equal(get("selected").value, "0");
+        assert.equal(get("x2").value, "2200");
+        assert.match(get("paths").textContent, /1 directed strokes/);
+        assert.equal(get("slant-undo").textContent,
+            "Undo last stroke merge");
+        choose("ñ", 1);
+        assert.equal(get("slant-undo").disabled, true,
+            "NFC selection cannot undo NFD editing");
+        choose(nfd, 0);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(expected));
+        assert.equal(merge.disabled, true,
+            "no following NFD segment remains");
+        get("slant-undo").dispatch("click");
+        assert.equal(get("selected").value, "0");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), original);
+        get("slant-redo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(expected));
+        get("subdivide").dispatch("click");
+        choose(nfd, 0);
+        assert.equal(merge.disabled, false,
+            "exact midpoint split can be restored by merge");
+        merge.dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(expected));
+        editor.reset();
+        assert.equal(merge.disabled, true);
         assert.equal(get("slant-undo").disabled, true);
     } finally {
         ui.restore();

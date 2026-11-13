@@ -1180,3 +1180,16 @@ This is deliberately a local sampled-stroke edit. The rounded midpoint
 need not lie exactly on the original Euclidean line at submicrometre
 precision; no analytic curve control point, persisted pen lift or new Rust
 TSV field is introduced. The complete P1-014 task remains open.
+
+## Lossless collinear segment merge (partial) — 2026-11-13
+
+The localhost editor can explicitly coalesce two consecutive exact-glyph
+segments when their endpoints touch, ink widths and colors agree, and their
+integer vectors are precisely collinear and forward-directed. Other Unicode
+glyphs interleaved between those source rows retain their positions. This is
+a reversible session edit, not an implicit file save or a new Rust shape
+primitive. A midpoint split can be merged only if rounding has not placed
+its seam off the original straight line; turns, backtracks, mismatched ink
+and non-touching segments refuse. Focused browser tests cover Unicode
+identity, full native TSV cap, unchanged source on refusal and undo/redo.
+The resulting contour remains a standard editable TSV stroke after export.
