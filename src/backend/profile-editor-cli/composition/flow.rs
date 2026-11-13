@@ -90,6 +90,7 @@ pub(super) struct FlowTypography {
     pub(super) paragraph_gap: Option<u32>,
     pub(super) pitch: Option<u32>,
     pub(super) quote_align: Option<BodyAlign>,
+    pub(super) task_align: Option<BodyAlign>,
 }
 
 #[derive(Debug)]
@@ -611,6 +612,7 @@ struct Layout<'model> {
     row_count: usize,
     rule_chain: Option<RuleChain>,
     statistics: Option<&'model HandwritingStatisticsProfile>,
+    task_align: Option<BodyAlign>,
     top: u32,
     y: u32,
 }
@@ -705,8 +707,9 @@ impl Layout<'_> {
         } else {
             let (align, kind) = match style {
                 LineStyle::Quote => (self.quote_align, "quote"),
-                LineStyle::Bullet | LineStyle::Task(_) =>
-                    (self.bullet_align, "bullet"),
+                LineStyle::Bullet => (self.bullet_align, "bullet"),
+                LineStyle::Task(_) =>
+                    (self.task_align.or(self.bullet_align), "task"),
                 LineStyle::Ordered => (self.ordered_align, "ordered"),
                 LineStyle::Body | LineStyle::Heading(_) |
                 LineStyle::Separator => return Ok((start_x, None)),
@@ -2930,6 +2933,7 @@ fn initialize_layout<'model>(
         bullet_align: spacing.bullet_align,
         ordered_align: spacing.ordered_align,
         quote_align: spacing.quote_align,
+        task_align: spacing.task_align,
         body_first_line_indent_um: spacing.body_first_line_indent.unwrap_or(0),
         body_continuation_indent_um:
             spacing.body_continuation_indent.unwrap_or(0),
@@ -3113,6 +3117,10 @@ pub(super) fn layout_flow_with_typography(
     if spacing.ordered_align.is_some()
         && source.format != FlowFormat::Markdown {
         return Err("flow ordered alignment requires Markdown flow".into());
+    }
+    if spacing.task_align.is_some()
+        && source.format != FlowFormat::Markdown {
+        return Err("flow task alignment requires Markdown flow".into());
     }
     if spacing.body_first_line_indent
         .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {

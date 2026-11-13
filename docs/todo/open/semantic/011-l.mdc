@@ -4455,3 +4455,20 @@ flags before source I/O. Unfit physical rows refuse without replacing
 the selected existing PDF. This is export-only numeric-row placement,
 not semantic list indentation, automatic numbering or saved notebook
 content; the P1 semantic notebook acceptance criterion remains open.
+
+## Independent checkbox text alignment (partial) — 2026-11-13
+
+Markdown checkbox tasks can now independently choose
+`--flow-task-align left|center|right`. Without this selection, tasks
+inherit the existing bullet alignment; an explicit task selection takes
+precedence without moving bullet ink, checkbox outlines or check marks.
+All selected list/quote insets and physical page boundaries still apply.
+The setting is transient and does not mutate stored notebook state.
+
+Five native Rust regressions cover selection precedence, untouched
+heading/body/bullet/quote/numbered rows, exact physical text positions,
+fixed checkbox ornaments through page turns, deterministic PDF/PNG/ink
+TSV replay and source-independent preflight refusal. A failed physical
+layout cannot overwrite existing selected export bytes. This remains
+CLI-only styling rather than the persisted semantic notebook export
+required for P1 acceptance.

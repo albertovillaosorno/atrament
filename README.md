@@ -736,6 +736,27 @@ and transient; it does not renumber items, alter pen strokes, or establish
 persisted semantic list alignment. Invalid values, duplicates, and
 unrenderable rows refuse before replacing an output file.
 
+For checkbox tasks (`- [ ]` and `- [x]`), use
+`--flow-task-align center` or `right` to align their *text* independently
+of unordered bullets. The checkbox outline and check remain in their
+original structural gutter, including on continued physical pages.
+If both task and bullet alignment are selected, the task setting wins
+for tasks only; bullets retain the bullet setting.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-bullet-align left --flow-task-align right \
+  --export-paper pdf --output task-aligned-notes.pdf
+```
+
+Omitting task alignment preserves the previous behavior: checkbox text
+inherits `--flow-bullet-align`, or remains at its original origin if neither
+is supplied. An explicit task `left` can undo a selected bullet center/right
+alignment for checkbox text without moving the marks. The option requires
+Markdown and is export-only; invalid or duplicate values refuse before input
+reads, and physical layout failure never replaces a selected output file.
+
 To indent only the **first physical row** of each Markdown prose block,
 select `--flow-body-first-line-indent-um 8000`. This shifts the first
 row 8 mm right and shortens its writing width by the same amount; wrapped

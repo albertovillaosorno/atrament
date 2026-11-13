@@ -190,6 +190,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-quote-align left|center|right (Markdown only)] \
     [--flow-bullet-align left|center|right (Markdown only)] \
     [--flow-ordered-align left|center|right (Markdown only)] \
+    [--flow-task-align left|center|right (Markdown only)] \
     [--flow-body-first-line-indent-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-continuation-indent-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-right-inset-um INSET_UM (0..12000, Markdown only)] \
@@ -250,6 +251,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     while their symbols stay fixed. --flow-ordered-align aligns \
     authored numbered list labels with their item text, preserving \
     the measured hanging indent on continued rows. \
+    --flow-task-align overrides bullet alignment for checkbox text; \
+    checkbox boxes remain fixed at their original gutter. \
     --flow-list-quote-inset-um shifts list/quote ink 0..12 mm right; \
     --flow-list-quote-right-inset-um reserves 0..12 mm on their right. \
     Explicit --place-text overlays may coexist with flow, outside its \
@@ -555,7 +558,8 @@ impl NotebookFlagPreflight {
                 0
             }
             "--flow-body-align" | "--flow-quote-align"
-            | "--flow-bullet-align" | "--flow-ordered-align" =>
+            | "--flow-bullet-align" | "--flow-ordered-align"
+            | "--flow-task-align" =>
                 self.select_flow_align(option, iter)?,
             "--flow-body-first-line-indent-um"
             | "--flow-body-continuation-indent-um" =>
@@ -632,6 +636,8 @@ impl NotebookFlagPreflight {
                 bullet_align: has("--flow-bullet-align")
                     .then_some(BodyAlign::Left),
                 ordered_align: has("--flow-ordered-align")
+                    .then_some(BodyAlign::Left),
+                task_align: has("--flow-task-align")
                     .then_some(BodyAlign::Left),
                 body_first_line_indent:
                     has("--flow-body-first-line-indent-um").then_some(0),
@@ -2293,11 +2299,13 @@ fn select_notebook_flow_typography(
                 iter, &mut typography.paragraph_gap,
             ),
         "--flow-body-align" | "--flow-quote-align"
-        | "--flow-bullet-align" | "--flow-ordered-align" => {
+        | "--flow-bullet-align" | "--flow-ordered-align"
+        | "--flow-task-align" => {
             let selected = match option {
                 "--flow-body-align" => &mut typography.body_align,
                 "--flow-quote-align" => &mut typography.quote_align,
                 "--flow-bullet-align" => &mut typography.bullet_align,
+                "--flow-task-align" => &mut typography.task_align,
                 _ => &mut typography.ordered_align,
             };
             if selected.is_some() {
@@ -2384,6 +2392,10 @@ fn validate_notebook_flow_flag_compatibility(
     if typography.ordered_align.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-ordered-align requires a Markdown flow".into());
+    }
+    if typography.task_align.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err("--flow-task-align requires a Markdown flow".into());
     }
     if typography.body_first_line_indent.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
@@ -2832,7 +2844,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 &mut iter, flow_region.is_some())?),
             "--flow-pitch-um" | "--flow-body-align" | "--flow-quote-align"
             | "--flow-bullet-align" | "--flow-ordered-align"
-            | "--flow-body-first-line-indent-um" | "--flow-body-inset-um"
+            | "--flow-task-align" | "--flow-body-first-line-indent-um"
+            | "--flow-body-inset-um"
             | "--flow-body-continuation-indent-um" | "--flow-paragraph-gap-um"
             | "--flow-body-right-inset-um" | "--flow-list-quote-inset-um"
             | "--flow-list-quote-right-inset-um" =>
@@ -2856,8 +2869,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                     &mut export, &mut ink, &mut glyphs, &mut stdin_used)?;
             }
             "--output" => output = Some(parse_selected_output(
-                &mut iter, output.is_some(),
-            )?),
+                &mut iter, output.is_some())?),
             "--replace" => preflight_unique_selection(
                 &mut replace, "--replace may appear only once")?,
             _ => return Err(format!("unknown notebook option: {option}")),

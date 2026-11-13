@@ -15261,6 +15261,262 @@ fn invalid_markdown_bullet_alignment_preflights_and_preserves_pdf() {
 }
 
 #[test]
+fn markdown_task_alignment_overrides_bullet_alignment_without_moving_boxes() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "# a\n\na a\n\n- a a\n\n- [x] a\n\n- [ ] a a\n\n1. a\n\n> a\n\n    a",
+    ).expect("mixed Markdown tasks");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 70_000, height: 200_000,
+    };
+    let base = FlowTypography {
+        bullet_align: Some(BodyAlign::Right),
+        body_align: Some(BodyAlign::Center),
+        list_quote_inset: Some(4_000),
+        list_quote_right_inset: Some(10_000),
+        ..FlowTypography::default()
+    };
+    let choose = |selection| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            task_align: selection, ..base
+        },
+    ).expect("task alignment");
+    let (inherited, marks, pages) = choose(None);
+    let (explicit_right, right_marks, right_pages) =
+        choose(Some(BodyAlign::Right));
+    assert_eq!(pages, right_pages);
+    assert_eq!(inherited.iter().map(|r| (&r.text, r.origin_um))
+        .collect::<Vec<_>>(), explicit_right.iter()
+        .map(|r| (&r.text, r.origin_um)).collect::<Vec<_>>());
+    assert_eq!(marks, right_marks);
+    let (left, left_marks, _) = choose(Some(BodyAlign::Left));
+    let (center, center_marks, _) = choose(Some(BodyAlign::Center));
+    assert_eq!(marks, left_marks);
+    assert_eq!(marks, center_marks);
+    assert_eq!(inherited.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(),
+        ["a", "a a", "a a", "a", "a a", "1. a", "a", "    a"]);
+    for (index, (original, (unshifted, middle))) in inherited.iter()
+        .zip(left.iter().zip(center.iter())).enumerate() {
+        assert_eq!((original.page, original.origin_um.1),
+            (unshifted.page, unshifted.origin_um.1));
+        assert_eq!((original.page, original.origin_um.1),
+            (middle.page, middle.origin_um.1));
+        if index == 3 || index == 4 {
+            let available = if index == 3 { 42_000 } else { 34_000 };
+            assert_eq!(original.origin_um.0,
+                unshifted.origin_um.0 + available);
+            assert_eq!(middle.origin_um.0,
+                unshifted.origin_um.0 + available / 2);
+        } else {
+            assert_eq!(original.origin_um.0, unshifted.origin_um.0);
+            assert_eq!(original.origin_um.0, middle.origin_um.0);
+        }
+    }
+    assert_eq!(marks.iter().filter(|mark| mark.width_um == 350).count(),
+        8, "both checkbox outlines remain fixed");
+}
+
+#[test]
+fn markdown_task_alignment_wraps_on_physical_pages_with_fixed_boxes() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "- [x] a a a a a a a a a a a a\n\n- [ ] a a a a a a a a",
+    ).expect("wrapped checkbox tasks");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 34_000, height: 25_000,
+    };
+    let base = FlowTypography {
+        list_quote_right_inset: Some(6_000),
+        ..FlowTypography::default()
+    };
+    let choose = |task_align| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            task_align, ..base
+        },
+    ).expect("multi-page tasks");
+    let (left, marks, pages) = choose(None);
+    let (right, shifted_marks, right_pages) =
+        choose(Some(BodyAlign::Right));
+    assert_eq!(pages, right_pages);
+    assert!(pages >= 3);
+    assert_eq!(marks, shifted_marks);
+    assert_eq!(marks.iter().filter(|mark| mark.width_um == 350).count(),
+        8, "checkbox outlines are attached to first physical rows");
+    let right_edge = region.left + region.width - 1_500 - 6_000;
+    for (normal, aligned) in left.iter().zip(right.iter()) {
+        assert_eq!((&normal.text, normal.page, normal.origin_um.1),
+            (&aligned.text, aligned.page, aligned.origin_um.1));
+        assert!(normal.origin_um.0 <= aligned.origin_um.0);
+        let extent = u32::try_from(normal.text.chars().count())
+            .expect("bounded row") * 4_000;
+        assert_eq!(aligned.origin_um.0 + extent, right_edge);
+    }
+    assert!(right.iter().any(|row| row.page > 1));
+}
+
+#[test]
+fn markdown_task_alignment_measures_compressed_glyph_contours() {
+    use atrament_unicode_grapheme_segmentation::UnicodeGraphemeSegmentation;
+
+    let mut stats = HandwritingStatisticsProfile::baseline(71);
+    for (dimension, mean) in [
+        (Dimension::Width, 12_000),
+        (Dimension::LetterSpacing, -10_000),
+    ] {
+        stats = stats.with_glyph("a", DimensionStatistics {
+            dimension,
+            statistics: ScalarStatistics {
+                minimum: mean, maximum: mean, mean, median: mean,
+                standard_deviation: 0,
+            },
+        }, &UnicodeGraphemeSegmentation)
+            .expect("compressed nominal task glyph");
+    }
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "- [x] a\n\n- [ ] a",
+    ).expect("authored checkboxes");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 50_000, height: 40_000,
+    };
+    let mut marker_baseline = None;
+    for (align, offset) in [
+        (BodyAlign::Left, 0),
+        (BodyAlign::Center, 12_000),
+        (BodyAlign::Right, 24_000),
+    ] {
+        let (rows, marks, pages) = layout_flow_with_typography(
+            &source, &NotebookProfile::default(), Some(&stats),
+            HeadingDecoration::default(), Some(region), FlowTypography {
+                task_align: Some(align),
+                list_quote_right_inset: Some(4_000),
+                ..FlowTypography::default()
+            },
+        ).expect("task ink fits region");
+        assert_eq!(pages, 1);
+        assert_eq!(rows.len(), 2);
+        if let Some(ref baseline) = marker_baseline {
+            assert_eq!(&marks, baseline);
+        } else {
+            marker_baseline = Some(marks.clone());
+        }
+        assert_eq!(marks.iter().filter(|m| m.width_um == 350).count(), 8);
+        for (index, row) in rows.iter().enumerate() {
+            assert_eq!(row.text, "a");
+            assert_eq!(row.origin_um, (
+                38_500 + offset, 42_500 + 13_000 * index as u32,
+            ));
+            assert!(row.origin_um.0 + 12_000 <= 74_500,
+                "compressed advance must not hide the 12 mm ink contour");
+        }
+    }
+}
+
+#[test]
+fn markdown_task_alignment_replays_native_pdf_png_and_ink() {
+    let source = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--flow-markdown",
+        "- a a a\n\n- [x] a a a a a a a a\n\n- [ ] a a a\n\n> a",
+        "--flow-region", "30000", "40000", "34000", "26000",
+        "--flow-list-quote-right-inset-um", "6000",
+        "--flow-bullet-align", "right",
+    ]);
+    let render = |selection: Option<&str>, format: &str| {
+        let mut command = source.clone();
+        if let Some(align) = selection {
+            command.extend(args(&["--flow-task-align", align]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72", "--png-page", "2"]));
+        }
+        execute_notebook(&command).expect("native checkbox export")
+            .expect("PDF, PNG or ink bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let baseline = render(None, format);
+        assert_eq!(baseline, render(Some("right"), format),
+            "inherit bullet-right when task selection is omitted");
+        for alignment in ["left", "center"] {
+            let chosen = render(Some(alignment), format);
+            assert_eq!(chosen, render(Some(alignment), format),
+                "{alignment} task {format} replay");
+            assert_ne!(chosen, baseline,
+                "{alignment} task must override bullet for {format}");
+            match format {
+                "pdf" => assert!(chosen.starts_with(b"%PDF-1.4")),
+                "png" => assert!(chosen.starts_with(b"\x89PNG\r\n\x1a\n")),
+                _ => assert!(chosen.starts_with(b"atrament.page-ink.v1\n")),
+            }
+        }
+    }
+}
+
+#[test]
+fn markdown_task_alignment_preflights_before_io_and_preserves_pdf() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, expected) in [
+        (vec!["--flow-task-align", "justify"],
+            "--flow-task-align requires left, center or right"),
+        (vec!["--flow-task-align"],
+            "--flow-task-align requires left, center or right"),
+        (vec!["--flow-task-align", "left",
+            "--flow-task-align", "right"],
+            "--flow-task-align may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("invalid option before selected input"), expected);
+    }
+    assert_eq!(preflight_notebook_sources(&args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--flow-task-align", "center",
+    ])).expect_err("Markdown-only task alignment"),
+        "--flow-task-align requires a Markdown flow");
+    let plain = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain source");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None, FlowTypography {
+            task_align: Some(BodyAlign::Center),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed Markdown-only option"),
+        "flow task alignment requires Markdown flow");
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"preserve-existing-task-PDF")
+        .expect("test sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "- [x] a a",
+        "--flow-region", "30000", "40000", "21000", "26000",
+        "--flow-list-quote-right-inset-um", "12000",
+        "--flow-task-align", "right",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let err = execute_notebook(&command)
+        .expect_err("unfit task row refuses before PDF replacement");
+    assert!(err.contains("flow list/quote right inset leaves no writing row"),
+        "{err}");
+    assert_eq!(fs::read(&target).expect("original PDF"),
+        b"preserve-existing-task-PDF");
+    fs::remove_file(target).expect("clean test-owned sentinel");
+}
+
+#[test]
 fn selected_markdown_ordered_alignment_preserves_other_rows_and_labels() {
     let source = FlowSource::new(FlowFormat::Markdown,
         "# a\n\na a\n\n1. a a\n\n12) a\n\n- a\n\n> a\n\n    a",
