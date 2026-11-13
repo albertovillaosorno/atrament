@@ -275,6 +275,26 @@ This does not introduce automatic whitespace ink, language detection,
 word-break standards conformance, dictionary hyphenation or persisted
 semantic notebook content. P2-013 remains open.
 
+## Compound-word dashes avoid orphaned physical rows (partial)
+
+The CLI flow compiler now attaches an authored ASCII `-`, U+2010,
+U+2013 or U+2014 after its preceding grapheme inside one long unspaced
+word. This avoids an orphan dash at the beginning of a wrapped row while
+allowing a measured break immediately *after* the dash. Existing Markdown
+block syntax, Unicode source identity, invisible-space policy, pen bounds
+and first-row/continuation limits are unchanged. Unfit clusters fall back
+to exact one-grapheme ink, without inventing dictionary hyphenation.
+
+Four direct failing-before/fixed-after cases, 384 reproducible sampled
+NFC/NFD compounds in each plain/Markdown mode, and 5-mm fallback checks
+confirm no lost ink. Independently placed pen strokes reproduce exact
+native vector PDF and 72-DPI transparent PNG bytes for all four dashes;
+missing authored dash ink refuses without replacing accepted exports.
+
+This is advisory visual wrapping, not a Unicode line-break standard,
+logical bidirectional layout, semantic persistence or automatic dashes.
+P2-013 remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

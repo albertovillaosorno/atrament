@@ -1315,6 +1315,13 @@ row where the group cannot fit falls back to individual measured glyphs,
 never silent clipping or dropped ink. Plain-text and Markdown export match
 independently placed ink; this does not imply general Unicode line breaking.
 
+A handwritten compound word also keeps an ASCII hyphen-minus `-`, U+2010
+hyphen, U+2013 en dash or U+2014 em dash after its preceding glyph when
+physically possible, rather than letting that punctuation start a new row.
+This is one-sided: a break *after* the dash remains permitted. These exact
+shapes must still be authored, and overly narrow rows retain measured
+single-grapheme fallback rather than inventing dictionary hyphenation.
+
 
 The Markdown subset supports single-line `#` through `######` headings;
 spaces separating the ATX marker from the title (including expanded tabs)

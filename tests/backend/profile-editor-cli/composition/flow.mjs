@@ -1738,6 +1738,53 @@ test('nonbreaking Unicode joins match independent PDF/PNG pen placement',
         }
     });
 
+test('wrapped dashes keep direct physical PDF/PNG pen parity', () => {
+    const dir = mkdtempSync(join(root, '.temp/flow-dash-'));
+    try {
+        const region = ['--flow-region', '30000', '40000',
+            '32000', '36000'];
+        for (const dash of ['-', '\u{2010}', '\u{2013}', '\u{2014}']) {
+            const strokes = [...'bcdefg', dash].flatMap((glyph) => [
+                '--glyph-stroke', glyph, '600', '500', '1800',
+                '3000', '250', '#123456',
+            ]);
+            for (const format of ['pdf', 'png']) {
+                const manual = join(dir, `manual-dash-${format}.output`);
+                const placed = spawnSync(cargo, [
+                    'run', '--offline', '--quiet',
+                    '-p', 'atrament_profile_editor_cli', '--',
+                    ...base, ...strokes,
+                    '--place-text', '1', '32500', '42500', 'abcde',
+                    '--place-text', '1', '32500', '51500', `f${dash}g`,
+                    '--export-paper', format,
+                    ...(format === 'png' ? ['--dpi', '72'] : []),
+                    '--output', manual, '--replace',
+                ], { cwd: root, encoding: 'utf8', timeout: 120000 });
+                assert.equal(placed.status, 0, placed.stderr);
+                const ink = readFileSync(manual);
+                for (const flag of ['--flow-text', '--flow-markdown']) {
+                    const flow = render(dir, `abcdef${dash}g`, format,
+                        [...strokes, ...region], flag);
+                    assert.equal(flow.result.status, 0,
+                        flow.result.stderr);
+                    assert.deepEqual(readFileSync(flow.output), ink,
+                        `${format} ${flag} dash ${dash}: directed pen ink`);
+                    const refused = render(dir, `abcdef${dash}g`,
+                        format, [...region], flag);
+                    assert.notEqual(refused.result.status, 0,
+                        'missing dash ink is not synthesized');
+                    assert.match(refused.result.stderr,
+                        /missing authored glyph|no authored strokes/i);
+                    assert.deepEqual(readFileSync(refused.output), ink,
+                        'refused ink cannot replace an accepted export');
+                }
+            }
+        }
+    } finally {
+        rmSync(dir, { recursive: true, force: true });
+    }
+});
+
 test('code fences keep literal Unicode ink and physical hard line breaks',
     () => {
         const dir = mkdtempSync(join(root, '.temp/markdown-fence-'));

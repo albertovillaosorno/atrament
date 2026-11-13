@@ -8297,6 +8297,10 @@ fn bilingual_punctuation_stays_with_neighbor_when_long_words_wrap()
         ("abcdef\u{a0}g", ["abcde", "f\u{a0}g"]),
         ("abcdef\u{202f}g", ["abcde", "f\u{202f}g"]),
         ("abcdef\u{2011}g", ["abcde", "f\u{2011}g"]),
+        ("abcdef-g", ["abcde", "f-g"]),
+        ("abcdef\u{2010}g", ["abcde", "f\u{2010}g"]),
+        ("abcdef\u{2013}g", ["abcde", "f\u{2013}g"]),
+        ("abcdef\u{2014}g", ["abcde", "f\u{2014}g"]),
     ] {
         for format in [FlowFormat::Plain, FlowFormat::Markdown] {
             let source = FlowSource::new(format, text)?;
@@ -8338,7 +8342,8 @@ fn narrow_paired_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
     };
     for format in [FlowFormat::Plain, FlowFormat::Markdown] {
         for text in ["«a»", "“a”", "‘a’", "(a)", "[a]", "{a}",
-            "a\u{a0}b", "a\u{202f}b", "a\u{2011}b"] {
+            "a\u{a0}b", "a\u{202f}b", "a\u{2011}b",
+            "a-b", "a\u{2010}b", "a\u{2013}b", "a\u{2014}b"] {
             let source = FlowSource::new(format, text)?;
             let (runs, ornaments, pages) = super::layout_flow_with_region(
                 &source, &NotebookProfile::default(), None,
@@ -8399,6 +8404,56 @@ fn seeded_nonbreaking_joins_keep_exact_graphemes_inside_wrapped_rows()
                     || row.page > pages {
                     return Err(format!(
                         "nonbreaking sample {case} orphaned joiner: {row:?}"
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[test]
+fn seeded_dash_joiners_do_not_start_overflow_rows()
+    -> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    let mut seed = 0xa2c4_15b7u32;
+    for case in 0..384usize {
+        seed = seed.wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
+        let prefix = 3usize + usize::try_from(seed % 19)
+            .map_err(|error| error.to_string())?;
+        seed = seed.wrapping_mul(1_664_525)
+            .wrapping_add(1_013_904_223);
+        let suffix = 3usize + usize::try_from(seed % 19)
+            .map_err(|error| error.to_string())?;
+        let dash = ["-", "\u{2010}", "\u{2013}", "\u{2014}"][case % 4];
+        let text = format!("{}n\u{303}{}{}ñ", "a".repeat(prefix),
+            dash, "b".repeat(suffix));
+        let region = super::FlowRegion {
+            left: 30_000, top: 40_000,
+            width: 32_000 + u32::try_from(case % 4)
+                .map_err(|error| error.to_string())? * 3_000,
+            height: 36_000,
+        };
+        for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+            let source = FlowSource::new(format, &text)?;
+            let (rows, marks, pages) = super::layout_flow_with_region(
+                &source, &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            let actual = rows.iter().map(|row| row.text.as_str())
+                .collect::<String>();
+            if actual != text || !marks.is_empty() || pages == 0
+                || rows.len() < 2 {
+                return Err(format!(
+                    "dash sample {case} lost ink on {format:?}: {rows:?}"
+                ));
+            }
+            for row in rows {
+                if row.text.starts_with(dash) || row.page > pages {
+                    return Err(format!(
+                        "dash sample {case} orphaned punctuation: {row:?}"
                     ));
                 }
             }
