@@ -1852,6 +1852,23 @@ The one-based index selects the first stroke in that glyph's authored order,
 even if unrelated TSV rows are interleaved. Turns, reverse travel and rounded
 midpoints off the original line refuse; unlike the connector, merging does
 not bridge a gap.
+
+For a **remergeable subdivision** of one exact authored stroke, select
+`glyphs --profile ink.tsv --split-stroke-exact 'ñ' 1` or use **Split selected
+stroke exactly** in the localhost glyph editor. This alternative to the
+ordinary rounded `--split-stroke` chooses a strict whole-micrometre point on
+the original directed line: its coordinate step is the upper-middle member
+of the line's integer lattice. It admits a split only when the greatest
+common divisor of its absolute X/Y displacements exceeds one. Diagonal
+segments without such a point refuse rather than introducing a tiny bend.
+
+Both halves preserve the same Unicode key, direction, width and ink color;
+subsequent `--merge-strokes 'ñ' 1` restores the exact original TSV row. The
+native CLI and browser accept no more than 4,096 total strokes; neither
+changes an imported source file automatically. Browser edits can be undone
+or redone within the bounded session history, then deliberately downloaded.
+The old rounded midpoint tool remains available for manual contour tuning.
+
 The groups are **diagnostic**: neither inspection nor TSV stores semantic
 pen-down groups, interpolated curves, or inferred cursive joins.
 

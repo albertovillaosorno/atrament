@@ -17151,3 +17151,169 @@ fn markdown_quote_color_refuses_early_without_overwriting_pdf() {
         b"preserve-quote-color-PDF");
     fs::remove_file(target).expect("remove test sentinel");
 }
+
+#[test]
+fn exact_lattice_split_roundtrips_unicode_tsv_and_native_pdf_png() {
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("exact source path");
+    let target_name = target.to_str().expect("exact destination path");
+    let nfd = "n\u{303}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "1000", "900", "1603", "1704",
+        "251", "#123456",
+        "--glyph-stroke", "ñ", "500", "700", "800", "900",
+        "251", "#ABCDEF",
+        "--glyph-stroke", nfd, "3200", "3500", "2597", "2696",
+        "251", "#123456",
+        "--glyph-stroke", "∞", "600", "600", "800", "900",
+        "250", "#234567",
+    ])).expect("authored unicode source").expect("source TSV");
+    fs::write(&source, &original).expect("write independent source");
+    let edit = args(&[
+        "--profile", source_name,
+        "--split-stroke-exact", nfd, "1",
+        "--split-stroke-exact", nfd, "3",
+    ]);
+    let revised = execute_glyph_library(&edit)
+        .expect("two exact lattice splits").expect("TSV bytes");
+    let expected = format!(concat!(
+        "atrament.glyph-strokes.v1\n",
+        "{nfd}\t1000\t900\t1303\t1304\t251\t#123456\n",
+        "{nfd}\t1303\t1304\t1603\t1704\t251\t#123456\n",
+        "ñ\t500\t700\t800\t900\t251\t#ABCDEF\n",
+        "{nfd}\t3200\t3500\t2897\t3096\t251\t#123456\n",
+        "{nfd}\t2897\t3096\t2597\t2696\t251\t#123456\n",
+        "∞\t600\t600\t800\t900\t250\t#234567\n",
+    ), nfd = nfd);
+    assert_eq!(revised, expected.as_bytes(),
+        "exact line lattice point must agree with browser calculation");
+    assert_eq!(fs::read(&source).expect("original remains"), original);
+    let merged = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--split-stroke-exact", nfd, "1",
+        "--split-stroke-exact", nfd, "3",
+        "--merge-strokes", nfd, "1",
+        "--merge-strokes", nfd, "2",
+    ])).expect("lossless remerge").expect("source ink restored");
+    assert_eq!(merged, original,
+        "both original directed lines must return byte-for-byte");
+    let mut inspect = edit.clone();
+    inspect.extend(args(&["--inspect-paths", nfd]));
+    let report = String::from_utf8(execute_glyph_library(&inspect)
+        .expect("native path inspection").expect("report"))
+        .expect("UTF-8 path inspection");
+    assert!(report.contains("Strokes: 4\nPaths: 2\nPen lifts: 1"),
+        "{report}");
+    let mut save = edit;
+    save.extend(args(&["--output", target_name]));
+    assert!(execute_glyph_library(&save)
+        .expect("explicit saved exact split").is_none());
+    assert_eq!(fs::read(&target).expect("saved split"), revised);
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", target_name,
+    ])).expect("reopened split").expect("TSV"), revised);
+    for format in ["pdf", "png"] {
+        let mut imported = args(&[
+            "--glyph-file", target_name,
+            "--place-text", "1", "25000", "30000", "n\u{303}ñ∞",
+            "--export-paper", format,
+        ]);
+        let mut authored = args(&[
+            "--glyph-stroke", nfd, "1000", "900", "1303", "1304",
+            "251", "#123456",
+            "--glyph-stroke", nfd, "1303", "1304", "1603", "1704",
+            "251", "#123456",
+            "--glyph-stroke", "ñ", "500", "700", "800", "900",
+            "251", "#ABCDEF",
+            "--glyph-stroke", nfd, "3200", "3500", "2897", "3096",
+            "251", "#123456",
+            "--glyph-stroke", nfd, "2897", "3096", "2597", "2696",
+            "251", "#123456",
+            "--glyph-stroke", "∞", "600", "600", "800", "900",
+            "250", "#234567",
+            "--place-text", "1", "25000", "30000", "n\u{303}ñ∞",
+            "--export-paper", format,
+        ]);
+        if format == "png" {
+            imported.extend(args(&["--dpi", "72"]));
+            authored.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&imported)
+            .expect("imported exact ink renders").expect("export"),
+            execute_notebook(&authored)
+                .expect("independent ink renders").expect("export"),
+            "native {format} cannot diverge from independently authored ink");
+    }
+    fs::remove_file(source).expect("remove exact test source");
+    fs::remove_file(target).expect("remove exact test output");
+}
+
+#[test]
+fn exact_lattice_split_refuses_primitive_and_incomplete_edits_atomically() {
+    for flags in [
+        args(&["--profile", "-", "--split-stroke-exact"]),
+        args(&["--profile", "-", "--split-stroke-exact", "ñ"]),
+    ] {
+        let error = preflight_glyph_profile_sources(&flags)
+            .expect_err("incomplete exact edit must refuse before stdin");
+        assert!(error.contains("--split-stroke-exact requires 2 operands"),
+            "{error}");
+    }
+    for index in ["0", "-1", "1.0", "4097", "invalid"] {
+        let error = preflight_glyph_profile_sources(&args(&[
+            "--profile", "-", "--split-stroke-exact", "ñ", index,
+        ])).expect_err("invalid ordinal must refuse before stdin");
+        assert!(error.contains("stroke index"), "{index}: {error}");
+    }
+    let invalid = preflight_glyph_profile_sources(&args(&[
+        "--profile", "-", "--split-stroke-exact", "na", "1",
+    ])).expect_err("nonexact Unicode key refused before input I/O");
+    assert!(invalid.contains("exact visible grapheme"), "{invalid}");
+
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("primitive source path");
+    let target_name = target.to_str().expect("destination path");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "1000", "900", "1601", "1702",
+        "251", "#123456",
+        "--glyph-stroke", "ñ", "1000", "1000", "1001", "1000",
+        "250", "#112233",
+    ])).expect("valid primitive source").expect("source bytes");
+    fs::write(&source, &original).expect("save source");
+    fs::write(&target, b"accepted native output")
+        .expect("write output sentinel");
+    for (glyph, index, diagnostic) in [
+        ("n\u{303}", "1", "strict integer point"),
+        ("ñ", "1", "strict integer point"),
+        ("n", "1", "no authored strokes"),
+        ("ñ", "2", "exceeds glyph"),
+    ] {
+        let error = execute_glyph_library(&args(&[
+            "--profile", source_name,
+            "--split-stroke-exact", glyph, index,
+            "--output", target_name, "--replace",
+        ])).expect_err("rejected exact split cannot replace a file");
+        assert!(error.contains(diagnostic), "{error}");
+        assert_eq!(fs::read(&source).expect("source unmodified"), original);
+        assert_eq!(fs::read(&target).expect("target unmodified"),
+            b"accepted native output");
+    }
+    let full = test_path().with_extension("tsv");
+    let full_name = full.to_str().expect("full source path");
+    let full_tsv = String::from("atrament.glyph-strokes.v1\n")
+        + &"∞\t1000\t1000\t1603\t1704\t250\t#112233\n".repeat(4096);
+    fs::write(&full, &full_tsv).expect("save full source");
+    let failure = execute_glyph_library(&args(&[
+        "--profile", full_name,
+        "--split-stroke-exact", "∞", "1",
+        "--output", target_name, "--replace",
+    ])).expect_err("maximum source cannot grow");
+    assert!(failure.contains("4096"), "{failure}");
+    assert_eq!(fs::read(&target).expect("target remains"),
+        b"accepted native output");
+    fs::remove_file(source).expect("remove primitive test source");
+    fs::remove_file(target).expect("remove primitive test output");
+    fs::remove_file(full).expect("remove full test input");
+}

@@ -207,8 +207,27 @@ function subdivisionMidpoint(stroke: Stroke): Point | null {
     return { x, y };
 }
 
-export function subdivideGlyphStroke(
-    source: Stroke[], grapheme: string, index: number,
+// An integer-lattice point strictly inside this directed line exists exactly
+// when gcd(|dx|, |dy|) > 1. Choose its upper-middle lattice step, never a
+// rounded off-line sample, so a later same-pen merge restores exact TSV ink.
+function losslessSplitPoint(stroke: Stroke): Point | null {
+    const dx = stroke.x2 - stroke.x1;
+    const dy = stroke.y2 - stroke.y1;
+    let a = Math.abs(dx);
+    let b = Math.abs(dy);
+    while (b !== 0) {
+        [a, b] = [b, a % b];
+    }
+    if (a < 2) return null;
+    const half = Math.ceil(a / 2);
+    return {
+        x: stroke.x1 + (dx / a) * half,
+        y: stroke.y1 + (dy / a) * half,
+    };
+}
+
+function splitGlyphStroke(
+    source: Stroke[], grapheme: string, index: number, exact: boolean,
 ): Stroke[] {
     if (!exactGrapheme(grapheme)) {
         throw new Error("Stroke subdivision requires an exact visible glyph");
@@ -221,9 +240,12 @@ export function subdivideGlyphStroke(
         throw new Error("Subdivision exceeds 4096 authored strokes");
     }
     const original = validateStroke(source[index]!);
-    const midpoint = subdivisionMidpoint(original);
+    const midpoint = exact ? losslessSplitPoint(original)
+        : subdivisionMidpoint(original);
     if (midpoint === null) {
-        throw new Error("Stroke is too short to subdivide in whole µm");
+        throw new Error(exact
+            ? "Stroke has no strict integer point on its straight line"
+            : "Stroke is too short to subdivide in whole µm");
     }
     const first = validateStroke({
         ...original, x2: midpoint.x, y2: midpoint.y,
@@ -235,6 +257,18 @@ export function subdivideGlyphStroke(
     candidate.splice(index, 1, first, second);
     encodeGlyphLibrary(candidate);
     return candidate;
+}
+
+export function subdivideGlyphStroke(
+    source: Stroke[], grapheme: string, index: number,
+): Stroke[] {
+    return splitGlyphStroke(source, grapheme, index, false);
+}
+
+export function splitGlyphStrokeExactly(
+    source: Stroke[], grapheme: string, index: number,
+): Stroke[] {
+    return splitGlyphStroke(source, grapheme, index, true);
 }
 
 // Co-directed collinear pieces have exactly the same round-pen footprint as
@@ -4247,6 +4281,7 @@ export function createGlyphStrokeEditor(): {
     const update = required<HTMLButtonElement>("glyph-update");
     const remove = required<HTMLButtonElement>("glyph-remove");
     const subdivide = required<HTMLButtonElement>("glyph-subdivide");
+    const splitExact = required<HTMLButtonElement>("glyph-split-exact");
     const merge = required<HTMLButtonElement>("glyph-merge");
     const clearGlyph = required<HTMLButtonElement>("glyph-clear");
     const reverse = required<HTMLButtonElement>("glyph-reverse");
@@ -4307,7 +4342,8 @@ export function createGlyphStrokeEditor(): {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, subdivide, merge, clearGlyph, reverse, reversePath,
+        remove, subdivide, splitExact, merge, clearGlyph, reverse,
+        reversePath,
         startPath, closePath,
         translatePath,
         pathDx, pathDy,
@@ -4334,7 +4370,8 @@ export function createGlyphStrokeEditor(): {
     type TransformKind = "slant" | "height" | "width" | "ink"
         | "move" | "rotation" | "reflection";
     type EditKind = TransformKind | "pen trace" | "stroke addition"
-        | "stroke edit" | "stroke subdivision" | "stroke merge"
+        | "stroke edit" | "stroke subdivision" | "lossless stroke split"
+        | "stroke merge"
         | "stroke direction" | "stroke order"
         | "pen path direction" | "pen path start"
         | "pen path closure" | "pen path move"
@@ -5508,6 +5545,9 @@ export function createGlyphStrokeEditor(): {
         subdivide.disabled = !active || drawing !== null
             || selectedIndex === null || strokes.length >= MAX_STROKES
             || subdivisionMidpoint(strokes[selectedIndex]!) === null;
+        splitExact.disabled = !active || drawing !== null
+            || selectedIndex === null || strokes.length >= MAX_STROKES
+            || losslessSplitPoint(strokes[selectedIndex]!) === null;
         const mergeTarget = selectedIndex === null ? null
             : mergeableStrokePair(strokes, character.value, selectedIndex);
         merge.disabled = !active || drawing !== null || mergeTarget === null;
@@ -6444,6 +6484,18 @@ export function createGlyphStrokeEditor(): {
             const next = subdivideGlyphStroke(strokes, target, index);
             commitInkEdit(next, target, "stroke subdivision", index + 1);
             message("Subdivided selected directed stroke; unsaved");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    splitExact.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null) return;
+        try {
+            const index = selectedIndex;
+            const target = character.value;
+            const next = splitGlyphStrokeExactly(strokes, target, index);
+            commitInkEdit(next, target, "lossless stroke split", index + 1);
+            message("Split directed ink exactly; remerge restores source");
         } catch (error) {
             message(String(error));
         }

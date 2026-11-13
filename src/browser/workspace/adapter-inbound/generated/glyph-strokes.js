@@ -184,7 +184,26 @@ function subdivisionMidpoint(stroke) {
         return null;
     return { x, y };
 }
-export function subdivideGlyphStroke(source, grapheme, index) {
+// An integer-lattice point strictly inside this directed line exists exactly
+// when gcd(|dx|, |dy|) > 1. Choose its upper-middle lattice step, never a
+// rounded off-line sample, so a later same-pen merge restores exact TSV ink.
+function losslessSplitPoint(stroke) {
+    const dx = stroke.x2 - stroke.x1;
+    const dy = stroke.y2 - stroke.y1;
+    let a = Math.abs(dx);
+    let b = Math.abs(dy);
+    while (b !== 0) {
+        [a, b] = [b, a % b];
+    }
+    if (a < 2)
+        return null;
+    const half = Math.ceil(a / 2);
+    return {
+        x: stroke.x1 + (dx / a) * half,
+        y: stroke.y1 + (dy / a) * half,
+    };
+}
+function splitGlyphStroke(source, grapheme, index, exact) {
     if (!exactGrapheme(grapheme)) {
         throw new Error("Stroke subdivision requires an exact visible glyph");
     }
@@ -196,9 +215,12 @@ export function subdivideGlyphStroke(source, grapheme, index) {
         throw new Error("Subdivision exceeds 4096 authored strokes");
     }
     const original = validateStroke(source[index]);
-    const midpoint = subdivisionMidpoint(original);
+    const midpoint = exact ? losslessSplitPoint(original)
+        : subdivisionMidpoint(original);
     if (midpoint === null) {
-        throw new Error("Stroke is too short to subdivide in whole µm");
+        throw new Error(exact
+            ? "Stroke has no strict integer point on its straight line"
+            : "Stroke is too short to subdivide in whole µm");
     }
     const first = validateStroke({
         ...original, x2: midpoint.x, y2: midpoint.y,
@@ -210,6 +232,12 @@ export function subdivideGlyphStroke(source, grapheme, index) {
     candidate.splice(index, 1, first, second);
     encodeGlyphLibrary(candidate);
     return candidate;
+}
+export function subdivideGlyphStroke(source, grapheme, index) {
+    return splitGlyphStroke(source, grapheme, index, false);
+}
+export function splitGlyphStrokeExactly(source, grapheme, index) {
+    return splitGlyphStroke(source, grapheme, index, true);
 }
 // Co-directed collinear pieces have exactly the same round-pen footprint as
 // their union. A rounded midpoint that falls off the original line, a turn,
@@ -4075,6 +4103,7 @@ export function createGlyphStrokeEditor() {
     const update = required("glyph-update");
     const remove = required("glyph-remove");
     const subdivide = required("glyph-subdivide");
+    const splitExact = required("glyph-split-exact");
     const merge = required("glyph-merge");
     const clearGlyph = required("glyph-clear");
     const reverse = required("glyph-reverse");
@@ -4128,7 +4157,8 @@ export function createGlyphStrokeEditor() {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, subdivide, merge, clearGlyph, reverse, reversePath,
+        remove, subdivide, splitExact, merge, clearGlyph, reverse,
+        reversePath,
         startPath, closePath,
         translatePath,
         pathDx, pathDy,
@@ -5266,6 +5296,9 @@ export function createGlyphStrokeEditor() {
         subdivide.disabled = !active || drawing !== null
             || selectedIndex === null || strokes.length >= MAX_STROKES
             || subdivisionMidpoint(strokes[selectedIndex]) === null;
+        splitExact.disabled = !active || drawing !== null
+            || selectedIndex === null || strokes.length >= MAX_STROKES
+            || losslessSplitPoint(strokes[selectedIndex]) === null;
         const mergeTarget = selectedIndex === null ? null
             : mergeableStrokePair(strokes, character.value, selectedIndex);
         merge.disabled = !active || drawing !== null || mergeTarget === null;
@@ -6233,6 +6266,20 @@ export function createGlyphStrokeEditor() {
             const next = subdivideGlyphStroke(strokes, target, index);
             commitInkEdit(next, target, "stroke subdivision", index + 1);
             message("Subdivided selected directed stroke; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    splitExact.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null)
+            return;
+        try {
+            const index = selectedIndex;
+            const target = character.value;
+            const next = splitGlyphStrokeExactly(strokes, target, index);
+            commitInkEdit(next, target, "lossless stroke split", index + 1);
+            message("Split directed ink exactly; remerge restores source");
         }
         catch (error) {
             message(String(error));

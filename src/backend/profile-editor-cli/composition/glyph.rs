@@ -771,7 +771,9 @@ impl GlyphOverlay {
                 self.move_stroke(grapheme, from, to)
             }
             "--remove-stroke" => self.remove_stroke(grapheme, from),
-            "--split-stroke" => self.split_stroke(grapheme, from),
+            "--split-stroke" => self.split_stroke(grapheme, from, false),
+            "--split-stroke-exact" =>
+                self.split_stroke(grapheme, from, true),
             "--merge-strokes" => self.merge_strokes(grapheme, from),
             "--join-strokes" => self.join_strokes(grapheme, from),
             "--set-stroke" => {
@@ -1722,7 +1724,8 @@ impl GlyphOverlay {
                     let _stroke = Self::parse_stroke(grapheme, iter)?;
                 }
                 "--reverse-stroke" | "--split-stroke"
-                | "--merge-strokes" | "--join-strokes" | "--remove-stroke" => {}
+                | "--split-stroke-exact" | "--merge-strokes"
+                | "--join-strokes" | "--remove-stroke" => {}
                 _ => return Err("unknown stroke edit".into()),
             }
         }
@@ -1820,11 +1823,12 @@ impl GlyphOverlay {
         Ok(())
     }
 
-    /// Split one directed line into two exact same-pen segments at the
-    /// browser-compatible, half-up whole-micrometre midpoint. The second
-    /// half follows the first in the original interleaved TSV position.
+    /// Split one directed line into touching same-pen segments. Ordinary
+    /// subdivision uses the browser's half-up whole-micrometre midpoint;
+    /// exact mode chooses an interior integer-lattice point strictly on the
+    /// original line, so --merge-strokes can restore the source losslessly.
     pub(super) fn split_stroke(
-        &mut self, grapheme: &str, ordinal: u32,
+        &mut self, grapheme: &str, ordinal: u32, exact: bool,
     ) -> Result<(), String> {
         let positions = self.matching_stroke_positions(grapheme)?;
         let index = Self::checked_stroke_position(&positions, ordinal)?;
@@ -1835,10 +1839,42 @@ impl GlyphOverlay {
             .ok_or("stroke index outside bounds")?;
         let original = self.strokes.get(selected)
             .ok_or("stroke index outside library")?;
-        let midpoint = (
-            (original.start_um.0 + original.end_um.0 + 1) / 2,
-            (original.start_um.1 + original.end_um.1 + 1) / 2,
-        );
+        let midpoint = if exact {
+            let dx = i64::from(original.end_um.0)
+                - i64::from(original.start_um.0);
+            let dy = i64::from(original.end_um.1)
+                - i64::from(original.start_um.1);
+            let mut divisor = dx.unsigned_abs();
+            let mut remainder = dy.unsigned_abs();
+            while remainder != 0 {
+                let next = divisor % remainder;
+                divisor = remainder;
+                remainder = next;
+            }
+            if divisor < 2 {
+                return Err(concat!(
+                    "stroke has no strict integer point on ",
+                    "its straight line",
+                ).into());
+            }
+            let unit = i64::try_from(divisor)
+                .map_err(|_| "stroke lattice overflow")?;
+            let middle = i64::try_from((divisor + 1) / 2)
+                .map_err(|_| "stroke lattice overflow")?;
+            (
+                u32::try_from(i64::from(original.start_um.0)
+                    + (dx / unit) * middle)
+                    .map_err(|_| "stroke lattice X outside cell")?,
+                u32::try_from(i64::from(original.start_um.1)
+                    + (dy / unit) * middle)
+                    .map_err(|_| "stroke lattice Y outside cell")?,
+            )
+        } else {
+            (
+                (original.start_um.0 + original.end_um.0 + 1) / 2,
+                (original.start_um.1 + original.end_um.1 + 1) / 2,
+            )
+        };
         if midpoint == original.start_um || midpoint == original.end_um {
             return Err("stroke too short to subdivide in whole um".into());
         }

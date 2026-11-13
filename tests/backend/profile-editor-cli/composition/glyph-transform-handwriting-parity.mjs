@@ -11,7 +11,7 @@ import {
     encodeGlyphLibrary, italicizeGlyphStrokes, rotateGlyphStrokes,
     scaleGlyphHeight, scaleGlyphInk, scaleGlyphWidth,
     translateGlyphStrokes, reflectGlyphStrokes, subdivideGlyphStroke,
-    mergeGlyphStrokes,
+    mergeGlyphStrokes, splitGlyphStrokeExactly,
 // jig-ignore-next-line: static ESM import needs a literal path.
 } from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -433,3 +433,77 @@ test('browser and native straight-stroke merge decisions match for 256 cases',
         assert.equal(approved, 64);
         assert.equal(refused, 192);
     });
+
+// Unlike rounded midpoint subdivision, the exact-lattice mode must either
+// create a genuinely collinear integer seam or refuse. Compare both real
+// implementations over directed diagonals, primitive lines, and NFC/NFD
+// interleaving; an accepted inverse must reproduce original TSV bytes.
+test('256 exact lattice splits agree with native CLI and lossless inverse',
+    { timeout: 90_000 }, () => {
+    const built = spawnSync(cargo, [
+        'build', '--locked', '--offline', '--quiet',
+        '-p', 'atrament_profile_editor_cli', '--bin', 'atrament-profiles',
+    ], { cwd: root, encoding: 'utf8', timeout: 90_000,
+        env: { ...process.env, TMPDIR: join(root, '.temp') } });
+    assert.equal(built.error, undefined);
+    assert.equal(built.status, 0, built.stderr);
+    const pick = generator(0xAEC0_2026);
+    let accepted = 0;
+    let refused = 0;
+    for (let sample = 0; sample < 256; sample += 1) {
+        const target = sample % 2 ? nfc : nfd;
+        const neighbor = target === nfc ? nfd : nfc;
+        const x1 = pick(900, 2400);
+        const y1 = pick(1300, 2900);
+        const sx = pick(0, 1) ? 1 : -1;
+        const sy = pick(0, 1) ? 1 : -1;
+        const base = pick(1, 36);
+        const factor = sample % 4 === 0 ? 2
+            : sample % 4 === 1 ? 3 : 1;
+        const dx = sample % 4 === 3 ? sx : sx * base * factor;
+        const dy = sample % 4 === 3 ? 0
+            : sy * (sample % 4 === 2 ? base + 1 : (base + 1) * factor);
+        const selected = { grapheme: target, x1, y1,
+            x2: x1 + dx, y2: y1 + dy,
+            width: 251, color: colors[0] };
+        const source = [selected, authoredStroke(pick, neighbor, colors[1]),
+            authoredStroke(pick, target, colors[0])];
+        const before = encodeGlyphLibrary(source);
+        let expected;
+        try {
+            expected = encodeGlyphLibrary(splitGlyphStrokeExactly(
+                source, target, 0));
+        } catch (error) {
+            expected = error;
+        }
+        const args = ['glyphs', ...source.flatMap(cliStroke),
+            '--split-stroke-exact', target, '1'];
+        const actual = spawnSync(binary, args, {
+            cwd: root, encoding: 'utf8', timeout: 2_000,
+            maxBuffer: 512 * 1024,
+        });
+        const detail = `exact split ${sample} ${target} (${dx},${dy})`;
+        assert.equal(actual.error, undefined, detail);
+        if (expected instanceof Error) {
+            refused += 1;
+            assert.notEqual(actual.status, 0, detail);
+            assert.equal(actual.stdout, '', detail);
+            assert.match(actual.stderr, /strict integer point/, detail);
+        } else {
+            accepted += 1;
+            assert.equal(actual.status, 0, `${detail}: ${actual.stderr}`);
+            assert.equal(actual.stdout, expected, detail);
+            assert.equal(encodeGlyphLibrary(mergeGlyphStrokes(
+                splitGlyphStrokeExactly(source, target, 0), target, 0,
+            )), before, detail);
+            const restored = spawnSync(binary, [...args,
+                '--merge-strokes', target, '1'], {
+                cwd: root, encoding: 'utf8', timeout: 2_000,
+            });
+            assert.equal(restored.status, 0, `${detail}: ${restored.stderr}`);
+            assert.equal(restored.stdout, before, detail);
+        }
+    }
+    assert.ok(accepted > 80, `expected many valid splits: ${accepted}`);
+    assert.ok(refused > 80, `expected many primitive refusals: ${refused}`);
+});

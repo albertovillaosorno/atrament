@@ -1219,3 +1219,31 @@ This does not create analytic curves, insert pen lifts, or infer joined
 cursive. A rounded subdivision is reversible only when its whole-micrometre
 midpoint remains exactly on the straight source contour. The P1 task stays
 open for the full two-line and correlated penmanship criteria.
+
+## Exact-lattice, remergeable stroke subdivision (partial) — 2026-11-13
+
+The local browser glyph editor and native Rust `atrament-profiles glyphs`
+CLI now expose separate, opt-in lossless subdivision. The UI's
+**Split selected stroke exactly** and CLI `--split-stroke-exact GRAPHEME INDEX`
+choose a strict interior whole-micrometre point on the selected directed
+segment using the upper-middle step of its integer lattice. The split
+exists only when the gcd of absolute X/Y displacements is greater than one;
+primitive diagonals refuse instead of rounding off the original line.
+
+Both new strokes retain the selected exact NFC/NFD Unicode key, RGB, width,
+order and pen direction. Other interleaved graphemes keep their TSV slots.
+The existing rounded midpoint split remains available for editable shape
+changes. An exact split followed by the existing same-pen collinear merge
+restores the source TSV byte-for-byte, including negative travel direction.
+The browser records a single bounded undoable in-memory change and never
+silently downloads or saves; the native CLI likewise requires explicit
+output selection. Full-cap libraries, malformed ordinals, incompatible
+keys and indivisible lines refuse without changing a saved source or target.
+
+Two focused browser tests, two native Rust tests, 256 actual browser/native
+subprocess parity cases, and a real Firefox/WebDriver BiDi session check the
+same straight-line seam, session recovery and file safety. The Firefox test
+reopens its actual downloaded TSV in Rust, recombines the segments and renders
+real vector PDF and transparent RGBA PNG. This is still editable sampled-line
+geometry, not analytic curve persistence, inferred pen lifts or finished
+correlated cursive handwriting; full P1-014 acceptance remains open.

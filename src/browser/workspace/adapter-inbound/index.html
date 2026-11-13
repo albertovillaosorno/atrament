@@ -1508,6 +1508,14 @@
               integer midpoint is selected for further editing. Very short
               strokes and a full 4,096-segment library refuse. The unsaved
               change uses one Undo step; download TSV explicitly.</p>
+            <button id="glyph-split-exact" type="button" disabled>
+              Split selected stroke exactly (remergeable; undoable)
+            </button>
+            <p class="field-help">Exact splitting chooses a whole-µm point
+              on the original straight line, preserving the same round-pen
+              footprint after a later merge. It refuses lines without an
+              interior integer point; midpoint split remains available for
+              retuning those strokes. Neither action saves automatically.</p>
             <button id="glyph-merge" type="button" disabled>
               Merge selected stroke with next straight segment (undoable)
             </button>

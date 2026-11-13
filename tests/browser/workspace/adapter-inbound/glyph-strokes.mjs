@@ -6,7 +6,8 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, SELECTABLE_MATH_GLYPHS, italicizeGlyphStrokes,
     scaleGlyphHeight, scaleGlyphWidth,
     scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
-    reflectGlyphStrokes, subdivideGlyphStroke, mergeGlyphStrokes,
+    reflectGlyphStrokes, subdivideGlyphStroke, splitGlyphStrokeExactly,
+    mergeGlyphStrokes,
     composeAccentedGlyph, fillMissingBilingualBaseline,
     fillMissingConnectedLowercase,
     missingBilingualBaseline, varyGlyphStrokes,
@@ -517,7 +518,7 @@ function mountEditor() {
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
         "glyph-ideal-accent", "glyph-ideal-diacritic",
         "glyph-update", "glyph-remove", "glyph-subdivide",
-        "glyph-merge",
+        "glyph-merge", "glyph-split-exact",
         "glyph-clear", "glyph-reverse",
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
         "glyph-path-earlier", "glyph-path-later",
@@ -11990,6 +11991,125 @@ test("merge control offers atomic exact-Unicode recovery and no implicit save",
             encodeGlyphLibrary(expected));
         editor.reset();
         assert.equal(merge.disabled, true);
+        assert.equal(get("slant-undo").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+test("exact lattice subdivision and merge are byte-identical on angled ink",
+    () => {
+    const nfd = "n\u0303";
+    const angled = { ...stroke(nfd), x1: 1000, y1: 900,
+        x2: 1603, y2: 1704, width: 251, color: "#123456" };
+    const reversed = { ...angled, x1: 3200, y1: 3500,
+        x2: 2597, y2: 2696 };
+    const original = [angled, stroke("ñ"), reversed, stroke("∞")];
+    const bytes = encodeGlyphLibrary(original);
+    const rounded = subdivideGlyphStroke([angled], nfd, 0);
+    assert.throws(() => mergeGlyphStrokes(rounded, nfd, 0),
+        /straight/, "rounded sample changes the original contour");
+    const split = splitGlyphStrokeExactly(original, nfd, 0);
+    assert.deepEqual(split.slice(0, 2), [
+        { ...angled, x2: 1303, y2: 1304 },
+        { ...angled, x1: 1303, y1: 1304 },
+    ], "odd lattice step chooses an exact upper-middle point");
+    assert.deepEqual(split[2], original[1], "interleaved NFC stays ordered");
+    assert.equal(encodeGlyphLibrary(mergeGlyphStrokes(split, nfd, 0)),
+        bytes, "all authored TSV bytes return after an exact split/merge");
+    const negative = splitGlyphStrokeExactly(original, nfd, 2);
+    assert.deepEqual(negative.slice(2, 4), [
+        { ...reversed, x2: 2897, y2: 3096 },
+        { ...reversed, x1: 2897, y1: 3096 },
+    ], "reversed diagonal retains direction and exact collinearity");
+    assert.equal(encodeGlyphLibrary(mergeGlyphStrokes(negative, nfd, 2)),
+        bytes, "negative coordinate travel must be reversible as well");
+    assert.deepEqual(original, [angled, stroke("ñ"), reversed, stroke("∞")],
+        "pure editing cannot mutate authored caller data");
+    assert.equal(candidatePenPaths(split, nfd)[0].last, 2);
+    for (const line of [
+        { ...angled, x2: 1601, y2: 1702 },
+        { ...angled, x2: 1001, y2: 900 },
+        { ...angled, x2: 1000, y2: 901 },
+    ]) {
+        const source = [line, stroke("ñ")];
+        const before = encodeGlyphLibrary(source);
+        assert.throws(() => splitGlyphStrokeExactly(source, nfd, 0),
+            /strict integer point/);
+        assert.equal(encodeGlyphLibrary(source), before);
+    }
+    assert.throws(() => splitGlyphStrokeExactly(original, "ñ", 0),
+        /selected exact glyph/);
+    assert.throws(() => splitGlyphStrokeExactly(original, nfd, 0.5));
+    assert.throws(() => splitGlyphStrokeExactly(original, "ab", 0));
+    const full = Array.from({ length: 4096 }, () => angled);
+    assert.throws(() => splitGlyphStrokeExactly(full, nfd, 0), /4096/);
+});
+
+test("lossless split uses one session-only undo and never auto-downloads",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const nfd = "n\u0303";
+        const select = (glyph, index) => {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            get("selected").value = String(index);
+            get("selected").dispatch("change");
+        };
+        const add = (glyph, x1, y1, x2, y2) => {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            for (const [axis, value] of Object.entries({
+                x1, y1, x2, y2, width: 251,
+            })) get(axis).value = String(value);
+            get("add").dispatch("click");
+        };
+        const exact = get("split-exact");
+        assert.equal(exact.disabled, true);
+        editor.start();
+        add(nfd, 1000, 900, 1603, 1704);
+        add("ñ", 500, 700, 800, 900);
+        select(nfd, 0);
+        assert.equal(exact.disabled, false);
+        get("save").dispatch("click");
+        const original = await downloads.at(-1).text();
+        const count = downloads.length;
+        exact.dispatch("click");
+        assert.equal(downloads.length, count,
+            "accepted authoring cannot implicitly export a file");
+        assert.equal(get("selected").value, "1",
+            "new second segment is selected for further retuning");
+        assert.equal(get("x1").value, "1303");
+        assert.equal(get("y1").value, "1304");
+        assert.equal(get("slant-undo").textContent,
+            "Undo last lossless stroke split");
+        select(nfd, 1);
+        get("save").dispatch("click");
+        const split = await downloads.at(-1).text();
+        assert.equal(split, encodeGlyphLibrary(splitGlyphStrokeExactly(
+            parseGlyphLibrary(original), nfd, 0)));
+        select("ñ", 2);
+        assert.equal(get("slant-undo").disabled, true,
+            "other Unicode shape cannot recover this exact edit");
+        select(nfd, 1);
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), original);
+        get("slant-redo").dispatch("click");
+        select(nfd, 0);
+        assert.equal(get("merge").disabled, false);
+        get("merge").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), original,
+            "native TSV source bytes survive an exact split/merge");
+        add(nfd, 1000, 900, 1601, 1702);
+        select(nfd, 2);
+        assert.equal(exact.disabled, true,
+            "primitive line has no interior lattice point");
+        editor.reset();
+        assert.equal(exact.disabled, true);
         assert.equal(get("slant-undo").disabled, true);
     } finally {
         ui.restore();
