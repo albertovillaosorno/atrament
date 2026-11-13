@@ -96,6 +96,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--copy-glyph SOURCE TARGET] \
     [--remove-glyph GRAPHEME] \
     [--reverse-stroke GRAPHEME INDEX] \
+    [--split-stroke GRAPHEME INDEX] \
     [--move-stroke GRAPHEME FROM TO] \
     [--reverse-path GRAPHEME PATH_INDEX] \
     [--close-path GRAPHEME PATH_INDEX] \
@@ -128,6 +129,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     in stroke order; it does not persist new curve or pen-lift metadata.\n\
     Glyph stroke indices are one-based within one exact Unicode glyph;\n\
     --reverse-stroke flips pen direction and --move-stroke shifts order.\n\
+    --split-stroke adds two continuous half-segments at the rounded midpoint.\n\
     --set-stroke updates ink geometry; --remove-stroke deletes one segment.\n\
     --reverse-path flips a multi-stroke path; --move-path swaps adjacent\n\
     paths using the current pen-continuity inspection order.\n\
@@ -1453,7 +1455,8 @@ fn preflight_glyph_typed_option(
         "--move-stroke" | "--move-path" | "--rotate-path"
         | "--shear-glyph" | "--scale-glyph-height"
         | "--scale-glyph-width" | "--translate-glyph" => 3,
-        "--reverse-stroke" | "--join-strokes" | "--remove-stroke"
+        "--reverse-stroke" | "--split-stroke"
+        | "--join-strokes" | "--remove-stroke"
         | "--reverse-path" | "--close-path"
         | "--scale-glyph-ink" => 2,
         _ => return Ok(false),
@@ -1463,6 +1466,7 @@ fn preflight_glyph_typed_option(
     match option {
         "--glyph-stroke" => validated_strokes.parse(option, iter)?,
         "--set-stroke" | "--move-stroke" | "--reverse-stroke"
+        | "--split-stroke"
         | "--join-strokes" | "--remove-stroke" | "--reverse-path"
         | "--close-path" | "--rotate-path" | "--move-path"
         | "--translate-path" =>
@@ -1591,6 +1595,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             | "--scale-glyph-height" | "--scale-glyph-width"
             | "--scale-glyph-ink" => glyphs.parse(option, &mut iter)?,
             "--reverse-stroke" | "--move-stroke" | "--join-strokes"
+            | "--split-stroke"
             | "--set-stroke" | "--remove-stroke" =>
                 glyphs.edit_stroke(option, &mut iter)?,
             "--reverse-path" | "--rotate-path" | "--close-path" | "--move-path"

@@ -771,6 +771,7 @@ impl GlyphOverlay {
                 self.move_stroke(grapheme, from, to)
             }
             "--remove-stroke" => self.remove_stroke(grapheme, from),
+            "--split-stroke" => self.split_stroke(grapheme, from),
             "--join-strokes" => self.join_strokes(grapheme, from),
             "--set-stroke" => {
                 let replacement = Self::parse_stroke(grapheme, iter)?;
@@ -1658,8 +1659,8 @@ impl GlyphOverlay {
                 "--set-stroke" => {
                     let _stroke = Self::parse_stroke(grapheme, iter)?;
                 }
-                "--reverse-stroke" | "--join-strokes"
-                | "--remove-stroke" => {}
+                "--reverse-stroke" | "--split-stroke"
+                | "--join-strokes" | "--remove-stroke" => {}
                 _ => return Err("unknown stroke edit".into()),
             }
         }
@@ -1741,6 +1742,43 @@ impl GlyphOverlay {
         self.strokes.retain(|stroke| stroke.grapheme != grapheme);
         if self.strokes.len() == before {
             return Err("no authored strokes for exact glyph".into());
+        }
+        Ok(())
+    }
+
+    /// Split one directed line into two exact same-pen segments at the
+    /// browser-compatible, half-up whole-micrometre midpoint. The second
+    /// half follows the first in the original interleaved TSV position.
+    pub(super) fn split_stroke(
+        &mut self, grapheme: &str, ordinal: u32,
+    ) -> Result<(), String> {
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let index = Self::checked_stroke_position(&positions, ordinal)?;
+        if self.strokes.len() == MAX_STROKES {
+            return Err("subdivision exceeds 4096 authored strokes".into());
+        }
+        let selected = *positions.get(index)
+            .ok_or("stroke index outside bounds")?;
+        let original = self.strokes.get(selected)
+            .ok_or("stroke index outside library")?;
+        let midpoint = (
+            (original.start_um.0 + original.end_um.0 + 1) / 2,
+            (original.start_um.1 + original.end_um.1 + 1) / 2,
+        );
+        if midpoint == original.start_um || midpoint == original.end_um {
+            return Err("stroke too short to subdivide in whole um".into());
+        }
+        let mut first = original.clone();
+        let mut second = original.clone();
+        first.end_um = midpoint;
+        second.start_um = midpoint;
+        let mut revised = self.strokes.clone();
+        revised[selected] = first;
+        revised.insert(selected + 1, second);
+        let prior = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = prior;
+            return Err(error);
         }
         Ok(())
     }

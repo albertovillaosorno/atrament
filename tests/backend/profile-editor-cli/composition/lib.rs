@@ -6128,6 +6128,181 @@ fn explicit_joins_refuse_unsafe_gaps_colors_and_indices_atomically() {
 }
 
 #[test]
+fn native_midpoint_split_matches_browser_tsv_paths_and_rendered_ink() {
+    let source = test_path().with_extension("tsv");
+    let revised = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("split source");
+    let revised_name = revised.to_str().expect("split output");
+    let nfd = "n\u{303}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "1000", "900", "1601", "1702",
+        "251", "#112233",
+        "--glyph-stroke", "ñ", "400", "800", "500", "1200",
+        "250", "#445566",
+        "--glyph-stroke", nfd, "1601", "1702", "2000", "2200",
+        "251", "#112233",
+        "--glyph-stroke", "∞", "600", "600", "900", "900",
+        "300", "#AABBCC",
+    ])).expect("original interleaved glyphs").expect("source bytes");
+    fs::write(&source, &original).expect("source saved");
+    let mut edits = args(&[
+        "--profile", source_name,
+        "--split-stroke", nfd, "1",
+        "--split-stroke", nfd, "3",
+    ]);
+    let split = execute_glyph_library(&edits)
+        .expect("two native splits").expect("TSV bytes");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ñ\t1000\t900\t1301\t1301\t251\t#112233\n",
+        "ñ\t1301\t1301\t1601\t1702\t251\t#112233\n",
+        "ñ\t400\t800\t500\t1200\t250\t#445566\n",
+        "ñ\t1601\t1702\t1801\t1951\t251\t#112233\n",
+        "ñ\t1801\t1951\t2000\t2200\t251\t#112233\n",
+        "∞\t600\t600\t900\t900\t300\t#AABBCC\n",
+    );
+    assert_eq!(split, expected.as_bytes(),
+        "midpoints use browser half-up rounding without moving other rows");
+    assert_eq!(fs::read(&source).expect("source remains"), original);
+    edits.extend(args(&["--inspect-paths", nfd]));
+    let report = String::from_utf8(execute_glyph_library(&edits)
+        .expect("read native paths").expect("report"))
+        .expect("inspector UTF-8");
+    assert!(report.contains("Strokes: 4\nPaths: 1\nPen lifts: 0"),
+        "{report}");
+    assert!(report.contains(
+        "Path 1: strokes 1..4 (4 segments) (1000, 900) -> (2000, 2200)"
+    ), "{report}");
+    assert!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--split-stroke", nfd, "1",
+        "--split-stroke", nfd, "3", "--output", revised_name,
+    ])).expect("explicit revised save").is_none());
+    assert_eq!(fs::read(&revised).expect("saved revision"), split);
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", revised_name,
+    ])).expect("native reload").expect("TSV"), split);
+
+    for format in ["pdf", "png"] {
+        let mut stored = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", revised_name,
+            "--place-text", "1", "30000", "45000", "n\u{303}ñ∞",
+        ]);
+        let mut independent = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", nfd, "1000", "900", "1301", "1301",
+            "251", "#112233",
+            "--glyph-stroke", nfd, "1301", "1301", "1601", "1702",
+            "251", "#112233",
+            "--glyph-stroke", "ñ", "400", "800", "500", "1200",
+            "250", "#445566",
+            "--glyph-stroke", nfd, "1601", "1702", "1801", "1951",
+            "251", "#112233",
+            "--glyph-stroke", nfd, "1801", "1951", "2000", "2200",
+            "251", "#112233",
+            "--glyph-stroke", "∞", "600", "600", "900", "900",
+            "300", "#AABBCC",
+            "--place-text", "1", "30000", "45000", "n\u{303}ñ∞",
+        ]);
+        if format == "png" {
+            stored.extend(args(&["--dpi", "72"]));
+            independent.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&stored)
+            .expect("saved native ink renders").expect("bytes"),
+            execute_notebook(&independent)
+                .expect("independent ink renders").expect("bytes"),
+            "split directed ink differs from native {format} geometry");
+    }
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(revised).expect("remove revision");
+}
+
+#[test]
+fn native_midpoint_split_refuses_invalid_or_unsafe_edits_without_file_writes() {
+    for flags in [
+        args(&["--profile", "-", "--split-stroke"]),
+        args(&["--profile", "-", "--split-stroke", "ñ"]),
+    ] {
+        let error = preflight_glyph_profile_sources(&flags)
+            .expect_err("incomplete split refuses before stdin");
+        assert!(error.contains("--split-stroke requires 2 operands"),
+            "{error}");
+    }
+    for index in ["0", "-1", "1.0", "4097", "not-a-number"] {
+        let error = preflight_glyph_profile_sources(&args(&[
+            "--profile", "-", "--split-stroke", "ñ", index,
+        ])).expect_err("invalid ordinal refuses before stdin");
+        assert!(error.contains("stroke index"), "{index}: {error}");
+    }
+    let invalid = preflight_glyph_profile_sources(&args(&[
+        "--profile", "-", "--split-stroke", "ab", "1",
+    ])).expect_err("multiple graphemes refuse before stdin");
+    assert!(invalid.contains("exact visible grapheme"), "{invalid}");
+
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("split source");
+    let target_name = target.to_str().expect("split target");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "1000", "1200", "1001", "1200",
+        "250", "#102030",
+        "--glyph-stroke", "n\u{303}", "1100", "1200", "1100", "1201",
+        "250", "#102030",
+        "--glyph-stroke", "∞", "700", "600", "1800", "2000",
+        "250", "#102030",
+    ])).expect("short strokes admitted").expect("TSV bytes");
+    fs::write(&source, &original).expect("saved source");
+    fs::write(&target, b"do not replace accepted ink")
+        .expect("output sentinel");
+    for (glyph, index, diagnostic) in [
+        ("ñ", "1", "too short"),
+        ("n\u{303}", "1", "too short"),
+        ("n", "1", "no authored strokes"),
+        ("ñ", "2", "exceeds glyph"),
+        ("∞", "2", "exceeds glyph"),
+    ] {
+        let error = execute_glyph_library(&args(&[
+            "--profile", source_name, "--split-stroke", glyph, index,
+            "--output", target_name, "--replace",
+        ])).expect_err("bad split leaves output intact");
+        assert!(error.contains(diagnostic), "{error}");
+        assert_eq!(fs::read(&source).expect("source intact"), original);
+        assert_eq!(fs::read(&target).expect("output intact"),
+            b"do not replace accepted ink");
+    }
+    let full = test_path().with_extension("tsv");
+    let full_name = full.to_str().expect("full library");
+    let full_tsv = String::from("atrament.glyph-strokes.v1\n")
+        + &"∞\t700\t600\t1800\t2000\t250\t#102030\n".repeat(4096);
+    fs::write(&full, full_tsv.as_bytes()).expect("full source");
+    let error = execute_glyph_library(&args(&[
+        "--profile", full_name, "--split-stroke", "∞", "1",
+        "--output", target_name, "--replace",
+    ])).expect_err("bounded stroke library refuses extra line");
+    assert!(error.contains("4096"), "{error}");
+    assert_eq!(fs::read(&full).expect("full source unchanged"),
+        full_tsv.as_bytes());
+    assert_eq!(fs::read(&target).expect("target unchanged"),
+        b"do not replace accepted ink");
+
+    // A two-micrometre directed line has a distinct integer midpoint.
+    let admitted = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "1000", "1200", "1002", "1200",
+        "250", "#102030", "--split-stroke", "ñ", "1",
+    ])).expect("two-um line can split").expect("updated ink");
+    assert!(String::from_utf8(admitted).expect("UTF-8").contains(
+        concat!(
+            "ñ\t1000\t1200\t1001\t1200\t250\t#102030\n",
+            "ñ\t1001\t1200\t1002\t1200\t250\t#102030\n",
+        )
+    ));
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(target).expect("remove target");
+    fs::remove_file(full).expect("remove full source");
+}
+
+#[test]
 fn targeted_stroke_edits_refuse_bad_shapes_and_leave_files_untouched() {
     let source = test_path().with_extension("tsv");
     let target = test_path().with_extension("tsv");
