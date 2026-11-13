@@ -889,6 +889,11 @@ impl GlyphOverlay {
                 let dy = next_signed_path_offset(iter, "path dy", 4500)?;
                 self.translate_path(grapheme, from, dx, dy)
             }
+            "--scale-path" => {
+                let x = next_integer(iter, "path X percent", 50, 150)?;
+                let y = next_integer(iter, "path Y percent", 50, 150)?;
+                self.scale_path(grapheme, from, x, y)
+            }
             "--style-path" => {
                 let width = next_integer(iter, "path pen width", 80, 1500)?;
                 let color = iter.next().ok_or("path color requires #RRGGBB")?;
@@ -1827,7 +1832,7 @@ impl GlyphOverlay {
         let path = matches!(flag,
             "--reverse-path" | "--close-path" | "--rotate-path"
             | "--move-path" | "--translate-path" | "--style-path"
-            | "--remove-path",
+            | "--scale-path" | "--remove-path",
         );
         let grapheme = iter.next().ok_or(if path {
             "path edit requires an exact grapheme"
@@ -1852,6 +1857,13 @@ impl GlyphOverlay {
                         return Err(
                             "path shift needs nonzero bounded whole um".into()
                         );
+                    }
+                }
+                "--scale-path" => {
+                    let x = next_integer(iter, "path X percent", 50, 150)?;
+                    let y = next_integer(iter, "path Y percent", 50, 150)?;
+                    if x == 100 && y == 100 {
+                        return Err("path scaling needs a changed axis".into());
                     }
                 }
                 "--style-path" => {
@@ -2652,6 +2664,72 @@ impl GlyphOverlay {
                 translated_pen_coordinate(
                     stroke.end_um.1, dy, 4500, stroke.width_um)?,
             );
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Resize one continuous path about its original first pen endpoint.
+    /// Shared joints use the same integer rounding, without moving other
+    /// exact Unicode strokes or silently updating their pen lift identity.
+    pub(super) fn scale_path(
+        &mut self, grapheme: &str, ordinal: u32,
+        x_percent: u32, y_percent: u32,
+    ) -> Result<(), String> {
+        if !(50..=150).contains(&x_percent)
+            || !(50..=150).contains(&y_percent)
+            || (x_percent == 100 && y_percent == 100) {
+            return Err("path scaling needs changed bounded percentages".into());
+        }
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("path index outside bounds")?;
+        let slots = positions.get(path.clone())
+            .ok_or("path range outside glyph")?;
+        let first = slots.first().and_then(|slot| self.strokes.get(*slot))
+            .ok_or("path start outside library")?;
+        let anchor = first.start_um;
+        let mut revised = self.strokes.clone();
+        let mut changed = false;
+        for selected in slots {
+            let stroke = revised.get_mut(*selected)
+                .ok_or("path segment outside library")?;
+            let scale = |point: (u32, u32)| -> Result<(u32, u32), String> {
+                let axis = |value: u32, origin: u32, percent: u32,
+                            limit: i64| -> Result<u32, String> {
+                    // JavaScript Math.round rounds negative ties toward +∞.
+                    let delta = i64::from(value)
+                        .checked_sub(i64::from(origin))
+                        .ok_or("scaled path delta overflow")?;
+                    let change = delta.checked_mul(i64::from(percent))
+                        .and_then(|amount| amount.checked_add(50))
+                        .ok_or("scaled path rounding overflow")?
+                        .div_euclid(100);
+                    let coordinate = i64::from(origin).checked_add(change)
+                        .ok_or("scaled path coordinate overflow")?;
+                    let moved = i32::try_from(coordinate)
+                        .map_err(|_error| "scaled path coordinate overflow")?;
+                    translated_pen_coordinate(0, moved, limit,
+                        stroke.width_um)
+                };
+                Ok((axis(point.0, anchor.0, x_percent, 3500)?,
+                    axis(point.1, anchor.1, y_percent, 4500)?))
+            };
+            let start = scale(stroke.start_um)?;
+            let end = scale(stroke.end_um)?;
+            if start == end {
+                return Err("path scaling collapses a pen segment".into());
+            }
+            changed |= start != stroke.start_um || end != stroke.end_um;
+            stroke.start_um = start;
+            stroke.end_um = end;
+        }
+        if !changed {
+            return Err("path scaling does not change selected ink".into());
         }
         let original = replace(&mut self.strokes, revised);
         if let Err(error) = self.encode_file() {

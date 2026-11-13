@@ -519,6 +519,51 @@ export function translateCandidatePath(strokes, grapheme, selectedIndex, dx, dy)
     encodeGlyphLibrary(next);
     return { strokes: next, selectedIndex };
 }
+// Resize a continuous path around its original first directed endpoint.
+// Both axes share the same rounded joint coordinates as the native CLI.
+export function scaleCandidatePath(strokes, grapheme, selectedIndex, xPercent, yPercent) {
+    if (!exactGrapheme(grapheme)
+        || !Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path scaling needs a selected exact glyph stroke");
+    }
+    if (![xPercent, yPercent].every((value) => Number.isSafeInteger(value) && value >= 50 && value <= 150)
+        || (xPercent === 100 && yPercent === 100)) {
+        throw new Error("Path scaling needs changed 50–150% axes");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const ordinal = positions.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    if (!path)
+        throw new Error("Selected glyph has no candidate pen path");
+    const slots = positions.slice(path.first - 1, path.last);
+    const first = strokes[slots[0]];
+    const anchor = { x: first.x1, y: first.y1 };
+    const next = strokes.slice();
+    let changed = false;
+    for (const index of slots) {
+        const old = strokes[index];
+        const resized = validateStroke({ ...old,
+            x1: Math.round(anchor.x + (old.x1 - anchor.x) * xPercent / 100),
+            y1: Math.round(anchor.y + (old.y1 - anchor.y) * yPercent / 100),
+            x2: Math.round(anchor.x + (old.x2 - anchor.x) * xPercent / 100),
+            y2: Math.round(anchor.y + (old.y2 - anchor.y) * yPercent / 100),
+        });
+        const radius = old.width / 2;
+        if ([resized.x1, resized.x2].some((x) => x < radius || x > 3500 - radius)
+            || [resized.y1, resized.y2].some((y) => y < radius || y > 4500 - radius)) {
+            throw new Error("Scaled pen contour clips glyph cell");
+        }
+        changed ||= resized.x1 !== old.x1 || resized.y1 !== old.y1
+            || resized.x2 !== old.x2 || resized.y2 !== old.y2;
+        next[index] = resized;
+    }
+    if (!changed)
+        throw new Error("Path scaling does not change selected ink");
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex };
+}
 // Delete the selected candidate path while keeping the remaining exact
 // Unicode stroke rows and their relative authored order intact.
 export function removeCandidatePath(strokes, grapheme, selectedIndex) {
@@ -4234,6 +4279,7 @@ export function createGlyphStrokeEditor() {
     const startPath = required("glyph-path-start");
     const closePath = required("glyph-path-close");
     const translatePath = required("glyph-path-translate");
+    const scalePath = required("glyph-path-scale");
     const stylePath = required("glyph-path-style");
     const removePath = required("glyph-path-remove");
     const copyPath = required("glyph-path-copy");
@@ -4241,6 +4287,8 @@ export function createGlyphStrokeEditor() {
     const pathCopyTarget = required("glyph-path-copy-target");
     const pathDx = required("glyph-path-dx");
     const pathDy = required("glyph-path-dy");
+    const pathScaleX = required("glyph-path-scale-x");
+    const pathScaleY = required("glyph-path-scale-y");
     const earlierPath = required("glyph-path-earlier");
     const laterPath = required("glyph-path-later");
     const earlier = required("glyph-earlier");
@@ -4288,9 +4336,9 @@ export function createGlyphStrokeEditor() {
         remove, subdivide, splitExact, merge, clearGlyph, reverse,
         reversePath,
         startPath, closePath,
-        translatePath, stylePath, removePath, copyPath, copyShiftedPath,
-        pathCopyTarget,
-        pathDx, pathDy,
+        translatePath, scalePath, stylePath, removePath,
+        copyPath, copyShiftedPath, pathCopyTarget,
+        pathDx, pathDy, pathScaleX, pathScaleY,
         earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
     let active = false;
@@ -5455,6 +5503,7 @@ export function createGlyphStrokeEditor() {
             || chosenPath.first === chosenPath.last || closureGap === 0
             || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
         translatePath.disabled = !active || !chosenPath;
+        scalePath.disabled = !active || drawing !== null || !chosenPath;
         stylePath.disabled = !active || drawing !== null || !chosenPath;
         removePath.disabled = !active || drawing !== null || !chosenPath
             || (chosenPath.last - chosenPath.first + 1) === strokes.length;
@@ -6576,6 +6625,18 @@ export function createGlyphStrokeEditor() {
             const changed = translateCandidatePath(strokes, character.value, selectedIndex, signed(pathDx.value, 3500), signed(pathDy.value, 4500));
             commitInkEdit(changed.strokes, character.value, "pen path move", changed.selectedIndex);
             message("Translated selected continuous pen path; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    scalePath.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null)
+            return;
+        try {
+            const changed = scaleCandidatePath(strokes, character.value, selectedIndex, decimalWhole(pathScaleX.value), decimalWhole(pathScaleY.value));
+            commitInkEdit(changed.strokes, character.value, "pen path scale", changed.selectedIndex);
+            message("Scaled selected continuous pen path; unsaved");
         }
         catch (error) {
             message(String(error));

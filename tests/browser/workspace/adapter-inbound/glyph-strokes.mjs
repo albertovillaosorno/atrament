@@ -14,7 +14,8 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
-    translateCandidatePath, styleCandidatePath, removeCandidatePath } =
+    translateCandidatePath, styleCandidatePath, scaleCandidatePath,
+    removeCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -606,7 +607,8 @@ function mountEditor() {
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
         "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
-        "glyph-path-style", "glyph-path-remove",
+        "glyph-path-style", "glyph-path-remove", "glyph-path-scale",
+        "glyph-path-scale-x", "glyph-path-scale-y",
         "glyph-path-copy", "glyph-path-copy-target",
         "glyph-path-copy-shifted",
         "glyph-earlier", "glyph-later", "glyph-join",
@@ -645,6 +647,8 @@ function mountEditor() {
     get("move-y").value = "0";
     get("path-dx").value = "0";
     get("path-dy").value = "0";
+    get("path-scale-x").value = "100";
+    get("path-scale-y").value = "100";
     get("variation-sample").value = "1";
     for (const [key, value] of Object.entries({
         seed: 42, width: 6, height: 6, thickness: 8, slant: 4,
@@ -12503,3 +12507,111 @@ test("lossless split uses one session-only undo and never auto-downloads",
         ui.restore();
     }
 });
+
+test("selected path scale preserves Unicode slots, joints and negative ties",
+    () => {
+        const nfd = "n\u0303";
+        const a = { ...stroke(nfd), x1: 500, y1: 700,
+            x2: 900, y2: 1200, width: 251, color: "#112233" };
+        const b = { ...a, x1: 900, y1: 1200,
+            x2: 1400, y2: 1900 };
+        const other = stroke("ñ");
+        const accent = { ...a, x1: 2200, y1: 2500,
+            x2: 2700, y2: 3000, width: 200, color: "#445566" };
+        const original = [a, other, b, stroke("∞"), accent];
+        const originalBytes = encodeGlyphLibrary(original);
+        const changed = scaleCandidatePath(original, nfd, 2, 125, 75);
+        const expected = [{ ...a, x2: 1000, y2: 1075 },
+            other, { ...b, x1: 1000, y1: 1075,
+                x2: 1625, y2: 1600 }, original[3], accent];
+        assert.deepEqual(changed, { strokes: expected, selectedIndex: 2 });
+        assert.deepEqual(candidatePenPaths(changed.strokes, nfd).map((path) =>
+            [path.first, path.last]), [[1, 2], [3, 3]]);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(changed.strokes)),
+            expected);
+        assert.equal(encodeGlyphLibrary(original), originalBytes);
+        const negative = { ...stroke("á"), x1: 1000, y1: 1500,
+            x2: 999, y2: 1499 };
+        assert.deepEqual(scaleCandidatePath([negative], "á", 0,
+            50, 125).strokes, [
+            { ...negative, x2: 1000, y2: 1499 },
+        ]);
+        const shortNegative = { ...negative, y2: 1500 };
+        assert.throws(() => scaleCandidatePath([shortNegative],
+            "á", 0, 50, 100), /endpoints must differ/i);
+        const shortPositive = { ...negative, x2: 1001, y2: 1500 };
+        assert.throws(() => scaleCandidatePath([shortPositive],
+            "á", 0, 101, 100), /does not change/);
+        const nearEdge = { ...a, x2: 3000 };
+        for (const [input, selected, x, y] of [
+            [original, 2, 100, 100], [original, 2, 49, 100],
+            [original, 2, 100, 151], [original, 2, 125.5, 100],
+            [original, -1, 125, 100], [original, 1, 125, 100],
+            [original, 2, Infinity, 100],
+            [[nearEdge], 0, 125, 100],
+        ]) {
+            assert.throws(() => scaleCandidatePath(input,
+                nfd, selected, x, y), /path|selected|clip|bounds/i);
+        }
+        assert.equal(encodeGlyphLibrary(original), originalBytes);
+    });
+
+test("selected path scale UI is undoable and exports only accepted ink",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const nfd = "n\u0303";
+            const a = { ...stroke(nfd), x1: 500, y1: 700,
+                x2: 900, y2: 1200, width: 251, color: "#112233" };
+            const b = { ...a, x1: 900, y1: 1200,
+                x2: 1400, y2: 1900 };
+            const original = [a, stroke("ñ"), b, stroke("∞")];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(original));
+            assert.equal(get("path-scale").disabled, true);
+            editor.start();
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            get("selected").value = "2";
+            get("selected").dispatch("change");
+            assert.equal(get("path-scale").disabled, false);
+            assert.equal(get("path-scale-x").disabled, false);
+            assert.equal(get("path-scale-y").disabled, false);
+            get("path-scale-x").value = "125";
+            get("path-scale-y").value = "75";
+            get("path-scale").dispatch("click");
+            assert.match(get("status").textContent,
+                /Scaled selected continuous pen path; unsaved/);
+            get("save").dispatch("click");
+            const changed = scaleCandidatePath(original, nfd, 2, 125, 75);
+            assert.equal(await downloads[0].text(),
+                encodeGlyphLibrary(changed.strokes));
+            get("slant-undo").dispatch("click");
+            assert.match(get("status").textContent,
+                /Undid last pen path scale/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[1].text(),
+                encodeGlyphLibrary(original));
+            get("slant-redo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[2].text(),
+                encodeGlyphLibrary(changed.strokes));
+            get("path-scale-x").value = "200";
+            get("path-scale-y").value = "150";
+            get("path-scale").dispatch("click");
+            assert.match(get("status").textContent, /50–150/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[3].text(),
+                encodeGlyphLibrary(changed.strokes));
+            editor.reset();
+            assert.equal(get("path-scale").disabled, true);
+            assert.equal(get("path-scale-x").disabled, true);
+            assert.equal(get("path-scale-y").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });

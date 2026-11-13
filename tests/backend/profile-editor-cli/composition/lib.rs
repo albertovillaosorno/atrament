@@ -17848,3 +17848,147 @@ fn exact_lattice_split_refuses_primitive_and_incomplete_edits_atomically() {
     fs::remove_file(target).expect("remove primitive test output");
     fs::remove_file(full).expect("remove full test input");
 }
+
+#[test]
+fn native_selected_path_scaling_round_trips_unicode_and_physical_ink() {
+    let source = test_path().with_extension("tsv");
+    let revision = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let revision_name = revision.to_str().expect("revision path");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "500", "700", "900", "1200",
+        "251", "#112233",
+        "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+        "300", "#778899",
+        "--glyph-stroke", "n\u{303}", "900", "1200", "1400", "1900",
+        "251", "#112233",
+        "--glyph-stroke", "∞", "800", "800", "1700", "1500",
+        "200", "#445566",
+        "--glyph-stroke", "n\u{303}", "2200", "2500", "2700", "3000",
+        "200", "#445566",
+    ])).expect("authored ink").expect("source bytes");
+    fs::write(&source, &original).expect("own source file");
+    let command = args(&[
+        "--profile", source_name,
+        "--scale-path", "n\u{303}", "1", "125", "75",
+    ]);
+    let scaled = execute_glyph_library(&command)
+        .expect("admitted scaling").expect("scaled TSV");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "n\u{303}\t500\t700\t1000\t1075\t251\t#112233\n",
+        "ñ\t2200\t600\t2200\t3300\t300\t#778899\n",
+        "n\u{303}\t1000\t1075\t1625\t1600\t251\t#112233\n",
+        "∞\t800\t800\t1700\t1500\t200\t#445566\n",
+        "n\u{303}\t2200\t2500\t2700\t3000\t200\t#445566\n",
+    ).as_bytes();
+    assert_eq!(scaled, expected);
+    assert_eq!(fs::read(&source).expect("unchanged source"), original);
+    let mut save = command;
+    save.extend(args(&["--output", revision_name]));
+    assert!(execute_glyph_library(&save).expect("saved revision").is_none());
+    assert_eq!(fs::read(&revision).expect("saved bytes"), expected);
+    let report = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", revision_name, "--inspect-paths", "n\u{303}",
+    ])).expect("inspection").expect("report")).expect("UTF-8");
+    assert!(report.contains("Strokes: 3\nPaths: 2\nPen lifts: 1"),
+        "{report}");
+    for format in ["pdf", "png"] {
+        let mut saved = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", revision_name,
+            "--place-text", "1", "30000", "45000", "ñn\u{303}",
+        ]);
+        let mut inline = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+            "300", "#778899",
+            "--glyph-stroke", "n\u{303}", "500", "700", "1000",
+            "1075", "251", "#112233",
+            "--glyph-stroke", "n\u{303}", "1000", "1075", "1625",
+            "1600", "251", "#112233",
+            "--glyph-stroke", "n\u{303}", "2200", "2500", "2700",
+            "3000", "200", "#445566",
+            "--place-text", "1", "30000", "45000", "ñn\u{303}",
+        ]);
+        if format == "png" {
+            saved.extend(args(&["--dpi", "72"]));
+            inline.extend(args(&["--dpi", "72"]));
+        }
+        let actual = execute_notebook(&saved)
+            .expect("native export").expect("export bytes");
+        let direct = execute_notebook(&inline)
+            .expect("independent geometry").expect("export bytes");
+        assert_eq!(actual, direct, "scaled path {format} compositor parity");
+    }
+    let negative_tie = execute_glyph_library(&args(&[
+        "--glyph-stroke", "á", "1000", "1500", "999", "1499",
+        "250", "#112233", "--scale-path", "á", "1", "50", "125",
+    ])).expect("negative half tie").expect("TSV");
+    assert!(String::from_utf8(negative_tie).expect("UTF-8").contains(
+        "á\t1000\t1500\t1000\t1499\t250\t#112233\n"
+    ));
+    fs::remove_file(source).expect("remove owned source");
+    fs::remove_file(revision).expect("remove owned revision");
+}
+
+#[test]
+fn native_selected_path_scaling_refuses_invalid_edits_without_writes() {
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source");
+    let output_name = output.to_str().expect("output");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "500", "700", "3000", "1200",
+        "251", "#112233",
+        "--glyph-stroke", "ñ", "2200", "600", "2400", "3300",
+        "300", "#778899",
+    ])).expect("source").expect("TSV");
+    fs::write(&source, &original).expect("source file");
+    fs::write(&output, b"destination sentinel").expect("destination file");
+    for (index, rejected) in [
+        args(&["--scale-path"]),
+        args(&["--scale-path", "n\u{303}"]),
+        args(&["--scale-path", "n\u{303}", "1"]),
+        args(&["--scale-path", "n\u{303}", "1", "125"]),
+        args(&["--scale-path", "n\u{303}", "0", "125", "75"]),
+        args(&["--scale-path", "n\u{303}", "2", "125", "75"]),
+        args(&["--scale-path", "n\u{303}", "1", "49", "100"]),
+        args(&["--scale-path", "n\u{303}", "1", "100", "151"]),
+        args(&["--scale-path", "n\u{303}", "1", "125.5", "75"]),
+        args(&["--scale-path", "n\u{303}", "1", "+125", "75"]),
+        args(&["--scale-path", "n\u{303}", "1", "100", "100"]),
+        args(&["--scale-path", "n\u{303}", "1", "125", "100"]),
+        args(&["--scale-path", "ab", "1", "125", "75"]),
+        args(&["--scale-path", "n", "1", "125", "75"]),
+    ].into_iter().enumerate() {
+        let mut edit = args(&["--profile", source_name]);
+        edit.extend(rejected.clone());
+        edit.extend(args(&["--output", output_name, "--replace"]));
+        let result = execute_glyph_library(&edit);
+        assert!(result.is_err(), "{index}: unsafe edit accepted");
+        assert_eq!(fs::read(&source).expect("source"), original);
+        assert_eq!(fs::read(&output).expect("destination"),
+            b"destination sentinel");
+        let mut piped = args(&["--profile", "-"]);
+        piped.extend(rejected);
+        let preflight = preflight_glyph_profile_sources(&piped);
+        if matches!(index, 5 | 11 | 13) {
+            assert!(preflight.is_ok(), "{index}: {preflight:?}");
+        } else {
+            assert!(preflight.is_err(), "{index}: {preflight:?}");
+        }
+    }
+    let collapsed = execute_glyph_library(&args(&[
+        "--glyph-stroke", "á", "1000", "1500", "999", "1500",
+        "250", "#112233", "--scale-path", "á", "1", "50", "100",
+    ])).expect_err("negative-tie horizontal segment collapses");
+    assert!(collapsed.contains("collapses"), "{collapsed}");
+    let no_change = execute_glyph_library(&args(&[
+        "--glyph-stroke", "á", "1000", "1500", "1001", "1500",
+        "250", "#112233", "--scale-path", "á", "1", "101", "100",
+    ])).expect_err("rounded one-um edit must refuse no-op");
+    assert!(no_change.contains("does not change"), "{no_change}");
+    fs::remove_file(source).expect("remove owned source");
+    fs::remove_file(output).expect("remove owned destination");
+}

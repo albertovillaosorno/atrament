@@ -2472,6 +2472,30 @@ stroke can also be translated as its own one-segment path.
 The path order, color and widths remain authored; this is
 not a new native TSV field or an automatically inferred anchor.
 
+**Scale selected pen path around its first endpoint** independently
+adjusts that continuous path's horizontal and vertical size by 50–150%.
+The browser's two percentage inputs apply one unsaved, undoable edit. The
+selected path's original first pen endpoint stays fixed; all shared joints
+use identical whole-micrometre rounding, so its segments remain connected.
+Unrelated paths, pen direction, color, width, and NFC/NFD glyph rows remain
+unchanged.
+
+For native editing, inspect the one-based path number first, then use:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile ink.tsv --scale-path 'ñ' 1 125 75 \
+  --output scaled.tsv
+```
+
+The CLI checks both percentages before reading a selected stdin library.
+A 100%/100% request, rounded no-op, zero-length stroke, bad path index or
+round-pen cap reaching outside the 3500 × 4500 µm cell refuses before
+writing a file. The original library never changes without an explicit
+file output, and no new scaling field or persistent pen-lift marker is
+added. Browser and native scaling were checked against 256 deterministic
+byte-for-byte Unicode and refusal cases, including negative rounding ties.
+
 **Apply pen width and color to selected continuous path** updates only the
 selected exact Unicode grapheme's inferred, connected pen path. The browser
 uses the existing **Pen width** and **Ink color** fields, records one bounded

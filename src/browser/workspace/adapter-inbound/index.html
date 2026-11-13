@@ -1548,6 +1548,21 @@
             <button id="glyph-path-translate" type="button" disabled>
               Translate selected continuous pen path
             </button>
+            <label>Selected path horizontal size (%)
+              <input id="glyph-path-scale-x" type="number" min="50"
+                max="150" step="1" value="100" disabled>
+            </label>
+            <label>Selected path vertical size (%)
+              <input id="glyph-path-scale-y" type="number" min="50"
+                max="150" step="1" value="100" disabled>
+            </label>
+            <button id="glyph-path-scale" type="button" disabled>
+              Scale selected pen path around its first endpoint
+            </button>
+            <p class="field-help">Only the selected continuous path changes.
+              Shared joints remain connected; an unchanged scale, clipped pen
+              contour or collapsed segment refuses. Undo before TSV download
+              to restore the original geometry.</p>
             <button id="glyph-path-style" type="button" disabled>
               Apply pen width and color to selected continuous path
             </button>

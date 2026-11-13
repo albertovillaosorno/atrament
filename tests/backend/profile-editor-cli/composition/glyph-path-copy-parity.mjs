@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
-    encodeGlyphLibrary, styleCandidatePath, removeCandidatePath }
+    encodeGlyphLibrary, styleCandidatePath, removeCandidatePath,
+    scaleCandidatePath }
 // jig-ignore-next-line: static ESM import needs a literal path.
     from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -377,4 +378,123 @@ test("128 native/browser path removals agree on TSV and safe refusal",
         }
         assert.ok(accepted > 60, "accepted " + accepted);
         assert.ok(refused > 30, "refused " + refused);
+    });
+
+// Exercise the actual browser rounding and Rust CLI path-number lookup with
+// interleaved NFC/NFD ink, directed joints and both safe/unsafe transforms.
+test('256 real Rust and browser selected-path scales agree byte for byte',
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            'build', '--locked', '--offline', '--quiet',
+            '-p', 'atrament_profile_editor_cli', '--bin', 'atrament-profiles',
+        ], { cwd: root, encoding: 'utf8', timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, '.temp') } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = random(0x5CA1_2026);
+        let accepted = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 256; sample += 1) {
+            const glyph = sample % 2 === 0 ? 'ñ' : 'n\u0303';
+            const other = glyph === 'ñ' ? 'n\u0303' : 'ñ';
+            const first = stroke(pick, glyph, '#123456');
+            const second = { ...first, x1: first.x2, y1: first.y2,
+                x2: first.x2 + pick(1, 220),
+                y2: first.y2 + pick(1, 220) };
+            const detached = stroke(pick, glyph, '#556677');
+            const mode = sample % 16;
+            let xPercent = [125, 50, 75, 150][mode % 4];
+            let yPercent = [75, 150, 125, 50][mode % 4];
+            let selected = mode % 3 === 0 ? 4 : 2;
+            let nativeIndex = selected === 4 ? 2 : 1;
+            let key = glyph;
+            if (mode === 4) {
+                xPercent = 100;
+                yPercent = 100;
+            } else if (mode === 5) {
+                xPercent = 49;
+            } else if (mode === 6) {
+                yPercent = 151;
+            } else if (mode === 7) {
+                selected = -1;
+                nativeIndex = 0;
+            } else if (mode === 8) {
+                selected = 9999;
+                nativeIndex = 4096;
+            } else if (mode === 9) {
+                key = 'ab';
+            } else if (mode === 10) {
+                xPercent = 125.5;
+            } else if (mode === 11 || mode === 15) {
+                selected = 0;
+                nativeIndex = 1;
+                first.x1 = 500;
+                first.y1 = 700;
+                first.x2 = 2800;
+                first.y2 = 900;
+                second.x1 = first.x2;
+                second.y1 = first.y2;
+                second.x2 = 3100;
+                second.y2 = 1100;
+                xPercent = 125;
+                yPercent = 100;
+            } else if (mode === 13) {
+                selected = 0;
+                nativeIndex = 1;
+                first.x1 = 1500;
+                first.y1 = 1500;
+                first.x2 = 1501;
+                first.y2 = 1500;
+                second.x1 = 1501;
+                second.y1 = 1500;
+                second.x2 = 1502;
+                second.y2 = 1500;
+                xPercent = 101;
+                yPercent = 100;
+            } else if (mode === 14) {
+                selected = 0;
+                nativeIndex = 1;
+                first.x1 = 1500;
+                first.y1 = 1500;
+                first.x2 = 1499;
+                first.y2 = 1499;
+                second.x1 = 1499;
+                second.y1 = 1499;
+                second.x2 = 1498;
+                second.y2 = 1498;
+                xPercent = 50;
+                yPercent = 125;
+            }
+            const source = [first, stroke(pick, other, '#AABBCC'),
+                second, stroke(pick, '∞', '#667788'), detached];
+            const baseline = encodeGlyphLibrary(source);
+            let expected;
+            try {
+                expected = encodeGlyphLibrary(scaleCandidatePath(
+                    source, key, selected, xPercent, yPercent).strokes);
+            } catch (error) {
+                expected = error;
+            }
+            const actual = spawnSync(binary, [
+                'glyphs', ...source.flatMap(strokeFlags),
+                '--scale-path', key, String(nativeIndex),
+                String(xPercent), String(yPercent),
+            ], { cwd: root, encoding: 'utf8', timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = `scaled path sample=${sample} mode=${mode}`;
+            assert.equal(actual.error, undefined, context);
+            if (expected instanceof Error) {
+                refused += 1;
+                assert.notEqual(actual.status, 0, context);
+                assert.equal(actual.stdout, '', context);
+                assert.match(actual.stderr, /^Error: /, context);
+            } else {
+                accepted += 1;
+                assert.equal(actual.status, 0, context + actual.stderr);
+                assert.equal(actual.stdout, expected, context);
+            }
+            assert.equal(encodeGlyphLibrary(source), baseline, context);
+        }
+        assert.ok(accepted > 75, `accepted scales: ${accepted}`);
+        assert.ok(refused > 70, `refused scales: ${refused}`);
     });

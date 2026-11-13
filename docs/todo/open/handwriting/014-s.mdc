@@ -1342,3 +1342,26 @@ identical resulting TSV and fail-closed outcomes.
 
 This is a manual authored-path edit, not new pen-lift metadata or cursive
 synthesis. P1-014 remains open.
+
+## Explicit selected-path anisotropic scaling (partial) — 2026-11-13
+
+Rust `glyphs --scale-path GRAPHEME PATH_INDEX X_PERCENT Y_PERCENT` and the
+localhost editor's **Scale selected pen path** now resize one inferred,
+continuous same-pen contour about its first authored directed endpoint.
+Both axes accept 50–150% whole-number scales; a 100%/100% request, rounded
+no-op, collapsed segment or clipped round pen cap refuses atomically.
+The implementation uses identical shared-joint rounding for every connected
+segment, including negative coordinates relative to the pivot. Unrelated
+NFC/NFD ink, explicit stroke order and pen style remain unchanged.
+
+Two native Rust regressions verify exact edited TSV, save/reopen, candidate
+path inspection, unchanged source/target on refusal, negative half ties and
+byte-identical PDF/PNG against separately supplied physical ink. Two browser
+tests cover full TSV roundtrip, selected-path boundaries, invalid edits,
+session-only undo/redo and deliberate TSV downloads. Another 256-case
+native CLI/browser comparison checks accepted output bytes and fail-closed
+refusals with interleaved Unicode glyphs.
+
+The output still uses concrete TSV v1 pen segments without persistent
+continuous-path identities, parametric curves or calibrated cursive synthesis.
+The full P1-014 acceptance remains open.
