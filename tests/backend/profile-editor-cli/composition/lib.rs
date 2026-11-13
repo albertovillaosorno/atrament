@@ -12828,3 +12828,42 @@ fn selected_minimum_pitch_cannot_compress_measured_handwriting_height() {
         24_000, "measured contour remains authoritative");
     assert_eq!(large[1].origin_um.1 - large[0].origin_um.1, 30_000);
 }
+
+#[test]
+fn selected_pitch_preserves_markdown_decorations_across_region_page_breaks() {
+    let paper = NotebookProfile::default();
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "# a\n\n> a\n\n- a\n\n1. a")
+        .expect("heading, quote, bullet and number source");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 80_000, height: 95_000,
+    };
+    let render = |pitch| layout_flow_with_min_pitch(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(region), Some(pitch),
+    );
+    let (normal, normal_marks, normal_pages) = render(9_000)
+        .expect("default Markdown annotations fit one page");
+    let (wide, marks, pages) = render(30_000)
+        .expect("large leading paginates Markdown decorations");
+    assert_eq!(normal_pages, 1);
+    assert!(pages > normal_pages, "larger leading should add a page");
+    let visible = |runs: &[TextRun]| runs.iter()
+        .map(|run| run.text.clone()).collect::<Vec<_>>();
+    assert_eq!(visible(&normal), visible(&wide),
+        "a spacing override must not alter Markdown content");
+    assert_eq!(normal_marks.len(), marks.len(),
+        "the same semantic decorations must survive pagination");
+    assert!(marks.len() >= 3,
+        "heading, blockquote and bullet all retain physical ink");
+    for run in &wide {
+        assert!((1..=pages).contains(&run.page));
+        assert!((42_500..137_500).contains(&run.origin_um.1));
+    }
+    for mark in &marks {
+        assert!((1..=pages).contains(&mark.page));
+        assert!(mark.start_um.1 >= region.top);
+        assert!(mark.end_um.1 <= region.top + region.height);
+    }
+    assert_eq!(render(30_000).expect("replay").1, marks);
+}
