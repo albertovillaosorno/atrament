@@ -1148,3 +1148,28 @@ A separate real Firefox/localhost integration verifies the actual controls,
 preview, refused and accepted downloads, Unicode history ownership, and
 unchanged backend-request count. The downloaded exact TSV is reopened by
 the independently built native CLI and produces valid PDF and RGBA PNG.
+
+## Exact directed-stroke midpoint subdivision (partial) — 2026-11-13
+
+The local glyph editor can replace one selected directed segment with two
+touching segments at a rounded whole-micrometre midpoint. Both inherit the
+same exact NFC/NFD glyph key, pen RGB and width; ordered surrounding ink
+and unrelated interleaved glyphs remain untouched. The second half is
+selected for manual retuning.
+
+A 1 µm stroke with no strict integer interior point, missing selection,
+mismatched glyph or full 4096-row library refuses without altering the
+accepted draft; unfinished pen traces disable the action. One bounded
+history step restores the exact TSV and stroke selection.
+
+Two focused browser tests verify exact integer endpoints, continued
+same-pen path membership, repeated splits, canonical TSV roundtrip, cap
+refusal, keyboard-safe session recovery and explicit-only download. The
+full browser glyph suite passes 274 tests. A separate native integration
+reopens the exact browser-produced TSV, checks pen paths and emits actual
+PDF and RGBA PNG bytes with byte-identical replay.
+
+This is deliberately a local sampled-stroke edit. The rounded midpoint
+need not lie exactly on the original Euclidean line at submicrometre
+precision; no analytic curve control point, persisted pen lift or new Rust
+TSV field is introduced. The complete P1-014 task remains open.

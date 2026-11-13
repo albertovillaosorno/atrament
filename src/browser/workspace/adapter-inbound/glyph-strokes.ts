@@ -196,6 +196,47 @@ export function encodeGlyphLibrary(strokes: Stroke[]): string {
     return result;
 }
 
+// A selected directed segment can be subdivided without any inferred
+// pen lift. Integer midpoint rounding is part of the explicit native TSV
+// geometry: both new segments meet at exactly the same sampled point.
+function subdivisionMidpoint(stroke: Stroke): Point | null {
+    const x = Math.round((stroke.x1 + stroke.x2) / 2);
+    const y = Math.round((stroke.y1 + stroke.y2) / 2);
+    if ((x === stroke.x1 && y === stroke.y1)
+        || (x === stroke.x2 && y === stroke.y2)) return null;
+    return { x, y };
+}
+
+export function subdivideGlyphStroke(
+    source: Stroke[], grapheme: string, index: number,
+): Stroke[] {
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Stroke subdivision requires an exact visible glyph");
+    }
+    if (!Number.isSafeInteger(index) || index < 0
+        || source[index]?.grapheme !== grapheme) {
+        throw new Error("Choose a stroke of the selected exact glyph");
+    }
+    if (source.length >= MAX_STROKES) {
+        throw new Error("Subdivision exceeds 4096 authored strokes");
+    }
+    const original = validateStroke(source[index]!);
+    const midpoint = subdivisionMidpoint(original);
+    if (midpoint === null) {
+        throw new Error("Stroke is too short to subdivide in whole µm");
+    }
+    const first = validateStroke({
+        ...original, x2: midpoint.x, y2: midpoint.y,
+    });
+    const second = validateStroke({
+        ...original, x1: midpoint.x, y1: midpoint.y,
+    });
+    const candidate = source.slice();
+    candidate.splice(index, 1, first, second);
+    encodeGlyphLibrary(candidate);
+    return candidate;
+}
+
 // Match the Rust --inspect-paths definition: exact directed endpoints and
 // identical pen width/RGB across consecutive strokes of one exact grapheme.
 // These are candidate paths, not persisted pen-down/pen-lift metadata.
@@ -4157,6 +4198,7 @@ export function createGlyphStrokeEditor(): {
     const selected = required<HTMLSelectElement>("glyph-selected");
     const update = required<HTMLButtonElement>("glyph-update");
     const remove = required<HTMLButtonElement>("glyph-remove");
+    const subdivide = required<HTMLButtonElement>("glyph-subdivide");
     const clearGlyph = required<HTMLButtonElement>("glyph-clear");
     const reverse = required<HTMLButtonElement>("glyph-reverse");
     const reversePath = required<HTMLButtonElement>("glyph-reverse-path");
@@ -4216,7 +4258,8 @@ export function createGlyphStrokeEditor(): {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, clearGlyph, reverse, reversePath, startPath, closePath,
+        remove, subdivide, clearGlyph, reverse, reversePath,
+        startPath, closePath,
         translatePath,
         pathDx, pathDy,
         earlierPath, laterPath, earlier, later, join, save,
@@ -4242,7 +4285,8 @@ export function createGlyphStrokeEditor(): {
     type TransformKind = "slant" | "height" | "width" | "ink"
         | "move" | "rotation" | "reflection";
     type EditKind = TransformKind | "pen trace" | "stroke addition"
-        | "stroke edit" | "stroke direction" | "stroke order"
+        | "stroke edit" | "stroke subdivision"
+        | "stroke direction" | "stroke order"
         | "pen path direction" | "pen path start"
         | "pen path closure" | "pen path move"
         | "pen path order" | "pen connection"
@@ -5412,6 +5456,9 @@ export function createGlyphStrokeEditor(): {
             || drawing !== null;
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
+        subdivide.disabled = !active || drawing !== null
+            || selectedIndex === null || strokes.length >= MAX_STROKES
+            || subdivisionMidpoint(strokes[selectedIndex]!) === null;
         clearGlyph.disabled = !active || shown.length === 0
             || drawing !== null;
         reverse.disabled = !active || selectedIndex === null;
@@ -6333,6 +6380,18 @@ export function createGlyphStrokeEditor(): {
             commitInkEdit(next, character.value, "stroke edit", index);
             message("Updated selected stroke; " + strokes.length
                 + " unsaved strokes");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    subdivide.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null) return;
+        try {
+            const index = selectedIndex;
+            const target = character.value;
+            const next = subdivideGlyphStroke(strokes, target, index);
+            commitInkEdit(next, target, "stroke subdivision", index + 1);
+            message("Subdivided selected directed stroke; unsaved");
         } catch (error) {
             message(String(error));
         }

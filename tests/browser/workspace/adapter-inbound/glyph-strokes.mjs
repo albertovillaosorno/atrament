@@ -6,7 +6,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, SELECTABLE_MATH_GLYPHS, italicizeGlyphStrokes,
     scaleGlyphHeight, scaleGlyphWidth,
     scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
-    reflectGlyphStrokes,
+    reflectGlyphStrokes, subdivideGlyphStroke,
     composeAccentedGlyph, fillMissingBilingualBaseline,
     fillMissingConnectedLowercase,
     missingBilingualBaseline, varyGlyphStrokes,
@@ -516,7 +516,8 @@ function mountEditor() {
         "glyph-ideal-rounded-right", "glyph-ideal-c-loop",
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
         "glyph-ideal-accent", "glyph-ideal-diacritic",
-        "glyph-update", "glyph-remove", "glyph-clear", "glyph-reverse",
+        "glyph-update", "glyph-remove", "glyph-subdivide",
+        "glyph-clear", "glyph-reverse",
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
         "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
@@ -11697,6 +11698,138 @@ test("whole-glyph reflection preview is opt-in with bounded undo and TSV",
         assert.equal(get("reflect-all").disabled, true);
         assert.equal(preview.children.length, 0);
         assert.equal(get("slant-redo").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
+
+test("subdivision keeps ordered directed ink and exact Unicode boundaries",
+    () => {
+    const nfd = "n\u0303";
+    const source = [
+        { ...stroke(nfd), x1: 1000, y1: 900, x2: 1601, y2: 1702,
+            width: 251, color: "#112233" },
+        { ...stroke("ñ"), x1: 400, y1: 800, x2: 500, y2: 1200 },
+        { ...stroke(nfd), x1: 1601, y1: 1702, x2: 2000, y2: 2200,
+            width: 251, color: "#112233" },
+        { ...stroke("∞"), x1: 600, y1: 600, x2: 900, y2: 900 },
+    ];
+    const before = structuredClone(source);
+    const result = subdivideGlyphStroke(source, nfd, 0);
+    assert.deepEqual(result.map((item) => item.grapheme),
+        [nfd, nfd, "ñ", nfd, "∞"]);
+    assert.deepEqual([result[0].x1, result[0].y1,
+        result[0].x2, result[0].y2], [1000, 900, 1301, 1301]);
+    assert.deepEqual([result[1].x1, result[1].y1,
+        result[1].x2, result[1].y2], [1301, 1301, 1601, 1702]);
+    assert.equal(result[0].width, 251);
+    assert.equal(result[1].width, 251);
+    assert.equal(result[0].color, "#112233");
+    assert.equal(result[1].color, "#112233");
+    assert.deepEqual(result.slice(2), source.slice(1));
+    assert.deepEqual(candidatePenPaths(result, nfd).map(({ first, last }) =>
+        [first, last]), [[1, 3]],
+    "the inserted seam must not create an inferred pen lift");
+    const twice = subdivideGlyphStroke(result, nfd, 1);
+    assert.equal(twice[1].x2, twice[2].x1);
+    assert.equal(twice[1].y2, twice[2].y1);
+    assert.equal(encodeGlyphLibrary(result),
+        encodeGlyphLibrary(parseGlyphLibrary(encodeGlyphLibrary(result))));
+    assert.deepEqual(source, before, "pure edit cannot mutate source");
+    for (const [key, index] of [
+        ["ñ", 0], ["n", 0], [nfd, 1], [nfd, -1],
+        [nfd, 0.5], [nfd, 4], ["ab", 0],
+    ]) {
+        assert.throws(() => subdivideGlyphStroke(source, key, index));
+    }
+    for (const tiny of [
+        { x1: 1000, y1: 1200, x2: 1001, y2: 1200 },
+        { x1: 1000, y1: 1200, x2: 1000, y2: 1201 },
+    ]) {
+        assert.throws(() => subdivideGlyphStroke([
+            { ...source[0], ...tiny },
+        ], nfd, 0), /too short/);
+    }
+    const atLimit = Array.from({ length: 4096 }, () => source[0]);
+    assert.throws(() => subdivideGlyphStroke(atLimit, nfd, 0),
+        /4096/, "native stroke count cannot overflow");
+    const nearLimit = atLimit.slice(1);
+    assert.equal(subdivideGlyphStroke(nearLimit, nfd, 0).length, 4096);
+});
+
+test("selected stroke subdivision is one recoverable, browser-only edit",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const nfd = "n\u0303";
+        const split = get("subdivide");
+        const choose = (glyph, index) => {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            get("selected").value = String(index);
+            get("selected").dispatch("change");
+        };
+        const add = (glyph, x1, y1, x2, y2) => {
+            get("character").value = glyph;
+            get("character").dispatch("input");
+            for (const [key, value] of Object.entries({
+                x1, y1, x2, y2, width: 251,
+            })) get(key).value = String(value);
+            get("add").dispatch("click");
+        };
+        assert.equal(split.disabled, true);
+        editor.start();
+        add(nfd, 1000, 900, 1601, 1702);
+        add("ñ", 400, 800, 500, 1200);
+        add(nfd, 1601, 1702, 2000, 2200);
+        choose(nfd, 0);
+        assert.equal(split.disabled, false);
+        get("save").dispatch("click");
+        const original = await downloads.at(-1).text();
+        const count = downloads.length;
+        split.dispatch("click");
+        assert.equal(downloads.length, count,
+            "split must not implicitly write a TSV");
+        const splitLines = parseGlyphLibrary(original);
+        const expected = subdivideGlyphStroke(splitLines, nfd, 0);
+        assert.equal(get("selected").value, "1",
+            "new trailing half is editable after insertion");
+        assert.equal(get("x1").value, "1301");
+        assert.equal(get("y1").value, "1301");
+        assert.match(get("paths").textContent, /strokes 1–3/);
+        assert.equal(get("slant-undo").textContent,
+            "Undo last stroke subdivision");
+        choose("ñ", 2);
+        assert.equal(get("slant-undo").disabled, true,
+            "NFC selection cannot recover the NFD edit");
+        choose(nfd, 1);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(expected));
+        get("slant-undo").dispatch("click");
+        assert.equal(get("selected").value, "0",
+            "undo restores the original selected stroke");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), original);
+        get("slant-redo").dispatch("click");
+        assert.equal(get("selected").value, "1");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(expected));
+        add(nfd, 1100, 3000, 1101, 3000);
+        choose(nfd, 4);
+        assert.equal(split.disabled, true,
+            "one-unit segment has no strict integer midpoint");
+        const refused = downloads.length;
+        split.dispatch("click");
+        assert.equal(downloads.length, refused);
+        assert.equal(get("slant-undo").textContent,
+            "Undo last stroke addition");
+        editor.reset();
+        assert.equal(split.disabled, true);
+        assert.equal(get("slant-undo").disabled, true);
     } finally {
         ui.restore();
     }

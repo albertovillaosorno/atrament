@@ -1500,6 +1500,14 @@
             <p class="field-help">Clearing removes only this exact Unicode
               grapheme's strokes from the unsaved draft, not other glyphs.
               Use Undo to recover the whole shape before downloading TSV.</p>
+            <button id="glyph-subdivide" type="button" disabled>
+              Split selected stroke at its midpoint (undoable)
+            </button>
+            <p class="field-help">Split replaces one directed line with
+              two touching segments of equal pen color and width. The new
+              integer midpoint is selected for further editing. Very short
+              strokes and a full 4,096-segment library refuse. The unsaved
+              change uses one Undo step; download TSV explicitly.</p>
             <button id="glyph-reverse" type="button" disabled>
               Reverse selected pen direction
             </button>

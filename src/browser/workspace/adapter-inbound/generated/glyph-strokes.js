@@ -173,6 +173,44 @@ export function encodeGlyphLibrary(strokes) {
     }
     return result;
 }
+// A selected directed segment can be subdivided without any inferred
+// pen lift. Integer midpoint rounding is part of the explicit native TSV
+// geometry: both new segments meet at exactly the same sampled point.
+function subdivisionMidpoint(stroke) {
+    const x = Math.round((stroke.x1 + stroke.x2) / 2);
+    const y = Math.round((stroke.y1 + stroke.y2) / 2);
+    if ((x === stroke.x1 && y === stroke.y1)
+        || (x === stroke.x2 && y === stroke.y2))
+        return null;
+    return { x, y };
+}
+export function subdivideGlyphStroke(source, grapheme, index) {
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Stroke subdivision requires an exact visible glyph");
+    }
+    if (!Number.isSafeInteger(index) || index < 0
+        || source[index]?.grapheme !== grapheme) {
+        throw new Error("Choose a stroke of the selected exact glyph");
+    }
+    if (source.length >= MAX_STROKES) {
+        throw new Error("Subdivision exceeds 4096 authored strokes");
+    }
+    const original = validateStroke(source[index]);
+    const midpoint = subdivisionMidpoint(original);
+    if (midpoint === null) {
+        throw new Error("Stroke is too short to subdivide in whole µm");
+    }
+    const first = validateStroke({
+        ...original, x2: midpoint.x, y2: midpoint.y,
+    });
+    const second = validateStroke({
+        ...original, x1: midpoint.x, y1: midpoint.y,
+    });
+    const candidate = source.slice();
+    candidate.splice(index, 1, first, second);
+    encodeGlyphLibrary(candidate);
+    return candidate;
+}
 export function candidatePenPaths(strokes, grapheme) {
     if (!exactGrapheme(grapheme)) {
         throw new Error("Path inspection requires one exact visible glyph");
@@ -3991,6 +4029,7 @@ export function createGlyphStrokeEditor() {
     const selected = required("glyph-selected");
     const update = required("glyph-update");
     const remove = required("glyph-remove");
+    const subdivide = required("glyph-subdivide");
     const clearGlyph = required("glyph-clear");
     const reverse = required("glyph-reverse");
     const reversePath = required("glyph-reverse-path");
@@ -4043,7 +4082,8 @@ export function createGlyphStrokeEditor() {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, clearGlyph, reverse, reversePath, startPath, closePath,
+        remove, subdivide, clearGlyph, reverse, reversePath,
+        startPath, closePath,
         translatePath,
         pathDx, pathDy,
         earlierPath, laterPath, earlier, later, join, save,
@@ -5177,6 +5217,9 @@ export function createGlyphStrokeEditor() {
             || drawing !== null;
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
+        subdivide.disabled = !active || drawing !== null
+            || selectedIndex === null || strokes.length >= MAX_STROKES
+            || subdivisionMidpoint(strokes[selectedIndex]) === null;
         clearGlyph.disabled = !active || shown.length === 0
             || drawing !== null;
         reverse.disabled = !active || selectedIndex === null;
@@ -6127,6 +6170,20 @@ export function createGlyphStrokeEditor() {
             commitInkEdit(next, character.value, "stroke edit", index);
             message("Updated selected stroke; " + strokes.length
                 + " unsaved strokes");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    subdivide.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null)
+            return;
+        try {
+            const index = selectedIndex;
+            const target = character.value;
+            const next = subdivideGlyphStroke(strokes, target, index);
+            commitInkEdit(next, target, "stroke subdivision", index + 1);
+            message("Subdivided selected directed stroke; unsaved");
         }
         catch (error) {
             message(String(error));

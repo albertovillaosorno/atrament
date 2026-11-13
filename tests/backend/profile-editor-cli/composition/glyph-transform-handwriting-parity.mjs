@@ -10,7 +10,7 @@ import test from 'node:test';
 import {
     encodeGlyphLibrary, italicizeGlyphStrokes, rotateGlyphStrokes,
     scaleGlyphHeight, scaleGlyphInk, scaleGlyphWidth,
-    translateGlyphStrokes,
+    translateGlyphStrokes, subdivideGlyphStroke,
 // jig-ignore-next-line: static ESM import needs a literal path.
 } from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -209,3 +209,67 @@ test('browser and native transformed shapes render identical PDF and PNG',
             }
         }
     });
+
+
+// The native path inspector must see the new seam as a continuous directed
+// pen-down gesture. The existing Rust notebook binary consumes the exact
+// browser TSV, not a separate surrogate or a second shape implementation.
+test("browser stroke subdivision exports valid native PDF and RGBA PNG",
+    { timeout: 90_000 }, () => {
+    const built = spawnSync(cargo, [
+        "build", "--locked", "--offline", "--quiet",
+        "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+    ], { cwd: root, encoding: "utf8", timeout: 90_000,
+        env: { ...process.env, TMPDIR: join(root, ".temp") } });
+    assert.equal(built.error, undefined, built.error?.message);
+    assert.equal(built.status, 0, built.stderr);
+
+    const source = [
+        { grapheme: nfd, x1: 1000, y1: 900, x2: 1601, y2: 1702,
+            width: 251, color: colors[0] },
+        { grapheme: nfc, x1: 400, y1: 800, x2: 500, y2: 1200,
+            width: 251, color: colors[1] },
+        { grapheme: nfd, x1: 1601, y1: 1702, x2: 2000, y2: 2200,
+            width: 251, color: colors[0] },
+    ];
+    const divided = subdivideGlyphStroke(source, nfd, 0);
+    const tsv = encodeGlyphLibrary(divided);
+    const invoke = (args, binaryOutput = false) => spawnSync(binary, args, {
+        cwd: root, input: Buffer.from(tsv, "utf8"),
+        encoding: binaryOutput ? undefined : "utf8",
+        timeout: 30_000, maxBuffer: 16 * 1024 * 1024,
+    });
+    const readback = invoke(["glyphs", "--profile", "-"]);
+    assert.equal(readback.status, 0, readback.stderr);
+    assert.equal(readback.stdout, tsv);
+    const report = invoke([
+        "glyphs", "--profile", "-", "--inspect-paths", nfd,
+    ]);
+    assert.equal(report.status, 0, report.stderr);
+    assert.match(report.stdout, /Strokes: 3\nPaths: 1\nPen lifts: 0/);
+    assert.match(report.stdout, /strokes 1\.\.3 \(3 segments\)/);
+    const other = invoke([
+        "glyphs", "--profile", "-", "--inspect-paths", nfc,
+    ]);
+    assert.equal(other.status, 0, other.stderr);
+    assert.match(other.stdout, /Strokes: 1\nPaths: 1\nPen lifts: 0/);
+    for (const format of ["pdf", "png"]) {
+        const flags = ["notebook", "--glyph-file", "-",
+            "--place-text", "1", "25000", "30000", nfd + nfc,
+            "--export-paper", format];
+        if (format === "png") flags.push("--dpi", "72");
+        const actual = invoke(flags, true);
+        assert.equal(actual.error, undefined, actual.error?.message);
+        assert.equal(actual.status, 0, String(actual.stderr));
+        assert.ok(actual.stdout.length > 100, format);
+        const signature = format === "pdf"
+            ? Buffer.from("%PDF-")
+            : Buffer.from("89504e470d0a1a0a", "hex");
+        assert.ok(actual.stdout.subarray(0, signature.length)
+            .equals(signature), format);
+        const replay = invoke(flags, true);
+        assert.equal(replay.status, 0, String(replay.stderr));
+        assert.deepEqual(replay.stdout, actual.stdout,
+            "native output must be byte-stable after subdivision");
+    }
+});

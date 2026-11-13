@@ -2104,6 +2104,17 @@ read-only preview, clipping refusal, exact NFC/NFD TSV download, undo/redo,
 and lack of new backend requests. Rust independently reopens the downloaded
 TSV and renders real PDF and transparent PNG ink from the reflected strokes.
 
+**Split selected stroke at its midpoint (undoable)** adds a manual pen
+editing step. Select one directed segment, then split it into two touching
+integer-micrometre segments with unchanged pen width and color. The second
+half becomes selected, so its endpoints can be adjusted separately.
+
+Splits retain source order and exact NFC/NFD keys, but a rounded midpoint
+can deviate from the original straight line by less than one micrometre.
+A one-unit-long stroke or the 4,096-segment limit refuses; no hidden pen
+lift, saved parametric curve, or implicit TSV download is introduced. The
+eight-step editor recovery can undo/redo the whole split.
+
 New edits after undo discard the redo tail, and the oldest step is evicted
 after eight successful edits. Identity transforms and refused edits preserve
 history; a successful TSV import or session reset clears it. Download
