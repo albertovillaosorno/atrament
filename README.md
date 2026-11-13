@@ -670,6 +670,28 @@ values refuse before source-file/standard-input access, and unfit
 writing rectangles cannot overwrite a previously accepted PDF. The
 horizontal center is nominal, not optical or based on varied ink paths.
 
+For Markdown blockquotes, use `--flow-quote-align center` or `right` to
+position only the quoted handwriting within its measured writing band.
+The vertical quote rule stays in the selected left gutter on every physical
+row, including wrapped continuations and subsequent pages. Existing
+`--flow-list-quote-inset-um` and `--flow-list-quote-right-inset-um` still
+bound the quote text without moving its rule; list markers and prose
+alignment remain independent.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-list-quote-inset-um 4000 \
+  --flow-list-quote-right-inset-um 6000 \
+  --flow-quote-align center --export-paper pdf \
+  --output centered-quotes.pdf
+```
+
+Omitting the option or selecting `left` preserves earlier PDF/PNG/ink TSV
+bytes. This Markdown-only CLI option does not save an alignment style or
+move manually placed ink, and nominal contours do not predict varied pen
+extents. Unsupported or duplicate selections refuse before source reads.
+
 To indent only the **first physical row** of each Markdown prose block,
 select `--flow-body-first-line-indent-um 8000`. This shifts the first
 row 8 mm right and shortens its writing width by the same amount; wrapped

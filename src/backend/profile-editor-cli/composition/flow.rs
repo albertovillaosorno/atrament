@@ -65,7 +65,7 @@ pub(super) enum FlowFormat {
     Plain,
 }
 
-/// Alignment of Markdown prose only, never headings or structural rows.
+/// Alignment for Markdown body or quote text, never structural ornaments.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
 pub(super) enum BodyAlign {
@@ -79,6 +79,7 @@ pub(super) enum BodyAlign {
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
 pub(super) struct FlowTypography {
     pub(super) body_align: Option<BodyAlign>,
+    pub(super) quote_align: Option<BodyAlign>,
     pub(super) body_continuation_indent: Option<u32>,
     pub(super) body_first_line_indent: Option<u32>,
     pub(super) body_inset: Option<u32>,
@@ -579,6 +580,7 @@ struct RuleChain {
 
 struct Layout<'model> {
     body_align: Option<BodyAlign>,
+    quote_align: Option<BodyAlign>,
     body_continuation_indent_um: u32,
     body_first_line_indent_um: u32,
     body_inset_um: u32,
@@ -649,6 +651,33 @@ impl Layout<'_> {
         };
         start_x.checked_add(shift)
             .ok_or_else(|| "flow body alignment position overflow".into())
+    }
+
+    // Move only quoted text within the remaining structural writing band.
+    // The vertical quote bar belongs to the original gutter, regardless of
+    // the wrapped row's selected text alignment.
+    fn aligned_quote_origin(
+        &self, text: &str, extent: u32, start_x: u32,
+    ) -> Result<u32, String> {
+        let Some(align) = self.quote_align else {
+            return Ok(start_x);
+        };
+        if align == BodyAlign::Left {
+            return Ok(start_x);
+        }
+        let capacity = self.flow_row_bounds(LineStyle::Quote, false)?.1;
+        let ink_extent = heading_contour_extent(
+            text, extent, self.statistics,
+        )?;
+        let available = capacity.checked_sub(ink_extent)
+            .ok_or("flow quote alignment exceeds writing row")?;
+        let shift = if align == BodyAlign::Center {
+            available / 2
+        } else {
+            available
+        };
+        start_x.checked_add(shift)
+            .ok_or_else(|| "flow quote alignment position overflow".into())
     }
 
     // Horizontal placement includes every visible nominal glyph contour,
@@ -1665,6 +1694,8 @@ impl Layout<'_> {
                 (self.aligned_body_origin(
                     &text, extent, start_x, first,
                 )?, None)
+            } else if matches!(style, LineStyle::Quote) {
+                (self.aligned_quote_origin(&text, extent, start_x)?, None)
             } else {
                 (start_x, None)
             };
@@ -1723,7 +1754,7 @@ impl Layout<'_> {
             }
         }
         if matches!(style, LineStyle::Quote) {
-            self.write_quote_rule(row_x, y)?;
+            self.write_quote_rule(start_x, y)?;
         }
         self.write_list_marker(style, first, row_x, y)?;
         if matches!(style, LineStyle::Heading(_)) {
@@ -2863,6 +2894,7 @@ fn initialize_layout<'model>(
     };
     Ok(Layout {
         body_align: spacing.body_align,
+        quote_align: spacing.quote_align,
         body_first_line_indent_um: spacing.body_first_line_indent.unwrap_or(0),
         body_continuation_indent_um:
             spacing.body_continuation_indent.unwrap_or(0),
@@ -3034,6 +3066,10 @@ pub(super) fn layout_flow_with_typography(
     if spacing.body_align.is_some()
         && source.format != FlowFormat::Markdown {
         return Err("flow body alignment requires Markdown flow".into());
+    }
+    if spacing.quote_align.is_some()
+        && source.format != FlowFormat::Markdown {
+        return Err("flow quote alignment requires Markdown flow".into());
     }
     if spacing.body_first_line_indent
         .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {

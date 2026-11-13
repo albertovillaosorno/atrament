@@ -4402,3 +4402,18 @@ ink TSV replay, typed/CLI preflight, and atomic refusal of unfit regions.
 Omitted or explicit zero retains prior bytes. This remains an export-only
 layout selection; saved semantic block styles and the complete notebook
 editor journey are not implemented. ATR-P2-011 stays open.
+
+## Selected Markdown quote-text alignment (partial) — 2026-11-13
+
+The native CLI additionally accepts `--flow-quote-align left|center|right`
+for one-level Markdown blockquotes. Center/right shifts the physical
+handwriting text within the measured quote writing width, independently
+of prose and heading alignment. Every vertical quote rule stays at its
+original left gutter, including wrapped continuations and page turns.
+
+Four native regressions verify exact row and bar coordinates, combined
+left/right quote insets, multi-page wrapping, deterministic real PDF/PNG
+and versioned ink TSV output, default/explicit-left byte parity, early
+flag and typed refusal, and preserved existing output on layout failure.
+This remains export-only: no saved blockquote identity, optical alignment
+or full semantic notebook Export is implied. ATR-P2-011 remains open.

@@ -187,6 +187,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-paragraph-gap-um GAP_UM (0..12000, Markdown only)] \
     [--flow-body-inset-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-align left|center|right (Markdown only)] \
+    [--flow-quote-align left|center|right (Markdown only)] \
     [--flow-body-first-line-indent-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-continuation-indent-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-right-inset-um INSET_UM (0..12000, Markdown only)] \
@@ -241,6 +242,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     Titles and literal code stay unchanged by those prose insets; \
     --flow-body-align centers or right-aligns each measured prose row \
     within the remaining inset writing width; defaults to left. \
+    --flow-quote-align centers or right-aligns quoted text only, \
+    preserving each vertical quote rule in its original gutter. \
     --flow-list-quote-inset-um shifts list/quote ink 0..12 mm right; \
     --flow-list-quote-right-inset-um reserves 0..12 mm on their right. \
     Explicit --place-text overlays may coexist with flow, outside its \
@@ -400,12 +403,11 @@ struct NotebookFlagPreflight {
 // Output and heading selections do not depend on source bytes. Consume their
 // arity before opening an earlier file or waiting for stdin to close.
 impl NotebookFlagPreflight {
-    fn select_body_align(
-        &mut self, iter: &mut Iter<'_, String>,
+    fn select_flow_align(
+        &mut self, option: &str, iter: &mut Iter<'_, String>,
     ) -> Result<usize, String> {
-        self.unique("--flow-body-align",
-            "--flow-body-align may appear only once")?;
-        let _alignment = parse_notebook_flow_body_align(iter)?;
+        self.unique(option, &format!("{option} may appear only once"))?;
+        let _alignment = parse_notebook_flow_align(iter, option)?;
         Ok(0)
     }
 
@@ -536,7 +538,8 @@ impl NotebookFlagPreflight {
                 let _gap = parse_notebook_flow_paragraph_gap(iter)?;
                 0
             }
-            "--flow-body-align" => self.select_body_align(iter)?,
+            "--flow-body-align" | "--flow-quote-align" =>
+                self.select_flow_align(option, iter)?,
             "--flow-body-first-line-indent-um"
             | "--flow-body-continuation-indent-um" =>
                 self.select_body_row_indent(option, iter)?,
@@ -611,6 +614,8 @@ impl NotebookFlagPreflight {
             flow_format, region_selected,
             FlowTypography {
                 body_align: has("--flow-body-align")
+                    .then_some(BodyAlign::Left),
+                quote_align: has("--flow-quote-align")
                     .then_some(BodyAlign::Left),
                 body_first_line_indent:
                     has("--flow-body-first-line-indent-um").then_some(0),
@@ -2249,14 +2254,14 @@ fn select_list_quote_inset(
     Ok(())
 }
 
-fn parse_notebook_flow_body_align(
-    iter: &mut Iter<'_, String>,
+fn parse_notebook_flow_align(
+    iter: &mut Iter<'_, String>, option: &str,
 ) -> Result<BodyAlign, String> {
     match iter.next().map(String::as_str) {
         Some("left") => Ok(BodyAlign::Left),
         Some("center") => Ok(BodyAlign::Center),
         Some("right") => Ok(BodyAlign::Right),
-        _ => Err("--flow-body-align requires left, center or right".into()),
+        _ => Err(format!("{option} requires left, center or right")),
     }
 }
 
@@ -2271,11 +2276,16 @@ fn select_notebook_flow_typography(
             select_notebook_flow_paragraph_gap(
                 iter, &mut typography.paragraph_gap,
             ),
-        "--flow-body-align" => {
-            if typography.body_align.is_some() {
-                return Err("--flow-body-align may appear only once".into());
+        "--flow-body-align" | "--flow-quote-align" => {
+            let selected = if option == "--flow-body-align" {
+                &mut typography.body_align
+            } else {
+                &mut typography.quote_align
+            };
+            if selected.is_some() {
+                return Err(format!("{option} may appear only once"));
             }
-            typography.body_align = Some(parse_notebook_flow_body_align(iter)?);
+            *selected = Some(parse_notebook_flow_align(iter, option)?);
             Ok(())
         }
         _ => select_flow_inset(iter, typography, option),
@@ -2344,6 +2354,10 @@ fn validate_notebook_flow_flag_compatibility(
     if typography.body_align.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-body-align requires a Markdown flow".into());
+    }
+    if typography.quote_align.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err("--flow-quote-align requires a Markdown flow".into());
     }
     if typography.body_first_line_indent.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
@@ -2791,7 +2805,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             | "--heading-marker-scale" => heading.parse(option, &mut iter)?,
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
-            "--flow-pitch-um" | "--flow-body-align"
+            "--flow-pitch-um" | "--flow-body-align" | "--flow-quote-align"
             | "--flow-body-first-line-indent-um" | "--flow-body-inset-um"
             | "--flow-body-continuation-indent-um" | "--flow-paragraph-gap-um"
             | "--flow-body-right-inset-um" | "--flow-list-quote-inset-um"

@@ -14862,3 +14862,199 @@ fn markdown_continuation_indent_can_exceed_first_row_free_width() {
         .collect::<Vec<_>>(), ["a", "a", "a", "a"]);
     assert!(rows.iter().all(|row| row.origin_um.0 == 48_500));
 }
+
+#[test]
+fn selected_markdown_quote_alignment_preserves_rule_gutter_and_prose() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "# a\n\na a\n\n> a a  \n> a\n\n- a\n\n    a",
+    ).expect("mixed Markdown rows");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 70_000, height: 200_000,
+    };
+    let base = FlowTypography {
+        list_quote_inset: Some(4_000),
+        list_quote_right_inset: Some(10_000),
+        body_align: Some(BodyAlign::Right),
+        ..FlowTypography::default()
+    };
+    let (left, left_marks, _) = layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), base,
+    ).expect("left-aligned quote baseline");
+    let quotes = |align| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            quote_align: Some(align), ..base
+        },
+    ).expect("chosen quote alignment");
+    let (explicit_left, left_rules, _) = quotes(BodyAlign::Left);
+    assert_eq!(left.iter().map(|row| (&row.text, row.origin_um))
+        .collect::<Vec<_>>(), explicit_left.iter()
+        .map(|row| (&row.text, row.origin_um)).collect::<Vec<_>>());
+    assert_eq!(left_marks, left_rules);
+    let (center, center_marks, _) = quotes(BodyAlign::Center);
+    let (right, right_marks, _) = quotes(BodyAlign::Right);
+    assert_eq!(left_marks, center_marks);
+    assert_eq!(left_marks, right_marks);
+    assert_eq!(left.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(),
+        ["a", "a a", "a a", "a", "a", "    a"]);
+    assert_eq!(left.iter().map(|row| row.origin_um.0)
+        .collect::<Vec<_>>(),
+        [32_500, 86_500, 42_500, 42_500, 42_500, 32_500]);
+    assert_eq!(center.iter().map(|row| row.origin_um.0)
+        .collect::<Vec<_>>(),
+        [32_500, 86_500, 59_500, 63_500, 42_500, 32_500]);
+    assert_eq!(right.iter().map(|row| row.origin_um.0)
+        .collect::<Vec<_>>(),
+        [32_500, 86_500, 76_500, 84_500, 42_500, 32_500]);
+    let bars = center_marks.iter().filter(|mark| mark.width_um == 400)
+        .collect::<Vec<_>>();
+    assert_eq!(bars.len(), 2);
+    assert!(bars.iter().all(|mark| mark.start_um.0 == 39_500
+        && mark.end_um.0 == 39_500));
+}
+
+#[test]
+fn selected_markdown_quote_alignment_wraps_and_paginates_same_ink() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "> a a a a a a a a a a a a a a a a",
+    ).expect("long quoted paragraph");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 34_000, height: 25_000,
+    };
+    let (left, original_bars, pages) = layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            list_quote_right_inset: Some(6_000),
+            ..FlowTypography::default()
+        },
+    ).expect("quoted wrap across pages");
+    let (right, selected_bars, aligned_pages) = layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            list_quote_right_inset: Some(6_000),
+            quote_align: Some(BodyAlign::Right),
+            ..FlowTypography::default()
+        },
+    ).expect("aligned quoted wrap across pages");
+    assert!(pages >= 3);
+    assert_eq!(pages, aligned_pages);
+    assert_eq!(original_bars, selected_bars);
+    assert!(left.iter().zip(right.iter()).all(|(ordinary, aligned)| {
+        ordinary.page == aligned.page
+            && ordinary.text == aligned.text
+            && ordinary.origin_um.1 == aligned.origin_um.1
+            && ordinary.origin_um.0 <= aligned.origin_um.0
+    }));
+    assert!(left.iter().zip(right.iter()).any(|(ordinary, aligned)|
+        ordinary.origin_um.0 < aligned.origin_um.0));
+    assert!(right.iter().any(|row| row.page > 1));
+    assert_eq!(selected_bars.len(), right.len());
+    assert!(selected_bars.iter().all(|mark| mark.start_um.0 == 35_500));
+}
+
+#[test]
+fn markdown_quote_alignment_exports_deterministic_native_formats() {
+    let source = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--flow-markdown", "> a a a a a a a a a a\n\n- a\n\na",
+        "--flow-region", "30000", "40000", "30000", "26000",
+        "--flow-list-quote-inset-um", "4000",
+        "--flow-list-quote-right-inset-um", "6000",
+        "--flow-body-align", "center",
+    ]);
+    let render = |alignment: Option<&str>, format: &str| {
+        let mut command = source.clone();
+        if let Some(align) = alignment {
+            command.extend(args(&["--flow-quote-align", align]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72", "--png-page", "2"]));
+        }
+        execute_notebook(&command).expect("native quote export")
+            .expect("PDF, PNG or ink TSV output")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let baseline = render(None, format);
+        assert_eq!(baseline, render(Some("left"), format),
+            "explicit quote-left retains {format} bytes");
+        for alignment in ["center", "right"] {
+            let selected = render(Some(alignment), format);
+            assert_eq!(selected, render(Some(alignment), format),
+                "deterministic {alignment} quote {format}");
+            assert_ne!(selected, baseline,
+                "selected {alignment} quote changes {format}");
+            match format {
+                "pdf" => assert!(selected.starts_with(b"%PDF-1.4")),
+                "png" => assert!(selected.starts_with(b"\x89PNG\r\n\x1a\n")),
+                _ => assert!(selected.starts_with(b"atrament.page-ink.v1\n")),
+            }
+        }
+    }
+}
+
+#[test]
+fn invalid_markdown_quote_alignment_preflights_and_preserves_pdf() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, expected) in [
+        (vec!["--flow-quote-align", "justify"],
+            "--flow-quote-align requires left, center or right"),
+        (vec!["--flow-quote-align"],
+            "--flow-quote-align requires left, center or right"),
+        (vec!["--flow-quote-align", "left",
+            "--flow-quote-align", "right"],
+            "--flow-quote-align may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("invalid option before selected input"), expected);
+    }
+    assert_eq!(preflight_notebook_sources(&args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--flow-quote-align", "center",
+    ])).expect_err("Markdown-only quote alignment"),
+        "--flow-quote-align requires a Markdown flow");
+    let plain = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain source");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None, FlowTypography {
+            quote_align: Some(BodyAlign::Center),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed Markdown-only option"),
+        "flow quote alignment requires Markdown flow");
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"preserve-existing-quote-PDF")
+        .expect("test sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "> a a",
+        "--flow-region", "30000", "40000", "21000", "26000",
+        "--flow-list-quote-right-inset-um", "12000",
+        "--flow-quote-align", "right",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let err = execute_notebook(&command)
+        .expect_err("unfit quote row refuses before PDF replacement");
+    assert!(err.contains("flow list/quote right inset leaves no writing row"),
+        "{err}");
+    assert_eq!(fs::read(&target).expect("original PDF"),
+        b"preserve-existing-quote-PDF");
+    fs::remove_file(target).expect("clean test-owned sentinel");
+}
