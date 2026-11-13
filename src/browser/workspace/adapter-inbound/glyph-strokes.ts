@@ -4191,7 +4191,12 @@ export function createGlyphStrokeEditor(): {
         | "pen path closure" | "pen path move"
         | "pen path order" | "pen connection"
         | "stroke removal" | "starter replacement"
-        | "glyph copy" | "accent composition";
+        | "glyph copy" | "accent composition"
+        | "lowercase fill" | "connected lowercase fill"
+        | "bilingual fill" | "connected bilingual fill"
+        | "punctuation fill" | "quotation fill"
+        | "math fill" | "digit fill" | "capital fill"
+        | "text mark fill" | "Spanish accent fill";
     let transformHistory: {
         before: string; after: string;
         beforeSelection: number | null; afterSelection: number | null;
@@ -5762,9 +5767,7 @@ export function createGlyphStrokeEditor(): {
                 geometricStarter(glyph, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "lowercase fill", null);
             message(`Filled ${missing.length} missing lowercase templates (`
                 + `${added.length} sampled strokes); unsaved draft`);
         } catch (error) {
@@ -5786,9 +5789,7 @@ export function createGlyphStrokeEditor(): {
             const count = new Set(next.map((line) => line.grapheme)).size
                 - new Set(strokes.map((line) => line.grapheme)).size;
             const added = next.length - strokes.length;
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "connected lowercase fill", null);
             message(`Filled ${count} missing connected lowercase glyphs (`
                 + `${added} sampled strokes); unsaved draft`);
         } catch (error) {
@@ -5830,9 +5831,7 @@ export function createGlyphStrokeEditor(): {
             const count = new Set(next.map((line) => line.grapheme)).size
                 - new Set(strokes.map((line) => line.grapheme)).size;
             const added = next.length - strokes.length;
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, form === "cursive" ? "connected bilingual fill" : "bilingual fill", null);
             const style = form === "cursive" ? "connected " : "";
             message(`Filled ${count} missing ${style}bilingual baseline `
                 + `glyphs (`
@@ -5863,9 +5862,7 @@ export function createGlyphStrokeEditor(): {
                 geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "punctuation fill", null);
             message(`Filled ${missing.length} missing punctuation glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         } catch (error) {
@@ -5890,9 +5887,7 @@ export function createGlyphStrokeEditor(): {
                 geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "quotation fill", null);
             message(`Filled ${missing.length} missing quotation glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         } catch (error) {
@@ -5918,9 +5913,7 @@ export function createGlyphStrokeEditor(): {
                 geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "math fill", null);
             message(`Filled ${missing.length} missing math glyphs (`
                 + `${added.length} exact strokes); unsaved draft`);
         } catch (error) {
@@ -5944,9 +5937,7 @@ export function createGlyphStrokeEditor(): {
                 geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "digit fill", null);
             message(`Filled ${missing.length} missing numeral glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         } catch (error) {
@@ -5971,9 +5962,7 @@ export function createGlyphStrokeEditor(): {
                 geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "capital fill", null);
             message(`Filled ${missing.length} missing uppercase glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         } catch (error) {
@@ -5997,9 +5986,7 @@ export function createGlyphStrokeEditor(): {
                 geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "text mark fill", null);
             message(`Filled ${missing.length} missing text punctuation `
                 + `glyphs (${added.length} sampled strokes); unsaved draft`);
         } catch (error) {
@@ -6045,9 +6032,7 @@ export function createGlyphStrokeEditor(): {
                     position));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "Spanish accent fill", null);
             const casing = letterCase === "uppercase" ? "uppercase " : "";
             message(`Filled ${missing.length} missing Spanish `
                 + `${casing}${normalization} accents `

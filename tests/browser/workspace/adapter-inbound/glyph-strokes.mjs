@@ -8262,6 +8262,79 @@ test("one-step stroke undo restores empty drafts and directed edits",
     }
 });
 
+test("bulk handwriting fills undo as one atomic exact-library change",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { editor, get, downloads } = ui;
+        const original = [stroke("ñ"), stroke("∞")];
+        const before = encodeGlyphLibrary(original);
+        const importInk = async () => {
+            const raw = new TextEncoder().encode(before);
+            get("load").files = [{ size: raw.length,
+                arrayBuffer: async () => raw.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = "ñ";
+            get("character").dispatch("input");
+        };
+        const save = async () => {
+            get("save").dispatch("click");
+            return downloads.at(-1).text();
+        };
+        editor.start();
+        await importInk();
+        get("seed-lowercase").dispatch("click");
+        assert.match(get("status").textContent, /Filled 26 missing/);
+        assert.equal(get("slant-undo").textContent,
+            "Undo last lowercase fill");
+        const lowercaseBytes = await save();
+        const lower = parseGlyphLibrary(lowercaseBytes);
+        assert.equal(new Set(lower.map((item) => item.grapheme)).size, 28);
+        assert.deepEqual(lower.slice(0, 2), original,
+            "batch preserves custom input and exact Unicode source slots");
+        get("character").value = "a";
+        get("character").dispatch("input");
+        assert.equal(get("slant-undo").disabled, true,
+            "batch recovery is gated to original selected glyph");
+        get("character").value = "ñ";
+        get("character").dispatch("input");
+        get("slant-undo").dispatch("click");
+        assert.equal(await save(), before,
+            "one undo removes all 26 new glyphs, not just one shape");
+        assert.equal(get("slant-redo").disabled, false);
+        get("seed-lowercase").dispatch("click");
+        assert.equal(get("slant-redo").disabled, true,
+            "a fresh batch replaces previous redo instead of stacking");
+        assert.equal(await save(), lowercaseBytes);
+        get("seed-punctuation").dispatch("click");
+        assert.equal(get("slant-undo").textContent,
+            "Undo last punctuation fill");
+        const punctuatedBytes = await save();
+        assert.notEqual(punctuatedBytes, lowercaseBytes);
+        get("slant-undo").dispatch("click");
+        assert.equal(await save(), lowercaseBytes,
+            "later batch undo restores prior batch intact");
+        get("slant-redo").dispatch("click");
+        assert.equal(await save(), punctuatedBytes);
+        await importInk();
+        get("seed-baseline").dispatch("click");
+        assert.match(get("status").textContent, /bilingual baseline/);
+        assert.equal(get("slant-undo").textContent,
+            "Undo last bilingual fill");
+        const fullBaseline = await save();
+        assert.ok(fullBaseline.length > before.length);
+        get("slant-undo").dispatch("click");
+        assert.equal(await save(), before,
+            "large bilingual fill remains a single exact history step");
+        get("slant-redo").dispatch("click");
+        assert.equal(await save(), fullBaseline);
+        editor.reset();
+        assert.equal(get("slant-undo").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});
+
 test("starter replacement, exact copy and accent composition are undoable",
     async () => {
     const ui = mountEditor();

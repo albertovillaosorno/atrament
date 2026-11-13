@@ -5555,9 +5555,7 @@ export function createGlyphStrokeEditor() {
             const added = missing.flatMap((glyph) => geometricStarter(glyph, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "lowercase fill", null);
             message(`Filled ${missing.length} missing lowercase templates (`
                 + `${added.length} sampled strokes); unsaved draft`);
         }
@@ -5580,9 +5578,7 @@ export function createGlyphStrokeEditor() {
             const count = new Set(next.map((line) => line.grapheme)).size
                 - new Set(strokes.map((line) => line.grapheme)).size;
             const added = next.length - strokes.length;
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "connected lowercase fill", null);
             message(`Filled ${count} missing connected lowercase glyphs (`
                 + `${added} sampled strokes); unsaved draft`);
         }
@@ -5627,9 +5623,7 @@ export function createGlyphStrokeEditor() {
             const count = new Set(next.map((line) => line.grapheme)).size
                 - new Set(strokes.map((line) => line.grapheme)).size;
             const added = next.length - strokes.length;
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, form === "cursive" ? "connected bilingual fill" : "bilingual fill", null);
             const style = form === "cursive" ? "connected " : "";
             message(`Filled ${count} missing ${style}bilingual baseline `
                 + `glyphs (`
@@ -5661,9 +5655,7 @@ export function createGlyphStrokeEditor() {
             const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "punctuation fill", null);
             message(`Filled ${missing.length} missing punctuation glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         }
@@ -5689,9 +5681,7 @@ export function createGlyphStrokeEditor() {
             const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "quotation fill", null);
             message(`Filled ${missing.length} missing quotation glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         }
@@ -5718,9 +5708,7 @@ export function createGlyphStrokeEditor() {
             const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "math fill", null);
             message(`Filled ${missing.length} missing math glyphs (`
                 + `${added.length} exact strokes); unsaved draft`);
         }
@@ -5745,9 +5733,7 @@ export function createGlyphStrokeEditor() {
             const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "digit fill", null);
             message(`Filled ${missing.length} missing numeral glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         }
@@ -5773,9 +5759,7 @@ export function createGlyphStrokeEditor() {
             const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "capital fill", null);
             message(`Filled ${missing.length} missing uppercase glyphs (`
                 + `${added.length} sampled strokes); unsaved draft`);
         }
@@ -5800,9 +5784,7 @@ export function createGlyphStrokeEditor() {
             const added = missing.flatMap((g) => geometricStarter(g, ...values));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "text mark fill", null);
             message(`Filled ${missing.length} missing text punctuation `
                 + `glyphs (${added.length} sampled strokes); unsaved draft`);
         }
@@ -5844,9 +5826,7 @@ export function createGlyphStrokeEditor() {
             const added = missing.flatMap(([base, target]) => composeAccentedGlyph(strokes, base, target, color.value, position));
             const next = [...strokes, ...added];
             encodeGlyphLibrary(next);
-            strokes = next;
-            selectedIndex = null;
-            render();
+            commitInkEdit(next, character.value, "Spanish accent fill", null);
             const casing = letterCase === "uppercase" ? "uppercase " : "";
             message(`Filled ${missing.length} missing Spanish `
                 + `${casing}${normalization} accents `
