@@ -4417,3 +4417,21 @@ and versioned ink TSV output, default/explicit-left byte parity, early
 flag and typed refusal, and preserved existing output on layout failure.
 This remains export-only: no saved blockquote identity, optical alignment
 or full semantic notebook Export is implied. ATR-P2-011 remains open.
+
+## Selected Markdown bullet and checkbox text alignment (partial) — 2026-11-13
+
+The native CLI now admits `--flow-bullet-align left|center|right` for
+unordered bullet and checkbox task text only. Center/right shifts each
+wrapped row inside its measured list writing band while the original
+bullet dash or checkbox outline/check remains in the left structural
+gutter, even when the block paginates. Numbered item labels remain
+literal, fixed-position authored text; heading, quote, prose and code
+rows retain their existing independent layout policies.
+
+Four native regressions check exact row offsets, unchanged structural
+ink and numbered list placement, combined left/right list insets,
+multi-page wrapping, deterministic PDF/PNG/versioned ink TSV output,
+prior-byte equivalence of default/explicit-left, source-independent
+preflight refusal, typed Markdown-only validation, and immutable selected
+PDF output after an unfit composition. This is CLI-only and does not
+persist semantic list identities or complete the P1 notebook journey.

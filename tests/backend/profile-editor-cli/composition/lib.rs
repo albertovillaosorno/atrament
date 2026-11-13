@@ -15058,3 +15058,204 @@ fn invalid_markdown_quote_alignment_preflights_and_preserves_pdf() {
         b"preserve-existing-quote-PDF");
     fs::remove_file(target).expect("clean test-owned sentinel");
 }
+
+#[test]
+fn selected_markdown_bullet_alignment_preserves_marker_gutter_and_other_rows() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "# a\n\na a\n\n- a a\n\n- [x] a\n\n1. a\n\n> a\n\n    a",
+    ).expect("mixed Markdown rows");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 70_000, height: 200_000,
+    };
+    let base = FlowTypography {
+        list_quote_inset: Some(4_000),
+        list_quote_right_inset: Some(10_000),
+        body_align: Some(BodyAlign::Right),
+        quote_align: Some(BodyAlign::Center),
+        ..FlowTypography::default()
+    };
+    let choose = |align| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            bullet_align: align, ..base
+        },
+    ).expect("selected bullet alignment");
+    let (default, marks, pages) = choose(None);
+    let (left, left_marks, left_pages) = choose(Some(BodyAlign::Left));
+    assert_eq!(pages, left_pages);
+    assert_eq!(marks, left_marks);
+    assert_eq!(default.iter().map(|row| (&row.text, row.origin_um))
+        .collect::<Vec<_>>(), left.iter()
+        .map(|row| (&row.text, row.origin_um)).collect::<Vec<_>>());
+    let (center, center_marks, _) = choose(Some(BodyAlign::Center));
+    let (right, right_marks, _) = choose(Some(BodyAlign::Right));
+    assert_eq!(marks, center_marks);
+    assert_eq!(marks, right_marks);
+    assert_eq!(default.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(),
+        ["a", "a a", "a a", "a", "1. a", "a", "    a"]);
+    for (index, (normal, (middle, end))) in default.iter()
+        .zip(center.iter().zip(right.iter())).enumerate() {
+        assert_eq!((normal.page, normal.origin_um.1),
+            (middle.page, middle.origin_um.1));
+        assert_eq!((normal.page, normal.origin_um.1),
+            (end.page, end.origin_um.1));
+        let (shift_center, shift_right) = match index {
+            2 => (17_000, 34_000),
+            3 => (21_000, 42_000),
+            _ => (0, 0),
+        };
+        assert_eq!(middle.origin_um.0,
+            normal.origin_um.0 + shift_center);
+        assert_eq!(end.origin_um.0,
+            normal.origin_um.0 + shift_right);
+    }
+    // Neither the bullet nor the checked box moves with its selected text.
+    assert_eq!(marks.iter().filter(|mark| mark.width_um == 450
+        && mark.start_um.1 == mark.end_um.1).count(), 1);
+    assert!(marks.iter().any(|mark| mark.width_um == 350));
+}
+
+#[test]
+fn selected_markdown_bullet_alignment_wraps_without_moving_markers() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "- a a a a a a a a a a a a a a a a\n\n- [x] a a a a a a a a",
+    ).expect("long bullet and checkbox paragraphs");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 34_000, height: 25_000,
+    };
+    let base = FlowTypography {
+        list_quote_right_inset: Some(6_000),
+        ..FlowTypography::default()
+    };
+    let (left, marks, pages) = layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), base,
+    ).expect("wrapped list baseline");
+    let (right, selected_marks, selected_pages) = layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), FlowTypography {
+            bullet_align: Some(BodyAlign::Right), ..base
+        },
+    ).expect("wrapped aligned list");
+    assert!(pages >= 3);
+    assert_eq!(pages, selected_pages);
+    assert_eq!(marks, selected_marks);
+    assert!(left.iter().zip(right.iter()).all(|(ordinary, aligned)| {
+        ordinary.page == aligned.page
+            && ordinary.text == aligned.text
+            && ordinary.origin_um.1 == aligned.origin_um.1
+            && ordinary.origin_um.0 <= aligned.origin_um.0
+    }));
+    assert!(left.iter().zip(right.iter()).any(|(ordinary, aligned)|
+        ordinary.origin_um.0 < aligned.origin_um.0));
+    assert!(right.iter().any(|row| row.page > 1));
+    assert_eq!(selected_marks.iter().filter(|mark| mark.width_um == 350)
+        .count(), 4, "checkbox outline retains all edges");
+}
+
+#[test]
+fn markdown_bullet_alignment_exports_deterministic_native_formats() {
+    let source = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--flow-markdown", "- a a a a a a a a a a\n\n- [x] a\n\n> a\n\na",
+        "--flow-region", "30000", "40000", "30000", "26000",
+        "--flow-list-quote-inset-um", "4000",
+        "--flow-list-quote-right-inset-um", "6000",
+        "--flow-body-align", "center",
+        "--flow-quote-align", "right",
+    ]);
+    let render = |alignment: Option<&str>, format: &str| {
+        let mut command = source.clone();
+        if let Some(align) = alignment {
+            command.extend(args(&["--flow-bullet-align", align]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72", "--png-page", "2"]));
+        }
+        execute_notebook(&command).expect("native bullet export")
+            .expect("PDF, PNG or ink TSV output")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let baseline = render(None, format);
+        assert_eq!(baseline, render(Some("left"), format),
+            "explicit bullet-left retains {format} bytes");
+        for alignment in ["center", "right"] {
+            let selected = render(Some(alignment), format);
+            assert_eq!(selected, render(Some(alignment), format),
+                "deterministic {alignment} bullet {format}");
+            assert_ne!(selected, baseline,
+                "selected {alignment} bullet changes {format}");
+            match format {
+                "pdf" => assert!(selected.starts_with(b"%PDF-1.4")),
+                "png" => assert!(selected.starts_with(b"\x89PNG\r\n\x1a\n")),
+                _ => assert!(selected.starts_with(b"atrament.page-ink.v1\n")),
+            }
+        }
+    }
+}
+
+#[test]
+fn invalid_markdown_bullet_alignment_preflights_and_preserves_pdf() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, expected) in [
+        (vec!["--flow-bullet-align", "justify"],
+            "--flow-bullet-align requires left, center or right"),
+        (vec!["--flow-bullet-align"],
+            "--flow-bullet-align requires left, center or right"),
+        (vec!["--flow-bullet-align", "left",
+            "--flow-bullet-align", "right"],
+            "--flow-bullet-align may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("invalid option before selected input"), expected);
+    }
+    assert_eq!(preflight_notebook_sources(&args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--flow-bullet-align", "center",
+    ])).expect_err("Markdown-only bullet alignment"),
+        "--flow-bullet-align requires a Markdown flow");
+    let plain = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain source");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None, FlowTypography {
+            bullet_align: Some(BodyAlign::Center),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed Markdown-only option"),
+        "flow bullet alignment requires Markdown flow");
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"preserve-existing-bullet-PDF")
+        .expect("test sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "- a a",
+        "--flow-region", "30000", "40000", "21000", "26000",
+        "--flow-list-quote-right-inset-um", "12000",
+        "--flow-bullet-align", "right",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let err = execute_notebook(&command)
+        .expect_err("unfit bullet row refuses before PDF replacement");
+    assert!(err.contains("flow list/quote right inset leaves no writing row"),
+        "{err}");
+    assert_eq!(fs::read(&target).expect("original PDF"),
+        b"preserve-existing-bullet-PDF");
+    fs::remove_file(target).expect("clean test-owned sentinel");
+}

@@ -692,6 +692,28 @@ bytes. This Markdown-only CLI option does not save an alignment style or
 move manually placed ink, and nominal contours do not predict varied pen
 extents. Unsupported or duplicate selections refuse before source reads.
 
+For unordered Markdown bullets and checkbox tasks, select
+`--flow-bullet-align center` or `right` to align each measured row of item
+text within the list writing band. The bullet dash or checkbox stays at
+its original structural gutter even after wrapping or moving to another
+page. Numbered labels such as `1.` and `2)` are authored handwriting and
+remain left-aligned; heading, quote and prose alignment are independent.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-list-quote-inset-um 4000 \
+  --flow-list-quote-right-inset-um 6000 \
+  --flow-bullet-align center --export-paper pdf \
+  --output centered-bullets.pdf
+```
+
+Omitted and explicit `left` preserve earlier PDF/PNG/ink TSV bytes. This
+Markdown-only, export-only option measures nominal glyph contours; it does
+not move original list markers, persist notebook semantics or guarantee
+optical alignment after pen variation. Invalid selections refuse before
+source reads, and unfit layouts preserve existing selected output files.
+
 To indent only the **first physical row** of each Markdown prose block,
 select `--flow-body-first-line-indent-um 8000`. This shifts the first
 row 8 mm right and shortens its writing width by the same amount; wrapped

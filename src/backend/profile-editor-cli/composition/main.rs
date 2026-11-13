@@ -188,6 +188,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-body-inset-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-align left|center|right (Markdown only)] \
     [--flow-quote-align left|center|right (Markdown only)] \
+    [--flow-bullet-align left|center|right (Markdown only)] \
     [--flow-body-first-line-indent-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-continuation-indent-um INSET_UM (0..12000, Markdown only)] \
     [--flow-body-right-inset-um INSET_UM (0..12000, Markdown only)] \
@@ -244,6 +245,8 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     within the remaining inset writing width; defaults to left. \
     --flow-quote-align centers or right-aligns quoted text only, \
     preserving each vertical quote rule in its original gutter. \
+    --flow-bullet-align aligns unordered bullet and checkbox text \
+    while their symbols stay fixed; numbered list text is unchanged. \
     --flow-list-quote-inset-um shifts list/quote ink 0..12 mm right; \
     --flow-list-quote-right-inset-um reserves 0..12 mm on their right. \
     Explicit --place-text overlays may coexist with flow, outside its \
@@ -538,7 +541,8 @@ impl NotebookFlagPreflight {
                 let _gap = parse_notebook_flow_paragraph_gap(iter)?;
                 0
             }
-            "--flow-body-align" | "--flow-quote-align" =>
+            "--flow-body-align" | "--flow-quote-align"
+            | "--flow-bullet-align" =>
                 self.select_flow_align(option, iter)?,
             "--flow-body-first-line-indent-um"
             | "--flow-body-continuation-indent-um" =>
@@ -616,6 +620,8 @@ impl NotebookFlagPreflight {
                 body_align: has("--flow-body-align")
                     .then_some(BodyAlign::Left),
                 quote_align: has("--flow-quote-align")
+                    .then_some(BodyAlign::Left),
+                bullet_align: has("--flow-bullet-align")
                     .then_some(BodyAlign::Left),
                 body_first_line_indent:
                     has("--flow-body-first-line-indent-um").then_some(0),
@@ -2276,11 +2282,12 @@ fn select_notebook_flow_typography(
             select_notebook_flow_paragraph_gap(
                 iter, &mut typography.paragraph_gap,
             ),
-        "--flow-body-align" | "--flow-quote-align" => {
-            let selected = if option == "--flow-body-align" {
-                &mut typography.body_align
-            } else {
-                &mut typography.quote_align
+        "--flow-body-align" | "--flow-quote-align"
+        | "--flow-bullet-align" => {
+            let selected = match option {
+                "--flow-body-align" => &mut typography.body_align,
+                "--flow-quote-align" => &mut typography.quote_align,
+                _ => &mut typography.bullet_align,
             };
             if selected.is_some() {
                 return Err(format!("{option} may appear only once"));
@@ -2358,6 +2365,10 @@ fn validate_notebook_flow_flag_compatibility(
     if typography.quote_align.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-quote-align requires a Markdown flow".into());
+    }
+    if typography.bullet_align.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err("--flow-bullet-align requires a Markdown flow".into());
     }
     if typography.body_first_line_indent.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
@@ -2806,6 +2817,7 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
             "--flow-region" => flow_region = Some(parse_notebook_flow_region(
                 &mut iter, flow_region.is_some())?),
             "--flow-pitch-um" | "--flow-body-align" | "--flow-quote-align"
+            | "--flow-bullet-align"
             | "--flow-body-first-line-indent-um" | "--flow-body-inset-um"
             | "--flow-body-continuation-indent-um" | "--flow-paragraph-gap-um"
             | "--flow-body-right-inset-um" | "--flow-list-quote-inset-um"
