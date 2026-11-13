@@ -4588,3 +4588,26 @@ original row identities and subsequent cursor progression. This is a layout
 policy only: no persisted semantic Markdown, full text compiler, fixed
 obstacle solver, or native saved notebook PDF/PNG output was introduced.
 ATR-P2-011's full user journey remains open.
+
+## Measured opening-row and tail balancing (partial) — 2026-11-13
+
+The independent Rust flow-pagination domain now offers the opt-in
+`KeepTogetherAndBalanceEndsWhenPossible` policy for already measured
+paragraph rows. As before, a whole unit stays together when physically
+possible, and the lone-tail guard can move one penultimate row. The new
+opening-row guard prevents a one-row paragraph opening at the foot of a
+page if the first pair fits the next actual writable sheet **and** the
+complete remaining unit can still paginate. A speculative retry that
+would exhaust pages or violate measured widths is discarded atomically.
+
+If a later block still runs out of room after an opening-row move, the
+full flow is replayed once with the original tail-only policy. A successful
+baseline replay wins; otherwise the existing typed refusal is preserved.
+
+Four direct domain regressions, 52,488 deterministic three-page oracle
+cases, the 10,000-case mixed-policy suite and an accepted-revision
+three-page application regression confirm exact physical placements,
+nonsequential/skipped page identities, immutable owners/source indices and
+later block progression. The original tail-only policy remains unchanged.
+This is not an automatic Markdown option, a saved semantic body compiler,
+or complete notebook PDF/transparent PNG delivery; ATR-P2-011 stays open.

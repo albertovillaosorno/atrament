@@ -106,3 +106,44 @@ This is an explicit policy for **already measured** semantic paragraphs,
 not automatic Markdown tagging. The native CLI's independently implemented
 wrapped-tail guard is not replaced; accepted notebook content measurement,
 fixed-object resolution and native notebook PDF/PNG remain incomplete.
+
+### Measured paragraph opening-and-tail balancing (partial) — 2026-11-13
+
+`FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible` is an opt-in
+extension of the existing tail-balanced policy. Complete measured units still
+move together to the earliest physically valid page when possible. Only a
+unit that has already paginated successfully with separate first and second
+rows qualifies for the opening-row preference, and it must contain at least
+three fragments. This prevents moving an unrelated predecessor's row.
+
+The paginator checks the physical sheet that originally received the second
+row. If the first two rows fit its exact height and width, it retries the
+entire unchanged unit from that sheet in isolated process-local state. Only a
+completely successful retry replaces the original placement and cursor;
+otherwise the original successful rows and typed behavior remain intact. The
+ordinary lone-final-row guard then runs on the selected placement.
+
+If a subsequently measured block cannot fit after an opening-row move, Rust
+replays the complete source flow **once** using the established tail-only
+behavior instead. A valid replay wins, so an optional opening preference
+cannot turn a tail-only success into a page-exhaustion failure. If both
+attempts fail, the original typed failure is returned.
+
+This can span three or more physical pages, with skipped narrow pages
+retained in `covered_pages`. Later measured units start at the final
+adjusted cursor.
+
+The deterministic three-page suite independently compares 52,488 integer
+fixtures against a separate placement oracle; over 100 cases must actually
+move an opening row, while over 100 ineligible cases must retain the earlier
+placement. The randomized 10,000-case mixed-policy oracle now exercises all
+five policies. Four direct physical-geometry regressions cover paired
+opening and trailing moves, whole-flow exhaustion-safe fallback, pen-width
+limits, nonsequential page IDs, and skipped narrow sheets. An accepted-revision
+three-page regression preserves source indices, semantic block owners,
+actual writable rectangles, revision, and the cursor for subsequent blocks.
+
+The policy does not infer Markdown semantics or rewrite a stored notebook.
+It neither solves fixed-obstacle geometry nor changes the independent native
+CLI's existing paragraph-tail behavior. The full source-to-PDF notebook
+journey and automatic policy selection remain open.

@@ -7572,3 +7572,91 @@ fn accepted_revision_balances_long_measured_paragraph_tail() {
         writable.y.micrometres().checked_add(80_000));
     assert_eq!(measured.revision, balanced.revision());
 }
+
+#[test]
+fn accepted_revision_balances_opening_and_trailing_paragraph_rows() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let paragraph = ids.allocate_candidate().expect("paragraph block");
+    let following = ids.allocate_candidate().expect("following block");
+    let third_page = ids.allocate_candidate().expect("third page");
+    fixture.notebook.pages.push(Page {
+        flows: vec![],
+        id: third_page,
+        paper_profile: fixture.profile_two,
+    });
+    for block in [paragraph, following] {
+        fixture.notebook.pages[0].flows[0].blocks.push(Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: block,
+            provenance: None,
+            style: None,
+        });
+    }
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else { panic!("accepted three-page measured notebook"); };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let pages = [fixture.page_one, fixture.page_two, third_page]
+        .map(|id| accepted_for(&mapping, id));
+    let owners = [fixture.block, paragraph, following]
+        .map(|id| accepted_for(&mapping, id));
+    let measured_row = |owner, height| MeasuredFragment {
+        height: Length::from_micrometres(height),
+        owner,
+        width: Length::from_micrometres(50_000),
+    };
+    let mut measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: vec![
+            MeasuredFlowUnit {
+                fragments: vec![measured_row(owners[0], 207_000)],
+                policy: FlowUnitPolicy::Independent,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![measured_row(owners[1], 60_000); 5],
+                policy: FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible,
+            },
+            MeasuredFlowUnit {
+                fragments: vec![measured_row(owners[2], 20_000)],
+                policy: FlowUnitPolicy::Independent,
+            },
+        ],
+    };
+    let accepted = session.current().expect("accepted notebook");
+    let baseline = paginate_revision(accepted, &measured)
+        .expect("first paragraph row stays on preceding sheet");
+    assert_eq!(baseline.placements().iter().map(|row| row.page)
+        .collect::<Vec<_>>(),
+        [pages[0], pages[0], pages[1], pages[1], pages[1], pages[1],
+            pages[1]]);
+
+    measured.units[1].policy =
+        FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible;
+    let revised = paginate_revision(accepted, &measured)
+        .expect("opening pair moves without exhausting accepted pages");
+    assert_eq!(revised.revision(), revision);
+    assert_eq!(revised.flow(), flow);
+    assert_eq!(revised.covered_pages().iter().map(|page| page.page)
+        .collect::<Vec<_>>(), pages);
+    assert_eq!(revised.placements().iter().map(|row| row.page)
+        .collect::<Vec<_>>(),
+        [pages[0], pages[1], pages[1], pages[1], pages[2], pages[2],
+            pages[2]]);
+    assert_eq!(revised.placements().iter().map(|row| row.owner)
+        .collect::<Vec<_>>(),
+        [owners[0], owners[1], owners[1], owners[1], owners[1],
+            owners[1], owners[2]]);
+    assert_eq!(revised.placements().iter().map(|row| row.source.fragment)
+        .collect::<Vec<_>>(), [0, 0, 1, 2, 3, 4, 0]);
+    let writable = revised.covered_pages()[2].writable;
+    assert_eq!(revised.placements()[4].top, writable.y);
+    assert_eq!(revised.placements()[4].writable, writable);
+    assert_eq!(revised.placements()[5].top.micrometres(),
+        writable.y.micrometres() + 60_000);
+    assert_eq!(revised.placements()[6].top.micrometres(),
+        writable.y.micrometres() + 120_000);
+}

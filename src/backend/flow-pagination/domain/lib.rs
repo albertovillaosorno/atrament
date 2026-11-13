@@ -42,6 +42,9 @@ use atrament_physical_page_profile::{Length, Rect};
 pub enum FlowUnitPolicy {
     /// Paginate each measured fragment independently in source order.
     Independent,
+    /// Keep an opening pair on one page if splitting strands the first row;
+    /// also balance a lone final row when physically possible.
+    KeepTogetherAndBalanceEndsWhenPossible,
     /// Keep a full unit together when possible; otherwise avoid a lone
     /// final fragment on a fresh page when at least two rows remain behind.
     KeepTogetherAndBalanceTailWhenPossible,
@@ -188,6 +191,14 @@ struct GroupExtent {
 /// page, and both final rows fit the last page's exact writable geometry.
 /// Otherwise the original fragment placement is preserved.
 ///
+/// `KeepTogetherAndBalanceEndsWhenPossible` also tries moving the first
+/// fragment to the second fragment's fresh sheet if those first two rows fit
+/// there and the remaining measured unit still paginates successfully. A
+/// preference that would exhaust the remaining pages is discarded without
+/// changing the original successful placement or its cursor. If a later unit
+/// then fails, the complete flow is replayed once without opening preferences;
+/// a valid tail-only layout wins over such speculative page exhaustion.
+///
 /// When every supplied unit has no measured fragments, pagination returns an
 /// empty plan without consulting page authority because no placement exists.
 ///
@@ -199,6 +210,28 @@ struct GroupExtent {
 pub fn paginate<Identity, PageIdentity>(
     pages: &[PageRegion<PageIdentity>],
     units: &[MeasuredFlowUnit<Identity>],
+) -> PaginationResult<Identity, PageIdentity>
+where
+    Identity: Copy,
+    PageIdentity: Copy + Ord,
+{
+    let proposed = paginate_once(pages, units, true);
+    if proposed.is_err()
+        && units.iter().any(|unit| unit.policy
+            == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible)
+        && let Ok(fallback) = paginate_once(pages, units, false)
+    {
+        return Ok(fallback);
+    }
+    proposed
+}
+
+/// Replay without opening-row preferences when a later unit cannot fit.
+/// This preserves successful tail-only layouts without an unbounded search.
+fn paginate_once<Identity, PageIdentity>(
+    pages: &[PageRegion<PageIdentity>],
+    units: &[MeasuredFlowUnit<Identity>],
+    balance_opening: bool,
 ) -> PaginationResult<Identity, PageIdentity>
 where
     Identity: Copy,
@@ -258,12 +291,21 @@ where
                     &mut cursor, &mut placements,
                 )?;
             },
-            FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible => {
+            FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible
+            | FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible => {
                 let first_placement = placements.len();
                 place_keep_together_when_possible(
                     pages, &unit.fragments, unit_index,
                     &mut cursor, &mut placements,
                 )?;
+                if balance_opening && unit.policy
+                    == FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible
+                {
+                    balance_lone_opening_fragment(
+                        pages, &unit.fragments, unit_index, first_placement,
+                        &mut cursor, &mut placements,
+                    );
+                }
                 balance_lone_trailing_fragment(
                     pages, first_placement, &mut cursor, &mut placements,
                 );
@@ -330,7 +372,8 @@ fn keep_with_next_reservations<Identity>(
                     })
             },
             FlowUnitPolicy::KeepTogetherWhenPossible
-            | FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible => {
+            | FlowUnitPolicy::KeepTogetherAndBalanceTailWhenPossible
+            | FlowUnitPolicy::KeepTogetherAndBalanceEndsWhenPossible => {
                 complete_group_extent(&unit.fragments)
             },
             FlowUnitPolicy::Independent => unit.fragments.first()
@@ -465,6 +508,57 @@ where
     }
 
     place_independent(pages, fragments, unit_index, cursor, placements)
+}
+
+/// A too-long group can put just its first row at the foot of a page.
+/// Re-attempt the complete group from the next row's actual fresh page only
+/// if its first pair fits there. The initial placement has already succeeded,
+/// so a failed preference cannot turn an accepted layout into an error.
+/// The trial is isolated until all unchanged rows have been placed.
+fn balance_lone_opening_fragment<Identity, PageIdentity>(
+    pages: &[PageRegion<PageIdentity>],
+    fragments: &[MeasuredFragment<Identity>],
+    unit_index: usize,
+    first_placement: usize,
+    cursor: &mut Cursor,
+    placements: &mut Vec<PlacedFragment<Identity, PageIdentity>>,
+) where
+    Identity: Copy,
+    PageIdentity: Copy + Eq,
+{
+    let Some(rows) = placements.get(first_placement..) else {
+        return;
+    };
+    let Some([first, second, ..]) = rows.get(..) else {
+        return;
+    };
+    if rows.len() < 3 || first.page == second.page {
+        return;
+    }
+    let Some((next_index, next_page)) = pages.iter().enumerate()
+        .find(|(_, page)| page.page == second.page) else {
+        return;
+    };
+    let Some(pair) = fragments.get(..2).and_then(complete_group_extent) else {
+        return;
+    };
+    if !group_fits_region(pair, next_page.writable,
+        next_page.writable.height) {
+        return;
+    }
+    let mut trial_cursor = Cursor {
+        page_index: next_index,
+        used_height: Length::ZERO,
+    };
+    let mut trial = Vec::with_capacity(fragments.len());
+    if place_independent(
+        pages, fragments, unit_index, &mut trial_cursor, &mut trial,
+    ).is_err() {
+        return;
+    }
+    placements.truncate(first_placement);
+    placements.extend(trial);
+    *cursor = trial_cursor;
 }
 
 /// When a too-long group leaves just its final row on a fresh page, move
