@@ -288,7 +288,9 @@ before reading stdin or imported files. Duplicate flags, negative and
 out-of-range numbers, overflow and a pitch without flow all refuse. The
 real compositor uses the same pagination and fixed-region admission for
 PDF, transparent PNG and physical page-ink TSV, including strict explicit
-PDF page budgets. Native regressions cover exact NFD glyph row locations,
+PDF page budgets.
+
+Native regressions cover exact NFD glyph row locations,
 9-mm replay, 18-mm pagination, the accepted 30-mm limit, deterministic
 multi-page exports, output-preserving refusal and pre-source-I/O validation.
 This remains a CLI flow-layout option, not persistent line-spacing semantics,
@@ -4382,3 +4384,21 @@ existing PDF when the first writing row cannot fit. Markdown hard
 breaks start independently compiled prose blocks and are indented
 again. This export-only selection is not a persisted semantic
 paragraph style and does not finish the complete P1 notebook journey.
+
+## Selected Markdown prose continuation indent (partial) — 2026-11-12
+
+The Rust CLI now accepts `--flow-body-continuation-indent-um 0..12000`
+for physical hanging indentation of only wrapped Markdown prose rows.
+The opening row stays at its selected body/first-line inset; subsequent
+rows reserve the additional continuation inset against their own measured
+writing width. Center/right alignment works inside that narrower area.
+The offset repeats when a paragraph continues on another physical page,
+but hard breaks and blank-separated paragraphs restart the opening row.
+
+Six focused native regressions verify independent prose/structural ink
+anchors, composition with first-line indentation and alignment, measured
+pagination and hard breaks, deterministic PDF/transparent PNG/versioned
+ink TSV replay, typed/CLI preflight, and atomic refusal of unfit regions.
+Omitted or explicit zero retains prior bytes. This remains an export-only
+layout selection; saved semantic block styles and the complete notebook
+editor journey are not implemented. ATR-P2-011 stays open.

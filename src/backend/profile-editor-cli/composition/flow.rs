@@ -79,6 +79,7 @@ pub(super) enum BodyAlign {
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
 pub(super) struct FlowTypography {
     pub(super) body_align: Option<BodyAlign>,
+    pub(super) body_continuation_indent: Option<u32>,
     pub(super) body_first_line_indent: Option<u32>,
     pub(super) body_inset: Option<u32>,
     pub(super) body_right_inset: Option<u32>,
@@ -578,6 +579,7 @@ struct RuleChain {
 
 struct Layout<'model> {
     body_align: Option<BodyAlign>,
+    body_continuation_indent_um: u32,
     body_first_line_indent_um: u32,
     body_inset_um: u32,
     body_right_inset_um: u32,
@@ -632,7 +634,7 @@ impl Layout<'_> {
         }
         let capacity = self.flow_row_bounds(LineStyle::Body, true)?.1
             .checked_sub(if first { self.body_first_line_indent_um }
-                else { 0 })
+                else { self.body_continuation_indent_um })
             .ok_or("flow body first-line indent leaves no writing row")?;
         let ink_extent = heading_contour_extent(
             text, extent, self.statistics,
@@ -830,6 +832,21 @@ impl Layout<'_> {
         self.row_count = self.row_count.checked_add(1)
             .ok_or("flow row count overflow")?;
         Ok(self.y)
+    }
+
+    fn continuation_hang<'text>(
+        &self, style: LineStyle, content: &'text str,
+        cap: u32, protect_body: bool,
+    ) -> Result<(u32, Option<&'text str>, bool), String> {
+        let (mut hang, marker) = ordered_hang_and_label(
+            style, content, cap, self.statistics,
+        )?;
+        let body = protect_body && matches!(style, LineStyle::Body)
+            && self.body_continuation_indent_um != 0;
+        if body {
+            hang = self.body_continuation_indent_um;
+        }
+        Ok((hang, marker, body))
     }
 
     // Reserve an extra first-row indent without narrowing wrapped
@@ -1326,12 +1343,11 @@ impl Layout<'_> {
         let (run_start, mark_start) = (self.lines.len(), self.ornaments.len());
         let heading_before_block = self.last_visible_heading;
         let preceding_reservation =
-            heading_before_block || self.last_visible_rule;
+            self.last_visible_heading || self.last_visible_rule;
         let (mut start_x, mut cap, first_indent) =
             self.first_row_bounds(style, protect_body)?;
-        let (hang, ordered_marker) = ordered_hang_and_label(
-            style, content, cap, self.statistics,
-        )?;
+        let (hang, ordered_marker, enforce_body_continuation_width) =
+            self.continuation_hang(style, content, cap, protect_body)?;
         let (mut row, mut width) = (String::new(), 0u32);
         // Pen contour can outlive a compressed glyph's nominal advance.
         // Reserve that occupied ink before admitting the next word.
@@ -1373,6 +1389,7 @@ impl Layout<'_> {
                     first, protect_body)?;
                 start_continuation(
                     first, &mut start_x, &mut cap, hang, first_indent,
+                    enforce_body_continuation_width,
                 )?;
                 first = false;
                 (width, row_ink_extent, count, pending_spaces) =
@@ -1400,6 +1417,7 @@ impl Layout<'_> {
                         first, protect_body)?;
                     start_continuation(
                         first, &mut start_x, &mut cap, hang, first_indent,
+                        enforce_body_continuation_width,
                     )?;
                     first = false;
                     (width, row_ink_extent, count) = (0, 0, 0);
@@ -1424,8 +1442,7 @@ impl Layout<'_> {
                 count = count.checked_add(1).ok_or("flow line too long")?;
             }
         }
-        self.write_last_row(row, start_x, width, style, first,
-            protect_body)?;
+        self.write_last_row(row, start_x, width, style, first, protect_body)?;
         self.arrange_wrapped_block(
             run_start, mark_start, heading_before_block,
             preceding_reservation, style, protect_body,
@@ -1860,11 +1877,24 @@ fn append_spaces(
 fn start_continuation(
     first: bool, start_x: &mut u32, cap: &mut u32,
     indent: u32, first_line_indent: u32,
+    enforce_body_width: bool,
 ) -> Result<(), String> {
     if first {
-        *cap = cap.checked_sub(indent)
-            .and_then(|value| value.checked_add(first_line_indent))
-            .ok_or("flow continuation region overflow")?;
+        // Restore the first-row reserve before subtracting the hanging
+        // indent; either indent may exceed the other row's free width.
+        let next_cap = cap.checked_add(first_line_indent)
+            .and_then(|value| value.checked_sub(indent))
+            .ok_or(if enforce_body_width {
+                "flow body continuation indent leaves no writing row"
+            } else {
+                "flow continuation region overflow"
+            })?;
+        if enforce_body_width && next_cap < 4_000 {
+            return Err(
+                "flow body continuation indent leaves no writing row".into()
+            );
+        }
+        *cap = next_cap;
         *start_x = start_x.checked_add(indent)
             .and_then(|value| value.checked_sub(first_line_indent))
             .ok_or("flow continuation position overflow")?;
@@ -2834,6 +2864,8 @@ fn initialize_layout<'model>(
     Ok(Layout {
         body_align: spacing.body_align,
         body_first_line_indent_um: spacing.body_first_line_indent.unwrap_or(0),
+        body_continuation_indent_um:
+            spacing.body_continuation_indent.unwrap_or(0),
         body_inset_um: spacing.body_inset.unwrap_or(0),
         body_right_inset_um: spacing.body_right_inset.unwrap_or(0),
         list_quote_inset_um: spacing.list_quote_inset.unwrap_or(0),
@@ -3012,6 +3044,18 @@ pub(super) fn layout_flow_with_typography(
     if spacing.body_first_line_indent.is_some()
         && source.format != FlowFormat::Markdown {
         return Err("flow body first-line indent requires Markdown flow".into());
+    }
+    if spacing.body_continuation_indent
+        .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {
+        return Err(
+            "flow body continuation indent must be within 0..12000 um".into()
+        );
+    }
+    if spacing.body_continuation_indent.is_some()
+        && source.format != FlowFormat::Markdown {
+        return Err(
+            "flow body continuation indent requires Markdown flow".into()
+        );
     }
     if spacing.body_inset
         .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {

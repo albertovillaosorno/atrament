@@ -12106,7 +12106,7 @@ fn word_baseline_step_replays_exact_unicode_words_and_composes_independently()
                 || stroke.width_um != 250
                 || stroke.rgb != [0x12, 0x34, 0x56] {
                 return Err(format!(
-                    "word baseline step changed wrong ink {run}/{index}: {stroke:?}"
+                    "word baseline step ink mismatch {run}/{index}: {stroke:?}"
                 ));
             }
         }
@@ -13657,7 +13657,8 @@ fn invalid_markdown_list_quote_inset_preflight_is_atomic() {
 #[test]
 fn selected_markdown_list_quote_right_inset_preserves_marks() {
     let source = FlowSource::new(FlowFormat::Markdown,
-        "a\n\n- a a\n\n1. a a\n\n- [x] a\n\n> a a\n\n# a\n\n    a\n\n~~~\na\n~~~")
+        concat!("a\n\n- a a\n\n1. a a\n\n- [x] a\n\n> a a\n\n# a\n\n",
+            "    a\n\n~~~\na\n~~~"))
         .expect("mixed structural Markdown");
     let region = FlowRegion {
         left: 30_000, top: 40_000, width: 62_000, height: 180_000,
@@ -14589,4 +14590,275 @@ fn markdown_first_line_indent_alignment_respects_compressed_ink() {
         assert!(rows[0].origin_um.0 + 12_000 <= 72_500,
             "nominal 12 mm contour stays before reserved right margin");
     }
+}
+
+#[test]
+fn markdown_continuation_indent_shifts_only_wrapped_prose() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a a a a a a\n\n# a\n\n- a\n\n> a\n\n    a",
+    ).expect("prose, heading, list, quote and literal source");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 30_000, height: 180_000,
+    };
+    let render = |indent| layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region),
+        FlowTypography {
+            body_continuation_indent: indent,
+            body_inset: Some(4_000),
+            body_right_inset: Some(6_000),
+            ..FlowTypography::default()
+        },
+    ).expect("bounded Markdown prose and structure");
+    let baseline = render(None);
+    let zero = render(Some(0));
+    assert_eq!(baseline.0.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(), row.heading_ink,
+    )).collect::<Vec<_>>(), zero.0.iter().map(|row| (
+        row.page, row.origin_um, row.text.as_str(), row.heading_ink,
+    )).collect::<Vec<_>>());
+    assert_eq!(baseline.1, zero.1);
+    assert_eq!(baseline.2, zero.2);
+    let moved = render(Some(8_000));
+    assert_eq!(moved.2, 1);
+    assert_eq!(moved.0.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(),
+        ["a a", "a", "a", "a", "a", "a", "a", "a", "    a"]);
+    assert_eq!(moved.0.iter().map(|row| row.origin_um.0)
+        .collect::<Vec<_>>(),
+        [36_500, 44_500, 44_500, 44_500, 44_500,
+            32_500, 38_500, 38_500, 32_500]);
+    assert_eq!(moved.1.iter().map(|mark| (
+        mark.start_um.0, mark.end_um.0, mark.width_um, mark.rgb,
+    )).collect::<Vec<_>>(),
+        baseline.1.iter().map(|mark| (
+            mark.start_um.0, mark.end_um.0, mark.width_um, mark.rgb,
+        )).collect::<Vec<_>>());
+    assert_eq!(moved.0.iter().rev().take(4)
+        .map(|row| (row.text.as_str(), row.origin_um.0))
+        .collect::<Vec<_>>(),
+        baseline.0.iter().rev().take(4)
+            .map(|row| (row.text.as_str(), row.origin_um.0))
+            .collect::<Vec<_>>(),
+        "heading, list, quote and literal ink anchors do not move");
+}
+
+#[test]
+fn markdown_continuation_indent_composes_with_first_row_and_alignment() {
+    let source = FlowSource::new(FlowFormat::Markdown, "a a a a")
+        .expect("wrapped prose");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 34_000, height: 50_000,
+    };
+    for (align, first, continuation) in [
+        (BodyAlign::Left, 40_500, 44_500),
+        (BodyAlign::Center, 42_500, 48_500),
+        (BodyAlign::Right, 44_500, 52_500),
+    ] {
+        let (rows, marks, pages) = layout_flow_with_typography(
+            &source, &NotebookProfile::default(), None,
+            HeadingDecoration::default(), Some(region),
+            FlowTypography {
+                body_align: Some(align),
+                body_first_line_indent: Some(4_000),
+                body_continuation_indent: Some(8_000),
+                body_inset: Some(4_000),
+                body_right_inset: Some(6_000),
+                ..FlowTypography::default()
+            },
+        ).expect("aligned first and continuation rows");
+        assert_eq!(pages, 1);
+        assert!(marks.is_empty());
+        assert_eq!(rows.iter().map(|row| row.text.as_str())
+            .collect::<Vec<_>>(), ["a a", "a", "a"]);
+        assert_eq!(rows.iter().map(|row| row.origin_um.0)
+            .collect::<Vec<_>>(), [first, continuation, continuation]);
+    }
+}
+
+#[test]
+fn markdown_continuation_indent_survives_page_turns_and_hard_breaks() {
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 30_000, height: 29_000,
+    };
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a a a a a a a a a a a a",
+    ).expect("long paragraph");
+    let typography = FlowTypography {
+        body_first_line_indent: Some(4_000),
+        body_continuation_indent: Some(8_000),
+        body_inset: Some(4_000),
+        body_right_inset: Some(6_000),
+        ..FlowTypography::default()
+    };
+    let (rows, _, pages) = layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region), typography,
+    ).expect("multi-page hanging paragraph");
+    assert!(pages >= 5);
+    assert_eq!(rows.first().expect("first row").origin_um.0, 40_500);
+    assert!(rows.iter().skip(1).all(|row| row.origin_um.0 == 44_500));
+    assert!(rows.iter().any(|row| row.page > 1));
+    let hard_breaks = FlowSource::new(FlowFormat::Markdown,
+        "a a a  \na a a\n\na a a",
+    ).expect("independent hard break and paragraph");
+    let (rows, _, _) = layout_flow_with_typography(
+        &hard_breaks, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(FlowRegion {
+            width: 34_000, height: 110_000, ..region
+        }), typography,
+    ).expect("restarted first row after each hard boundary");
+    assert_eq!(rows.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(), ["a a", "a", "a a", "a", "a a", "a"]);
+    assert_eq!(rows.iter().map(|row| row.origin_um.0)
+        .collect::<Vec<_>>(),
+        [40_500, 44_500, 40_500, 44_500, 40_500, 44_500]);
+}
+
+#[test]
+fn selected_markdown_continuation_indent_replays_native_outputs() {
+    let base = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--flow-markdown", "a a a a a a\n\n# a\n\n- a\n\n> a",
+        "--flow-region", "30000", "40000", "30000", "90000",
+        "--flow-body-inset-um", "4000",
+        "--flow-body-right-inset-um", "6000",
+        "--flow-body-align", "center",
+    ]);
+    let render = |indent: Option<&str>, format: &str| {
+        let mut command = base.clone();
+        if let Some(indent) = indent {
+            command.extend(args(&[
+                "--flow-body-continuation-indent-um", indent,
+            ]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        execute_notebook(&command).expect("native hanging export")
+            .expect("PDF, PNG or TSV data")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let default = render(None, format);
+        assert_eq!(default, render(Some("0"), format),
+            "zero continuation indent preserves {format} bytes");
+        let selected = render(Some("8000"), format);
+        assert_eq!(selected, render(Some("8000"), format),
+            "continuation indent deterministically replays {format}");
+        assert_ne!(selected, default,
+            "selected continuation indent changes {format}");
+        if format == "pdf" {
+            assert!(selected.starts_with(b"%PDF-1.4"));
+        } else if format == "png" {
+            assert!(selected.starts_with(b"\x89PNG\r\n\x1a\n"));
+        } else {
+            assert!(selected.starts_with(b"atrament.page-ink.v1\n"));
+        }
+    }
+}
+
+#[test]
+fn invalid_markdown_continuation_indent_preflights_and_preserves_pdf() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "unopened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, expected) in [
+        (vec!["--flow-body-continuation-indent-um", "-1"],
+            "flow body continuation indent must be within 0..12000 um"),
+        (vec!["--flow-body-continuation-indent-um", "12001"],
+            "flow body continuation indent must be within 0..12000 um"),
+        (vec!["--flow-body-continuation-indent-um"],
+            "--flow-body-continuation-indent-um requires 0..12000 um"),
+        (vec!["--flow-body-continuation-indent-um", "4000",
+            "--flow-body-continuation-indent-um", "5000"],
+            "--flow-body-continuation-indent-um may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("invalid option must refuse before source I/O"),
+            expected);
+    }
+    assert_eq!(preflight_notebook_sources(&args(&[
+        "--flow-text", "a", "--export-paper", "pdf",
+        "--flow-body-continuation-indent-um", "0",
+    ])).expect_err("Markdown-only option"),
+        "--flow-body-continuation-indent-um requires a Markdown flow");
+    let plain = FlowSource::new(FlowFormat::Plain, "a")
+        .expect("plain source");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None,
+        FlowTypography {
+            body_continuation_indent: Some(0),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed Markdown-only option"),
+        "flow body continuation indent requires Markdown flow");
+    let source = FlowSource::new(FlowFormat::Markdown, "a")
+        .expect("Markdown source");
+    assert_eq!(layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), None,
+        FlowTypography {
+            body_continuation_indent: Some(12_001),
+            ..FlowTypography::default()
+        },
+    ).expect_err("typed inset bound"),
+        "flow body continuation indent must be within 0..12000 um");
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"preserve-existing-continuation-PDF")
+        .expect("test sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "a a",
+        "--flow-region", "30000", "40000", "27000", "32000",
+        "--flow-body-inset-um", "8000",
+        "--flow-body-right-inset-um", "8000",
+        "--flow-body-continuation-indent-um", "8000",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test path"), "--replace",
+    ]));
+    let err = execute_notebook(&command)
+        .expect_err("narrow continuation row refuses before file commit");
+    assert!(err.contains("flow body continuation indent leaves no writing row"),
+        "{err}");
+    assert_eq!(fs::read(&target).expect("original PDF unchanged"),
+        b"preserve-existing-continuation-PDF");
+    fs::remove_file(target).expect("clean test-owned sentinel");
+}
+
+#[test]
+fn markdown_continuation_indent_can_exceed_first_row_free_width() {
+    let source = FlowSource::new(FlowFormat::Markdown, "a a a a")
+        .expect("prose whose first row is narrower than the hang");
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 34_000, height: 90_000,
+    };
+    let (rows, marks, pages) = layout_flow_with_typography(
+        &source, &NotebookProfile::default(), None,
+        HeadingDecoration::default(), Some(region),
+        FlowTypography {
+            body_first_line_indent: Some(12_000),
+            body_continuation_indent: Some(12_000),
+            body_inset: Some(4_000),
+            body_right_inset: Some(6_000),
+            ..FlowTypography::default()
+        },
+    ).expect("both rows retain seven millimetres of writing width");
+    assert_eq!(pages, 1);
+    assert!(marks.is_empty());
+    assert_eq!(rows.iter().map(|row| row.text.as_str())
+        .collect::<Vec<_>>(), ["a", "a", "a", "a"]);
+    assert!(rows.iter().all(|row| row.origin_um.0 == 48_500));
 }

@@ -696,6 +696,30 @@ fail before the CLI reads a selected file or standard input. This is not
 a saved semantic paragraph style or automatic typographic first-line
 indentation across explicit hard breaks.
 
+To indent only **wrapped continuation rows** of Markdown prose, select
+`--flow-body-continuation-indent-um 8000`. Unlike a first-line indent, this
+keeps the paragraph's opening row at its original left inset and moves later
+rows 8 mm right, reserving the same space from their measured writing width.
+It also works with an independently selected first-line indent: both rows
+use their own constrained rectangles for center/right alignment.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-body-inset-um 4000 --flow-body-right-inset-um 6000 \
+  --flow-body-continuation-indent-um 8000 \
+  --export-paper pdf --output hanging-prose.pdf
+```
+
+The optional 0–12 mm offset repeats on every physical page where the same
+Markdown prose block continues. An explicit hard break starts a fresh block;
+headings, markers, quotes, literal indented lines and code are not moved.
+Omission and explicit zero preserve previous PDF, PNG and ink TSV bytes.
+
+A selected continuation that cannot fit at least 4 mm of writing width
+refuses without replacing an earlier export. This is export-only typography,
+not a persisted semantic paragraph style.
+
 For a little more space to the right of Markdown list labels and quote
 rules, select `--flow-list-quote-inset-um 6000`. This adds 6 mm to the
 existing 6 mm offset of each bullet, ordered item, checkbox task and
@@ -2343,9 +2367,10 @@ For a seeded word-local baseline incline, add
 `--glyph-variation`. Each ASCII-space-delimited word in a physical text run
 receives an independent signed micrometre step. The first exact Unicode glyph
 keeps its nominal baseline; each later glyph moves vertically by its
-zero-based ordinal times that word's step. The next word restarts at zero,
-even across repeated spaces. A negative step inclines the word upward and
-a positive step downward on the page.
+zero-based ordinal times that word's step.
+
+The next word restarts at zero, even across repeated spaces. A negative
+step inclines the word upward and a positive step downward on the page.
 
 This option adds to line drift and shared word rise without changing original
 glyph contours, pen widths, glyph source, nominal advances, row pitch or text
@@ -2353,8 +2378,10 @@ wrapping. Directed short joins use the actual final endpoints. Like tracking,
 this optional rhythm can run off the printable sheet or extend a requested
 bridge beyond 1200 µm; either condition refuses the whole export instead of
 silently clipping or disconnecting ink. A zero spread preserves PDF, PNG and
-page-ink TSV bytes exactly. It is a CLI-only creative treatment, not a learned
-writer's baseline or a saved notebook setting.
+page-ink TSV bytes exactly.
+
+It is a CLI-only creative treatment, not a learned writer's baseline
+or a saved notebook setting.
 
 For example, extend the preceding command with
 `--glyph-line-drift 120 --glyph-word-drift 90 --glyph-word-rise 90`
