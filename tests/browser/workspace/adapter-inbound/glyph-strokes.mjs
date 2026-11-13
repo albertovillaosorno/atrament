@@ -13,7 +13,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     missingBilingualBaseline, varyGlyphStrokes,
     candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     reverseCandidatePath, moveCandidatePath,
-    rotateClosedCandidatePath, closeCandidatePath,
+    rotateClosedCandidatePath, closeCandidatePath, joinNextCandidatePath,
     translateCandidatePath, styleCandidatePath, scaleCandidatePath,
     reflectCandidatePath, rotateCandidatePath, removeCandidatePath } =
     await import(new URL(
@@ -605,6 +605,7 @@ function mountEditor() {
         "glyph-merge", "glyph-split-exact",
         "glyph-clear", "glyph-reverse",
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
+        "glyph-path-join-next",
         "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
         "glyph-path-style", "glyph-path-remove", "glyph-path-scale",
@@ -1660,6 +1661,116 @@ test("explicit path closure preserves Unicode rows and refuses gaps", () => {
         /4096 authored strokes/);
     assert.equal(encodeGlyphLibrary(original), originalBytes);
 });
+
+test("join-next preserves neighboring same-pen paths and Unicode", () => {
+    const key = "n\u0303";
+    const ink = (grapheme, x1, y1, x2, y2) =>
+        ({ grapheme, x1, y1, x2, y2, width: 250,
+            color: "#243647" });
+    const a = ink(key, 500, 700, 850, 750);
+    const b = ink(key, 850, 750, 1100, 850);
+    const c = ink(key, 1350, 900, 1600, 1050);
+    const d = ink(key, 1600, 1050, 1900, 1150);
+    const other = ink("ñ", 600, 700, 650, 1000);
+    const math = ink("∞", 500, 300, 600, 400);
+    const original = [a, other, b, math, c, d];
+    const originalBytes = encodeGlyphLibrary(original);
+    const joined = joinNextCandidatePath(original, key, 2);
+    const bridge = ink(key, 1100, 850, 1350, 900);
+    assert.deepEqual(joined.strokes, [a, other, b, bridge, math, c, d]);
+    assert.equal(joined.selectedIndex, 3);
+    assert.deepEqual(candidatePenPaths(joined.strokes, key)
+        .map((path) => [path.first, path.last]), [[1, 5]]);
+    assert.equal(encodeGlyphLibrary(original), originalBytes);
+    for (const [glyph, selected] of [[key, 5], [key, -1],
+        ["ñ", 1], [key, 99], ["nn", 2]]) {
+        assert.throws(() => joinNextCandidatePath(original, glyph, selected));
+    }
+    assert.throws(() => joinNextCandidatePath([
+        a, b, { ...c, width: 300 }, d,
+    ], key, 0), /matching pen/);
+    assert.throws(() => joinNextCandidatePath([
+        a, b, { ...c, x1: 3400 }, d,
+    ], key, 0), /1200/);
+    const exactLimit = [ink(key, 500, 700, 800, 850),
+        ink(key, 2000, 850, 2200, 950)];
+    assert.deepEqual(joinNextCandidatePath(exactLimit, key, 0)
+        .strokes[1], ink(key, 800, 850, 2000, 850),
+        "an exactly 1200 µm gap is admitted");
+    assert.throws(() => joinNextCandidatePath([
+        exactLimit[0], { ...exactLimit[1], x1: 2001 },
+    ], key, 0), /1200/,
+    "1201 µm cannot be rounded down to a permitted join");
+    const tangent = [ink(key, 300, 700, 125, 850),
+        ink(key, 500, 850, 650, 950)];
+    assert.deepEqual(joinNextCandidatePath(tangent, key, 0).strokes[1],
+        ink(key, 125, 850, 500, 850),
+        "round pen tangent to x=0 is permitted without clipping");
+    const edge = [ink(key, 250, 700, 50, 850),
+        ink(key, 250, 850, 450, 950)];
+    assert.throws(() => joinNextCandidatePath(edge, key, 0),
+        /pen bridge clips glyph cell/);
+    const atLimit = [a, b, c, d,
+        ...Array.from({ length: 4092 }, () => math)];
+    assert.equal(atLimit.length, 4096);
+    assert.throws(() => joinNextCandidatePath(atLimit, key, 0),
+        /4096 authored strokes/);
+    assert.equal(encodeGlyphLibrary(atLimit).startsWith(originalBytes.slice(
+        0, originalBytes.indexOf("\n") + 1)), true);
+});
+
+test("join-next browser action is one undoable, explicit TSV change",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const key = "o\u0301";
+            const ink = (grapheme, x1, y1, x2, y2) =>
+                ({ grapheme, x1, y1, x2, y2, width: 250,
+                    color: "#243647" });
+            const a = ink(key, 500, 700, 850, 750);
+            const b = ink(key, 850, 750, 1100, 850);
+            const c = ink(key, 1350, 900, 1600, 1050);
+            const other = ink("ó", 600, 700, 650, 1000);
+            const source = [a, other, b, c];
+            const bytes = new TextEncoder().encode(encodeGlyphLibrary(source));
+            assert.equal(get("path-join-next").disabled, true);
+            editor.start();
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = key;
+            get("character").dispatch("input");
+            get("selected").value = "2";
+            get("selected").dispatch("change");
+            assert.equal(get("path-join-next").disabled, false);
+            get("path-join-next").dispatch("click");
+            assert.match(get("status").textContent,
+                /Joined neighboring same-pen paths; unsaved/);
+            assert.equal(downloads.length, 0);
+            assert.equal(get("selected").value, "3",
+                "new directed bridge becomes selected");
+            assert.match(get("paths").textContent,
+                /1 candidate pen path, 0 apparent pen lifts/);
+            assert.equal(get("path-join-next").disabled, true);
+            const joined = joinNextCandidatePath(source, key, 2).strokes;
+            get("save").dispatch("click");
+            assert.equal(await downloads[0].text(),
+                encodeGlyphLibrary(joined));
+            get("slant-undo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[1].text(),
+                encodeGlyphLibrary(source));
+            get("slant-redo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[2].text(),
+                encodeGlyphLibrary(joined));
+            editor.reset();
+            assert.equal(get("path-join-next").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
 
 test("browser UI closes path and offers loop entry", async () => {
     const ui = mountEditor();

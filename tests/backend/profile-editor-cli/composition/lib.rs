@@ -4604,6 +4604,179 @@ fn native_explicit_path_closure_preserves_unicode_and_refuses_atomically() {
 }
 
 #[test]
+fn native_join_next_path_preserves_unicode_and_native_pdf_png_ink() {
+    let nfd = "n\u{303}";
+    let source = test_path().with_extension("tsv");
+    let saved = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("original path");
+    let saved_name = saved.to_str().expect("saved path");
+    let geometry = args(&[
+        "--glyph-stroke", nfd, "500", "700", "850", "750",
+        "250", "#243647",
+        "--glyph-stroke", "ñ", "600", "700", "650", "1000",
+        "251", "#112233",
+        "--glyph-stroke", nfd, "850", "750", "1100", "850",
+        "250", "#243647",
+        "--glyph-stroke", "∞", "500", "300", "600", "400",
+        "251", "#445566",
+        "--glyph-stroke", nfd, "1350", "900", "1600", "1050",
+        "250", "#243647",
+        "--glyph-stroke", nfd, "1600", "1050", "1900", "1150",
+        "250", "#243647",
+    ]);
+    let original = execute_glyph_library(&geometry)
+        .expect("original glyph library").expect("original TSV");
+    fs::write(&source, &original).expect("source library");
+    let edited = execute_glyph_library(&args(&[
+        "--profile", source_name, "--join-next-path", nfd, "1",
+    ])).expect("valid short pen bridge").expect("new TSV");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ñ\t500\t700\t850\t750\t250\t#243647\n",
+        "ñ\t600\t700\t650\t1000\t251\t#112233\n",
+        "ñ\t850\t750\t1100\t850\t250\t#243647\n",
+        "ñ\t1100\t850\t1350\t900\t250\t#243647\n",
+        "∞\t500\t300\t600\t400\t251\t#445566\n",
+        "ñ\t1350\t900\t1600\t1050\t250\t#243647\n",
+        "ñ\t1600\t1050\t1900\t1150\t250\t#243647\n",
+    );
+    assert_eq!(edited, expected.as_bytes());
+    let mut save = args(&[
+        "--profile", source_name, "--join-next-path", nfd, "1",
+        "--output", saved_name,
+    ]);
+    assert_eq!(execute_glyph_library(&save)
+        .expect("deliberate file save"), None);
+    assert_eq!(fs::read(&saved).expect("saved bytes"), edited);
+    assert_eq!(fs::read(&source).expect("untouched source"), original);
+    let report = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", saved_name, "--inspect-paths", nfd,
+    ])).expect("inspected merged path").expect("inspector bytes"))
+        .expect("UTF-8 path report");
+    assert!(report.contains("Strokes: 5\nPaths: 1\nPen lifts: 0"),
+        "{report}");
+    assert!(report.contains(
+        "Path 1: strokes 1..5 (5 segments) (500, 700) -> (1900, 1150)"
+    ), "{report}");
+
+    for format in ["pdf", "png"] {
+        let mut imported = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", saved_name,
+            "--place-text", "1", "30000", "45000", nfd,
+        ]);
+        let mut inline = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", nfd, "500", "700", "850", "750",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "850", "750", "1100", "850",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "1100", "850", "1350", "900",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "1350", "900", "1600", "1050",
+            "250", "#243647",
+            "--glyph-stroke", nfd, "1600", "1050", "1900", "1150",
+            "250", "#243647",
+            "--place-text", "1", "30000", "45000", nfd,
+        ]);
+        if format == "png" {
+            imported.extend(args(&["--dpi", "72"]));
+            inline.extend(args(&["--dpi", "72"]));
+        }
+        let actual = execute_notebook(&imported)
+            .expect("native glyph-file ink").expect("rendered bytes");
+        let expected_bytes = execute_notebook(&inline)
+            .expect("inline native ink").expect("rendered inline bytes");
+        assert_eq!(actual, expected_bytes,
+            "joining must reach the same native {format} renderer");
+        assert!(if format == "pdf" {
+            actual.starts_with(b"%PDF-1.4")
+        } else { actual.starts_with(b"\x89PNG\r\n\x1a\n") });
+    }
+
+    fs::write(&saved, b"accepted output").expect("sentinel");
+    for rejected in [
+        args(&["--join-next-path"]),
+        args(&["--join-next-path", nfd]),
+        args(&["--join-next-path", nfd, "0"]),
+        args(&["--join-next-path", nfd, "3"]),
+        args(&["--join-next-path", "ñ", "1"]),
+        args(&["--join-next-path", "nn", "1"]),
+        args(&["--join-next-path", nfd, "1.5"]),
+        args(&["--join-next-path", nfd, "4097"]),
+        args(&["--join-next-path", nfd, "1",
+            "--join-next-path", nfd, "1"]),
+        args(&["--set-stroke", nfd, "3", "1350", "900",
+            "1600", "1050", "300", "#243647",
+            "--join-next-path", nfd, "1"]),
+        args(&["--set-stroke", nfd, "3", "3400", "900",
+            "1600", "1050", "250", "#243647",
+            "--join-next-path", nfd, "1"]),
+    ] {
+        let mut command = args(&["--profile", source_name]);
+        command.extend(rejected);
+        command.extend(args(&["--output", saved_name, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid joined path must refuse: {command:?}");
+        assert_eq!(fs::read(&saved).expect("unmodified sentinel"),
+            b"accepted output");
+        assert_eq!(fs::read(&source).expect("unmodified source"), original);
+    }
+    for (x, allowed) in [(2000, true), (2001, false)] {
+        let coordinate = x.to_string();
+        let proposed = args(&[
+            "--glyph-stroke", nfd, "500", "700", "800", "850",
+            "250", "#243647",
+            "--glyph-stroke", nfd, &coordinate, "850", "2200", "950",
+            "250", "#243647",
+            "--join-next-path", nfd, "1",
+        ]);
+        assert_eq!(execute_glyph_library(&proposed).is_ok(), allowed,
+            "a {x} µm second-path start must honor the 1200 µm limit");
+    }
+    let tangent = args(&[
+        "--glyph-stroke", nfd, "300", "700", "125", "850",
+        "250", "#243647",
+        "--glyph-stroke", nfd, "500", "850", "650", "950",
+        "250", "#243647",
+        "--join-next-path", nfd, "1",
+    ]);
+    assert!(String::from_utf8(execute_glyph_library(&tangent)
+        .expect("round pen edge tangent is valid")
+        .expect("TSV bytes")).expect("UTF-8").contains(
+        "n\u{303}\t125\t850\t500\t850\t250\t#243647\n"
+    ));
+    // Edge-valid source endpoints can still be too close to the cell edge
+    // for the added *round pen*. The original TSV is not clipped on import.
+    let clipped = args(&[
+        "--glyph-stroke", nfd, "250", "700", "50", "850",
+        "250", "#243647",
+        "--glyph-stroke", nfd, "250", "850", "450", "950",
+        "250", "#243647",
+        "--join-next-path", nfd, "1",
+    ]);
+    assert!(execute_glyph_library(&clipped)
+        .expect_err("round pen clips cell").contains("clips"));
+    // The last permitted authored stroke cannot allocate a bridge.
+    let mut full = String::from("atrament.glyph-strokes.v1\n");
+    full.push_str("n\u{303}\t500\t700\t850\t750\t250\t#243647\n");
+    full.push_str("n\u{303}\t1350\t900\t1600\t1050\t250\t#243647\n");
+    full.push_str(&"∞\t500\t300\t600\t400\t251\t#445566\n".repeat(4094));
+    fs::write(&source, &full).expect("4096-row source");
+    save = args(&[
+        "--profile", source_name, "--join-next-path", nfd, "1",
+        "--output", saved_name, "--replace",
+    ]);
+    assert!(execute_glyph_library(&save)
+        .expect_err("4097th bridge refused")
+        .contains("4096 authored strokes"));
+    assert_eq!(fs::read(&saved).expect("preserved sentinel"),
+        b"accepted output");
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(saved).expect("remove saved output");
+}
+
+#[test]
 fn native_whole_glyph_shear_keeps_exact_unicode_slots_and_pen_paths() {
     let source = test_path().with_extension("tsv");
     let saved = test_path().with_extension("tsv");

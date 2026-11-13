@@ -1423,3 +1423,35 @@ byte-identical accepted output and fail-closed invalid inputs.
 This is a manual edit of sampled TSV v1 lines. It does not create persistent
 pen-lift identities, Bézier contours, learned cursive connections or the
 full P1-014 correlated penmanship acceptance.
+
+## Explicit adjacent candidate-path pen join (partial) — 2026-11-13
+
+The Rust `atrament-profiles glyphs --join-next-path GRAPHEME PATH_INDEX`
+command and the admitted localhost **Join selected path to following
+same-pen path** control insert one authored straight connector. The bridge
+starts at the selected candidate path's final directed endpoint and ends
+at the next candidate path's first point for the same exact Unicode key.
+Both paths keep their original line order, direction, pen width, RGB and
+interleaved unrelated glyph rows. The adjacent paths become one continuous
+path in the existing stroke-order inspection; no path identity is saved.
+
+The operation requires equal pen color and thickness, a nonzero gap of at
+most 1200 µm, full round-pen containment in the 3500 × 4500 µm glyph
+cell, and available space under the 4096-segment / 512-KiB TSV bounds.
+Malformed operands, absent next paths, already continuous points, style
+mismatches, clipped connectors and exhausted capacity refuse atomically.
+Browser changes are one undoable session step and save only on deliberate
+TSV download. Rust refuses invalid options before reading a selected
+unclosed stdin source; output replacement still requires explicit intent.
+
+Focused browser helper and UI regressions cover exact NFC/NFD interleaving,
+unchanged source, inferred path count, refused joins, deliberate TSV export,
+Undo/Redo and session reset. Native tests cover save/reopen, inspection,
+unchanged source/target after refused edits, the 4096-row cap and actual
+PDF/transparent PNG byte parity with independently supplied pen segments.
+An additional 256-case subprocess oracle compares production browser TSV
+with the real Rust CLI for accepted and refused randomized path joins.
+
+This is opt-in manual bridging of user-authored segments; it does not
+infer letter connections, synthesize cursive Bézier paths or complete the
+P1 two-line correlated penmanship acceptance.

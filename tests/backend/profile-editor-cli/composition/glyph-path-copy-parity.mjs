@@ -7,7 +7,8 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     encodeGlyphLibrary, styleCandidatePath, removeCandidatePath,
-    scaleCandidatePath, reflectCandidatePath, rotateCandidatePath }
+    scaleCandidatePath, reflectCandidatePath, rotateCandidatePath,
+    joinNextCandidatePath }
 // jig-ignore-next-line: static ESM import needs a literal path.
     from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -714,4 +715,101 @@ test('256 real Rust and browser selected-path rotations agree on TSV',
         }
         assert.ok(accepted > 55, `accepted rotations: ${accepted}`);
         assert.ok(refused > 90, `refused rotations: ${refused}`);
+    });
+
+// Use the actual browser geometry encoder and native Rust CLI to verify the
+// newly inserted bridge across exact Unicode interleaving and typed refusals.
+test("256 native/browser join-next samples agree on full TSV or refusal",
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            "build", "--locked", "--offline", "--quiet",
+            "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+        ], { cwd: root, encoding: "utf8", timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, ".temp") } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = random(0xB71D_2026);
+        let accepted = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 256; sample += 1) {
+            const glyph = sample % 2 === 0 ? "n\u0303" : "ñ";
+            const other = glyph === "ñ" ? "n\u0303" : "ñ";
+            const mode = sample % 12;
+            const x = pick(400, 900);
+            const y = pick(400, 1800);
+            const a = { grapheme: glyph, x1: x, y1: y,
+                x2: x + 150, y2: y + 100,
+                width: 250, color: "#243647" };
+            const b = { ...a, x1: a.x2, y1: a.y2,
+                x2: a.x2 + 200, y2: a.y2 + 100 };
+            const c = { ...a, x1: b.x2 + pick(150, 700),
+                y1: b.y2 + pick(0, 80) };
+            c.x2 = c.x1 + 120;
+            c.y2 = c.y1 + 100;
+            if (mode === 5) c.width = 275;
+            if (mode === 6) c.color = "#556677";
+            if (mode === 7) {
+                c.x1 = b.x2 + 1300;
+                c.x2 = c.x1 + 100;
+            }
+            if (mode === 10) {
+                b.x2 = 50;
+                b.y2 = 850;
+                c.x1 = 250;
+                c.y1 = 850;
+                c.x2 = 350;
+                c.y2 = 950;
+            }
+            if (mode === 11) {
+                c.x1 = b.x2;
+                c.y1 = b.y2;
+                c.x2 = c.x1 + 120;
+                c.y2 = c.y1 + 100;
+            }
+            const d = { ...c, x1: c.x2, y1: c.y2,
+                x2: c.x2 + 100, y2: c.y2 + 90 };
+            const rows = [a, stroke(pick, other, "#AABBCC"),
+                b, stroke(pick, "∞", "#667788"), c, d];
+            let selected = mode === 4 ? 4 : 2;
+            let pathOrdinal = mode === 4 ? 2 : 1;
+            let selectedGlyph = glyph;
+            if (mode === 8) {
+                selected = 9999;
+                pathOrdinal = 4097;
+            } else if (mode === 9) {
+                selectedGlyph = other;
+                selected = 1;
+                pathOrdinal = 1;
+            }
+            const original = encodeGlyphLibrary(rows);
+            let browser;
+            try {
+                browser = encodeGlyphLibrary(joinNextCandidatePath(
+                    rows, selectedGlyph, selected).strokes);
+            } catch (error) {
+                browser = error;
+            }
+            const native = spawnSync(binary, [
+                "glyphs", ...rows.flatMap(strokeFlags),
+                "--join-next-path", selectedGlyph, String(pathOrdinal),
+            ], { cwd: root, encoding: "utf8", timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = `join-next ${sample} mode=${mode} ${glyph}`;
+            assert.equal(native.error, undefined, context);
+            if (browser instanceof Error) {
+                refused += 1;
+                assert.notEqual(native.status, 0, context);
+                assert.equal(native.stdout, "", context);
+            } else {
+                accepted += 1;
+                assert.equal(native.status, 0, context + native.stderr);
+                assert.equal(native.stdout, browser, context);
+                assert.equal(browser.split("\n").length,
+                    original.split("\n").length + 1);
+            }
+            assert.equal(encodeGlyphLibrary(rows), original,
+                `${context}: source input was mutated`);
+        }
+        assert.ok(accepted > 70, `expected enough accepted joins: ${accepted}`);
+        assert.ok(refused > 70, `expected enough refused joins: ${refused}`);
     });

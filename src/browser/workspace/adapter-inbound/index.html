@@ -1537,6 +1537,13 @@
             <button id="glyph-path-close" type="button" disabled>
               Close selected open pen path (short bridge)
             </button>
+            <button id="glyph-path-join-next" type="button" disabled>
+              Join selected path to following same-pen path (short bridge)
+            </button>
+            <p class="field-help">Connect this path's last pen point to
+              the next path's first point only with matching width/color,
+              1200 µm or less separation and full pen clearance. The
+              resulting single path is one undoable edit.</p>
             <label>Selected path horizontal shift (µm)
               <input id="glyph-path-dx" type="number" min="-3500"
                 max="3500" step="10" value="0" disabled>

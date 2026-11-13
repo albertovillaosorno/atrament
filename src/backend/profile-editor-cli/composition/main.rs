@@ -104,6 +104,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--move-stroke GRAPHEME FROM TO] \
     [--reverse-path GRAPHEME PATH_INDEX] \
     [--close-path GRAPHEME PATH_INDEX] \
+    [--join-next-path GRAPHEME PATH_INDEX] \
     [--rotate-path GRAPHEME PATH_INDEX START_STROKE] \
     [--move-path GRAPHEME FROM_PATH TO_PATH] \
     [--translate-path GRAPHEME PATH_INDEX DX_UM DY_UM] \
@@ -147,6 +148,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     paths using the current pen-continuity inspection order.\n\
     --rotate-path changes the first stroke of a closed loop (one-based).\n\
     --close-path inserts a short closing segment on a selected open path.\n\
+    --join-next-path bridges adjacent same-pen glyph paths (up to 1200 um).\n\
     --translate-path moves one path using bounded signed micrometres.\n\
     --scale-path resizes around the selected path's first endpoint.\n\
     --reflect-path mirrors a selected path, preserving directed joints.\n\
@@ -1479,7 +1481,8 @@ fn preflight_glyph_typed_option(
         "--reverse-stroke" | "--split-stroke"
         | "--split-stroke-exact" | "--merge-strokes"
         | "--join-strokes" | "--remove-stroke"
-        | "--reverse-path" | "--close-path" | "--remove-path"
+        | "--reverse-path" | "--close-path" | "--join-next-path"
+        | "--remove-path"
         | "--scale-glyph-ink" => 2,
         _ => return Ok(false),
     };
@@ -1491,7 +1494,8 @@ fn preflight_glyph_typed_option(
         | "--split-stroke" | "--split-stroke-exact"
         | "--merge-strokes" | "--join-strokes"
         | "--remove-stroke" | "--reverse-path"
-        | "--close-path" | "--rotate-path" | "--move-path"
+        | "--close-path" | "--join-next-path" | "--rotate-path"
+        | "--move-path"
         | "--translate-path" | "--style-path" | "--scale-path"
         | "--reflect-path" | "--remove-path"
         | "--rotate-path-ink" =>
@@ -1647,7 +1651,8 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             | "--split-stroke" | "--split-stroke-exact"
             | "--merge-strokes" | "--set-stroke" | "--remove-stroke" =>
                 glyphs.edit_stroke(option, &mut iter)?,
-            "--reverse-path" | "--rotate-path" | "--close-path" | "--move-path"
+            "--reverse-path" | "--rotate-path" | "--close-path"
+            | "--join-next-path" | "--move-path"
             | "--translate-path" | "--style-path" | "--scale-path"
             | "--reflect-path" | "--remove-path"
             | "--rotate-path-ink" =>

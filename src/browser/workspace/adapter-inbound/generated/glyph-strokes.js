@@ -449,6 +449,55 @@ export function closeCandidatePath(strokes, grapheme, selectedIndex) {
     encodeGlyphLibrary(next);
     return { strokes: next, selectedIndex: endSlot + 1 };
 }
+// Join two neighboring candidate paths of one exact Unicode glyph with one
+// new directed same-pen bridge. Neither path is re-ordered or inferred from
+// nearby geometry; full round-pen clearance and the entire TSV are checked.
+export function joinNextCandidatePath(strokes, grapheme, selectedIndex) {
+    if (!exactGrapheme(grapheme) || !Number.isSafeInteger(selectedIndex)
+        || selectedIndex < 0 || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path joining requires a selected exact glyph stroke");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) =>
+        stroke.grapheme === grapheme ? [index] : []);
+    const ordinal = positions.indexOf(selectedIndex) + 1;
+    const paths = candidatePenPaths(strokes, grapheme);
+    const index = paths.findIndex((candidate) =>
+        ordinal >= candidate.first && ordinal <= candidate.last);
+    const current = paths[index];
+    const following = paths[index + 1];
+    if (!current || !following) {
+        throw new Error("Joining needs a following candidate pen path");
+    }
+    const lastSlot = positions[current.last - 1];
+    const before = strokes[lastSlot];
+    const after = strokes[positions[following.first - 1]];
+    if (before.width !== after.width
+        || before.color.toUpperCase() !== after.color.toUpperCase()) {
+        throw new Error("Joining paths requires matching pen width and RGB");
+    }
+    const bridge = {
+        grapheme, x1: before.x2, y1: before.y2,
+        x2: after.x1, y2: after.y1,
+        width: before.width, color: before.color,
+    };
+    if (bridge.x1 === bridge.x2 && bridge.y1 === bridge.y2) {
+        throw new Error("Candidate paths are already continuous");
+    }
+    const distance = (bridge.x2 - bridge.x1) ** 2
+        + (bridge.y2 - bridge.y1) ** 2;
+    if (distance > 1200 * 1200) {
+        throw new Error("Path gap exceeds 1200 µm join limit");
+    }
+    if (strokes.length >= MAX_STROKES) {
+        throw new Error("Joining paths exceeds 4096 authored strokes");
+    }
+    validateInsertedBridge(bridge);
+    const next = [...strokes];
+    next.splice(lastSlot + 1, 0, bridge);
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex: lastSlot + 1 };
+}
 // Reverse every directed segment in one touching path AND its sequence.
 // Interleaved glyph rows stay in their original v1 TSV positions.
 export function reverseCandidatePath(strokes, grapheme, selectedIndex) {
@@ -4385,6 +4434,7 @@ export function createGlyphStrokeEditor() {
     const reversePath = required("glyph-reverse-path");
     const startPath = required("glyph-path-start");
     const closePath = required("glyph-path-close");
+    const joinNextPath = required("glyph-path-join-next");
     const translatePath = required("glyph-path-translate");
     const scalePath = required("glyph-path-scale");
     const rotatePath = required("glyph-path-rotate");
@@ -4449,7 +4499,7 @@ export function createGlyphStrokeEditor() {
         selected, update,
         remove, subdivide, splitExact, merge, clearGlyph, reverse,
         reversePath,
-        startPath, closePath,
+        startPath, closePath, joinNextPath,
         translatePath, scalePath, stylePath, removePath,
         rotatePath, pathRotateDegrees, pathRotatePivotX, pathRotatePivotY,
         reflectPath, pathReflectAxis, pathReflectPivot,
@@ -5618,6 +5668,15 @@ export function createGlyphStrokeEditor() {
         closePath.disabled = !active || !chosenPath
             || chosenPath.first === chosenPath.last || closureGap === 0
             || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
+        const followingPath = paths[paths.indexOf(chosenPath) + 1];
+        const bridgeGap = chosenPath && followingPath ?
+            (chosenPath.end.x - followingPath.start.x) ** 2
+                + (chosenPath.end.y - followingPath.start.y) ** 2 : 0;
+        joinNextPath.disabled = !active || drawing !== null
+            || !chosenPath || !followingPath || strokes.length >= MAX_STROKES
+            || chosenPath.width !== followingPath.width
+            || chosenPath.color !== followingPath.color
+            || bridgeGap === 0 || bridgeGap > 1200 * 1200;
         translatePath.disabled = !active || !chosenPath;
         scalePath.disabled = !active || drawing !== null || !chosenPath;
         rotatePath.disabled = !active || drawing !== null || !chosenPath;
@@ -6651,6 +6710,21 @@ export function createGlyphStrokeEditor() {
             const changed = closeCandidatePath(strokes, glyph, selectedIndex);
             commitInkEdit(changed.strokes, glyph, "pen path closure", changed.selectedIndex);
             message("Closed selected pen path with a short bridge; unsaved");
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    joinNextPath.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null)
+            return;
+        try {
+            const glyph = character.value;
+            const changed = joinNextCandidatePath(
+                strokes, glyph, selectedIndex);
+            commitInkEdit(changed.strokes, glyph, "pen path join",
+                changed.selectedIndex);
+            message("Joined neighboring same-pen paths; unsaved");
         }
         catch (error) {
             message(String(error));

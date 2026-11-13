@@ -2598,6 +2598,24 @@ rendered to native PDF or transparent PNG. This is a manually requested
 straight connector, not mathematical closure of an analytic circle,
 a new curve primitive, or an inferred pen-up/cursive model.
 
+**Join selected path to following same-pen path** adds one deliberate
+straight bridge between adjacent candidate paths of the same exact glyph.
+The selected path's final endpoint leads to the next path's first endpoint,
+with no endpoint edits or reordered source strokes. Both paths must use the
+same pen width and RGB, have a nonzero gap no greater than 1200 µm, and
+fit the full round pen within the 3500 × 4500 µm authoring cell. The action
+is a single session-only Undo/Redo step; it does not download automatically.
+
+The corresponding native command is `glyphs --profile ink.tsv
+--join-next-path 'ñ' 1 --output joined.tsv`. Obtain the current one-based
+path index from `--inspect-paths`; after a join the two paths become one,
+so later path numbers can change. The complete TSV is validated before
+writing, including the 4096-segment cap. Missing next paths, different
+pen styles, long or clipped bridges refuse without replacing output.
+Saved TSV is accepted by the same Rust PDF and transparent PNG compositor.
+This is not automatic cursive joining, analytic curve construction or
+persistent path-identity metadata.
+
 **Load stroke TSV** reads an explicit existing glyph file into an in-memory
 draft. **Download stroke TSV** saves the canonical native-compatible file;
 there is no automatic saving or new server-side file endpoint. The Rust CLI

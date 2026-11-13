@@ -748,6 +748,55 @@ impl GlyphOverlay {
         Ok(())
     }
 
+    /// Insert one continuous, same-pen bridge from a selected candidate
+    /// path to the next path of this exact glyph. Neither path is reordered;
+    /// unrelated interleaved Unicode TSV rows retain their original slots.
+    pub(super) fn join_next_path(
+        &mut self, grapheme: &str, ordinal: u32,
+    ) -> Result<(), String> {
+        self.validate_stroke_library()?;
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let before = paths.get(index).ok_or("selected path outside bounds")?;
+        let after = paths.get(index.saturating_add(1))
+            .ok_or("joining needs a following candidate pen path")?;
+        let last_slot = *positions.get(before.end.saturating_sub(1))
+            .ok_or("last source path segment outside library")?;
+        let next_slot = *positions.get(after.start)
+            .ok_or("next path segment outside library")?;
+        let last = self.strokes.get(last_slot)
+            .ok_or("last source stroke outside library")?;
+        let next = self.strokes.get(next_slot)
+            .ok_or("next path stroke outside library")?;
+        if last.width_um != next.width_um || last.rgb != next.rgb {
+            return Err(concat!(
+                "joining paths requires matching pen width and RGB"
+            ).into());
+        }
+        let start = last.end_um;
+        let end = next.start_um;
+        if start == end {
+            return Err("candidate paths are already continuous".into());
+        }
+        let dx = i64::from(start.0) - i64::from(end.0);
+        let dy = i64::from(start.1) - i64::from(end.1);
+        let squared = dx.unsigned_abs().pow(2)
+            .saturating_add(dy.unsigned_abs().pow(2));
+        if squared > MAX_JOIN_GAP_UM.pow(2) {
+            return Err("path gap exceeds 1200 um join limit".into());
+        }
+        if self.strokes.len() >= MAX_STROKES {
+            return Err("joining paths exceeds 4096 authored strokes".into());
+        }
+        ensure_inserted_bridge_fits_cell(start, end, last.width_um)?;
+        let bridge = GlyphStroke {
+            grapheme: grapheme.to_owned(), start_um: start, end_um: end,
+            width_um: last.width_um, rgb: last.rgb,
+        };
+        self.strokes.insert(last_slot.saturating_add(1), bridge);
+        Ok(())
+    }
+
     /// Copy exact authored pen geometry to a new independent Unicode key.
     /// The source remains untouched; no live dependency is established.
     pub(super) fn copy_glyph(
@@ -931,6 +980,7 @@ impl GlyphOverlay {
         match flag {
             "--reverse-path" => self.reverse_path(grapheme, from),
             "--close-path" => self.close_path(grapheme, from),
+            "--join-next-path" => self.join_next_path(grapheme, from),
             "--rotate-path" => {
                 let start = next_integer(iter, "path start stroke", 1, 4096)?;
                 self.rotate_path(grapheme, from, start)
@@ -1909,7 +1959,8 @@ impl GlyphOverlay {
         flag: &str, iter: &mut Iter<'_, String>,
     ) -> Result<(), String> {
         let path = matches!(flag,
-            "--reverse-path" | "--close-path" | "--rotate-path"
+            "--reverse-path" | "--close-path" | "--join-next-path"
+            | "--rotate-path"
             | "--move-path" | "--translate-path" | "--style-path"
             | "--scale-path" | "--reflect-path" | "--remove-path"
             | "--rotate-path-ink",
@@ -1979,7 +2030,8 @@ impl GlyphOverlay {
                         .ok_or("path color requires #RRGGBB")?;
                     let _rgb = parse_path_rgb(color)?;
                 }
-                "--reverse-path" | "--close-path" | "--remove-path" => {}
+                "--reverse-path" | "--close-path" | "--join-next-path"
+                | "--remove-path" => {}
                 _ => return Err("unknown path edit".into()),
             }
         } else {
