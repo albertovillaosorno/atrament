@@ -107,6 +107,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--rotate-path GRAPHEME PATH_INDEX START_STROKE] \
     [--move-path GRAPHEME FROM_PATH TO_PATH] \
     [--translate-path GRAPHEME PATH_INDEX DX_UM DY_UM] \
+    [--style-path GRAPHEME PATH_INDEX WIDTH_UM #RRGGBB] \
     [--shear-glyph GRAPHEME ANGLE_DEG BASELINE_Y_UM] \
     [--scale-glyph-height GRAPHEME PERCENT BASELINE_Y_UM] \
     [--scale-glyph-width GRAPHEME PERCENT ANCHOR_X_UM] \
@@ -1461,7 +1462,7 @@ fn preflight_glyph_typed_option(
     let count = match option {
         "--glyph-stroke" => 7,
         "--set-stroke" => 8,
-        "--translate-path" | "--rotate-glyph" => 4,
+        "--translate-path" | "--style-path" | "--rotate-glyph" => 4,
         "--move-stroke" | "--move-path" | "--rotate-path"
         | "--shear-glyph" | "--scale-glyph-height"
         | "--scale-glyph-width" | "--translate-glyph"
@@ -1482,7 +1483,7 @@ fn preflight_glyph_typed_option(
         | "--merge-strokes" | "--join-strokes"
         | "--remove-stroke" | "--reverse-path"
         | "--close-path" | "--rotate-path" | "--move-path"
-        | "--translate-path" =>
+        | "--translate-path" | "--style-path" =>
             GlyphOverlay::preflight_stroke_or_path_edit(option, iter)?,
         _ => GlyphOverlay::preflight_transform_option(option, iter)?,
     }
@@ -1636,7 +1637,8 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
             | "--merge-strokes" | "--set-stroke" | "--remove-stroke" =>
                 glyphs.edit_stroke(option, &mut iter)?,
             "--reverse-path" | "--rotate-path" | "--close-path" | "--move-path"
-            | "--translate-path" => glyphs.edit_path(option, &mut iter)?,
+            | "--translate-path" | "--style-path" =>
+                glyphs.edit_path(option, &mut iter)?,
             "--remove-glyph" => {
                 let grapheme = iter.next()
                     .ok_or("--remove-glyph requires an exact grapheme")?;

@@ -889,6 +889,11 @@ impl GlyphOverlay {
                 let dy = next_signed_path_offset(iter, "path dy", 4500)?;
                 self.translate_path(grapheme, from, dx, dy)
             }
+            "--style-path" => {
+                let width = next_integer(iter, "path pen width", 80, 1500)?;
+                let color = iter.next().ok_or("path color requires #RRGGBB")?;
+                self.style_path(grapheme, from, width, parse_path_rgb(color)?)
+            }
             _ => Err("unknown path edit".into()),
         }
     }
@@ -1820,7 +1825,7 @@ impl GlyphOverlay {
     ) -> Result<(), String> {
         let path = matches!(flag,
             "--reverse-path" | "--close-path" | "--rotate-path"
-            | "--move-path" | "--translate-path",
+            | "--move-path" | "--translate-path" | "--style-path",
         );
         let grapheme = iter.next().ok_or(if path {
             "path edit requires an exact grapheme"
@@ -1846,6 +1851,14 @@ impl GlyphOverlay {
                             "path shift needs nonzero bounded whole um".into()
                         );
                     }
+                }
+                "--style-path" => {
+                    let _width = next_integer(
+                        iter, "path pen width", 80, 1500,
+                    )?;
+                    let color = iter.next()
+                        .ok_or("path color requires #RRGGBB")?;
+                    let _rgb = parse_path_rgb(color)?;
                 }
                 "--reverse-path" | "--close-path" => {}
                 _ => return Err("unknown path edit".into()),
@@ -2646,6 +2659,44 @@ impl GlyphOverlay {
         Ok(())
     }
 
+    /// Restyle one inspected path without changing its geometry, order or
+    /// exact Unicode identity. Every new round cap must fit the glyph cell.
+    pub(super) fn style_path(
+        &mut self, grapheme: &str, ordinal: u32,
+        width: u32, rgb: [u8; 3],
+    ) -> Result<(), String> {
+        if !(80..=1500).contains(&width) {
+            return Err("path pen width outside native bounds".into());
+        }
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("path index outside bounds")?;
+        let slots = positions.get(path.clone())
+            .ok_or("path range outside glyph")?;
+        let mut revised = self.strokes.clone();
+        let mut changed = false;
+        for selected in slots {
+            let stroke = revised.get_mut(*selected)
+                .ok_or("path segment outside library")?;
+            for point in [stroke.start_um, stroke.end_um] {
+                let _x = translated_pen_coordinate(point.0, 0, 3500, width)?;
+                let _y = translated_pen_coordinate(point.1, 0, 4500, width)?;
+            }
+            changed |= stroke.width_um != width || stroke.rgb != rgb;
+            stroke.width_um = width;
+            stroke.rgb = rgb;
+        }
+        if !changed {
+            return Err("selected path already uses that pen style".into());
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     pub(super) fn validate_optional_rhythm(&self) -> Result<(), String> {
         if let Some(maximum_um) = self.line_drift_um {
             if maximum_um > 150 {
@@ -3066,6 +3117,21 @@ fn validate_shifted_path_copy_keys(
         return Err("shifted path copy needs exact visible graphemes".into());
     }
     Ok(())
+}
+
+// The path style edit shares native #RRGGBB grammar with authored lines.
+fn parse_path_rgb(color: &str) -> Result<[u8; 3], String> {
+    if color.len() != 7 || !color.starts_with('#')
+        || !color.bytes().skip(1).all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("path color requires #RRGGBB".into());
+    }
+    let channel = |index: usize| -> Result<u8, String> {
+        u8::from_str_radix(
+            color.get(index..index.saturating_add(2))
+                .ok_or("path color requires #RRGGBB")?, 16,
+        ).map_err(|_error| "path color requires #RRGGBB".into())
+    };
+    Ok([channel(1)?, channel(3)?, channel(5)?])
 }
 
 // Admit the entire round pen cap, including odd micrometre widths.

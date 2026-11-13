@@ -1298,3 +1298,28 @@ entered ink, plus unsafe input and existing-target sentinel preservation.
 
 This is an authored segment operation, not generated cursive or saved
 pen-lift metadata; the broader P1-014 acceptance remains open.
+
+## Explicit whole-path pen style (partial) — 2026-11-13
+
+The native Rust `glyphs --style-path GRAPHEME PATH_INDEX WIDTH_UM #RRGGBB`
+command and the localhost glyph editor's **Apply pen width and color to
+selected continuous path** now restyle one independently inspected pen path.
+They preserve directed endpoints, ordered TSV records, other NFC/NFD keys
+and interleaved strokes; the browser records one undoable in-memory edit.
+Both enforce 80–1500 µm width, exact six-digit RGB, complete round-pen cap
+clearance in the 3500 × 4500 µm cell, and refuse a no-change request.
+
+Invalid input, clipped ink and unavailable path indices refuse atomically;
+native syntax is checked before an unclosed selected stdin is read. Neither
+interface saves a selected source or target without an explicit user action.
+
+Two native tests verify UTF-8 TSV save/reopen, candidate path inspection,
+byte-identical real PDF and transparent PNG against independently authored
+ink, and source/output sentinel preservation on refusal. Two browser tests
+cover full-library restyling, NFC/NFD isolation, editable session recovery,
+TSV download and invalid-input refusal. Another deterministic 256-case
+browser-versus-real-Rust comparison verifies accepted UTF-8 bytes and errors.
+
+This edits explicit sampled-line ink only; it does not add persisted pen
+lifts, live path identities, analytic curves, generated cursive or calibrated
+pen pressure. The complete P1-014 acceptance remains open.

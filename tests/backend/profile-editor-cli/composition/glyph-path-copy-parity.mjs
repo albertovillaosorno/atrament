@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
-    encodeGlyphLibrary }
+    encodeGlyphLibrary, styleCandidatePath }
 // jig-ignore-next-line: static ESM import needs a literal path.
     from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -213,4 +213,99 @@ test("256 native and browser shifted path copies agree on full ink",
         }
         assert.ok(accepted > 40, `accepted samples: ${accepted}`);
         assert.ok(refused > 80, `refused samples: ${refused}`);
+    });
+
+// Rust's --style-path and browser restyling agree at the byte boundary.
+// Covers interleaved Unicode, multi-stroke paths, odd pen widths and refusal.
+test("256 Rust/browser whole-path pen styles match exact TSV or refusal",
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            "build", "--locked", "--offline", "--quiet",
+            "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+        ], { cwd: root, encoding: "utf8", timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, ".temp") } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = random(0x51A7_2026);
+        let accepted = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 256; sample += 1) {
+            const glyph = sample % 2 === 0 ? "ñ" : "n\u0303";
+            const other = glyph === "ñ" ? "n\u0303" : "ñ";
+            const first = stroke(pick, glyph, "#123456");
+            const next = { ...first, x1: first.x2, y1: first.y2,
+                x2: first.x2 + pick(5, 100),
+                y2: first.y2 + pick(5, 100) };
+            if (sample % 5 === 0) next.color = "#445566";
+            const detached = stroke(pick, glyph, "#778899");
+            const rows = [first, stroke(pick, other, "#ABCD01"),
+                next, detached, stroke(pick, "∞", "#556677")];
+            const chosen = sample % 2 === 0 ? 0 : 3;
+            const ordinal = [0, 2, 3].indexOf(chosen) + 1;
+            const path = candidatePenPaths(rows, glyph).findIndex(
+                ({ first: from, last: to }) =>
+                    ordinal >= from && ordinal <= to) + 1;
+            const mode = sample % 16;
+            let width = mode === 0 ? 250 : mode === 1 ? 80
+                : mode === 2 ? 1500 : mode === 3 ? 251
+                    : mode === 4 ? 1501 : mode === 5 ? 79
+                        : pick(80, 800);
+            let color = mode === 6 ? "123456"
+                : mode === 7 ? "#GGGGGG"
+                    : mode === 8 ? "#123456" : "#aBcDef";
+            let source = glyph;
+            let browserIndex = chosen;
+            let nativeIndex = path;
+            if (mode === 9) {
+                browserIndex = -1;
+                nativeIndex = 0;
+            } else if (mode === 10) {
+                browserIndex = 9999;
+                nativeIndex = 4097;
+            } else if (mode === 11) {
+                source = "ab";
+            } else if (mode === 12) {
+                browserIndex = 0;
+                nativeIndex = 1;
+                width = 250;
+                color = "#123456";
+            } else if (mode === 13) {
+                rows[0] = { ...rows[0], x1: 125 };
+                browserIndex = 0;
+                nativeIndex = 1;
+                width = 251;
+                color = "#aBcDef";
+            }
+            const original = encodeGlyphLibrary(rows);
+            let expected;
+            try {
+                expected = encodeGlyphLibrary(styleCandidatePath(
+                    rows, source, browserIndex, width, color).strokes);
+            } catch (error) {
+                expected = error;
+            }
+            const actual = spawnSync(binary, [
+                "glyphs", ...rows.flatMap(strokeFlags),
+                "--style-path", source, String(nativeIndex),
+                String(width), color,
+            ], { cwd: root, encoding: "utf8", timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = "path style sample=" + sample + " mode=" + mode;
+            assert.equal(actual.error, undefined, context);
+            if (expected instanceof Error) {
+                refused += 1;
+                assert.notEqual(actual.status, 0, context);
+                assert.equal(actual.stdout, "", context);
+                assert.match(actual.stderr, /^Error: /, context);
+            } else {
+                accepted += 1;
+                assert.equal(actual.status, 0,
+                    context + ": " + actual.stderr);
+                assert.equal(actual.stdout, expected, context);
+            }
+            assert.equal(encodeGlyphLibrary(rows), original,
+                context + ": original source must stay untouched");
+        }
+        assert.ok(accepted > 50, "accepted styles: " + accepted);
+        assert.ok(refused > 70, "refused styles: " + refused);
     });

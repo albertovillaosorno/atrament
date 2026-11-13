@@ -2472,6 +2472,30 @@ stroke can also be translated as its own one-segment path.
 The path order, color and widths remain authored; this is
 not a new native TSV field or an automatically inferred anchor.
 
+**Apply pen width and color to selected continuous path** updates only the
+selected exact Unicode grapheme's inferred, connected pen path. The browser
+uses the existing **Pen width** and **Ink color** fields, records one bounded
+undoable step, and does not save until **Download stroke TSV** is selected.
+Other paths, directed endpoints and interleaved NFC/NFD glyph rows remain
+unchanged.
+
+The native equivalent is:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile ink.tsv --style-path 'ñ' 1 501 '#ABCDEF' \
+  --output restyled.tsv
+```
+
+The one-based path number comes from `--inspect-paths`; it may change
+after another edit. Width must be an integer from 80 to 1500 µm and
+color an exact six-digit hexadecimal RGB value. Every selected endpoint
+must retain its full round-pen clearance in the 3500 × 4500 µm cell.
+
+Missing paths, unchanged pen style, malformed operands or clipped ink
+refuse without changing the source file or an existing output. This is
+authored line styling, not a saved pen-lift identifier or a new curve.
+
 **Start closed pen loop at selected stroke** changes the start of an
 existing closed, same-pen path without changing any segment's geometry
 or direction. Select a later stroke inside the loop. Open contours,

@@ -597,6 +597,49 @@ export function translateCandidatePath(
     return { strokes: next, selectedIndex };
 }
 
+// Apply one pen style to the complete selected continuous path. This does
+// not restyle interleaved glyphs or create an implicit persisted pen lift.
+export function styleCandidatePath(
+    strokes: readonly Stroke[], grapheme: string, selectedIndex: number,
+    width: number, color: string,
+): { strokes: Stroke[]; selectedIndex: number } {
+    if (!exactGrapheme(grapheme)
+        || !Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path pen style needs a selected exact glyph stroke");
+    }
+    if (!Number.isSafeInteger(width) || width < 80 || width > 1500
+        || !/^#[0-9a-fA-F]{6}$/.test(color)) {
+        throw new Error("Path pen style requires 80–1500 µm and #RRGGBB");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) =>
+        stroke.grapheme === grapheme ? [index] : []);
+    const ordinal = positions.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) =>
+        ordinal >= candidate.first && ordinal <= candidate.last);
+    if (!path) throw new Error("Selected glyph has no candidate pen path");
+    const slots = positions.slice(path.first - 1, path.last);
+    const next = strokes.slice();
+    let changed = false;
+    for (const index of slots) {
+        const old = strokes[index]!;
+        const radius = width / 2;
+        if ([old.x1, old.x2].some((x) =>
+            x < radius || x > 3500 - radius)
+            || [old.y1, old.y2].some((y) =>
+                y < radius || y > 4500 - radius)) {
+            throw new Error("Restyled pen contour clips glyph cell");
+        }
+        changed ||= old.width !== width
+            || old.color.toUpperCase() !== color.toUpperCase();
+        next[index] = validateStroke({ ...old, width, color });
+    }
+    if (!changed) throw new Error("Selected path already uses that pen style");
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex };
+}
+
 // Reorder neighboring candidate paths, keeping every stroke within each
 // path in the same direction/order and every other glyph in the same TSV slot.
 export function moveCandidatePath(
@@ -4366,6 +4409,7 @@ export function createGlyphStrokeEditor(): {
     const startPath = required<HTMLButtonElement>("glyph-path-start");
     const closePath = required<HTMLButtonElement>("glyph-path-close");
     const translatePath = required<HTMLButtonElement>("glyph-path-translate");
+    const stylePath = required<HTMLButtonElement>("glyph-path-style");
     const copyPath = required<HTMLButtonElement>("glyph-path-copy");
     const copyShiftedPath =
         required<HTMLButtonElement>("glyph-path-copy-shifted");
@@ -4427,7 +4471,7 @@ export function createGlyphStrokeEditor(): {
         remove, subdivide, splitExact, merge, clearGlyph, reverse,
         reversePath,
         startPath, closePath,
-        translatePath, copyPath, copyShiftedPath, pathCopyTarget,
+        translatePath, stylePath, copyPath, copyShiftedPath, pathCopyTarget,
         pathDx, pathDy,
         earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
@@ -4457,7 +4501,7 @@ export function createGlyphStrokeEditor(): {
         | "stroke direction" | "stroke order"
         | "pen path direction" | "pen path start"
         | "pen path closure" | "pen path copy" | "pen path move"
-        | "pen path shifted copy"
+        | "pen path shifted copy" | "pen path pen style"
         | "pen path order" | "pen connection"
         | "stroke removal" | "glyph clear" | "starter replacement"
         | "glyph copy" | "accent composition"
@@ -5658,6 +5702,7 @@ export function createGlyphStrokeEditor(): {
             || chosenPath.first === chosenPath.last || closureGap === 0
             || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
         translatePath.disabled = !active || !chosenPath;
+        stylePath.disabled = !active || drawing !== null || !chosenPath;
         copyPath.disabled = !active || drawing !== null || !chosenPath
             || strokes.length >= MAX_STROKES;
         copyShiftedPath.disabled = copyPath.disabled;
@@ -6689,6 +6734,20 @@ export function createGlyphStrokeEditor(): {
             commitInkEdit(next, glyph, "pen path shifted copy", selectedIndex);
             message(`Copied ${added} shifted path strokes to `
                 + `${target} (unsaved)`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    stylePath.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null) return;
+        try {
+            const changed = styleCandidatePath(
+                strokes, character.value, selectedIndex,
+                decimalWhole(numeric.width.value), color.value,
+            );
+            commitInkEdit(changed.strokes, character.value,
+                "pen path pen style", changed.selectedIndex);
+            message("Restyled selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
         }

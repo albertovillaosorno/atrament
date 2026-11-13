@@ -14,7 +14,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
-    translateCandidatePath } =
+    translateCandidatePath, styleCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -606,6 +606,7 @@ function mountEditor() {
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
         "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
+        "glyph-path-style",
         "glyph-path-copy", "glyph-path-copy-target",
         "glyph-path-copy-shifted",
         "glyph-earlier", "glyph-later", "glyph-join",
@@ -1947,6 +1948,111 @@ test("shifted path copy UI downloads exact ink and supports recovery",
                 encodeGlyphLibrary(expected));
             editor.reset();
             assert.equal(get("path-copy-shifted").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("whole candidate path pen style preserves exact ink and refuses clipping",
+    () => {
+        const nfd = "n\u0303";
+        const a = { ...stroke(nfd), x1: 500, y1: 600,
+            x2: 900, y2: 1200, width: 251, color: "#112233" };
+        const b = { ...a, x1: 900, y1: 1200,
+            x2: 1400, y2: 1900 };
+        const tail = { ...a, x1: 1800, y1: 2400,
+            x2: 2200, y2: 2800, width: 200, color: "#445566" };
+        const other = stroke("ñ");
+        const source = [a, other, b, stroke("∞"), tail];
+        const original = encodeGlyphLibrary(source);
+        const changed = styleCandidatePath(source, nfd, 2, 501, "#abCDef");
+        assert.equal(changed.selectedIndex, 2);
+        assert.deepEqual(changed.strokes, [
+            { ...a, width: 501, color: "#ABCDEF" },
+            other, { ...b, width: 501, color: "#ABCDEF" },
+            source[3], tail,
+        ]);
+        assert.equal(candidatePenPaths(changed.strokes, nfd).length, 2);
+        assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(changed.strokes)),
+            changed.strokes);
+        const tailOnly = styleCandidatePath(source, nfd, 4,
+            125, "#010203");
+        assert.deepEqual(tailOnly.strokes.slice(0, 4), source.slice(0, 4));
+        assert.equal(tailOnly.strokes[4].width, 125);
+        for (const [index, width, color] of [
+            [-1, 250, "#123456"], [1, 250, "#123456"],
+            [2, 79, "#123456"], [2, 1501, "#123456"],
+            [2, 250.5, "#123456"], [2, 250, "123456"],
+            [2, 250, "#GGGGGG"], [2, 1500, "#123456"],
+            [2, 251, "#112233"],
+        ]) {
+            assert.throws(() => styleCandidatePath(
+                source, nfd, index, width, color),
+            /selected|80|clip|#RRGGBB|already/);
+        }
+        assert.equal(encodeGlyphLibrary(source), original,
+            "accepted and refused transformations cannot mutate source");
+        const full = Array.from({ length: 4096 }, (_, index) => ({
+            ...a, x1: 500 + index % 100,
+            y1: 600, x2: 900, y2: 1200,
+        }));
+        const fullResult = styleCandidatePath(full, nfd, 0, 501, "#ABCDEF");
+        assert.equal(fullResult.strokes.length, 4096);
+        assert.equal(full[0].width, 251);
+    });
+
+test("selected path style UI downloads only deliberately styled ink",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const nfd = "n\u0303";
+            const a = { ...stroke(nfd), x1: 500, y1: 600,
+                x2: 900, y2: 1200, width: 251, color: "#112233" };
+            const b = { ...a, x1: 900, y1: 1200,
+                x2: 1400, y2: 1900 };
+            const original = [a, stroke("ñ"), b, stroke("∞")];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(original));
+            assert.equal(get("path-style").disabled, true);
+            editor.start();
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            get("selected").value = "2";
+            get("selected").dispatch("change");
+            assert.equal(get("path-style").disabled, false);
+            get("width").value = "501";
+            get("color").value = "#abcdef";
+            get("path-style").dispatch("click");
+            assert.match(get("status").textContent,
+                /Restyled selected continuous pen path; unsaved/);
+            get("save").dispatch("click");
+            const changed = styleCandidatePath(original, nfd, 2,
+                501, "#abcdef");
+            assert.equal(await downloads[0].text(),
+                encodeGlyphLibrary(changed.strokes));
+            get("slant-undo").dispatch("click");
+            assert.match(get("status").textContent,
+                /Undid last pen path pen style/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[1].text(),
+                encodeGlyphLibrary(original));
+            get("slant-redo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[2].text(),
+                encodeGlyphLibrary(changed.strokes));
+            get("width").value = "1500";
+            get("color").value = "#111111";
+            get("path-style").dispatch("click");
+            assert.match(get("status").textContent, /clip/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[3].text(),
+                encodeGlyphLibrary(changed.strokes));
+            editor.reset();
+            assert.equal(get("path-style").disabled, true);
         } finally {
             ui.restore();
         }
