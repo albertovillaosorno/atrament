@@ -11,6 +11,7 @@ import {
     encodeGlyphLibrary, italicizeGlyphStrokes, rotateGlyphStrokes,
     scaleGlyphHeight, scaleGlyphInk, scaleGlyphWidth,
     translateGlyphStrokes, reflectGlyphStrokes, subdivideGlyphStroke,
+    mergeGlyphStrokes,
 // jig-ignore-next-line: static ESM import needs a literal path.
 } from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -348,3 +349,87 @@ test('browser subdivision matches native exact TSV and short-line refusal',
     assert.ok(approved > 0, 'subdivision needs accepted segments');
     assert.ok(rejected > 0, 'subdivision needs refused short segments');
 });
+
+// An exact lossless coalescing decision must agree across the localhost
+// authoring editor and the native TSV authority, including same-shape
+// neighbors whose Unicode normalization forms are deliberately distinct.
+test('browser and native straight-stroke merge decisions match for 256 cases',
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            'build', '--locked', '--offline', '--quiet',
+            '-p', 'atrament_profile_editor_cli', '--bin', 'atrament-profiles',
+        ], { cwd: root, encoding: 'utf8', timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, '.temp'),
+                CARGO_TARGET_DIR: join(root, '.cache/cargo-target') } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = generator(0x5A4A_2026);
+        let approved = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 256; sample += 1) {
+            const target = sample % 2 === 0 ? nfc : nfd;
+            const other = target === nfc ? nfd : nfc;
+            const x = pick(450, 1100);
+            const y = pick(450, 1100);
+            const dx = pick(20, 350);
+            const dy = pick(20, 350);
+            const width = pick(100, 450);
+            const first = { grapheme: target, x1: x, y1: y,
+                x2: x + dx, y2: y + dy, width, color: colors[0] };
+            const next = { ...first, x1: first.x2, y1: first.y2,
+                x2: first.x2 + dx, y2: first.y2 + dy };
+            const source = [first,
+                { grapheme: other, x1: 500, y1: 700,
+                    x2: 900, y2: 1100, width: 250, color: colors[1] },
+                next];
+            const mode = sample % 8;
+            if (mode === 1) {
+                source[2].x2 += dx;
+                source[2].y2 += dy;
+            } else if (mode === 2) {
+                source[2].x1 += 1;
+            } else if (mode === 3) {
+                source[2].y2 += 1;
+            } else if (mode === 4) {
+                source[2].x2 = first.x1;
+                source[2].y2 = first.y1;
+            } else if (mode === 5) {
+                source[2].color = colors[1];
+            } else if (mode === 6) {
+                source[2].width += 1;
+            }
+            // Browser indexes the actual TSV row; Rust indexes the
+            // selected glyph's stroke sequence starting at one.
+            const sourceIndex = mode === 7 ? 2 : 0;
+            const nativeOrdinal = mode === 7 ? 2 : 1;
+            let expected;
+            try {
+                expected = encodeGlyphLibrary(mergeGlyphStrokes(
+                    source, target, sourceIndex,
+                ));
+            } catch (error) {
+                expected = error;
+            }
+            const actual = spawnSync(binary, [
+                'glyphs', ...source.flatMap(cliStroke),
+                '--merge-strokes', target, String(nativeOrdinal),
+            ], { cwd: root, encoding: 'utf8', timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = 'case ' + sample + ', ' + target
+                + ', mode ' + mode;
+            assert.equal(actual.error, undefined, context);
+            if (expected instanceof Error) {
+                refused += 1;
+                assert.notEqual(actual.status, 0, context);
+                assert.equal(actual.stdout, '', context);
+                assert.match(actual.stderr, /^Error: /, context);
+            } else {
+                approved += 1;
+                assert.equal(actual.status, 0,
+                    context + ': ' + actual.stderr);
+                assert.equal(actual.stdout, expected, context);
+            }
+        }
+        assert.equal(approved, 64);
+        assert.equal(refused, 192);
+    });

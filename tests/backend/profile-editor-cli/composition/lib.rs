@@ -6302,6 +6302,201 @@ fn native_midpoint_split_refuses_invalid_or_unsafe_edits_without_file_writes() {
     fs::remove_file(full).expect("remove full source");
 }
 
+
+fn assert_merged_ink_export_matches_authored(
+    revised_name: &str, nfd: &str,
+) {
+    for format in ["pdf", "png"] {
+        let mut imported = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", revised_name,
+            "--place-text", "1", "30000", "45000", "n\u{303}\u{f1}\u{221e}",
+        ]);
+        let mut independently_authored = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", nfd, "800", "900", "2000", "2100",
+            "250", "#112233",
+            "--glyph-stroke", "\u{f1}", "500", "800", "500", "1600",
+            "250", "#445566",
+            "--glyph-stroke", "\u{221e}", "600", "600", "900", "900",
+            "300", "#AABBCC",
+            "--glyph-stroke", nfd, "1600", "2400", "2100", "2400",
+            "250", "#112233",
+            "--place-text", "1", "30000", "45000", "n\u{303}\u{f1}\u{221e}",
+        ]);
+        if format == "png" {
+            imported.extend(args(&["--dpi", "72"]));
+            independently_authored.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&imported)
+            .expect("imported glyphs render").expect("render bytes"),
+            execute_notebook(&independently_authored)
+                .expect("authored glyphs render").expect("render bytes"),
+            "merged TSV and direct {format} ink differ");
+    }
+}
+
+#[test]
+fn native_lossless_merge_preserves_exact_glyph_rows_and_export_geometry() {
+    let source = test_path().with_extension("tsv");
+    let revised = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("original TSV path");
+    let revised_name = revised.to_str().expect("merged TSV path");
+    let nfd = "n\u{303}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "800", "900", "1200", "1300",
+        "250", "#112233",
+        "--glyph-stroke", "\u{f1}", "500", "800", "500", "1600",
+        "250", "#445566",
+        "--glyph-stroke", nfd, "1200", "1300", "1600", "1700",
+        "250", "#112233",
+        "--glyph-stroke", "\u{221e}", "600", "600", "900", "900",
+        "300", "#AABBCC",
+        "--glyph-stroke", nfd, "1600", "1700", "2000", "2100",
+        "250", "#112233",
+        "--glyph-stroke", nfd, "1600", "2400", "2100", "2400",
+        "250", "#112233",
+    ])).expect("authored exact glyphs").expect("source bytes");
+    fs::write(&source, &original).expect("save source");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "n\u{303}\t800\t900\t2000\t2100\t250\t#112233\n",
+        "\u{f1}\t500\t800\t500\t1600\t250\t#445566\n",
+        "\u{221e}\t600\t600\t900\t900\t300\t#AABBCC\n",
+        "n\u{303}\t1600\t2400\t2100\t2400\t250\t#112233\n",
+    );
+    let edit = args(&[
+        "--profile", source_name,
+        "--merge-strokes", nfd, "1",
+        "--merge-strokes", nfd, "1",
+    ]);
+    let merged = execute_glyph_library(&edit)
+        .expect("merge exact same-glyph neighbors").expect("merged TSV");
+    assert_eq!(merged, expected.as_bytes(),
+        "merge retains interleaved NFC and unrelated glyph slots");
+    assert_eq!(fs::read(&source).expect("source intact"), original);
+    let roundtrip = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--split-stroke", nfd, "1",
+        "--merge-strokes", nfd, "1",
+    ])).expect("split/merge replay").expect("roundtrip bytes");
+    assert_eq!(roundtrip, original,
+        "exact line subdivision must be recoverable without rounding drift");
+
+    let mut inspect = edit.clone();
+    inspect.extend(args(&["--inspect-paths", nfd]));
+    let report = String::from_utf8(execute_glyph_library(&inspect)
+        .expect("inspect merged glyph").expect("path report"))
+        .expect("UTF-8 report");
+    assert!(report.contains("Strokes: 2\nPaths: 2\nPen lifts: 1"),
+        "{report}");
+    assert!(report.contains(
+        "Path 1: strokes 1..1 (1 segment) (800, 900) -> (2000, 2100)"
+    ), "{report}");
+    let mut save = edit;
+    save.extend(args(&["--output", revised_name]));
+    assert!(execute_glyph_library(&save)
+        .expect("save merged TSV").is_none());
+    assert_eq!(fs::read(&revised).expect("saved merged ink"), merged);
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", revised_name,
+    ])).expect("read merged TSV").expect("bytes"), merged);
+
+    assert_merged_ink_export_matches_authored(revised_name, nfd);
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(revised).expect("remove merged file");
+}
+
+#[test]
+fn native_lossless_merge_refuses_nonidentical_ink_without_clobbering() {
+    for flags in [
+        args(&["--profile", "-", "--merge-strokes"]),
+        args(&["--profile", "-", "--merge-strokes", "\u{f1}"]),
+    ] {
+        let failure = preflight_glyph_profile_sources(&flags)
+            .expect_err("incomplete operands refuse before stdin");
+        assert!(failure.contains("--merge-strokes requires 2 operands"),
+            "{failure}");
+    }
+    for index in ["0", "-1", "1.0", "4097", "not-a-number"] {
+        let failure = preflight_glyph_profile_sources(&args(&[
+            "--profile", "-", "--merge-strokes", "\u{f1}", index,
+        ])).expect_err("invalid ordinal refuses before stdin");
+        assert!(failure.contains("stroke index"), "{index}: {failure}");
+    }
+    let failure = preflight_glyph_profile_sources(&args(&[
+        "--profile", "-", "--merge-strokes", "n\u{303}a", "1",
+    ])).expect_err("multiple graphemes refuse");
+    assert!(failure.contains("exact visible grapheme"), "{failure}");
+
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source TSV path");
+    let target_name = target.to_str().expect("target TSV path");
+    fs::write(&target, b"do not replace accepted output")
+        .expect("sentinel target");
+    let base = "n\u{303}\t1000\t1000\t1300\t1300\t250\t#102030\n";
+    for (scenario, next, diagnostic) in [
+        ("pen lift", "n\u{303}\t1301\t1300\t1600\t1600\t250\t#102030\n",
+            "touching"),
+        ("turn", "n\u{303}\t1300\t1300\t1400\t1600\t250\t#102030\n",
+            "straight"),
+        ("reverse", "n\u{303}\t1300\t1300\t1200\t1200\t250\t#102030\n",
+            "co-directed"),
+        ("width", "n\u{303}\t1300\t1300\t1600\t1600\t251\t#102030\n",
+            "matching pen"),
+        ("color", "n\u{303}\t1300\t1300\t1600\t1600\t250\t#102031\n",
+            "matching pen"),
+        ("different glyph", "\u{f1}\t1300\t1300\t1600\t1600\t250\t#102030\n",
+            "following stroke"),
+        ("rounded bend", "n\u{303}\t1300\t1300\t1601\t1602\t250\t#102030\n",
+            "straight"),
+    ] {
+        let content = format!("atrament.glyph-strokes.v1\n{base}{next}");
+        fs::write(&source, content.as_bytes()).expect("valid case TSV");
+        let failure = execute_glyph_library(&args(&[
+            "--profile", source_name, "--merge-strokes", "n\u{303}", "1",
+            "--output", target_name, "--replace",
+        ])).expect_err("nonlossless merge refuses");
+        assert!(failure.contains(diagnostic),
+            "{scenario} refusal: {failure}");
+        assert_eq!(fs::read(&source).expect("source untouched"),
+            content.as_bytes());
+        assert_eq!(fs::read(&target).expect("target untouched"),
+            b"do not replace accepted output", "{scenario}");
+    }
+    let rounded = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "n\u{303}\t1000\t900\t1301\t1301\t251\t#112233\n",
+        "n\u{303}\t1301\t1301\t1601\t1702\t251\t#112233\n",
+    );
+    fs::write(&source, rounded).expect("rounded midpoint source");
+    let failure = execute_glyph_library(&args(&[
+        "--profile", source_name, "--merge-strokes", "n\u{303}", "1",
+        "--output", target_name, "--replace",
+    ])).expect_err("rounded midpoint can be noncollinear");
+    assert!(failure.contains("straight"), "{failure}");
+
+    // Combining two strokes must also work at the full 4096-row cap.
+    let full = test_path().with_extension("tsv");
+    let full_name = full.to_str().expect("full TSV path");
+    let mut source_text = String::from("atrament.glyph-strokes.v1\n");
+    source_text.push_str("n\u{303}\t800\t900\t1200\t1300\t250\t#112233\n");
+    source_text.push_str("n\u{303}\t1200\t1300\t1600\t1700\t250\t#112233\n");
+    source_text.push_str(
+        &"\u{221e}\t600\t600\t900\t900\t250\t#112233\n".repeat(4094)
+    );
+    fs::write(&full, &source_text).expect("bounded full TSV");
+    let reduced = execute_glyph_library(&args(&[
+        "--profile", full_name, "--merge-strokes", "n\u{303}", "1",
+    ])).expect("full library can shrink").expect("shrunk TSV");
+    assert!(String::from_utf8(reduced).expect("UTF-8").contains(
+        "n\u{303}\t800\t900\t1600\t1700\t250\t#112233\n"));
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(target).expect("remove target");
+    fs::remove_file(full).expect("remove full fixture");
+}
+
 #[test]
 fn native_reflection_preserves_directed_unicode_paths_and_pdf_png_ink() {
     let source = test_path().with_extension("tsv");

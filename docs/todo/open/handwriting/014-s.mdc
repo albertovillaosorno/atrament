@@ -1193,3 +1193,29 @@ its seam off the original straight line; turns, backtracks, mismatched ink
 and non-touching segments refuse. Focused browser tests cover Unicode
 identity, full native TSV cap, unchanged source on refusal and undo/redo.
 The resulting contour remains a standard editable TSV stroke after export.
+
+
+## Native lossless collinear glyph merge (partial) — 2026-11-13
+
+The Rust `atrament-profiles glyphs` CLI now provides
+`--merge-strokes GRAPHEME FIRST_INDEX`, corresponding to the browser's
+explicit segment merge. It selects one-based consecutive strokes within the
+exact Unicode grapheme, including when unrelated NFC, NFD or mathematical
+glyph rows are interleaved in source TSV. Only touching, co-directed,
+strictly collinear, identical-width and identical-color pen lines qualify.
+The resulting single directed segment replaces the first selected row;
+the second disappears, other rows retain order, and the original library
+is never implicitly overwritten.
+
+Two native Rust tests check exact TSV, split/merge replay, path inspection,
+save/reopen, PDF and transparent PNG parity with independently authored ink,
+invalid/incomplete arguments before stdin, refusal without source/target
+clobbering, off-line rounded midpoints and full 4096-stroke input reduction.
+A separate 256-case deterministic browser-versus-native subprocess test
+compares accepted and refused operations on independent NFC/NFD forms and
+requires identical resulting UTF-8 TSV bytes.
+
+This does not create analytic curves, insert pen lifts, or infer joined
+cursive. A rounded subdivision is reversible only when its whole-micrometre
+midpoint remains exactly on the straight source contour. The P1 task stays
+open for the full two-line and correlated penmanship criteria.

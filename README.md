@@ -1842,6 +1842,16 @@ is derived, not persisted as a new v1 TSV path or analytic-circle field.
 
 Reordering or reversing a stroke may split the reported paths. Explicitly
 using `--join-strokes` can merge paths by inserting an authored bridge.
+
+To **remove** a redundant seam without adding any new ink, use
+`glyphs --profile ink.tsv --merge-strokes 'ñ' 1 --output merged.tsv`.
+This coalesces only touching, co-directed, exactly collinear consecutive
+strokes of the same exact Unicode glyph, with identical pen width and color.
+
+The one-based index selects the first stroke in that glyph's authored order,
+even if unrelated TSV rows are interleaved. Turns, reverse travel and rounded
+midpoints off the original line refuse; unlike the connector, merging does
+not bridge a gap.
 The groups are **diagnostic**: neither inspection nor TSV stores semantic
 pen-down groups, interpolated curves, or inferred cursive joins.
 

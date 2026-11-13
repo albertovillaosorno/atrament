@@ -772,6 +772,7 @@ impl GlyphOverlay {
             }
             "--remove-stroke" => self.remove_stroke(grapheme, from),
             "--split-stroke" => self.split_stroke(grapheme, from),
+            "--merge-strokes" => self.merge_strokes(grapheme, from),
             "--join-strokes" => self.join_strokes(grapheme, from),
             "--set-stroke" => {
                 let replacement = Self::parse_stroke(grapheme, iter)?;
@@ -1317,6 +1318,66 @@ impl GlyphOverlay {
         Ok(positions)
     }
 
+    /// Coalesce two touching, forward-collinear segments of one exact glyph.
+    /// The next stroke is selected in glyph order, even when other Unicode
+    /// rows separate the pair in the portable TSV. Only a mathematically
+    /// lossless same-pen union is admitted; unlike --join-strokes, this
+    /// operation never creates ink across a pen lift.
+    pub(super) fn merge_strokes(
+        &mut self, grapheme: &str, ordinal: u32,
+    ) -> Result<(), String> {
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let index = Self::checked_stroke_position(&positions, ordinal)?;
+        let first_position = *positions.get(index)
+            .ok_or("stroke index outside bounds")?;
+        let next_position = *positions.get(index.saturating_add(1))
+            .ok_or("merge requires a following stroke in the same glyph")?;
+        let first = self.strokes.get(first_position)
+            .ok_or("first stroke outside library")?;
+        let next = self.strokes.get(next_position)
+            .ok_or("following stroke outside library")?;
+        let delta = |start: (u32, u32), end: (u32, u32)|
+            -> Result<(i64, i64), String> {
+            Ok((
+                i64::from(end.0).checked_sub(i64::from(start.0))
+                    .ok_or("stroke X displacement overflow")?,
+                i64::from(end.1).checked_sub(i64::from(start.1))
+                    .ok_or("stroke Y displacement overflow")?,
+            ))
+        };
+        let first_delta = delta(first.start_um, first.end_um)?;
+        let next_delta = delta(next.start_um, next.end_um)?;
+        let cross = first_delta.0.checked_mul(next_delta.1)
+            .and_then(|left| first_delta.1.checked_mul(next_delta.0)
+                .and_then(|right| left.checked_sub(right)))
+            .ok_or("stroke cross product overflow")?;
+        let dot = first_delta.0.checked_mul(next_delta.0)
+            .and_then(|first_term| first_delta.1
+                .checked_mul(next_delta.1)
+                .and_then(|second_term| first_term.checked_add(second_term)))
+            .ok_or("stroke dot product overflow")?;
+        let continuous = first.end_um == next.start_um;
+        let identical_pen = first.width_um == next.width_um
+            && first.rgb == next.rgb;
+        if !(continuous && identical_pen && cross == 0 && dot > 0) {
+            return Err(concat!(
+                "merge needs touching, straight, co-directed same-glyph ",
+                "strokes with matching pen width and color",
+            ).into());
+        }
+        let mut revised = self.strokes.clone();
+        let merged = revised.get_mut(first_position)
+            .ok_or("first stroke outside revised library")?;
+        merged.end_um = next.end_um;
+        let _removed = revised.remove(next_position);
+        let prior = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = prior;
+            return Err(error);
+        }
+        Ok(())
+    }
+
     /// Swap two adjacent complete path ranges, retaining each constituent
     /// segment direction, pen settings, and unrelated interleaved records.
     pub(super) fn move_path(
@@ -1661,7 +1722,7 @@ impl GlyphOverlay {
                     let _stroke = Self::parse_stroke(grapheme, iter)?;
                 }
                 "--reverse-stroke" | "--split-stroke"
-                | "--join-strokes" | "--remove-stroke" => {}
+                | "--merge-strokes" | "--join-strokes" | "--remove-stroke" => {}
                 _ => return Err("unknown stroke edit".into()),
             }
         }
