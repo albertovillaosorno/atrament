@@ -1384,6 +1384,35 @@
               on the physical page. Rounded pen caps must remain in the cell;
               a collapsed segment or clipped contour refuses atomically.
               The preview never modifies the authored TSV.</p>
+            <label>Reflect authored glyph across coordinate
+              <select id="glyph-reflect-axis" disabled>
+                <option value="x">Vertical axis (mirror left/right, X)</option>
+                <option value="y">Horizontal axis (mirror up/down, Y)</option>
+              </select>
+            </label>
+            <label>Reflection coordinate (X 0–3500, Y 0–4500 µm)
+              <input id="glyph-reflect-pivot" type="number" min="0"
+                max="4500" step="1" value="1750" disabled>
+            </label>
+            <button id="glyph-reflect-all" type="button" disabled>
+              Reflect all selected glyph strokes (unsaved)
+            </button>
+            <div class="glyph-slant-preview-region">
+              <svg id="glyph-reflect-preview"
+                class="glyph-stroke-preview glyph-stroke-slant-preview"
+                viewBox="0 0 3500 4500" role="img"
+                aria-label="Proposed reflected glyph preview"></svg>
+              <p id="glyph-reflect-preview-status" class="field-help"
+                role="status" aria-live="polite">
+                Author a glyph to preview its reflection.
+              </p>
+            </div>
+            <p class="field-help">Reflection mirrors only the selected
+              exact Unicode glyph around a chosen X or Y axis. Directed
+              stroke order, widths and colors remain unchanged; pen caps
+              must fit within the cell. Preview is read-only, the accepted
+              reflection is one undoable session edit, and TSV download is
+              separate.</p>
             <label>Move entire authored glyph X (signed µm)
               <input id="glyph-move-x" type="number" min="-3500"
                 max="3500" step="1" value="0" disabled>

@@ -2442,6 +2442,45 @@ export function rotateGlyphStrokes(
     return candidate;
 }
 
+// Reflect one exact authored Unicode glyph across a physical X or Y axis.
+// Retain every directed stroke and pen width; refuse pen-cap clipping.
+export function reflectGlyphStrokes(
+    source: Stroke[], grapheme: string, axis: "x" | "y", pivot: number,
+): Stroke[] {
+    if (!exactGrapheme(grapheme)) {
+        throw new Error("Reflection requires one exact visible glyph");
+    }
+    if (axis !== "x" && axis !== "y") {
+        throw new Error("Reflection axis must be x or y");
+    }
+    const maximum = axis === "x" ? 3500 : 4500;
+    if (!Number.isSafeInteger(pivot) || pivot < 0 || pivot > maximum) {
+        throw new Error("Reflection pivot outside glyph cell");
+    }
+    let found = false;
+    const candidate = source.map((line) => {
+        if (line.grapheme !== grapheme) return line;
+        found = true;
+        const stroke = validateStroke(line);
+        const reflected = { ...stroke,
+            x1: axis === "x" ? 2 * pivot - stroke.x1 : stroke.x1,
+            x2: axis === "x" ? 2 * pivot - stroke.x2 : stroke.x2,
+            y1: axis === "y" ? 2 * pivot - stroke.y1 : stroke.y1,
+            y2: axis === "y" ? 2 * pivot - stroke.y2 : stroke.y2,
+        };
+        if ([reflected.x1, reflected.x2].some((x) =>
+            x * 2 < stroke.width || x * 2 > 7000 - stroke.width)
+            || [reflected.y1, reflected.y2].some((y) =>
+                y * 2 < stroke.width || y * 2 > 9000 - stroke.width)) {
+            throw new Error("Reflected pen contour clips glyph cell");
+        }
+        return validateStroke(reflected);
+    });
+    if (!found) throw new Error("Selected glyph has no authored ink");
+    encodeGlyphLibrary(candidate);
+    return candidate;
+}
+
 // Move the entire caller-authored glyph without changing its geometry,
 // pen order or neighboring exact Unicode records. Zero offset is identity.
 export function translateGlyphStrokes(
@@ -4080,6 +4119,12 @@ export function createGlyphStrokeEditor(): {
     const rotatePreview = required<SVGSVGElement>("glyph-rotate-preview");
     const rotatePreviewStatus =
         required<HTMLElement>("glyph-rotate-preview-status");
+    const reflectAxis = required<HTMLSelectElement>("glyph-reflect-axis");
+    const reflectPivot = required<HTMLInputElement>("glyph-reflect-pivot");
+    const reflectGlyph = required<HTMLButtonElement>("glyph-reflect-all");
+    const reflectPreview = required<SVGSVGElement>("glyph-reflect-preview");
+    const reflectPreviewStatus =
+        required<HTMLElement>("glyph-reflect-preview-status");
     const moveX = required<HTMLInputElement>("glyph-move-x");
     const moveY = required<HTMLInputElement>("glyph-move-y");
     const moveGlyph = required<HTMLButtonElement>("glyph-move-all");
@@ -4165,6 +4210,7 @@ export function createGlyphStrokeEditor(): {
         widthPercent, widthAnchor, scaleWidth,
         inkPercent, scaleInk, moveX, moveY, moveGlyph,
         rotateAngle, rotatePivotX, rotatePivotY, rotateGlyph,
+        reflectAxis, reflectPivot, reflectGlyph,
         undoTransform, redoTransform, selectUndoGlyph, selectRedoGlyph,
         variationSeed,
         variationSample, variationDownload,
@@ -4194,7 +4240,7 @@ export function createGlyphStrokeEditor(): {
     // Saving, failed edits and read-only previews never add history entries.
     const HISTORY_LIMIT = 8;
     type TransformKind = "slant" | "height" | "width" | "ink"
-        | "move" | "rotation";
+        | "move" | "rotation" | "reflection";
     type EditKind = TransformKind | "pen trace" | "stroke addition"
         | "stroke edit" | "stroke direction" | "stroke order"
         | "pen path direction" | "pen path start"
@@ -4223,7 +4269,8 @@ export function createGlyphStrokeEditor(): {
         ink.length === 0 ? "" : encodeGlyphLibrary([...ink]);
     const recoveryLabel = (kind: EditKind): string =>
         kind === "ink" ? "glyph pen thickness"
-            : (["slant", "height", "width", "move", "rotation"]
+            : (["slant", "height", "width", "move", "rotation",
+                "reflection"]
                 .includes(kind) ? `glyph ${kind}` : kind);
 
     // User-authored geometry is integral in micrometres/percent/degrees.
@@ -5144,6 +5191,49 @@ export function createGlyphStrokeEditor(): {
             rotatePreviewStatus.textContent = String(error);
         }
     };
+    const renderReflectPreview = (): void => {
+        reflectPreview.replaceChildren();
+        if (!active) {
+            reflectPreviewStatus.textContent =
+                "Requires a compatible backend session";
+            return;
+        }
+        const target = character.value;
+        const authored = strokes.filter((item) =>
+            item.grapheme === target);
+        if (authored.length === 0) {
+            reflectPreviewStatus.textContent =
+                "Author this exact glyph before previewing reflection";
+            return;
+        }
+        try {
+            if (reflectPivot.value === "") {
+                throw new Error("Choose a reflection pivot");
+            }
+            if (authored.length > 128) {
+                throw new Error("Preview limited to 128 authored segments");
+            }
+            const candidate = reflectGlyphStrokes(strokes, target,
+                reflectAxis.value as "x" | "y",
+                decimalWhole(reflectPivot.value));
+            const lines = candidate.filter((item) =>
+                item.grapheme === target).map((item) => {
+                const line = document.createElementNS(SVG_NS, "line");
+                for (const axis of ["x1", "y1", "x2", "y2"] as const) {
+                    line.setAttribute(axis, String(item[axis]));
+                }
+                line.setAttribute("stroke", item.color);
+                line.setAttribute("stroke-width", String(item.width));
+                line.setAttribute("stroke-linecap", "round");
+                return line;
+            });
+            reflectPreview.replaceChildren(...lines);
+            reflectPreviewStatus.textContent = `${lines.length} proposed `
+                + "reflected segments; preview only, draft unchanged";
+        } catch (error) {
+            reflectPreviewStatus.textContent = String(error);
+        }
+    };
     const renderMovePreview = (): void => {
         movePreview.replaceChildren();
         if (!active) {
@@ -5318,6 +5408,8 @@ export function createGlyphStrokeEditor(): {
             || drawing !== null;
         rotateGlyph.disabled = !active || shown.length === 0
             || drawing !== null;
+        reflectGlyph.disabled = !active || shown.length === 0
+            || drawing !== null;
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
         clearGlyph.disabled = !active || shown.length === 0
@@ -5402,6 +5494,7 @@ export function createGlyphStrokeEditor(): {
         renderInkPreview();
         renderMovePreview();
         renderRotatePreview();
+        renderReflectPreview();
         const label = `${shown.length} strokes for selected glyph`;
         preview.setAttribute("aria-label", label);
         renderVariation();
@@ -5441,6 +5534,10 @@ export function createGlyphStrokeEditor(): {
     for (const control of [rotateAngle, rotatePivotX, rotatePivotY]) {
         control.addEventListener("input", renderRotatePreview);
         control.addEventListener("change", renderRotatePreview);
+    }
+    for (const control of [reflectAxis, reflectPivot]) {
+        control.addEventListener("input", renderReflectPreview);
+        control.addEventListener("change", renderReflectPreview);
     }
     for (const control of [moveX, moveY]) {
         control.addEventListener("input", renderMovePreview);
@@ -5724,6 +5821,25 @@ export function createGlyphStrokeEditor(): {
                 decimalWhole(rotatePivotY.value));
             applyGlyphTransform(next, target, "rotation");
             message(`Rotated all authored ${target} strokes; unsaved`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    reflectGlyph.addEventListener("click", () => {
+        if (!active) return;
+        try {
+            if (drawing !== null) {
+                throw new Error("Finish the pen trace before reflection");
+            }
+            if (reflectPivot.value === "") {
+                throw new Error("Choose a reflection pivot");
+            }
+            const target = character.value;
+            const next = reflectGlyphStrokes(strokes, target,
+                reflectAxis.value as "x" | "y",
+                decimalWhole(reflectPivot.value));
+            applyGlyphTransform(next, target, "reflection");
+            message(`Reflected all authored ${target} strokes; unsaved`);
         } catch (error) {
             message(String(error));
         }

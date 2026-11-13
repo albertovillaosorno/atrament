@@ -1123,3 +1123,23 @@ Focused browser regression covers interleaved NFC/NFD and mathematical
 glyph rows, byte-exact undo, single-step redo, successive clears, empty-draft
 export refusal, and reset. It remains editor-only recovery; native glyph
 parsing and notebook-wide undo/redo are unchanged.
+
+## Explicit whole-glyph reflection in the authoring session — 2026-11-13
+
+The browser editor can mirror all already-authored strokes for one exact
+Unicode grapheme about a selected whole-micrometre vertical X or horizontal
+Y axis. A read-only preview shows the exact transformed coordinates of up
+to 128 segments. A deliberate apply keeps every directed stroke in its
+original order, preserves pen width and RGB, retains unrelated interleaved
+NFC/NFD/math glyph rows, and records one bounded undoable in-memory step.
+
+The mirror validates axis and pivot before touching the draft, then checks
+round-pen clearance in the 3500 × 4500 µm cell and native v1 TSV limits.
+Clipping, invalid input or a missing exact glyph refuses atomically.
+Two focused browser regressions verify both axes, double-reflection byte
+identity, shared pen endpoints, all 4096 admitted rows, read-only preview,
+invalid-input refusal, exact exported TSV, undo, redo and session reset.
+
+This is manual sampled-line editing, not analytic curve persistence or a
+native CLI reflection option. Export still occurs through explicit v1 TSV;
+the broader joined-cursive and calibrated correlated ink task stays open.

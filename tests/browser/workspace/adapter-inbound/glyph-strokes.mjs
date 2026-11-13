@@ -6,6 +6,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     geometricStarter, SELECTABLE_MATH_GLYPHS, italicizeGlyphStrokes,
     scaleGlyphHeight, scaleGlyphWidth,
     scaleGlyphInk, translateGlyphStrokes, rotateGlyphStrokes,
+    reflectGlyphStrokes,
     composeAccentedGlyph, fillMissingBilingualBaseline,
     fillMissingConnectedLowercase,
     missingBilingualBaseline, varyGlyphStrokes,
@@ -503,6 +504,9 @@ function mountEditor() {
         "glyph-rotate-angle", "glyph-rotate-pivot-x",
         "glyph-rotate-pivot-y", "glyph-rotate-all",
         "glyph-rotate-preview", "glyph-rotate-preview-status",
+        "glyph-reflect-axis", "glyph-reflect-pivot",
+        "glyph-reflect-all", "glyph-reflect-preview",
+        "glyph-reflect-preview-status",
         "glyph-move-x", "glyph-move-y", "glyph-move-all",
         "glyph-move-preview", "glyph-move-preview-status",
         "glyph-ideal-preview", "glyph-ideal-geometry",
@@ -546,6 +550,8 @@ function mountEditor() {
     get("rotate-angle").value = "0";
     get("rotate-pivot-x").value = "1750";
     get("rotate-pivot-y").value = "2250";
+    get("reflect-axis").value = "x";
+    get("reflect-pivot").value = "1750";
     get("move-x").value = "0";
     get("move-y").value = "0";
     get("path-dx").value = "0";
@@ -731,6 +737,8 @@ test("authored glyph transforms reject numeric coercions", () => {
                 "rotate-preview"],
             ["rotate-pivot-y", "0x8ca", "rotate-all",
                 "rotate-preview"],
+            ["reflect-pivot", "0x6d6", "reflect-all",
+                "reflect-preview"],
             ["move-x", "0e0", "move-all", "move-preview"],
             ["move-y", "+0", "move-all", "move-preview"],
         ];
@@ -11560,3 +11568,136 @@ test("clear exact glyph is one reversible isolated edit, including empty draft",
             ui.restore();
         }
     });
+
+
+test("whole-glyph reflection preserves directed exact-Unicode pen paths",
+    () => {
+    const nfd = "o\u0301";
+    const source = [
+        { ...stroke(nfd), x1: 450, y1: 1000, x2: 850, y2: 1600,
+            width: 251, color: "#243647" },
+        { ...stroke("ó"), x1: 200, y1: 1000, x2: 550, y2: 1500 },
+        { ...stroke(nfd), x1: 850, y1: 1600, x2: 1300, y2: 2200,
+            width: 251, color: "#243647" },
+        { ...stroke("∞"), x1: 300, y1: 1700, x2: 500, y2: 1900 },
+    ];
+    const original = structuredClone(source);
+    const leftRight = reflectGlyphStrokes(source, nfd, "x", 1750);
+    assert.deepEqual(leftRight.map((line) => line.grapheme),
+        [nfd, "ó", nfd, "∞"]);
+    assert.equal(leftRight[0].x1, 3050);
+    assert.equal(leftRight[0].x2, 2650);
+    assert.equal(leftRight[2].x1, 2650);
+    assert.equal(leftRight[2].y1, leftRight[0].y2);
+    assert.equal(leftRight[2].x1, leftRight[0].x2);
+    assert.equal(leftRight[0].width, 251);
+    assert.deepEqual(leftRight[1], source[1]);
+    assert.deepEqual(leftRight[3], source[3]);
+    assert.deepEqual(reflectGlyphStrokes(leftRight, nfd, "x", 1750),
+        original, "twice across the same axis returns every byte");
+    const upDown = reflectGlyphStrokes(source, nfd, "y", 2250);
+    assert.equal(upDown[0].y1, 3500);
+    assert.equal(upDown[0].y2, 2900);
+    assert.equal(upDown[2].y1, upDown[0].y2);
+    assert.equal(upDown[0].x1, source[0].x1);
+    assert.deepEqual(reflectGlyphStrokes(upDown, nfd, "y", 2250),
+        original);
+    assert.equal(encodeGlyphLibrary(leftRight),
+        encodeGlyphLibrary(parseGlyphLibrary(encodeGlyphLibrary(leftRight))));
+    assert.deepEqual(source, original);
+    for (const [glyph, axis, pivot] of [
+        [nfd, "x", 400], [nfd, "y", 400],
+        [nfd, "x", 3501], [nfd, "y", 4501],
+        [nfd, "x", 1.5], [nfd, "x", -1],
+        [nfd, "horizontal", 1750],
+        ["ñ", "x", 1750], ["ab", "x", 1750],
+    ]) {
+        assert.throws(() => reflectGlyphStrokes(source,
+            glyph, axis, pivot),
+        "invalid axis, selected Unicode or pivot must refuse");
+    }
+    const full = Array.from({ length: 4096 }, (_, i) => ({
+        ...stroke(nfd), x1: 1400, y1: 1600,
+        x2: 1600 + i % 100, y2: 1700,
+    }));
+    assert.equal(reflectGlyphStrokes(full, nfd, "x", 1750).length,
+        4096, "bounded full-size libraries remain editable");
+});
+
+test("whole-glyph reflection preview is opt-in with bounded undo and TSV",
+    async () => {
+    const ui = mountEditor();
+    try {
+        const { get, editor, downloads } = ui;
+        const nfd = "o\u0301";
+        const preview = get("reflect-preview");
+        const status = get("reflect-preview-status");
+        assert.equal(get("reflect-all").disabled, true);
+        editor.start();
+        get("character").value = nfd;
+        get("character").dispatch("input");
+        for (const [key, value] of Object.entries({
+            x1: 450, y1: 1000, x2: 850, y2: 1600, width: 251,
+        })) get(key).value = String(value);
+        get("add").dispatch("click");
+        const original = [{ grapheme: nfd, x1: 450, y1: 1000,
+            x2: 850, y2: 1600, width: 251, color: "#243647" }];
+        assert.equal(get("reflect-all").disabled, false);
+        assert.equal(preview.children.length, 1);
+        assert.equal(Number(preview.children[0].attributes.get("x1")),
+            3050);
+        assert.match(status.textContent, /preview only, draft unchanged/);
+        assert.equal(downloads.length, 0);
+        get("reflect-pivot").value = "400";
+        get("reflect-pivot").dispatch("input");
+        assert.equal(preview.children.length, 0);
+        assert.match(status.textContent, /clips glyph cell/);
+        get("reflect-all").dispatch("click");
+        assert.match(get("status").textContent, /clips glyph cell/);
+        get("reflect-pivot").value = "1.75e3";
+        get("reflect-pivot").dispatch("input");
+        assert.equal(preview.children.length, 0);
+        get("reflect-all").dispatch("click");
+        assert.match(get("status").textContent, /whole decimal/);
+        get("reflect-pivot").value = "1750";
+        get("reflect-pivot").dispatch("input");
+        get("reflect-all").dispatch("click");
+        const horizontally = reflectGlyphStrokes(original, nfd,
+            "x", 1750);
+        assert.match(get("status").textContent, /Reflected all authored/);
+        assert.equal(downloads.length, 0);
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(horizontally));
+        assert.equal(get("slant-undo").textContent,
+            "Undo last glyph reflection");
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(original));
+        get("slant-redo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(horizontally));
+        get("reflect-axis").value = "y";
+        get("reflect-axis").dispatch("change");
+        get("reflect-pivot").value = "2250";
+        get("reflect-pivot").dispatch("input");
+        const both = reflectGlyphStrokes(horizontally, nfd, "y", 2250);
+        assert.equal(Number(preview.children[0].attributes.get("y1")),
+            both[0].y1);
+        get("reflect-all").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(), encodeGlyphLibrary(both));
+        get("slant-undo").dispatch("click");
+        get("save").dispatch("click");
+        assert.equal(await downloads.at(-1).text(),
+            encodeGlyphLibrary(horizontally));
+        editor.reset();
+        assert.equal(get("reflect-all").disabled, true);
+        assert.equal(preview.children.length, 0);
+        assert.equal(get("slant-redo").disabled, true);
+    } finally {
+        ui.restore();
+    }
+});

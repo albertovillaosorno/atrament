@@ -2084,6 +2084,21 @@ It does not affect any other key, including equivalent-looking NFC/NFD
 spellings. An empty in-memory library can be undone, but cannot be saved as
 a native TSV until another glyph is authored or an undo restores one.
 
+**Reflect all selected glyph strokes (unsaved)** mirrors the exact
+selected Unicode glyph about a chosen vertical X coordinate (0–3500 µm)
+or horizontal Y coordinate (0–4500 µm). It reflects ordered, directed
+sampled endpoints without reversing their pen directions, changing widths
+or pigment, or touching any sibling glyph. A read-only SVG preview shows
+up to 128 proposed strokes; full edits accept the native 4,096-stroke TSV
+limit. Invalid axes, nondecimal pivots and clipped round pen caps refuse
+without changing authored ink. Each accepted reflection is one bounded
+undo/redo step, and downloading TSV remains a separate explicit action.
+
+This is a browser-only geometry authoring control: the downloaded v1 TSV
+holds its already-reflected integer segments for independent Rust PDF/PNG
+export. It does not add a persisted mirror parameter or infer a cursive
+path, and the native CLI has no matching reflection flag.
+
 New edits after undo discard the redo tail, and the oldest step is evicted
 after eight successful edits. Identity transforms and refused edits preserve
 history; a successful TSV import or session reset clears it. Download
