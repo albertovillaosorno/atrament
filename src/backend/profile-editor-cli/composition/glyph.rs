@@ -894,6 +894,18 @@ impl GlyphOverlay {
                 let y = next_integer(iter, "path Y percent", 50, 150)?;
                 self.scale_path(grapheme, from, x, y)
             }
+            "--reflect-path" => {
+                let axis = iter.next()
+                    .ok_or("reflection axis requires x or y")?;
+                let maximum = match axis.as_str() {
+                    "x" => 3500,
+                    "y" => 4500,
+                    _ => return Err("reflection axis requires x or y".into()),
+                };
+                let pivot = next_integer(iter, "reflection pivot", 0,
+                    maximum)?;
+                self.reflect_path(grapheme, from, axis, pivot)
+            }
             "--style-path" => {
                 let width = next_integer(iter, "path pen width", 80, 1500)?;
                 let color = iter.next().ok_or("path color requires #RRGGBB")?;
@@ -1832,7 +1844,7 @@ impl GlyphOverlay {
         let path = matches!(flag,
             "--reverse-path" | "--close-path" | "--rotate-path"
             | "--move-path" | "--translate-path" | "--style-path"
-            | "--scale-path" | "--remove-path",
+            | "--scale-path" | "--reflect-path" | "--remove-path",
         );
         let grapheme = iter.next().ok_or(if path {
             "path edit requires an exact grapheme"
@@ -1865,6 +1877,18 @@ impl GlyphOverlay {
                     if x == 100 && y == 100 {
                         return Err("path scaling needs a changed axis".into());
                     }
+                }
+                "--reflect-path" => {
+                    let axis = iter.next()
+                        .ok_or("reflection axis requires x or y")?;
+                    let maximum = match axis.as_str() {
+                        "x" => 3500,
+                        "y" => 4500,
+                        _ => return Err(
+                            "reflection axis requires x or y".into()),
+                    };
+                    let _pivot = next_integer(iter, "reflection pivot",
+                        0, maximum)?;
                 }
                 "--style-path" => {
                     let _width = next_integer(
@@ -2730,6 +2754,67 @@ impl GlyphOverlay {
         }
         if !changed {
             return Err("path scaling does not change selected ink".into());
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Reflect only one inferred connected path across a physical axis.
+    /// Directed joints, interleaved Unicode records and pen style remain
+    /// unchanged; the full round pen must fit both axes of the glyph cell.
+    pub(super) fn reflect_path(
+        &mut self, grapheme: &str, ordinal: u32,
+        axis: &str, pivot: u32,
+    ) -> Result<(), String> {
+        let maximum = match axis {
+            "x" => 3500u32,
+            "y" => 4500u32,
+            _ => return Err("reflection axis requires x or y".into()),
+        };
+        if pivot > maximum {
+            return Err("reflection pivot outside glyph cell".into());
+        }
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("path index outside bounds")?;
+        let slots = positions.get(path.clone())
+            .ok_or("path range outside glyph")?;
+        let mut revised = self.strokes.clone();
+        let mut changed = false;
+        for selected in slots {
+            let stroke = revised.get_mut(*selected)
+                .ok_or("path segment outside library")?;
+            let reflect = |point: (u32, u32)|
+                -> Result<(u32, u32), String> {
+                let mirror = |value: u32| {
+                    i64::from(pivot) * 2 - i64::from(value)
+                };
+                let x = if axis == "x" { mirror(point.0) }
+                    else { i64::from(point.0) };
+                let y = if axis == "y" { mirror(point.1) }
+                    else { i64::from(point.1) };
+                let pen = i64::from(stroke.width_um);
+                if x * 2 < pen || x * 2 > 7000 - pen
+                    || y * 2 < pen || y * 2 > 9000 - pen {
+                    return Err("reflected pen contour clips glyph cell".into());
+                }
+                Ok((u32::try_from(x)
+                    .map_err(|_error| "reflected X out of bounds")?,
+                    u32::try_from(y)
+                        .map_err(|_error| "reflected Y out of bounds")?))
+            };
+            let start = reflect(stroke.start_um)?;
+            let end = reflect(stroke.end_um)?;
+            changed |= start != stroke.start_um || end != stroke.end_um;
+            stroke.start_um = start;
+            stroke.end_um = end;
+        }
+        if !changed {
+            return Err("path reflection does not change selected ink".into());
         }
         let original = replace(&mut self.strokes, revised);
         if let Err(error) = self.encode_file() {

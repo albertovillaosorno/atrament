@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     encodeGlyphLibrary, styleCandidatePath, removeCandidatePath,
-    scaleCandidatePath }
+    scaleCandidatePath, reflectCandidatePath }
 // jig-ignore-next-line: static ESM import needs a literal path.
     from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -497,4 +497,121 @@ test('256 real Rust and browser selected-path scales agree byte for byte',
         }
         assert.ok(accepted > 75, `accepted scales: ${accepted}`);
         assert.ok(refused > 70, `refused scales: ${refused}`);
+    });
+
+// Exercise the production browser transform against actual native output.
+// Reversal is an exact involution; no shape, Unicode or row normalization.
+test('256 real Rust and browser selected-path reflections agree on TSV',
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            'build', '--locked', '--offline', '--quiet',
+            '-p', 'atrament_profile_editor_cli', '--bin', 'atrament-profiles',
+        ], { cwd: root, encoding: 'utf8', timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, '.temp') } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = random(0xC0F1_78A7);
+        let accepted = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 256; sample += 1) {
+            const key = sample % 2 === 0 ? 'ñ' : 'n\u0303';
+            const other = key === 'ñ' ? 'n\u0303' : 'ñ';
+            const mode = sample % 16;
+            const first = stroke(pick, key, '#123456');
+            const second = {
+                ...first, x1: first.x2, y1: first.y2,
+                x2: first.x2 + pick(1, 200),
+                y2: first.y2 + pick(1, 200),
+            };
+            const detached = stroke(pick, key, '#667788');
+            const source = [first, stroke(pick, other, '#AABBCC'),
+                second, stroke(pick, '∞', '#CCDDEE'), detached];
+            let selected = mode % 3 === 0 ? 4 : mode % 3 === 1 ? 2 : 0;
+            const pathOrdinal = candidatePenPaths(source, key).findIndex(
+                ({ first: from, last: to }) => {
+                    const ordinal = [0, 2, 4].indexOf(selected) + 1;
+                    return ordinal >= from && ordinal <= to;
+                }) + 1;
+            let nativeIndex = pathOrdinal;
+            let axis = mode % 2 === 0 ? 'x' : 'y';
+            let pivot = axis === 'x' ? 1750 : 2250;
+            if (mode === 2) {
+                // Clipping near the physical edge must reject atomically.
+                pivot = 0;
+            } else if (mode === 3) {
+                pivot = 4501;
+            } else if (mode === 4) {
+                axis = 'z';
+            } else if (mode === 5) {
+                selected = -1;
+                nativeIndex = 0;
+            } else if (mode === 6) {
+                selected = 9999;
+                nativeIndex = 4097;
+            } else if (mode === 7) {
+                pivot = 3501;
+                axis = 'x';
+            } else if (mode === 8) {
+                pivot = -1;
+            } else if (mode === 9) {
+                pivot = 1.5;
+            } else if (mode === 10) {
+                first.x1 = 1750;
+                first.x2 = 1750;
+                first.y1 = 700;
+                first.y2 = 900;
+                second.x1 = 1750;
+                second.x2 = 1750;
+                second.y1 = 900;
+                second.y2 = 1200;
+                selected = 0;
+                nativeIndex = 1;
+                axis = 'x';
+                pivot = 1750;
+            } else if (mode === 11) {
+                // Odd pen width plus half-micrometre round cap at edge.
+                first.x1 = 126;
+                first.x2 = 900;
+                first.width = 251;
+                second.width = 251;
+                selected = 0;
+                nativeIndex = 1;
+                axis = 'y';
+                pivot = 2250;
+            } else if (mode === 12) {
+                // Reflection must not infer a join through a different pen.
+                second.color = '#FF7733';
+                selected = 2;
+                nativeIndex = 2;
+            }
+            const original = encodeGlyphLibrary(source);
+            let expected;
+            try {
+                expected = encodeGlyphLibrary(reflectCandidatePath(
+                    source, key, selected, axis, pivot).strokes);
+            } catch (error) {
+                expected = error;
+            }
+            const actual = spawnSync(binary, [
+                'glyphs', ...source.flatMap(strokeFlags),
+                '--reflect-path', key, String(nativeIndex), axis,
+                String(pivot),
+            ], { cwd: root, encoding: 'utf8', timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = `reflected path sample=${sample} mode=${mode}`;
+            assert.equal(actual.error, undefined, context);
+            if (expected instanceof Error) {
+                refused += 1;
+                assert.notEqual(actual.status, 0, context);
+                assert.equal(actual.stdout, '', context);
+                assert.match(actual.stderr, /^Error: /, context);
+            } else {
+                accepted += 1;
+                assert.equal(actual.status, 0, context + actual.stderr);
+                assert.equal(actual.stdout, expected, context);
+            }
+            assert.equal(encodeGlyphLibrary(source), original, context);
+        }
+        assert.ok(accepted > 65, `accepted mirrors: ${accepted}`);
+        assert.ok(refused > 65, `refused mirrors: ${refused}`);
     });

@@ -15,7 +15,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
     translateCandidatePath, styleCandidatePath, scaleCandidatePath,
-    removeCandidatePath } =
+    reflectCandidatePath, removeCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -608,6 +608,8 @@ function mountEditor() {
         "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
         "glyph-path-style", "glyph-path-remove", "glyph-path-scale",
+        "glyph-path-reflect", "glyph-path-reflect-axis",
+        "glyph-path-reflect-pivot",
         "glyph-path-scale-x", "glyph-path-scale-y",
         "glyph-path-copy", "glyph-path-copy-target",
         "glyph-path-copy-shifted",
@@ -649,6 +651,8 @@ function mountEditor() {
     get("path-dy").value = "0";
     get("path-scale-x").value = "100";
     get("path-scale-y").value = "100";
+    get("path-reflect-axis").value = "x";
+    get("path-reflect-pivot").value = "1750";
     get("variation-sample").value = "1";
     for (const [key, value] of Object.entries({
         seed: 42, width: 6, height: 6, thickness: 8, slant: 4,
@@ -12656,4 +12660,114 @@ test("path scaling preserves closed contour joints and full 4096-stroke budget",
         assert.equal(encodeGlyphLibrary(large), before);
         assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(scaled.strokes)),
             scaled.strokes);
+    });
+
+
+test("selected path reflection preserves Unicode and reverses without loss",
+    () => {
+        const nfd = "n\u0303";
+        const a = { ...stroke(nfd), x1: 500, y1: 700,
+            x2: 900, y2: 1200, width: 251, color: "#112233" };
+        const b = { ...a, x1: 900, y1: 1200, x2: 1400, y2: 1900 };
+        const accent = { ...a, x1: 2200, y1: 2500,
+            x2: 2700, y2: 3000, color: "#445566" };
+        const original = [a, stroke("ñ"), b, stroke("∞"), accent];
+        const source = encodeGlyphLibrary(original);
+        const mirrored = reflectCandidatePath(original, nfd, 2, "x", 1750);
+        assert.deepEqual(mirrored, { strokes: [
+            { ...a, x1: 3000, x2: 2600 }, original[1],
+            { ...b, x1: 2600, x2: 2100 }, original[3], accent,
+        ], selectedIndex: 2 });
+        assert.deepEqual(candidatePenPaths(mirrored.strokes, nfd).map((p) =>
+            [p.first, p.last]), [[1, 2], [3, 3]]);
+        assert.equal(encodeGlyphLibrary(reflectCandidatePath(
+            mirrored.strokes, nfd, 2, "x", 1750).strokes), source,
+        "a second mirror restores all original authored bytes");
+        const vertical = reflectCandidatePath(original, nfd, 0, "y", 2250);
+        assert.equal(vertical.strokes[0].y1, 3800);
+        assert.equal(vertical.strokes[2].y2, 2600);
+        assert.equal(vertical.strokes[1], original[1]);
+        assert.equal(encodeGlyphLibrary(original), source);
+        for (const [rows, key, index, axis, pivot] of [
+            [original, nfd, -1, "x", 1750],
+            [original, "ñ", 0, "x", 1750],
+            [original, nfd, 0, "z", 1750],
+            [original, nfd, 0, "x", 3501],
+            [original, nfd, 0, "y", -1],
+            [original, nfd, 0, "x", 0],
+            [original, nfd, 0, "y", 0],
+            [original, nfd, 0, "x", 1.5],
+        ]) {
+            assert.throws(() => reflectCandidatePath(rows, key, index,
+                axis, pivot), /path|axis|pivot|clip|selected/i);
+        }
+        const centered = { ...a, x1: 1750, x2: 1750 };
+        assert.throws(() => reflectCandidatePath([centered], nfd, 0,
+            "x", 1750), /does not change/);
+        const full = Array.from({ length: 4096 }, (_, index) => ({
+            ...a, x1: 500 + index % 100, x2: 900,
+        }));
+        assert.equal(reflectCandidatePath(full, nfd, 4095,
+            "x", 1750).strokes.length, 4096);
+        assert.equal(encodeGlyphLibrary(original), source);
+    });
+
+test("selected path reflection UI keeps deliberate TSV and bounded undo",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const nfd = "n\u0303";
+            const a = { ...stroke(nfd), x1: 500, y1: 700,
+                x2: 900, y2: 1200, width: 251, color: "#112233" };
+            const b = { ...a, x1: 900, y1: 1200,
+                x2: 1400, y2: 1900 };
+            const original = [a, stroke("ñ"), b, stroke("∞")];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(original));
+            assert.equal(get("path-reflect").disabled, true);
+            editor.start();
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            get("selected").value = "2";
+            get("selected").dispatch("change");
+            assert.equal(get("path-reflect").disabled, false);
+            assert.equal(get("path-reflect-axis").disabled, false);
+            get("path-reflect-axis").value = "x";
+            get("path-reflect-pivot").value = "1750";
+            get("path-reflect").dispatch("click");
+            assert.match(get("status").textContent,
+                /Reflected selected continuous pen path; unsaved/);
+            const result = reflectCandidatePath(original, nfd, 2,
+                "x", 1750).strokes;
+            assert.equal(downloads.length, 0,
+                "editing never downloads without an explicit save");
+            get("save").dispatch("click");
+            assert.equal(await downloads[0].text(),
+                encodeGlyphLibrary(result));
+            get("slant-undo").dispatch("click");
+            assert.match(get("status").textContent,
+                /Undid last pen path reflection/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[1].text(),
+                encodeGlyphLibrary(original));
+            get("slant-redo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[2].text(),
+                encodeGlyphLibrary(result));
+            get("path-reflect-pivot").value = "0";
+            get("path-reflect").dispatch("click");
+            assert.match(get("status").textContent, /clips/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[3].text(),
+                encodeGlyphLibrary(result));
+            editor.reset();
+            assert.equal(get("path-reflect").disabled, true);
+            assert.equal(get("slant-undo").disabled, true);
+        } finally {
+            ui.restore();
+        }
     });

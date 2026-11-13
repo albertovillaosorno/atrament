@@ -18046,3 +18046,161 @@ fn native_selected_path_scaling_preserves_closed_loops_and_full_budget() {
         "{report}");
     fs::remove_file(source).expect("remove owned full-budget source");
 }
+
+#[test]
+fn native_selected_path_reflection_preserves_exact_ink_and_exports() {
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let output_name = output.to_str().expect("output path");
+    let nfd = "n\u{303}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "500", "700", "900", "1200",
+        "251", "#112233",
+        "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+        "300", "#778899",
+        "--glyph-stroke", nfd, "900", "1200", "1400", "1900",
+        "251", "#112233",
+        "--glyph-stroke", "∞", "800", "800", "1700", "1500",
+        "200", "#445566",
+        "--glyph-stroke", nfd, "2200", "2500", "2700", "3000",
+        "200", "#445566",
+    ])).expect("authored source").expect("TSV bytes");
+    fs::write(&source, &original).expect("save source");
+    let command = args(&[
+        "--profile", source_name,
+        "--reflect-path", nfd, "1", "x", "1750",
+    ]);
+    let reflected = execute_glyph_library(&command)
+        .expect("reflected path").expect("TSV");
+    let expected = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "n\u{303}\t3000\t700\t2600\t1200\t251\t#112233\n",
+        "ñ\t2200\t600\t2200\t3300\t300\t#778899\n",
+        "n\u{303}\t2600\t1200\t2100\t1900\t251\t#112233\n",
+        "∞\t800\t800\t1700\t1500\t200\t#445566\n",
+        "n\u{303}\t2200\t2500\t2700\t3000\t200\t#445566\n",
+    );
+    assert_eq!(reflected, expected.as_bytes());
+    let twice = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-path", nfd, "1", "x", "1750",
+        "--reflect-path", nfd, "1", "x", "1750",
+    ])).expect("double reflection").expect("original TSV");
+    assert_eq!(twice, original);
+    let vertical = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-path", nfd, "1", "y", "2250",
+    ])).expect("vertical reflection").expect("TSV");
+    assert!(String::from_utf8(vertical).expect("UTF-8").contains(
+        "n\u{303}\t500\t3800\t900\t3300\t251\t#112233\n"));
+    let report = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-path", nfd, "1", "x", "1750",
+        "--inspect-paths", nfd,
+    ])).expect("path inspection").expect("UTF-8"))
+        .expect("UTF-8");
+    assert!(report.contains("Strokes: 3\nPaths: 2\nPen lifts: 1"),
+        "{report}");
+    let mut save = command;
+    save.extend(args(&["--output", output_name]));
+    assert!(execute_glyph_library(&save).expect("saved output").is_none());
+    assert_eq!(fs::read(&source).expect("source retained"), original);
+    assert_eq!(fs::read(&output).expect("saved revision"), reflected);
+    for format in ["pdf", "png"] {
+        let mut saved = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", output_name,
+            "--place-text", "1", "30000", "45000", "ñn\u{303}",
+        ]);
+        let mut direct = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+            "300", "#778899",
+            "--glyph-stroke", nfd, "3000", "700", "2600", "1200",
+            "251", "#112233",
+            "--glyph-stroke", nfd, "2600", "1200", "2100", "1900",
+            "251", "#112233",
+            "--glyph-stroke", nfd, "2200", "2500", "2700", "3000",
+            "200", "#445566",
+            "--place-text", "1", "30000", "45000", "ñn\u{303}",
+        ]);
+        if format == "png" {
+            saved.extend(args(&["--dpi", "72"]));
+            direct.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&saved)
+            .expect("saved ink export").expect("bytes"),
+            execute_notebook(&direct)
+                .expect("independent physical ink").expect("bytes"),
+            "selected path reflection {format} parity");
+    }
+    fs::remove_file(source).expect("remove owned source");
+    fs::remove_file(output).expect("remove owned output");
+}
+
+#[test]
+fn native_selected_path_reflection_refuses_without_clobbering() {
+    for flags in [
+        args(&["--profile", "-", "--reflect-path"]),
+        args(&["--profile", "-", "--reflect-path", "ñ"]),
+        args(&["--profile", "-", "--reflect-path", "ñ", "1"]),
+        args(&["--profile", "-", "--reflect-path", "ñ", "1", "x"]),
+    ] {
+        let error = preflight_glyph_profile_sources(&flags)
+            .expect_err("incomplete option refuses before stdin");
+        assert!(error.contains("--reflect-path requires 4 operands"),
+            "{error}");
+    }
+    for (key, path, axis, pivot) in [
+        ("ñ", "0", "x", "1750"),
+        ("ñ", "4097", "x", "1750"),
+        ("ab", "1", "x", "1750"),
+        ("ñ", "1", "z", "1750"),
+        ("ñ", "1", "X", "1750"),
+        ("ñ", "1", "x", "-1"),
+        ("ñ", "1", "x", "3501"),
+        ("ñ", "1", "y", "4501"),
+        ("ñ", "1", "x", "1.5"),
+    ] {
+        let _refused = preflight_glyph_profile_sources(&args(&[
+            "--profile", "-", "--reflect-path", key, path, axis, pivot,
+        ])).expect_err("bad typed operand refuses before stdin");
+    }
+    let source = test_path().with_extension("tsv");
+    let output = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source");
+    let output_name = output.to_str().expect("output");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "500", "700", "900", "1200",
+        "251", "#112233",
+        "--glyph-stroke", "∞", "800", "800", "1700", "1500",
+        "200", "#445566",
+    ])).expect("authored source").expect("TSV");
+    fs::write(&source, &original).expect("saved source");
+    fs::write(&output, b"accepted output sentinel")
+        .expect("saved existing target");
+    for (glyph, index, axis, pivot, reason) in [
+        ("ñ", "1", "x", "0", "clips"),
+        ("ñ", "1", "y", "0", "clips"),
+        ("ñ", "2", "x", "1750", "path index"),
+        ("á", "1", "x", "1750", "no authored strokes"),
+    ] {
+        let failure = execute_glyph_library(&args(&[
+            "--profile", source_name, "--reflect-path",
+            glyph, index, axis, pivot,
+            "--output", output_name, "--replace",
+        ])).expect_err("invalid edit does not overwrite accepted file");
+        assert!(failure.contains(reason), "{failure}");
+        assert_eq!(fs::read(&source).expect("source unchanged"), original);
+        assert_eq!(fs::read(&output).expect("output unchanged"),
+            b"accepted output sentinel");
+    }
+    let centered = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "1750", "700", "1750", "1200",
+        "251", "#112233", "--reflect-path", "ñ", "1", "x", "1750",
+    ])).expect_err("unchanged path reflection must refuse");
+    assert!(centered.contains("does not change"), "{centered}");
+    fs::remove_file(source).expect("remove owned source");
+    fs::remove_file(output).expect("remove owned output");
+}

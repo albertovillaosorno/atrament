@@ -108,6 +108,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--move-path GRAPHEME FROM_PATH TO_PATH] \
     [--translate-path GRAPHEME PATH_INDEX DX_UM DY_UM] \
     [--scale-path GRAPHEME PATH_INDEX X_PERCENT Y_PERCENT] \
+    [--reflect-path GRAPHEME PATH_INDEX x|y PIVOT_UM] \
     [--style-path GRAPHEME PATH_INDEX WIDTH_UM #RRGGBB] \
     [--remove-path GRAPHEME PATH_INDEX] \
     [--shear-glyph GRAPHEME ANGLE_DEG BASELINE_Y_UM] \
@@ -147,6 +148,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --close-path inserts a short closing segment on a selected open path.\n\
     --translate-path moves one path using bounded signed micrometres.\n\
     --scale-path resizes around the selected path's first endpoint.\n\
+    --reflect-path mirrors a selected path, preserving directed joints.\n\
     --shear-glyph slants all exact-glyph pen segments 0..20 degrees.\n\
     --scale-glyph-height rescales exact-glyph Y about the baseline.\n\
     --scale-glyph-width rescales exact-glyph X about the anchor.\n\
@@ -1466,7 +1468,7 @@ fn preflight_glyph_typed_option(
         "--glyph-stroke" => 7,
         "--set-stroke" => 8,
         "--translate-path" | "--style-path" | "--scale-path"
-        | "--rotate-glyph" => 4,
+        | "--reflect-path" | "--rotate-glyph" => 4,
         "--move-stroke" | "--move-path" | "--rotate-path"
         | "--shear-glyph" | "--scale-glyph-height"
         | "--scale-glyph-width" | "--translate-glyph"
@@ -1488,7 +1490,7 @@ fn preflight_glyph_typed_option(
         | "--remove-stroke" | "--reverse-path"
         | "--close-path" | "--rotate-path" | "--move-path"
         | "--translate-path" | "--style-path" | "--scale-path"
-        | "--remove-path" =>
+        | "--reflect-path" | "--remove-path" =>
             GlyphOverlay::preflight_stroke_or_path_edit(option, iter)?,
         _ => GlyphOverlay::preflight_transform_option(option, iter)?,
     }
@@ -1643,7 +1645,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 glyphs.edit_stroke(option, &mut iter)?,
             "--reverse-path" | "--rotate-path" | "--close-path" | "--move-path"
             | "--translate-path" | "--style-path" | "--scale-path"
-            | "--remove-path" =>
+            | "--reflect-path" | "--remove-path" =>
                 glyphs.edit_path(option, &mut iter)?,
             "--remove-glyph" => {
                 let grapheme = iter.next()

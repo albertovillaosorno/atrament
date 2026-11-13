@@ -1366,3 +1366,28 @@ and fail-closed refusals with interleaved Unicode glyphs.
 The output still uses concrete TSV v1 pen segments without persistent
 continuous-path identities, parametric curves or calibrated cursive synthesis.
 The full P1-014 acceptance remains open.
+
+## Explicit selected-path axis reflection (partial) — 2026-11-13
+
+The localhost editor and native Rust `glyphs --reflect-path GRAPHEME
+PATH_INDEX x|y PIVOT_UM` now mirror one selected, inferred continuous
+pen path about a caller-chosen integer coordinate. Other paths of the
+same exact grapheme, interleaved NFC/NFD keys, directed stroke order,
+pen widths and RGB are unchanged. A second identical reflection restores
+the original TSV bytes with no rounding loss. Both reject malformed
+inputs, missing paths, unchanged ink and round-pen clipping on either
+axis before changing the accepted library.
+
+The browser records one reversible session edit but never downloads
+without an explicit click. Native CLI validates operands before reading
+an unclosed selected stdin source and writes only with explicit output;
+failed edits preserve existing source/target files. Two Rust tests verify
+exact TSV, native path inspection, PDF and transparent PNG parity and
+atomic refusal. Two browser tests cover Unicode isolation, the full
+4096-stroke limit, selection, undo/redo and deliberate TSV download.
+A 256-case subprocess comparison checks accepted and refused browser
+and real Rust native results byte-for-byte.
+
+The operation changes concrete v1 line geometry only, without creating
+persistent pen lifts, analytic curve primitives or learned cursive.
+The full two-line correlated penmanship acceptance remains open.

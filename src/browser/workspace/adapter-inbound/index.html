@@ -1563,6 +1563,23 @@
               Shared joints remain connected; an unchanged scale, clipped pen
               contour or collapsed segment refuses. Undo before TSV download
               to restore the original geometry.</p>
+            <label>Reflect selected path across coordinate
+              <select id="glyph-path-reflect-axis" disabled>
+                <option value="x">Vertical axis (X, left/right)</option>
+                <option value="y">Horizontal axis (Y, up/down)</option>
+              </select>
+            </label>
+            <label>Selected path reflection pivot (µm)
+              <input id="glyph-path-reflect-pivot" type="number" min="0"
+                max="4500" step="1" value="1750" disabled>
+            </label>
+            <button id="glyph-path-reflect" type="button" disabled>
+              Reflect selected continuous pen path (undoable)
+            </button>
+            <p class="field-help">Mirror just the selected pen path.
+              A second mirror restores original directed geometry. Other
+              paths and exact Unicode glyphs stay unchanged; an unchanged
+              or clipped round-pen contour refuses before editing.</p>
             <button id="glyph-path-style" type="button" disabled>
               Apply pen width and color to selected continuous path
             </button>

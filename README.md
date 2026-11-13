@@ -2496,6 +2496,26 @@ file output, and no new scaling field or persistent pen-lift marker is
 added. Browser and native scaling were checked against 256 deterministic
 byte-for-byte Unicode and refusal cases, including negative rounding ties.
 
+**Reflect selected continuous pen path** mirrors only the one path
+containing the selected stroke, around a chosen vertical X or horizontal Y
+coordinate (whole micrometres). It preserves directed joints, stroke order,
+pen style and other paths of the same glyph, even when unrelated NFC/NFD
+rows are interleaved. The new browser path reflection controls record one
+bounded, unsaved undoable edit; the corresponding native command is:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile ink.tsv --reflect-path 'ñ' 1 x 1750 \
+  --output mirrored.tsv
+```
+
+Select the one-based path from `--inspect-paths`. The X pivot must be from
+0–3500 µm, or the Y pivot from 0–4500 µm. Pen caps must remain entirely
+within the same 3500 × 4500 µm cell on **both** axes. Invalid axes,
+missing paths, clipping and unchanged ink refuse without altering input or
+existing output. Reflecting again about the same axis restores the exact
+v1 TSV bytes; there is still no saved pen-lift identity or analytic curve.
+
 **Apply pen width and color to selected continuous path** updates only the
 selected exact Unicode grapheme's inferred, connected pen path. The browser
 uses the existing **Pen width** and **Ink color** fields, records one bounded

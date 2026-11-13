@@ -597,6 +597,60 @@ export function translateCandidatePath(
     return { strokes: next, selectedIndex };
 }
 
+// Reflect a selected directed path without touching any other path of the
+// same exact glyph. A second reflection restores the original TSV bytes.
+export function reflectCandidatePath(
+    strokes: readonly Stroke[], grapheme: string, selectedIndex: number,
+    axis: "x" | "y", pivot: number,
+): { strokes: Stroke[]; selectedIndex: number } {
+    if (!exactGrapheme(grapheme)
+        || !Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path reflection needs a selected exact glyph stroke");
+    }
+    if (axis !== "x" && axis !== "y") {
+        throw new Error("Reflection axis must be x or y");
+    }
+    const maximum = axis === "x" ? 3500 : 4500;
+    if (!Number.isSafeInteger(pivot) || pivot < 0 || pivot > maximum) {
+        throw new Error("Reflection pivot outside glyph cell");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) =>
+        stroke.grapheme === grapheme ? [index] : []);
+    const ordinal = positions.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) =>
+        ordinal >= candidate.first && ordinal <= candidate.last);
+    if (!path) throw new Error("Selected glyph has no candidate pen path");
+    const slots = positions.slice(path.first - 1, path.last);
+    let changed = false;
+    const next = strokes.slice();
+    for (const slot of slots) {
+        const stroke = strokes[slot]!;
+        const reflected = {
+            ...stroke,
+            x1: axis === "x" ? 2 * pivot - stroke.x1 : stroke.x1,
+            x2: axis === "x" ? 2 * pivot - stroke.x2 : stroke.x2,
+            y1: axis === "y" ? 2 * pivot - stroke.y1 : stroke.y1,
+            y2: axis === "y" ? 2 * pivot - stroke.y2 : stroke.y2,
+        };
+        if ([reflected.x1, reflected.x2].some((x) =>
+            2 * x < stroke.width || 2 * x > 7000 - stroke.width)
+            || [reflected.y1, reflected.y2].some((y) =>
+                2 * y < stroke.width || 2 * y > 9000 - stroke.width)) {
+            throw new Error("Reflected pen contour clips glyph cell");
+        }
+        next[slot] = validateStroke(reflected);
+        changed ||= reflected.x1 !== stroke.x1 || reflected.x2 !== stroke.x2
+            || reflected.y1 !== stroke.y1 || reflected.y2 !== stroke.y2;
+    }
+    if (!changed) {
+        throw new Error("Path reflection does not change selected ink");
+    }
+    encodeGlyphLibrary(next);
+    return { strokes: next, selectedIndex };
+}
+
 // Resize a continuous path around its original first directed endpoint.
 // Both axes share the same rounded joint coordinates as the native CLI.
 export function scaleCandidatePath(
@@ -4487,6 +4541,11 @@ export function createGlyphStrokeEditor(): {
     const closePath = required<HTMLButtonElement>("glyph-path-close");
     const translatePath = required<HTMLButtonElement>("glyph-path-translate");
     const scalePath = required<HTMLButtonElement>("glyph-path-scale");
+    const reflectPath = required<HTMLButtonElement>("glyph-path-reflect");
+    const pathReflectAxis =
+        required<HTMLSelectElement>("glyph-path-reflect-axis");
+    const pathReflectPivot =
+        required<HTMLInputElement>("glyph-path-reflect-pivot");
     const stylePath = required<HTMLButtonElement>("glyph-path-style");
     const removePath = required<HTMLButtonElement>("glyph-path-remove");
     const copyPath = required<HTMLButtonElement>("glyph-path-copy");
@@ -4553,6 +4612,7 @@ export function createGlyphStrokeEditor(): {
         reversePath,
         startPath, closePath,
         translatePath, scalePath, stylePath, removePath,
+        reflectPath, pathReflectAxis, pathReflectPivot,
         copyPath, copyShiftedPath, pathCopyTarget,
         pathDx, pathDy, pathScaleX, pathScaleY,
         earlierPath, laterPath, earlier, later, join, save,
@@ -4584,7 +4644,7 @@ export function createGlyphStrokeEditor(): {
         | "pen path direction" | "pen path start"
         | "pen path closure" | "pen path copy" | "pen path move"
         | "pen path shifted copy" | "pen path pen style"
-        | "pen path removal" | "pen path scale"
+        | "pen path removal" | "pen path scale" | "pen path reflection"
         | "pen path order" | "pen connection"
         | "stroke removal" | "glyph clear" | "starter replacement"
         | "glyph copy" | "accent composition"
@@ -5786,6 +5846,7 @@ export function createGlyphStrokeEditor(): {
             || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
         translatePath.disabled = !active || !chosenPath;
         scalePath.disabled = !active || drawing !== null || !chosenPath;
+        reflectPath.disabled = !active || drawing !== null || !chosenPath;
         stylePath.disabled = !active || drawing !== null || !chosenPath;
         removePath.disabled = !active || drawing !== null || !chosenPath
             || (chosenPath.last - chosenPath.first + 1) === strokes.length;
@@ -6871,6 +6932,21 @@ export function createGlyphStrokeEditor(): {
             commitInkEdit(changed.strokes, character.value,
                 "pen path move", changed.selectedIndex);
             message("Translated selected continuous pen path; unsaved");
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    reflectPath.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null) return;
+        try {
+            const changed = reflectCandidatePath(
+                strokes, character.value, selectedIndex,
+                pathReflectAxis.value as "x" | "y",
+                decimalWhole(pathReflectPivot.value),
+            );
+            commitInkEdit(changed.strokes, character.value,
+                "pen path reflection", changed.selectedIndex);
+            message("Reflected selected continuous pen path; unsaved");
         } catch (error) {
             message(String(error));
         }
