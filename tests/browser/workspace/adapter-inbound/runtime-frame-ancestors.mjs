@@ -5135,6 +5135,7 @@ test(
                     { href: "#llm-editor-title", id: "", tag: "A" },
                     { href: "#human-editor-title", id: "", tag: "A" },
                     { href: null, id: "source-panel", tag: "SECTION" },
+                    { href: null, id: "glyph-editor-region", tag: "SECTION" },
                     { href: null, id: "preview-panel", tag: "SECTION" },
                     { href: null, id: "zoom-out", tag: "BUTTON" },
                     { href: null, id: "zoom-in", tag: "BUTTON" },
@@ -5144,6 +5145,7 @@ test(
                     { href: "#llm-editor-title", id: "", tag: "A" },
                     { href: "#human-editor-title", id: "", tag: "A" },
                     { href: null, id: "source-panel", tag: "SECTION" },
+                    { href: null, id: "glyph-editor-region", tag: "SECTION" },
                     {
                         href: null,
                         id: "workspace-divider",
@@ -5523,7 +5525,7 @@ test(
                 wait: "complete",
             });
             await setFirefoxViewport(bidi, tab.context, 481, 480);
-            for (let index = 0; index < 4; index += 1) {
+            for (let index = 0; index < 5; index += 1) {
                 await performTrustedKey(bidi, tab.context, "\uE004");
             }
             assert.deepEqual(
@@ -5960,7 +5962,7 @@ test(
                 wait: "complete",
             });
             await setFirefoxViewport(bidi, tab.context, 481, 225);
-            for (let index = 0; index < 4; index += 1) {
+            for (let index = 0; index < 5; index += 1) {
                 await performTrustedKey(bidi, tab.context, "\uE004");
             }
             assert.deepEqual(
