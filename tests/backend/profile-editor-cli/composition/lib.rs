@@ -13262,3 +13262,201 @@ fn invalid_markdown_body_inset_preflight_and_export_are_atomic() {
         b"keep-existing-PDF");
     fs::remove_file(target).expect("test-owned file cleanup");
 }
+
+#[test]
+fn selected_markdown_body_right_inset_preserves_structural_anchors() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "# a\n\na a  \na\n\n- a\n\n> a\n\n    a\n\n~~~\na\n~~~")
+        .expect("mixed Markdown");
+    let paper = NotebookProfile::default();
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 52_000, height: 185_000,
+    };
+    let render = |left, right| layout_flow_with_typography(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(region), FlowTypography {
+            body_inset: left, body_right_inset: right,
+            ..FlowTypography::default()
+        },
+    ).expect("admitted physical layout");
+    let baseline = render(None, None);
+    let explicit_zero = render(Some(0), Some(0));
+    let signature = |(runs, marks, pages):
+        (Vec<TextRun>, Vec<NotebookInkLine>, usize)| {
+        (runs.into_iter().map(|row| (row.page, row.origin_um, row.text))
+            .collect::<Vec<_>>(), marks, pages)
+    };
+    assert_eq!(signature(baseline), signature(explicit_zero),
+        "explicit zero must keep legacy row/ornament bytes");
+    let (original, marks, pages) = render(None, None);
+    let (right, right_marks, right_pages) = render(None, Some(6_000));
+    assert_eq!(pages, right_pages);
+    assert_eq!(marks, right_marks);
+    assert_eq!(original.len(), right.len());
+    for (before, after) in original.iter().zip(&right) {
+        assert_eq!((before.page, before.origin_um, &before.text),
+            (after.page, after.origin_um, &after.text),
+            "right margin only changes width, never the writing origin");
+    }
+    let (both, both_marks, _) = render(Some(4_000), Some(6_000));
+    assert_eq!(marks, both_marks);
+    for (index, (before, after)) in original.iter().zip(&both).enumerate() {
+        assert_eq!((&before.text, before.page, before.origin_um.1),
+            (&after.text, after.page, after.origin_um.1));
+        let prose = matches!(index, 1 | 2);
+        assert_eq!(after.origin_um.0 - before.origin_um.0,
+            if prose { 4_000 } else { 0 });
+    }
+}
+
+#[test]
+fn selected_markdown_body_right_inset_measures_width_and_both_edges() {
+    let source = FlowSource::new(FlowFormat::Markdown,
+        "a a a a a a a a a a a a").expect("visible prose");
+    let paper = NotebookProfile::default();
+    let region = FlowRegion {
+        left: 30_000, top: 40_000, width: 32_000, height: 32_000,
+    };
+    let render = |left, right, fixed| layout_flow_with_typography(
+        &source, &paper, None, HeadingDecoration::default(),
+        Some(fixed), FlowTypography {
+            body_inset: left, body_right_inset: right,
+            ..FlowTypography::default()
+        },
+    );
+    let (baseline, _, _) = render(None, None, region).expect("default");
+    let (right, _, right_pages) = render(None, Some(10_000), region)
+        .expect("right margin wraps onto more rows");
+    assert!(right.len() > baseline.len());
+    assert!(right_pages >= 2);
+    assert!(right.iter().all(|row| row.origin_um.0 == 32_500));
+    let (both, _, _) = render(Some(6_000), Some(10_000), region)
+        .expect("combined inset");
+    assert!(both.len() > right.len(), "both edges reduce usable width");
+    assert!(both.iter().all(|row| row.origin_um.0 == 38_500));
+    let narrow = FlowRegion {
+        left: 30_000, top: 40_000, width: 9_000, height: 32_000,
+    };
+    assert_eq!(render(None, Some(2_000), narrow)
+        .expect_err("right inset leaves <4mm"),
+        "flow body right inset leaves no writing row");
+    let both_narrow = FlowRegion { width: 11_000, ..narrow };
+    assert_eq!(render(Some(2_000), Some(2_000), both_narrow)
+        .expect_err("combined insets leave <4mm"),
+        "flow body right inset leaves no writing row");
+    for invalid in [12_001, u32::MAX] {
+        assert_eq!(render(None, Some(invalid), region)
+            .expect_err("typed maximum"),
+            "flow body right inset must be within 0..12000 um");
+    }
+    let plain = FlowSource::new(FlowFormat::Plain, "a").expect("plain");
+    assert_eq!(layout_flow_with_typography(
+        &plain, &paper, None, HeadingDecoration::default(),
+        Some(region), FlowTypography {
+            body_right_inset: Some(0), ..FlowTypography::default()
+        },
+    ).expect_err("plain flow cannot request right Markdown margin"),
+        "flow body right inset requires Markdown flow");
+}
+
+#[test]
+fn selected_markdown_body_right_inset_native_exports_replay() {
+    let base = args(&[
+        "--printed-sheet", "true",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060",
+        "--flow-markdown", "a a a a a a a a a a a a a a\n\n# a\n\n- a\n\n> a",
+        "--flow-region", "30000", "40000", "52000", "100000",
+    ]);
+    let export = |right: Option<&str>, format: &str| {
+        let mut command = base.clone();
+        if let Some(value) = right {
+            command.extend(args(&["--flow-body-right-inset-um", value]));
+        }
+        if format == "ink" {
+            command.push("--emit-ink-file".into());
+        } else {
+            command.extend(args(&["--export-paper", format]));
+        }
+        if format == "png" {
+            command.extend(args(&["--dpi", "72"]));
+        }
+        execute_notebook(&command).expect("native export")
+            .expect("PDF/PNG/ink bytes")
+    };
+    for format in ["pdf", "png", "ink"] {
+        let original = export(None, format);
+        assert_eq!(original, export(Some("0"), format),
+            "explicit zero must keep legacy {format} bytes");
+        let selected = export(Some("9000"), format);
+        assert_eq!(selected, export(Some("9000"), format),
+            "native {format} replay must be deterministic");
+        assert_ne!(original, selected,
+            "selected right margin must reflow real {format} ink");
+        if format == "pdf" {
+            assert!(selected.starts_with(b"%PDF-1.4"));
+        } else if format == "png" {
+            assert!(selected.starts_with(b"\x89PNG\r\n\x1a\n"));
+        } else {
+            let rows = String::from_utf8(selected).expect("versioned TSV");
+            assert!(rows.starts_with("atrament.page-ink.v1\n"));
+            assert!(rows.lines().skip(1)
+                .any(|line| line.starts_with("1\t")));
+        }
+    }
+}
+
+#[test]
+fn invalid_markdown_body_right_inset_preflight_is_atomic() {
+    let source = args(&[
+        "--flow-markdown-file", "-", "--glyph-file", "not-opened.tsv",
+        "--export-paper", "pdf",
+    ]);
+    for (tokens, diagnostic) in [
+        (vec!["--flow-body-right-inset-um", "12001"], "within 0..12000"),
+        (vec!["--flow-body-right-inset-um", "-1"], "within 0..12000"),
+        (vec!["--flow-body-right-inset-um", "+0"], "within 0..12000"),
+        (vec!["--flow-body-right-inset-um", "4294967296"],
+            "within 0..12000"),
+        (vec!["--flow-body-right-inset-um", ""], "within 0..12000"),
+        (vec!["--flow-body-right-inset-um"], "requires 0..12000"),
+        (vec!["--flow-body-right-inset-um", "0",
+            "--flow-body-right-inset-um", "1"], "may appear only once"),
+    ] {
+        let mut command = source.clone();
+        command.extend(args(&tokens));
+        let error = preflight_notebook_sources(&command)
+            .expect_err("invalid right margin cannot read selected stdin");
+        assert!(error.contains(diagnostic), "{tokens:?}: {error}");
+    }
+    for (flag, value) in [
+        ("--flow-text", "a"), ("--ink-file", "not-opened.tsv"),
+    ] {
+        let mut command = args(&[
+            "--export-paper", "pdf", "--glyph-file", "not-opened.tsv",
+            flag, value,
+        ]);
+        command.extend(args(&["--flow-body-right-inset-um", "0"]));
+        assert_eq!(preflight_notebook_sources(&command)
+            .expect_err("right margin requires Markdown flow"),
+            "--flow-body-right-inset-um requires a Markdown flow");
+    }
+    let target = test_path().with_extension("pdf");
+    fs::write(&target, b"keep-existing-PDF").expect("sentinel");
+    let mut command = args(&[
+        "--printed-sheet", "true", "--export-paper", "pdf",
+        "--glyph-stroke", "a", "900", "900", "2200", "3400",
+        "250", "#204060", "--flow-markdown", "a",
+        "--flow-region", "30000", "40000", "9000", "32000",
+        "--flow-body-right-inset-um", "2000",
+    ]);
+    command.extend(args(&[
+        "--output", target.to_str().expect("test filename"), "--replace",
+    ]));
+    assert_eq!(execute_notebook(&command)
+        .expect_err("right margin removes usable text width"),
+        "flow body right inset leaves no writing row");
+    assert_eq!(fs::read(&target).expect("output preserved"),
+        b"keep-existing-PDF");
+    fs::remove_file(target).expect("test-owned sentinel cleanup");
+}

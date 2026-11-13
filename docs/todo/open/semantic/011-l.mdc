@@ -4282,3 +4282,18 @@ measured wrap/page behavior, default/selected PDF, transparent PNG and
 versioned ink TSV replay, typed bounds, source-independent preflight, and
 atomic refusal of an impossible narrow-region inset. This does not finish
 saved semantic notebook bodies or the complete localhost editor journey.
+
+## Selected right Markdown prose inset (partial) — 2026-11-12
+
+The native CLI now accepts `--flow-body-right-inset-um 0..12000` to reduce
+the usable width of every flowing Markdown prose row without moving its
+left origin. It composes with the older optional left body inset; both
+keep full physical page and fixed-region admission. Heading and list
+marks, quotes, fenced code and literal indented rows retain their earlier
+positions and their own widths.
+
+Four native Rust tests check legacy zero/default identity, combined
+physical inset wrapping and page turns, actual deterministic PDF/PNG/ink
+TSV output, early CLI/typed rejection and atomic existing-PDF protection.
+No persisted paragraph style, new nested Markdown semantics or complete
+saved-notebook flow is implied by this optional export-only constraint.

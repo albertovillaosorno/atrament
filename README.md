@@ -609,6 +609,25 @@ stdin. Native Rust regressions compare unchanged default output, physically
 measured wrapping, structural markers, deterministic PDF/PNG/ink TSV, and
 refusal without overwriting a chosen PDF.
 
+Use `--flow-body-right-inset-um 6000` to reserve another 6 mm to the
+**right** of flowing Markdown prose. It decreases measured text capacity
+without moving the left origin. Both physical margins can be selected
+independently, and neither moves heading decorations, list/checkbox labels,
+quote bars or literal indented/fenced rows.
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- notebook \
+  --glyph-file glyph-strokes.tsv --flow-markdown-file notes.md \
+  --flow-body-inset-um 4000 --flow-body-right-inset-um 6000 \
+  --export-paper pdf --output bounded-prose.pdf
+```
+
+The right inset is also bounded to 0–12,000 µm, requires Markdown and is
+export-only. An omitted or explicit zero preserves the earlier physical
+output; combined insets must leave at least 4 mm for a prose row. Invalid
+or duplicate settings fail in source-independent preflight; failed physical
+admission leaves a selected existing output intact.
+
 The CLI continues content on the next physical page when needed;
 `--pages` and `--png-page` still refuse impossible selections. Invalid,
 overlapping-margins or too-small areas refuse before any selected file

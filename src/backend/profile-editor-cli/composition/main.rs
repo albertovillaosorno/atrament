@@ -184,6 +184,7 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     [--flow-pitch-um MIN_UM (9000..30000)] \
     [--flow-paragraph-gap-um GAP_UM (0..12000, Markdown only)] \
     [--flow-body-inset-um INSET_UM (0..12000, Markdown only)] \
+    [--flow-body-right-inset-um INSET_UM (0..12000, Markdown only)] \
     [--handwriting-profile ink.json (requires glyph shapes)] \
     [--output FILE [--replace]]\n\
     Flow requires --export-paper pdf|png or --emit-ink-file; text is not \
@@ -224,8 +225,9 @@ const NOTEBOOK_USAGE: &str = "Usage: atrament-profiles notebook \
     taller measured glyphs retain their necessary clearance. \
     --flow-paragraph-gap-um selects Markdown blank-line spacing \
     from 0..12 mm; default is 4 mm. Plain rows are unchanged. \
-    --flow-body-inset-um shifts flowing Markdown prose right 0..12 mm, \
-    leaving list markers, titles, quotes and literal code unchanged; \
+    --flow-body-inset-um shifts Markdown prose right 0..12 mm; \
+    --flow-body-right-inset-um reserves 0..12 mm to its right. \
+    Titles, list markers, quotes and literal code stay unchanged; \
     Explicit --place-text overlays may coexist with flow, outside its \
     rectangle, but do not reserve flow space or prevent collisions. \
     PDF page count includes the last manual ink page, with or without \
@@ -469,10 +471,11 @@ impl NotebookFlagPreflight {
                 let _gap = parse_notebook_flow_paragraph_gap(iter)?;
                 0
             }
-            "--flow-body-inset-um" => {
+            "--flow-body-inset-um" | "--flow-body-right-inset-um" => {
                 self.unique(option,
-                    "--flow-body-inset-um may appear only once")?;
-                let _inset = parse_notebook_flow_body_inset(iter)?;
+                    &format!("{option} may appear only once"))?;
+                let _inset = parse_notebook_flow_body_inset(
+                    iter, option == "--flow-body-right-inset-um")?;
                 0
             }
             "--flow-pitch-um" => {
@@ -544,6 +547,8 @@ impl NotebookFlagPreflight {
                 paragraph_gap: has("--flow-paragraph-gap-um")
                     .then_some(0),
                 body_inset: has("--flow-body-inset-um").then_some(0),
+                body_right_inset: has("--flow-body-right-inset-um")
+                    .then_some(0),
             }, self.heading, self.export_format,
         )?;
         // Explicit ink and glyph intent needs an output mode even before
@@ -2068,28 +2073,36 @@ fn select_notebook_flow_paragraph_gap(
 
 // Reuse the physical 0..12 mm bound on both preflight and typed layout.
 fn parse_notebook_flow_body_inset(
-    iter: &mut Iter<'_, String>,
+    iter: &mut Iter<'_, String>, right: bool,
 ) -> Result<u32, String> {
+    let option = if right { "--flow-body-right-inset-um" }
+        else { "--flow-body-inset-um" };
+    let label = if right { "flow body right inset" }
+        else { "flow body inset" };
     let raw = iter.next()
-        .ok_or("--flow-body-inset-um requires 0..12000 um")?;
+        .ok_or_else(|| format!("{option} requires 0..12000 um"))?;
     if raw.is_empty() || !raw.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err("flow body inset must be within 0..12000 um".into());
+        return Err(format!("{label} must be within 0..12000 um"));
     }
     let inset = raw.parse::<u32>()
-        .map_err(|_error| "flow body inset must be within 0..12000 um")?;
+        .map_err(|_error| format!("{label} must be within 0..12000 um"))?;
     if inset > 12_000 {
-        return Err("flow body inset must be within 0..12000 um".into());
+        return Err(format!("{label} must be within 0..12000 um"));
     }
     Ok(inset)
 }
 
-fn select_notebook_flow_body_inset(
-    iter: &mut Iter<'_, String>, selected: &mut Option<u32>,
+fn select_flow_body_inset(
+    iter: &mut Iter<'_, String>, typography: &mut FlowTypography,
+    option: &str,
 ) -> Result<(), String> {
+    let right = option == "--flow-body-right-inset-um";
+    let selected = if right { &mut typography.body_right_inset }
+        else { &mut typography.body_inset };
     if selected.is_some() {
-        return Err("--flow-body-inset-um may appear only once".into());
+        return Err(format!("{option} may appear only once"));
     }
-    *selected = Some(parse_notebook_flow_body_inset(iter)?);
+    *selected = Some(parse_notebook_flow_body_inset(iter, right)?);
     Ok(())
 }
 
@@ -2155,6 +2168,12 @@ fn validate_notebook_flow_flag_compatibility(
     if typography.body_inset.is_some()
         && flow_format != Some(FlowFormat::Markdown) {
         return Err("--flow-body-inset-um requires a Markdown flow".into());
+    }
+    if typography.body_right_inset.is_some()
+        && flow_format != Some(FlowFormat::Markdown) {
+        return Err(
+            "--flow-body-right-inset-um requires a Markdown flow".into()
+        );
     }
     heading.validate().map_err(str::to_owned)?;
     if heading.is_selected() && flow_format != Some(FlowFormat::Markdown) {
@@ -2574,8 +2593,8 @@ fn parse_notebook_options(args: &[String]) -> Result<NotebookRequest, String> {
                 &mut iter, &mut flow_typography.pitch)?,
             "--flow-paragraph-gap-um" => select_notebook_flow_paragraph_gap(
                 &mut iter, &mut flow_typography.paragraph_gap)?,
-            "--flow-body-inset-um" => select_notebook_flow_body_inset(
-                &mut iter, &mut flow_typography.body_inset)?,
+            "--flow-body-inset-um" | "--flow-body-right-inset-um" =>
+                select_flow_body_inset(&mut iter, &mut flow_typography, option)?,
             "--flow-text" | "--flow-markdown"
             | "--flow-text-file" | "--flow-markdown-file" =>
                 parse_notebook_flow(&mut iter, option, &mut flow,

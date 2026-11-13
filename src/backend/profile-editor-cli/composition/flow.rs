@@ -70,6 +70,7 @@ pub(super) enum FlowFormat {
 #[expect(clippy::redundant_pub_crate, reason = "Sibling CLI module access")]
 pub(super) struct FlowTypography {
     pub(super) body_inset: Option<u32>,
+    pub(super) body_right_inset: Option<u32>,
     pub(super) paragraph_gap: Option<u32>,
     pub(super) pitch: Option<u32>,
 }
@@ -543,6 +544,7 @@ struct RuleChain {
 
 struct Layout<'model> {
     body_inset_um: u32,
+    body_right_inset_um: u32,
     bottom: u32,
     heading: HeadingDecoration,
     // Whether the last heading was itself bound to an earlier title/rule.
@@ -861,7 +863,7 @@ impl Layout<'_> {
         Ok(Some(gaps))
     }
 
-    // Only flowing Markdown prose receives the optional left inset.
+    // Only flowing Markdown prose receives optional left/right insets.
     // Literal code, indented source, headings, quotes and list markers
     // retain their original physical anchors and measured row widths.
     fn flow_row_bounds(
@@ -874,6 +876,9 @@ impl Layout<'_> {
             cap = cap.checked_sub(self.body_inset_um)
                 .filter(|width| *width >= 4_000)
                 .ok_or("flow body inset leaves no writing row")?;
+            cap = cap.checked_sub(self.body_right_inset_um)
+                .filter(|width| *width >= 4_000)
+                .ok_or("flow body right inset leaves no writing row")?;
         }
         Ok((start_x, cap))
     }
@@ -2679,6 +2684,7 @@ fn initialize_layout<'model>(
     };
     Ok(Layout {
         body_inset_um: spacing.body_inset.unwrap_or(0),
+        body_right_inset_um: spacing.body_right_inset.unwrap_or(0),
         heading,
         heading_attached_to_prior: false,
         heading_chain: None,
@@ -2847,6 +2853,14 @@ pub(super) fn layout_flow_with_typography(
     if spacing.body_inset.is_some()
         && source.format != FlowFormat::Markdown {
         return Err("flow body inset requires Markdown flow".into());
+    }
+    if spacing.body_right_inset
+        .is_some_and(|inset| inset > MAX_BODY_INSET_UM) {
+        return Err("flow body right inset must be within 0..12000 um".into());
+    }
+    if spacing.body_right_inset.is_some()
+        && source.format != FlowFormat::Markdown {
+        return Err("flow body right inset requires Markdown flow".into());
     }
     let pitch = measured_pitch_with_minimum(
         source, statistics, spacing.pitch,
