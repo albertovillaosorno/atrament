@@ -761,6 +761,86 @@ impl GlyphOverlay {
         Ok(())
     }
 
+    /// Append an explicitly translated candidate path, without moving ink.
+    /// A nonzero offset also permits an independent same-glyph duplicate.
+    pub(super) fn copy_path_shifted(
+        &mut self, source: &str, ordinal: u32, target: &str,
+        dx: i32, dy: i32,
+    ) -> Result<(), String> {
+        validate_shifted_path_copy_keys(source, target)?;
+        if dx.unsigned_abs() > 3500 || dy.unsigned_abs() > 4500
+            || (dx == 0 && dy == 0) {
+            return Err("shifted copy needs nonzero bounded whole um".into());
+        }
+        self.validate_stroke_library()?;
+        let (positions, paths) = self.selected_candidate_paths(source)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("source path outside bounds")?;
+        let copies = positions.get(path.clone())
+            .ok_or("source path segments outside glyph")?
+            .iter().map(|position| {
+                let original = self.strokes.get(*position)
+                    .ok_or("source path segment outside library")?;
+                let translate = |point: (u32, u32)|
+                    -> Result<(u32, u32), String> {
+                    Ok((
+                        translated_pen_coordinate(
+                            point.0, dx, 3500, original.width_um)?,
+                        translated_pen_coordinate(
+                            point.1, dy, 4500, original.width_um)?,
+                    ))
+                };
+                Ok(GlyphStroke {
+                    grapheme: target.to_owned(),
+                    start_um: translate(original.start_um)?,
+                    end_um: translate(original.end_um)?,
+                    ..original.clone()
+                })
+            }).collect::<Result<Vec<_>, String>>()?;
+        if copies.len() > MAX_STROKES.saturating_sub(self.strokes.len()) {
+            return Err("shifted copy exceeds 4096 authored strokes".into());
+        }
+        let before = self.strokes.len();
+        self.strokes.extend(copies);
+        if let Err(error) = self.encode_file() {
+            self.strokes.truncate(before);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(super) fn copy_path_shifted_option(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let (source, ordinal, target, dx, dy) =
+            Self::parse_shifted_path_copy_option(iter)?;
+        self.copy_path_shifted(source, ordinal, target, dx, dy)
+    }
+
+    fn parse_shifted_path_copy_option<'input>(
+        iter: &mut Iter<'input, String>,
+    ) -> Result<(&'input str, u32, &'input str, i32, i32), String> {
+        let source = iter.next()
+            .ok_or("--copy-path-shifted requires 5 operands")?;
+        let ordinal = next_integer(iter, "source path index", 1, 4096)?;
+        let target = iter.next()
+            .ok_or("--copy-path-shifted requires 5 operands")?;
+        let dx = next_signed_path_offset(iter, "path dx", 3500)?;
+        let dy = next_signed_path_offset(iter, "path dy", 4500)?;
+        validate_shifted_path_copy_keys(source, target)?;
+        if dx == 0 && dy == 0 {
+            return Err("shifted copy needs nonzero bounded whole um".into());
+        }
+        Ok((source, ordinal, target, dx, dy))
+    }
+
+    pub(super) fn preflight_copy_path_shifted_option(
+        iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let _checked = Self::parse_shifted_path_copy_option(iter)?;
+        Ok(())
+    }
+
     pub(super) fn copy_path_option(
         &mut self, iter: &mut Iter<'_, String>,
     ) -> Result<(), String> {
@@ -2540,35 +2620,22 @@ impl GlyphOverlay {
         let path = paths.get(index).ok_or("path index outside bounds")?;
         let slots = positions.get(path.clone())
             .ok_or("path range outside glyph")?;
-        // The pen's radius must be inside every cell edge, including odd
-        // widths: twice the coordinate must be >= ink width.
-        let translate = |value: u32, offset: i32, cell: i64, width: u32|
-            -> Result<u32, String> {
-            let moved = i64::from(value)
-                .checked_add(i64::from(offset))
-                .ok_or("translated coordinate overflow")?;
-            let twice = moved.checked_mul(2)
-                .ok_or("translated pen edge overflow")?;
-            let maximum = cell.checked_mul(2)
-                .and_then(|limit| limit.checked_sub(i64::from(width)))
-                .ok_or("translated pen limit overflow")?;
-            if twice < i64::from(width) || twice > maximum {
-                return Err("translated pen contour clips glyph cell".into());
-            }
-            u32::try_from(moved)
-                .map_err(|_error| "translated coordinate out of bounds".into())
-        };
+        // Share the same full pen-cap check as shifted path copies.
         let mut revised = self.strokes.clone();
         for selected in slots {
             let stroke = revised.get_mut(*selected)
                 .ok_or("path segment outside library")?;
             stroke.start_um = (
-                translate(stroke.start_um.0, dx, 3500, stroke.width_um)?,
-                translate(stroke.start_um.1, dy, 4500, stroke.width_um)?,
+                translated_pen_coordinate(
+                    stroke.start_um.0, dx, 3500, stroke.width_um)?,
+                translated_pen_coordinate(
+                    stroke.start_um.1, dy, 4500, stroke.width_um)?,
             );
             stroke.end_um = (
-                translate(stroke.end_um.0, dx, 3500, stroke.width_um)?,
-                translate(stroke.end_um.1, dy, 4500, stroke.width_um)?,
+                translated_pen_coordinate(
+                    stroke.end_um.0, dx, 3500, stroke.width_um)?,
+                translated_pen_coordinate(
+                    stroke.end_um.1, dy, 4500, stroke.width_um)?,
             );
         }
         let original = replace(&mut self.strokes, revised);
@@ -2987,6 +3054,36 @@ fn is_exact_visible_grapheme(
         // Joined emoji or visible glyphs with such marks keep exact keys.
         && !grapheme.chars().all(is_nonmarking_scalar)
         && boundaries.grapheme_count(grapheme) == 1
+}
+
+// Shifted copying can duplicate a path inside its own exact Unicode glyph.
+fn validate_shifted_path_copy_keys(
+    source: &str, target: &str,
+) -> Result<(), String> {
+    let boundaries = UnicodeGraphemeSegmentation;
+    if !is_exact_visible_grapheme(source, boundaries)
+        || !is_exact_visible_grapheme(target, boundaries) {
+        return Err("shifted path copy needs exact visible graphemes".into());
+    }
+    Ok(())
+}
+
+// Admit the entire round pen cap, including odd micrometre widths.
+fn translated_pen_coordinate(
+    value: u32, offset: i32, cell: i64, width: u32,
+) -> Result<u32, String> {
+    let moved = i64::from(value).checked_add(i64::from(offset))
+        .ok_or("translated coordinate overflow")?;
+    let twice = moved.checked_mul(2)
+        .ok_or("translated pen edge overflow")?;
+    let maximum = cell.checked_mul(2)
+        .and_then(|limit| limit.checked_sub(i64::from(width)))
+        .ok_or("translated pen limit overflow")?;
+    if twice < i64::from(width) || twice > maximum {
+        return Err("translated pen contour clips glyph cell".into());
+    }
+    u32::try_from(moved)
+        .map_err(|_error| "translated coordinate out of bounds".into())
 }
 
 // Pure exact-key admission shared by standalone CLI preflight and final

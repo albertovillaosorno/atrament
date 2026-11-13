@@ -5,7 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
-import { candidatePenPaths, copyCandidatePath, encodeGlyphLibrary }
+import { candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
+    encodeGlyphLibrary }
 // jig-ignore-next-line: static ESM import needs a literal path.
     from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -125,4 +126,91 @@ test('256 native and browser path copies agree on exact TSV and refusals',
         }
         assert.ok(accepted > 80, `expected accepted copies: ${accepted}`);
         assert.ok(refused > 80, `expected safe refusals: ${refused}`);
+    });
+
+// Compare full production TSV for accepted and refused shifted copies,
+// including exact NFC/NFD source/target identity and self-copy.
+test("256 native and browser shifted path copies agree on full ink",
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            "build", "--locked", "--offline", "--quiet",
+            "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+        ], { cwd: root, encoding: "utf8", timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, ".temp") } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = random(0xC0F1_5517);
+        let accepted = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 256; sample += 1) {
+            const sourceKey = sample % 2 === 0 ? "ñ" : "n\u0303";
+            const other = sourceKey === "ñ" ? "n\u0303" : "ñ";
+            const targetKey = sample % 4 === 0 ? sourceKey
+                : sample % 3 === 0 ? other : "á";
+            const first = stroke(pick, sourceKey, "#123456");
+            const second = { ...first, x1: first.x2, y1: first.y2,
+                x2: first.x2 + pick(5, 100),
+                y2: first.y2 + pick(5, 100) };
+            const detached = stroke(pick, sourceKey, "#556677");
+            const rows = [first, stroke(pick, other, "#AABBCC"),
+                second, detached, stroke(pick, "∞", "#667788")];
+            const chosenIndex = sample % 2 === 0 ? 0 : 3;
+            const ordinal = [0, 2, 3].indexOf(chosenIndex) + 1;
+            const path = candidatePenPaths(rows, sourceKey).findIndex(
+                ({ first: from, last: to }) =>
+                    ordinal >= from && ordinal <= to) + 1;
+            const mode = sample % 16;
+            let dx = mode === 0 ? 0 : mode === 1 ? 3500
+                : mode === 2 ? -3500 : pick(-250, 250);
+            let dy = mode === 0 ? 0 : mode === 3 ? 4500
+                : mode === 4 ? -4500 : pick(-250, 250);
+            let target = targetKey;
+            let browserIndex = chosenIndex;
+            let nativeIndex = path;
+            if (mode === 5) {
+                target = "ab";
+            } else if (mode === 6) {
+                dx = 3501;
+            } else if (mode === 7) {
+                browserIndex = -1;
+                nativeIndex = 0;
+            } else if (mode === 8) {
+                dy = -4501;
+            } else if (mode === 9) {
+                dx = 123;
+                dy = 34;
+            }
+            const original = encodeGlyphLibrary(rows);
+            let expected;
+            try {
+                expected = encodeGlyphLibrary(copyShiftedCandidatePath(
+                    rows, sourceKey, browserIndex, target, dx, dy));
+            } catch (error) {
+                expected = error;
+            }
+            const actual = spawnSync(binary, [
+                "glyphs", ...rows.flatMap(strokeFlags),
+                "--copy-path-shifted", sourceKey, String(nativeIndex),
+                target, String(dx), String(dy),
+            ], { cwd: root, encoding: "utf8", timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = `shifted sample ${sample} mode ${mode}`;
+            assert.equal(actual.error, undefined, context);
+            if (expected instanceof Error) {
+                refused += 1;
+                assert.notEqual(actual.status, 0, context);
+                assert.equal(actual.stdout, "", context);
+                assert.match(actual.stderr, /^Error: /, context);
+            } else {
+                accepted += 1;
+                assert.equal(actual.status, 0,
+                    context + ": " + actual.stderr);
+                assert.equal(actual.stdout, expected, context);
+                assert.ok(expected.startsWith(original), context);
+            }
+            assert.equal(encodeGlyphLibrary(rows), original,
+                `${context} must not mutate source`);
+        }
+        assert.ok(accepted > 40, `accepted samples: ${accepted}`);
+        assert.ok(refused > 80, `refused samples: ${refused}`);
     });

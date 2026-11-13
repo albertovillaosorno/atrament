@@ -396,6 +396,52 @@ export function copyCandidatePath(
     return next;
 }
 
+// Append a shifted copy, optionally back into the same exact glyph.
+// Original directed strokes and unrelated interleaved TSV slots are unchanged.
+export function copyShiftedCandidatePath(
+    strokes: readonly Stroke[], source: string, selectedIndex: number,
+    target: string, dx: number, dy: number,
+): Stroke[] {
+    if (!exactGrapheme(source) || !exactGrapheme(target)) {
+        throw new Error("Shifted path copy needs exact visible graphemes");
+    }
+    if (!Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== source) {
+        throw new Error("Shifted copy needs a selected source glyph stroke");
+    }
+    if (!Number.isSafeInteger(dx) || !Number.isSafeInteger(dy)
+        || Math.abs(dx) > 3500 || Math.abs(dy) > 4500
+        || (dx === 0 && dy === 0)) {
+        throw new Error("Shifted copy needs nonzero bounded whole µm offsets");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) =>
+        stroke.grapheme === source ? [index] : []);
+    const ordinal = positions.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, source).find((candidate) =>
+        ordinal >= candidate.first && ordinal <= candidate.last);
+    if (!path) throw new Error("Selected source path no longer exists");
+    const copies = positions.slice(path.first - 1, path.last).map((index) => {
+        const original = strokes[index]!;
+        const moved = validateStroke({
+            ...original, grapheme: target,
+            x1: original.x1 + dx, y1: original.y1 + dy,
+            x2: original.x2 + dx, y2: original.y2 + dy,
+        });
+        const radius = original.width / 2;
+        if ([moved.x1, moved.x2].some((x) =>
+            x < radius || x > 3500 - radius)
+            || [moved.y1, moved.y2].some((y) =>
+                y < radius || y > 4500 - radius)) {
+            throw new Error("Translated pen contour clips glyph cell");
+        }
+        return moved;
+    });
+    const next = [...strokes, ...copies];
+    encodeGlyphLibrary(next);
+    return next;
+}
+
 // Select a later segment as the entry to an already closed pen loop.
 // A cyclic reorder leaves its actual geometry/direction untouched and
 // retains interleaved exact-Unicode TSV slots and the original input.
@@ -4321,6 +4367,8 @@ export function createGlyphStrokeEditor(): {
     const closePath = required<HTMLButtonElement>("glyph-path-close");
     const translatePath = required<HTMLButtonElement>("glyph-path-translate");
     const copyPath = required<HTMLButtonElement>("glyph-path-copy");
+    const copyShiftedPath =
+        required<HTMLButtonElement>("glyph-path-copy-shifted");
     const pathCopyTarget =
         required<HTMLInputElement>("glyph-path-copy-target");
     const pathDx = required<HTMLInputElement>("glyph-path-dx");
@@ -4379,7 +4427,7 @@ export function createGlyphStrokeEditor(): {
         remove, subdivide, splitExact, merge, clearGlyph, reverse,
         reversePath,
         startPath, closePath,
-        translatePath, copyPath, pathCopyTarget,
+        translatePath, copyPath, copyShiftedPath, pathCopyTarget,
         pathDx, pathDy,
         earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
@@ -4409,6 +4457,7 @@ export function createGlyphStrokeEditor(): {
         | "stroke direction" | "stroke order"
         | "pen path direction" | "pen path start"
         | "pen path closure" | "pen path copy" | "pen path move"
+        | "pen path shifted copy"
         | "pen path order" | "pen connection"
         | "stroke removal" | "glyph clear" | "starter replacement"
         | "glyph copy" | "accent composition"
@@ -5611,6 +5660,7 @@ export function createGlyphStrokeEditor(): {
         translatePath.disabled = !active || !chosenPath;
         copyPath.disabled = !active || drawing !== null || !chosenPath
             || strokes.length >= MAX_STROKES;
+        copyShiftedPath.disabled = copyPath.disabled;
         const pathIndex = paths.indexOf(chosenPath!);
         earlierPath.disabled = !active || pathIndex <= 0;
         laterPath.disabled = !active || pathIndex < 0
@@ -6611,6 +6661,33 @@ export function createGlyphStrokeEditor(): {
             const added = next.length - strokes.length;
             commitInkEdit(next, glyph, "pen path copy", selectedIndex);
             message(`Copied ${added} directed path strokes to `
+                + `${target} (unsaved)`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
+    copyShiftedPath.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null) return;
+        try {
+            const glyph = character.value;
+            const target = pathCopyTarget.value;
+            const signed = (raw: string, maximum: number): number => {
+                if (!/^-?[0-9]+$/.test(raw)) {
+                    throw new Error("Path offset needs a whole micrometre");
+                }
+                const value = Number(raw);
+                if (!Number.isSafeInteger(value)
+                    || Math.abs(value) > maximum) {
+                    throw new Error("Path offset outside native bounds");
+                }
+                return value;
+            };
+            const next = copyShiftedCandidatePath(strokes, glyph,
+                selectedIndex, target, signed(pathDx.value, 3500),
+                signed(pathDy.value, 4500));
+            const added = next.length - strokes.length;
+            commitInkEdit(next, glyph, "pen path shifted copy", selectedIndex);
+            message(`Copied ${added} shifted path strokes to `
                 + `${target} (unsaved)`);
         } catch (error) {
             message(String(error));

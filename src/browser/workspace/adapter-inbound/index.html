@@ -1555,10 +1555,15 @@
             <button id="glyph-path-copy" type="button" disabled>
               Copy selected continuous pen path to glyph (undoable)
             </button>
+            <button id="glyph-path-copy-shifted" type="button" disabled>
+              Copy selected path with signed X/Y shift (undoable)
+            </button>
             <p class="field-help">Copy appends this path's directed pen
               strokes to another exact Unicode glyph without replacing
-              existing target ink or changing source geometry. It is an
-              explicit, in-memory edit; download TSV to save.</p>
+              existing target ink or changing source geometry. Shifted
+              copy instead uses both X/Y offsets and permits copying into
+              the same exact glyph; a zero shift and clipped pen refuse.
+              Both edits are in memory; download TSV to save.</p>
             <button id="glyph-path-earlier" type="button" disabled>
               Move selected pen path earlier
             </button>

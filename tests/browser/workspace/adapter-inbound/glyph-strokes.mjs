@@ -11,7 +11,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     composeAccentedGlyph, fillMissingBilingualBaseline,
     fillMissingConnectedLowercase,
     missingBilingualBaseline, varyGlyphStrokes,
-    candidatePenPaths, copyCandidatePath,
+    candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
     translateCandidatePath } =
@@ -237,6 +237,44 @@ test("path copy appends selected directed ink across exact Unicode", () => {
         { ...stroke("á"), x2: 100, y2: 200 }];
     assert.throws(() => copyCandidatePath(invalidUnused, nfd, 0, "ñ"),
         /Stroke endpoints must differ/);
+});
+
+test("shifted pen path copies preserve full round caps and source ink", () => {
+    const nfd = "n\u0303";
+    const a = { ...stroke(nfd), x1: 500, y1: 500,
+        x2: 900, y2: 1000, width: 251 };
+    const b = { ...a, x1: 900, y1: 1000, x2: 1600, y2: 1800 };
+    const prior = { ...stroke("ñ"), x1: 500, y1: 200 };
+    const library = [a, prior, b, stroke("∞")];
+    const bytes = encodeGlyphLibrary(library);
+    const moved = (target) => [{ ...a, grapheme: target,
+        x1: 600, y1: 700, x2: 1000, y2: 1200 },
+    { ...b, grapheme: target,
+        x1: 1000, y1: 1200, x2: 1700, y2: 2000 }];
+    const cross = copyShiftedCandidatePath(library, nfd, 2, "ñ", 100, 200);
+    assert.deepEqual(cross, [...library, ...moved("ñ")]);
+    const same = copyShiftedCandidatePath(library, nfd, 0, nfd, 100, 200);
+    assert.deepEqual(same, [...library, ...moved(nfd)]);
+    assert.deepEqual(parseGlyphLibrary(encodeGlyphLibrary(same)), same);
+    for (const [target, dx, dy] of [
+        ["ñ", 0, 0], ["ñ", 3500, 1], ["ñ", -500, 0],
+        ["ñ", 0, -500], ["ab", 100, 1], [" ", 100, 1],
+        ["ñ", 0.5, 1], ["ñ", 3501, 1], ["ñ", 1, -4501],
+    ]) {
+        assert.throws(() => copyShiftedCandidatePath(
+            library, nfd, 0, target, dx, dy));
+        assert.equal(encodeGlyphLibrary(library), bytes);
+    }
+    for (const index of [-1, 1, 9, 1.5]) {
+        assert.throws(() => copyShiftedCandidatePath(
+            library, nfd, index, "ñ", 100, 100));
+    }
+    const full = Array.from({ length: 4096 }, (_, i) => ({
+        ...a, x1: 500, y1: 500, x2: 600 + i % 500, y2: 800,
+    }));
+    assert.throws(() => copyShiftedCandidatePath(
+        full, nfd, 0, "ñ", 100, 100), /4096|stroke count/);
+    assert.equal(encodeGlyphLibrary(library), bytes);
 });
 
 test("reversing one candidate path preserves exact Unicode TSV slots", () => {
@@ -569,6 +607,7 @@ function mountEditor() {
         "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
         "glyph-path-copy", "glyph-path-copy-target",
+        "glyph-path-copy-shifted",
         "glyph-earlier", "glyph-later", "glyph-join",
         "glyph-paths", "glyph-variation-preview", "glyph-variation-status",
         "glyph-variation-seed", "glyph-variation-sample",
@@ -1851,6 +1890,63 @@ test("browser path copying is undoable and preserves prior target ink",
             assert.equal(get("path-copy").disabled, true);
             editor.start();
             assert.equal(get("path-copy").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("shifted path copy UI downloads exact ink and supports recovery",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            editor.start();
+            const nfd = "n\u0303";
+            const a = { ...stroke(nfd), x1: 500, y1: 600,
+                x2: 900, y2: 1200 };
+            const b = { ...a, x1: 900, y1: 1200,
+                x2: 1400, y2: 1900 };
+            const original = [a, stroke("ñ"), b, stroke("∞")];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(original));
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            get("selected").value = "2";
+            get("selected").dispatch("change");
+            assert.equal(get("path-copy-shifted").disabled, false);
+            get("path-copy-target").value = nfd;
+            get("path-dx").value = "100";
+            get("path-dy").value = "200";
+            get("path-copy-shifted").dispatch("click");
+            assert.match(get("status").textContent,
+                /Copied 2 shifted path strokes/);
+            get("save").dispatch("click");
+            const expected = copyShiftedCandidatePath(
+                original, nfd, 2, nfd, 100, 200);
+            assert.equal(await downloads[0].text(),
+                encodeGlyphLibrary(expected));
+            get("slant-undo").dispatch("click");
+            assert.match(get("status").textContent,
+                /Undid last pen path shifted copy/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[1].text(),
+                encodeGlyphLibrary(original));
+            get("slant-redo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[2].text(),
+                encodeGlyphLibrary(expected));
+            get("path-dx").value = "0";
+            get("path-dy").value = "0";
+            get("path-copy-shifted").dispatch("click");
+            assert.match(get("status").textContent, /nonzero/);
+            get("save").dispatch("click");
+            assert.equal(await downloads[3].text(),
+                encodeGlyphLibrary(expected));
+            editor.reset();
+            assert.equal(get("path-copy-shifted").disabled, true);
         } finally {
             ui.restore();
         }

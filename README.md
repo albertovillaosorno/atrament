@@ -1975,6 +1975,30 @@ an output file. The browser's **Copy selected continuous pen path to glyph**
 control offers the same opt-in action with one-step undo/redo. It uses an
 explicit target input and only writes to disk on **Download stroke TSV**.
 
+To duplicate a pen path in-place (or append it to another exact glyph)
+with an explicit micrometre offset, use the separate shifted-copy option:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyphs.tsv \
+  --copy-path-shifted 'ñ' 2 'ñ' 150 -200 \
+  --output shifted-glyphs.tsv
+```
+
+`--copy-path-shifted SOURCE PATH_INDEX TARGET DX_UM DY_UM` requires at
+least one nonzero integer offset (X within ±3500 µm, Y within ±4500 µm).
+Unlike plain copy, `SOURCE` and `TARGET` may be identical. The operation
+appends independently translated directed strokes; original and previously
+existing target ink are unchanged. The entire round pen contour must stay
+inside the 3500×4500 µm glyph cell.
+
+Over-budget, invalid Unicode, zero shift or clipped ink refuses atomically
+without replacing a selected file. In the browser, choose a source
+stroke, enter the target glyph and set **Selected path horizontal/vertical
+shift**. Then choose **Copy selected path with signed X/Y shift**.
+Session undo/redo and explicit TSV download work as for ordinary copy.
+Neither operation persists analytic curves.
+
 These are copied pen segments, not live references, saved pen lifts,
 analytic curve primitives or inferred cursive joins.
 

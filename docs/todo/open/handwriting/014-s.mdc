@@ -1272,3 +1272,29 @@ Candidate paths are still derived from adjacent line-segment endpoints and
 matching pen settings. There are no explicit saved pen-lift identifiers,
 analytic curves, learned connections or calibrated cursive movements.
 Complete P1-014 penmanship acceptance remains open.
+
+## Explicit shifted authored-path duplication (partial) — 2026-11-13
+
+Native glyph editing now supports `--copy-path-shifted SOURCE PATH_INDEX
+TARGET DX_UM DY_UM`. It appends an independent displaced clone of one
+inspected directed pen path, including a same-Unicode-glyph clone, without
+moving source segments or overwriting existing target ink. Offsets are
+signed whole micrometres bounded at ±3500/±4500 and cannot both be zero.
+Every copied segment checks its *complete* round pen cap inside the glyph
+cell; over-capacity, invalid keys, missing paths and out-of-cell ink refuse
+atomically.
+
+Library, source and selected output files remain untouched on failure.
+CLI operands are preflighted before an unclosed selected stdin.
+
+The browser offers the same explicit shifted path copy using the shared
+path-target and signed offset inputs. A production-path regression covers
+selection, exact TSV and bounded in-memory undo/redo; pure tests cover
+NFD/NFC, interleaving, same-glyph duplication, odd widths, source immutability
+and refusal conditions. A deterministic 256-case Rust/browser parity test
+compares canonical TSV bytes and refusals. Native tests verify exact
+saved/reopened TSV and byte-identical real PDF/PNG compared with separately
+entered ink, plus unsafe input and existing-target sentinel preservation.
+
+This is an authored segment operation, not generated cursive or saved
+pen-lift metadata; the broader P1-014 acceptance remains open.
