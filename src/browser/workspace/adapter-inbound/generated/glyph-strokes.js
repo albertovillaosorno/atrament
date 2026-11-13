@@ -3950,6 +3950,7 @@ export function createGlyphStrokeEditor() {
     const selected = required("glyph-selected");
     const update = required("glyph-update");
     const remove = required("glyph-remove");
+    const clearGlyph = required("glyph-clear");
     const reverse = required("glyph-reverse");
     const reversePath = required("glyph-reverse-path");
     const startPath = required("glyph-path-start");
@@ -4000,7 +4001,8 @@ export function createGlyphStrokeEditor() {
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
-        remove, reverse, reversePath, startPath, closePath, translatePath,
+        remove, clearGlyph, reverse, reversePath, startPath, closePath,
+        translatePath,
         pathDx, pathDy,
         earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
@@ -5090,6 +5092,8 @@ export function createGlyphStrokeEditor() {
             || drawing !== null;
         update.disabled = !active || selectedIndex === null;
         remove.disabled = !active || selectedIndex === null;
+        clearGlyph.disabled = !active || shown.length === 0
+            || drawing !== null;
         reverse.disabled = !active || selectedIndex === null;
         const chosenPosition = shown.findIndex(({ index }) => {
             return index === selectedIndex;
@@ -6182,6 +6186,22 @@ export function createGlyphStrokeEditor() {
         next.splice(selectedIndex, 1);
         commitInkEdit(next, character.value, "stroke removal", null);
         message(strokes.length + " unsaved authored strokes");
+    });
+    clearGlyph.addEventListener("click", () => {
+        if (!active || drawing !== null)
+            return;
+        const target = character.value;
+        const next = strokes.filter((stroke) => stroke.grapheme !== target);
+        const count = strokes.length - next.length;
+        if (count === 0)
+            return;
+        // Unlike a native TSV, an empty in-memory draft is allowed until
+        // recovery; any retained glyphs must still pass native TSV bounds.
+        if (next.length > 0)
+            encodeGlyphLibrary(next);
+        commitInkEdit(next, target, "glyph clear", null);
+        message(`Cleared ${count} strokes for exact glyph ${target}; `
+            + "undoable, unsaved");
     });
     source.addEventListener("change", async () => {
         if (!active)

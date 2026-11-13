@@ -512,7 +512,7 @@ function mountEditor() {
         "glyph-ideal-rounded-right", "glyph-ideal-c-loop",
         "glyph-ideal-e-bar", "glyph-ideal-i-stem", "glyph-ideal-i-dot",
         "glyph-ideal-accent", "glyph-ideal-diacritic",
-        "glyph-update", "glyph-remove", "glyph-reverse",
+        "glyph-update", "glyph-remove", "glyph-clear", "glyph-reverse",
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
         "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
@@ -11445,6 +11445,117 @@ test("browser manual g shows hook exit and retains clipped-out TSV",
             editor.reset();
             assert.equal(get("ideal-exit").attributes.get("visibility"),
                 "hidden");
+        } finally {
+            ui.restore();
+        }
+    });
+
+// Destructive glyph-wide edits must enter the same eight-step history as a
+// pen trace; one exact Unicode key must never remove another key's ink.
+test("clear exact glyph is one reversible isolated edit, including empty draft",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const nfd = "n\u0303";
+            const clear = get("clear");
+            const undo = get("slant-undo");
+            const redo = get("slant-redo");
+            const visit = (glyph) => {
+                get("character").value = glyph;
+                get("character").dispatch("input");
+            };
+            const saved = async () => {
+                get("save").dispatch("click");
+                return await downloads.at(-1).text();
+            };
+            assert.equal(clear.disabled, true, "inactive action is disabled");
+            clear.dispatch("click");
+            editor.start();
+            assert.equal(clear.disabled, true, "unwritten glyph cannot clear");
+            for (const [glyph, x] of [[nfd, 100], ["ñ", 200],
+                [nfd, 300], ["∞", 400]]) {
+                visit(glyph);
+                get("x1").value = String(x);
+                get("add").dispatch("click");
+            }
+            const original = await saved();
+            const expected = parseGlyphLibrary(original).filter(
+                ({ grapheme }) => grapheme !== nfd);
+            visit("m");
+            clear.dispatch("click");
+            visit(nfd);
+            assert.match(get("recovery-status").textContent,
+                /Session edits: 4\/4 applied/,
+                "clearing missing ink cannot add a history step");
+            // An unfinished pointer trace must not silently delete authored
+            // ink or interrupt the current drawing gesture.
+            const pointer = (clientX, clientY) => ({
+                clientX, clientY, pointerId: 13, isPrimary: true, button: 0,
+            });
+            get("preview").dispatch("pointerdown", pointer(10, 20));
+            assert.equal(clear.disabled, true);
+            clear.dispatch("click");
+            get("preview").dispatch("pointercancel", { pointerId: 13 });
+            assert.equal(clear.disabled, false);
+            assert.equal(await saved(), original);
+            assert.equal(clear.disabled, false);
+            const downloadedBefore = downloads.length;
+            clear.dispatch("click");
+            assert.equal(downloads.length, downloadedBefore,
+                "removing ink cannot write a TSV without a download gesture");
+            assert.equal(get("preview").children.length, 0);
+            assert.equal(get("selected").disabled, true);
+            assert.equal(clear.disabled, true, "nothing remains for exact key");
+            assert.match(get("status").textContent, /Cleared 2 strokes/);
+            assert.equal(undo.textContent, "Undo last glyph clear");
+            assert.deepEqual(parseGlyphLibrary(await saved()), expected);
+
+            visit("ñ");
+            assert.equal(undo.disabled, true,
+                "another normalised-visible grapheme cannot undo NFD");
+            clear.dispatch("click"); // This button is valid for ñ now.
+            assert.equal(undo.textContent, "Undo last glyph clear");
+            assert.deepEqual(parseGlyphLibrary(await saved()),
+                expected.filter(({ grapheme }) => grapheme !== "ñ"));
+            undo.dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await saved()), expected);
+            get("recovery-undo-select").dispatch("click");
+            assert.equal(get("character").value, nfd,
+                "navigation preserves exact Unicode identity");
+            undo.dispatch("click");
+            assert.equal(await saved(), original,
+                "undo reconstructs interleaved rows and original TSV bytes");
+            visit("m");
+            clear.dispatch("click");
+            visit(nfd);
+            assert.equal(redo.disabled, false,
+                "missing-glyph removal must not truncate the redo branch");
+            redo.dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await saved()), expected);
+
+            visit("ñ");
+            clear.dispatch("click");
+            visit("∞");
+            clear.dispatch("click");
+            assert.equal(get("preview").children.length, 0);
+            const beforeRefusal = downloads.length;
+            get("save").dispatch("click");
+            assert.equal(downloads.length, beforeRefusal,
+                "an empty in-memory library must not download invalid TSV");
+            assert.match(get("status").textContent,
+                /Save requires 1\.\.4096 authored glyph strokes/);
+            assert.equal(undo.textContent, "Undo last glyph clear");
+            undo.dispatch("click");
+            assert.deepEqual(parseGlyphLibrary(await saved()),
+                expected.filter(({ grapheme }) => grapheme === "∞"));
+            redo.dispatch("click");
+            assert.equal(clear.disabled, true);
+            editor.reset();
+            assert.equal(undo.disabled, true);
+            assert.equal(redo.disabled, true);
+            editor.start();
+            assert.equal(clear.disabled, true);
         } finally {
             ui.restore();
         }

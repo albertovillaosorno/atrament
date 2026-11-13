@@ -1108,3 +1108,18 @@ modifier conventions, no-event interception for editable fields and
 failed history ownership, and session reset. The export schema, Rust
 page ink and maximum history depth are unchanged; this is editor-only
 keyboard accessibility, not persistent notebook-wide undo.
+
+## Exact-glyph wholesale removal with session recovery — 2026-11-13
+
+The localhost editor can clear the full set of authored segments for the
+selected exact Unicode grapheme as one bounded undoable step. All other
+NFC/NFD spellings, unrelated glyphs, and their original ordered TSV rows
+remain unchanged. Empty drafts stay in memory only; native TSV download
+still refuses zero strokes. Redo reapplies the whole removal, and session
+end clears its history. The action is disabled when the selected glyph has
+no ink or a live pen trace is unfinished, with no implicit file write.
+
+Focused browser regression covers interleaved NFC/NFD and mathematical
+glyph rows, byte-exact undo, single-step redo, successive clears, empty-draft
+export refusal, and reset. It remains editor-only recovery; native glyph
+parsing and notebook-wide undo/redo are unchanged.

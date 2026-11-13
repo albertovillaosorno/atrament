@@ -2078,6 +2078,12 @@ Ctrl+Z/Command+Z undoes the next eligible exact-glyph step; Ctrl+Y,
 Ctrl+Shift+Z or Command+Shift+Z redoes it. These shortcuts leave text-field
 native undo, other selected Unicode keys and active pen traces untouched.
 
+The **Clear all strokes for selected glyph** control removes one exact
+Unicode key's complete authored shape as a single reversible history step.
+It does not affect any other key, including equivalent-looking NFC/NFD
+spellings. An empty in-memory library can be undone, but cannot be saved as
+a native TSV until another glyph is authored or an undo restores one.
+
 New edits after undo discard the redo tail, and the oldest step is evicted
 after eight successful edits. Identity transforms and refused edits preserve
 history; a successful TSV import or session reset clears it. Download

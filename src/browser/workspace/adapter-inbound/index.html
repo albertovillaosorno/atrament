@@ -1465,6 +1465,12 @@
             <button id="glyph-remove" type="button" disabled>
               Remove selected stroke
             </button>
+            <button id="glyph-clear" type="button" disabled>
+              Clear all strokes for selected glyph (undoable)
+            </button>
+            <p class="field-help">Clearing removes only this exact Unicode
+              grapheme's strokes from the unsaved draft, not other glyphs.
+              Use Undo to recover the whole shape before downloading TSV.</p>
             <button id="glyph-reverse" type="button" disabled>
               Reverse selected pen direction
             </button>
