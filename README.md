@@ -2496,6 +2496,14 @@ Missing paths, unchanged pen style, malformed operands or clipped ink
 refuse without changing the source file or an existing output. This is
 authored line styling, not a saved pen-lift identifier or a new curve.
 
+**Remove selected continuous pen path** deletes exactly the selected
+candidate path's segments, without erasing other paths or Unicode rows.
+The browser operation is one undoable, unsaved step; the Rust equivalent
+is `glyphs --profile ink.tsv --remove-path 'ñ' 2 --output revised.tsv`.
+Both refuse deleting the final authored path, since native TSV v1 requires
+at least one stroke. Missing paths and malformed indices also refuse
+without changing an existing file; no auto-save or learned pen lift occurs.
+
 **Start closed pen loop at selected stroke** changes the start of an
 existing closed, same-pen path without changing any segment's geometry
 or direction. Select a later stroke inside the loop. Open contours,

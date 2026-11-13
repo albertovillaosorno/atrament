@@ -1323,3 +1323,22 @@ browser-versus-real-Rust comparison verifies accepted UTF-8 bytes and errors.
 This edits explicit sampled-line ink only; it does not add persisted pen
 lifts, live path identities, analytic curves, generated cursive or calibrated
 pen pressure. The complete P1-014 acceptance remains open.
+
+## Selected candidate-path removal (partial) — 2026-11-13
+
+Rust `--remove-path GRAPHEME PATH_INDEX` and the localhost editor's
+**Remove selected continuous pen path** delete only selected connected,
+same-pen directed segments. Interleaved strokes and exact NFC/NFD keys
+retain their relative TSV positions, and the browser provides bounded
+in-memory undo/redo without writing or downloading automatically.
+
+Both refuse the last remaining authored stroke/path because a v1 TSV must
+be nonempty, and reject invalid selection, Unicode and out-of-range paths.
+Native preflight refuses incomplete or malformed arguments before reading
+a selected stdin. A native save/reopen test checks untouched source and
+output sentinel on refusal; two browser tests cover selection, recovery,
+and unchanged source ink. A 128-case native/browser comparison verifies
+identical resulting TSV and fail-closed outcomes.
+
+This is a manual authored-path edit, not new pen-lift metadata or cursive
+synthesis. P1-014 remains open.

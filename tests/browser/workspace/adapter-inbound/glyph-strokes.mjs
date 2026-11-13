@@ -14,7 +14,7 @@ const { parseGlyphLibrary, encodeGlyphLibrary, createGlyphStrokeEditor,
     candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
     reverseCandidatePath, moveCandidatePath,
     rotateClosedCandidatePath, closeCandidatePath,
-    translateCandidatePath, styleCandidatePath } =
+    translateCandidatePath, styleCandidatePath, removeCandidatePath } =
     await import(new URL(
         "../../../../src/browser/workspace/adapter-inbound/generated/"
             + "glyph-strokes.js", import.meta.url,
@@ -606,7 +606,7 @@ function mountEditor() {
         "glyph-reverse-path", "glyph-path-start", "glyph-path-close",
         "glyph-path-earlier", "glyph-path-later",
         "glyph-path-dx", "glyph-path-dy", "glyph-path-translate",
-        "glyph-path-style",
+        "glyph-path-style", "glyph-path-remove",
         "glyph-path-copy", "glyph-path-copy-target",
         "glyph-path-copy-shifted",
         "glyph-earlier", "glyph-later", "glyph-join",
@@ -2053,6 +2053,78 @@ test("selected path style UI downloads only deliberately styled ink",
                 encodeGlyphLibrary(changed.strokes));
             editor.reset();
             assert.equal(get("path-style").disabled, true);
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("remove candidate path preserves interleaved NFC/NFD and nonempty TSV",
+    () => {
+        const nfd = "n\u0303";
+        const a = { ...stroke(nfd), x1: 500, y1: 600,
+            x2: 900, y2: 1200, width: 251, color: "#112233" };
+        const b = { ...a, x1: 900, y1: 1200,
+            x2: 1400, y2: 1900 };
+        const tail = { ...a, x1: 1800, y1: 2400,
+            x2: 2200, y2: 2800, width: 200, color: "#445566" };
+        const other = stroke("ñ");
+        const source = [a, other, b, stroke("∞"), tail];
+        const before = encodeGlyphLibrary(source);
+        assert.deepEqual(removeCandidatePath(source, nfd, 2),
+            [other, source[3], tail]);
+        assert.deepEqual(removeCandidatePath(source, nfd, 4),
+            source.slice(0, 4));
+        assert.deepEqual(removeCandidatePath(source, "ñ", 1),
+            [a, b, source[3], tail]);
+        assert.equal(encodeGlyphLibrary(source), before);
+        for (const index of [-1, 1, 9999]) {
+            assert.throws(() => removeCandidatePath(source, nfd, index),
+                /selected exact glyph/);
+        }
+        assert.throws(() => removeCandidatePath([a, b], nfd, 0),
+            /final authored pen path/);
+    });
+
+test("UI removes only selected path and recovers it with bounded undo",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const nfd = "n\u0303";
+            const a = { ...stroke(nfd), x1: 500, y1: 600,
+                x2: 900, y2: 1200, width: 251, color: "#112233" };
+            const b = { ...a, x1: 900, y1: 1200,
+                x2: 1400, y2: 1900 };
+            const source = [a, stroke("ñ"), b, stroke("∞")];
+            const bytes = new TextEncoder().encode(
+                encodeGlyphLibrary(source));
+            assert.equal(get("path-remove").disabled, true);
+            editor.start();
+            get("load").files = [{ size: bytes.length,
+                arrayBuffer: async () => bytes.buffer }];
+            await get("load").dispatch("change");
+            get("character").value = nfd;
+            get("character").dispatch("input");
+            get("selected").value = "2";
+            get("selected").dispatch("change");
+            assert.equal(get("path-remove").disabled, false);
+            get("path-remove").dispatch("click");
+            assert.match(get("status").textContent,
+                /Removed 2 selected pen path strokes; unsaved/);
+            get("save").dispatch("click");
+            const revised = removeCandidatePath(source, nfd, 2);
+            assert.equal(await downloads[0].text(),
+                encodeGlyphLibrary(revised));
+            get("slant-undo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[1].text(),
+                encodeGlyphLibrary(source));
+            get("slant-redo").dispatch("click");
+            get("save").dispatch("click");
+            assert.equal(await downloads[2].text(),
+                encodeGlyphLibrary(revised));
+            editor.reset();
+            assert.equal(get("path-remove").disabled, true);
         } finally {
             ui.restore();
         }

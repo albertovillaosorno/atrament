@@ -519,6 +519,27 @@ export function translateCandidatePath(strokes, grapheme, selectedIndex, dx, dy)
     encodeGlyphLibrary(next);
     return { strokes: next, selectedIndex };
 }
+// Delete the selected candidate path while keeping the remaining exact
+// Unicode stroke rows and their relative authored order intact.
+export function removeCandidatePath(strokes, grapheme, selectedIndex) {
+    if (!Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== grapheme) {
+        throw new Error("Path removal needs a selected exact glyph stroke");
+    }
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) => stroke.grapheme === grapheme ? [index] : []);
+    const ordinal = positions.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, grapheme).find((candidate) => ordinal >= candidate.first && ordinal <= candidate.last);
+    if (!path)
+        throw new Error("Selected glyph has no candidate pen path");
+    const removed = new Set(positions.slice(path.first - 1, path.last));
+    if (removed.size === strokes.length) {
+        throw new Error("Cannot remove the final authored pen path");
+    }
+    const next = strokes.filter((_stroke, index) => !removed.has(index));
+    encodeGlyphLibrary(next);
+    return next;
+}
 // Apply one pen style to the complete selected continuous path. This does
 // not restyle interleaved glyphs or create an implicit persisted pen lift.
 export function styleCandidatePath(strokes, grapheme, selectedIndex, width, color) {
@@ -4214,6 +4235,7 @@ export function createGlyphStrokeEditor() {
     const closePath = required("glyph-path-close");
     const translatePath = required("glyph-path-translate");
     const stylePath = required("glyph-path-style");
+    const removePath = required("glyph-path-remove");
     const copyPath = required("glyph-path-copy");
     const copyShiftedPath = required("glyph-path-copy-shifted");
     const pathCopyTarget = required("glyph-path-copy-target");
@@ -4266,7 +4288,8 @@ export function createGlyphStrokeEditor() {
         remove, subdivide, splitExact, merge, clearGlyph, reverse,
         reversePath,
         startPath, closePath,
-        translatePath, stylePath, copyPath, copyShiftedPath, pathCopyTarget,
+        translatePath, stylePath, removePath, copyPath, copyShiftedPath,
+        pathCopyTarget,
         pathDx, pathDy,
         earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
@@ -5433,6 +5456,8 @@ export function createGlyphStrokeEditor() {
             || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
         translatePath.disabled = !active || !chosenPath;
         stylePath.disabled = !active || drawing !== null || !chosenPath;
+        removePath.disabled = !active || drawing !== null || !chosenPath
+            || (chosenPath.last - chosenPath.first + 1) === strokes.length;
         copyPath.disabled = !active || drawing !== null || !chosenPath
             || strokes.length >= MAX_STROKES;
         copyShiftedPath.disabled = copyPath.disabled;
@@ -6502,6 +6527,20 @@ export function createGlyphStrokeEditor() {
             commitInkEdit(next, glyph, "pen path shifted copy", selectedIndex);
             message(`Copied ${added} shifted path strokes to `
                 + `${target} (unsaved)`);
+        }
+        catch (error) {
+            message(String(error));
+        }
+    });
+    removePath.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null)
+            return;
+        try {
+            const glyph = character.value;
+            const next = removeCandidatePath(strokes, glyph, selectedIndex);
+            const removed = strokes.length - next.length;
+            commitInkEdit(next, glyph, "pen path removal", null);
+            message("Removed " + removed + " selected pen path strokes; unsaved");
         }
         catch (error) {
             message(String(error));

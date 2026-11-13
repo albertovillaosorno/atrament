@@ -894,6 +894,7 @@ impl GlyphOverlay {
                 let color = iter.next().ok_or("path color requires #RRGGBB")?;
                 self.style_path(grapheme, from, width, parse_path_rgb(color)?)
             }
+            "--remove-path" => self.remove_path(grapheme, from),
             _ => Err("unknown path edit".into()),
         }
     }
@@ -1825,7 +1826,8 @@ impl GlyphOverlay {
     ) -> Result<(), String> {
         let path = matches!(flag,
             "--reverse-path" | "--close-path" | "--rotate-path"
-            | "--move-path" | "--translate-path" | "--style-path",
+            | "--move-path" | "--translate-path" | "--style-path"
+            | "--remove-path",
         );
         let grapheme = iter.next().ok_or(if path {
             "path edit requires an exact grapheme"
@@ -1860,7 +1862,7 @@ impl GlyphOverlay {
                         .ok_or("path color requires #RRGGBB")?;
                     let _rgb = parse_path_rgb(color)?;
                 }
-                "--reverse-path" | "--close-path" => {}
+                "--reverse-path" | "--close-path" | "--remove-path" => {}
                 _ => return Err("unknown path edit".into()),
             }
         } else {
@@ -2650,6 +2652,34 @@ impl GlyphOverlay {
                 translated_pen_coordinate(
                     stroke.end_um.1, dy, 4500, stroke.width_um)?,
             );
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    /// Remove exactly one candidate path, leaving all other authored
+    /// Unicode rows in their original order and retaining nonempty v1 ink.
+    pub(super) fn remove_path(
+        &mut self, grapheme: &str, ordinal: u32,
+    ) -> Result<(), String> {
+        let (positions, paths) = self.selected_candidate_paths(grapheme)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let path = paths.get(index).ok_or("path index outside bounds")?;
+        let slots = positions.get(path.clone())
+            .ok_or("path range outside glyph")?;
+        if slots.len() == self.strokes.len() {
+            return Err("cannot remove the final authored pen path".into());
+        }
+        let mut revised = self.strokes.clone();
+        for selected in slots.iter().rev() {
+            if *selected >= revised.len() {
+                return Err("path segment outside library".into());
+            }
+            let _removed = revised.remove(*selected);
         }
         let original = replace(&mut self.strokes, revised);
         if let Err(error) = self.encode_file() {

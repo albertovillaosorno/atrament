@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 import { candidatePenPaths, copyCandidatePath, copyShiftedCandidatePath,
-    encodeGlyphLibrary, styleCandidatePath }
+    encodeGlyphLibrary, styleCandidatePath, removeCandidatePath }
 // jig-ignore-next-line: static ESM import needs a literal path.
     from '../../../../src/browser/workspace/adapter-inbound/generated/glyph-strokes.js';
 
@@ -308,4 +308,73 @@ test("256 Rust/browser whole-path pen styles match exact TSV or refusal",
         }
         assert.ok(accepted > 50, "accepted styles: " + accepted);
         assert.ok(refused > 70, "refused styles: " + refused);
+    });
+
+// CLI and browser remove the exact same authored path, not a whole glyph.
+test("128 native/browser path removals agree on TSV and safe refusal",
+    { timeout: 90_000 }, () => {
+        const built = spawnSync(cargo, [
+            "build", "--locked", "--offline", "--quiet",
+            "-p", "atrament_profile_editor_cli", "--bin", "atrament-profiles",
+        ], { cwd: root, encoding: "utf8", timeout: 90_000,
+            env: { ...process.env, TMPDIR: join(root, ".temp") } });
+        assert.equal(built.error, undefined, built.error?.message);
+        assert.equal(built.status, 0, built.stderr);
+        const pick = random(0xD311_2026);
+        let accepted = 0;
+        let refused = 0;
+        for (let sample = 0; sample < 128; sample += 1) {
+            const glyph = sample % 2 ? "ñ" : "n\u0303";
+            const other = glyph === "ñ" ? "n\u0303" : "ñ";
+            const first = stroke(pick, glyph, "#123456");
+            const second = { ...first, x1: first.x2, y1: first.y2,
+                x2: first.x2 + pick(5, 100),
+                y2: first.y2 + pick(5, 100) };
+            const last = stroke(pick, glyph, "#556677");
+            const rows = sample % 7 === 0 ? [first, second]
+                : [first, stroke(pick, other, "#ABCDEF"),
+                    second, stroke(pick, "∞", "#998877"), last];
+            const chosen = sample % 3 === 0 ? 0
+                : rows.length === 2 ? 1 : 4;
+            const ordinal = rows.flatMap((line, index) =>
+                line.grapheme === glyph ? [index] : []).indexOf(chosen) + 1;
+            const path = candidatePenPaths(rows, glyph).findIndex(
+                ({ first: from, last: to }) =>
+                    ordinal >= from && ordinal <= to) + 1;
+            const mode = sample % 13;
+            const index = mode === 1 ? -1 : mode === 2 ? 9999 : chosen;
+            const nativeIndex = mode === 1 ? 0
+                : mode === 2 ? 4097 : path;
+            const requested = mode === 3 ? "ab" : glyph;
+            const original = encodeGlyphLibrary(rows);
+            let expected;
+            try {
+                expected = encodeGlyphLibrary(removeCandidatePath(
+                    rows, requested, index));
+            } catch (error) {
+                expected = error;
+            }
+            const actual = spawnSync(binary, [
+                "glyphs", ...rows.flatMap(strokeFlags),
+                "--remove-path", requested, String(nativeIndex),
+            ], { cwd: root, encoding: "utf8", timeout: 2_000,
+                maxBuffer: 512 * 1024 });
+            const context = "path remove sample " + sample;
+            assert.equal(actual.error, undefined, context);
+            if (expected instanceof Error) {
+                refused += 1;
+                assert.notEqual(actual.status, 0, context);
+                assert.equal(actual.stdout, "", context);
+                assert.match(actual.stderr, /^Error: /, context);
+            } else {
+                accepted += 1;
+                assert.equal(actual.status, 0,
+                    context + ": " + actual.stderr);
+                assert.equal(actual.stdout, expected, context);
+            }
+            assert.equal(encodeGlyphLibrary(rows), original,
+                context + ": original library untouched");
+        }
+        assert.ok(accepted > 60, "accepted " + accepted);
+        assert.ok(refused > 30, "refused " + refused);
     });

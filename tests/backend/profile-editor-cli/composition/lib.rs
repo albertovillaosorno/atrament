@@ -5556,6 +5556,80 @@ fn native_path_copy_appends_exact_unicode_and_renders_pdf_png() {
 }
 
 #[test]
+fn native_path_removal_preserves_interleaved_unicode_and_refuses_last_ink() {
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("path");
+    let target_name = target.to_str().expect("path");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "500", "600", "1000", "1200",
+        "251", "#112233",
+        "--glyph-stroke", "ñ", "1100", "600", "1400", "1200",
+        "251", "#ABCDEF",
+        "--glyph-stroke", "n\u{303}", "1000", "1200", "1400", "1900",
+        "251", "#112233",
+        "--glyph-stroke", "∞", "300", "400", "600", "800",
+        "200", "#556677",
+        "--glyph-stroke", "n\u{303}", "1800", "2500", "2300",
+        "3000", "200", "#445566",
+    ])).expect("source").expect("TSV");
+    fs::write(&source, &original).expect("source");
+    fs::write(&target, b"target sentinel").expect("sentinel");
+    let revised = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--remove-path", "n\u{303}", "1",
+    ])).expect("remove two connected segments").expect("output");
+    assert_eq!(revised, concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ñ\t1100\t600\t1400\t1200\t251\t#ABCDEF\n",
+        "∞\t300\t400\t600\t800\t200\t#556677\n",
+        "n\u{303}\t1800\t2500\t2300\t3000\t200\t#445566\n",
+    ).as_bytes());
+    assert_eq!(fs::read(&source).expect("source"), original);
+    assert!(execute_glyph_library(&args(&[
+        "--profile", source_name, "--remove-path", "n\u{303}", "1",
+        "--output", target_name, "--replace",
+    ])).expect("save selected target").is_none());
+    assert_eq!(fs::read(&target).expect("reopen"), revised);
+    let inspected = execute_glyph_library(&args(&[
+        "--profile", target_name, "--inspect-paths", "n\u{303}",
+    ])).expect("inspection").expect("UTF-8");
+    assert!(String::from_utf8_lossy(&inspected).contains("Paths: 1"));
+    for (index, rejected) in [
+        args(&["--remove-path"]),
+        args(&["--remove-path", "n\u{303}"]),
+        args(&["--remove-path", "n\u{303}", "0"]),
+        args(&["--remove-path", "n\u{303}", "4097"]),
+        args(&["--remove-path", "n\u{303}", "3"]),
+        args(&["--remove-path", "ab", "1"]),
+        args(&["--remove-path", " ", "1"]),
+    ].into_iter().enumerate() {
+        let mut edit = args(&["--profile", source_name]);
+        edit.extend(rejected.clone());
+        edit.extend(args(&["--output", target_name, "--replace"]));
+        assert!(execute_glyph_library(&edit).is_err(),
+            "invalid path removal {rejected:?}");
+        assert_eq!(fs::read(&target).expect("sentinel"), revised);
+        let mut piped = args(&["--profile", "-"]);
+        piped.extend(rejected);
+        let preflight = preflight_glyph_profile_sources(&piped);
+        if index == 4 {
+            preflight.expect("missing path requires source inspection");
+        } else {
+            assert!(preflight.is_err(), "{preflight:?}");
+        }
+    }
+    let alone = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ñ", "500", "600", "900", "1000",
+        "200", "#112233",
+        "--remove-path", "ñ", "1",
+    ])).expect_err("cannot delete final native pen path");
+    assert!(alone.contains("final authored pen path"), "{alone}");
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(target).expect("remove target");
+}
+
+#[test]
 fn native_path_pen_style_round_trips_unicode_and_physical_exports() {
     let source = test_path().with_extension("tsv");
     let revision = test_path().with_extension("tsv");
