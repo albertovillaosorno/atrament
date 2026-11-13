@@ -1390,6 +1390,7 @@ impl GlyphOverlay {
             "--copy-glyph" => self.copy_glyph_option(iter)?,
             "--shear-glyph" => self.shear_glyph_option(iter)?,
             "--rotate-glyph" => self.rotate_glyph_option(iter)?,
+            "--reflect-glyph" => self.reflect_glyph_option(iter)?,
             "--scale-glyph-height" => self.scale_glyph_height_option(iter)?,
             "--scale-glyph-width" => self.scale_glyph_width_option(iter)?,
             "--scale-glyph-ink" => self.scale_glyph_ink_option(iter)?,
@@ -1691,6 +1692,18 @@ impl GlyphOverlay {
                     iter, "rotation Y pivot", 0, 4500,
                 )?;
             }
+            "--reflect-glyph" => {
+                let axis = iter.next()
+                    .ok_or("reflection axis requires x or y")?;
+                let bound = match axis.as_str() {
+                    "x" => 3500,
+                    "y" => 4500,
+                    _ => return Err("reflection axis requires x or y".into()),
+                };
+                let _pivot = next_integer(
+                    iter, "reflection pivot", 0, bound,
+                )?;
+            }
             "--translate-glyph" => {
                 let _dx = next_signed_path_offset(iter, "glyph dx", 3500)?;
                 let _dy = next_signed_path_offset(iter, "glyph dy", 4500)?;
@@ -1918,6 +1931,77 @@ impl GlyphOverlay {
         let pivot_x = next_integer(iter, "rotation X pivot", 0, 3500)?;
         let pivot_y = next_integer(iter, "rotation Y pivot", 0, 4500)?;
         self.rotate_glyph(grapheme, degrees, pivot_x, pivot_y)
+    }
+
+    /// Mirror one exact authored glyph about a selected physical axis.
+    /// Reflect both directed endpoints without changing pen order, width,
+    /// pigment, unrelated Unicode rows, or the saved v1 profile schema.
+    pub(super) fn reflect_glyph(
+        &mut self, grapheme: &str, axis: &str, pivot: u32,
+    ) -> Result<(), String> {
+        let maximum = match axis {
+            "x" => 3500u32,
+            "y" => 4500u32,
+            _ => return Err("reflection axis requires x or y".into()),
+        };
+        if pivot > maximum {
+            return Err("reflection pivot outside glyph cell".into());
+        }
+        let positions = self.matching_stroke_positions(grapheme)?;
+        let mut revised = self.strokes.clone();
+        for position in positions {
+            let stroke = revised.get_mut(position)
+                .ok_or("glyph stroke outside library")?;
+            let reflect = |point: &mut (u32, u32)|
+                -> Result<(), String> {
+                let selected = if axis == "x" { point.0 } else { point.1 };
+                let next = i64::from(pivot) * 2 - i64::from(selected);
+                let twice = next * 2;
+                let pen = i64::from(stroke.width_um);
+                let limit = i64::from(maximum) * 2 - pen;
+                if twice < pen || twice > limit {
+                    return Err(
+                        "reflected pen contour clips glyph cell".into()
+                    );
+                }
+                let projected = u32::try_from(next)
+                    .map_err(|_error| "reflected coordinate out of bounds")?;
+                if axis == "x" {
+                    point.0 = projected;
+                } else {
+                    point.1 = projected;
+                }
+                Ok(())
+            };
+            let mut start = stroke.start_um;
+            let mut end = stroke.end_um;
+            reflect(&mut start)?;
+            reflect(&mut end)?;
+            stroke.start_um = start;
+            stroke.end_um = end;
+        }
+        let original = replace(&mut self.strokes, revised);
+        if let Err(error) = self.encode_file() {
+            self.strokes = original;
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(super) fn reflect_glyph_option(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let grapheme = iter.next()
+            .ok_or("--reflect-glyph requires an exact grapheme")?;
+        let axis = iter.next()
+            .ok_or("reflection axis requires x or y")?;
+        let maximum = match axis.as_str() {
+            "x" => 3500,
+            "y" => 4500,
+            _ => return Err("reflection axis requires x or y".into()),
+        };
+        let pivot = next_integer(iter, "reflection pivot", 0, maximum)?;
+        self.reflect_glyph(grapheme, axis, pivot)
     }
 
     /// Choose a new first segment of a closed candidate pen loop without

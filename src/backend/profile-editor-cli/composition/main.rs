@@ -109,6 +109,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     [--scale-glyph-ink GRAPHEME PERCENT] \
     [--translate-glyph GRAPHEME DX_UM DY_UM] \
     [--rotate-glyph GRAPHEME ANGLE_DEG PIVOT_X_UM PIVOT_Y_UM] \
+    [--reflect-glyph GRAPHEME x|y PIVOT_UM] \
     [--join-strokes GRAPHEME FIRST_INDEX] \
     [--set-stroke GRAPHEME INDEX X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--remove-stroke GRAPHEME INDEX] \
@@ -142,6 +143,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --scale-glyph-ink rescales exact-glyph pen thickness 50..150%.\n\
     --translate-glyph moves all exact-glyph strokes within the pen cell.\n\
     --rotate-glyph rotates ordered ink clockwise around an X/Y pivot.\n\
+    --reflect-glyph mirrors exact glyph ink about an X or Y coordinate.\n\
     --join-strokes inserts a short same-pen connector to the next segment.\n\
     --copy-glyph clones explicit source ink under an unoccupied target.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
@@ -1454,7 +1456,8 @@ fn preflight_glyph_typed_option(
         "--translate-path" | "--rotate-glyph" => 4,
         "--move-stroke" | "--move-path" | "--rotate-path"
         | "--shear-glyph" | "--scale-glyph-height"
-        | "--scale-glyph-width" | "--translate-glyph" => 3,
+        | "--scale-glyph-width" | "--translate-glyph"
+        | "--reflect-glyph" => 3,
         "--reverse-stroke" | "--split-stroke"
         | "--join-strokes" | "--remove-stroke"
         | "--reverse-path" | "--close-path"
@@ -1591,6 +1594,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                 load_selected_glyph_file(&mut glyphs, selected, &mut piped)?;
             }
             "--copy-glyph" | "--glyph-stroke" | "--rotate-glyph"
+            | "--reflect-glyph"
             | "--translate-glyph" | "--shear-glyph"
             | "--scale-glyph-height" | "--scale-glyph-width"
             | "--scale-glyph-ink" => glyphs.parse(option, &mut iter)?,

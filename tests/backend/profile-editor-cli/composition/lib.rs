@@ -6303,6 +6303,187 @@ fn native_midpoint_split_refuses_invalid_or_unsafe_edits_without_file_writes() {
 }
 
 #[test]
+fn native_reflection_preserves_directed_unicode_paths_and_pdf_png_ink() {
+    let source = test_path().with_extension("tsv");
+    let mirrored = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("reflection source");
+    let mirrored_name = mirrored.to_str().expect("reflection output");
+    let nfd = "o\u{301}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "450", "1000", "850", "1600",
+        "251", "#243647",
+        "--glyph-stroke", "ó", "200", "1000", "550", "1500",
+        "250", "#102030",
+        "--glyph-stroke", nfd, "850", "1600", "1300", "2200",
+        "251", "#243647",
+        "--glyph-stroke", "∞", "300", "1700", "500", "1900",
+        "250", "#AABBCC",
+    ])).expect("original library").expect("source TSV");
+    fs::write(&source, &original).expect("save reflection source");
+    let mirror_x = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-glyph", nfd, "x", "1750",
+    ])).expect("native horizontal reflection").expect("reflected bytes");
+    let expected_x = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ó\t3050\t1000\t2650\t1600\t251\t#243647\n",
+        "ó\t200\t1000\t550\t1500\t250\t#102030\n",
+        "ó\t2650\t1600\t2200\t2200\t251\t#243647\n",
+        "∞\t300\t1700\t500\t1900\t250\t#AABBCC\n",
+    );
+    assert_eq!(mirror_x, expected_x.as_bytes(),
+        "mirrored directed segments keep interleaved NFC/math slots");
+    let double_x = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-glyph", nfd, "x", "1750",
+        "--reflect-glyph", nfd, "x", "1750",
+    ])).expect("double reflection").expect("original bytes");
+    assert_eq!(double_x, original,
+        "reflection is an exact involution, not a rounded approximation");
+    let mirror_y = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-glyph", nfd, "y", "2250",
+    ])).expect("native vertical reflection").expect("vertical TSV");
+    let expected_y = concat!(
+        "atrament.glyph-strokes.v1\n",
+        "ó\t450\t3500\t850\t2900\t251\t#243647\n",
+        "ó\t200\t1000\t550\t1500\t250\t#102030\n",
+        "ó\t850\t2900\t1300\t2300\t251\t#243647\n",
+        "∞\t300\t1700\t500\t1900\t250\t#AABBCC\n",
+    );
+    assert_eq!(mirror_y, expected_y.as_bytes());
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-glyph", nfd, "y", "2250",
+        "--reflect-glyph", nfd, "y", "2250",
+    ])).expect("double vertical reflection").expect("bytes"), original);
+    let report = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-glyph", nfd, "x", "1750",
+        "--inspect-paths", nfd,
+    ])).expect("inspect mirrored path").expect("report"))
+        .expect("UTF-8 inspector");
+    assert!(report.contains("Strokes: 2\nPaths: 1\nPen lifts: 0"),
+        "{report}");
+    assert!(report.contains(
+        "Path 1: strokes 1..2 (2 segments) (3050, 1000) -> (2200, 2200)"
+    ), "{report}");
+    assert!(execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-glyph", nfd, "x", "1750",
+        "--output", mirrored_name,
+    ])).expect("save reflected TSV").is_none());
+    assert_eq!(fs::read(&source).expect("original unchanged"), original);
+    assert_eq!(fs::read(&mirrored).expect("mirrored saved"), mirror_x);
+    assert_eq!(execute_glyph_library(&args(&[
+        "--profile", mirrored_name,
+    ])).expect("reopen").expect("TSV"), mirror_x);
+    for format in ["pdf", "png"] {
+        let mut saved = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", mirrored_name,
+            "--place-text", "1", "30000", "45000", "o\u{301}ó∞",
+        ]);
+        let mut manual = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", nfd, "3050", "1000", "2650", "1600",
+            "251", "#243647",
+            "--glyph-stroke", "ó", "200", "1000", "550", "1500",
+            "250", "#102030",
+            "--glyph-stroke", nfd, "2650", "1600", "2200", "2200",
+            "251", "#243647",
+            "--glyph-stroke", "∞", "300", "1700", "500", "1900",
+            "250", "#AABBCC",
+            "--place-text", "1", "30000", "45000", "o\u{301}ó∞",
+        ]);
+        if format == "png" {
+            saved.extend(args(&["--dpi", "72"]));
+            manual.extend(args(&["--dpi", "72"]));
+        }
+        assert_eq!(execute_notebook(&saved)
+            .expect("saved reflected ink").expect("bytes"),
+            execute_notebook(&manual)
+                .expect("independent authored ink").expect("bytes"),
+            "native {format} must reflect directed source ink exactly");
+    }
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(mirrored).expect("remove reflected output");
+}
+
+#[test]
+fn native_reflection_refuses_bad_parameters_and_clipping_atomically() {
+    for flags in [
+        args(&["--profile", "-", "--reflect-glyph"]),
+        args(&["--profile", "-", "--reflect-glyph", "ó"]),
+        args(&["--profile", "-", "--reflect-glyph", "ó", "x"]),
+    ] {
+        let error = preflight_glyph_profile_sources(&flags)
+            .expect_err("incomplete reflection must refuse before stdin");
+        assert!(error.contains("--reflect-glyph requires 3 operands"),
+            "{error}");
+    }
+    for (glyph, axis, pivot, diagnostic) in [
+        ("ó", "X", "1750", "axis"),
+        ("ó", "z", "1750", "axis"),
+        ("ó", "", "1750", "axis"),
+        ("ab", "x", "1750", "exact visible"),
+        ("ó", "x", "-1", "reflection pivot"),
+        ("ó", "x", "1.5", "reflection pivot"),
+        ("ó", "x", "3501", "reflection pivot"),
+        ("ó", "y", "4501", "reflection pivot"),
+        ("ó", "y", "not-a-number", "reflection pivot"),
+    ] {
+        let error = preflight_glyph_profile_sources(&args(&[
+            "--profile", "-", "--reflect-glyph", glyph, axis, pivot,
+        ])).expect_err("bad typed operand must refuse before file read");
+        assert!(error.contains(diagnostic), "{error}");
+    }
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ó", "450", "1000", "850", "1600",
+        "251", "#243647",
+        "--glyph-stroke", "∞", "600", "1200", "800", "1800",
+        "250", "#AABBCC",
+    ])).expect("source glyph library").expect("source TSV");
+    fs::write(&source, &original).expect("saved source");
+    fs::write(&target, b"retain accepted reflection")
+        .expect("target sentinel");
+    let source_name = source.to_str().expect("source path");
+    let target_name = target.to_str().expect("target path");
+    for (glyph, axis, pivot, diagnostic) in [
+        ("ó", "x", "0", "clips"),
+        ("ó", "y", "0", "clips"),
+        ("a", "x", "1750", "no authored strokes"),
+    ] {
+        let error = execute_glyph_library(&args(&[
+            "--profile", source_name,
+            "--reflect-glyph", glyph, axis, pivot,
+            "--output", target_name, "--replace",
+        ])).expect_err("unsafe reflection cannot replace accepted file");
+        assert!(error.contains(diagnostic), "{error}");
+        assert_eq!(fs::read(&source).expect("unchanged source"), original);
+        assert_eq!(fs::read(&target).expect("unchanged target"),
+            b"retain accepted reflection");
+    }
+    // The physical pen radius is half a micrometre for odd pen widths:
+    // 2*x >= width and 2*x <= 7000-width must both hold.
+    let tangent = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ó", "126", "1000", "850", "1600",
+        "251", "#243647", "--reflect-glyph", "ó", "x", "1750",
+    ])).expect("odd-width reflected edge is admitted").expect("TSV");
+    assert!(String::from_utf8(tangent).expect("UTF-8")
+        .contains("ó\t3374\t1000\t2650\t1600\t251\t#243647"));
+    let error = execute_glyph_library(&args(&[
+        "--glyph-stroke", "ó", "125", "1000", "850", "1600",
+        "251", "#243647", "--reflect-glyph", "ó", "x", "1750",
+    ])).expect_err("odd-width reflected contour must clip");
+    assert!(error.contains("clips"), "{error}");
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(target).expect("remove target");
+}
+
+#[test]
 fn targeted_stroke_edits_refuse_bad_shapes_and_leave_files_untouched() {
     let source = test_path().with_extension("tsv");
     let target = test_path().with_extension("tsv");
