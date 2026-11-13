@@ -344,6 +344,10 @@ fn glyph_library_preflights_typed_stroke_and_path_edits() {
             "path dx outside native bounds"),
         (["--translate-path", "a", "1", "0", "0"].as_slice(),
             "path shift needs nonzero bounded whole um"),
+        (["--copy-path", "a", "0", "ñ"].as_slice(),
+            "source path index requires 1..4096"),
+        (["--copy-path", "a", "4097", "ñ"].as_slice(),
+            "source path index requires 1..4096"),
     ] {
         let mut flags = args(&["--profile", "-"]);
         flags.extend(tail.iter().map(|value| (*value).to_owned()));
@@ -356,6 +360,7 @@ fn glyph_library_preflights_typed_stroke_and_path_edits() {
         ["--set-stroke", "ñ", "1", "500", "500", "1800", "3000",
             "250", "#123456"].as_slice(),
         ["--translate-path", "ñ", "1", "-2", "2"].as_slice(),
+        ["--copy-path", "n\u{303}", "1", "ñ"].as_slice(),
     ] {
         let mut flags = args(&["--profile", "-"]);
         flags.extend(tail.iter().map(|value| (*value).to_owned()));
@@ -409,6 +414,10 @@ fn glyph_library_preflights_exact_mutation_and_inspection_keys() {
             "glyph copy needs two distinct exact visible graphemes"),
         (["--copy-glyph", " ", "ñ"].as_slice(),
             "glyph copy needs two distinct exact visible graphemes"),
+        (["--copy-path", "a", "1", "a"].as_slice(),
+            "glyph copy needs two distinct exact visible graphemes"),
+        (["--copy-path", "a", "1", "bc"].as_slice(),
+            "glyph copy needs two distinct exact visible graphemes"),
         (["--inspect-glyph", "ab"].as_slice(),
             "inspection requires one exact visible grapheme"),
         (["--inspect-paths", ""].as_slice(),
@@ -430,6 +439,7 @@ fn glyph_library_preflights_exact_mutation_and_inspection_keys() {
     }
     for tail in [
         ["--copy-glyph", "n\u{303}", "ñ"].as_slice(),
+        ["--copy-path", "n\u{303}", "1", "ñ"].as_slice(),
         ["--inspect-glyph", "ñ"].as_slice(),
         ["--inspect-paths", "n\u{303}"].as_slice(),
         ["--remove-glyph", "ñ"].as_slice(),
@@ -5463,6 +5473,143 @@ fn explicit_source_glyph_copy_derives_simple_a_without_changing_o() {
 }
 
 #[test]
+fn native_path_copy_appends_exact_unicode_and_renders_pdf_png() {
+    let source = test_path().with_extension("tsv");
+    let revision = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let revision_name = revision.to_str().expect("revision path");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "500", "700", "1100", "1500",
+        "200", "#112233",
+        "--glyph-stroke", "∞", "800", "800", "2000", "2700",
+        "300", "#445566",
+        "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+        "300", "#778899",
+        "--glyph-stroke", "n\u{303}", "1100", "1500", "1700", "2500",
+        "200", "#112233",
+        "--glyph-stroke", "n\u{303}", "2100", "700", "2700", "1100",
+        "220", "#99AABB",
+    ])).expect("source library admitted").expect("original bytes");
+    fs::write(&source, &original).expect("owned source");
+    let mut copy = args(&[
+        "--profile", source_name,
+        "--copy-path", "n\u{303}", "1", "ñ",
+        "--copy-path", "n\u{303}", "2", "á",
+    ]);
+    let output = execute_glyph_library(&copy)
+        .expect("independent path copies").expect("canonical copied TSV");
+    let mut expected = original.clone();
+    expected.extend_from_slice(concat!(
+        "ñ\t500\t700\t1100\t1500\t200\t#112233\n",
+        "ñ\t1100\t1500\t1700\t2500\t200\t#112233\n",
+        "á\t2100\t700\t2700\t1100\t220\t#99AABB\n",
+    ).as_bytes());
+    assert_eq!(output, expected);
+    assert_eq!(fs::read(&source).expect("source remains unchanged"),
+        original);
+    copy.extend(args(&["--output", revision_name]));
+    assert!(execute_glyph_library(&copy)
+        .expect("explicit save accepted").is_none());
+    assert_eq!(fs::read(&revision).expect("saved UTF-8 TSV"), output);
+    let report = String::from_utf8(execute_glyph_library(&args(&[
+        "--profile", revision_name, "--inspect-paths", "ñ",
+    ])).expect("inspect saved ink").expect("path report"))
+        .expect("UTF-8 inspection");
+    assert!(report.contains("Strokes: 3"), "{report}");
+    assert!(report.contains("Paths: 2"), "{report}");
+    for format in ["pdf", "png"] {
+        let mut saved = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-file", revision_name,
+            "--place-text", "1", "30000", "45000", "ñá",
+        ]);
+        let mut inline = args(&[
+            "--export-paper", format, "--printed-sheet", "true",
+            "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+            "300", "#778899",
+            "--glyph-stroke", "ñ", "500", "700", "1100", "1500",
+            "200", "#112233",
+            "--glyph-stroke", "ñ", "1100", "1500", "1700", "2500",
+            "200", "#112233",
+            "--glyph-stroke", "á", "2100", "700", "2700", "1100",
+            "220", "#99AABB",
+            "--place-text", "1", "30000", "45000", "ñá",
+        ]);
+        if format == "png" {
+            saved.extend(args(&["--dpi", "72"]));
+            inline.extend(args(&["--dpi", "72"]));
+        }
+        let actual = execute_notebook(&saved)
+            .expect("saved path renders").expect("rendered bytes");
+        let expectation = execute_notebook(&inline)
+            .expect("inline path renders").expect("inline bytes");
+        assert_eq!(actual, expectation,
+            "copied path must render same {format} as explicit source ink");
+        if format == "pdf" {
+            assert!(actual.starts_with(b"%PDF-1.4"));
+        } else {
+            assert!(actual.starts_with(b"\x89PNG\r\n\x1a\n"));
+        }
+    }
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(revision).expect("remove revision");
+}
+
+#[test]
+fn native_path_copy_refuses_unsafe_inputs_and_preserves_files() {
+    let source = test_path().with_extension("tsv");
+    let target = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source path");
+    let target_name = target.to_str().expect("target path");
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", "n\u{303}", "500", "700", "1100", "1500",
+        "200", "#112233",
+        "--glyph-stroke", "ñ", "2200", "600", "2200", "3300",
+        "300", "#778899",
+    ])).expect("valid library").expect("canonical TSV");
+    fs::write(&source, &original).expect("owned source");
+    fs::write(&target, b"unchanged target sentinel").expect("sentinel");
+    for rejected in [
+        args(&["--copy-path"]),
+        args(&["--copy-path", "n\u{303}"]),
+        args(&["--copy-path", "n\u{303}", "1"]),
+        args(&["--copy-path", "n\u{303}", "0", "á"]),
+        args(&["--copy-path", "n\u{303}", "-1", "á"]),
+        args(&["--copy-path", "n\u{303}", "1.0", "á"]),
+        args(&["--copy-path", "n\u{303}", "4097", "á"]),
+        args(&["--copy-path", "n\u{303}", "2", "á"]),
+        args(&["--copy-path", "n", "1", "á"]),
+        args(&["--copy-path", "n\u{303}", "1", "n\u{303}"]),
+        args(&["--copy-path", "n\u{303}", "1", "ab"]),
+        args(&["--copy-path", " ", "1", "á"]),
+        args(&["--copy-path", "n\u{303}", "1", " "]),
+        args(&["--copy-path", "n\u{303}", "1", "\n"]),
+    ] {
+        let mut command = args(&["--profile", source_name]);
+        command.extend(rejected);
+        command.extend(args(&["--output", target_name, "--replace"]));
+        assert!(execute_glyph_library(&command).is_err(),
+            "invalid path copy accepted: {command:?}");
+        assert_eq!(fs::read(&source).expect("source bytes"), original);
+        assert_eq!(fs::read(&target).expect("target bytes"),
+            b"unchanged target sentinel");
+    }
+    let full = String::from("atrament.glyph-strokes.v1\n")
+        + &"n\u{303}\t500\t700\t1100\t1500\t200\t#112233\n".repeat(4096);
+    fs::write(&source, full.as_bytes()).expect("full source library");
+    let error = execute_glyph_library(&args(&[
+        "--profile", source_name, "--copy-path", "n\u{303}", "1", "á",
+        "--output", target_name, "--replace",
+    ])).expect_err("over-budget copy refuses");
+    assert!(error.contains("4096 authored strokes"), "{error}");
+    assert_eq!(fs::read(&source).expect("full source"), full.as_bytes());
+    assert_eq!(fs::read(&target).expect("sentinel"),
+        b"unchanged target sentinel");
+    fs::remove_file(source).expect("remove source");
+    fs::remove_file(target).expect("remove sentinel");
+}
+
+#[test]
 fn explicit_glyph_copy_refuses_ambiguous_targets_and_stroke_budget() {
     let source = test_path().with_extension("tsv");
     let target = test_path().with_extension("tsv");
@@ -8880,8 +9027,9 @@ fn typed_glyph_mutations_refuse_invalid_unselected_inventory()
     // Each operation is valid against the original library. None may
     // mutate an unrelated invalid typed stroke or create further edits
     // before the complete authored inventory has been admitted.
-    let mutations: [(&str, fn(&mut GlyphOverlay) -> Result<(), String>); 9] = [
+    let mutations: [(&str, fn(&mut GlyphOverlay) -> Result<(), String>); 10] = [
         ("copy glyph", |overlay| overlay.copy_glyph("a", "c")),
+        ("copy path", |overlay| overlay.copy_path("a", 1, "c")),
         ("remove glyph", |overlay| overlay.remove_glyph("a")),
         ("remove stroke", |overlay| overlay.remove_stroke("a", 1)),
         ("reverse stroke", |overlay| overlay.reverse_stroke("a", 1)),

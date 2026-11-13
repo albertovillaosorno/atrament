@@ -729,6 +729,62 @@ impl GlyphOverlay {
         self.copy_glyph(source, target)
     }
 
+    /// Copy one explicitly inspected candidate pen path onto another exact
+    /// Unicode grapheme. A pre-existing target is preserved; this appends
+    /// concrete directed strokes, not a live path reference or pen lift.
+    pub(super) fn copy_path(
+        &mut self, source: &str, ordinal: u32, target: &str,
+    ) -> Result<(), String> {
+        validate_copy_glyph_keys(source, target)?;
+        self.validate_stroke_library()?;
+        let (positions, paths) = self.selected_candidate_paths(source)?;
+        let index = checked_path_position(&paths, ordinal)?;
+        let range = paths.get(index).ok_or("source path outside bounds")?;
+        let copies = positions.get(range.clone())
+            .ok_or("source path segments outside glyph")?
+            .iter().map(|position| {
+                let original = self.strokes.get(*position)
+                    .ok_or("source path segment outside library")?;
+                Ok(GlyphStroke {
+                    grapheme: target.to_owned(), ..original.clone()
+                })
+            }).collect::<Result<Vec<_>, String>>()?;
+        if copies.len() > MAX_STROKES.saturating_sub(self.strokes.len()) {
+            return Err("path copy exceeds 4096 authored strokes".into());
+        }
+        let before = self.strokes.len();
+        self.strokes.extend(copies);
+        if let Err(error) = self.encode_file() {
+            self.strokes.truncate(before);
+            return Err(error);
+        }
+        Ok(())
+    }
+
+    pub(super) fn copy_path_option(
+        &mut self, iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let source = iter.next()
+            .ok_or("--copy-path requires source, index and target")?;
+        let ordinal = next_integer(iter, "source path index", 1, 4096)?;
+        let target = iter.next()
+            .ok_or("--copy-path requires source, index and target")?;
+        self.copy_path(source, ordinal, target)
+    }
+
+    /// Validate all source-independent operands before opening an imported
+    /// library (including an unclosed stdin source).
+    pub(super) fn preflight_copy_path_option(
+        iter: &mut Iter<'_, String>,
+    ) -> Result<(), String> {
+        let source = iter.next()
+            .ok_or("--copy-path requires source, index and target")?;
+        let _ordinal = next_integer(iter, "source path index", 1, 4096)?;
+        let target = iter.next()
+            .ok_or("--copy-path requires source, index and target")?;
+        validate_copy_glyph_keys(source, target)
+    }
+
     /// Path numbers are derived from the same exact adjacent-pen test as
     /// --inspect-paths. Edits never introduce v1 path identity metadata.
     pub(super) fn edit_path(

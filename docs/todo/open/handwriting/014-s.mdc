@@ -1247,3 +1247,28 @@ reopens its actual downloaded TSV in Rust, recombines the segments and renders
 real vector PDF and transparent RGBA PNG. This is still editable sampled-line
 geometry, not analytic curve persistence, inferred pen lifts or finished
 correlated cursive handwriting; full P1-014 acceptance remains open.
+
+## Explicit cross-glyph pen-path copy (partial) — 2026-11-13
+
+The native `atrament-profiles glyphs` editor now supports
+`--copy-path SOURCE PATH_INDEX TARGET`. The caller selects one candidate
+path by the one-based numbers printed by `--inspect-paths`, and the editor
+appends its concrete directed, same-pen strokes to a distinct, exact
+Unicode target. Existing target ink and interleaved source records remain
+untouched; NFC and NFD keys do not normalize to one another. No copy
+implicitly saves over a source TSV or creates a live linked glyph.
+
+The browser glyph editor exposes the same explicit path copy with a target
+input and bounded in-memory undo/redo. Both implementations refuse invalid
+Unicode identities and over-budget source libraries rather than creating
+partial ink; native preflight validates the typed operands before reading
+an unclosed selected `stdin` source. Native Rust tests cover exact TSV,
+source/sentinel preservation, saved/reopened candidate path inspection and
+byte-equal PDF and transparent PNG compared to independently entered ink.
+Browser tests check selected-path boundaries, copied target ink, capacity,
+invalid requests, unchanged inputs and undo/redo.
+
+Candidate paths are still derived from adjacent line-segment endpoints and
+matching pen settings. There are no explicit saved pen-lift identifiers,
+analytic curves, learned connections or calibrated cursive movements.
+Complete P1-014 penmanship acceptance remains open.

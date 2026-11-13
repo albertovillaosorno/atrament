@@ -365,6 +365,37 @@ export function candidatePenPaths(
     return paths;
 }
 
+// One-time, explicit copy of exactly one candidate pen path to another
+// Unicode identity. A pre-existing target keeps all its authored lines;
+// the selected source's directed order and original interleaved rows stay.
+export function copyCandidatePath(
+    strokes: readonly Stroke[], source: string, selectedIndex: number,
+    target: string,
+): Stroke[] {
+    if (!exactGrapheme(source) || !exactGrapheme(target)
+        || source === target) {
+        throw new Error("Path copy needs two different exact graphemes");
+    }
+    if (!Number.isSafeInteger(selectedIndex) || selectedIndex < 0
+        || strokes[selectedIndex]?.grapheme !== source) {
+        throw new Error("Path copy needs a selected source glyph stroke");
+    }
+    // Also refuse invalid unused source rows before deriving a new path.
+    encodeGlyphLibrary([...strokes]);
+    const positions = strokes.flatMap((stroke, index) =>
+        stroke.grapheme === source ? [index] : []);
+    const selectedPosition = positions.indexOf(selectedIndex) + 1;
+    const path = candidatePenPaths(strokes, source).find((candidate) =>
+        selectedPosition >= candidate.first
+        && selectedPosition <= candidate.last);
+    if (!path) throw new Error("Selected source path no longer exists");
+    const copies = positions.slice(path.first - 1, path.last)
+        .map((index) => ({ ...strokes[index]!, grapheme: target }));
+    const next = [...strokes, ...copies];
+    encodeGlyphLibrary(next);
+    return next;
+}
+
 // Select a later segment as the entry to an already closed pen loop.
 // A cyclic reorder leaves its actual geometry/direction untouched and
 // retains interleaved exact-Unicode TSV slots and the original input.
@@ -4289,6 +4320,9 @@ export function createGlyphStrokeEditor(): {
     const startPath = required<HTMLButtonElement>("glyph-path-start");
     const closePath = required<HTMLButtonElement>("glyph-path-close");
     const translatePath = required<HTMLButtonElement>("glyph-path-translate");
+    const copyPath = required<HTMLButtonElement>("glyph-path-copy");
+    const pathCopyTarget =
+        required<HTMLInputElement>("glyph-path-copy-target");
     const pathDx = required<HTMLInputElement>("glyph-path-dx");
     const pathDy = required<HTMLInputElement>("glyph-path-dy");
     const earlierPath = required<HTMLButtonElement>("glyph-path-earlier");
@@ -4345,7 +4379,7 @@ export function createGlyphStrokeEditor(): {
         remove, subdivide, splitExact, merge, clearGlyph, reverse,
         reversePath,
         startPath, closePath,
-        translatePath,
+        translatePath, copyPath, pathCopyTarget,
         pathDx, pathDy,
         earlierPath, laterPath, earlier, later, join, save,
         ...AXES.flatMap((axis) => [numeric[axis], ranges[axis]])];
@@ -4374,7 +4408,7 @@ export function createGlyphStrokeEditor(): {
         | "stroke merge"
         | "stroke direction" | "stroke order"
         | "pen path direction" | "pen path start"
-        | "pen path closure" | "pen path move"
+        | "pen path closure" | "pen path copy" | "pen path move"
         | "pen path order" | "pen connection"
         | "stroke removal" | "glyph clear" | "starter replacement"
         | "glyph copy" | "accent composition"
@@ -5575,6 +5609,8 @@ export function createGlyphStrokeEditor(): {
             || chosenPath.first === chosenPath.last || closureGap === 0
             || closureGap > 1200 * 1200 || strokes.length >= MAX_STROKES;
         translatePath.disabled = !active || !chosenPath;
+        copyPath.disabled = !active || drawing !== null || !chosenPath
+            || strokes.length >= MAX_STROKES;
         const pathIndex = paths.indexOf(chosenPath!);
         earlierPath.disabled = !active || pathIndex <= 0;
         laterPath.disabled = !active || pathIndex < 0
@@ -6564,6 +6600,22 @@ export function createGlyphStrokeEditor(): {
             message(String(error));
         }
     });
+    copyPath.addEventListener("click", () => {
+        if (!active || selectedIndex === null || drawing !== null) return;
+        try {
+            const glyph = character.value;
+            const target = pathCopyTarget.value;
+            const next = copyCandidatePath(
+                strokes, glyph, selectedIndex, target,
+            );
+            const added = next.length - strokes.length;
+            commitInkEdit(next, glyph, "pen path copy", selectedIndex);
+            message(`Copied ${added} directed path strokes to `
+                + `${target} (unsaved)`);
+        } catch (error) {
+            message(String(error));
+        }
+    });
     translatePath.addEventListener("click", () => {
         if (!active || selectedIndex === null) return;
         try {
@@ -6759,6 +6811,7 @@ export function createGlyphStrokeEditor(): {
         for (const control of controls) control.disabled = true;
         source.value = "";
         copyFrom.value = "";
+        pathCopyTarget.value = "";
         if (downloadUrl !== null) {
             URL.revokeObjectURL(downloadUrl);
             downloadUrl = null;

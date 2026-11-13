@@ -1952,6 +1952,32 @@ You can then edit the new `a` independently via
 missing source ink, invalid Unicode and exceeding the bounded 4,096-stroke
 library refuse.
 
+To **reuse one authored pen path** without replacing an already-inked
+Unicode glyph, inspect the source with `--inspect-paths` and select its
+one-based candidate path index:
+
+```sh
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyphs.tsv --inspect-paths 'ñ'
+cargo run -q -p atrament_profile_editor_cli -- glyphs \
+  --profile my-glyphs.tsv --copy-path 'ñ' 2 'ñ' \
+  --output extended-glyphs.tsv
+```
+
+`--copy-path SOURCE PATH_INDEX TARGET` appends only the directed source
+path's actual sampled strokes, even when target ink already exists. Source
+and target must be two distinct, exact visible Unicode graphemes; NFC and
+NFD forms remain separate identities. Unrelated and interleaved rows retain
+their order. The path index follows the same adjacency and pen agreement
+rules reported by `--inspect-paths`; it can change after intervening edits.
+Missing paths, oversized libraries and invalid keys refuse without writing
+an output file. The browser's **Copy selected continuous pen path to glyph**
+control offers the same opt-in action with one-step undo/redo. It uses an
+explicit target input and only writes to disk on **Download stroke TSV**.
+
+These are copied pen segments, not live references, saved pen lifts,
+analytic curve primitives or inferred cursive joins.
+
 The operation copies **sampled segments**; an exact analytic
 circle, anchored diacritics and joined cursive still require separate work.
 An integration test also copies the browser's actual sampled `o` to `ö`,

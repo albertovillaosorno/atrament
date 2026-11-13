@@ -94,6 +94,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     | glyphs [--profile strokes.tsv|-] \
     [--glyph-stroke GRAPHEME X1 Y1 X2 Y2 WIDTH_UM '#RRGGBB'] \
     [--copy-glyph SOURCE TARGET] \
+    [--copy-path SOURCE PATH_INDEX TARGET] \
     [--remove-glyph GRAPHEME] \
     [--reverse-stroke GRAPHEME INDEX] \
     [--split-stroke GRAPHEME INDEX] \
@@ -150,6 +151,7 @@ const USAGE: &str = "Usage: atrament-profiles notebook [--help] \
     --reflect-glyph mirrors exact glyph ink about an X or Y coordinate.\n\
     --join-strokes inserts a short same-pen connector to the next segment.\n\
     --copy-glyph clones explicit source ink under an unoccupied target.\n\
+    --copy-path appends one source pen path to a distinct exact target.\n\
     --inventory-text checks exact text-baseline membership and overrides,\n\
     not glyph outlines, available ink shapes, or renderability.\n\
     --preview-glyph reports bounded seeded numerical estimates only; \
@@ -1518,6 +1520,12 @@ fn preflight_glyph_profile_sources(args: &[String]) -> Result<(), String> {
                     "--replace may appear only once")?;
                 0
             }
+            "--copy-path" => {
+                let mut complete = iter.clone();
+                preflight_glyph_operands(option, 3, &mut complete)?;
+                GlyphOverlay::preflight_copy_path_option(&mut iter)?;
+                0
+            }
             "--copy-glyph" => {
                 let mut complete = iter.clone();
                 preflight_glyph_operands(option, 2, &mut complete)?;
@@ -1599,6 +1607,7 @@ fn execute_glyph_library(args: &[String]) -> Result<Option<Vec<u8>>, String> {
                     .ok_or("--profile requires a glyph library path")?;
                 load_selected_glyph_file(&mut glyphs, selected, &mut piped)?;
             }
+            "--copy-path" => glyphs.copy_path_option(&mut iter)?,
             "--copy-glyph" | "--glyph-stroke" | "--rotate-glyph"
             | "--reflect-glyph"
             | "--translate-glyph" | "--shear-glyph"
