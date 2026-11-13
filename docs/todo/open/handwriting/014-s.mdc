@@ -1070,3 +1070,18 @@ The existing Rust native glyph schema is unchanged: this is editor-only,
 nonpersistent history, not saved notebook undo/redo or automatic shape
 inference. Browser regressions exercise bounded eviction, branching, exact
 Unicode selection and bulk fills, refused edits and session boundaries.
+
+## Navigable exact-Unicode glyph recovery — 2026-11-13
+
+The eight-step browser history now displays the applied/retained cursor and
+next undo and redo actions, including their exact NFC/NFD glyph owners.
+Dedicated selection buttons locate the next owner without applying the
+history step or changing any authored TSV bytes. Actual undo/redo still
+requires the matching Unicode key and leaves other glyphs untouched.
+NFD combining-accent steps are visibly distinguished from NFC keys.
+
+A focused browser regression walks mixed NFD, NFC and mathematical glyph
+edits through selection-only navigation, empty-draft undo, full redo and
+session reset. Both accepted TSV and download transport remain unchanged.
+This is a session-only navigation aid, not durable notebook history, a
+new glyph schema or completion of joined cursive handwriting.

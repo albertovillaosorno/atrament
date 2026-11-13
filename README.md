@@ -2063,8 +2063,13 @@ holds exact before/after TSV bytes and stroke selection. Undo restores
 original coordinates, pen properties and Unicode identities even after
 rounding losses; redo reapplies the exact accepted change. No automatic
 download or Rust profile write occurs. Select the exact grapheme associated
-with the next history step to undo or redo it. A bulk fill is one step
-regardless of how many missing glyphs it adds.
+with the next history step to undo or redo it. **Select next undo glyph**
+and **Select next redo glyph** navigate to the exact NFC/NFD owner without
+modifying the draft or advancing the history cursor. A live status reports
+applied/retained steps and the next action's glyph and edit kind, even when
+a different glyph is selected. Undo/redo remain disabled until the correct
+Unicode grapheme is selected. A bulk fill is one step regardless of how many
+missing glyphs it adds.
 
 New edits after undo discard the redo tail, and the oldest step is evicted
 after eight successful edits. Identity transforms and refused edits preserve

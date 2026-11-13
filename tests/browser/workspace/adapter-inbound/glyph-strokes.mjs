@@ -489,6 +489,8 @@ function mountEditor() {
         "glyph-accent-lift", "glyph-italic-angle",
         "glyph-authored-angle", "glyph-authored-baseline",
         "glyph-slant-authored", "glyph-slant-undo", "glyph-slant-redo",
+        "glyph-recovery-undo-select", "glyph-recovery-redo-select",
+        "glyph-recovery-status",
         "glyph-slant-preview", "glyph-slant-preview-status",
         "glyph-height-percent", "glyph-height-baseline",
         "glyph-scale-height", "glyph-height-preview",
@@ -8789,6 +8791,100 @@ test("multi-step history replays Unicode-specific ink and bulk fill exactly",
             assert.equal(await saved(), withFill);
             assert.equal(redo.disabled, true);
             editor.reset();
+        } finally {
+            ui.restore();
+        }
+    });
+
+test("history navigation finds exact NFC/NFD undo and redo owners",
+    async () => {
+        const ui = mountEditor();
+        try {
+            const { editor, get, downloads } = ui;
+            const nfd = "a\u0301";
+            const goUndo = get("recovery-undo-select");
+            const goRedo = get("recovery-redo-select");
+            const undo = get("slant-undo");
+            const redo = get("slant-redo");
+            const visit = (glyph) => {
+                get("character").value = glyph;
+                get("character").dispatch("input");
+            };
+            const add = (glyph, offset) => {
+                visit(glyph);
+                for (const [key, value] of Object.entries({
+                    x1: 400 + offset, y1: 1200, x2: 800 + offset,
+                    y2: 1600, width: 250,
+                })) get(key).value = String(value);
+                get("add").dispatch("click");
+                return { grapheme: glyph, x1: 400 + offset,
+                    y1: 1200, x2: 800 + offset, y2: 1600,
+                    width: 250, color: "#243647" };
+            };
+            const save = async () => {
+                get("save").dispatch("click");
+                return await downloads.at(-1).text();
+            };
+            assert.equal(goUndo.disabled, true);
+            assert.equal(goRedo.disabled, true);
+            editor.start();
+            const first = add(nfd, 0);
+            const second = add("á", 100);
+            const third = add("∞", 200);
+            const original = encodeGlyphLibrary([first, second, third]);
+            assert.equal(get("recovery-status").textContent.includes(
+                "3/3 applied"), true);
+            assert.equal(goUndo.disabled, true,
+                "current Unicode glyph already owns next undo");
+            assert.equal(goRedo.disabled, true);
+            undo.dispatch("click");
+            assert.equal(goUndo.disabled, false);
+            assert.equal(goUndo.textContent, "Select á to undo");
+            assert.equal(undo.disabled, true,
+                "history still requires explicit exact-owner selection");
+            const afterThirdUndo = await save();
+            goUndo.dispatch("click");
+            assert.equal(get("character").value, "á");
+            assert.match(get("status").textContent,
+                /Selected á for undo; draft unchanged/);
+            assert.equal(await save(), afterThirdUndo,
+                "navigating history cannot rewrite authored ink");
+            assert.equal(goUndo.disabled, true);
+            assert.equal(undo.disabled, false);
+            undo.dispatch("click");
+            assert.equal(goUndo.textContent, "Select á (NFD) to undo");
+            goUndo.dispatch("click");
+            assert.equal(get("character").value, nfd,
+                "navigation retains combining acute instead of NFC");
+            assert.equal(undo.disabled, false);
+            assert.equal(await save(), encodeGlyphLibrary([first]));
+            undo.dispatch("click");
+            assert.equal(goUndo.disabled, true);
+            assert.equal(goRedo.disabled, true,
+                "same exact glyph is already selected for redo");
+            assert.match(get("recovery-status").textContent,
+                /0\/3 applied.*Redo: á \(NFD\)/);
+            redo.dispatch("click");
+            assert.equal(goRedo.textContent, "Select á to redo");
+            assert.equal(goRedo.disabled, false);
+            goRedo.dispatch("click");
+            assert.equal(get("character").value, "á");
+            assert.equal(await save(), encodeGlyphLibrary([first]));
+            redo.dispatch("click");
+            assert.equal(goRedo.textContent, "Select ∞ to redo");
+            goRedo.dispatch("click");
+            assert.equal(get("character").value, "∞");
+            redo.dispatch("click");
+            assert.equal(await save(), original);
+            assert.equal(get("recovery-status").textContent.includes(
+                "3/3 applied"), true);
+            assert.equal(goRedo.disabled, true);
+            assert.equal(goUndo.disabled, true);
+            editor.reset();
+            assert.equal(goUndo.disabled, true);
+            assert.equal(goRedo.disabled, true);
+            assert.equal(get("recovery-status").textContent,
+                "No active glyph editing session.");
         } finally {
             ui.restore();
         }

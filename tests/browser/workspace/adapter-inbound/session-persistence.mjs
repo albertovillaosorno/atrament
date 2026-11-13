@@ -1688,21 +1688,7 @@ function usesUnreviewedBrowserNavigation(
             "u",
         ),
     ];
-    if (glyph) {
-        // Glyph undo/redo captures its own in-memory transformHistory value;
-        // these exact property reads do not reference the browser History.
-        for (const [site, count] of [
-            ['const history = transformHistory;', 1],
-            ['history.side', 2],
-            ['history.grapheme', 1],
-            ['history[requiredSide]', 1],
-            ['history[side]', 1],
-            ['history.kind', 2],
-        ]) {
-            if (remaining.split(site).length - 1 !== count) return true;
-            remaining = remaining.replaceAll(site, "");
-        }
-    }
+    // Bounded transformHistory needs no ambient browser History exception.
     // Standalone location/history are ambient browser globals. Reject the
     // first-class references too, not only named mutations: destructuring,
     // optional chaining and bound methods can hide a later navigation.

@@ -1264,12 +1264,21 @@
             <button id="glyph-slant-redo" type="button" disabled>
               Redo last glyph transform
             </button>
+            <button id="glyph-recovery-undo-select" type="button" disabled>
+              Select next undo glyph
+            </button>
+            <button id="glyph-recovery-redo-select" type="button" disabled>
+              Select next redo glyph
+            </button>
+            <p id="glyph-recovery-status" class="field-help" role="status"
+              aria-live="polite">No session edits to recover.</p>
             <p class="field-help">Undo/redo recovers the last eight accepted
               local edits: authored glyph transforms, pen traces, individual
               strokes, paths, connectors, starters, copies, accents and bulk
               fills. Each action restores the exact Unicode grapheme, its
               stroke selection and all prior ink. Select the grapheme of the
-              next history step to undo or redo it. A new edit after undo
+              next history step to undo or redo it, or use its Select button
+              to navigate without changing ink. A new edit after undo
               discards the redo tail; importing a TSV or ending the session
               clears history. Recovery never downloads or saves a file.</p>
             <div class="glyph-slant-preview-region">

@@ -3899,6 +3899,9 @@ export function createGlyphStrokeEditor() {
     const slantAuthored = required("glyph-slant-authored");
     const undoTransform = required("glyph-slant-undo");
     const redoTransform = required("glyph-slant-redo");
+    const selectUndoGlyph = required("glyph-recovery-undo-select");
+    const selectRedoGlyph = required("glyph-recovery-redo-select");
+    const historyStatus = required("glyph-recovery-status");
     const slantPreview = required("glyph-slant-preview");
     const slantPreviewStatus = required("glyph-slant-preview-status");
     const heightPercent = required("glyph-height-percent");
@@ -3991,7 +3994,8 @@ export function createGlyphStrokeEditor() {
         widthPercent, widthAnchor, scaleWidth,
         inkPercent, scaleInk, moveX, moveY, moveGlyph,
         rotateAngle, rotatePivotX, rotatePivotY, rotateGlyph,
-        undoTransform, redoTransform, variationSeed,
+        undoTransform, redoTransform, selectUndoGlyph, selectRedoGlyph,
+        variationSeed,
         variationSample, variationDownload,
         ...Object.values(variationControls),
         selected, update,
@@ -4990,6 +4994,30 @@ export function createGlyphStrokeEditor() {
             || undoKind === null;
         redoTransform.disabled = !active || drawing !== null
             || redoKind === null;
+        // Navigate to the exact next Unicode key before recovering it.
+        // Selection alone never changes the draft, cursor or redo branch.
+        const glyphLabel = (glyph) => glyph.normalize("NFC") === glyph
+            ? glyph : `${glyph.normalize("NFC")} (NFD)`;
+        selectUndoGlyph.textContent = undoStep === undefined
+            ? "No undo glyph"
+            : `Select ${glyphLabel(undoStep.grapheme)} to undo`;
+        selectRedoGlyph.textContent = redoStep === undefined
+            ? "No redo glyph"
+            : `Select ${glyphLabel(redoStep.grapheme)} to redo`;
+        selectUndoGlyph.disabled = !active || drawing !== null
+            || undoStep === undefined || undoKind !== null;
+        selectRedoGlyph.disabled = !active || drawing !== null
+            || redoStep === undefined || redoKind !== null;
+        historyStatus.textContent = !active
+            ? "No active glyph editing session."
+            : `Session edits: ${historyCursor}/${transformHistory.length} `
+                + "applied (eight-step limit). "
+                + (undoStep === undefined ? "No next undo. "
+                    : `Undo: ${glyphLabel(undoStep.grapheme)} `
+                        + `(${recoveryLabel(undoStep.kind)}). `)
+                + (redoStep === undefined ? "No next redo."
+                    : `Redo: ${glyphLabel(redoStep.grapheme)} `
+                        + `(${recoveryLabel(redoStep.kind)}).`);
         renderIdeal();
         const shown = strokes.flatMap((stroke, index) => {
             return stroke.grapheme === character.value
@@ -5558,6 +5586,26 @@ export function createGlyphStrokeEditor() {
     };
     undoTransform.addEventListener("click", () => restoreTransform("before"));
     redoTransform.addEventListener("click", () => restoreTransform("after"));
+    const selectHistoryGlyph = (side) => {
+        if (!active || drawing !== null)
+            return;
+        const step = side === "before"
+            ? transformHistory[historyCursor - 1]
+            : transformHistory[historyCursor];
+        if (step === undefined || step.grapheme === character.value)
+            return;
+        // Use the same exact-key selector as manual input; NFC/NFD must not
+        // collapse to the same visible character during history navigation.
+        character.value = step.grapheme;
+        selectedIndex = null;
+        render();
+        const label = step.grapheme.normalize("NFC") === step.grapheme
+            ? step.grapheme : `${step.grapheme.normalize("NFC")} (NFD)`;
+        message(`Selected ${label} for ${side === "before" ? "undo" : "redo"}`
+            + "; draft unchanged");
+    };
+    selectUndoGlyph.addEventListener("click", () => selectHistoryGlyph("before"));
+    selectRedoGlyph.addEventListener("click", () => selectHistoryGlyph("after"));
     seedLowercase.addEventListener("click", () => {
         if (!active)
             return;
