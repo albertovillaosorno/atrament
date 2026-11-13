@@ -2074,6 +2074,7 @@ For shared pigment-lightness rhythm, select
 `--glyph-word-pigment MAX_PERCENT` (0–20) with `--glyph-variation`. Each ASCII-space-delimited
 word gets one seeded signed percentage from an independent stream. Positive
 values lighten its RGB toward white; negative values darken it toward black.
+
 The same shade applies to all authored segments and selected same-pen joins,
 including any heading-ink color override. It changes only displayed pigment,
 never stroke shape, pen width, nominal advance, or the canonical glyph TSV.
