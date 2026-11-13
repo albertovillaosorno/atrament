@@ -217,6 +217,30 @@ full Unicode line-breaking conformance or persisted notebook flow. Exact
 unsupported glyphs still need authored shapes or an explicit chosen
 fallback. The broader P2-013 acceptance criterion remains open.
 
+## Smart quotation marks and bracket ties in native flow (partial)
+
+The CLI's opt-in long-word punctuation protection now keeps authored Spanish
+`«` and English curly `“`/`‘` opening quotes, plus `(`/`[`/`{`, beside
+following ink. Curly `”`/`’` closing quotes and the existing `)`/`]`/`}`
+remain attached to preceding ink when a long unspaced word wraps. This
+also protects nested opening and closing sequences without changing exact
+NFC/NFD grapheme identities or the selected physical row's limits. Straight
+ASCII quotes are deliberately left ambiguous rather than silently treated
+as opening or closing punctuation.
+
+A red-before/green-after test checks ten targeted physical boundary cases
+in both plain and Markdown flow. The seeded Unicode oracle now covers
+768 deterministic cases across eight quoted/bracketed or inverted pairs.
+A deliberately narrow 5-mm text region also proves two-glyph clusters
+fall back to original grapheme-by-grapheme placement rather than making
+previously printable text refuse. Ten real-flow samples compare PDF and
+transparent PNG bytes against independent exact authored-ink placements;
+missing smart-quote glyphs still refuse without replacing selected output.
+
+This improves bounded visual line breaks, not automatic fonts, dictionary
+hyphenation, mixed-direction text, semantic notebook persistence or full
+Unicode line-breaking rules. The P2-013 end-to-end task remains open.
+
 ## Acceptance decision
 
 Open. The finite implementation described above is not established by

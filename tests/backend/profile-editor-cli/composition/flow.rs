@@ -8284,6 +8284,16 @@ fn bilingual_punctuation_stays_with_neighbor_when_long_words_wrap()
         ("abcdef?g", ["abcde", "f?g"]),
         ("abcdef!g", ["abcde", "f!g"]),
         ("abcdef.!", ["abcde", "f.!"]),
+        ("abcde«fg", ["abcde", "«fg"]),
+        ("abcde“fg", ["abcde", "“fg"]),
+        ("abcde‘fg", ["abcde", "‘fg"]),
+        ("abcde(fg", ["abcde", "(fg"]),
+        ("abcde[fg", ["abcde", "[fg"]),
+        ("abcde{fg", ["abcde", "{fg"]),
+        ("abcdef”g", ["abcde", "f”g"]),
+        ("abcdef’g", ["abcde", "f’g"]),
+        ("abcde«¿fg", ["abcde", "«¿fg"]),
+        ("abcdef?”g", ["abcde", "f?”g"]),
     ] {
         for format in [FlowFormat::Plain, FlowFormat::Markdown] {
             let source = FlowSource::new(format, text)?;
@@ -8314,13 +8324,41 @@ fn bilingual_punctuation_stays_with_neighbor_when_long_words_wrap()
 }
 
 #[test]
+fn narrow_quoted_rows_retain_exact_unicode_ink_when_pair_cannot_fit()
+    -> Result<(), String> {
+    use atrament_notebook_profile::NotebookProfile;
+
+    // Two nominal 4-mm glyphs cannot share the 5-mm text region. Pairing
+    // must fall back to grapheme placement instead of rejecting the page.
+    let region = super::FlowRegion {
+        left: 30_000, top: 40_000, width: 9_000, height: 50_000,
+    };
+    for format in [FlowFormat::Plain, FlowFormat::Markdown] {
+        for text in ["«a»", "“a”", "‘a’", "(a)", "[a]", "{a}"] {
+            let source = FlowSource::new(format, text)?;
+            let (runs, ornaments, pages) = super::layout_flow_with_region(
+                &source, &NotebookProfile::default(), None,
+                super::HeadingDecoration::default(), Some(region),
+            )?;
+            assert_eq!(pages, 1);
+            assert!(ornaments.is_empty());
+            assert_eq!(runs.len(), 3, "{format:?} {text:?} {runs:?}");
+            assert_eq!(runs.iter().map(|run| run.text.as_str())
+                .collect::<String>(), text);
+            assert!(runs.iter().all(|run| run.text.chars().count() == 1));
+        }
+    }
+    Ok(())
+}
+
+#[test]
 fn seeded_bilingual_long_words_keep_punctuation_inside_physical_rows()
     -> Result<(), String> {
     use atrament_notebook_profile::NotebookProfile;
 
     let paper = NotebookProfile::default();
     let mut seed = 0x9b7e_35d1u32;
-    for sample in 0..512usize {
+    for sample in 0..768usize {
         seed = seed.wrapping_mul(1_664_525)
             .wrapping_add(1_013_904_223);
         let prefix = 3usize + usize::try_from(seed % 19)
@@ -8329,11 +8367,11 @@ fn seeded_bilingual_long_words_keep_punctuation_inside_physical_rows()
             .wrapping_add(1_013_904_223);
         let suffix = 3usize + usize::try_from(seed % 19)
             .map_err(|error| error.to_string())?;
-        let (opening, closing) = if seed & 1 == 0 {
-            ("¿", "?")
-        } else {
-            ("¡", "!")
-        };
+        let pairs = [
+            ("¿", "?"), ("¡", "!"), ("«", "»"), ("“", "”"),
+            ("‘", "’"), ("(", ")"), ("[", "]"), ("{", "}"),
+        ];
+        let (opening, closing) = pairs[sample % pairs.len()];
         let text = format!(
             "{}{}n\u{303}{}{}ñ", "a".repeat(prefix), opening,
             "b".repeat(suffix), closing,

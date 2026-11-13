@@ -2200,13 +2200,15 @@ fn next_punctuation_cluster(
     })
 }
 
-// Prevent bad visual breaks inside overlong English/Spanish words. Exact
-// Unicode grapheme comparison does not normalize authored NFC/NFD ink.
-// Other punctuation stays ordinary text and ASCII spaces remain breakable.
+// Keep opening Spanish/English punctuation and paired brackets with the
+// next authored grapheme, and closing marks with the preceding grapheme.
+// Exact Unicode identities survive unchanged; ASCII spaces still break words.
+// Straight quotes/apostrophes are intentionally not inferred as directional.
 fn punctuation_pair_stays_together(previous: &str, next: &str) -> bool {
-    matches!(previous, "¿" | "¡")
+    matches!(previous, "¿" | "¡" | "«" | "“" | "‘"
+        | "(" | "[" | "{")
         || matches!(next, "?" | "!" | "." | "," | ";" | ":"
-            | ")" | "]" | "}" | "»")
+            | ")" | "]" | "}" | "»" | "”" | "’")
 }
 
 // Flowing prose reserves a preceding compressed glyph's nominal ink contour.

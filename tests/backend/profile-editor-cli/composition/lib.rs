@@ -9082,12 +9082,19 @@ fn bilingual_punctuation_wrapping_matches_direct_native_pdf_and_png_ink() {
         left: 30_000, top: 40_000, width: 32_000, height: 36_000,
     };
     let glyphs = ["a", "b", "c", "d", "e", "f", "g", "¿", "¡",
-        "?", "!", ".", "ñ", "n\u{303}"];
+        "?", "!", ".", "ñ", "n\u{303}", "«", "»", "“", "”",
+        "‘", "’", "(", ")", "[", "]", "{", "}"];
     for (format, text) in [
         (FlowFormat::Plain, "abcde¿n\u{303}g"),
         (FlowFormat::Markdown, "abcdef?ñ"),
         (FlowFormat::Plain, "abcde¡fg"),
         (FlowFormat::Markdown, "abcdef.!"),
+        (FlowFormat::Plain, "abcde«fg"),
+        (FlowFormat::Markdown, "abcdef”g"),
+        (FlowFormat::Plain, "abcde“n\u{303}g"),
+        (FlowFormat::Markdown, "abcdef’ñ"),
+        (FlowFormat::Plain, "abcde(fg"),
+        (FlowFormat::Markdown, "abcdef)g"),
     ] {
         let source = FlowSource::new(format, text)
             .expect("bilingual source admitted");
@@ -9149,32 +9156,36 @@ fn bilingual_punctuation_wrapping_matches_direct_native_pdf_and_png_ink() {
 
 #[test]
 fn bilingual_punctuation_flow_refuses_missing_ink_before_replacing_exports() {
-    for format in ["pdf", "png"] {
-        let output = test_path().with_extension(format);
-        let name = output.to_str().expect("owned export path");
-        fs::write(&output, b"preserve previously accepted page")
-            .expect("selected output sentinel");
-        let mut command = args(&[
-            "--printed-sheet", "true", "--export-paper", format,
-            "--flow-text", "abcde¿fg",
-            "--flow-region", "30000", "40000", "32000", "36000",
-        ]);
-        if format == "png" {
-            command.extend(args(&["--dpi", "72"]));
+    for (text, missing) in [
+        ("abcde¿fg", "U+00BF"), ("abcde«fg", "U+00AB"),
+    ] {
+        for format in ["pdf", "png"] {
+            let output = test_path().with_extension(format);
+            let name = output.to_str().expect("owned export path");
+            fs::write(&output, b"preserve previously accepted page")
+                .expect("selected output sentinel");
+            let mut command = args(&[
+                "--printed-sheet", "true", "--export-paper", format,
+                "--flow-text", text,
+                "--flow-region", "30000", "40000", "32000", "36000",
+            ]);
+            if format == "png" {
+                command.extend(args(&["--dpi", "72"]));
+            }
+            for glyph in ["a", "b", "c", "d", "e", "f", "g"] {
+                command.extend(args(&[
+                    "--glyph-stroke", glyph, "500", "500", "1800", "2800",
+                    "250", "#204060",
+                ]));
+            }
+            command.extend(args(&["--output", name, "--replace"]));
+            let error = execute_notebook(&command)
+                .expect_err("missing quoted punctuation cannot invent ink");
+            assert!(error.contains(missing), "{error}");
+            assert_eq!(fs::read(&output).expect("target unchanged"),
+                b"preserve previously accepted page");
+            fs::remove_file(output).expect("remove test-owned target");
         }
-        for glyph in ["a", "b", "c", "d", "e", "f", "g"] {
-            command.extend(args(&[
-                "--glyph-stroke", glyph, "500", "500", "1800", "2800",
-                "250", "#204060",
-            ]));
-        }
-        command.extend(args(&["--output", name, "--replace"]));
-        let error = execute_notebook(&command)
-            .expect_err("missing inverted punctuation cannot invent ink");
-        assert!(error.contains("U+00BF"), "{error}");
-        assert_eq!(fs::read(&output).expect("target unchanged"),
-            b"preserve previously accepted page");
-        fs::remove_file(output).expect("remove test-owned target");
     }
 }
 
