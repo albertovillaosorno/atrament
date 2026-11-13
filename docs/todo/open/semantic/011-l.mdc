@@ -4544,3 +4544,27 @@ Four focused regressions cover mixed independent marker colors,
 wrapped multi-page bars, deterministic PDF/PNG/ink TSV export, and
 source-independent/typed preflight plus atomic PDF refusal. This is
 CLI export decoration only, not a persisted semantic quote identity.
+
+## Revision-bound measured keep-with-next policy (partial) — 2026-11-13
+
+The pure Rust flow-pagination domain now admits an explicit
+`KeepWithNextWhenPossible` policy. A caller-measured heading or other
+complete unit can move with the first fragment of its next visible unit;
+consecutive marked units form a chain, and a following keep-together unit
+reserves its entire measured extent. Empty units do not break the chain.
+The earliest writable page with sufficient remaining height and width is
+selected; impossible or overflowing combined extents safely fall back to
+ordinary per-fragment pagination without spending an empty page.
+
+Seven direct regressions verify two-page movement, exact fits, chain and
+full-successor continuity, skipped narrow pages, absent successors,
+integer overflow and a 16,384-unit linear-time reservation chain.
+An independently written 10,000-case randomized reference
+oracle now covers all three policies and checks source-to-placement bijection.
+One accepted semantic-revision regression verifies the same two-page move
+while retaining original owners, source indices, flow and revision.
+
+This is a reusable measured-layout primitive. The Rust CLI Markdown parser
+does not yet use it; source-text compilation, fixed image obstacles and a
+saved notebook body remain incomplete. The original ATR-P2-011 finite
+acceptance criterion is still open.

@@ -132,6 +132,30 @@ fn next_case_value(seed: &mut u64) -> u64 {
     *seed >> 32
 }
 
+// Deliberately independent small-integer reservation oracle: it never calls
+// the production group extent or page-selection helpers.
+fn reference_next_reservation(
+    units: &[MeasuredFlowUnit<u64>], start: usize,
+) -> Option<(u64, u64)> {
+    let mut total_height = 0u64;
+    let mut maximum_width = 0u64;
+    for unit in units.iter().skip(start) {
+        if unit.fragments.is_empty() { continue; }
+        let count = if unit.policy == FlowUnitPolicy::Independent {
+            1
+        } else { unit.fragments.len() };
+        for fragment in unit.fragments.iter().take(count) {
+            total_height = total_height.checked_add(
+                fragment.height.micrometres())?;
+            maximum_width = maximum_width.max(fragment.width.micrometres());
+        }
+        if unit.policy != FlowUnitPolicy::KeepWithNextWhenPossible {
+            return Some((total_height, maximum_width));
+        }
+    }
+    None
+}
+
 fn reference_mixed_units(
     pages: &[PageRegion<u64>],
     units: &[MeasuredFlowUnit<u64>],
@@ -209,6 +233,35 @@ fn reference_mixed_units(
                     unit_index,
                     &mut cursor,
                     &mut placements,
+                )?;
+            },
+            FlowUnitPolicy::KeepWithNextWhenPossible => {
+                if let Some((height, width)) =
+                    reference_next_reservation(units, unit_index)
+                {
+                    let fits_here = pages.get(cursor.page_index)
+                        .is_some_and(|page| {
+                            height <= page.writable.height.micrometres()
+                                .saturating_sub(cursor.used_height)
+                                && width <= page.writable.width.micrometres()
+                        });
+                    if !fits_here {
+                        if let Some((later, _)) = pages.iter().enumerate()
+                            .skip(cursor.page_index.saturating_add(1))
+                            .find(|(_, page)| {
+                                height <= page.writable.height.micrometres()
+                                    && width <=
+                                        page.writable.width.micrometres()
+                            })
+                        {
+                            cursor.page_index = later;
+                            cursor.used_height = 0;
+                        }
+                    }
+                }
+                reference_place_group(
+                    pages, &unit.fragments, unit_index,
+                    &mut cursor, &mut placements,
                 )?;
             },
         }
@@ -304,7 +357,7 @@ fn mixed_policy_pagination_matches_reference_oracle() {
     let mut seed = 0x5eed_f10f_u64;
     let mut seen_page_counts = [false; 4];
     let mut seen_unit_counts = [false; 4];
-    let mut seen_policies = [false; 2];
+    let mut seen_policies = [false; 3];
     let mut seen_fragment_counts = [false; 4];
     let mut saw_success = false;
     let mut saw_failure = false;
@@ -328,12 +381,12 @@ fn mixed_policy_pagination_matches_reference_oracle() {
         let mut units = Vec::with_capacity(unit_count);
         let mut owner = 1u64;
         for _ in 0..unit_count {
-            let policy_index = (next_case_value(&mut seed) & 1) as usize;
+            let policy_index = (next_case_value(&mut seed) % 3) as usize;
             seen_policies[policy_index] = true;
-            let policy = if policy_index == 0 {
-                FlowUnitPolicy::Independent
-            } else {
-                FlowUnitPolicy::KeepTogetherWhenPossible
+            let policy = match policy_index {
+                0 => FlowUnitPolicy::Independent,
+                1 => FlowUnitPolicy::KeepTogetherWhenPossible,
+                _ => FlowUnitPolicy::KeepWithNextWhenPossible,
             };
             let fragment_count = (next_case_value(&mut seed) % 4) as usize;
             seen_fragment_counts[fragment_count] = true;
@@ -1347,4 +1400,142 @@ fn placement_source_tracks_measured_units_across_empty_units_and_skips() {
         [(41, 0, 0), (43, 2, 0), (43, 2, 1)],
     );
     assert_eq!(plan.placements[1].owner, plan.placements[0].owner);
+}
+
+#[test]
+fn keep_with_next_moves_heading_and_first_body_row_together() {
+    let pages = [page(1, 500, 100, 100), page(2, 700, 100, 100)];
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 75)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
+            vec![fragment(2, 50, 15)]),
+        unit(FlowUnitPolicy::Independent,
+            vec![fragment(3, 50, 20), fragment(4, 50, 30)]),
+    ];
+    let plan = paginate(&pages, &units).expect("heading can travel with body");
+    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
+        [1, 2, 2, 2]);
+    assert_eq!(plan.placements.iter().map(|p| p.top.micrometres())
+        .collect::<Vec<_>>(), [500, 700, 715, 735]);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+    assert_eq!(plan.covered_pages, pages);
+}
+
+#[test]
+fn keep_with_next_chain_skips_empty_units_and_narrow_pages() {
+    let pages = [
+        page(1, 0, 100, 100),
+        page(2, 1000, 100, 25),
+        page(3, 2000, 100, 120),
+    ];
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(1, 40, 80)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
+            vec![fragment(2, 40, 10)]),
+        unit(FlowUnitPolicy::Independent, vec![]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
+            vec![fragment(3, 40, 10)]),
+        unit(FlowUnitPolicy::KeepTogetherWhenPossible,
+            vec![fragment(4, 40, 15), fragment(5, 40, 15)]),
+    ];
+    let plan = paginate(&pages, &units).expect("two titles join full body");
+    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
+        [1, 3, 3, 3, 3]);
+    assert_eq!(plan.placements.iter().map(|p| p.top.micrometres())
+        .collect::<Vec<_>>(), [0, 2000, 2010, 2020, 2035]);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+    assert_eq!(plan.covered_pages, pages);
+}
+
+#[test]
+fn keep_with_next_degrades_when_no_common_page_fits() {
+    let pages = [page(1, 0, 100, 100), page(2, 1000, 100, 100)];
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 80)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
+            vec![fragment(2, 50, 10)]),
+        unit(FlowUnitPolicy::Independent, vec![fragment(3, 50, 95)]),
+    ];
+    let plan = paginate(&pages, &units)
+        .expect("unsatisfiable pair is advisory");
+    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
+        [1, 1, 2]);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+}
+
+#[test]
+fn keep_with_next_exact_current_fit_does_not_skip_a_page() {
+    let pages = [page(1, 10, 100, 100), page(2, 200, 100, 100)];
+    let units = [
+        unit(FlowUnitPolicy::Independent, vec![fragment(1, 50, 60)]),
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
+            vec![fragment(2, 50, 20)]),
+        unit(FlowUnitPolicy::Independent, vec![fragment(3, 50, 20)]),
+    ];
+    let plan = paginate(&pages, &units).expect("exact bottom fit");
+    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
+        [1, 1, 1]);
+    assert_eq!(plan.covered_pages, vec![pages[0]]);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+}
+
+#[test]
+fn keep_with_next_without_successor_is_independent() {
+    let pages = [page(1, 0, 100, 30), page(2, 100, 100, 30)];
+    let units = [
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
+            vec![fragment(1, 30, 20), fragment(2, 30, 20)]),
+        unit(FlowUnitPolicy::KeepTogetherWhenPossible, vec![]),
+    ];
+    let plan = paginate(&pages, &units).expect("trailing heading is legal");
+    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
+        [1, 2]);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+}
+
+#[test]
+fn keep_with_next_overflow_falls_back_without_wrapping() {
+    let pages = [
+        page(1, 0, 100, u64::MAX),
+        page(2, 0, 100, 100),
+    ];
+    let units = [
+        unit(FlowUnitPolicy::KeepWithNextWhenPossible,
+            vec![fragment(1, 50, u64::MAX - 10)]),
+        unit(FlowUnitPolicy::Independent, vec![fragment(2, 50, 20)]),
+    ];
+    let plan = paginate(&pages, &units).expect("no overflowing group sum");
+    assert_eq!(plan.placements.iter().map(|p| p.page).collect::<Vec<_>>(),
+        [1, 2]);
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
+}
+
+#[test]
+fn long_keep_with_next_chain_reserves_one_page_in_source_order() {
+    // A large chain is intentionally linear to process. Each unit remains
+    // identifiable rather than being folded into a synthetic giant fragment.
+    let pages = [page(1, 0, 100, 1_000), page(2, 20_000, 100, 16_385)];
+    let mut units = vec![unit(
+        FlowUnitPolicy::Independent,
+        vec![fragment(1, 20, 999)],
+    )];
+    for owner in 2..=16_385u64 {
+        units.push(unit(
+            FlowUnitPolicy::KeepWithNextWhenPossible,
+            vec![fragment(owner, 20, 1)],
+        ));
+    }
+    units.push(unit(
+        FlowUnitPolicy::Independent,
+        vec![fragment(16_386, 20, 1)],
+    ));
+    let plan = paginate(&pages, &units)
+        .expect("full heading chain fits page 2");
+    assert_eq!(plan.placements.len(), 16_386);
+    assert_eq!(plan.placements.first().map(|placed| placed.page), Some(1));
+    assert_eq!(plan.placements.last().map(|placed| placed.page), Some(2));
+    assert!(plan.placements.iter().skip(1).all(|placed| placed.page == 2));
+    assert_eq!(plan.placements.last().map(|placed| placed.top),
+        Some(Length::from_micrometres(36_384)));
+    assert_placement_source_bijection(&pages, &units, &plan.placements);
 }

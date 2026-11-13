@@ -44,6 +44,9 @@ pub enum FlowUnitPolicy {
     Independent,
     /// Keep all fragments on one page when one remaining page can contain them.
     KeepTogetherWhenPossible,
+    /// Prefer the complete unit with its next visible measured fragment.
+    /// Consecutive keep-with-next units form a chain.
+    KeepWithNextWhenPossible,
 }
 
 /// One already-measured indivisible semantic flow fragment.
@@ -208,6 +211,7 @@ where
             }
         }
     }
+    let keep_reservations = keep_with_next_reservations(units);
     let mut cursor = Cursor {
         page_index: 0,
         used_height: Length::ZERO,
@@ -234,6 +238,15 @@ where
                     unit_index,
                     &mut cursor,
                     &mut placements,
+                )?;
+            },
+            FlowUnitPolicy::KeepWithNextWhenPossible => {
+                if let Some(Some(extent)) = keep_reservations.get(unit_index) {
+                    prefer_group_page(pages, *extent, &mut cursor);
+                }
+                place_independent(
+                    pages, &unit.fragments, unit_index,
+                    &mut cursor, &mut placements,
                 )?;
             },
         }
@@ -269,6 +282,73 @@ fn complete_group_extent<Identity>(
         height: Length::from_micrometres(height),
         width,
     })
+}
+
+/// Precompute the complete keep-with-next preference for each measured unit.
+/// Reverse traversal keeps long heading chains linear in source size, rather
+/// than rescanning all following units for each heading. Empty units are inert.
+fn keep_with_next_reservations<Identity>(
+    units: &[MeasuredFlowUnit<Identity>],
+) -> Vec<Option<GroupExtent>> {
+    let mut reversed = Vec::with_capacity(units.len());
+    let mut following: Option<GroupExtent> = None;
+    for unit in units.iter().rev() {
+        if unit.fragments.is_empty() {
+            reversed.push(None);
+            continue;
+        }
+        let reserved = match unit.policy {
+            FlowUnitPolicy::KeepWithNextWhenPossible => {
+                complete_group_extent(&unit.fragments)
+                    .zip(following)
+                    .and_then(|(own, next)| {
+                        own.height.micrometres()
+                            .checked_add(next.height.micrometres())
+                            .map(|height| GroupExtent {
+                                height: Length::from_micrometres(height),
+                                width: own.width.max(next.width),
+                            })
+                    })
+            },
+            FlowUnitPolicy::KeepTogetherWhenPossible => {
+                complete_group_extent(&unit.fragments)
+            },
+            FlowUnitPolicy::Independent => unit.fragments.first()
+                .map(|fragment| GroupExtent {
+                    height: fragment.height,
+                    width: fragment.width,
+                }),
+        };
+        let requested =
+            if unit.policy == FlowUnitPolicy::KeepWithNextWhenPossible {
+                reserved
+            } else {
+                None
+            };
+        reversed.push(requested);
+        following = reserved;
+    }
+    reversed.reverse();
+    reversed
+}
+
+/// Find the earliest later full fit, never spending pages on an
+/// impossible preference. All caller fragments retain their own indices.
+fn prefer_group_page<PageIdentity>(
+    pages: &[PageRegion<PageIdentity>],
+    extent: GroupExtent, cursor: &mut Cursor,
+) {
+    if pages.get(cursor.page_index).is_some_and(|page| {
+        group_fits_region(extent, page.writable,
+            remaining_height(page.writable, cursor.used_height))
+    }) { return; }
+    if let Some((index, _)) = cursor.page_index.checked_add(1)
+        .and_then(|from| pages.iter().enumerate().skip(from)
+            .find(|(_, page)| group_fits_region(
+                extent, page.writable, page.writable.height))) {
+        cursor.page_index = index;
+        cursor.used_height = Length::ZERO;
+    }
 }
 
 fn fragment_fits_region<Identity>(

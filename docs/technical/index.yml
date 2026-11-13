@@ -121,3 +121,6 @@ contracts:
   - id: atrament.technical.local-print-cli
     status: verified
     path: local-print-cli.md
+  - id: atrament.technical.measured-flow-keep-with-next
+    status: verified
+    path: measured-flow-keep-with-next.md

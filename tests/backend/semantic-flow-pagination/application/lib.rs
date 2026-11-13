@@ -7452,3 +7452,60 @@ fn check_many_mixed_alignment_stale_choice(
     }
     Ok(())
 }
+
+#[test]
+fn accepted_revision_keep_with_next_moves_heading_with_body() {
+    let ids = IdentityAllocator::new();
+    let mut fixture = candidate_fixture(&ids);
+    let heading = ids.allocate_candidate().expect("heading block");
+    let body = ids.allocate_candidate().expect("body block");
+    for block in [heading, body] {
+        fixture.notebook.pages[0].flows[0].blocks.push(Block {
+            content: BlockContent::Rule,
+            extensions: vec![],
+            id: block,
+            provenance: None,
+            style: None,
+        });
+    }
+    let mut session = SemanticNotebookSessionService::default();
+    let AcceptanceOutcome::Accepted { mapping, revision } =
+        session.accept(fixture.notebook)
+    else { panic!("accepted two-page notebook"); };
+    let flow = accepted_for(&mapping, fixture.flow);
+    let page_one = accepted_for(&mapping, fixture.page_one);
+    let page_two = accepted_for(&mapping, fixture.page_two);
+    let owners = [fixture.block, heading, body]
+        .map(|candidate| accepted_for(&mapping, candidate));
+    let mut measured = RevisionFlowMeasurement {
+        flow,
+        revision,
+        units: owners.iter().enumerate().map(|(index, owner)| {
+            MeasuredFlowUnit {
+                fragments: vec![MeasuredFragment {
+                    height: Length::from_micrometres(
+                        if index == 0 { 245_000 } else { 20_000 }),
+                    owner: *owner,
+                    width: Length::from_micrometres(50_000),
+                }],
+                policy: FlowUnitPolicy::Independent,
+            }
+        }).collect(),
+    };
+    let accepted = session.current().expect("accepted revision");
+    let baseline = paginate_revision(accepted, &measured)
+        .expect("independent rows can split title and body");
+    assert_eq!(baseline.placements().iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [page_one, page_one, page_two]);
+    measured.units[1].policy = FlowUnitPolicy::KeepWithNextWhenPossible;
+    let guarded = paginate_revision(accepted, &measured)
+        .expect("admitted heading and body travel to next sheet");
+    assert_eq!(guarded.revision(), revision);
+    assert_eq!(guarded.flow(), flow);
+    assert_eq!(guarded.placements().iter().map(|row| row.page)
+        .collect::<Vec<_>>(), [page_one, page_two, page_two]);
+    assert_eq!(guarded.placements().iter().map(|row| row.owner)
+        .collect::<Vec<_>>(), owners);
+    assert_eq!(guarded.placements().iter().map(|row| row.source.unit)
+        .collect::<Vec<_>>(), [0, 1, 2]);
+}
