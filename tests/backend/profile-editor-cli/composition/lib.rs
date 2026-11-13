@@ -19342,3 +19342,47 @@ fn notebook_ruler_refusal_preserves_selected_pdf_and_png() {
         fs::remove_file(output).expect("remove test-owned target");
     }
 }
+
+#[test]
+fn notebook_ruler_saved_profile_cli_matches_typed_pdf_and_selected_png() {
+    let profile = NotebookProfile::default();
+    let source = profile.canonical_json().expect("saved notebook metadata");
+    let input = test_path();
+    let name = input.to_str().expect("test-owned saved profile path");
+    fs::write(&input, source.as_bytes()).expect("save canonical source");
+    let sample = RulerVariation::from_decimal_mm("2026", "0.075")
+        .expect("bounded ruler input");
+    let ink = [NotebookInkLine {
+        page: 2,
+        start_um: (30_000, 40_000),
+        end_um: (36_000, 46_000),
+        width_um: 250,
+        rgb: [52, 86, 120],
+    }];
+    for format in ["pdf", "png"] {
+        let mut flags = args(&[
+            "--profile", name, "--export-paper", format,
+            "--ruler-seed", "2026", "--ruler-error-mm", "0.075",
+            "--ink-line", "2", "30000", "40000", "36000",
+            "46000", "250", "#345678",
+        ]);
+        let expected = if format == "pdf" {
+            flags.extend(args(&["--pages", "2"]));
+            profile.paper_layer_pdf_with_ink_ruler(2, &ink, Some(sample))
+                .expect("typed two-page PDF")
+        } else {
+            flags.extend(args(&["--png-page", "2", "--dpi", "72"]));
+            profile.paper_layer_png_page_with_ink_ruler(
+                72, 2, &ink, Some(sample),
+            ).expect("typed second-page PNG")
+        };
+        let actual = execute_notebook(&flags)
+            .expect("native saved source admitted").expect("export bytes");
+        assert_eq!(actual, expected, "{format} exact native/typed parity");
+        assert_eq!(actual, execute_notebook(&flags)
+            .expect("same seed replay").expect("export bytes"));
+        assert_eq!(fs::read(&input).expect("read source untouched"),
+            source.as_bytes());
+    }
+    fs::remove_file(input).expect("remove test-owned saved source");
+}
