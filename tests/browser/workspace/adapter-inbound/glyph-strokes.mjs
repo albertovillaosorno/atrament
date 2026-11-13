@@ -12771,3 +12771,42 @@ test("selected path reflection UI keeps deliberate TSV and bounded undo",
             ui.restore();
         }
     });
+
+test("selected path mirror preserves closed loops and 4096 connected ink",
+    () => {
+        const nfd = "n\u0303";
+        const first = { ...stroke(nfd), x1: 500, y1: 700,
+            x2: 900, y2: 700, width: 251, color: "#112233" };
+        const top = { ...first, x1: 900, y1: 700, x2: 900, y2: 1000 };
+        const bottom = { ...first, x1: 900, y1: 1000,
+            x2: 500, y2: 1000 };
+        const left = { ...first, x1: 500, y1: 1000,
+            x2: 500, y2: 700 };
+        const other = stroke("ñ");
+        const original = [first, other, top, bottom, left];
+        const mirrored = reflectCandidatePath(original, nfd, 3,
+            "x", 1750).strokes;
+        assert.deepEqual(candidatePenPaths(mirrored, nfd).map((path) =>
+            [path.first, path.last, path.start, path.end]), [[
+            1, 4, { x: 3000, y: 700 }, { x: 3000, y: 700 },
+        ]]);
+        assert.equal(mirrored[1], other,
+            "unselected NFC stays at its exact interleaved TSV position");
+        assert.equal(encodeGlyphLibrary(reflectCandidatePath(
+            mirrored, nfd, 3, "x", 1750).strokes),
+        encodeGlyphLibrary(original), "closed shape returns without loss");
+        const full = Array.from({ length: 4096 }, (_, index) => ({
+            ...first, x1: 500 + 2 * (index % 2),
+            x2: 500 + 2 * ((index + 1) % 2),
+        }));
+        assert.equal(candidatePenPaths(full, nfd).length, 1);
+        const result = reflectCandidatePath(full, nfd, 2048,
+            "x", 1750).strokes;
+        assert.equal(result.length, 4096);
+        assert.equal(candidatePenPaths(result, nfd).length, 1);
+        assert.equal(result[0].x1, 3000);
+        assert.equal(result[0].x2, 2998);
+        assert.equal(encodeGlyphLibrary(reflectCandidatePath(
+            result, nfd, 2048, "x", 1750).strokes),
+        encodeGlyphLibrary(full));
+    });

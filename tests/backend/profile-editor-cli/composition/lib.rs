@@ -18204,3 +18204,70 @@ fn native_selected_path_reflection_refuses_without_clobbering() {
     fs::remove_file(source).expect("remove owned source");
     fs::remove_file(output).expect("remove owned output");
 }
+
+#[test]
+fn native_path_reflection_keeps_closed_loops_and_full_stroke_budget() {
+    let nfd = "n\u{303}";
+    let original = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "500", "700", "900", "700",
+        "251", "#112233",
+        "--glyph-stroke", "ñ", "1500", "1500", "2000", "2000",
+        "251", "#445566",
+        "--glyph-stroke", nfd, "900", "700", "900", "1000",
+        "251", "#112233",
+        "--glyph-stroke", nfd, "900", "1000", "500", "1000",
+        "251", "#112233",
+        "--glyph-stroke", nfd, "500", "1000", "500", "700",
+        "251", "#112233",
+    ])).expect("authored loop").expect("source TSV");
+    let mirrored = execute_glyph_library(&args(&[
+        "--glyph-stroke", nfd, "500", "700", "900", "700",
+        "251", "#112233",
+        "--glyph-stroke", "ñ", "1500", "1500", "2000", "2000",
+        "251", "#445566",
+        "--glyph-stroke", nfd, "900", "700", "900", "1000",
+        "251", "#112233",
+        "--glyph-stroke", nfd, "900", "1000", "500", "1000",
+        "251", "#112233",
+        "--glyph-stroke", nfd, "500", "1000", "500", "700",
+        "251", "#112233",
+        "--reflect-path", nfd, "1", "x", "1750",
+        "--inspect-paths", nfd,
+    ])).expect("mirrored loop inspector").expect("report");
+    let report = String::from_utf8(mirrored).expect("UTF-8");
+    assert!(report.contains("Strokes: 4\nPaths: 1\nPen lifts: 0"),
+        "{report}");
+    assert!(report.contains("(3000, 700) -> (3000, 700)"),
+        "mirroring must preserve a closed loop: {report}");
+    let source = test_path().with_extension("tsv");
+    let source_name = source.to_str().expect("source name");
+    let mut authored = String::from("atrament.glyph-strokes.v1\n");
+    for index in 0..4096 {
+        let from = 500 + 2 * (index % 2);
+        let to = 500 + 2 * ((index + 1) % 2);
+        authored.push_str(&format!(
+            "n\u{303}\t{from}\t700\t{to}\t700\t251\t#112233\n",
+        ));
+    }
+    fs::write(&source, authored.as_bytes()).expect("save full library");
+    let result = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-path", nfd, "1", "x", "1750",
+    ])).expect("reflect 4096-path").expect("full mirrored TSV");
+    assert_eq!(result.iter().filter(|byte| **byte == b'\n').count(),
+        4097, "reflection never adds or drops authored segments");
+    assert!(result.starts_with(
+        b"atrament.glyph-strokes.v1\nn\xcc\x83\t3000\t700\t2998\t700\t251\t#112233\n"
+    ));
+    let double = execute_glyph_library(&args(&[
+        "--profile", source_name,
+        "--reflect-path", nfd, "1", "x", "1750",
+        "--reflect-path", nfd, "1", "x", "1750",
+    ])).expect("reversed full library").expect("source ink");
+    assert_eq!(double, authored.as_bytes());
+    assert_eq!(fs::read(&source).expect("source preserved"),
+        authored.as_bytes());
+    assert!(String::from_utf8(original).expect("UTF-8").contains(
+        "ñ\t1500\t1500\t2000\t2000\t251\t#445566\n"));
+    fs::remove_file(source).expect("remove test fixture");
+}
